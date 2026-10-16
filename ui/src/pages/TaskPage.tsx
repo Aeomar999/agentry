@@ -106,6 +106,7 @@ export function TaskPage() {
             ) : (
               task.status !== "done" && <span>· setting up the worktree</span>
             )}
+            {task.firstTitle && <span title={task.firstTitle}>· renamed by the coordinator from "{task.firstTitle.slice(0, 60)}"</span>}
           </>
         }
       />

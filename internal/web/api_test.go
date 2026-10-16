@@ -274,3 +274,28 @@ func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {
 		}
 	}
 }
+
+// A task can be just a description: the title stands in from its first
+// line until the coordinator names it.
+func TestATaskNeedsOnlyADescription(t *testing.T) {
+	server, _ := newTestServer(t)
+	long := "When a webhook delivery fails with a 503 the sender gives up at once, retry it once after a second\nMore detail."
+	for _, c := range []struct{ description, wantTitle string }{
+		{"Fix the login redirect\nIt loops after sign-in.", "Fix the login redirect"},
+		{long, "When a webhook delivery fails with a 503 the sender gives up at once..."},
+	} {
+		body, _ := json.Marshal(map[string]string{"description": c.description})
+		if code, reply := call(t, server, "POST", "/api/tasks", string(body)); code != 200 {
+			t.Fatalf("create: %d %s", code, reply)
+		}
+	}
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	var list []taskSummary
+	json.Unmarshal([]byte(body), &list)
+	if len(list) != 2 || list[1].Title != "Fix the login redirect" || list[0].Title != "When a webhook delivery fails with a 503 the sender gives up at once..." {
+		t.Errorf("titles: %+v", list)
+	}
+	if code, _ := call(t, server, "POST", "/api/tasks", `{"description":"  "}`); code != http.StatusBadRequest {
+		t.Errorf("an empty task: %d", code)
+	}
+}

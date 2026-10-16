@@ -62,9 +62,9 @@ func section(b *strings.Builder, title, body string) {
 
 func taskText(task *tasks.Task) string {
 	if task.Description == "" {
-		return task.Title
+		return "Title: " + task.Title
 	}
-	return task.Title + "\n\n" + task.Description
+	return "Title: " + task.Title + "\n\n" + task.Description
 }
 
 func whereText(task *tasks.Task) string {

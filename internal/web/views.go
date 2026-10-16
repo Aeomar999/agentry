@@ -26,6 +26,7 @@ type taskSummary struct {
 type taskDetail struct {
 	taskSummary
 	Description string       `json:"description"`
+	FirstTitle  string       `json:"firstTitle"` // when the coordinator renamed the task
 	Coordinator string       `json:"coordinator"`
 	Summary     string       `json:"summary"`
 	Worktree    *worktree    `json:"worktree"`
@@ -93,7 +94,8 @@ func summaryOf(t *tasks.Task) taskSummary {
 }
 
 func detailOf(t *tasks.Task, log []events.Event) taskDetail {
-	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, Coordinator: t.Coordinator, Summary: t.Summary}
+	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle,
+		Coordinator: t.Coordinator, Summary: t.Summary}
 	if w := t.Worktree; w != nil {
 		detail.Worktree = &worktree{Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}

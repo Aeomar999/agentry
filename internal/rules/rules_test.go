@@ -194,3 +194,18 @@ func TestAgentRules(t *testing.T) {
 		}
 	}
 }
+
+// The coordinator (or you) may give the task a better title, once it has
+// read it; the first title is kept.
+func TestTheTaskCanBeRenamed(t *testing.T) {
+	task := run(t, []step{
+		created,
+		{engineer, events.TaskRenamed, "", map[string]any{"title": "Something else"}, false},      // only the coordinator
+		{coordinator, events.TaskRenamed, "", map[string]any{"title": "Remove the TODOs"}, false}, // the same title
+		{coordinator, events.TaskRenamed, "", map[string]any{"title": "Remove the TODO comments in src/"}, true},
+		{you, events.TaskRenamed, "", map[string]any{"title": "Clean up src/"}, true},
+	})
+	if task.Title != "Clean up src/" || task.FirstTitle != "Remove the TODOs" {
+		t.Errorf("title %q, first title %q", task.Title, task.FirstTitle)
+	}
+}

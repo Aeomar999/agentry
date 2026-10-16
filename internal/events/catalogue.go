@@ -19,6 +19,7 @@ var catalogue = map[Type]spec{
 	AgentChanged: {fields: []string{"name", "prompt", "engine"}, writers: []ActorKind{Human, System}},
 
 	TaskCreated:   {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human}},
+	TaskRenamed:   {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
 	WorktreeReady: {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
 
 	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}},

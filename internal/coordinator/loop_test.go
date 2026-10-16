@@ -54,8 +54,12 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 		}
 	}
 
-	endTurn(t, s, id, "turn-1", "coordinator", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO in src/."}`)
+	// The coordinator renames the task as it decides.
+	endTurn(t, s, id, "turn-1", "coordinator", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO in src/.", "title": "Remove the TODO comments in src/"}`)
 	task = waitForTurn(t, s, id, "turn-2", "engineer")
+	if task.Title != "Remove the TODO comments in src/" || task.FirstTitle != "Remove the TODOs" {
+		t.Errorf("title %q, first title %q", task.Title, task.FirstTitle)
+	}
 	if brief := readBrief(t, task, "turn-2"); !strings.Contains(brief, "You are the engineer") || !strings.Contains(brief, "Remove every TODO in src/.") {
 		t.Errorf("the engineer's brief:\n%s", brief)
 	}

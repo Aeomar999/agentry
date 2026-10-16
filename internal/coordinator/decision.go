@@ -17,6 +17,7 @@ type Decision struct {
 	Instructions string `json:"instructions,omitempty"`
 	Summary      string `json:"summary,omitempty"`
 	Question     string `json:"question,omitempty"`
+	Title        string `json:"title,omitempty"` // any decision may rename the task
 }
 
 type Action string
@@ -32,7 +33,11 @@ const (
 const DecisionFormat = "End your reply with exactly one decision: a JSON object, on its own, as the very last thing you write. One of:\n\n" +
 	`{"action": "assign", "agent": "<agent name>", "instructions": "<what to do, what done looks like, what it needs to know>"}` + "\n" +
 	`{"action": "done", "summary": "<what was done, for the user>"}` + "\n" +
-	`{"action": "ask", "question": "<what you need the user to decide>"}` + "\n"
+	`{"action": "ask", "question": "<what you need the user to decide>"}` + "\n\n" +
+	`Any decision may also carry "title": a better title for the task, when its title doesn't say what the task is about ` +
+	`(people often write a vague one, or none, and then the start of the description stands in). ` +
+	`Make it one plain imperative line under 70 characters, such as "Add a retry to the webhook sender". ` +
+	`Leave "title" out when the title is already clear.` + "\n"
 
 // ParseDecision finds the decision at the end of a coordinator's reply.
 // The error explains what was wrong, so the coordinator can be told.

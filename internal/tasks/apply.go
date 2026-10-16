@@ -36,7 +36,13 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
 		t.Coordinator = e.Text("coordinator")
-		t.step(e, You, t.Coordinator, t.Title)
+		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
+
+	case events.TaskRenamed:
+		if t.FirstTitle == "" {
+			t.FirstTitle = t.Title
+		}
+		t.Title = e.Text("title")
 
 	case events.WorktreeReady:
 		t.Worktree = &Worktree{Repo: e.Text("repo"), Path: e.Text("path"), Branch: e.Text("branch"), Base: e.Text("base"), Port: e.Number("port")}
@@ -119,3 +125,12 @@ func (t *Task) step(e events.Event, from, to, text string) {
 }
 
 func turnID(number int) string { return fmt.Sprintf("turn-%d", number) }
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

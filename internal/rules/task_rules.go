@@ -12,6 +12,7 @@ type rule func(t *tasks.Task, p events.Proposal) string
 // Check handles. Each lists the conditions that must all hold.
 var taskRules = map[events.Type]rule{
 	events.WorktreeReady: all(noWorktreeYet),
+	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -59,6 +60,20 @@ func byTheCoordinatorOrAgentry(t *tasks.Task, p events.Proposal) string {
 		return ""
 	}
 	return byTheCoordinator(t, p)
+}
+
+func byTheCoordinatorOrYou(t *tasks.Task, p events.Proposal) string {
+	if p.Actor.Kind == events.Human {
+		return ""
+	}
+	return byTheCoordinator(t, p)
+}
+
+func aNewTitle(t *tasks.Task, p events.Proposal) string {
+	if title := p.Text("title"); title == "" || title == t.Title {
+		return "the task already has that title"
+	}
+	return ""
 }
 
 func byTheWorkingAgent(t *tasks.Task, p events.Proposal) string {

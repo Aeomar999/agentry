@@ -16,6 +16,7 @@ const (
 type Task struct {
 	ID          string
 	Title       string
+	FirstTitle  string // the title it was created with, when it has been renamed
 	Description string
 	Repo        string
 	Coordinator string // the agent that decides who works on the task next

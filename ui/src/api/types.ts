@@ -16,6 +16,7 @@ export interface TaskSummary {
 
 export interface TaskDetail extends TaskSummary {
   description: string;
+  firstTitle: string; // the title it was created with, when the coordinator renamed it
   coordinator: string;
   summary: string;
   worktree: Worktree | null;

@@ -111,6 +111,9 @@ func (l *Loop) startTurn(task *tasks.Task, roster agents.Roster, move Move) {
 // apply turns the coordinator's decision into its event, written as the coordinator.
 func (l *Loop) apply(task *tasks.Task, decision Decision) {
 	coordinator := events.Actor{Kind: events.Agent, ID: task.Coordinator}
+	if title := strings.TrimSpace(decision.Title); title != "" && title != task.Title {
+		l.propose(task.ID, coordinator, events.TaskRenamed, map[string]any{"title": title})
+	}
 	switch decision.Action {
 	case Assign:
 		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions})

@@ -37,9 +37,13 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.Title, request.Repo = strings.TrimSpace(request.Title), strings.TrimSpace(request.Repo)
-	if request.Title == "" {
-		http.Error(w, "a task needs a title", http.StatusBadRequest)
+	request.Description = strings.TrimSpace(request.Description)
+	if request.Title == "" && request.Description == "" {
+		http.Error(w, "describe the task", http.StatusBadRequest)
 		return
+	}
+	if request.Title == "" {
+		request.Title = titleFrom(request.Description) // the coordinator renames it once it has read the task
 	}
 	if request.Repo == "" {
 		request.Repo = s.config.DefaultRepo
@@ -64,8 +68,23 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	id := fmt.Sprintf("task-%d", len(ids)+1)
 	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
-		"title": request.Title, "description": strings.TrimSpace(request.Description),
+		"title": request.Title, "description": request.Description,
 		"repo": request.Repo, "coordinator": coordinator.Name}})
+}
+
+// titleFrom stands in for a title nobody gave: the description's first
+// line, cut at a word to at most 72 characters.
+func titleFrom(description string) string {
+	line, _, _ := strings.Cut(description, "\n")
+	line = strings.Join(strings.Fields(line), " ")
+	if len(line) <= 72 {
+		return line
+	}
+	cut := strings.LastIndexByte(line[:72], ' ')
+	if cut < 40 {
+		cut = 72
+	}
+	return strings.TrimRight(line[:cut], ",.;:") + "..."
 }
 
 func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
