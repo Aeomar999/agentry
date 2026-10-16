@@ -50,6 +50,7 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 
 - **Repo:** each task works in its own git worktree of the repo (`-repo` sets the default; the page can name another), on branch `agentry/<task>`, with its own port in `PORT`.
 - **Data:** `~/.agentry` holds the log (`agentry.db`), the worktrees and the policy. Change it with `-data`.
+- **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
 - **Trust:** open the repo with Claude Code once beforehand. Claude asks whether to trust a new folder, and a worktree inherits its repo's answer. If you skip this, the first task shows "needs you". Open its terminal on the page and answer the question there.
 - **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. As shipped, agents allow everything, so the push goes straight through; with the profiles on, every push waits for your approval on the page.
 
@@ -57,10 +58,14 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 
 The page is an admin console: tasks, agents and the policy in the sidebar, and everything updates live.
 
-- **Add a task:** New task (or press `n`), or ask Claude (below).
-- **The terminal:** `Ctrl+J`, or Terminal in the status bar, opens a terminal under the page. It has a tab for each agent that is working and one for Claude. Drag its top edge to make it taller, up to the whole page. You watch an agent's session; Take control lets you type into it. If you open the page inside VS Code, VS Code keeps `Ctrl+J` for itself, so use the button.
-- **Claude:** the Claude tab is a Claude Code session that Agentry runs for you in the default repo. Tell it what you want done. It reads the code, drafts the task (title, what to change, what done looks like, which repo), shows it to you, and hands it to the coordinator. It can also answer a coordinator's question for you. It can't approve an agent's actions or edit files: approving stays on the page.
-- **Needs you:** a task waiting for you shows its question or the action to approve at the top of its page, and the bell counts them.
+- **Add a task:** New task (or press `n`). Describe it in your own words; a title, labels and a token budget are optional. The coordinator reads it first and gives it a title that says what it is.
+- **Tasks:** a list, or a board (keys `1` and `2`) with Backlog, To do, In progress, Review and Done. Drag a card onto any column to tell the coordinator what you want: park it, start it, have it reviewed, send it back, wrap it up, or reopen a finished one. Drag within a column, or a row in the list, to set your priority order. The Backlog shows when you ask for it. Labels filter with a click.
+- **Agents:** add, edit and remove them: prompt, engine, model, policy profile, colour, which column their work counts as, and the machines they may run on (none: the one Agentry runs on). Each agent's colour marks its work everywhere.
+- **The dock:** `Ctrl+J`, or Terminal in the status bar, opens a panel under the page; drag its top edge to make it taller, up to the whole page. If you open the page inside VS Code, VS Code keeps `Ctrl+J` for itself, so use the button. Its tabs:
+  - **Questions:** everything waiting for you, from every task: approvals, the coordinator's questions (sometimes with options, or a small page it made to show you something), a task stopped at its budget, an agent stuck on a prompt. The status bar counts them.
+  - **Claude:** a Claude Code session Agentry runs for you in the default repo. Tell it what you want done; it reads the code, drafts the task, and hands it to the coordinator. It can also answer a coordinator's question for you. It can't approve an agent's actions or edit files.
+  - **Each working agent:** its live terminal. You watch; Take control lets you type into it.
+- **Budgets:** every task has a token budget (`-budget`, 5M by default). When a task reaches it, it stops before the next turn and asks you to raise it or wrap up.
 - **Keys:** `Ctrl+K` searches everything, and `?` lists every shortcut.
 
 ## The policy
