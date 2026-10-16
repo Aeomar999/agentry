@@ -21,7 +21,9 @@ func fakeClaude(t *testing.T) (record string) {
 	t.Helper()
 	bin := t.TempDir()
 	record = filepath.Join(bin, "record.txt")
-	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; env | grep -E '^(AGENTRY_|PORT=)' | sort; } > " + record + "\nsleep 30\n"
+	// Written whole, then moved into place: the test reads it the moment it exists.
+	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; env | grep -E '^(AGENTRY_|PORT=)' | sort; } > " + record + ".part && mv " +
+		record + ".part " + record + "\nsleep 30\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

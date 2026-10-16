@@ -15,7 +15,9 @@ import (
 // without asking, and able to find this agentry binary and the server.
 func TestTheDeskStartsClaudeWithWhatItNeeds(t *testing.T) {
 	bin, record := t.TempDir(), filepath.Join(t.TempDir(), "started")
-	fake := "#!/bin/sh\n{ echo \"$AGENTRY_SERVER $AGENTRY_DESK_TOKEN\"; echo \"$PATH\"; printf '%s\\n' \"$@\"; pwd; } > " + record + "\nsleep 30\n"
+	// Written whole, then moved into place: the test reads it the moment it exists.
+	fake := "#!/bin/sh\n{ echo \"$AGENTRY_SERVER $AGENTRY_DESK_TOKEN\"; echo \"$PATH\"; printf '%s\\n' \"$@\"; pwd; } > " + record +
+		".part && mv " + record + ".part " + record + "\nsleep 30\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}
