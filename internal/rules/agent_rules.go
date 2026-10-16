@@ -20,8 +20,8 @@ var agentName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown),
-	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, keepsACoordinator),
+	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown),
+	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown, keepsACoordinator),
 	events.AgentRemoved: allOf(agentExists, removalKeepsACoordinator),
 	events.TaskCreated:  allOf(coordinatorExists),
 	events.TaskAssigned: allOf(assigneeExists),
@@ -105,6 +105,13 @@ func workersAreKnown(_ agents.Roster, p events.Proposal) string {
 func colorIsKnown(_ agents.Roster, p events.Proposal) string {
 	if color := p.Text("color"); color != "" && !slices.Contains(agents.Colors, color) {
 		return "unknown colour " + color + "; known: " + strings.Join(agents.Colors, ", ")
+	}
+	return ""
+}
+
+func columnIsKnown(_ agents.Roster, p events.Proposal) string {
+	if column := p.Text("column"); column != "" && column != "review" {
+		return `an agent's work counts as In progress ("") or Review ("review"), not ` + column
 	}
 	return ""
 }

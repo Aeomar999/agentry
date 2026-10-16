@@ -32,7 +32,9 @@ var agentryFiles = []string{".agentry/", ".codex/hooks.json"}
 var ErrNotMerged = errors.New("the task branch isn't merged into dev")
 
 // Create makes the worktree for a task in root/<task>, on branch agentry/<task>,
-// starting from the repo's current commit.
+// starting from the repo's current commit. A task reopened after it was done
+// may still have its worktree or its branch, if its work wasn't merged: then
+// that worktree is used, or made again on that branch, so no work is lost.
 func Create(repo, root, task string, port int) (Worktree, error) {
 	top, err := git(repo, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -47,8 +49,20 @@ func Create(repo, root, task string, port int) (Worktree, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return Worktree{}, err
 	}
-	if _, err := git(top, "worktree", "add", "-q", "-b", w.Branch, w.Path, base); err != nil {
-		return Worktree{}, err
+	switch {
+	case isWorktree(w.Path):
+		return w.since(top) // set up when it was made
+	case branchExists(top, w.Branch):
+		if _, err := git(top, "worktree", "add", "-q", w.Path, w.Branch); err != nil {
+			return Worktree{}, err
+		}
+		if w, err = w.since(top); err != nil {
+			return w, err
+		}
+	default:
+		if _, err := git(top, "worktree", "add", "-q", "-b", w.Branch, w.Path, base); err != nil {
+			return Worktree{}, err
+		}
 	}
 	for _, setUp := range []func() error{w.copyUntrackedFiles, w.linkDependencies, w.ignoreAgentryFiles} {
 		if err := setUp(); err != nil {
@@ -121,6 +135,27 @@ func (w Worktree) ignoreAgentryFiles() error {
 	}
 	_, err = file.WriteString("# Agentry\n" + strings.Join(missing, "\n") + "\n")
 	return err
+}
+
+// since sets the base of a branch that already has work: where it left the
+// repo's current commit, so a review sees the task's work and nothing else.
+func (w Worktree) since(top string) (Worktree, error) {
+	base, err := git(top, "merge-base", "HEAD", w.Branch)
+	if err != nil {
+		return w, err
+	}
+	w.Base = base
+	return w, nil
+}
+
+func isWorktree(path string) bool {
+	_, err := os.Stat(filepath.Join(path, ".git"))
+	return err == nil
+}
+
+func branchExists(repo, branch string) bool {
+	_, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil
 }
 
 // Remove takes the worktree and its branch away, but only once the branch is

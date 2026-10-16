@@ -18,6 +18,8 @@ const (
 	TaskLabeled   Type = "task.labeled"  // the task's labels, all of them, replacing the ones before
 	TaskBudgeted  Type = "task.budgeted" // a new token budget for the task, as when you raise it
 	TaskRanked    Type = "task.ranked"   // where the task sits in your priority order: lower is first
+	TaskHeld      Type = "task.held"     // parked in a place ("todo", "backlog") until you move it on ("")
+	TaskReopened  Type = "task.reopened" // a finished task back to work, with what you want done
 	WorktreeReady Type = "worktree.ready"
 
 	TaskAssigned       Type = "task.assigned" // the coordinator hands the task to an agent

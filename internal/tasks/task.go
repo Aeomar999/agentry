@@ -11,6 +11,7 @@ const (
 	Working  Status = "working"
 	NeedsYou Status = "needs you"
 	Done     Status = "done"
+	Held     Status = "held" // parked in To do or the Backlog until you move it on
 )
 
 type Task struct {
@@ -20,6 +21,7 @@ type Task struct {
 	Labels      []string
 	Budget      int     // tokens the task may use before it asks you; 0 is no limit
 	Rank        float64 // your priority order, lower first; a new task starts above every older one
+	Parked      string  // "todo" or "backlog" while you hold it there; the coordinator leaves it alone
 	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string
@@ -113,6 +115,8 @@ func (t *Task) Status() Status {
 		return NeedsYou
 	case t.OpenTurn() != nil && t.OpenTurn().Waiting != "":
 		return NeedsYou
+	case t.Parked != "" && t.OpenTurn() == nil: // a turn running when you parked it finishes first
+		return Held
 	}
 	return Working
 }

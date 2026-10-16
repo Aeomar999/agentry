@@ -22,6 +22,9 @@ type Agent struct {
 	Workers []string `json:"workers"`
 	// Color tells it apart on the page; one of Colors, or "" for the next free one.
 	Color string `json:"color"`
+	// Column is where its work shows on the board: "" for In progress, or
+	// "review" for agents that check work, such as a reviewer or tester.
+	Column string `json:"column"`
 
 	untouched bool // still as Agentry wrote it: you have never changed it
 }
@@ -38,7 +41,7 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
-		"workers": a.workers(), "color": a.Color,
+		"workers": a.workers(), "color": a.Color, "column": a.Column,
 	}}
 }
 
@@ -57,7 +60,7 @@ func (a Agent) workers() []string {
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
 		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
-		Workers: e.List("workers"), Color: e.Text("color"), untouched: e.Actor.Kind == events.System}
+		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), untouched: e.Actor.Kind == events.System}
 }
 
 // Roster is every agent, in the order they were created.

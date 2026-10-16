@@ -3,6 +3,8 @@
 package rules
 
 import (
+	"slices"
+
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -39,7 +41,7 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 		return nil
 	case task == nil:
 		return refuse("task " + p.Stream + " doesn't exist")
-	case task.IsDone && p.Type != events.TaskLabeled && p.Type != events.TaskRanked: // labels and order sort finished work too
+	case task.IsDone && !slices.Contains(afterDone, p.Type):
 		return refuse("task " + p.Stream + " is done")
 	}
 	if reason := taskRules[p.Type](task, p); reason != "" {
@@ -47,6 +49,10 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 	}
 	return nil
 }
+
+// afterDone are what may happen to a finished task: labels and order sort
+// finished work too, and you can reopen it.
+var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened}
 
 func refuse(reason string) *events.Rejection {
 	return &events.Rejection{Check: "order", Reason: reason}

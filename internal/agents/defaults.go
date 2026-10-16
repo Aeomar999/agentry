@@ -18,9 +18,9 @@ var defaults = []Agent{
 		Description: "Takes every task, decides who works on it next, and when it is done"},
 	{Name: "engineer", Engine: "claude", Profile: "developer", Color: "blue",
 		Description: "Writes and changes code on the task branch, with tests, and commits it"},
-	{Name: "reviewer", Engine: "claude", Profile: "read-only", Color: "violet",
+	{Name: "reviewer", Engine: "claude", Profile: "read-only", Color: "violet", Column: "review",
 		Description: "Reviews the task branch's changes for bugs, clarity and fit; changes nothing"},
-	{Name: "tester", Engine: "claude", Profile: "developer", Color: "teal",
+	{Name: "tester", Engine: "claude", Profile: "developer", Color: "teal", Column: "review",
 		Description: "Runs the tests, adds missing ones, and tries the change for real"},
 	{Name: "deployer", Engine: "claude", Profile: "developer", Color: "green",
 		Description: "Merges the finished task branch into dev and pushes it (the push asks you first)"},
@@ -46,23 +46,30 @@ func SeedProposals(current Roster) []events.Proposal {
 }
 
 // Upgrades fill in what default agents created by an older Agentry lack: a
-// policy profile, a colour. Only agents you have never changed: an empty
+// policy profile, a colour, the board column their work counts as. Only agents you have never changed: an empty
 // field you chose (the default profile) stays as you left it.
 func Upgrades(current Roster) []events.Proposal {
 	upgrader := events.Actor{Kind: events.System, ID: "defaults"}
 	var proposals []events.Proposal
 	for _, shipped := range defaults {
 		agent, exists := current.Get(shipped.Name)
-		if !exists || !agent.untouched || (agent.Profile != "" && agent.Color != "") {
+		if !exists || !agent.untouched {
 			continue
 		}
-		if agent.Profile == "" {
-			agent.Profile = shipped.Profile
+		filled := false
+		for _, field := range []struct {
+			value   *string
+			shipped string
+		}{
+			{&agent.Profile, shipped.Profile}, {&agent.Color, shipped.Color}, {&agent.Column, shipped.Column},
+		} {
+			if *field.value == "" && field.shipped != "" {
+				*field.value, filled = field.shipped, true
+			}
 		}
-		if agent.Color == "" {
-			agent.Color = shipped.Color
+		if filled {
+			proposals = append(proposals, agent.Proposal(upgrader, true))
 		}
-		proposals = append(proposals, agent.Proposal(upgrader, true))
 	}
 	return proposals
 }

@@ -34,6 +34,7 @@ const BLANK: Agent = {
   coordinates: false,
   workers: [],
   color: "",
+  column: "",
 };
 
 export function AgentForm({ agent }: { agent?: Agent }) {
@@ -132,6 +133,12 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                 ))}
               </div>
             </div>
+            <Field label="Its work counts as" htmlFor="agent-column" hint="The board column a task is in while this agent has it.">
+              <Select id="agent-column" value={draft.column} onChange={(e) => set({ column: e.target.value as Agent["column"] })}>
+                <option value="">In progress</option>
+                <option value="review">Review</option>
+              </Select>
+            </Field>
             <Checkbox
               checked={draft.coordinates}
               onChange={(coordinates) => set({ coordinates })}

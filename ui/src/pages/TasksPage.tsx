@@ -17,6 +17,9 @@ import { useResource } from "@/live/use-resource";
 import { useKeys, useRowCursor } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
 import { tokens } from "@/lib/tokens";
+import { rankAt } from "@/lib/rank";
+import { api } from "@/api/client";
+import { useToast } from "@/components/organisms/Toasts";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { timeAgo } from "@/lib/time";
@@ -27,6 +30,7 @@ const FILTERS: { id: string; label: string; status?: TaskStatus }[] = [
   { id: "all", label: "All" },
   { id: "needs-you", label: "Needs you", status: "needs you" },
   { id: "working", label: "Working", status: "working" },
+  { id: "held", label: "Held", status: "held" },
   { id: "done", label: "Done", status: "done" },
 ];
 
@@ -79,10 +83,12 @@ function describe(task: TaskSummary): string {
 
 type View = "list" | "board";
 const viewKey = "agentry-tasks-view";
+const backlogKey = "agentry-show-backlog";
 
 export function TasksPage() {
   useBreadcrumb({ label: "Tasks" });
   const navigate = useNavigate();
+  const notify = useToast();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const { data, error } = useResource<TaskSummary[]>("/api/tasks");
@@ -107,6 +113,13 @@ export function TasksPage() {
   useKeys({ "1": () => showView("list"), "2": () => showView("board") });
 
   const filter = FILTERS.find((f) => f.id === params.get("status")) ?? FILTERS[0];
+  // The Backlog can grow long, so it shows only when you ask; remembered here.
+  const [showBacklog, setShowBacklog] = useState(() => readStored(backlogKey) === "true");
+  const toggleBacklog = () => {
+    writeStored(backlogKey, String(!showBacklog));
+    setShowBacklog(!showBacklog);
+  };
+  const inBacklog = tasks.filter((task) => task.parked === "backlog").length;
   const label = params.get("label");
   const pickLabel = (picked: string) => setParam("label", picked);
   const shown = useMemo(() => {
@@ -114,21 +127,32 @@ export function TasksPage() {
     return tasks.filter(
       (task) =>
         (!filter.status || task.status === filter.status) &&
+        (showBacklog || task.parked !== "backlog") &&
         (!label || task.labels.includes(label)) &&
         words.every((word) =>
           `${task.id} ${task.title} ${task.repo} ${task.currentAgent} ${task.labels.join(" ")}`.toLowerCase().includes(word),
         ),
     );
-  }, [tasks, filter, label, search]);
+  }, [tasks, filter, label, search, showBacklog]);
 
   const open = (task: TaskSummary) => navigate(`/tasks/${task.id}`);
+  // Dragging a row sets its place in your priority order, as on the board.
+  const reorder = async (task: TaskSummary, at: number) => {
+    const rank = rankAt(shown, task, at);
+    if (rank === null) return;
+    try {
+      await api("PUT", `/api/tasks/${encodeURIComponent(task.id)}/rank`, { rank });
+    } catch (failure) {
+      notify("danger", "The order wasn't saved", (failure as Error).message);
+    }
+  };
   const cursor = useRowCursor(view === "list" ? shown.length : 0, (index) => open(shown[index]));
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Tasks"
-        meta="Each task goes to the coordinator, which hands it from agent to agent until it says done."
+        meta="Each task goes to the coordinator, which hands it from agent to agent until it says done. Drag tasks to put them in your order."
         actions={[{ label: "New task", icon: <Plus />, to: "/tasks/new", primary: true }]}
       />
       <div className="flex flex-wrap items-center gap-2 border-b border-divider px-6 py-3">
@@ -143,6 +167,12 @@ export function TasksPage() {
         ))}
         {label && <FilterChip label={`label: ${label}  ×`} active onClick={() => setParam("label", null)} />}
         <div className="ml-auto flex items-center gap-2" data-page-search>
+          <FilterChip
+            label={showBacklog ? "Hide the backlog" : "Show the backlog"}
+            count={inBacklog}
+            active={showBacklog}
+            onClick={toggleBacklog}
+          />
           <SegmentedControl
             segments={[
               { id: "list", label: "List", icon: <List /> },
@@ -159,7 +189,9 @@ export function TasksPage() {
           <Banner title="Couldn't load the tasks">{error}</Banner>
         </div>
       )}
-      {view === "board" && data && <TaskBoard tasks={shown} agents={agents} onOpen={open} onPickLabel={pickLabel} />}
+      {view === "board" && data && (
+        <TaskBoard tasks={shown} agents={agents} showBacklog={showBacklog} onOpen={open} onPickLabel={pickLabel} />
+      )}
       {view === "list" && (
         <ResourceTable
           columns={columnsFor(pickLabel)}
@@ -167,6 +199,7 @@ export function TasksPage() {
           rowKey={(task) => task.id}
           onOpen={open}
           activeKey={shown[cursor]?.id}
+          onReorder={reorder}
           empty={
             data && (
               <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>

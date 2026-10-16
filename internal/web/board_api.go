@@ -5,12 +5,21 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// direct is what moving a card on the board does: it tells the coordinator
-// what you want next, in words it reads at its next turn. The coordinator
-// still makes the move, so the board never disagrees with the log. A task
-// waiting for your answer takes it as the answer.
+// direct is what moving a card on the board does. The columns are the
+// work's stages, not agents: the coordinator still decides who works next,
+// so the board never disagrees with the log.
+//
+//   - Backlog, To do: park it there; the coordinator leaves it alone
+//   - In progress: start it (let it go); from Review, send it back for more
+//     work
+//   - Review: have it checked next
+//   - Done: wrap it up
+//
+// A finished task moved anywhere but Done is reopened first. A task
+// waiting for your answer takes the words as the answer.
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To, Note string }
 	if !decode(w, r, &request) {
@@ -21,25 +30,97 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	text := "Wrap this task up: finish it as it is."
-	if request.To != "done" {
-		roster, err := s.roster()
-		if err != nil {
-			failed(w, err)
-			return
-		}
-		if _, ok := roster.Get(request.To); !ok {
-			http.Error(w, "no agent called "+request.To, http.StatusBadRequest)
-			return
-		}
-		text = "Hand this task to " + request.To + " next."
-	}
-	if note := strings.TrimSpace(request.Note); note != "" {
-		text += " " + note
-	}
-	if task.Question != "" {
-		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": text}})
+	roster, err := s.roster()
+	if err != nil {
+		failed(w, err)
 		return
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDirected, Data: map[string]any{"text": text}})
+	note := strings.TrimSpace(request.Note)
+	park := func(place string) events.Proposal {
+		return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": place}}
+	}
+
+	switch request.To {
+	case "backlog", "todo":
+		if task.IsDone && !s.proposeOrRefuse(w, s.reopen(task, "Reopen this task and park it.", note)) {
+			return
+		}
+		s.propose(w, park(request.To))
+		return
+	case "done":
+		if task.IsDone {
+			http.Error(w, "the task is done already", http.StatusConflict)
+			return
+		}
+		s.tell(w, task, "Wrap this task up: finish it as it is.", note)
+		return
+	case "in-progress", "review":
+	default:
+		http.Error(w, "no column called "+request.To, http.StatusBadRequest)
+		return
+	}
+
+	inReview := false
+	if agent, ok := roster.Get(stageOf(task)); ok {
+		inReview = agent.Column == "review"
+	}
+	text := ""
+	switch {
+	case request.To == "review":
+		text = "Have this task reviewed next."
+	case inReview:
+		text = "This needs more work: hand it back to an agent that builds it."
+	case note != "":
+		text = "Carry on."
+	}
+	if task.IsDone {
+		if text == "" {
+			text = "It needs more work."
+		}
+		s.propose(w, s.reopen(task, "Reopen this task. "+text, note))
+		return
+	}
+	if task.Parked != "" && !s.proposeOrRefuse(w, park("")) {
+		return
+	}
+	if text == "" { // started from To do or the Backlog: nothing more to say
+		reply(w, map[string]string{"task": task.ID})
+		return
+	}
+	s.tell(w, task, text, note)
+}
+
+// tell gives the coordinator your words: as the answer, if it asked you
+// something, or as a direction it reads at its next turn.
+func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string) {
+	if note != "" {
+		text += " " + note
+	}
+	kind, field := events.TaskDirected, "text"
+	if task.Question != "" {
+		kind, field = events.TaskAnswered, "answer"
+	}
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}})
+}
+
+func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {
+	if note != "" {
+		text += " " + note
+	}
+	return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": text}}
+}
+
+// proposeOrRefuse writes a proposal that comes before another, and answers
+// for the request only if it fails.
+func (s *Server) proposeOrRefuse(w http.ResponseWriter, p events.Proposal) bool {
+	_, rejection, err := s.store.Propose(p)
+	switch {
+	case err != nil:
+		failed(w, err)
+		return false
+	case rejection != nil:
+		http.Error(w, rejection.Reason, http.StatusConflict)
+		return false
+	}
+	return true
 }

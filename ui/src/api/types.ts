@@ -1,6 +1,6 @@
 // The JSON `agentry serve` answers with, as defined in internal/web/views.go.
 
-export type TaskStatus = "working" | "needs you" | "done";
+export type TaskStatus = "working" | "needs you" | "done" | "held";
 
 export interface TaskSummary {
   id: string;
@@ -17,6 +17,7 @@ export interface TaskSummary {
   tokensUsed: number;
   overBudget: boolean;
   rank: number; // your priority order, lower first
+  parked: "" | "todo" | "backlog"; // while you hold it there
   createdAt: string;
   lastActiveAt: string;
 }
@@ -91,6 +92,7 @@ export interface Agent {
   coordinates: boolean;
   workers: string[]; // the machines it may run on; none: the machine Agentry runs on
   color: string; // one of the agent colours; "" for the next free one
+  column: "" | "review"; // where its work shows on the board: In progress, or Review
 }
 
 export type Decision = "allow" | "ask" | "deny";

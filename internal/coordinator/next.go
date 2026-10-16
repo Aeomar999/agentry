@@ -39,7 +39,7 @@ const (
 // the loop can stop and restart at any point and pick up where it was.
 func Next(task *tasks.Task, roster agents.Roster) Move {
 	switch {
-	case task.IsDone, task.Question != "", task.OpenTurn() != nil:
+	case task.IsDone, task.Question != "", task.OpenTurn() != nil, task.Parked != "":
 		return Move{Kind: Wait}
 	case task.Worktree == nil:
 		return Move{Kind: PrepareWorktree}

@@ -98,13 +98,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": request.Budget}})
-	switch {
-	case err != nil:
-		failed(w, err)
-		return
-	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusConflict)
+	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": request.Budget}}) {
 		return
 	}
 	if task.Question != "" && task.TokensUsed < request.Budget {

@@ -26,6 +26,7 @@ type taskSummary struct {
 	TokensUsed   int          `json:"tokensUsed"` // by every turn that has ended
 	OverBudget   bool         `json:"overBudget"` // stopped, or about to stop, for its budget
 	Rank         float64      `json:"rank"`       // your priority order, lower first
+	Parked       string       `json:"parked"`     // "todo" or "backlog" while you hold it there
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 }
@@ -100,7 +101,7 @@ func summaryOf(t *tasks.Task) taskSummary {
 		needsYou = open.Waiting
 	}
 	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
-		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget, Rank: t.Rank,
+		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget, Rank: t.Rank, Parked: t.Parked,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 

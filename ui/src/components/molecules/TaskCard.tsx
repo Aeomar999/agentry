@@ -53,6 +53,7 @@ export function TaskCard({ task, onPickLabel, coordinator, onOpen, draggable, dr
 function nowLine(task: TaskSummary, coordinator: string) {
   if (task.status === "done") return <span className="text-ink-muted">Done</span>;
   if (task.status === "needs you") return <span className="text-warning">{task.needsYou}</span>;
+  if (task.status === "held") return <span className="text-ink-muted">Waiting until you start it</span>;
   if (task.currentAgent === coordinator) return <span className="text-ink-muted">The coordinator is deciding</span>;
   if (task.currentAgent)
     return (

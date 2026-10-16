@@ -25,6 +25,8 @@ var catalogue = map[Type]spec{
 	TaskLabeled:   {writers: []ActorKind{Human}}, // "labels" may be empty: that removes them all
 	TaskBudgeted:  {fields: []string{"budget"}, writers: []ActorKind{Human}},
 	TaskRanked:    {fields: []string{"rank"}, writers: []ActorKind{Human}},
+	TaskHeld:      {writers: []ActorKind{Human}}, // "place" "" lets it go
+	TaskReopened:  {fields: []string{"text"}, writers: []ActorKind{Human}},
 	WorktreeReady: {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
 
 	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}},

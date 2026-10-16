@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -19,6 +20,8 @@ var taskRules = map[events.Type]rule{
 	events.TaskLabeled:   all(labelsAreValid),
 	events.TaskBudgeted:  all(aPositiveBudget),
 	events.TaskRanked:    all(),
+	events.TaskHeld:      all(aKnownPlace),
+	events.TaskReopened:  all(isDone),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -104,6 +107,23 @@ func CheckLabels(labels []string) string {
 		if label == "" || len(label) > 32 || strings.TrimSpace(label) != label {
 			return "a label is 1 to 32 characters with no space at either end: " + `"` + label + `"`
 		}
+	}
+	return ""
+}
+
+// Places a task can be parked in: the board's To do and Backlog.
+var Places = []string{"todo", "backlog"}
+
+func aKnownPlace(_ *tasks.Task, p events.Proposal) string {
+	if place := p.Text("place"); place != "" && !slices.Contains(Places, place) {
+		return "a task is parked in todo or backlog, not " + place
+	}
+	return ""
+}
+
+func isDone(t *tasks.Task, _ events.Proposal) string {
+	if !t.IsDone {
+		return "the task isn't done, so there is nothing to reopen"
 	}
 	return ""
 }

@@ -49,6 +49,16 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
 
+	case events.TaskHeld:
+		t.Parked = e.Text("place")
+
+	case events.TaskReopened:
+		// Back to work in a fresh worktree (the loop makes it again), with a
+		// new count of turns and issues, from what you said.
+		t.IsDone, t.Summary, t.Worktree = false, "", nil
+		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
+		t.step(e, You, t.Coordinator, e.Text("text"))
+
 	case events.TaskRanked:
 		t.Rank = e.Real("rank")
 

@@ -144,3 +144,33 @@ func TestRemoveAfterTheDeployerPushesToOriginDev(t *testing.T) {
 		t.Errorf("after the push: %v", err)
 	}
 }
+
+// A reopened task keeps its unmerged work: its worktree is used as it is,
+// or made again on its branch.
+func TestCreateAgainKeepsTheTasksWork(t *testing.T) {
+	repo, root := newRepo(t), t.TempDir()
+	w, err := Create(repo, root, "task-1", 7901)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(w.Path, "work.txt"), "done so far\n")
+	mustGit(t, w.Path, "add", "work.txt")
+	mustGit(t, w.Path, "commit", "-qm", "work")
+
+	again, err := Create(repo, root, "task-1", 7902)
+	if err != nil || again.Path != w.Path || again.Base != w.Base {
+		t.Fatalf("the worktree as it is: %+v, %v", again, err)
+	}
+
+	mustGit(t, repo, "worktree", "remove", "--force", w.Path) // the folder went, the branch stayed
+	again, err = Create(repo, root, "task-1", 7903)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if content, err := os.ReadFile(filepath.Join(again.Path, "work.txt")); err != nil || string(content) != "done so far\n" {
+		t.Errorf("made again on its branch: %q, %v", content, err)
+	}
+	if again.Base != w.Base {
+		t.Errorf("base %s, want where the branch left dev, %s", again.Base, w.Base)
+	}
+}

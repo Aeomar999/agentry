@@ -332,27 +332,6 @@ func TestAgentsAreEditedFromThePage(t *testing.T) {
 	}
 }
 
-// Moving a card tells the coordinator what you want next, in the trail.
-func TestMovingACardDirectsTheCoordinator(t *testing.T) {
-	server, _ := newTestServer(t)
-	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
-	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"reviewer","note":"It was reviewed by hand already."}`); code != 200 {
-		t.Fatalf("direct: %d %s", code, body)
-	}
-	if code, _ := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"designer"}`); code != http.StatusBadRequest {
-		t.Errorf("to an agent that doesn't exist: %d", code)
-	}
-	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
-	var detail taskDetail
-	json.Unmarshal([]byte(body), &detail)
-	last := detail.Trail[len(detail.Trail)-1]
-	if last.From != "you" || last.Text != "Hand this task to reviewer next. It was reviewed by hand already." || detail.Status != "working" {
-		t.Errorf("trail %+v, status %s", detail.Trail, detail.Status)
-	}
-}
-
-// Labels are cleaned when a task is created, replaced later, and kept on a
-// finished task too.
 func TestTasksCarryLabels(t *testing.T) {
 	server, _ := newTestServer(t)
 	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect","labels":["Bug"," auth ","bug",""]}`)
@@ -478,5 +457,64 @@ func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
 	}
 	if push.Kind != "approval" || push.Action != "push-1" || push.Text != "git push" || push.Reason != "every push asks" {
 		t.Errorf("the approval: %+v", push)
+	}
+}
+
+// The board's columns are the work's stages: a card goes onto any of them,
+// and the coordinator still makes the move.
+func TestCardsMoveThroughTheStages(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	show := func() taskDetail {
+		_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+		var detail taskDetail
+		json.Unmarshal([]byte(body), &detail)
+		return detail
+	}
+	lastStep := func(d taskDetail) string { return d.Trail[len(d.Trail)-1].Text }
+	move := func(to, note string) int {
+		code, _ := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"`+to+`","note":"`+note+`"}`)
+		return code
+	}
+
+	move("backlog", "")
+	if d := show(); d.Status != "held" || d.Parked != "backlog" {
+		t.Errorf("onto Backlog: %s, parked %q", d.Status, d.Parked)
+	}
+	move("todo", "")
+	if d := show(); d.Parked != "todo" {
+		t.Errorf("onto To do: parked %q", d.Parked)
+	}
+	steps := len(show().Trail)
+	move("in-progress", "")
+	if d := show(); d.Parked != "" || d.Status != "working" || len(d.Trail) != steps {
+		t.Errorf("started: parked %q, %s, %d steps (want %d: nothing to say)", d.Parked, d.Status, len(d.Trail), steps)
+	}
+	move("review", "Check the redirect on Safari.")
+	if d := show(); lastStep(d) != "Have this task reviewed next. Check the redirect on Safari." {
+		t.Errorf("onto Review: %q", lastStep(d))
+	}
+	if code := move("sideways", ""); code != http.StatusBadRequest {
+		t.Errorf("a column that doesn't exist: %d", code)
+	}
+
+	// Done, then back for more work.
+	worker, coordinator := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "coordinator"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}},
+		{Stream: "task-1", Actor: coordinator, Type: events.TaskDone, Data: map[string]any{"summary": "Fixed."}},
+	} {
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatalf("%s: %v %v", p.Type, err, rejection)
+		}
+	}
+	if code := move("done", ""); code != http.StatusConflict {
+		t.Errorf("a done task onto Done: %d", code)
+	}
+	move("in-progress", "The fix broke sign-out.")
+	if d := show(); d.Status != "working" || d.Worktree != nil || lastStep(d) != "Reopen this task. Carry on. The fix broke sign-out." {
+		t.Errorf("reopened: %s, worktree %v, %q", d.Status, d.Worktree, lastStep(d))
 	}
 }

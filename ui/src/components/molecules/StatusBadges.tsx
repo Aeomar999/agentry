@@ -5,7 +5,7 @@ import type { Action, Agent, Decision, TaskStatus } from "@/api/types";
 // working is info, needs you is warning, done and allow are success,
 // deny is danger.
 
-const TASK: Record<TaskStatus, BadgeVariant> = { working: "info", "needs you": "warning", done: "success" };
+const TASK: Record<TaskStatus, BadgeVariant> = { working: "info", "needs you": "warning", done: "success", held: "default" };
 
 export function TaskStatusBadge({ status }: { status: TaskStatus }) {
   return <Badge variant={TASK[status]}>{status}</Badge>;
