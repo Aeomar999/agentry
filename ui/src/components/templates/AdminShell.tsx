@@ -6,10 +6,10 @@ import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
 import { StatusBar } from "@/components/organisms/StatusBar";
 import { TopBar } from "@/components/organisms/TopBar";
-import { DESK, TerminalDock } from "@/components/organisms/TerminalDock";
+import { DESK, QUESTIONS, TerminalDock } from "@/components/organisms/TerminalDock";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import type { Crumb } from "@/components/molecules/Breadcrumbs";
-import type { Agent, ServerConfig, TaskSummary } from "@/api/types";
+import type { Agent, Question, ServerConfig, TaskSummary } from "@/api/types";
 import { useLive } from "@/live/LiveProvider";
 import { useResource } from "@/live/use-resource";
 import { AgentColorsProvider } from "@/live/agent-colors";
@@ -45,6 +45,7 @@ export function AdminShell() {
   const navigate = useNavigate();
   const { connection, position } = useLive();
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
+  const questions = useResource<Question[]>("/api/questions").data ?? [];
   const agents = useResource<Agent[]>("/api/agents").data ?? [];
   const config = useResource<ServerConfig>("/api/config").data;
 
@@ -188,6 +189,7 @@ export function AdminShell() {
                     onResize={resizeDock}
                     working={working}
                     selected={dockTab}
+                    waiting={questions.length}
                     onSelect={setDockTab}
                     onClose={() => setDockOpen(false)}
                     theme={theme}
@@ -200,7 +202,8 @@ export function AdminShell() {
               position={position}
               defaultRepo={config?.defaultRepo ?? ""}
               working={tasks.filter((task) => task.status === "working").length}
-              needsYou={needsYou}
+              needsYou={questions.length}
+              onOpenQuestions={() => openTerminal(QUESTIONS)}
               terminalOpen={dockOpen}
               onToggleTerminal={() => toggleDock.current()}
             />

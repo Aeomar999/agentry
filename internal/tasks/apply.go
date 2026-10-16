@@ -115,9 +115,10 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TaskNeedsYou:
 		t.Question = e.Text("question")
+		t.Asked = Asked{By: e.Actor.ID, At: e.At, Options: e.List("options"), Page: e.Text("page")}
 		t.step(e, e.Actor.ID, You, t.Question)
 	case events.TaskAnswered:
-		t.Question, t.TurnsSinceAnswer, t.IssuesInARow = "", 0, 0
+		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("answer"))
 
 	case events.TaskDone:

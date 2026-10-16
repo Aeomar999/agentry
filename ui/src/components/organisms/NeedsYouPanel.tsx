@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Ban, Check, Gauge, MessageSquare, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Input, TextArea } from "@/components/atoms/Input";
@@ -8,6 +8,7 @@ import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { Action, TaskDetail } from "@/api/types";
 import { useToast } from "./Toasts";
+import { QuestionPage } from "@/components/molecules/QuestionPage";
 
 // What a task is waiting on you for: actions the policy held, a question
 // from the coordinator, or an agent stuck on a prompt in its terminal.
@@ -19,6 +20,7 @@ interface NeedsYouPanelProps {
 }
 
 export function NeedsYouPanel({ task, onChanged, onOpenTerminal }: NeedsYouPanelProps) {
+  const [fromPage, setFromPage] = useState("");
   const approvals = task.approvals ?? [];
   const question = task.status === "needs you" && approvals.length === 0 ? task.needsYou : "";
   if (approvals.length === 0 && !question) return null;
@@ -33,7 +35,8 @@ export function NeedsYouPanel({ task, onChanged, onOpenTerminal }: NeedsYouPanel
         ))}
         {question && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{question}</p>}
         {question && task.overBudget && <BudgetChoice task={task} onChanged={onChanged} />}
-        {question && askedByCoordinator && <Answer taskId={task.id} onChanged={onChanged} />}
+        {question && task.page && <QuestionPage page={task.page} onAnswer={setFromPage} />}
+        {question && askedByCoordinator && <Answer taskId={task.id} onChanged={onChanged} options={task.options} prefill={fromPage} />}
         {question && !askedByCoordinator && (
           <div className="flex flex-wrap items-center gap-3 text-[12px] text-ink-muted">
             The agent is waiting on something in its terminal.
@@ -47,7 +50,15 @@ export function NeedsYouPanel({ task, onChanged, onOpenTerminal }: NeedsYouPanel
   );
 }
 
-function Approval({ taskId, action, onChanged }: { taskId: string; action: Action; onChanged: () => void }) {
+export function Approval({
+  taskId,
+  action,
+  onChanged,
+}: {
+  taskId: string;
+  action: Pick<Action, "id" | "agent" | "tool" | "command" | "reason">;
+  onChanged: () => void;
+}) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -84,16 +95,26 @@ function Approval({ taskId, action, onChanged }: { taskId: string; action: Actio
   );
 }
 
-function Answer({ taskId, onChanged }: { taskId: string; onChanged: () => void }) {
-  const notify = useToast();
-  const [answer, setAnswer] = useState("");
-  const [busy, setBusy] = useState(false);
+interface AnswerProps {
+  taskId: string;
+  onChanged: () => void;
+  options?: string[]; // answers the coordinator offered: one click sends one
+  prefill?: string; // an answer to check before sending, as from a question's page
+}
 
-  async function send() {
-    if (!answer.trim()) return;
+export function Answer({ taskId, onChanged, options = [], prefill = "" }: AnswerProps) {
+  const notify = useToast();
+  const [answer, setAnswer] = useState(prefill);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (prefill) setAnswer(prefill);
+  }, [prefill]);
+
+  async function send(text = answer) {
+    if (!text.trim()) return;
     setBusy(true);
     try {
-      await api("POST", `/api/tasks/${taskId}/answer`, { answer });
+      await api("POST", `/api/tasks/${taskId}/answer`, { answer: text });
       notify("success", "Answer sent to the coordinator");
       setAnswer("");
       onChanged();
@@ -106,6 +127,15 @@ function Answer({ taskId, onChanged }: { taskId: string; onChanged: () => void }
 
   return (
     <div className="flex flex-col gap-2">
+      {options.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {options.map((option) => (
+            <Button key={option} disabled={busy} onClick={() => send(option)}>
+              {option}
+            </Button>
+          ))}
+        </div>
+      )}
       <TextArea
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
@@ -113,7 +143,7 @@ function Answer({ taskId, onChanged }: { taskId: string; onChanged: () => void }
         placeholder="Your answer goes to the coordinator"
       />
       <div>
-        <Button variant="primary" icon={<MessageSquare />} disabled={busy || !answer.trim()} onClick={send}>
+        <Button variant="primary" icon={<MessageSquare />} disabled={busy || !answer.trim()} onClick={() => send()}>
           Answer
         </Button>
       </div>
@@ -123,7 +153,7 @@ function Answer({ taskId, onChanged }: { taskId: string; onChanged: () => void }
 
 // A task stopped at its budget: raise it and the task goes on, or have the
 // coordinator wrap up with what is done.
-function BudgetChoice({ task, onChanged }: { task: TaskDetail; onChanged: () => void }) {
+export function BudgetChoice({ task, onChanged }: { task: { id: string; budget: number; tokensUsed: number }; onChanged: () => void }) {
   const notify = useToast();
   const [raiseTo, setRaiseTo] = useState(tokens(Math.max(task.budget * 2, task.tokensUsed + task.budget)));
   const [busy, setBusy] = useState(false);

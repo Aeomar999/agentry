@@ -34,6 +34,8 @@ type taskDetail struct {
 	taskSummary
 	Description string       `json:"description"`
 	FirstTitle  string       `json:"firstTitle"` // when the coordinator renamed the task
+	Options     []string     `json:"options"`    // answers the open question offers
+	Page        string       `json:"page"`       // the page the open question came with
 	Coordinator string       `json:"coordinator"`
 	Summary     string       `json:"summary"`
 	Worktree    *worktree    `json:"worktree"`
@@ -122,7 +124,7 @@ func stageOf(t *tasks.Task) string {
 }
 
 func detailOf(t *tasks.Task, log []events.Event) taskDetail {
-	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle,
+	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, Summary: t.Summary}
 	if w := t.Worktree; w != nil {
 		detail.Worktree = &worktree{Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}

@@ -443,3 +443,40 @@ func TestTasksListInPriorityOrder(t *testing.T) {
 		t.Errorf("after the drop: %s", got)
 	}
 }
+
+// Everything waiting for you, from every task, in one list, oldest first.
+func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"Pick a layout"}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Ship it"}`)
+	worker := events.Actor{Kind: events.Worker, ID: "laptop"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	propose := func(p events.Proposal) {
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatalf("%s: %v %v", p.Type, err, rejection)
+		}
+	}
+	for _, id := range []string{"task-1", "task-2"} {
+		propose(events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901}})
+		propose(events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}})
+	}
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}})
+	propose(events.Proposal{Stream: "task-1", Actor: coordinator, Type: events.TaskNeedsYou,
+		Data: map[string]any{"question": "Which layout?", "options": []string{"Tabs", "One page"}, "page": "<svg></svg>"}})
+	propose(events.Proposal{Stream: "task-2", Actor: coordinator, Type: events.ActionRequested, Correlation: "push-1", Data: map[string]any{"tool": "Bash", "command": "git push"}})
+	propose(events.Proposal{Stream: "task-2", Actor: events.Actor{Kind: events.Policy, ID: "policy"}, Type: events.ActionAsked, Correlation: "push-1", Data: map[string]any{"reason": "every push asks"}})
+
+	_, body := call(t, server, "GET", "/api/questions", "")
+	var questions []question
+	json.Unmarshal([]byte(body), &questions)
+	if len(questions) != 2 {
+		t.Fatalf("questions: %s", body)
+	}
+	ask, push := questions[0], questions[1]
+	if ask.Kind != "question" || ask.Task != "task-1" || ask.Text != "Which layout?" || len(ask.Options) != 2 || ask.Page != "<svg></svg>" {
+		t.Errorf("the question: %+v", ask)
+	}
+	if push.Kind != "approval" || push.Action != "push-1" || push.Text != "git push" || push.Reason != "every push asks" {
+		t.Errorf("the approval: %+v", push)
+	}
+}

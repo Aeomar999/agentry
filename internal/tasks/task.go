@@ -32,6 +32,7 @@ type Task struct {
 	Trail    []Step    // the handoffs, as the page shows them
 
 	Question     string // an open question for the user, "" when there is none
+	Asked        Asked  // how it was asked: by whom, when, with which options or page
 	Summary      string // the coordinator's summary, once done
 	IsDone       bool
 	LastActiveAt time.Time
@@ -172,4 +173,12 @@ func (t *Task) CurrentAgent() string {
 		return turn.Agent
 	}
 	return ""
+}
+
+// Asked is how the open question was put to you.
+type Asked struct {
+	By      string // the coordinator, or Agentry's loop
+	At      time.Time
+	Options []string // answers to pick from; you may still write your own
+	Page    string   // a small HTML page the coordinator wrote to ask it, shown in a sandbox
 }

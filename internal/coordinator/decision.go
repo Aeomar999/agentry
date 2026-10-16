@@ -12,12 +12,14 @@ import (
 
 // Decision is what the coordinator's reply ends with.
 type Decision struct {
-	Action       Action `json:"action"`
-	Agent        string `json:"agent,omitempty"`
-	Instructions string `json:"instructions,omitempty"`
-	Summary      string `json:"summary,omitempty"`
-	Question     string `json:"question,omitempty"`
-	Title        string `json:"title,omitempty"` // any decision may rename the task
+	Action       Action   `json:"action"`
+	Agent        string   `json:"agent,omitempty"`
+	Instructions string   `json:"instructions,omitempty"`
+	Summary      string   `json:"summary,omitempty"`
+	Question     string   `json:"question,omitempty"`
+	Title        string   `json:"title,omitempty"`   // any decision may rename the task
+	Options      []string `json:"options,omitempty"` // for ask: answers the user can pick
+	Page         string   `json:"page,omitempty"`    // for ask: a small HTML page that asks it
 }
 
 type Action string
@@ -34,6 +36,10 @@ const DecisionFormat = "End your reply with exactly one decision: a JSON object,
 	`{"action": "assign", "agent": "<agent name>", "instructions": "<what to do, what done looks like, what it needs to know>"}` + "\n" +
 	`{"action": "done", "summary": "<what was done, for the user>"}` + "\n" +
 	`{"action": "ask", "question": "<what you need the user to decide>"}` + "\n\n" +
+	`An "ask" may also carry "options": a short list of answers the user can pick with one click, and "page": ` +
+	`a small self-contained HTML page (inline CSS and SVG, no links or scripts from elsewhere) that shows what you need ` +
+	`them to see, such as a diagram of two designs. The page can call answer("text") to send that as the user's answer. ` +
+	`Use a page only when words alone would be hard to follow.` + "\n\n" +
 	`Any decision may also carry "title": a better title for the task, when its title doesn't say what the task is about ` +
 	`(people often write a vague one, or none, and then the start of the description stands in). ` +
 	`Make it one plain imperative line under 70 characters, such as "Add a retry to the webhook sender". ` +

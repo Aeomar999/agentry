@@ -1,6 +1,9 @@
 package coordinator
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestParseDecision(t *testing.T) {
 	cases := []struct {
@@ -24,6 +27,9 @@ func TestParseDecision(t *testing.T) {
 		{"with a new title",
 			`{"action": "assign", "agent": "engineer", "instructions": "Fix it.", "title": "Fix the login redirect"}`,
 			Decision{Action: Assign, Agent: "engineer", Instructions: "Fix it.", Title: "Fix the login redirect"}, false},
+		{"an ask with options and a page",
+			`{"action": "ask", "question": "Which layout?", "options": ["Tabs", "One page"], "page": "<svg></svg>"}`,
+			Decision{Action: Ask, Question: "Which layout?", Options: []string{"Tabs", "One page"}, Page: "<svg></svg>"}, false},
 		{"no decision", "I think the engineer should go next.", Decision{}, true},
 		{"text after the JSON", `{"action": "done", "summary": "x"} and then more words`, Decision{}, true},
 		{"assign without an agent", `{"action": "assign", "instructions": "go"}`, Decision{}, true},
@@ -35,7 +41,7 @@ func TestParseDecision(t *testing.T) {
 			t.Errorf("%s: error %v, want error %v", c.name, err, c.wantErr)
 			continue
 		}
-		if !c.wantErr && got != c.want {
+		if !c.wantErr && !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
 	}

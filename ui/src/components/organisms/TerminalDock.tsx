@@ -1,5 +1,5 @@
 import { PointerEvent as ReactPointerEvent, useRef } from "react";
-import { Sparkles, SquareTerminal, X } from "lucide-react";
+import { Inbox, Sparkles, SquareTerminal, X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { Kbd } from "@/components/atoms/Kbd";
 import { EmptyState } from "@/components/molecules/EmptyState";
@@ -9,28 +9,32 @@ import { cn } from "@/lib/cn";
 import type { Theme } from "@/lib/theme";
 import { modKey } from "@/lib/shortcuts";
 import { TerminalView } from "./TerminalView";
+import { QuestionsPanel } from "./QuestionsPanel";
 import { AgentName } from "@/components/molecules/AgentName";
 
-// The terminal dock at the bottom of the content area, toggled with Ctrl+J
-// and resized by dragging its top edge. Its tabs: Claude, your own session
-// that turns what you say into tasks for the coordinator, then the terminal
-// of every agent working right now.
+// The dock at the bottom of the content area, toggled with Ctrl+J and
+// resized by dragging its top edge. Its tabs: Questions, everything waiting
+// for you from every task; Claude, your own session that turns what you say
+// into tasks for the coordinator; then the terminal of every agent working
+// right now.
 
+export const QUESTIONS = "questions";
 export const DESK = "claude";
 
 interface TerminalDockProps {
   height: number;
   onResize: (height: number) => void; // the shell clamps it
   working: TaskSummary[];
-  selected: string; // DESK or a task id
+  selected: string; // QUESTIONS, DESK or a task id
+  waiting: number; // how many questions wait for you
   onSelect: (tab: string) => void;
   onClose: () => void;
   theme: Theme;
 }
 
-export function TerminalDock({ height, onResize, working, selected, onSelect, onClose, theme }: TerminalDockProps) {
+export function TerminalDock({ height, onResize, working, selected, waiting, onSelect, onClose, theme }: TerminalDockProps) {
   const task = working.find((t) => t.id === selected);
-  const tab = task ? task.id : DESK;
+  const tab = task ? task.id : selected === QUESTIONS ? QUESTIONS : DESK;
   return (
     <section
       aria-label="Terminal"
@@ -39,6 +43,13 @@ export function TerminalDock({ height, onResize, working, selected, onSelect, on
     >
       <ResizeHandle height={height} onResize={onResize} />
       <div className="flex h-9 shrink-0 scrollbar-thin items-center gap-0.5 overflow-x-auto border-b border-divider px-2">
+        <DockTab
+          active={tab === QUESTIONS}
+          onClick={() => onSelect(QUESTIONS)}
+          icon={<Inbox />}
+          label={waiting > 0 ? `Questions ${waiting}` : "Questions"}
+          attention={waiting > 0}
+        />
         <DockTab active={tab === DESK} onClick={() => onSelect(DESK)} icon={<Sparkles />} label="Claude" />
         {working.map((t) => (
           <DockTab
@@ -51,11 +62,13 @@ export function TerminalDock({ height, onResize, working, selected, onSelect, on
         ))}
         <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-3 text-[11px] text-ink-faint">
           <Kbd>{modKey} J</Kbd>
-          <IconButton icon={<X />} label="Close the terminal" onClick={onClose} className="size-7" />
+          <IconButton icon={<X />} label="Close the dock" onClick={onClose} className="size-7" />
         </span>
       </div>
       <div className="min-h-0 flex-1">
-        {tab === DESK ? (
+        {tab === QUESTIONS ? (
+          <QuestionsPanel onOpenTerminal={onSelect} />
+        ) : tab === DESK ? (
           <TerminalView key={`desk-${theme}`} url={deskTerminalURL(theme)} title="claude" takeControlOnConnect />
         ) : task ? (
           // A new key each turn: every turn is a new session.
@@ -68,7 +81,19 @@ export function TerminalDock({ height, onResize, working, selected, onSelect, on
   );
 }
 
-function DockTab({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function DockTab({
+  active,
+  onClick,
+  icon,
+  label,
+  attention = false,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  attention?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -76,6 +101,7 @@ function DockTab({ active, onClick, icon, label }: { active: boolean; onClick: (
       className={cn(
         "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm px-2.5 font-mono text-[12px] whitespace-nowrap [&>svg]:size-3.5",
         active ? "bg-surface-3 text-ink-primary" : "text-ink-muted hover:bg-surface-2 hover:text-ink-primary",
+        attention && "text-warning",
       )}
     >
       {icon}

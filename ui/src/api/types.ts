@@ -24,6 +24,8 @@ export interface TaskSummary {
 export interface TaskDetail extends TaskSummary {
   description: string;
   firstTitle: string; // the title it was created with, when the coordinator renamed it
+  options: string[]; // answers the open question offers
+  page: string; // the page the open question came with
   coordinator: string;
   summary: string;
   worktree: Worktree | null;
@@ -121,4 +123,23 @@ export interface ServerConfig {
 
 export interface CreatedEvent {
   stream: string;
+}
+
+// Something waiting for you, from any task (internal/web/questions_api.go).
+export interface Question {
+  id: string;
+  kind: "approval" | "question" | "budget" | "waiting";
+  task: string;
+  taskTitle: string;
+  agent: string;
+  at: string;
+  text: string;
+  context: string;
+  action?: string;
+  tool?: string;
+  reason?: string;
+  options?: string[];
+  page?: string;
+  tokensUsed?: number;
+  budget?: number;
 }
