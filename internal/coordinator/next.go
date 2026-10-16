@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"fmt"
+	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -49,6 +50,11 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 	case task.TurnsSinceAnswer >= MaxTurns:
 		return Move{Kind: AskYou, Reason: fmt.Sprintf(
 			"This task has had %d turns without finishing. Answer with any guidance and the coordinator carries on.", task.TurnsSinceAnswer)}
+	case task.Budget > 0 && task.TokensUsed >= task.Budget && task.TurnsSinceAnswer > 0:
+		// Once you answer, one more turn runs, so "wrap up" can be done.
+		return Move{Kind: AskYou, Reason: fmt.Sprintf(
+			"This task has used %s tokens of its %s budget. Raise the budget to go on, or tell the coordinator to wrap up.",
+			Tokens(task.TokensUsed), Tokens(task.Budget))}
 	case task.IssuesInARow >= MaxIssuesRun:
 		return Move{Kind: AskYou, Reason: fmt.Sprintf(
 			"%d issues in a row, the last: %s. Fix what's wrong and answer, and the coordinator carries on.", task.IssuesInARow, task.Handoff.Text)}
@@ -75,4 +81,15 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 		}
 	}
 	return Move{Kind: ApplyDecision, Decision: decision}
+}
+
+// Tokens writes a count of tokens as people read it: 950, 12.4k, 3.1M.
+func Tokens(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1e6), ".0") + "M"
+	case n >= 1_000:
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1e3), ".0") + "k"
+	}
+	return fmt.Sprint(n)
 }

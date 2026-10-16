@@ -18,6 +18,8 @@ type Task struct {
 	Title       string
 	FirstTitle  string // the title it was created with, when it has been renamed
 	Labels      []string
+	Budget      int // tokens the task may use before it asks you; 0 is no limit
+	TokensUsed  int // by every turn that has ended
 	Description string
 	Repo        string
 	Coordinator string // the agent that decides who works on the task next
@@ -62,6 +64,7 @@ type Turn struct {
 	Ended        bool
 	Report       string // the agent's final message
 	Issue        string // why the turn was cut short, if it was
+	Tokens       int    // what it used, when the engine said
 }
 
 type Decision string

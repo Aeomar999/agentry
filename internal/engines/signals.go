@@ -12,6 +12,7 @@ type Signal struct {
 	Report        string // the agent's final message of the turn
 	Question      string // what the engine is waiting for
 	EngineSession string // the engine's own session id
+	Tokens        int    // tokens the turn used, when the engine says (TurnEnded)
 }
 
 type SignalKind string
@@ -38,6 +39,7 @@ type hookPayload struct {
 	LastAssistantMessage string          `json:"last_assistant_message"`
 	Message              string          `json:"message"`
 	NotificationType     string          `json:"notification_type"` // Claude only
+	TranscriptPath       string          `json:"transcript_path"`
 }
 
 func parsePayload(payload []byte) (hookPayload, error) {

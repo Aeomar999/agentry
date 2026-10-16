@@ -37,6 +37,7 @@ type serveOptions struct {
 	address string
 	repo    string // the default repo for new tasks
 	dataDir string // the log and the worktrees
+	budget  int    // tokens a new task may use before it asks you; 0 is no limit
 }
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
@@ -48,6 +49,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.StringVar(&options.address, "addr", "127.0.0.1:7800", "where to listen")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
+	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	if flags.Parse(args) != nil {
 		return 2
 	}
@@ -125,7 +127,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
-	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Policy: agentPolicy, Desk: deskTerminal,
+	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), hub.Handler())
 	fmt.Fprintf(stdout, "Agentry is running. Open http://%s/?token=%s\n", listener.Addr(), uiToken)

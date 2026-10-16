@@ -36,6 +36,7 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
 		t.Labels = e.List("labels")
+		t.Budget = e.Number("budget")
 		t.Coordinator = e.Text("coordinator")
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -43,6 +44,9 @@ func (t *Task) apply(e events.Event) {
 		// Only noted in the trail: the work in hand goes on, and the
 		// coordinator reads it at its next turn.
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
+
+	case events.TaskBudgeted:
+		t.Budget = e.Number("budget")
 
 	case events.TaskLabeled:
 		t.Labels = e.List("labels")
@@ -89,7 +93,8 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TurnEnded:
 		turn := t.Turn(e.Correlation)
-		turn.Ended, turn.Report = true, e.Text("report")
+		turn.Ended, turn.Report, turn.Tokens = true, e.Text("report"), e.Number("tokens")
+		t.TokensUsed += turn.Tokens
 		t.IssuesInARow = 0
 		if turn.Agent == t.Coordinator {
 			t.PendingDecision = turn.Report

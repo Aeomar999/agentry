@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -37,6 +38,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Title, Description, Repo string
 		Labels                   []string
+		Budget                   int // tokens; 0 takes the default
 	}
 	if !decode(w, r, &request) {
 		return
@@ -52,6 +54,10 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.Repo == "" {
 		request.Repo = s.config.DefaultRepo
+	}
+	budget := request.Budget
+	if budget <= 0 {
+		budget = s.config.Budget
 	}
 	roster, err := s.roster()
 	if err != nil {
@@ -74,7 +80,36 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	id := fmt.Sprintf("task-%d", len(ids)+1)
 	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels)}})
+		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels), "budget": budget}})
+}
+
+// setBudget gives the task a new token budget. A task stopped at its budget
+// takes it as your answer and carries on.
+func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Budget int }
+	if !decode(w, r, &request) {
+		return
+	}
+	task, err := s.task(r.PathValue("task"))
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": request.Budget}})
+	switch {
+	case err != nil:
+		failed(w, err)
+		return
+	case rejection != nil:
+		http.Error(w, rejection.Reason, http.StatusConflict)
+		return
+	}
+	if task.Question != "" && task.TokensUsed < request.Budget {
+		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{
+			"answer": "I raised the budget to " + coordinator.Tokens(request.Budget) + " tokens. Carry on."}})
+		return
+	}
+	reply(w, map[string]int{"budget": request.Budget})
 }
 
 // label sets the task's labels, all of them.
@@ -166,7 +201,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
+	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
 		"engines": rules.KnownEngines, "workers": knownWorkers()})
 }
 

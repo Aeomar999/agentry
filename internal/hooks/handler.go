@@ -72,7 +72,7 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	case engines.Waiting:
 		p.Type, p.Data = events.AgentWaiting, map[string]any{"question": signal.Question}
 	case engines.TurnEnded:
-		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": signal.Report}
+		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": signal.Report, "tokens": signal.Tokens}
 	default:
 		return
 	}

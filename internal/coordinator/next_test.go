@@ -109,3 +109,36 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 }
 
 func turnID(n int) string { return "turn-" + strings.Repeat("x", n) } // unique; Next doesn't read turn numbers
+
+// At its budget a task comes to you before another turn starts; after your
+// answer one more turn runs, so the coordinator can wrap up.
+func TestTheBudgetSendsTheTaskToYou(t *testing.T) {
+	h := history{}.
+		add(you, events.TaskCreated, "", map[string]any{"title": "x", "repo": "/r", "coordinator": "coordinator", "budget": 100_000}).
+		add(worker, events.WorktreeReady, "", map[string]any{"path": "/w", "branch": "b", "port": 7901}).
+		add(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "coordinator", "hash": "h"}).
+		add(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "coordinator", "report": "r", "tokens": 60_000}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
+	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn {
+		t.Errorf("under budget: %+v", move)
+	}
+	h = h.add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "half done", "tokens": 50_000})
+	move := Next(h.task(), defaultRoster())
+	if move.Kind != AskYou || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
+		t.Errorf("over budget: %+v", move)
+	}
+	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": move.Reason}).
+		add(you, events.TaskAnswered, "", map[string]any{"answer": "Wrap up."})
+	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn || move.Agent.Name != "coordinator" {
+		t.Errorf("after your answer the coordinator gets one turn: %+v", move)
+	}
+}
+
+func TestTokens(t *testing.T) {
+	for n, want := range map[int]string{950: "950", 12_400: "12.4k", 5_000_000: "5M", 3_140_000: "3.1M"} {
+		if got := Tokens(n); got != want {
+			t.Errorf("Tokens(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

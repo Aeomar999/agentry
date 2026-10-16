@@ -15,6 +15,7 @@ import type { Agent, TaskStatus, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useKeys, useRowCursor } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
+import { tokens } from "@/lib/tokens";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { timeAgo } from "@/lib/time";
@@ -49,6 +50,11 @@ function columnsFor(pickLabel: (label: string) => void): Column<TaskSummary>[] {
     { header: "Status", className: "w-28", render: (task) => <TaskStatusBadge status={task.status} /> },
     { header: "Agent", className: "w-32 max-lg:hidden", render: (task) => <Mono>{task.currentAgent || "none"}</Mono> },
     { header: "Turns", className: "w-16 text-right max-lg:hidden", render: (task) => <Mono>{task.turns}</Mono> },
+    {
+      header: "Tokens",
+      className: "w-24 text-right max-lg:hidden",
+      render: (task) => <Mono className={task.overBudget ? "text-danger" : undefined}>{tokens(task.tokensUsed)}</Mono>,
+    },
     {
       header: "Active",
       className: "w-24 text-right max-sm:hidden",

@@ -6,7 +6,8 @@ import { Input, TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
 import { Field } from "@/components/molecules/Field";
 import { api } from "@/api/client";
-import type { CreatedEvent, TaskSummary } from "@/api/types";
+import type { CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
+import { parseTokens, tokens } from "@/lib/tokens";
 import { LabelInput } from "@/components/molecules/LabelInput";
 import { knownLabels } from "@/lib/labels";
 import { useResource } from "@/live/use-resource";
@@ -22,6 +23,8 @@ export function NewTaskForm() {
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
+  const [budget, setBudget] = useState("");
+  const config = useResource<ServerConfig>("/api/config").data;
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,10 +32,15 @@ export function NewTaskForm() {
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     if (!description.trim() || busy) return;
+    const asked = budget.trim() ? parseTokens(budget) : 0;
+    if (Number.isNaN(asked) || asked < 0) {
+      setError("A budget is a number of tokens, such as 2M or 500k.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const created = await api<CreatedEvent>("POST", "/api/tasks", { description, title, labels });
+      const created = await api<CreatedEvent>("POST", "/api/tasks", { description, title, labels, budget: asked });
       notify("success", `Created ${created.stream}`, "The coordinator reads it next.");
       navigate(`/tasks/${created.stream}`);
     } catch (failure) {
@@ -61,6 +69,20 @@ export function NewTaskForm() {
         <div id="task-labels" className="max-w-md">
           <LabelInput labels={labels} onChange={setLabels} known={knownLabels(tasks)} />
         </div>
+      </Field>
+      <Field
+        label="Token budget"
+        htmlFor="task-budget"
+        hint="Optional. When the task has used this many tokens it stops and asks you to raise it or wrap up."
+      >
+        <Input
+          id="task-budget"
+          mono
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+          placeholder={config ? (config.budget ? `${tokens(config.budget)}, the default` : "no limit") : ""}
+          className="max-w-48"
+        />
       </Field>
       <div className="flex items-center gap-3">
         <Button type="submit" variant="primary" icon={<Plus />} disabled={busy || !description.trim()}>

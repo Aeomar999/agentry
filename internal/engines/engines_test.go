@@ -142,3 +142,19 @@ func TestLaunchIsNeverAskWithThePrompt(t *testing.T) {
 		}
 	}
 }
+
+// A turn's tokens come from its transcript, each reply counted once.
+func TestClaudeCountsTheTurnsTokens(t *testing.T) {
+	transcript := filepath.Join(t.TempDir(), "session.jsonl")
+	os.WriteFile(transcript, []byte(`{"type":"user","message":{"role":"user","content":"go"}}
+{"message":{"id":"msg_1","usage":{"input_tokens":6,"cache_creation_input_tokens":27370,"cache_read_input_tokens":105289,"output_tokens":1228}}}
+{"message":{"id":"msg_1","usage":{"input_tokens":6,"cache_creation_input_tokens":27370,"cache_read_input_tokens":105289,"output_tokens":1228}}}
+{"message":{"id":"msg_2","usage":{"input_tokens":2,"output_tokens":100}}}
+not json
+`), 0o644)
+	claude, _ := engines.Get("claude")
+	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`))
+	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 {
+		t.Errorf("signals %+v, err %v", signals, err)
+	}
+}

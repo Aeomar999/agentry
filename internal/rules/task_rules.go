@@ -17,6 +17,7 @@ var taskRules = map[events.Type]rule{
 	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
 	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
 	events.TaskLabeled:   all(labelsAreValid),
+	events.TaskBudgeted:  all(aPositiveBudget),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -76,6 +77,13 @@ func byTheCoordinatorOrYou(t *tasks.Task, p events.Proposal) string {
 func aNewTitle(t *tasks.Task, p events.Proposal) string {
 	if title := p.Text("title"); title == "" || title == t.Title {
 		return "the task already has that title"
+	}
+	return ""
+}
+
+func aPositiveBudget(_ *tasks.Task, p events.Proposal) string {
+	if p.Number("budget") <= 0 {
+		return "a budget is a number of tokens above 0"
 	}
 	return ""
 }

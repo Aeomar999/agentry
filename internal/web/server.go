@@ -17,6 +17,7 @@ type Config struct {
 	UIToken     string // opens the page and the API; printed when the server starts
 	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
+	Budget      int    // the token budget a new task gets when it names none; 0 is no limit
 	Policy      PolicySource
 	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
@@ -55,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	deskToo("GET /api/tasks/{task}", s.showTask)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	api("PUT /api/tasks/{task}/labels", s.label)
+	api("PUT /api/tasks/{task}/budget", s.setBudget)
 	api("POST /api/tasks/{task}/direct", s.direct)
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)

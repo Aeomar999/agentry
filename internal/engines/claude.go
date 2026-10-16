@@ -1,7 +1,9 @@
 package engines
 
 import (
+	"bufio"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 )
@@ -51,7 +53,46 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 		}
 		return nil, nil
 	}
-	return sharedSignals(p), nil
+	signals := sharedSignals(p)
+	if p.HookEventName == "Stop" && len(signals) == 1 {
+		signals[0].Tokens = claudeTokens(p.TranscriptPath)
+	}
+	return signals, nil
+}
+
+// claudeTokens adds up what a session's transcript says it used: every
+// token the model read (fresh, or from the cache) and wrote. Each turn is
+// its own session, so this is the turn's use. A reply can appear on several
+// lines with the same usage, so each message is counted once.
+func claudeTokens(transcript string) int {
+	file, err := os.Open(transcript)
+	if err != nil {
+		return 0
+	}
+	defer file.Close()
+	seen, total := map[string]bool{}, 0
+	lines := bufio.NewScanner(file)
+	lines.Buffer(make([]byte, 0, 1<<20), 16<<20)
+	for lines.Scan() {
+		var entry struct {
+			Message struct {
+				ID    string `json:"id"`
+				Usage *struct {
+					Input      int `json:"input_tokens"`
+					Output     int `json:"output_tokens"`
+					CacheWrite int `json:"cache_creation_input_tokens"`
+					CacheRead  int `json:"cache_read_input_tokens"`
+				} `json:"usage"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(lines.Bytes(), &entry) != nil || entry.Message.Usage == nil || seen[entry.Message.ID] {
+			continue
+		}
+		seen[entry.Message.ID] = true
+		u := entry.Message.Usage
+		total += u.Input + u.Output + u.CacheWrite + u.CacheRead
+	}
+	return total
 }
 
 // GateReply: Claude's PreToolUse takes allow and deny as JSON.

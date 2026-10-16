@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Ban, Check, MessageSquare, SquareTerminal } from "lucide-react";
+import { Ban, Check, Gauge, MessageSquare, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
-import { TextArea } from "@/components/atoms/Input";
+import { Input, TextArea } from "@/components/atoms/Input";
+import { tokens, parseTokens } from "@/lib/tokens";
 import { CodeBlock } from "@/components/molecules/CodeBlock";
 import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
@@ -31,6 +32,7 @@ export function NeedsYouPanel({ task, onChanged, onOpenTerminal }: NeedsYouPanel
           <Approval key={action.id} taskId={task.id} action={action} onChanged={onChanged} />
         ))}
         {question && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{question}</p>}
+        {question && task.overBudget && <BudgetChoice task={task} onChanged={onChanged} />}
         {question && askedByCoordinator && <Answer taskId={task.id} onChanged={onChanged} />}
         {question && !askedByCoordinator && (
           <div className="flex flex-wrap items-center gap-3 text-[12px] text-ink-muted">
@@ -115,6 +117,53 @@ function Answer({ taskId, onChanged }: { taskId: string; onChanged: () => void }
           Answer
         </Button>
       </div>
+    </div>
+  );
+}
+
+// A task stopped at its budget: raise it and the task goes on, or have the
+// coordinator wrap up with what is done.
+function BudgetChoice({ task, onChanged }: { task: TaskDetail; onChanged: () => void }) {
+  const notify = useToast();
+  const [raiseTo, setRaiseTo] = useState(tokens(Math.max(task.budget * 2, task.tokensUsed + task.budget)));
+  const [busy, setBusy] = useState(false);
+
+  async function run(work: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    try {
+      await work();
+      notify("success", done);
+      onChanged();
+    } catch (error) {
+      notify("danger", "That didn't go through", (error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const raise = () => {
+    const budget = parseTokens(raiseTo);
+    if (Number.isNaN(budget) || budget <= task.tokensUsed) {
+      notify("danger", "Raise it above what the task has used", `It has used ${tokens(task.tokensUsed)} tokens.`);
+      return;
+    }
+    run(() => api("PUT", `/api/tasks/${task.id}/budget`, { budget }), `Budget raised to ${tokens(budget)}`);
+  };
+  const wrapUp = () =>
+    run(
+      () => api("POST", `/api/tasks/${task.id}/answer`, { answer: "Stop here: wrap the task up with what is done, and say what is left." }),
+      "Asked the coordinator to wrap up",
+    );
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input mono value={raiseTo} onChange={(e) => setRaiseTo(e.target.value)} className="w-28" aria-label="New budget" />
+      <Button variant="primary" icon={<Gauge />} disabled={busy} onClick={raise}>
+        Raise the budget
+      </Button>
+      <Button disabled={busy} onClick={wrapUp}>
+        Wrap up
+      </Button>
     </div>
   );
 }

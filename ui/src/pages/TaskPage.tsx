@@ -11,6 +11,8 @@ import { KeyValueList } from "@/components/molecules/KeyValueList";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
+import { TokenMeter } from "@/components/molecules/TokenMeter";
+import { tokens } from "@/lib/tokens";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
 import { LabelEditor } from "@/components/organisms/LabelEditor";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
@@ -179,6 +181,7 @@ export function TaskPage() {
                 { label: "Agent", value: <Mono>{task.currentAgent || "none"}</Mono> },
                 { label: "Coordinator", value: <Mono>{task.coordinator}</Mono> },
                 { label: "Turns", value: <Mono>{task.turns}</Mono> },
+                { label: "Tokens", value: <TokenMeter used={task.tokensUsed} budget={task.budget} /> },
                 { label: "Worktree", value: w ? <Mono className="break-all">{w.path}</Mono> : "not yet" },
                 ...(w
                   ? [
@@ -210,7 +213,10 @@ function TurnList({ turns }: { turns: Turn[] }) {
           <div className="flex items-center gap-2 text-[12px]">
             <Mono className="font-semibold text-ink-primary">{turn.agent}</Mono>
             <Mono className="text-ink-faint">{clockTime(turn.startedAt)}</Mono>
-            <span className="ml-auto text-[11px] text-ink-muted">{turn.ended ? (turn.issue ? "issue" : "ended") : "running"}</span>
+            {turn.tokens > 0 && <Mono className="ml-auto text-[11px] text-ink-faint">{tokens(turn.tokens)}</Mono>}
+            <span className={turn.tokens > 0 ? "text-[11px] text-ink-muted" : "ml-auto text-[11px] text-ink-muted"}>
+              {turn.ended ? (turn.issue ? "issue" : "ended") : "running"}
+            </span>
           </div>
           {turn.issue && <p className="text-[11px] break-words text-danger">{turn.issue}</p>}
         </li>

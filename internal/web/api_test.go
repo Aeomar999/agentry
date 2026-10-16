@@ -374,3 +374,42 @@ func TestTasksCarryLabels(t *testing.T) {
 		t.Errorf("a label too long: %d", code)
 	}
 }
+
+// A task gets the default budget, or its own; raising it on a task stopped
+// at its budget answers for you, and the task carries on.
+func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Default budget"}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Its own budget","budget":200000}`)
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	var list []taskSummary
+	json.Unmarshal([]byte(body), &list)
+	if list[1].Budget != 5_000_000 || list[0].Budget != 200_000 {
+		t.Errorf("budgets: %d, %d", list[1].Budget, list[0].Budget)
+	}
+
+	s.Propose(events.Proposal{Stream: "task-2", Actor: events.Actor{Kind: events.System, ID: "coordinator-loop"}, Type: events.TaskNeedsYou,
+		Data: map[string]any{"question": "This task has used 210k tokens of its 200k budget."}})
+	if code, body := call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":1000000}`); code != 200 {
+		t.Fatalf("raise: %d %s", code, body)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-2", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Budget != 1_000_000 || detail.Status != "working" || detail.Trail[len(detail.Trail)-1].Text != "I raised the budget to 1M tokens. Carry on." {
+		t.Errorf("after raising: budget %d, status %s, trail %+v", detail.Budget, detail.Status, detail.Trail)
+	}
+	if code, _ := call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":0}`); code != http.StatusConflict {
+		t.Errorf("a budget of 0: %d", code)
+	}
+}

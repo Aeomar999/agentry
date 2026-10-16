@@ -22,6 +22,9 @@ type taskSummary struct {
 	NeedsYou     string       `json:"needsYou"`    // what you are asked, "" when nothing
 	HasQuestion  bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
 	Labels       []string     `json:"labels"`
+	Budget       int          `json:"budget"`     // tokens; 0 is no limit
+	TokensUsed   int          `json:"tokensUsed"` // by every turn that has ended
+	OverBudget   bool         `json:"overBudget"` // stopped, or about to stop, for its budget
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 }
@@ -61,6 +64,7 @@ type turn struct {
 	Acknowledged bool      `json:"acknowledged"`
 	Ended        bool      `json:"ended"`
 	Issue        string    `json:"issue"`
+	Tokens       int       `json:"tokens"`
 }
 
 type action struct {
@@ -92,8 +96,9 @@ func summaryOf(t *tasks.Task) taskSummary {
 	if open := t.OpenTurn(); needsYou == "" && open != nil {
 		needsYou = open.Waiting
 	}
-	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels),
-		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
+	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget,
+		Turns:      len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 
 // listOf makes nil an empty list, so the page reads [], never null.
@@ -126,7 +131,7 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, StartedAt: tu.StartedAt,
-			Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue})
+			Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens})
 	}
 	for _, a := range t.Actions {
 		view := action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command,

@@ -13,6 +13,9 @@ export interface TaskSummary {
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer
   labels: string[];
+  budget: number; // tokens; 0 is no limit
+  tokensUsed: number;
+  overBudget: boolean;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -51,6 +54,7 @@ export interface Turn {
   acknowledged: boolean;
   ended: boolean;
   issue: string;
+  tokens: number;
 }
 
 export interface Action {
@@ -106,6 +110,7 @@ export interface PolicyProfile {
 
 export interface ServerConfig {
   defaultRepo: string;
+  budget: number; // what a new task gets, in tokens
   hasTerminal: boolean;
   hasDesk: boolean;
   engines: string[];
