@@ -1,0 +1,57 @@
+# Agentry on the swarm, deployed by Berth from `dev`, pinned to NODE.
+#
+# Every ${NAME} is filled from this app's .env on the manager: NODE, DOMAIN,
+# and optionally GIT_NAME and GIT_EMAIL (who agents' commits are by) and
+# BUDGET (a new task's tokens). BERTH_* names are set by Berth.
+#
+# The home volume holds Claude's sign-in, the repos and Agentry's SQLite log,
+# so the service is pinned, and stops before its next copy starts. Berth's
+# daily backup stops it, copies the volume and starts it again: the default,
+# and the one safe for a live SQLite file.
+#
+# Keep the :? messages free of dashes and colons.
+
+services:
+  agentry-server-dev:
+    image: registry.gitlab.com/dev.chempa/agentry:dev
+    # Reaps the processes agents leave behind: tmux servers, engines, tests.
+    init: true
+    environment:
+      AGENTRY_PUBLIC_URL: https://${DOMAIN:?DOMAIN must be set}
+      AGENTRY_BUDGET: ${BUDGET:-5000000}
+      GIT_NAME: ${GIT_NAME:-}
+      GIT_EMAIL: ${GIT_EMAIL:-}
+    volumes:
+      - agentry-home-dev:/home/agentry
+    networks:
+      - berth-proxy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:7800/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # Time for a hook call waiting on you to record its denial.
+    stop_grace_period: 30s
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == ${NODE:?NODE must be set}
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-6g}
+      labels:
+        - traefik.enable=true
+        - traefik.swarm.lbswarm=true
+        - traefik.http.routers.${BERTH_STACK}.rule=Host(`${DOMAIN}`)
+        - traefik.http.services.${BERTH_STACK}.loadbalancer.server.port=7800
+
+volumes:
+  agentry-home-dev:
+
+networks:
+  berth-proxy:
+    external: true

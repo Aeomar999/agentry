@@ -1,0 +1,6 @@
+# Only cmd/, internal/ (the built UI included) and deploy/ go into the image.
+.git
+bin
+ui
+docs
+*.md

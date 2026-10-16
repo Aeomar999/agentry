@@ -54,6 +54,14 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 - **Trust:** open the repo with Claude Code once beforehand. Claude asks whether to trust a new folder, and a worktree inherits its repo's answer. If you skip this, the first task shows "needs you". Open its terminal on the page and answer the question there.
 - **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. As shipped, agents allow everything, so the push goes straight through; with the profiles on, every push waits for your approval on the page.
 
+## Deploy it
+
+`agentry.chempa.dev` runs from the `dev` branch: GitLab tests the commit, builds the image (`Dockerfile`: the server, git, tmux and Claude Code) and asks Berth to deploy `docker-stack.dev.yml`, pinned to the workstation. Everything worth keeping is in the container's home, a volume: Claude's sign-in, the repos under `~/work`, and Agentry's log and policy in `~/.agentry`.
+
+- **The link:** the server prints it with its token: `ssh vps berth logs agentry dev server`.
+- **Signing Claude in:** once, after the first deploy: open the dock's Claude tab and follow Claude's sign-in. The agents use the same sign-in.
+- **Repos:** clone them into `~/work` (ask the desk, or from an agent's terminal) and name them on a task.
+
 ## Use it
 
 The page is an admin console: tasks, agents and the policy in the sidebar, and everything updates live.

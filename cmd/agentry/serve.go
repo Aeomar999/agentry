@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -34,10 +35,11 @@ import (
 )
 
 type serveOptions struct {
-	address string
-	repo    string // the default repo for new tasks
-	dataDir string // the log and the worktrees
-	budget  int    // tokens a new task may use before it asks you; 0 is no limit
+	address   string
+	repo      string // the default repo for new tasks
+	dataDir   string // the log and the worktrees
+	budget    int    // tokens a new task may use before it asks you; 0 is no limit
+	publicURL string // the address people open; "" for the address listened on
 }
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
@@ -47,6 +49,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	var options serveOptions
 	flags.StringVar(&options.address, "addr", "127.0.0.1:7800", "where to listen")
+	flags.StringVar(&options.publicURL, "public-url", "", "the address people open, for the printed link, such as https://agentry.example.com")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
@@ -96,10 +99,10 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	hookToken := newToken() // new each start: only sessions started by this server have it
-	deskToken := newToken() // the same, for the desk's session
-	serverURL := "http://" + listener.Addr().String()
-	var theme atomic.Value // the page's theme, which the sessions it watches start in
+	hookToken := newToken()                // new each start: only sessions started by this server have it
+	deskToken := newToken()                // the same, for the desk's session
+	serverURL := localURL(listener.Addr()) // what agents' hooks and the desk call, on this machine
+	var theme atomic.Value                 // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
 	currentTheme := func() string { return theme.Load().(string) }
 
@@ -130,10 +133,21 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), hub.Handler())
-	fmt.Fprintf(stdout, "Agentry is running. Open http://%s/?token=%s\n", listener.Addr(), uiToken)
+	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
+	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)
 	fmt.Fprintf(stdout, "Agents follow the policy in %s; edits take effect when you save.\n", agentPolicy.Path())
 	return serveUntilDone(ctx, listener, server.Handler())
+}
+
+// localURL is the server as seen from this machine. Listening on every
+// address (0.0.0.0, as in a container) is reached on loopback.
+func localURL(addr net.Addr) string {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok || !tcp.IP.IsUnspecified() {
+		return "http://" + addr.String()
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", tcp.Port)
 }
 
 func seedAgents(log *store.Store) error {

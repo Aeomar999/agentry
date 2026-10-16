@@ -1,0 +1,96 @@
+# One environment, so one branch: dev. Check, build the image, ask Berth to
+# deploy it to agentry.chempa.dev. The UI is built and committed in
+# internal/web/dist, so the pipeline needs no Node.
+
+stages:
+  - check
+  - build
+  - deploy
+
+default:
+  tags:
+    - self-hosted
+
+variables:
+  FF_NETWORK_PER_BUILD: "true"
+
+check:
+  stage: check
+  interruptible: true
+  timeout: 15 minutes
+  image: golang:1.27-bookworm
+  variables:
+    GIT_AUTHOR_NAME: CI
+    GIT_AUTHOR_EMAIL: ci@example.com
+    GIT_COMMITTER_NAME: CI
+    GIT_COMMITTER_EMAIL: ci@example.com
+  before_script:
+    # The tests run real tmux sessions and git worktrees.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends tmux >/dev/null
+  script:
+    - test -f internal/web/dist/index.html || { echo "The UI isn't built: run make ui and commit internal/web/dist"; exit 1; }
+    - go vet ./...
+    - go test ./...
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+build_image:
+  stage: build
+  interruptible: true
+  timeout: 20 minutes
+  tags:
+    - self-hosted
+    - dind
+  image: docker:28-cli
+  services:
+    - docker:28-dind
+  needs:
+    - job: check
+      artifacts: false
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "/certs/client"
+    DOCKER_BUILDKIT: 1
+  before_script:
+    - |
+      for i in $(seq 1 30); do
+        docker info >/dev/null 2>&1 && break
+        if [ "$i" = 30 ]; then echo "dind did not become ready after 30s"; exit 1; fi
+        sleep 1
+      done
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - SHA_TAG="$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+    - BRANCH_TAG="$CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG"
+    - docker pull "$BRANCH_TAG" || echo "no previous $BRANCH_TAG, building cold"
+    - docker build --pull --cache-from "$BRANCH_TAG" --build-arg BUILDKIT_INLINE_CACHE=1 -t "$SHA_TAG" -t "$BRANCH_TAG" .
+    - docker push "$SHA_TAG"
+    - docker push "$BRANCH_TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  needs:
+    - job: build_image
+      artifacts: false
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      case "${BERTH_HOOK_TOKEN:-}" in
+        ""|\$*) echo "No Berth hook token. Create the app on the manager, then add BERTH_HOOK_TOKEN_DEV."; exit 1 ;;
+      esac
+      RESP=$(curl -sS --max-time 900 -X POST -H "Authorization: Bearer $BERTH_HOOK_TOKEN" -w "\n%{http_code}" "$BERTH_HOOK_URL")
+      CODE=$(printf '%s' "$RESP" | tail -n1)
+      echo "Berth responded HTTP $CODE:"; printf '%s' "$RESP" | sed '$d'
+      [ "$CODE" = "200" ] || { echo "Deploy failed"; exit 1; }
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      variables:
+        BERTH_HOOK_URL: https://hooks.berth.chempa.dev/deploy/agentry/dev/server
+        BERTH_HOOK_TOKEN: $BERTH_HOOK_TOKEN_DEV

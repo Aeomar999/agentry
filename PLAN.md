@@ -20,7 +20,7 @@ The smallest MVP, in the user's words: "a simple page just plain and perhaps one
 
 ## Now
 
-Nothing in Next: every task the user asked for this session is done. The next step is the user's choice from Later.
+T-060: deploy Agentry from GitLab to Berth at agentry.chempa.dev, pinned to the workstation.
 
 ## Next
 
@@ -156,6 +156,7 @@ Every finding the MVP depends on, and the task that must use it. A task is not d
 - 2026-10-16 A budget counts every token the model read and wrote, cache reads included: that is what the transcript says was used, and leaving cache reads out would make a turn look ten times cheaper than it was. The task is checked between turns, not stopped mid-turn: an agent cut off halfway leaves work half done.
 - 2026-10-16 A question's page runs in a sandbox with no network and its own origin, and what it sends is a draft you send yourself: the page is written by a model, so it may show and suggest, never act or read anything of yours.
 - 2026-10-16 An agent's knowledge travels through a file in the worktree, read back when the turn ends, so agents edit it with the tools they already have and no new token or command; a change is recorded as the agent, and an agent can change only its own.
+- 2026-10-16 Agentry deploys as one container on Berth (`agentry dev server`, branch `dev`, agentry.chempa.dev), pinned to the workstation at the user's request. Its home is one volume: Claude's sign-in, the repos and Agentry's data, so a deploy keeps them and Berth's nightly stop-and-copy backs them up. Claude Code is pinned in the image, outside the volume, so the image decides the version.
 - 2026-10-16 A terminal session has one size, and any viewer may set it while nobody else is in control. Rules out letting each viewer see its own size, which tmux can't do for one pane.
 - 2026-10-16 Every proof finding the MVP needs is listed in "From the proofs" with the task that uses it, at the user's request ("the feaures that we have built in the proofs, make sure to use them please to make things workk well"). This brought the terminal panel (T-018), the Codex adapter (T-008) and the prompt hash check (T-011) back into the MVP. Proof code is still ported, not imported.
 - 2026-10-16 One concern per package, at the user's request: `internal/events`, `store`, `tasks`, `agents`, `coordinator`, `engines`, `hook`, `worktrees`, `sessions`, `policy`, `watchdog`, `web`. Packages depend downward only (`events` depends on nothing). Each file does one job, and names say what it does without a comment.
