@@ -34,9 +34,9 @@ export async function api<T>(method: "GET" | "POST", path: string, body?: unknow
 }
 
 // Websockets can't send headers, so the terminal's carries the token in its address.
-function socketURL(path: string): string {
+function socketURL(path: string, query = ""): string {
   const scheme = location.protocol === "https:" ? "wss://" : "ws://";
-  return `${scheme}${location.host}${path}?token=${encodeURIComponent(token)}`;
+  return `${scheme}${location.host}${path}?token=${encodeURIComponent(token)}${query}`;
 }
 
 export function terminalURL(taskId: string): string {
@@ -44,6 +44,8 @@ export function terminalURL(taskId: string): string {
 }
 
 // The Claude session that turns what you say into tasks for the coordinator.
-export function deskTerminalURL(): string {
-  return socketURL("/api/desk/terminal");
+// It starts in the page's theme, and restarts in a new one, keeping the
+// conversation, when the address's theme changes.
+export function deskTerminalURL(theme: "light" | "dark"): string {
+  return socketURL("/api/desk/terminal", `&theme=${theme}`);
 }

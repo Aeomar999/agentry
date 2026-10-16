@@ -23,8 +23,15 @@ func TestTheDeskStartsClaudeWithWhatItNeeds(t *testing.T) {
 	socket = sessions.SocketFor(fmt.Sprintf("desk-test-%d", time.Now().UnixNano()))
 	defer Stop()
 
+	// The desk resumes only a conversation Claude saved: make it look saved.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	conversation = newSessionID()
+	os.MkdirAll(filepath.Join(home, ".claude", "projects", "-repo"), 0o755)
+	os.WriteFile(filepath.Join(home, ".claude", "projects", "-repo", conversation+".jsonl"), []byte("{}\n"), 0o644)
+
 	repo := t.TempDir()
-	config := Config{Dir: repo, ServerURL: "http://127.0.0.1:7800", Token: "desk-secret", Binary: "/opt/agentry/bin/agentry"}
+	config := Config{Dir: repo, ServerURL: "http://127.0.0.1:7800", Token: "desk-secret", Binary: "/opt/agentry/bin/agentry", Theme: "light"}
 	if err := Start(config); err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +41,7 @@ func TestTheDeskStartsClaudeWithWhatItNeeds(t *testing.T) {
 		started = string(content)
 	}
 	for _, want := range []string{"http://127.0.0.1:7800 desk-secret", "/opt/agentry/bin:", "--append-system-prompt", "You are the desk of Agentry",
-		"--permission-mode\ndefault", "--allowedTools\nBash(agentry task:*)", "--disallowedTools\nEdit\nWrite\nMultiEdit\nNotebookEdit", repo} {
+		"--settings\n{\"theme\":\"light\"}", "--permission-mode\ndefault", "--session-id\n" + conversation, "--allowedTools\nBash(agentry task:*)", "--disallowedTools\nEdit\nWrite\nMultiEdit\nNotebookEdit", repo} {
 		if !strings.Contains(started, want) {
 			t.Errorf("the desk was started without %q:\n%s", want, started)
 		}
@@ -48,5 +55,19 @@ func TestTheDeskStartsClaudeWithWhatItNeeds(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(record); err == nil {
 		t.Error("a running desk was started again")
+	}
+
+	// In another theme, it restarts in that one and continues the conversation.
+	config.Theme = "dark"
+	if err := Start(config); err != nil {
+		t.Fatal(err)
+	}
+	started = ""
+	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline) && started == ""; time.Sleep(50 * time.Millisecond) {
+		content, _ := os.ReadFile(record)
+		started = string(content)
+	}
+	if !strings.Contains(started, `{"theme":"dark"}`) || !strings.Contains(started, "--resume\n"+conversation) {
+		t.Errorf("after a theme change the desk should resume its own conversation in the new theme:\n%s", started)
 	}
 }

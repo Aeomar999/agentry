@@ -141,6 +141,23 @@ func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil})
 }
 
+// setTheme records the page's theme, "light" or "dark". Sessions started
+// after it use it, so the engines draw colours that suit the terminal.
+func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Theme string }
+	if !decode(w, r, &request) {
+		return
+	}
+	if request.Theme != "light" && request.Theme != "dark" {
+		http.Error(w, `the theme is "light" or "dark"`, http.StatusBadRequest)
+		return
+	}
+	if s.config.SetTheme != nil {
+		s.config.SetTheme(request.Theme)
+	}
+	reply(w, map[string]string{"theme": request.Theme})
+}
+
 // showPolicy is the policy in force, and why the file on disk isn't, if it isn't.
 func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 	if s.config.Policy == nil {

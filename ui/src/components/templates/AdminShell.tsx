@@ -188,6 +188,7 @@ export function AdminShell() {
                   selected={dockTab}
                   onSelect={setDockTab}
                   onClose={() => setDockOpen(false)}
+                  theme={theme}
                 />
               )}
             </div>

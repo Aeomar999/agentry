@@ -60,9 +60,9 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, name string) {
 func (h *Hub) watch(name string) (*viewers, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if watch, ok := h.watches[name]; ok {
+	if watch, ok := h.watches[name]; ok && !watch.control.hasEnded() {
 		return watch, nil
-	}
+	} // else its session ended (as when the desk restarts) and the cleanup hasn't run yet
 	watch := newViewers()
 	c, err := attach(sessions.SocketFor(name), watch.broadcast)
 	if err != nil {

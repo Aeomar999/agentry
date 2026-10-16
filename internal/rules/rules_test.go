@@ -181,6 +181,11 @@ func TestAgentRules(t *testing.T) {
 		{"change an agent", agent("engineer", "codex", "Only Go.", false).Proposal(you, true), true},
 		{"change one that doesn't exist", agent("ghost", "claude", "x", false).Proposal(you, true), false},
 		{"leave no coordinator", agent("coordinator", "claude", "x", false).Proposal(you, true), false},
+		{"a worker that doesn't exist", agents.Agent{Name: "tester", Engine: "claude", Prompt: "x", Workers: []string{"build-box"}}.Proposal(you, true), false},
+		{"no workers: runs on this machine", agents.Agent{Name: "tester", Engine: "claude", Prompt: "x", Workers: nil}.Proposal(you, true), true},
+		{"remove an agent", agent("designer", "codex", "x", false).Removal(you), true},
+		{"remove it twice", agent("designer", "codex", "x", false).Removal(you), false},
+		{"remove the only coordinator", agent("coordinator", "claude", "x", true).Removal(you), false},
 		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-9", Actor: you, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "engineer"}}, false},
 	}

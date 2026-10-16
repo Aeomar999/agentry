@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -96,9 +97,12 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	hookToken := newToken() // new each start: only sessions started by this server have it
 	deskToken := newToken() // the same, for the desk's session
 	serverURL := "http://" + listener.Addr().String()
+	var theme atomic.Value // the page's theme, which the sessions it watches start in
+	theme.Store("dark")
+	currentTheme := func() string { return theme.Load().(string) }
 
 	runner := turns.NewRunner(log, turns.Config{HookCommand: shellQuote(self) + " hook",
-		ServerURL: serverURL, HookToken: hookToken})
+		ServerURL: serverURL, HookToken: hookToken, Theme: currentTheme})
 	isRunning := func(task string) bool { return sessions.IsRunning(sessions.SocketFor(task)) }
 	go coordinator.NewLoop(log, runner, filepath.Join(o.dataDir, "worktrees")).Run(ctx)
 	go watchdog.New(log, watchdog.DefaultLimits, isRunning, runner.Stop).Run(ctx)
@@ -108,7 +112,12 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	hub := terminal.NewHub()
 	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, Token: deskToken, Binary: self}
 	deskTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := desk.Start(deskConfig); err != nil {
+		if t := r.URL.Query().Get("theme"); t == "light" || t == "dark" {
+			theme.Store(t) // the page opening the desk says its theme
+		}
+		config := deskConfig
+		config.Theme = currentTheme()
+		if err := desk.Start(config); err != nil {
 			http.Error(w, "starting Claude: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -116,7 +125,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
-	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Policy: agentPolicy, Desk: deskTerminal},
+	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Policy: agentPolicy, Desk: deskTerminal,
+		SetTheme: func(t string) { theme.Store(t) }},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), hub.Handler())
 	fmt.Fprintf(stdout, "Agentry is running. Open http://%s/?token=%s\n", listener.Addr(), uiToken)
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)

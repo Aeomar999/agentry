@@ -32,6 +32,7 @@ type Session struct {
 	StateDir    string // where Agentry keeps this turn's files, inside the worktree
 	HookCommand string // runs Agentry's hook: HookCommand + " " + event name
 	Model       string // "" for the engine's default
+	Theme       string // "light" or "dark", the page's; "" leaves the engine's own
 }
 
 type Decision string

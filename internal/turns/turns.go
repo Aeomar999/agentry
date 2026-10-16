@@ -26,6 +26,7 @@ type Config struct {
 	HookCommand string // runs `agentry hook`, e.g. "/usr/local/bin/agentry hook"
 	ServerURL   string // where the hook posts its calls
 	HookToken   string
+	Theme       func() string // the page's theme now; nil leaves the engine's own
 }
 
 type Runner struct {
@@ -68,6 +69,9 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 
 	session := engines.Session{Worktree: task.Worktree.Path, StateDir: filepath.Join(task.Worktree.Path, StateDir),
 		HookCommand: r.config.HookCommand, Model: agent.Model}
+	if r.config.Theme != nil {
+		session.Theme = r.config.Theme()
+	}
 	if err := engine.Prepare(session); err != nil {
 		return fmt.Errorf("preparing %s's hooks: %w", agent.Engine, err)
 	}

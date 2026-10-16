@@ -22,7 +22,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	section(&b, "Where the work is", whereText(task))
 
 	var team strings.Builder
-	for _, agent := range roster.Workers() {
+	for _, agent := range roster.Assignees() {
 		fmt.Fprintf(&team, "- %s: %s\n", agent.Name, agent.Description)
 	}
 	section(&b, "The agents you can hand work to", team.String())

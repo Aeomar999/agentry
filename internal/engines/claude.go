@@ -18,9 +18,14 @@ var (
 	claudeReports = []string{"PostToolUse", "UserPromptSubmit", "Notification", "Stop", "SessionStart", "SessionEnd"}
 )
 
-// Prepare writes a settings file for `claude --settings`.
+// Prepare writes a settings file for `claude --settings`: the hooks, and
+// the page's theme, so the session's colours suit the terminal showing it.
 func (claude) Prepare(s Session) error {
-	return writeJSON(claudeSettings(s), hookSettings(s.HookCommand, claudeGates, claudeReports))
+	settings := hookSettings(s.HookCommand, claudeGates, claudeReports)
+	if s.Theme != "" {
+		settings["theme"] = s.Theme
+	}
+	return writeJSON(claudeSettings(s), settings)
 }
 
 func (claude) Launch(s Session, prompt string) []string {

@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/molecules/EmptyState";
 import { terminalURL, deskTerminalURL } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
+import type { Theme } from "@/lib/theme";
 import { modKey } from "@/lib/shortcuts";
 import { TerminalView } from "./TerminalView";
 
@@ -23,9 +24,10 @@ interface TerminalDockProps {
   selected: string; // DESK or a task id
   onSelect: (tab: string) => void;
   onClose: () => void;
+  theme: Theme;
 }
 
-export function TerminalDock({ height, onResize, working, selected, onSelect, onClose }: TerminalDockProps) {
+export function TerminalDock({ height, onResize, working, selected, onSelect, onClose, theme }: TerminalDockProps) {
   const task = working.find((t) => t.id === selected);
   const tab = task ? task.id : DESK;
   return (
@@ -53,7 +55,7 @@ export function TerminalDock({ height, onResize, working, selected, onSelect, on
       </div>
       <div className="min-h-0 flex-1">
         {tab === DESK ? (
-          <TerminalView key="desk" url={deskTerminalURL()} title="claude" takeControlOnConnect />
+          <TerminalView key={`desk-${theme}`} url={deskTerminalURL(theme)} title="claude" takeControlOnConnect />
         ) : task ? (
           // A new key each turn: every turn is a new session.
           <TerminalView key={`${task.id}-${task.turns}`} url={terminalURL(task.id)} title={task.currentAgent} />

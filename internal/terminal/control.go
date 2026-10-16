@@ -53,6 +53,15 @@ func (c *control) run(command string) {
 	io.WriteString(c.commands, command+"\n")
 }
 
+func (c *control) hasEnded() bool {
+	select {
+	case <-c.ended:
+		return true
+	default:
+		return false
+	}
+}
+
 // detach ends this client only; the session keeps running.
 func (c *control) detach() {
 	c.detached.Do(func() {

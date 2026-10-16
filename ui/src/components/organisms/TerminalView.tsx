@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { Hand, Undo2 } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { StatusDot, DotTone } from "@/components/atoms/StatusDot";
+import { terminalTheme } from "@/lib/terminal-theme";
 
 // A live terminal session over a websocket (internal/terminal). Everyone
 // watches; Take control sends your keys, and the server drops keys from
@@ -42,8 +43,10 @@ export function TerminalView({ url, title, takeControlOnConnect = false }: Termi
   const [seat, setSeat] = useState<Seat>("connecting");
 
   useEffect(() => {
-    const background = getComputedStyle(document.documentElement).getPropertyValue("--color-terminal").trim();
-    const term = new Terminal({ fontSize: 13, cursorBlink: true, theme: { background } });
+    const term = new Terminal({ fontSize: 13, cursorBlink: true, theme: terminalTheme() });
+    // Follow the page's theme when it changes.
+    const themeWatch = new MutationObserver(() => (term.options.theme = terminalTheme()));
+    themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(screen.current!);
@@ -82,6 +85,7 @@ export function TerminalView({ url, title, takeControlOnConnect = false }: Termi
     const typing = term.onData((keys) => ws.readyState === WebSocket.OPEN && ws.send(encoder.encode(keys)));
 
     return () => {
+      themeWatch.disconnect();
       watchArea.disconnect();
       typing.dispose();
       ws.onclose = null;

@@ -28,8 +28,8 @@ func TestTheDefaultsAreFiveAgentsWithPrompts(t *testing.T) {
 	if !ok || coordinator.Name != "coordinator" {
 		t.Errorf("the coordinator: %+v", coordinator)
 	}
-	if workers := roster.Workers(); len(workers) != 4 || workers[0].Name != "engineer" {
-		t.Errorf("workers: %+v", workers)
+	if assignees := roster.Assignees(); len(assignees) != 4 || assignees[0].Name != "engineer" {
+		t.Errorf("assignees: %+v", assignees)
 	}
 }
 
@@ -82,4 +82,35 @@ func TestProfileUpgradesFillOnlyEmptyProfiles(t *testing.T) {
 	if again := ProfileUpgrades(roster); len(again) != 0 {
 		t.Errorf("upgrading twice should do nothing, got %d", len(again))
 	}
+}
+
+// A removed agent leaves the roster; workers survive the trip through the log.
+func TestRemovedAgentsLeaveAndWorkersAreKept(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	designer := Agent{Name: "designer", Engine: "claude", Prompt: "Design.", Workers: []string{"mac-mini", "build-box"}}
+	stream := append(seeded(), asEvent(designer.Proposal(you, false)))
+	if got, _ := FromEvents(stream).Get("designer"); len(got.Workers) != 2 || got.Workers[1] != "build-box" {
+		t.Errorf("workers: %+v", got.Workers)
+	}
+	stream = append(stream, asEvent(designer.Removal(you)))
+	if _, ok := FromEvents(stream).Get("designer"); ok {
+		t.Error("the removed agent is still in the roster")
+	}
+}
+
+// asEvent is a proposal as the log hands it back: lists come back as []any.
+func asEvent(p events.Proposal) events.Event {
+	data := map[string]any{}
+	for key, value := range p.Data {
+		if list, ok := value.([]string); ok {
+			items := make([]any, len(list))
+			for i, item := range list {
+				items[i] = item
+			}
+			value = items
+		}
+		data[key] = value
+	}
+	p.Data = data
+	return events.Event{Proposal: p}
 }

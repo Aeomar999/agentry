@@ -18,7 +18,8 @@ type Config struct {
 	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
 	Policy      PolicySource
-	Desk        http.Handler // the desk's terminal websocket; nil when there is no desk
+	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk
+	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
 }
 
 // PolicySource is the policy in force and any problem with the file on disk.
@@ -59,6 +60,7 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/config", s.showConfig)
 	api("GET /api/policy", s.showPolicy)
 	api("GET /api/changes", s.waitForChanges)
+	api("POST /api/theme", s.setTheme)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
 	}

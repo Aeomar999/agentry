@@ -42,8 +42,8 @@
   --color-info: #38bdf8;
   --color-info-soft: #38bdf81f;
 
-  /* The agent's terminal stays dark in both themes: the engines draw their
-     own colours and expect a dark screen. */
+  /* The terminals' screen. It follows the theme, and Agentry starts each
+     Claude session in the page's theme so its colours suit it. */
   --color-terminal: #0e1014;
 
   /* Inter for prose, JetBrains Mono for ids, paths, commands and times:
@@ -90,6 +90,8 @@ html.light {
   --color-success: #16a34a;
   --color-warning: #b45309;
   --color-info: #0284c7;
+
+  --color-terminal: #ffffff;
 }
 
 html {

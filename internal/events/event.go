@@ -45,6 +45,24 @@ func (p Proposal) Flag(field string) bool {
 	return value
 }
 
+// List returns a data field as a list of strings, or nil. A list read back
+// from the log decodes as []any.
+func (p Proposal) List(field string) []string {
+	switch value := p.Data[field].(type) {
+	case []string:
+		return value
+	case []any:
+		var list []string
+		for _, item := range value {
+			if text, ok := item.(string); ok {
+				list = append(list, text)
+			}
+		}
+		return list
+	}
+	return nil
+}
+
 // Rejection says which check refused a proposal, and why.
 type Rejection struct {
 	Check  string `json:"check"` // shape | who | order

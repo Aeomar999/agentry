@@ -7,6 +7,7 @@ type Type string
 const (
 	AgentCreated Type = "agent.created"
 	AgentChanged Type = "agent.changed"
+	AgentRemoved Type = "agent.removed"
 )
 
 // A task's stream, in roughly the order they happen.

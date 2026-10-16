@@ -1,5 +1,5 @@
-// Package agents is who can be handed work: each agent's name, prompt and
-// engine. Agents are events in the log, not code, so the user can add and
+// Package agents is who can be handed work: each agent's name, prompt,
+// engine and the workers it may run on. Agents are events in the log, not code, so the user can add and
 // change them; the defaults are only what a new install starts with.
 package agents
 
@@ -17,6 +17,9 @@ type Agent struct {
 	Model       string `json:"model"`       // "" means the engine's default
 	Profile     string `json:"profile"`     // its policy profile in policy.toml; "" means the default profile
 	Coordinates bool   `json:"coordinates"` // decides who works next, instead of working
+	// Workers are the machines it may run on. None means the machine Agentry
+	// runs on, which is always there; workers are other machines (T-022).
+	Workers []string `json:"workers"`
 }
 
 // Proposal is the event that creates (or with changed set, changes) this agent.
@@ -28,12 +31,26 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
+		"workers": a.workers(),
 	}}
+}
+
+// Removal is the event that removes this agent.
+func (a Agent) Removal(by events.Actor) events.Proposal {
+	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentRemoved, Data: map[string]any{"name": a.Name}}
+}
+
+func (a Agent) workers() []string {
+	if a.Workers == nil {
+		return []string{}
+	}
+	return a.Workers
 }
 
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
-		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates")}
+		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
+		Workers: e.List("workers")}
 }
 
 // Roster is every agent, in the order they were created.
@@ -48,6 +65,10 @@ func FromEvents(stream []events.Event) Roster {
 		case events.AgentChanged:
 			if i := roster.index(e.Text("name")); i >= 0 {
 				roster[i] = fromEvent(e)
+			}
+		case events.AgentRemoved:
+			if i := roster.index(e.Text("name")); i >= 0 {
+				roster = slices.Delete(roster, i, i+1)
 			}
 		}
 	}
@@ -69,15 +90,15 @@ func (r Roster) Coordinator() (Agent, bool) {
 	return Agent{}, false
 }
 
-// Workers are the agents a coordinator can hand work to.
-func (r Roster) Workers() Roster {
-	var workers Roster
+// Assignees are the agents a coordinator can hand work to.
+func (r Roster) Assignees() Roster {
+	var assignees Roster
 	for _, a := range r {
 		if !a.Coordinates {
-			workers = append(workers, a)
+			assignees = append(assignees, a)
 		}
 	}
-	return workers
+	return assignees
 }
 
 func (r Roster) index(name string) int {
