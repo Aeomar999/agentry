@@ -11,6 +11,7 @@ import { KeyValueList } from "@/components/molecules/KeyValueList";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
+import { AgentName } from "@/components/molecules/AgentName";
 import { TokenMeter } from "@/components/molecules/TokenMeter";
 import { tokens } from "@/lib/tokens";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
@@ -178,7 +179,7 @@ export function TaskPage() {
             <KeyValueList
               items={[
                 { label: "Status", value: <TaskStatusBadge status={task.status} /> },
-                { label: "Agent", value: <Mono>{task.currentAgent || "none"}</Mono> },
+                { label: "Agent", value: task.currentAgent ? <AgentName name={task.currentAgent} /> : <Mono>none</Mono> },
                 { label: "Coordinator", value: <Mono>{task.coordinator}</Mono> },
                 { label: "Turns", value: <Mono>{task.turns}</Mono> },
                 { label: "Tokens", value: <TokenMeter used={task.tokensUsed} budget={task.budget} /> },
@@ -211,7 +212,7 @@ function TurnList({ turns }: { turns: Turn[] }) {
       {[...turns].reverse().map((turn) => (
         <li key={turn.id} className="flex flex-col gap-0.5 border-b border-divider px-4 py-2 last:border-b-0">
           <div className="flex items-center gap-2 text-[12px]">
-            <Mono className="font-semibold text-ink-primary">{turn.agent}</Mono>
+            <AgentName name={turn.agent} className="font-semibold text-ink-primary" />
             <Mono className="text-ink-faint">{clockTime(turn.startedAt)}</Mono>
             {turn.tokens > 0 && <Mono className="ml-auto text-[11px] text-ink-faint">{tokens(turn.tokens)}</Mono>}
             <span className={turn.tokens > 0 ? "text-[11px] text-ink-muted" : "ml-auto text-[11px] text-ink-muted"}>

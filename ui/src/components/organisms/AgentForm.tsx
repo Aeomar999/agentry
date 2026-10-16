@@ -13,6 +13,8 @@ import { api } from "@/api/client";
 import type { Agent, Policy, ServerConfig } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
+import { AGENT_COLORS } from "@/live/agent-colors";
+import { cn } from "@/lib/cn";
 
 // Add an agent, or change one. The name is fixed once it exists: tasks and
 // the log refer to agents by name. Workers are the machines it may run on;
@@ -22,7 +24,17 @@ import { useToast } from "./Toasts";
 // Model names each engine understands besides a full model id.
 const MODELS: Record<string, string[]> = { claude: ["opus", "sonnet", "haiku"], codex: [] };
 
-const BLANK: Agent = { name: "", description: "", prompt: "", engine: "claude", model: "", profile: "", coordinates: false, workers: [] };
+const BLANK: Agent = {
+  name: "",
+  description: "",
+  prompt: "",
+  engine: "claude",
+  model: "",
+  profile: "",
+  coordinates: false,
+  workers: [],
+  color: "",
+};
 
 export function AgentForm({ agent }: { agent?: Agent }) {
   const navigate = useNavigate();
@@ -98,6 +110,28 @@ export function AgentForm({ agent }: { agent?: Agent }) {
             <Field label="Description" htmlFor="agent-description" hint="One line. The coordinator reads it to choose who works next.">
               <Input id="agent-description" value={draft.description} onChange={(e) => set({ description: e.target.value })} />
             </Field>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[12px] font-medium text-ink-secondary">Colour</span>
+              <div role="radiogroup" aria-label="Colour" className="flex flex-wrap gap-1.5">
+                {AGENT_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    role="radio"
+                    aria-checked={draft.color === color}
+                    aria-label={color}
+                    title={color}
+                    onClick={() => set({ color })}
+                    className={cn(
+                      "size-6 cursor-pointer rounded-sm border",
+                      draft.color === color ? "border-ink-primary" : "border-transparent hover:border-divider-2",
+                    )}
+                  >
+                    <span className="mx-auto block size-3.5 rounded-full" style={{ background: `var(--color-agent-${color})` }} />
+                  </button>
+                ))}
+              </div>
+            </div>
             <Checkbox
               checked={draft.coordinates}
               onChange={(coordinates) => set({ coordinates })}

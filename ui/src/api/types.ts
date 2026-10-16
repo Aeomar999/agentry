@@ -88,6 +88,7 @@ export interface Agent {
   profile: string;
   coordinates: boolean;
   workers: string[]; // the machines it may run on; none: the machine Agentry runs on
+  color: string; // one of the agent colours; "" for the next free one
 }
 
 export type Decision = "allow" | "ask" | "deny";

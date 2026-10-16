@@ -215,7 +215,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
-		"engines": rules.KnownEngines, "workers": knownWorkers()})
+		"engines": rules.KnownEngines, "workers": knownWorkers(), "colors": agents.Colors})
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started

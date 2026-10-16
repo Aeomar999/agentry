@@ -8,6 +8,7 @@ import { KeyValueList } from "@/components/molecules/KeyValueList";
 import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
+import { AgentName } from "@/components/molecules/AgentName";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
@@ -22,7 +23,7 @@ export function AgentPage() {
   return (
     <>
       <PageHeader
-        title={<span className="font-mono">{agent.name}</span>}
+        title={<AgentName name={agent.name} />}
         badges={<RoleBadge agent={agent} />}
         meta={agent.description}
         actions={[{ label: "Edit", icon: <Pencil />, to: `/agents/${encodeURIComponent(agent.name)}/edit` }]}

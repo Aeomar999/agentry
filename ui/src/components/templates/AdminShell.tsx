@@ -12,6 +12,7 @@ import type { Crumb } from "@/components/molecules/Breadcrumbs";
 import type { Agent, ServerConfig, TaskSummary } from "@/api/types";
 import { useLive } from "@/live/LiveProvider";
 import { useResource } from "@/live/use-resource";
+import { AgentColorsProvider } from "@/live/agent-colors";
 import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
@@ -159,52 +160,54 @@ export function AdminShell() {
   return (
     <CrumbContext.Provider value={setCrumbs}>
       <TerminalContext.Provider value={openTerminal}>
-        <div className="flex h-full flex-col">
-          <TopBar
-            crumbs={crumbs}
-            needsYou={needsYou}
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            onToggleSidebar={() => (matchMedia("(min-width: 768px)").matches ? setCollapsed((c) => !c) : setDrawerOpen((open) => !open))}
-            onOpenPalette={() => setPalette(true)}
-          />
-          <div className="flex min-h-0 flex-1">
-            <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
-            <div ref={column} className="flex min-w-0 flex-1 flex-col">
-              <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
-                {connection === "signed out" ? (
-                  <EmptyState icon={<KeyRound />} title="Not signed in">
-                    Open the link <span className="font-mono">agentry serve</span> printed. Its token signs this browser in.
-                  </EmptyState>
-                ) : (
-                  <Outlet />
+        <AgentColorsProvider agents={agents}>
+          <div className="flex h-full flex-col">
+            <TopBar
+              crumbs={crumbs}
+              needsYou={needsYou}
+              theme={theme}
+              onToggleTheme={toggleTheme}
+              onToggleSidebar={() => (matchMedia("(min-width: 768px)").matches ? setCollapsed((c) => !c) : setDrawerOpen((open) => !open))}
+              onOpenPalette={() => setPalette(true)}
+            />
+            <div className="flex min-h-0 flex-1">
+              <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
+              <div ref={column} className="flex min-w-0 flex-1 flex-col">
+                <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
+                  {connection === "signed out" ? (
+                    <EmptyState icon={<KeyRound />} title="Not signed in">
+                      Open the link <span className="font-mono">agentry serve</span> printed. Its token signs this browser in.
+                    </EmptyState>
+                  ) : (
+                    <Outlet />
+                  )}
+                </main>
+                {dockOpen && (
+                  <TerminalDock
+                    height={dockHeight}
+                    onResize={resizeDock}
+                    working={working}
+                    selected={dockTab}
+                    onSelect={setDockTab}
+                    onClose={() => setDockOpen(false)}
+                    theme={theme}
+                  />
                 )}
-              </main>
-              {dockOpen && (
-                <TerminalDock
-                  height={dockHeight}
-                  onResize={resizeDock}
-                  working={working}
-                  selected={dockTab}
-                  onSelect={setDockTab}
-                  onClose={() => setDockOpen(false)}
-                  theme={theme}
-                />
-              )}
+              </div>
             </div>
+            <StatusBar
+              connection={connection}
+              position={position}
+              defaultRepo={config?.defaultRepo ?? ""}
+              working={tasks.filter((task) => task.status === "working").length}
+              needsYou={needsYou}
+              terminalOpen={dockOpen}
+              onToggleTerminal={() => toggleDock.current()}
+            />
           </div>
-          <StatusBar
-            connection={connection}
-            position={position}
-            defaultRepo={config?.defaultRepo ?? ""}
-            working={tasks.filter((task) => task.status === "working").length}
-            needsYou={needsYou}
-            terminalOpen={dockOpen}
-            onToggleTerminal={() => toggleDock.current()}
-          />
-        </div>
-        <CommandPalette open={palette} items={paletteItems} onClose={() => setPalette(false)} />
-        <ShortcutOverlay open={overlay} onClose={() => setOverlay(false)} />
+          <CommandPalette open={palette} items={paletteItems} onClose={() => setPalette(false)} />
+          <ShortcutOverlay open={overlay} onClose={() => setOverlay(false)} />
+        </AgentColorsProvider>
       </TerminalContext.Provider>
     </CrumbContext.Provider>
   );

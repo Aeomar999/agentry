@@ -2,6 +2,7 @@ import { DragEvent } from "react";
 import type { TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { LabelList } from "./LabelChip";
+import { AgentName } from "./AgentName";
 import { timeAgo } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 
@@ -39,7 +40,7 @@ export function TaskCard({ task, onPickLabel, coordinator, onOpen, draggable, dr
       <span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-ink-primary">{task.title}</span>
       <span className="line-clamp-2 text-[12px] leading-4">{nowLine(task, coordinator)}</span>
       <LabelList labels={task.labels} onPick={onPickLabel} />
-      <span className="flex items-center gap-2 font-mono text-[11px] text-ink-faint">
+      <span className="flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-ink-faint">
         {task.id}
         <span className={cn("ml-auto", task.overBudget && "text-danger")}>{task.tokensUsed > 0 && tokens(task.tokensUsed)}</span>
         <span>{task.turns} turns</span>
@@ -53,6 +54,12 @@ function nowLine(task: TaskSummary, coordinator: string) {
   if (task.status === "done") return <span className="text-ink-muted">Done</span>;
   if (task.status === "needs you") return <span className="text-warning">{task.needsYou}</span>;
   if (task.currentAgent === coordinator) return <span className="text-ink-muted">The coordinator is deciding</span>;
-  if (task.currentAgent) return <span className="text-info">{task.currentAgent} is working</span>;
+  if (task.currentAgent)
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ink-secondary">
+        <AgentName name={task.currentAgent} dotOnly />
+        {task.currentAgent} is working
+      </span>
+    );
   return <span className="text-ink-muted">Setting up</span>;
 }

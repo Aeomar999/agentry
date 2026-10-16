@@ -96,6 +96,32 @@ html.light {
   --color-terminal: #ffffff;
 }
 
+/* Agents: one colour each, so who is working, and who worked when, shows at
+   a glance. Names match agents.Colors on the server. Outside @theme because
+   only inline styles use them, and @theme keeps just what utilities use. */
+:root {
+  --color-agent-blue: #60a5fa;
+  --color-agent-violet: #a78bfa;
+  --color-agent-teal: #2dd4bf;
+  --color-agent-green: #4ade80;
+  --color-agent-amber: #fbbf24;
+  --color-agent-orange: #fb923c;
+  --color-agent-red: #f87171;
+  --color-agent-pink: #f472b6;
+  --color-agent-slate: #94a3b8;
+}
+html.light {
+  --color-agent-blue: #2563eb;
+  --color-agent-violet: #7c3aed;
+  --color-agent-teal: #0d9488;
+  --color-agent-green: #16a34a;
+  --color-agent-amber: #b45309;
+  --color-agent-orange: #ea580c;
+  --color-agent-red: #dc2626;
+  --color-agent-pink: #db2777;
+  --color-agent-slate: #64748b;
+}
+
 html {
   font-family: var(--font-sans);
   color: var(--color-ink-primary);

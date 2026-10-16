@@ -5,8 +5,13 @@
 const tokenKey = "agentry-token";
 
 export const token: string = (() => {
-  const fromLink = new URLSearchParams(location.search).get("token");
-  if (fromLink) history.replaceState(null, "", location.pathname + location.hash);
+  const query = new URLSearchParams(location.search);
+  const fromLink = query.get("token");
+  if (fromLink) {
+    query.delete("token"); // the rest of the address, such as ?view=board, stays
+    const rest = query.toString();
+    history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
+  }
   try {
     if (fromLink) localStorage.setItem(tokenKey, fromLink);
     return fromLink || localStorage.getItem(tokenKey) || "";

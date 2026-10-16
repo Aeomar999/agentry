@@ -20,8 +20,8 @@ var agentName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown),
-	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, keepsACoordinator),
+	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown),
+	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, keepsACoordinator),
 	events.AgentRemoved: allOf(agentExists, removalKeepsACoordinator),
 	events.TaskCreated:  allOf(coordinatorExists),
 	events.TaskAssigned: allOf(assigneeExists),
@@ -98,6 +98,13 @@ func workersAreKnown(_ agents.Roster, p events.Proposal) string {
 			}
 			return "no worker called " + worker + "; known: " + strings.Join(KnownWorkers, ", ")
 		}
+	}
+	return ""
+}
+
+func colorIsKnown(_ agents.Roster, p events.Proposal) string {
+	if color := p.Text("color"); color != "" && !slices.Contains(agents.Colors, color) {
+		return "unknown colour " + color + "; known: " + strings.Join(agents.Colors, ", ")
 	}
 	return ""
 }

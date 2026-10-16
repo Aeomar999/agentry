@@ -10,6 +10,7 @@ import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
+import { AgentName } from "@/components/molecules/AgentName";
 import { LabelList } from "@/components/molecules/LabelChip";
 import type { Agent, TaskStatus, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
@@ -48,7 +49,11 @@ function columnsFor(pickLabel: (label: string) => void): Column<TaskSummary>[] {
       ),
     },
     { header: "Status", className: "w-28", render: (task) => <TaskStatusBadge status={task.status} /> },
-    { header: "Agent", className: "w-32 max-lg:hidden", render: (task) => <Mono>{task.currentAgent || "none"}</Mono> },
+    {
+      header: "Agent",
+      className: "w-32 max-lg:hidden",
+      render: (task) => (task.currentAgent ? <AgentName name={task.currentAgent} /> : <Mono className="text-ink-faint">none</Mono>),
+    },
     { header: "Turns", className: "w-16 text-right max-lg:hidden", render: (task) => <Mono>{task.turns}</Mono> },
     {
       header: "Tokens",

@@ -142,7 +142,7 @@ func seedAgents(log *store.Store) error {
 		return err
 	}
 	roster := agents.FromEvents(stream)
-	for _, p := range append(agents.SeedProposals(roster), agents.ProfileUpgrades(roster)...) {
+	for _, p := range append(agents.SeedProposals(roster), agents.Upgrades(roster)...) {
 		if _, rejection, err := log.Propose(p); err != nil || rejection != nil {
 			return fmt.Errorf("seeding the default agents: %v", errors.Join(err, rejectionError(rejection)))
 		}

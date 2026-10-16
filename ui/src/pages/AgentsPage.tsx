@@ -6,12 +6,13 @@ import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
+import { AgentName } from "@/components/molecules/AgentName";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
 
 const COLUMNS: Column<Agent>[] = [
-  { header: "Name", className: "w-32", render: (agent) => <Mono className="font-semibold text-ink-primary">{agent.name}</Mono> },
+  { header: "Name", className: "w-36", render: (agent) => <AgentName name={agent.name} className="font-semibold text-ink-primary" /> },
   { header: "Role", className: "w-28", render: (agent) => <RoleBadge agent={agent} /> },
   {
     header: "Description",

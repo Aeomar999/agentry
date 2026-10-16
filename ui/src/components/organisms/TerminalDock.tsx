@@ -9,6 +9,7 @@ import { cn } from "@/lib/cn";
 import type { Theme } from "@/lib/theme";
 import { modKey } from "@/lib/shortcuts";
 import { TerminalView } from "./TerminalView";
+import { AgentName } from "@/components/molecules/AgentName";
 
 // The terminal dock at the bottom of the content area, toggled with Ctrl+J
 // and resized by dragging its top edge. Its tabs: Claude, your own session
@@ -44,7 +45,7 @@ export function TerminalDock({ height, onResize, working, selected, onSelect, on
             key={t.id}
             active={tab === t.id}
             onClick={() => onSelect(t.id)}
-            icon={<SquareTerminal />}
+            icon={<AgentName name={t.currentAgent} dotOnly />}
             label={`${t.id} · ${t.currentAgent}`}
           />
         ))}

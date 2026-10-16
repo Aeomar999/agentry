@@ -60,7 +60,7 @@ func TestEachDefaultAgentHasAProfile(t *testing.T) {
 	}
 }
 
-func TestProfileUpgradesFillOnlyEmptyProfiles(t *testing.T) {
+func TestUpgradesFillOnlyEmptyProfiles(t *testing.T) {
 	var stream []events.Event
 	for _, agent := range FromEvents(seeded()) {
 		agent.Profile = ""
@@ -69,7 +69,7 @@ func TestProfileUpgradesFillOnlyEmptyProfiles(t *testing.T) {
 		}
 		stream = append(stream, events.Event{Proposal: agent.Proposal(events.Actor{Kind: events.System, ID: "old"}, false)})
 	}
-	upgrades := ProfileUpgrades(FromEvents(stream))
+	upgrades := Upgrades(FromEvents(stream))
 	for _, p := range upgrades {
 		stream = append(stream, events.Event{Proposal: p})
 	}
@@ -79,7 +79,7 @@ func TestProfileUpgradesFillOnlyEmptyProfiles(t *testing.T) {
 	if len(upgrades) != 4 || reviewer.Profile != "read-only" || tester.Profile != "autonomous" {
 		t.Errorf("%d upgrades, reviewer %q, tester %q", len(upgrades), reviewer.Profile, tester.Profile)
 	}
-	if again := ProfileUpgrades(roster); len(again) != 0 {
+	if again := Upgrades(roster); len(again) != 0 {
 		t.Errorf("upgrading twice should do nothing, got %d", len(again))
 	}
 }
@@ -113,4 +113,19 @@ func asEvent(p events.Proposal) events.Event {
 	}
 	p.Data = data
 	return events.Event{Proposal: p}
+}
+
+// An agent you changed is never upgraded, even where you left a field empty.
+func TestUpgradesLeaveAgentsYouChanged(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	old := events.Actor{Kind: events.System, ID: "defaults"}
+	stream := []events.Event{
+		{Proposal: Agent{Name: "engineer", Engine: "claude", Prompt: "x"}.Proposal(old, false)},
+		{Proposal: Agent{Name: "reviewer", Engine: "claude", Prompt: "x"}.Proposal(old, false)},
+		{Proposal: Agent{Name: "reviewer", Engine: "claude", Prompt: "mine"}.Proposal(you, true)},
+	}
+	upgrades := Upgrades(FromEvents(stream))
+	if len(upgrades) != 1 || upgrades[0].Text("name") != "engineer" || upgrades[0].Text("color") != "blue" || upgrades[0].Text("profile") != "developer" {
+		t.Errorf("upgrades: %+v", upgrades)
+	}
 }

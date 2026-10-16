@@ -4,6 +4,7 @@ import { Button } from "@/components/atoms/Button";
 import { TextArea } from "@/components/atoms/Input";
 import { Dialog } from "@/components/molecules/Dialog";
 import { TaskCard } from "@/components/molecules/TaskCard";
+import { AgentName } from "@/components/molecules/AgentName";
 import { api } from "@/api/client";
 import type { Agent, TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
@@ -142,14 +143,11 @@ export function TaskBoard({ tasks, agents, onOpen, onPickLabel }: TaskBoardProps
               )}
             >
               <h2 className="flex h-10 shrink-0 items-center gap-2 border-b border-divider px-3 text-[12px] font-semibold">
-                <span
-                  className={cn(
-                    column.id === NEEDS_YOU && cards.length > 0 ? "text-warning" : "text-ink-primary",
-                    column.dropTo && column.id !== DONE && "font-mono",
-                  )}
-                >
-                  {column.title}
-                </span>
+                {column.dropTo && column.id !== DONE ? (
+                  <AgentName name={column.title} className="text-ink-primary" />
+                ) : (
+                  <span className={column.id === NEEDS_YOU && cards.length > 0 ? "text-warning" : "text-ink-primary"}>{column.title}</span>
+                )}
                 <span className="font-mono text-[11px] font-normal text-ink-faint">{cards.length}</span>
               </h2>
               <div className="flex min-h-24 scrollbar-thin flex-col gap-2 overflow-y-auto p-2">
