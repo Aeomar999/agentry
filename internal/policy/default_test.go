@@ -12,9 +12,18 @@ const (
 
 var protected = []string{"/home/dev/.agentry/agentry.db", "/home/dev/.agentry/policy.toml", "/home/dev/.agentry/ui-token"}
 
+// override is the line in the shipped policy that makes every agent allow everything.
+const override = "\nuse_for_everyone = \"allow-everything\"\n"
+
+// loadDefault is the shipped policy with use_for_everyone commented out, so
+// each profile's own rules can be tested.
 func loadDefault(t *testing.T) *Policy {
 	t.Helper()
-	p, err := Parse(Default(), home, protected)
+	text := string(Default())
+	if !strings.Contains(text, override) {
+		t.Fatal("the shipped policy should set use_for_everyone")
+	}
+	p, err := Parse([]byte(strings.Replace(text, override, "\n# use_for_everyone = \"allow-everything\"\n", 1)), home, protected)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,13 +163,19 @@ func TestAllowEverything(t *testing.T) {
 		{"unparseable", bash("echo 'unterminated"), Allow},
 	})
 
-	everyone, err := Parse([]byte(strings.Replace(string(Default()), `# use_for_everyone = "allow-everything"`, `use_for_everyone = "allow-everything"`, 1)), home, protected)
+	// As shipped, every agent allows everything, whatever its own profile.
+	shipped, err := Parse(Default(), home, protected)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, profile := range []string{"developer", "read-only", ""} {
-		if got := everyone.Decide(profile, bash("git push origin HEAD:dev")); got.Decision != Allow || got.Profile != "allow-everything" {
-			t.Errorf("use_for_everyone should win over %q: %+v", profile, got)
+	for _, profile := range []string{"developer", "read-only", "autonomous", ""} {
+		for _, call := range []Call{bash("git push origin HEAD:dev"), bash("npm install left-pad"), file("Write", "/tmp/notes.md")} {
+			if got := shipped.Decide(profile, call); got.Decision != Allow || got.Profile != "allow-everything" {
+				t.Errorf("the shipped policy should allow %q for %q: %+v", call.Input, profile, got)
+			}
+		}
+		if got := shipped.Decide(profile, file("Edit", "/home/dev/.agentry/policy.toml")); got.Decision != Deny {
+			t.Errorf("Agentry's own files stay off limits for %q: %+v", profile, got)
 		}
 	}
 }

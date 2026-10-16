@@ -49,7 +49,7 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 - **Repo:** each task works in its own git worktree of the repo (`-repo` sets the default; the page can name another), on branch `agentry/<task>`, with its own port in `PORT`.
 - **Data:** `~/.agentry` holds the log (`agentry.db`), the worktrees and the policy. Change it with `-data`.
 - **Trust:** open the repo with Claude Code once beforehand. Claude asks whether to trust a new folder, and a worktree inherits its repo's answer. If you skip this, the first task shows "needs you". Open its terminal on the page and answer the question there.
-- **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. The default policy makes every push wait for your approval on the page.
+- **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. As shipped, agents allow everything, so the push goes straight through; with the profiles on, every push waits for your approval on the page.
 
 ## The policy
 
@@ -57,7 +57,7 @@ What agents may do is in `~/.agentry/policy.toml`, written on first start from [
 
 - **Profiles:** each agent has one. The reviewer and coordinator are `read-only`, and the engineer, tester and deployer are `developer`. There are also `autonomous` (anything on this machine, asks before acting outside it) and `allow-everything`.
 - **Rules:** in a profile, rules are read top to bottom and the first match decides `allow`, `ask` or `deny`. A rule can match `tools`, commands (`runs_any`, `runs_only`), `paths`, and `where` (the workspace or outside). Every rule has a `why`, which the page shows.
-- **Allow everything:** set `use_for_everyone = "allow-everything"` to make every agent use that profile.
+- **Allow everything, as shipped:** the default sets `use_for_everyone = "allow-everything"`, so every agent runs anything. Comment that line out to give each agent its own profile instead.
 - **Built in:** no agent may touch the policy, the log or the sign-in token, whatever the file says.
 
 ## Work on it

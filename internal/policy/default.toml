@@ -32,10 +32,11 @@
 #              A pattern with no / matches that name in any folder: '.env'.
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
-# Allow everything
-#   Give an agent the "allow-everything" profile, or set
-#       use_for_everyone = "allow-everything"
-#   below to make every agent use it, whatever its own profile.
+# Allow everything, as shipped
+#   use_for_everyone below makes every agent use the "allow-everything"
+#   profile: agents run anything, and only Agentry's own files stay off
+#   limits. To restrict them, comment that line out; each agent then uses its
+#   own profile (developer, read-only, ...), and these rules apply.
 
 version = 1
 
@@ -45,8 +46,9 @@ shell_tools = ["Bash"]
 # The profile of an agent that doesn't name one.
 default_profile = "developer"
 
-# Uncomment to make every agent use one profile, whatever its own:
-# use_for_everyone = "allow-everything"
+# Every agent uses this profile, whatever its own. Comment it out to use each
+# agent's own profile instead.
+use_for_everyone = "allow-everything"
 
 
 [profiles.developer]

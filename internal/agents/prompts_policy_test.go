@@ -11,7 +11,9 @@ import (
 // The default prompts tell agents to run commands. None of them may be one
 // the policy denies, or an agent following its own prompt gets blocked.
 func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
-	shipped, err := policy.Parse(policy.Default(), "/home/dev", nil)
+	// The developer profile's own rules, without the shipped use_for_everyone.
+	rules := strings.Replace(string(policy.Default()), "\nuse_for_everyone = ", "\n# use_for_everyone = ", 1)
+	shipped, err := policy.Parse([]byte(rules), "/home/dev", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
