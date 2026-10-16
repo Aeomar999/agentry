@@ -172,6 +172,14 @@ scratch = ['/tmp/claude-*/**']
   why = "Keys and passwords never reach a model."
 
   [[profiles.read-only.rules]]
+  name = "keeps its own notes"
+  decision = "allow"
+  tools = ["Edit", "Write", "MultiEdit"]
+  paths = ['**/.agentry/knowledge.md']
+  where = "workspace"
+  why = "Its knowledge file is its notes for later tasks, not the work it judges."
+
+  [[profiles.read-only.rules]]
   name = "this agent changes nothing"
   decision = "deny"
   tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]

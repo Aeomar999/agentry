@@ -129,3 +129,17 @@ func TestUpgradesLeaveAgentsYouChanged(t *testing.T) {
 		t.Errorf("upgrades: %+v", upgrades)
 	}
 }
+
+// Knowledge is the agent's own: settings changes keep it.
+func TestKnowledgeSurvivesSettingsChanges(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	engineer := Agent{Name: "engineer", Engine: "claude", Prompt: "x"}
+	stream := []events.Event{
+		{Proposal: engineer.Proposal(you, false)},
+		{Proposal: engineer.Learned(events.Actor{Kind: events.Agent, ID: "engineer"}, "Use gofmt -s.")},
+		{Proposal: Agent{Name: "engineer", Engine: "codex", Prompt: "y"}.Proposal(you, true)},
+	}
+	if got, _ := FromEvents(stream).Get("engineer"); got.Knowledge != "Use gofmt -s." || got.Engine != "codex" {
+		t.Errorf("after a settings change: %+v", got)
+	}
+}

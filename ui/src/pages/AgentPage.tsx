@@ -8,6 +8,7 @@ import { KeyValueList } from "@/components/molecules/KeyValueList";
 import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
+import { KnowledgeEditor } from "@/components/organisms/KnowledgeEditor";
 import { AgentName } from "@/components/molecules/AgentName";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
@@ -30,9 +31,12 @@ export function AgentPage() {
       />
       <div className="flex flex-col gap-6 p-6 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1">
-          <Panel flush title="Prompt" aside="Its standing instructions, given at the start of every turn">
-            <CodeViewer text={agent.prompt} language="markdown" maxHeight={2000} />
-          </Panel>
+          <div className="flex flex-col gap-4">
+            <Panel flush title="Prompt" aside="Its standing instructions, given at the start of every turn">
+              <CodeViewer text={agent.prompt} language="markdown" maxHeight={2000} />
+            </Panel>
+            <KnowledgeEditor key={agent.name} agent={agent.name} knowledge={agent.knowledge} />
+          </div>
         </div>
         <aside className="w-full shrink-0 xl:w-inspector">
           <Panel title="Settings">

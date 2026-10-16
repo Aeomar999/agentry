@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -21,6 +22,16 @@ import (
 // StateDir is where Agentry keeps a task's files inside its worktree. Git
 // ignores it (package worktrees).
 const StateDir = ".agentry"
+
+// KnowledgeFile is where the working agent's knowledge is put at the start
+// of its turn, for it to keep up to date; read back when the turn ends.
+var KnowledgeFile = filepath.Join(StateDir, "knowledge.md")
+
+// ReadKnowledge is what the agent left in the knowledge file.
+func ReadKnowledge(worktree string) (string, error) {
+	content, err := os.ReadFile(filepath.Join(worktree, KnowledgeFile))
+	return strings.TrimSpace(string(content)), err
+}
 
 type Config struct {
 	HookCommand string // runs `agentry hook`, e.g. "/usr/local/bin/agentry hook"
@@ -63,6 +74,9 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	turn := task.NextTurnID()
 	briefFile := filepath.Join(StateDir, turn+".md")
 	if err := writeFile(filepath.Join(task.Worktree.Path, briefFile), brief); err != nil {
+		return err
+	}
+	if err := writeFile(filepath.Join(task.Worktree.Path, KnowledgeFile), agent.Knowledge+"\n"); err != nil {
 		return err
 	}
 	prompt := "Read " + briefFile + " and do what it says."

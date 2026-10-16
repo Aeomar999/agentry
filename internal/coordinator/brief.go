@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // A brief is everything an agent is given for one turn: its own prompt, then
@@ -18,6 +19,7 @@ const longestStep = 4000
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster) string {
 	var b strings.Builder
 	header(&b, coordinator, task)
+	knowledge(&b, coordinator)
 	section(&b, "The task", taskText(task))
 	section(&b, "Where the work is", whereText(task))
 
@@ -43,6 +45,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 func workerBrief(task *tasks.Task, agent agents.Agent, instructions string) string {
 	var b strings.Builder
 	header(&b, agent, task)
+	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
 	section(&b, "Your instructions from the coordinator", instructions)
 	section(&b, "Where the work is", whereText(task))
@@ -50,6 +53,19 @@ func workerBrief(task *tasks.Task, agent agents.Agent, instructions string) stri
 		"End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. "+
 			"The coordinator reads only this report, so make it complete. Don't stop to ask questions: put them in the report.")
 	return b.String()
+}
+
+// knowledge is the agent's notes from earlier tasks, and how to keep them.
+func knowledge(b *strings.Builder, agent agents.Agent) {
+	notes := agent.Knowledge
+	if notes == "" {
+		notes = "(Nothing yet.)"
+	}
+	section(b, "What you know from earlier tasks", notes+"\n\n"+
+		"These notes are yours, kept across tasks, in "+turns.KnowledgeFile+". Before you finish, update that file: add what "+
+		"you learned that will help on a later task (how this codebase does things, a trap you hit, what the user prefers), "+
+		"fix what turned out wrong, and drop what no longer matters. Keep it short: a few lines per point. Leave it as it is "+
+		"if you learned nothing new.")
 }
 
 func header(b *strings.Builder, agent agents.Agent, task *tasks.Task) {

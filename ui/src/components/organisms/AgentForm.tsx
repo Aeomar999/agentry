@@ -35,6 +35,7 @@ const BLANK: Agent = {
   workers: [],
   color: "",
   column: "",
+  knowledge: "",
 };
 
 export function AgentForm({ agent }: { agent?: Agent }) {

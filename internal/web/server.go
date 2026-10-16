@@ -68,6 +68,8 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/agents", s.createAgent)
 	api("PUT /api/agents/{name}", s.changeAgent)
 	api("DELETE /api/agents/{name}", s.removeAgent)
+	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
+	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
 	api("GET /api/policy", s.showPolicy)
 	api("GET /api/changes", s.waitForChanges)

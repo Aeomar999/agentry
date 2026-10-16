@@ -8,6 +8,7 @@ const (
 	AgentCreated Type = "agent.created"
 	AgentChanged Type = "agent.changed"
 	AgentRemoved Type = "agent.removed"
+	AgentLearned Type = "agent.learned" // an agent's knowledge, all of it: changed by the agent as it works, or by you
 )
 
 // A task's stream, in roughly the order they happen.

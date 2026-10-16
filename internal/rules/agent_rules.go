@@ -23,6 +23,7 @@ var rosterRules = map[events.Type]rosterRule{
 	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown),
 	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown, keepsACoordinator),
 	events.AgentRemoved: allOf(agentExists, removalKeepsACoordinator),
+	events.AgentLearned: allOf(agentExists, onlyItsOwnKnowledge),
 	events.TaskCreated:  allOf(coordinatorExists),
 	events.TaskAssigned: allOf(assigneeExists),
 }
@@ -112,6 +113,14 @@ func colorIsKnown(_ agents.Roster, p events.Proposal) string {
 func columnIsKnown(_ agents.Roster, p events.Proposal) string {
 	if column := p.Text("column"); column != "" && column != "review" {
 		return `an agent's work counts as In progress ("") or Review ("review"), not ` + column
+	}
+	return ""
+}
+
+// onlyItsOwnKnowledge: an agent changes its own knowledge, never another's.
+func onlyItsOwnKnowledge(_ agents.Roster, p events.Proposal) string {
+	if p.Actor.Kind == events.Agent && p.Actor.ID != p.Text("name") {
+		return p.Actor.ID + " can't change what " + p.Text("name") + " knows"
 	}
 	return ""
 }

@@ -93,6 +93,7 @@ export interface Agent {
   workers: string[]; // the machines it may run on; none: the machine Agentry runs on
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review"; // where its work shows on the board: In progress, or Review
+  knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
 }
 
 export type Decision = "allow" | "ask" | "deny";

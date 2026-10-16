@@ -6,6 +6,7 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
@@ -14,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // Judge gives the policy's verdict on a call by an agent with a profile.
@@ -77,6 +79,30 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 		return
 	}
 	h.store.Propose(p)
+	if signal.Kind == engines.TurnEnded {
+		h.recordWhatWasLearned(call)
+	}
+}
+
+// recordWhatWasLearned keeps what the agent wrote in its knowledge file this
+// turn, if it changed anything.
+func (h *Handler) recordWhatWasLearned(call hookcall.Call) {
+	task, err := h.task(call.Task)
+	if err != nil || task == nil || task.Worktree == nil {
+		return
+	}
+	learned, err := turns.ReadKnowledge(task.Worktree.Path)
+	if err != nil {
+		return
+	}
+	stream, err := h.store.Stream(events.AgentsStream)
+	if err != nil {
+		return
+	}
+	agent, ok := agents.FromEvents(stream).Get(call.Agent)
+	if ok && learned != strings.TrimSpace(agent.Knowledge) {
+		h.store.Propose(agent.Learned(events.Actor{Kind: events.Agent, ID: agent.Name}, learned))
+	}
 }
 
 func (h *Handler) refuse(engine engines.Engine, call hookcall.Call, reason string) hookcall.Reply {

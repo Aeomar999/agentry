@@ -26,7 +26,18 @@ type Agent struct {
 	// "review" for agents that check work, such as a reviewer or tester.
 	Column string `json:"column"`
 
+	// Knowledge is what the agent has learned as it works, in its own words
+	// and yours; part of every brief. Changed only by agent.learned, so
+	// editing the agent's settings never touches it.
+	Knowledge string `json:"knowledge"`
+
 	untouched bool // still as Agentry wrote it: you have never changed it
+}
+
+// Learned is the event that sets the agent's knowledge to knowledge.
+func (a Agent) Learned(by events.Actor, knowledge string) events.Proposal {
+	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentLearned,
+		Data: map[string]any{"name": a.Name, "knowledge": knowledge}}
 }
 
 // Colors an agent can have. The page has a shade of each for both themes.
@@ -74,7 +85,13 @@ func FromEvents(stream []events.Event) Roster {
 			roster = append(roster, fromEvent(e))
 		case events.AgentChanged:
 			if i := roster.index(e.Text("name")); i >= 0 {
+				knowledge := roster[i].Knowledge
 				roster[i] = fromEvent(e)
+				roster[i].Knowledge = knowledge
+			}
+		case events.AgentLearned:
+			if i := roster.index(e.Text("name")); i >= 0 {
+				roster[i].Knowledge = e.Text("knowledge")
 			}
 		case events.AgentRemoved:
 			if i := roster.index(e.Text("name")); i >= 0 {

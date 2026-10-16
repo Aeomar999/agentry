@@ -137,6 +137,8 @@ func TestTheReadOnlyProfile(t *testing.T) {
 		{"diff from the base", bash("git diff c1169f1..HEAD"), Allow},
 		{"run the tests", bash("go test -v ./... && gofmt -l ."), Allow},
 		{"edit", file("Edit", workspace+"/main.go"), Deny},
+		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
+		{"notes in another folder", file("Write", "/tmp/elsewhere/.agentry/knowledge.md"), Deny},
 		{"commit", bash("git commit -am 'x'"), Ask},
 		{"push", bash("git push origin HEAD:dev"), Ask},
 	})

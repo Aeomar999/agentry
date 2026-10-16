@@ -18,6 +18,7 @@ var catalogue = map[Type]spec{
 	AgentCreated: {fields: []string{"name", "prompt", "engine"}, writers: []ActorKind{Human, System}},
 	AgentChanged: {fields: []string{"name", "prompt", "engine"}, writers: []ActorKind{Human, System}},
 	AgentRemoved: {fields: []string{"name"}, writers: []ActorKind{Human}},
+	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 
 	TaskCreated:   {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human}},
 	TaskRenamed:   {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
@@ -56,7 +57,7 @@ var catalogue = map[Type]spec{
 
 // streamOf is the stream a type must be in; types not listed go in a task's stream.
 var streamOf = map[Type]string{
-	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream,
+	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream, AgentLearned: AgentsStream,
 	PolicyLoaded: PolicyStream, PolicyRefused: PolicyStream,
 }
 

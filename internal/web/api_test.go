@@ -518,3 +518,22 @@ func TestCardsMoveThroughTheStages(t *testing.T) {
 		t.Errorf("reopened: %s, worktree %v, %q", d.Status, d.Worktree, lastStep(d))
 	}
 }
+
+// You can edit what an agent knows, and see who changed it.
+func TestYouEditWhatAnAgentKnows(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "PUT", "/api/agents/engineer/knowledge", `{"knowledge":"  Prefer table tests.  "}`); code != 200 {
+		t.Fatalf("set: %d %s", code, body)
+	}
+	call(t, server, "PUT", "/api/agents/engineer", `{"engine":"claude","prompt":"Write Go."}`) // settings, not knowledge
+	_, body := call(t, server, "GET", "/api/agents", "")
+	var roster []agents.Agent
+	json.Unmarshal([]byte(body), &roster)
+	if roster[1].Knowledge != "Prefer table tests." {
+		t.Errorf("knowledge: %q", roster[1].Knowledge)
+	}
+	_, body = call(t, server, "GET", "/api/agents/engineer/knowledge", "")
+	if !strings.Contains(body, `"by":"you"`) || !strings.Contains(body, "Prefer table tests.") {
+		t.Errorf("history: %s", body)
+	}
+}

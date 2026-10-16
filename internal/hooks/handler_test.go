@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // judgeByCommand: "ls" is allowed, "sudo" denied, anything else asks.
@@ -34,6 +36,11 @@ func judgeByCommand(_ string, call policy.Call) policy.Verdict {
 // engineerAtWork is a store with a task whose engineer turn (turn-2) is open.
 func engineerAtWork(t *testing.T) *store.Store {
 	t.Helper()
+	return engineerAtWorkIn(t, "/w/task-1")
+}
+
+func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
+	t.Helper()
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +53,7 @@ func engineerAtWork(t *testing.T) *store.Store {
 	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"}},
-		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": worktree, "branch": "b", "port": 7901}},
 		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
 		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}},
 		{Stream: "task-1", Actor: coordinator, Type: events.TaskAssigned, Data: map[string]any{"agent": "engineer", "instructions": "go"}},
@@ -208,5 +215,34 @@ func TestTheGateUsesTheWorkingAgentsProfile(t *testing.T) {
 	NewHandler(s, judge).Handle(context.Background(), hookCall("PreToolUse", bash("toolu_9", "ls")))
 	if asked != "developer" {
 		t.Errorf("the engineer's profile is developer, the judge got %q", asked)
+	}
+}
+
+// What the agent wrote in its knowledge file during the turn is kept when
+// the turn ends; a file left as it was writes nothing.
+func TestWhatTheAgentLearnedIsKept(t *testing.T) {
+	worktree := t.TempDir()
+	s := engineerAtWorkIn(t, worktree)
+	h := NewHandler(s, judgeByCommand)
+	os.MkdirAll(filepath.Join(worktree, ".agentry"), 0o755)
+	os.WriteFile(filepath.Join(worktree, turns.KnowledgeFile), []byte("This repo formats with gofmt -s.\n"), 0o644)
+	h.Handle(context.Background(), hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`))
+
+	stream, _ := s.Stream(events.AgentsStream)
+	engineer, _ := agents.FromEvents(stream).Get("engineer")
+	if engineer.Knowledge != "This repo formats with gofmt -s." {
+		t.Errorf("knowledge: %q", engineer.Knowledge)
+	}
+	learned := 0
+	for _, e := range stream {
+		if e.Type == events.AgentLearned {
+			learned++
+			if e.Actor.ID != "engineer" {
+				t.Errorf("recorded as %s, want the engineer", e.Actor)
+			}
+		}
+	}
+	if learned != 1 {
+		t.Errorf("%d agent.learned events, want 1", learned)
 	}
 }
