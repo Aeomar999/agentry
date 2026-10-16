@@ -1,6 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "@fontsource-variable/inter";
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/400-italic.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource-variable/archivo/standard.css";
 import "@fontsource-variable/jetbrains-mono";
 import "@/styles/globals.css";
 import { applyTheme, savedTheme } from "@/lib/theme";

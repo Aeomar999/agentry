@@ -46,9 +46,11 @@
      Claude session in the page's theme so its colours suit it. */
   --color-terminal: #0e1014;
 
-  /* Inter for prose, JetBrains Mono for ids, paths, commands and times:
-     anything a person compares character by character. */
-  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  /* IBM Plex Sans for text, Archivo (narrowed, bold) for page titles, and
+     JetBrains Mono for ids, paths, commands and times: anything a person
+     compares character by character. */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Archivo Variable", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Dense rows: an admin tool shows fifty rows, not eight. */
@@ -100,7 +102,6 @@ html {
   background: var(--color-surface-0);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "ss01", "cv11", "calt";
   color-scheme: dark;
 }
 html.light {

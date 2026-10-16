@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -138,7 +139,8 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil})
+	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
+		"engines": rules.KnownEngines, "workers": knownWorkers()})
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started
@@ -156,6 +158,14 @@ func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 		s.config.SetTheme(request.Theme)
 	}
 	reply(w, map[string]string{"theme": request.Theme})
+}
+
+// knownWorkers are the machines an agent can be given; none until T-022.
+func knownWorkers() []string {
+	if rules.KnownWorkers == nil {
+		return []string{}
+	}
+	return rules.KnownWorkers
 }
 
 // showPolicy is the policy in force, and why the file on disk isn't, if it isn't.

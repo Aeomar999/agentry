@@ -122,8 +122,12 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 }
 
 func agentsOf(roster agents.Roster) []agents.Agent {
-	if roster == nil {
-		return []agents.Agent{}
+	list := []agents.Agent{}
+	for _, a := range roster {
+		if a.Workers == nil {
+			a.Workers = []string{} // the page reads a list, never null
+		}
+		list = append(list, a)
 	}
-	return roster
+	return list
 }

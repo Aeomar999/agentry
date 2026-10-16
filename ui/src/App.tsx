@@ -7,6 +7,7 @@ import { NewTaskPage } from "@/pages/NewTaskPage";
 import { TaskPage } from "@/pages/TaskPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { AgentPage } from "@/pages/AgentPage";
+import { AgentEditPage } from "@/pages/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
@@ -26,7 +27,9 @@ const router = createBrowserRouter([
           { path: "/tasks/new", element: <NewTaskPage /> },
           { path: "/tasks/:taskId", element: <TaskPage /> },
           { path: "/agents", element: <AgentsPage /> },
+          { path: "/agents/new", element: <AgentEditPage /> },
           { path: "/agents/:name", element: <AgentPage /> },
+          { path: "/agents/:name/edit", element: <AgentEditPage /> },
           { path: "/policy", element: <PolicyPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],

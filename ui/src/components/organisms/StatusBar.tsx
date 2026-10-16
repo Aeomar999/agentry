@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { GitBranch, SquareTerminal } from "lucide-react";
 import { StatusDot, DotTone } from "@/components/atoms/StatusDot";
 import { Kbd } from "@/components/atoms/Kbd";
@@ -17,11 +18,12 @@ interface StatusBarProps {
   position: number;
   defaultRepo: string;
   working: number;
+  needsYou: number; // tasks waiting for you
   terminalOpen: boolean;
   onToggleTerminal: () => void;
 }
 
-export function StatusBar({ connection, position, defaultRepo, working, terminalOpen, onToggleTerminal }: StatusBarProps) {
+export function StatusBar({ connection, position, defaultRepo, working, needsYou, terminalOpen, onToggleTerminal }: StatusBarProps) {
   const { tone, label } = CONNECTION[connection];
   return (
     <footer className="flex h-statusbar shrink-0 items-center gap-4 border-t border-divider bg-surface-1 px-3 text-[11px] text-ink-muted">
@@ -37,13 +39,23 @@ export function StatusBar({ connection, position, defaultRepo, working, terminal
           <span className="truncate font-mono">{defaultRepo}</span>
         </span>
       )}
+      {needsYou > 0 && (
+        <Link
+          to="/tasks?status=needs-you"
+          className="ml-auto flex h-5 items-center gap-1.5 rounded-sm bg-warning-soft px-1.5 whitespace-nowrap text-warning hover:text-ink-primary"
+        >
+          <StatusDot tone="warning" />
+          {needsYou === 1 ? "1 waiting for you" : `${needsYou} waiting for you`}
+        </Link>
+      )}
       <button
         type="button"
         onClick={onToggleTerminal}
         title={`Show or hide the terminal (${modKey} J)`}
         className={cn(
-          "ml-auto flex h-5 cursor-pointer items-center gap-1.5 rounded-sm px-1.5 whitespace-nowrap hover:bg-surface-3 hover:text-ink-primary",
+          "flex h-5 cursor-pointer items-center gap-1.5 rounded-sm px-1.5 whitespace-nowrap hover:bg-surface-3 hover:text-ink-primary",
           terminalOpen && "bg-surface-3 text-ink-primary",
+          needsYou === 0 && "ml-auto",
         )}
       >
         <SquareTerminal className="size-3.5" aria-hidden />

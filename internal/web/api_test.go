@@ -299,3 +299,34 @@ func TestATaskNeedsOnlyADescription(t *testing.T) {
 		t.Errorf("an empty task: %d", code)
 	}
 }
+
+// Agents are added, changed and removed from the page; the rules decide.
+func TestAgentsAreEditedFromThePage(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/agents", `{"name":"designer","engine":"claude","prompt":"Design the page.","description":"Draws the UI"}`); code != 200 {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	if code, body := call(t, server, "PUT", "/api/agents/engineer", `{"name":"ignored","engine":"codex","model":"gpt-5","prompt":"Write Go.","workers":[]}`); code != 200 {
+		t.Fatalf("change: %d %s", code, body)
+	}
+	if code, _ := call(t, server, "PUT", "/api/agents/engineer", `{"engine":"claude","prompt":"x","workers":["build-box"]}`); code != http.StatusConflict {
+		t.Errorf("a worker that doesn't exist: %d", code)
+	}
+	if code, _ := call(t, server, "DELETE", "/api/agents/coordinator", ""); code != http.StatusConflict {
+		t.Errorf("removing the only coordinator: %d", code)
+	}
+	if code, body := call(t, server, "DELETE", "/api/agents/designer", ""); code != 200 {
+		t.Errorf("remove: %d %s", code, body)
+	}
+
+	_, body := call(t, server, "GET", "/api/agents", "")
+	var roster []agents.Agent
+	json.Unmarshal([]byte(body), &roster)
+	engineer := roster[1]
+	if len(roster) != 5 || engineer.Name != "engineer" || engineer.Engine != "codex" || engineer.Model != "gpt-5" || engineer.Workers == nil {
+		t.Errorf("roster: %+v", roster)
+	}
+	if !strings.Contains(body, `"workers":[]`) {
+		t.Error("an agent with no workers should list none, not null")
+	}
+}

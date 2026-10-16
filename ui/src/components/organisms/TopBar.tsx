@@ -23,7 +23,7 @@ export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar
       <IconButton icon={<PanelLeft />} label="Show or hide the sidebar" onClick={onToggleSidebar} />
       <Link to="/tasks" className="flex shrink-0 items-center gap-2">
         <LogoTile />
-        <span className="text-[14px] font-semibold tracking-tight text-ink-primary max-sm:hidden">Agentry</span>
+        <span className="font-display text-[16px] font-bold tracking-tight text-ink-primary [font-stretch:85%] max-sm:hidden">Agentry</span>
       </Link>
       <span className="h-5 w-px shrink-0 bg-divider max-sm:hidden" />
       <div className="min-w-0 flex-1 max-sm:hidden">

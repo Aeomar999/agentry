@@ -155,7 +155,7 @@ export function AdminShell() {
   );
 
   const needsYou = tasks.filter((task) => task.status === "needs you").length;
-  const working = tasks.filter((task) => task.status !== "done" && task.currentAgent);
+  const working = tasks.filter((task) => task.status !== "done" && task.currentAgent); // their terminals, in the dock
   return (
     <CrumbContext.Provider value={setCrumbs}>
       <TerminalContext.Provider value={openTerminal}>
@@ -197,7 +197,8 @@ export function AdminShell() {
             connection={connection}
             position={position}
             defaultRepo={config?.defaultRepo ?? ""}
-            working={working.length}
+            working={tasks.filter((task) => task.status === "working").length}
+            needsYou={needsYou}
             terminalOpen={dockOpen}
             onToggleTerminal={() => toggleDock.current()}
           />

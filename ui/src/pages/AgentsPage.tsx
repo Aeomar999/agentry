@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { Plus } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
@@ -24,6 +25,11 @@ const COLUMNS: Column<Agent>[] = [
     render: (agent) => <Mono className="text-ink-muted">{agent.model || "default"}</Mono>,
   },
   { header: "Profile", className: "w-32 max-md:hidden", render: (agent) => <Mono>{agent.profile || "default"}</Mono> },
+  {
+    header: "Runs on",
+    className: "w-36 max-lg:hidden",
+    render: (agent) => <Mono className="text-ink-muted">{agent.workers.length ? agent.workers.join(", ") : "this machine"}</Mono>,
+  },
 ];
 
 export function AgentsPage() {
@@ -36,7 +42,11 @@ export function AgentsPage() {
 
   return (
     <>
-      <PageHeader title="Agents" meta="The coordinator chooses from these for every step. Each starts from its own prompt." />
+      <PageHeader
+        title="Agents"
+        meta="The coordinator chooses from these for every step. Each starts from its own prompt."
+        actions={[{ label: "New agent", icon: <Plus />, to: "/agents/new", primary: true }]}
+      />
       {error && (
         <div className="p-6">
           <Banner title="Couldn't load the agents">{error}</Banner>

@@ -79,6 +79,7 @@ export interface Agent {
   model: string;
   profile: string;
   coordinates: boolean;
+  workers: string[]; // the machines it may run on; none: the machine Agentry runs on
 }
 
 export type Decision = "allow" | "ask" | "deny";
@@ -103,6 +104,9 @@ export interface PolicyProfile {
 export interface ServerConfig {
   defaultRepo: string;
   hasTerminal: boolean;
+  hasDesk: boolean;
+  engines: string[];
+  workers: string[]; // the machines agents can be given; none yet
 }
 
 export interface CreatedEvent {

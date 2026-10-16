@@ -24,7 +24,9 @@ export function PageHeader({ title, meta, badges, actions = [] }: PageHeaderProp
     <header className="flex flex-wrap items-start justify-between gap-3 border-b border-divider px-6 pt-5 pb-4">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[18px] leading-7 font-semibold tracking-tight break-words text-ink-primary">{title}</h1>
+          <h1 className="font-display text-[22px] leading-7 font-bold tracking-tight break-words text-ink-primary [font-stretch:85%]">
+            {title}
+          </h1>
           {badges}
         </div>
         {meta && <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-muted">{meta}</div>}

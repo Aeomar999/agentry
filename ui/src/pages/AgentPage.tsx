@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import { Bot } from "lucide-react";
+import { Bot, Pencil } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -21,7 +21,12 @@ export function AgentPage() {
 
   return (
     <>
-      <PageHeader title={<span className="font-mono">{agent.name}</span>} badges={<RoleBadge agent={agent} />} meta={agent.description} />
+      <PageHeader
+        title={<span className="font-mono">{agent.name}</span>}
+        badges={<RoleBadge agent={agent} />}
+        meta={agent.description}
+        actions={[{ label: "Edit", icon: <Pencil />, to: `/agents/${encodeURIComponent(agent.name)}/edit` }]}
+      />
       <div className="flex flex-col gap-6 p-6 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1">
           <Panel flush title="Prompt" aside="Its standing instructions, given at the start of every turn">
@@ -36,6 +41,7 @@ export function AgentPage() {
                 { label: "Model", value: <Mono>{agent.model || "the engine's default"}</Mono> },
                 { label: "Policy profile", value: <Mono>{agent.profile || "the default profile"}</Mono> },
                 { label: "Role", value: agent.coordinates ? "Decides who works next" : "Works on the task" },
+                { label: "Runs on", value: agent.workers.length ? <Mono>{agent.workers.join(", ")}</Mono> : "This machine" },
               ]}
             />
           </Panel>

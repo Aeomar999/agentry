@@ -1,20 +1,28 @@
 import { Component, lazy, ReactNode, Suspense } from "react";
+import { TextArea } from "@/components/atoms/Input";
 import { CodeBlock } from "./CodeBlock";
 
-// A file shown in VS Code's editor, read only. Monaco is large, so it loads
-// only when a page shows one. Until it has loaded, or if it fails, the text
-// shows as plain text: the file is never hidden behind the editor.
+// A file in VS Code's editor: read only, or editable when onChange is
+// given. Monaco is large, so it loads only when a page shows one. Until it
+// has loaded, or if it fails, the text shows as plain text, so nothing is
+// ever hidden behind the editor.
 
 export interface CodeViewerProps {
   text: string;
   language: "ini" | "markdown"; // ini highlights TOML
   maxHeight?: number; // grows with the text up to this, then scrolls
+  minHeight?: number;
+  onChange?: (text: string) => void; // makes it editable
 }
 
 const MonacoView = lazy(() => import("./MonacoView"));
 
 export function CodeViewer(props: CodeViewerProps) {
-  const plain = <CodeBlock text={props.text} className="border-0 bg-transparent" />;
+  const plain = props.onChange ? (
+    <TextArea value={props.text} onChange={(event) => props.onChange!(event.target.value)} rows={16} className="font-mono text-[12.5px]" />
+  ) : (
+    <CodeBlock text={props.text} className="border-0 bg-transparent" />
+  );
   return (
     <PlainOnError fallback={plain}>
       <Suspense fallback={plain}>

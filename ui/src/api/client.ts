@@ -21,7 +21,7 @@ export class SignedOutError extends Error {
   }
 }
 
-export async function api<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method,
     signal,
