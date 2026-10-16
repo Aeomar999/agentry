@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +34,10 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Title, Description, Repo string }
+	var request struct {
+		Title, Description, Repo string
+		Labels                   []string
+	}
 	if !decode(w, r, &request) {
 		return
 	}
@@ -70,7 +74,30 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	id := fmt.Sprintf("task-%d", len(ids)+1)
 	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name}})
+		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels)}})
+}
+
+// label sets the task's labels, all of them.
+func (s *Server) label(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Labels []string }
+	if !decode(w, r, &request) {
+		return
+	}
+	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskLabeled,
+		Data: map[string]any{"labels": cleanLabels(request.Labels)}})
+}
+
+// cleanLabels trims labels, lowercases them so "Bug" and "bug" are one, and
+// drops empty and repeated ones. The rules check what is left.
+func cleanLabels(labels []string) []string {
+	clean := []string{}
+	for _, label := range labels {
+		label = strings.ToLower(strings.Join(strings.Fields(label), " "))
+		if label != "" && !slices.Contains(clean, label) {
+			clean = append(clean, label)
+		}
+	}
+	return clean
 }
 
 // titleFrom stands in for a title nobody gave: the description's first

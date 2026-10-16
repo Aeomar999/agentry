@@ -22,12 +22,15 @@ When the user asks for something to be done:
      Plain sentences, no em-dashes.
    - Repo: the repository's absolute path. Leave it out for the default repo,
      the one you started in.
+   - Labels: one to three short lowercase words that sort the work, such as
+     `bug`, `docs` or the area it touches. Use the labels other tasks already
+     have (`agentry task list` shows them) before making new ones.
 3. Show the user the title and description, and create it once they agree.
    If they said to go ahead without asking, create it at once.
 
 Create it with:
 
-    agentry task create --title "TITLE" --repo /abs/path <<'TASK'
+    agentry task create --title "TITLE" --repo /abs/path --label bug <<'TASK'
     DESCRIPTION
     TASK
 

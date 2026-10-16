@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"strings"
+
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -14,6 +16,7 @@ var taskRules = map[events.Type]rule{
 	events.WorktreeReady: all(noWorktreeYet),
 	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
 	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
+	events.TaskLabeled:   all(labelsAreValid),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -73,6 +76,25 @@ func byTheCoordinatorOrYou(t *tasks.Task, p events.Proposal) string {
 func aNewTitle(t *tasks.Task, p events.Proposal) string {
 	if title := p.Text("title"); title == "" || title == t.Title {
 		return "the task already has that title"
+	}
+	return ""
+}
+
+// labelsAreValid keeps labels short words: they are filters and chips.
+func labelsAreValid(_ *tasks.Task, p events.Proposal) string {
+	return CheckLabels(p.List("labels"))
+}
+
+// CheckLabels is "" for labels that may be used, or why not. Task creation
+// runs it too.
+func CheckLabels(labels []string) string {
+	if len(labels) > 12 {
+		return "at most 12 labels"
+	}
+	for _, label := range labels {
+		if label == "" || len(label) > 32 || strings.TrimSpace(label) != label {
+			return "a label is 1 to 32 characters with no space at either end: " + `"` + label + `"`
+		}
 	}
 	return ""
 }

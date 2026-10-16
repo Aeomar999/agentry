@@ -35,6 +35,7 @@ func (t *Task) apply(e events.Event) {
 	switch e.Type {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
+		t.Labels = e.List("labels")
 		t.Coordinator = e.Text("coordinator")
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -42,6 +43,9 @@ func (t *Task) apply(e events.Event) {
 		// Only noted in the trail: the work in hand goes on, and the
 		// coordinator reads it at its next turn.
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
+
+	case events.TaskLabeled:
+		t.Labels = e.List("labels")
 
 	case events.TaskRenamed:
 		if t.FirstTitle == "" {

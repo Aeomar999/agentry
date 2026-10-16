@@ -10,9 +10,11 @@ import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
+import { LabelList } from "@/components/molecules/LabelChip";
 import type { Agent, TaskStatus, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useKeys, useRowCursor } from "@/lib/shortcuts";
+import { readStored, writeStored } from "@/lib/stored";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { timeAgo } from "@/lib/time";
@@ -26,38 +28,46 @@ const FILTERS: { id: string; label: string; status?: TaskStatus }[] = [
   { id: "done", label: "Done", status: "done" },
 ];
 
-const COLUMNS: Column<TaskSummary>[] = [
-  { header: "Task", className: "w-24", render: (task) => <Mono className="text-ink-muted">{task.id}</Mono> },
-  {
-    header: "Title",
-    className: "w-full max-w-0",
-    render: (task) => (
-      <div className="min-w-0 py-0.5">
-        <p className="truncate font-medium text-ink-primary">{task.title}</p>
-        <p className="truncate text-[12px] text-ink-muted">
-          {task.status === "needs you" ? <span className="text-warning">{task.needsYou}</span> : describe(task)}
-        </p>
-      </div>
-    ),
-  },
-  { header: "Status", className: "w-28", render: (task) => <TaskStatusBadge status={task.status} /> },
-  { header: "Agent", className: "w-32 max-lg:hidden", render: (task) => <Mono>{task.currentAgent || "none"}</Mono> },
-  { header: "Turns", className: "w-16 text-right max-lg:hidden", render: (task) => <Mono>{task.turns}</Mono> },
-  {
-    header: "Active",
-    className: "w-24 text-right max-sm:hidden",
-    render: (task) => (
-      <Mono className="text-ink-muted">
-        <span title={task.lastActiveAt}>{timeAgo(task.lastActiveAt)}</span>
-      </Mono>
-    ),
-  },
-];
+function columnsFor(pickLabel: (label: string) => void): Column<TaskSummary>[] {
+  return [
+    { header: "Task", className: "w-24", render: (task) => <Mono className="text-ink-muted">{task.id}</Mono> },
+    {
+      header: "Title",
+      className: "w-full max-w-0",
+      render: (task) => (
+        <div className="min-w-0 py-0.5">
+          <p className="flex items-center gap-2">
+            <span className="truncate font-medium text-ink-primary">{task.title}</span>
+            <LabelList labels={task.labels} onPick={pickLabel} />
+          </p>
+          <p className="truncate text-[12px] text-ink-muted">
+            {task.status === "needs you" ? <span className="text-warning">{task.needsYou}</span> : describe(task)}
+          </p>
+        </div>
+      ),
+    },
+    { header: "Status", className: "w-28", render: (task) => <TaskStatusBadge status={task.status} /> },
+    { header: "Agent", className: "w-32 max-lg:hidden", render: (task) => <Mono>{task.currentAgent || "none"}</Mono> },
+    { header: "Turns", className: "w-16 text-right max-lg:hidden", render: (task) => <Mono>{task.turns}</Mono> },
+    {
+      header: "Active",
+      className: "w-24 text-right max-sm:hidden",
+      render: (task) => (
+        <Mono className="text-ink-muted">
+          <span title={task.lastActiveAt}>{timeAgo(task.lastActiveAt)}</span>
+        </Mono>
+      ),
+    },
+  ];
+}
 
 function describe(task: TaskSummary): string {
   if (task.status === "done") return "Done";
   return task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next";
 }
+
+type View = "list" | "board";
+const viewKey = "agentry-tasks-view";
 
 export function TasksPage() {
   useBreadcrumb({ label: "Tasks" });
@@ -68,8 +78,14 @@ export function TasksPage() {
   const agents = useResource<Agent[]>("/api/agents").data ?? [];
   const tasks = data ?? [];
 
-  // The board is the default; ?view=list shows the table. Both keep the filter.
-  const view = params.get("view") === "list" ? "list" : "board";
+  // The table by default, or the board; ?view= picks one, and the last one
+  // picked is remembered in this browser. Both keep the filter.
+  const asked = params.get("view");
+  const view: View = asked === "board" || asked === "list" ? asked : readStored(viewKey) === "board" ? "board" : "list";
+  const showView = (next: View) => {
+    writeStored(viewKey, next);
+    setParam("view", next);
+  };
   const setParam = (name: string, value: string | null) =>
     setParams((current) => {
       const next = new URLSearchParams(current);
@@ -77,17 +93,22 @@ export function TasksPage() {
       else next.set(name, value);
       return next;
     });
-  useKeys({ "1": () => setParam("view", null), "2": () => setParam("view", "list") });
+  useKeys({ "1": () => showView("list"), "2": () => showView("board") });
 
   const filter = FILTERS.find((f) => f.id === params.get("status")) ?? FILTERS[0];
+  const label = params.get("label");
+  const pickLabel = (picked: string) => setParam("label", picked);
   const shown = useMemo(() => {
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return tasks.filter(
       (task) =>
         (!filter.status || task.status === filter.status) &&
-        words.every((word) => `${task.id} ${task.title} ${task.repo} ${task.currentAgent}`.toLowerCase().includes(word)),
+        (!label || task.labels.includes(label)) &&
+        words.every((word) =>
+          `${task.id} ${task.title} ${task.repo} ${task.currentAgent} ${task.labels.join(" ")}`.toLowerCase().includes(word),
+        ),
     );
-  }, [tasks, filter, search]);
+  }, [tasks, filter, label, search]);
 
   const open = (task: TaskSummary) => navigate(`/tasks/${task.id}`);
   const cursor = useRowCursor(view === "list" ? shown.length : 0, (index) => open(shown[index]));
@@ -109,14 +130,15 @@ export function TasksPage() {
             onClick={() => setParam("status", f.id === "all" ? null : f.id)}
           />
         ))}
+        {label && <FilterChip label={`label: ${label}  ×`} active onClick={() => setParam("label", null)} />}
         <div className="ml-auto flex items-center gap-2" data-page-search>
           <SegmentedControl
             segments={[
-              { id: "board", label: "Board", icon: <Columns3 /> },
               { id: "list", label: "List", icon: <List /> },
+              { id: "board", label: "Board", icon: <Columns3 /> },
             ]}
             active={view}
-            onChange={(id) => setParam("view", id === "list" ? "list" : null)}
+            onChange={(id) => showView(id as View)}
           />
           <SearchField value={search} onChange={setSearch} placeholder="Filter tasks" shortcut="/" />
         </div>
@@ -126,10 +148,10 @@ export function TasksPage() {
           <Banner title="Couldn't load the tasks">{error}</Banner>
         </div>
       )}
-      {view === "board" && data && <TaskBoard tasks={shown} agents={agents} onOpen={open} />}
+      {view === "board" && data && <TaskBoard tasks={shown} agents={agents} onOpen={open} onPickLabel={pickLabel} />}
       {view === "list" && (
         <ResourceTable
-          columns={COLUMNS}
+          columns={columnsFor(pickLabel)}
           rows={shown}
           rowKey={(task) => task.id}
           onOpen={open}

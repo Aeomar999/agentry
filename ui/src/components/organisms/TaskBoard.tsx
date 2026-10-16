@@ -44,9 +44,10 @@ interface TaskBoardProps {
   tasks: TaskSummary[];
   agents: Agent[];
   onOpen: (task: TaskSummary) => void;
+  onPickLabel: (label: string) => void;
 }
 
-export function TaskBoard({ tasks, agents, onOpen }: TaskBoardProps) {
+export function TaskBoard({ tasks, agents, onOpen, onPickLabel }: TaskBoardProps) {
   const notify = useToast();
   const columns = columnsFor(agents);
   const coordinator = agents.find((a) => a.coordinates)?.name ?? "coordinator";
@@ -101,6 +102,7 @@ export function TaskBoard({ tasks, agents, onOpen }: TaskBoardProps) {
                   <TaskCard
                     key={task.id}
                     task={task}
+                    onPickLabel={onPickLabel}
                     coordinator={coordinator}
                     onOpen={() => onOpen(task)}
                     draggable={task.status !== "done"}

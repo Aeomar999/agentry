@@ -6,7 +6,10 @@ import { Input, TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
 import { Field } from "@/components/molecules/Field";
 import { api } from "@/api/client";
-import type { CreatedEvent } from "@/api/types";
+import type { CreatedEvent, TaskSummary } from "@/api/types";
+import { LabelInput } from "@/components/molecules/LabelInput";
+import { knownLabels } from "@/lib/labels";
+import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";
 import { useToast } from "./Toasts";
 
@@ -18,6 +21,8 @@ export function NewTaskForm() {
   const notify = useToast();
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
+  const [labels, setLabels] = useState<string[]>([]);
+  const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -27,7 +32,7 @@ export function NewTaskForm() {
     setBusy(true);
     setError("");
     try {
-      const created = await api<CreatedEvent>("POST", "/api/tasks", { description, title });
+      const created = await api<CreatedEvent>("POST", "/api/tasks", { description, title, labels });
       notify("success", `Created ${created.stream}`, "The coordinator reads it next.");
       navigate(`/tasks/${created.stream}`);
     } catch (failure) {
@@ -51,6 +56,11 @@ export function NewTaskForm() {
       />
       <Field label="Title" htmlFor="task-title" hint="Optional. The coordinator names the task once it has read it.">
         <Input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} className="max-w-md" />
+      </Field>
+      <Field label="Labels" htmlFor="task-labels" hint="Optional. Enter or a comma after each.">
+        <div id="task-labels" className="max-w-md">
+          <LabelInput labels={labels} onChange={setLabels} known={knownLabels(tasks)} />
+        </div>
       </Field>
       <div className="flex items-center gap-3">
         <Button type="submit" variant="primary" icon={<Plus />} disabled={busy || !description.trim()}>

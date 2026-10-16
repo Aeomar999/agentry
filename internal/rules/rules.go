@@ -33,10 +33,13 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 	case p.Type == events.TaskCreated && task != nil:
 		return refuse("task " + p.Stream + " already exists")
 	case p.Type == events.TaskCreated:
+		if reason := CheckLabels(p.List("labels")); reason != "" {
+			return refuse(reason)
+		}
 		return nil
 	case task == nil:
 		return refuse("task " + p.Stream + " doesn't exist")
-	case task.IsDone:
+	case task.IsDone && p.Type != events.TaskLabeled: // labels sort finished work too
 		return refuse("task " + p.Stream + " is done")
 	}
 	if reason := taskRules[p.Type](task, p); reason != "" {

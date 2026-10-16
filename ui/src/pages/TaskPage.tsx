@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
+import { LabelEditor } from "@/components/organisms/LabelEditor";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { clockTime, dateTime, timeAgo } from "@/lib/time";
@@ -119,6 +120,7 @@ export function TaskPage() {
       )}
       <div className="flex flex-col gap-6 p-6 xl:flex-row xl:items-start">
         <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <LabelEditor key={task.labels.join(",")} taskId={task.id} labels={task.labels} />
           {task.description && <p className="text-[13px] leading-5 whitespace-pre-wrap text-ink-secondary">{task.description}</p>}
           <NeedsYouPanel task={task} onChanged={reload} onOpenTerminal={() => openTerminal(task.id)} />
           {task.status === "done" && (

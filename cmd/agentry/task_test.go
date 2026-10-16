@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,9 +20,14 @@ func TestTaskCommandsTalkToTheServer(t *testing.T) {
 			http.Error(w, "no", http.StatusUnauthorized)
 			return
 		}
-		var body map[string]string
+		var body map[string]any
 		json.NewDecoder(r.Body).Decode(&body)
-		got = append(got, r.Method+" "+r.URL.Path+" "+body["title"]+"|"+body["description"]+"|"+body["repo"]+body["answer"])
+		text := func(key string) string { value, _ := body[key].(string); return value }
+		labels := ""
+		if list, ok := body["labels"].([]any); ok && len(list) > 0 {
+			labels = fmt.Sprint(list)
+		}
+		got = append(got, r.Method+" "+r.URL.Path+" "+text("title")+"|"+text("description")+"|"+text("repo")+labels+text("answer"))
 		switch r.URL.Path {
 		case "/api/tasks":
 			if r.Method == "POST" {
@@ -39,7 +45,7 @@ func TestTaskCommandsTalkToTheServer(t *testing.T) {
 
 	var out, errs bytes.Buffer
 	description := strings.NewReader("Retry once on a 503.\nDone when the test passes.\n")
-	if code := runTask([]string{"create", "--title", "Add a retry", "--repo", "/src/app"}, description, &out, &errs); code != 0 {
+	if code := runTask([]string{"create", "--title", "Add a retry", "--repo", "/src/app", "--label", "webhooks", "--label", "bug"}, description, &out, &errs); code != 0 {
 		t.Fatalf("create: %d %s", code, errs.String())
 	}
 	if !strings.Contains(out.String(), "Created task-7") {
@@ -54,7 +60,7 @@ func TestTaskCommandsTalkToTheServer(t *testing.T) {
 	}
 
 	want := []string{
-		"POST /api/tasks Add a retry|Retry once on a 503.\nDone when the test passes.|/src/app",
+		"POST /api/tasks Add a retry|Retry once on a 503.\nDone when the test passes.|/src/app[webhooks bug]",
 		"GET /api/tasks ||",
 		"POST /api/tasks/task-7/answer ||the billing queue",
 	}

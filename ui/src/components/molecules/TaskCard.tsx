@@ -1,10 +1,12 @@
 import { DragEvent } from "react";
 import type { TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
+import { LabelList } from "./LabelChip";
 import { timeAgo } from "@/lib/time";
 
 interface TaskCardProps {
   task: TaskSummary;
+  onPickLabel: (label: string) => void;
   coordinator: string;
   onOpen: () => void;
   draggable: boolean;
@@ -14,7 +16,7 @@ interface TaskCardProps {
 }
 
 // One task on the board: what it is, and what is happening to it now.
-export function TaskCard({ task, coordinator, onOpen, draggable, dragging, onDragStart, onDragEnd }: TaskCardProps) {
+export function TaskCard({ task, onPickLabel, coordinator, onOpen, draggable, dragging, onDragStart, onDragEnd }: TaskCardProps) {
   return (
     // A div acting as a button: browsers don't all start a drag from a <button>.
     <div
@@ -34,6 +36,7 @@ export function TaskCard({ task, coordinator, onOpen, draggable, dragging, onDra
     >
       <span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-ink-primary">{task.title}</span>
       <span className="line-clamp-2 text-[12px] leading-4">{nowLine(task, coordinator)}</span>
+      <LabelList labels={task.labels} onPick={onPickLabel} />
       <span className="flex items-center gap-2 font-mono text-[11px] text-ink-faint">
         {task.id}
         <span className="ml-auto">{task.turns} turns</span>

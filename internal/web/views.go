@@ -21,6 +21,7 @@ type taskSummary struct {
 	Turns        int          `json:"turns"`
 	NeedsYou     string       `json:"needsYou"`    // what you are asked, "" when nothing
 	HasQuestion  bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
+	Labels       []string     `json:"labels"`
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 }
@@ -91,8 +92,16 @@ func summaryOf(t *tasks.Task) taskSummary {
 	if open := t.OpenTurn(); needsYou == "" && open != nil {
 		needsYou = open.Waiting
 	}
-	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "",
+	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels),
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
+}
+
+// listOf makes nil an empty list, so the page reads [], never null.
+func listOf(items []string) []string {
+	if items == nil {
+		return []string{}
+	}
+	return items
 }
 
 // stageOf is the agent the coordinator last handed the task to, or "" before

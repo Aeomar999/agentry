@@ -21,7 +21,7 @@ import (
 // action isn't here: that takes the UI token, which only the page has.
 
 const taskUsage = `Usage:
-  agentry task create --title "..." [--repo /abs/path] [--description "..."]
+  agentry task create --title "..." [--repo /abs/path] [--label bug --label ...] [--description "..."]
                       (or the description on stdin)
   agentry task list
   agentry task show task-N
@@ -66,6 +66,8 @@ func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) err
 	title := flags.String("title", "", "")
 	repo := flags.String("repo", "", "")
 	description := flags.String("description", "", "")
+	var labels []string
+	flags.Func("label", "", func(label string) error { labels = append(labels, label); return nil })
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("%v\n%s", err, taskUsage)
 	}
@@ -76,7 +78,8 @@ func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) err
 		*description = readPiped(stdin)
 	}
 	var created struct{ Stream string }
-	if err := c.call("POST", "/api/tasks", map[string]string{"title": *title, "description": *description, "repo": *repo}, &created); err != nil {
+	request := map[string]any{"title": *title, "description": *description, "repo": *repo, "labels": labels}
+	if err := c.call("POST", "/api/tasks", request, &created); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Created %s: %s\nThe coordinator reads it next. On the page: %s/tasks/%s\n", created.Stream, *title, c.server, created.Stream)
@@ -85,6 +88,7 @@ func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) err
 
 type taskLine struct {
 	ID, Title, Status, CurrentAgent, NeedsYou, Repo string
+	Labels                                          []string
 }
 
 func (c taskClient) list(stdout io.Writer) error {
@@ -96,7 +100,11 @@ func (c taskClient) list(stdout io.Writer) error {
 		fmt.Fprintln(stdout, "No tasks yet.")
 	}
 	for _, t := range tasks {
-		fmt.Fprintf(stdout, "%-8s %-10s %s\n", t.ID, t.Status, t.Title)
+		fmt.Fprintf(stdout, "%-8s %-10s %s", t.ID, t.Status, t.Title)
+		if len(t.Labels) > 0 {
+			fmt.Fprintf(stdout, "  [%s]", strings.Join(t.Labels, ", "))
+		}
+		fmt.Fprintln(stdout)
 		if t.NeedsYou != "" {
 			fmt.Fprintf(stdout, "         waiting for you: %s\n", oneLine(t.NeedsYou, 160))
 		}

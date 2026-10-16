@@ -12,6 +12,7 @@ export interface TaskSummary {
   turns: number;
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer
+  labels: string[];
   createdAt: string;
   lastActiveAt: string;
 }

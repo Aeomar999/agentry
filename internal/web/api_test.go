@@ -349,3 +349,28 @@ func TestMovingACardDirectsTheCoordinator(t *testing.T) {
 		t.Errorf("trail %+v, status %s", detail.Trail, detail.Status)
 	}
 }
+
+// Labels are cleaned when a task is created, replaced later, and kept on a
+// finished task too.
+func TestTasksCarryLabels(t *testing.T) {
+	server, _ := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect","labels":["Bug"," auth ","bug",""]}`)
+	labels := func() []string {
+		_, body := call(t, server, "GET", "/api/tasks", "")
+		var list []taskSummary
+		json.Unmarshal([]byte(body), &list)
+		return list[0].Labels
+	}
+	if got := labels(); strings.Join(got, ",") != "bug,auth" {
+		t.Errorf("labels at creation: %v", got)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/labels", `{"labels":["frontend"]}`); code != 200 {
+		t.Fatalf("relabel: %d %s", code, body)
+	}
+	if got := labels(); strings.Join(got, ",") != "frontend" {
+		t.Errorf("labels after relabelling: %v", got)
+	}
+	if code, _ := call(t, server, "PUT", "/api/tasks/task-1/labels", `{"labels":["`+strings.Repeat("x", 40)+`"]}`); code != http.StatusConflict {
+		t.Errorf("a label too long: %d", code)
+	}
+}
