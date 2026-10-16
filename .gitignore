@@ -1,0 +1,11 @@
+# Built binaries: `go build -o bin/<name> .` recreates them
+bin/
+
+# Dependencies and local databases
+node_modules/
+*.db
+*.db-wal
+*.db-shm
+
+# Editor settings
+.vscode/

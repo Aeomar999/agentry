@@ -1,0 +1,150 @@
+// Package watchdog catches agents that go quiet. Hooks say what an agent
+// does, but a crash fires no hook, and a hung network call or a stuck tool
+// fires nothing at all; the screen keeps animating, so "screen unchanged"
+// detects nothing either (proof 03). So it checks each open turn on a clock,
+// and every problem it finds is an issue, which goes back to the coordinator.
+package watchdog
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
+)
+
+// Limits are how long each kind of quiet may last.
+type Limits struct {
+	StartGrace  time.Duration // a new session's process may not be up yet
+	Acknowledge time.Duration // until the engine echoes the prompt
+	Silence     time.Duration // a turn with no events at all
+	Tool        time.Duration // one approved tool call without a result
+	Repeats     int           // the same command requested this many times in a row
+}
+
+var DefaultLimits = Limits{
+	StartGrace:  3 * time.Second,
+	Acknowledge: 60 * time.Second,
+	Silence:     10 * time.Minute,
+	Tool:        20 * time.Minute,
+	Repeats:     5,
+}
+
+type Watchdog struct {
+	store     *store.Store
+	limits    Limits
+	isRunning func(task string) bool // is the task's agent process alive
+	stop      func(task string)      // end the task's session
+}
+
+var dog = events.Actor{Kind: events.System, ID: "watchdog"}
+
+func New(s *store.Store, limits Limits, isRunning func(task string) bool, stop func(task string)) *Watchdog {
+	return &Watchdog{store: s, limits: limits, isRunning: isRunning, stop: stop}
+}
+
+// Run checks every second until ctx ends: a crash is flagged within about
+// StartGrace plus a second.
+func (w *Watchdog) Run(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			w.Check(now)
+		}
+	}
+}
+
+// Check looks at every task with an open turn, once.
+func (w *Watchdog) Check(now time.Time) {
+	ids, err := w.store.TaskIDs()
+	if err != nil {
+		slog.Error("watchdog: listing tasks", "err", err)
+		return
+	}
+	for _, id := range ids {
+		stream, err := w.store.Stream(id)
+		if err != nil {
+			continue
+		}
+		task := tasks.FromEvents(stream)
+		if task == nil || task.IsDone || task.OpenTurn() == nil {
+			continue
+		}
+		w.checkTurn(now, task, task.OpenTurn())
+	}
+}
+
+func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) {
+	if problem := w.findProblem(now, task, turn); problem != "" {
+		w.stop(task.ID)
+		w.propose(task.ID, events.IssueRaised, "", map[string]any{"reason": problem})
+		return
+	}
+	if !turn.Acknowledged && turn.Waiting == "" && now.Sub(turn.StartedAt) > w.limits.Acknowledge {
+		w.propose(task.ID, events.AgentWaiting, turn.ID, map[string]any{"question": fmt.Sprintf(
+			"%s hasn't received its prompt after %s. It may be showing a question on screen, such as whether to trust "+
+				"this repository: open its terminal and answer it.", turn.Agent, w.limits.Acknowledge)})
+	}
+}
+
+// findProblem returns what is wrong with an open turn, or "".
+func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn) string {
+	if now.Sub(turn.StartedAt) > w.limits.StartGrace && !w.isRunning(task.ID) {
+		return fmt.Sprintf("%s's process exited in %s (crashed or was killed)", turn.Agent, turn.ID)
+	}
+	if command, times := repeatedCommand(task, turn); times >= w.limits.Repeats {
+		return fmt.Sprintf("%s requested the same command %d times in a row, so it may be stuck in a loop: %s", turn.Agent, times, command)
+	}
+	if action := runningTool(task, turn); action != nil {
+		if now.Sub(action.RequestedAt) > w.limits.Tool {
+			return fmt.Sprintf("%s's tool call has run for over %s with no result: %s", turn.Agent, w.limits.Tool, action.Command)
+		}
+		return ""
+	}
+	isWaitingForYou := len(task.WaitingForYou()) > 0 || turn.Waiting != ""
+	if !isWaitingForYou && now.Sub(turn.LastEventAt) > w.limits.Silence {
+		return fmt.Sprintf("%s has been silent for over %s (stalled: a hung network call or a stuck tool)", turn.Agent, w.limits.Silence)
+	}
+	return ""
+}
+
+// runningTool is the turn's approved action that has no result yet, if any.
+func runningTool(task *tasks.Task, turn *tasks.Turn) *tasks.Action {
+	for _, action := range task.Actions {
+		if action.Turn == turn.ID && action.Decision == tasks.Approved && !action.HasResult {
+			return action
+		}
+	}
+	return nil
+}
+
+// repeatedCommand is the turn's last command and how many times in a row it
+// was requested. It compares the command itself, never its description (proof 03).
+func repeatedCommand(task *tasks.Task, turn *tasks.Turn) (string, int) {
+	var last string
+	times := 0
+	for _, action := range task.Actions {
+		if action.Turn != turn.ID {
+			continue
+		}
+		if action.Command == last {
+			times++
+		} else {
+			last, times = action.Command, 1
+		}
+	}
+	return last, times
+}
+
+func (w *Watchdog) propose(task string, kind events.Type, correlation string, data map[string]any) {
+	if _, rejection, err := w.store.Propose(events.Proposal{Stream: task, Actor: dog, Type: kind, Correlation: correlation, Data: data}); err != nil || rejection != nil {
+		slog.Warn("watchdog: proposal refused", "task", task, "type", kind, "rejection", rejection, "err", err)
+	}
+}
