@@ -17,8 +17,10 @@ type taskSummary struct {
 	Repo         string       `json:"repo"`
 	Status       tasks.Status `json:"status"`
 	CurrentAgent string       `json:"currentAgent"`
+	Stage        string       `json:"stage"` // the agent the coordinator last handed it to: its column on the board
 	Turns        int          `json:"turns"`
-	NeedsYou     string       `json:"needsYou"` // what you are asked, "" when nothing
+	NeedsYou     string       `json:"needsYou"`    // what you are asked, "" when nothing
+	HasQuestion  bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 }
@@ -89,8 +91,19 @@ func summaryOf(t *tasks.Task) taskSummary {
 	if open := t.OpenTurn(); needsYou == "" && open != nil {
 		needsYou = open.Waiting
 	}
-	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(),
+	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "",
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
+}
+
+// stageOf is the agent the coordinator last handed the task to, or "" before
+// the first handoff.
+func stageOf(t *tasks.Task) string {
+	for i := len(t.Trail) - 1; i >= 0; i-- {
+		if step := t.Trail[i]; step.From == t.Coordinator && step.To != tasks.You {
+			return step.To
+		}
+	}
+	return ""
 }
 
 func detailOf(t *tasks.Task, log []events.Event) taskDetail {

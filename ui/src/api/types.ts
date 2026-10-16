@@ -8,8 +8,10 @@ export interface TaskSummary {
   repo: string;
   status: TaskStatus;
   currentAgent: string;
+  stage: string; // the agent the coordinator last handed it to: its column on the board
   turns: number;
   needsYou: string;
+  hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer
   createdAt: string;
   lastActiveAt: string;
 }

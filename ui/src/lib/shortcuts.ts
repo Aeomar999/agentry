@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 export interface Shortcut {
   keys: string[]; // pressed in order: ["g", "t"] is G then T
   label: string;
-  group: "Anywhere" | "Go to" | "Lists";
+  group: "Anywhere" | "Go to" | "Tasks" | "Lists";
 }
 
 export const modKey = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
@@ -21,6 +21,8 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["g", "t"], label: "Tasks", group: "Go to" },
   { keys: ["g", "a"], label: "Agents", group: "Go to" },
   { keys: ["g", "p"], label: "Policy", group: "Go to" },
+  { keys: ["1"], label: "Board", group: "Tasks" },
+  { keys: ["2"], label: "List", group: "Tasks" },
   { keys: ["j"], label: "Next row", group: "Lists" },
   { keys: ["k"], label: "Previous row", group: "Lists" },
   { keys: ["Enter"], label: "Open the row", group: "Lists" },

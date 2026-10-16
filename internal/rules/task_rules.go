@@ -13,6 +13,7 @@ type rule func(t *tasks.Task, p events.Proposal) string
 var taskRules = map[events.Type]rule{
 	events.WorktreeReady: all(noWorktreeYet),
 	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
+	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),

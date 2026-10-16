@@ -13,7 +13,8 @@ const (
 // A task's stream, in roughly the order they happen.
 const (
 	TaskCreated   Type = "task.created"
-	TaskRenamed   Type = "task.renamed" // a title that says what the task is, from the coordinator once it has read it
+	TaskRenamed   Type = "task.renamed"  // a title that says what the task is, from the coordinator once it has read it
+	TaskDirected  Type = "task.directed" // you tell the coordinator what you want next, as when you move a card on the board
 	WorktreeReady Type = "worktree.ready"
 
 	TaskAssigned       Type = "task.assigned" // the coordinator hands the task to an agent

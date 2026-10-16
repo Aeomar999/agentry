@@ -330,3 +330,22 @@ func TestAgentsAreEditedFromThePage(t *testing.T) {
 		t.Error("an agent with no workers should list none, not null")
 	}
 }
+
+// Moving a card tells the coordinator what you want next, in the trail.
+func TestMovingACardDirectsTheCoordinator(t *testing.T) {
+	server, _ := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"reviewer","note":"It was reviewed by hand already."}`); code != 200 {
+		t.Fatalf("direct: %d %s", code, body)
+	}
+	if code, _ := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"designer"}`); code != http.StatusBadRequest {
+		t.Errorf("to an agent that doesn't exist: %d", code)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	last := detail.Trail[len(detail.Trail)-1]
+	if last.From != "you" || last.Text != "Hand this task to reviewer next. It was reviewed by hand already." || detail.Status != "working" {
+		t.Errorf("trail %+v, status %s", detail.Trail, detail.Status)
+	}
+}

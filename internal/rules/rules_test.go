@@ -214,3 +214,20 @@ func TestTheTaskCanBeRenamed(t *testing.T) {
 		t.Errorf("title %q, first title %q", task.Title, task.FirstTitle)
 	}
 }
+
+// Directions from the board are noted; a question takes an answer instead.
+func TestDirectionsWaitForNoQuestion(t *testing.T) {
+	task := run(t, []step{
+		created,
+		{you, events.TaskDirected, "", map[string]any{"text": "Hand this task to reviewer next."}, true},
+		{coordinator, events.TaskDirected, "", map[string]any{"text": "x"}, false}, // only you
+		worktree,
+		turnStarted("turn-1", "coordinator"),
+		turnEnded("turn-1", "coordinator", `{"action":"ask"}`),
+		{coordinator, events.TaskNeedsYou, "", map[string]any{"question": "Which branch?"}, true},
+		{you, events.TaskDirected, "", map[string]any{"text": "Wrap it up."}, false},
+	})
+	if steps := task.Trail; steps[1].Text != "Hand this task to reviewer next." || steps[1].From != "you" {
+		t.Errorf("trail: %+v", steps)
+	}
+}

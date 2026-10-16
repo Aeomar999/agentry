@@ -54,6 +54,7 @@ func (s *Server) Handler() http.Handler {
 	deskToo("POST /api/tasks", s.createTask)
 	deskToo("GET /api/tasks/{task}", s.showTask)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
+	api("POST /api/tasks/{task}/direct", s.direct)
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/agents", s.listAgents)

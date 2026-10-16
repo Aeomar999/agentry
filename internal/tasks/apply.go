@@ -38,6 +38,11 @@ func (t *Task) apply(e events.Event) {
 		t.Coordinator = e.Text("coordinator")
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
+	case events.TaskDirected:
+		// Only noted in the trail: the work in hand goes on, and the
+		// coordinator reads it at its next turn.
+		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
+
 	case events.TaskRenamed:
 		if t.FirstTitle == "" {
 			t.FirstTitle = t.Title

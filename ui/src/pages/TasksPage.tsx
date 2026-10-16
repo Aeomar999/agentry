@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Inbox, Plus } from "lucide-react";
+import { Columns3, Inbox, List, Plus } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { FilterChip } from "@/components/molecules/FilterChip";
@@ -10,9 +10,11 @@ import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
-import type { TaskStatus, TaskSummary } from "@/api/types";
+import type { Agent, TaskStatus, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { useRowCursor } from "@/lib/shortcuts";
+import { useKeys, useRowCursor } from "@/lib/shortcuts";
+import { SegmentedControl } from "@/components/molecules/SegmentedControl";
+import { TaskBoard } from "@/components/organisms/TaskBoard";
 import { timeAgo } from "@/lib/time";
 
 // The filter lives in the address (?status=needs-you), so a link can open
@@ -63,7 +65,19 @@ export function TasksPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const { data, error } = useResource<TaskSummary[]>("/api/tasks");
+  const agents = useResource<Agent[]>("/api/agents").data ?? [];
   const tasks = data ?? [];
+
+  // The board is the default; ?view=list shows the table. Both keep the filter.
+  const view = params.get("view") === "list" ? "list" : "board";
+  const setParam = (name: string, value: string | null) =>
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === null) next.delete(name);
+      else next.set(name, value);
+      return next;
+    });
+  useKeys({ "1": () => setParam("view", null), "2": () => setParam("view", "list") });
 
   const filter = FILTERS.find((f) => f.id === params.get("status")) ?? FILTERS[0];
   const shown = useMemo(() => {
@@ -76,10 +90,10 @@ export function TasksPage() {
   }, [tasks, filter, search]);
 
   const open = (task: TaskSummary) => navigate(`/tasks/${task.id}`);
-  const cursor = useRowCursor(shown.length, (index) => open(shown[index]));
+  const cursor = useRowCursor(view === "list" ? shown.length : 0, (index) => open(shown[index]));
 
   return (
-    <>
+    <div className="flex h-full flex-col">
       <PageHeader
         title="Tasks"
         meta="Each task goes to the coordinator, which hands it from agent to agent until it says done."
@@ -92,10 +106,18 @@ export function TasksPage() {
             label={f.label}
             count={f.status ? tasks.filter((task) => task.status === f.status).length : tasks.length}
             active={f === filter}
-            onClick={() => setParams(f.id === "all" ? {} : { status: f.id })}
+            onClick={() => setParam("status", f.id === "all" ? null : f.id)}
           />
         ))}
-        <div className="ml-auto" data-page-search>
+        <div className="ml-auto flex items-center gap-2" data-page-search>
+          <SegmentedControl
+            segments={[
+              { id: "board", label: "Board", icon: <Columns3 /> },
+              { id: "list", label: "List", icon: <List /> },
+            ]}
+            active={view}
+            onChange={(id) => setParam("view", id === "list" ? "list" : null)}
+          />
           <SearchField value={search} onChange={setSearch} placeholder="Filter tasks" shortcut="/" />
         </div>
       </div>
@@ -104,20 +126,23 @@ export function TasksPage() {
           <Banner title="Couldn't load the tasks">{error}</Banner>
         </div>
       )}
-      <ResourceTable
-        columns={COLUMNS}
-        rows={shown}
-        rowKey={(task) => task.id}
-        onOpen={open}
-        activeKey={shown[cursor]?.id}
-        empty={
-          data && (
-            <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
-              {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
-            </EmptyState>
-          )
-        }
-      />
-    </>
+      {view === "board" && data && <TaskBoard tasks={shown} agents={agents} onOpen={open} />}
+      {view === "list" && (
+        <ResourceTable
+          columns={COLUMNS}
+          rows={shown}
+          rowKey={(task) => task.id}
+          onOpen={open}
+          activeKey={shown[cursor]?.id}
+          empty={
+            data && (
+              <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
+                {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
+              </EmptyState>
+            )
+          }
+        />
+      )}
+    </div>
   );
 }
