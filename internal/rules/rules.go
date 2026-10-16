@@ -39,7 +39,7 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 		return nil
 	case task == nil:
 		return refuse("task " + p.Stream + " doesn't exist")
-	case task.IsDone && p.Type != events.TaskLabeled: // labels sort finished work too
+	case task.IsDone && p.Type != events.TaskLabeled && p.Type != events.TaskRanked: // labels and order sort finished work too
 		return refuse("task " + p.Stream + " is done")
 	}
 	if reason := taskRules[p.Type](task, p); reason != "" {

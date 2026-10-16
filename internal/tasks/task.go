@@ -18,8 +18,9 @@ type Task struct {
 	Title       string
 	FirstTitle  string // the title it was created with, when it has been renamed
 	Labels      []string
-	Budget      int // tokens the task may use before it asks you; 0 is no limit
-	TokensUsed  int // by every turn that has ended
+	Budget      int     // tokens the task may use before it asks you; 0 is no limit
+	Rank        float64 // your priority order, lower first; a new task starts above every older one
+	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string
 	Coordinator string // the agent that decides who works on the task next

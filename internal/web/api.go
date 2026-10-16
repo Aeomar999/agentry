@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,11 +27,13 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summaries := []taskSummary{}
-	for i := len(ids) - 1; i >= 0; i-- { // newest first
+	for i := len(ids) - 1; i >= 0; i-- { // newest first, which a tie keeps
 		if task, err := s.task(ids[i]); err == nil && task != nil {
 			summaries = append(summaries, summaryOf(task))
 		}
 	}
+	// In your priority order; a new task starts first.
+	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
@@ -110,6 +113,16 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, map[string]int{"budget": request.Budget})
+}
+
+// rank puts the task in your priority order: the page sends a rank between
+// the two tasks it was dropped between.
+func (s *Server) rank(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Rank float64 }
+	if !decode(w, r, &request) {
+		return
+	}
+	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
 }
 
 // label sets the task's labels, all of them.

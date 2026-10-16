@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -411,5 +412,34 @@ func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
 	}
 	if code, _ := call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":0}`); code != http.StatusConflict {
 		t.Errorf("a budget of 0: %d", code)
+	}
+}
+
+// Tasks list in your priority order; a new one starts at the top.
+func TestTasksListInPriorityOrder(t *testing.T) {
+	server, _ := newTestServer(t)
+	for _, d := range []string{"first", "second", "third"} {
+		call(t, server, "POST", "/api/tasks", `{"description":"`+d+`"}`)
+	}
+	order := func() string {
+		_, body := call(t, server, "GET", "/api/tasks", "")
+		var list []taskSummary
+		json.Unmarshal([]byte(body), &list)
+		ids := []string{}
+		for _, task := range list {
+			ids = append(ids, task.ID)
+		}
+		return strings.Join(ids, " ")
+	}
+	if got := order(); got != "task-3 task-2 task-1" {
+		t.Errorf("newest first: %s", got)
+	}
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	var list []taskSummary
+	json.Unmarshal([]byte(body), &list)
+	// task-1 dropped between task-3 and task-2
+	call(t, server, "PUT", "/api/tasks/task-1/rank", fmt.Sprintf(`{"rank":%f}`, (list[0].Rank+list[1].Rank)/2))
+	if got := order(); got != "task-3 task-1 task-2" {
+		t.Errorf("after the drop: %s", got)
 	}
 }

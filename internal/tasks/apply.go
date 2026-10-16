@@ -37,6 +37,7 @@ func (t *Task) apply(e events.Event) {
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
 		t.Labels = e.List("labels")
 		t.Budget = e.Number("budget")
+		t.Rank = -float64(e.Position) // newest first until you reorder; positions never repeat
 		t.Coordinator = e.Text("coordinator")
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -47,6 +48,9 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
+
+	case events.TaskRanked:
+		t.Rank = e.Real("rank")
 
 	case events.TaskLabeled:
 		t.Labels = e.List("labels")

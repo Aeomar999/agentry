@@ -17,6 +17,7 @@ const (
 	TaskDirected  Type = "task.directed" // you tell the coordinator what you want next, as when you move a card on the board
 	TaskLabeled   Type = "task.labeled"  // the task's labels, all of them, replacing the ones before
 	TaskBudgeted  Type = "task.budgeted" // a new token budget for the task, as when you raise it
+	TaskRanked    Type = "task.ranked"   // where the task sits in your priority order: lower is first
 	WorktreeReady Type = "worktree.ready"
 
 	TaskAssigned       Type = "task.assigned" // the coordinator hands the task to an agent

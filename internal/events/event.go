@@ -45,6 +45,17 @@ func (p Proposal) Flag(field string) bool {
 	return value
 }
 
+// Real returns a data field as a float64, or 0.
+func (p Proposal) Real(field string) float64 {
+	switch value := p.Data[field].(type) {
+	case float64:
+		return value
+	case int:
+		return float64(value)
+	}
+	return 0
+}
+
 // List returns a data field as a list of strings, or nil. A list read back
 // from the log decodes as []any.
 func (p Proposal) List(field string) []string {

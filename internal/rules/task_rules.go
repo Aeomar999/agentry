@@ -18,6 +18,7 @@ var taskRules = map[events.Type]rule{
 	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
 	events.TaskLabeled:   all(labelsAreValid),
 	events.TaskBudgeted:  all(aPositiveBudget),
+	events.TaskRanked:    all(),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),

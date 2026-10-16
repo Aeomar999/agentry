@@ -23,6 +23,7 @@ export function TaskCard({ task, onPickLabel, coordinator, onOpen, draggable, dr
     <div
       role="button"
       tabIndex={0}
+      data-task={task.id}
       onClick={onOpen}
       onKeyDown={(event) => event.key === "Enter" && onOpen()}
       draggable={draggable}
@@ -40,7 +41,7 @@ export function TaskCard({ task, onPickLabel, coordinator, onOpen, draggable, dr
       <LabelList labels={task.labels} onPick={onPickLabel} />
       <span className="flex items-center gap-2 font-mono text-[11px] text-ink-faint">
         {task.id}
-        <span className={cn("ml-auto", task.overBudget && "text-danger")}>{tokens(task.tokensUsed)}</span>
+        <span className={cn("ml-auto", task.overBudget && "text-danger")}>{task.tokensUsed > 0 && tokens(task.tokensUsed)}</span>
         <span>{task.turns} turns</span>
         <span title={task.lastActiveAt}>{timeAgo(task.lastActiveAt)}</span>
       </span>

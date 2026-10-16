@@ -16,6 +16,7 @@ export interface TaskSummary {
   budget: number; // tokens; 0 is no limit
   tokensUsed: number;
   overBudget: boolean;
+  rank: number; // your priority order, lower first
   createdAt: string;
   lastActiveAt: string;
 }
