@@ -59,6 +59,8 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/tasks/{task}/labels", s.label)
 	api("PUT /api/tasks/{task}/budget", s.setBudget)
 	api("PUT /api/tasks/{task}/rank", s.rank)
+	api("GET /api/tasks/{task}/files", s.listFiles)
+	api("GET /api/tasks/{task}/file", s.readFile)
 	api("POST /api/tasks/{task}/direct", s.direct)
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)

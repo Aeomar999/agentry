@@ -1,5 +1,5 @@
 import { useParams, useSearchParams } from "react-router-dom";
-import { CircleCheck, FileQuestion, SquareTerminal } from "lucide-react";
+import { CircleCheck, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { useBreadcrumb, useTerminal } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -94,9 +94,14 @@ export function TaskPage() {
       <PageHeader
         title={task.title}
         badges={<TaskStatusBadge status={task.status} />}
-        actions={
-          working ? [{ label: `${task.currentAgent}'s terminal`, icon: <SquareTerminal />, onClick: () => openTerminal(task.id) }] : []
-        }
+        actions={[
+          ...(task.worktree
+            ? [{ label: "Peek", icon: <FolderGit2 />, onClick: () => window.open(`/tasks/${task.id}/workspace`, "_blank") }]
+            : []),
+          ...(working
+            ? [{ label: `${task.currentAgent}'s terminal`, icon: <SquareTerminal />, onClick: () => openTerminal(task.id) }]
+            : []),
+        ]}
         meta={
           <>
             <Mono>{task.id}</Mono>

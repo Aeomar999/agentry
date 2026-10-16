@@ -11,11 +11,14 @@ import { AgentEditPage } from "@/pages/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
+import { WorkspacePage } from "@/pages/WorkspacePage";
 
 // Every page renders inside the one shell. The Go server answers any path
 // that isn't the API or a file with index.html, so these addresses can be
 // bookmarked and reloaded.
 const router = createBrowserRouter([
+  // The peek into a task's workspace is its own page, in its own tab.
+  { path: "/tasks/:taskId/workspace", element: <WorkspacePage />, errorElement: <ErrorPage /> },
   {
     element: <AdminShell />,
     children: [

@@ -1,8 +1,8 @@
-import { PointerEvent as ReactPointerEvent, useRef } from "react";
 import { Inbox, Sparkles, SquareTerminal, X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { Kbd } from "@/components/atoms/Kbd";
 import { EmptyState } from "@/components/molecules/EmptyState";
+import { ResizeHandle } from "@/components/molecules/ResizeHandle";
 import { terminalURL, deskTerminalURL } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
@@ -107,33 +107,5 @@ function DockTab({
       {icon}
       {label}
     </button>
-  );
-}
-
-// Dragging the top edge sets the height: up is taller.
-function ResizeHandle({ height, onResize }: { height: number; onResize: (height: number) => void }) {
-  const start = useRef<{ y: number; height: number } | null>(null);
-
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    start.current = { y: event.clientY, height };
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (start.current) onResize(start.current.height + start.current.y - event.clientY);
-  }
-  function onPointerUp() {
-    start.current = null;
-  }
-
-  return (
-    <div
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Drag to resize the terminal"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      className="absolute inset-x-0 -top-[3px] z-10 h-[6px] cursor-row-resize hover:bg-divider-2 active:bg-ink-faint"
-    />
   );
 }
