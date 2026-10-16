@@ -1,0 +1,109 @@
+// The JSON `agentry serve` answers with, as defined in internal/web/views.go.
+
+export type TaskStatus = "working" | "needs you" | "done";
+
+export interface TaskSummary {
+  id: string;
+  title: string;
+  repo: string;
+  status: TaskStatus;
+  currentAgent: string;
+  turns: number;
+  needsYou: string;
+  createdAt: string;
+  lastActiveAt: string;
+}
+
+export interface TaskDetail extends TaskSummary {
+  description: string;
+  coordinator: string;
+  summary: string;
+  worktree: Worktree | null;
+  trail: Step[] | null;
+  turnList: Turn[] | null;
+  approvals: Action[] | null;
+  actions: Action[] | null;
+  events: LogEvent[] | null;
+}
+
+export interface Worktree {
+  path: string;
+  branch: string;
+  base: string;
+  port: number;
+}
+
+export interface Step {
+  at: string;
+  from: string;
+  to: string;
+  text: string;
+}
+
+export interface Turn {
+  id: string;
+  agent: string;
+  startedAt: string;
+  acknowledged: boolean;
+  ended: boolean;
+  issue: string;
+}
+
+export interface Action {
+  id: string;
+  turn: string;
+  agent: string;
+  tool: string;
+  command: string;
+  requestedAt: string;
+  asked: boolean;
+  decision: string;
+  reason: string;
+}
+
+export interface LogEvent {
+  position: number;
+  at: string;
+  type: string;
+  actor: string;
+  correlation?: string;
+  data?: Record<string, unknown>;
+}
+
+export interface Agent {
+  name: string;
+  description: string;
+  prompt: string;
+  engine: string;
+  model: string;
+  profile: string;
+  coordinates: boolean;
+}
+
+export type Decision = "allow" | "ask" | "deny";
+
+export interface Policy {
+  path: string;
+  hash: string;
+  problem: string;
+  defaultProfile: string;
+  useForEveryone: string;
+  profiles: PolicyProfile[];
+  text: string;
+}
+
+export interface PolicyProfile {
+  name: string;
+  why: string;
+  otherwise: Decision;
+  rules: { name: string; decision: Decision; why: string }[];
+}
+
+export interface ServerConfig {
+  defaultRepo: string;
+  hasTerminal: boolean;
+}
+
+export interface CreatedEvent {
+  stream: string;
+}

@@ -19,6 +19,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -93,16 +94,30 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err
 	}
 	hookToken := newToken() // new each start: only sessions started by this server have it
+	deskToken := newToken() // the same, for the desk's session
+	serverURL := "http://" + listener.Addr().String()
 
 	runner := turns.NewRunner(log, turns.Config{HookCommand: shellQuote(self) + " hook",
-		ServerURL: "http://" + listener.Addr().String(), HookToken: hookToken})
+		ServerURL: serverURL, HookToken: hookToken})
 	isRunning := func(task string) bool { return sessions.IsRunning(sessions.SocketFor(task)) }
 	go coordinator.NewLoop(log, runner, filepath.Join(o.dataDir, "worktrees")).Run(ctx)
 	go watchdog.New(log, watchdog.DefaultLimits, isRunning, runner.Stop).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Policy, refused error) { recordPolicy(log, agentPolicy, refused) })
 
-	server := web.NewServer(log, web.Config{UIToken: uiToken, DefaultRepo: o.repo, Policy: agentPolicy},
-		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), terminal.NewHub().Handler())
+	// The desk starts when you first open it on the page, and stops with the server.
+	hub := terminal.NewHub()
+	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, Token: deskToken, Binary: self}
+	deskTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := desk.Start(deskConfig); err != nil {
+			http.Error(w, "starting Claude: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hub.Serve(w, r, desk.Name)
+	})
+	defer desk.Stop()
+
+	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Policy: agentPolicy, Desk: deskTerminal},
+		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), hub.Handler())
 	fmt.Fprintf(stdout, "Agentry is running. Open http://%s/?token=%s\n", listener.Addr(), uiToken)
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)
 	fmt.Fprintf(stdout, "Agents follow the policy in %s; edits take effect when you save.\n", agentPolicy.Path())

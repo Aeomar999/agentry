@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+/* The whole look of Agentry's UI. Components only spend these variables, so
+   a light theme, or a new palette, is an override block here and never a
+   change to a component.
+
+   Clean and sharp: dark by default in four surface tones, 1px hairlines
+   between panels, nearly square corners, and no shadows, glows or accent
+   stripes anywhere. What is selected is a flat, lighter surface. Orange is
+   for the logo, the one main button on a screen and the focus line. */
+
+@theme {
+  /* Surfaces: base, panel (sidebar, status bar), raised (menus, hover),
+     extra-raised (badges, kbd chips). A fifth tone flattens the depth. */
+  --color-surface-0: #1a1d23;
+  --color-surface-1: #16181d;
+  --color-surface-2: #21252d;
+  --color-surface-3: #2b2f38;
+
+  /* Hairlines: the only separation between panels. */
+  --color-divider: #2b2f38;
+  --color-divider-2: #353a44;
+
+  /* Text: almost white, never pure; muted is for ids, paths and times. */
+  --color-ink-primary: #e4e6eb;
+  --color-ink-secondary: #b3b7c0;
+  --color-ink-muted: #8b919e;
+  --color-ink-faint: #5e6471;
+
+  /* Brand orange, the same in both themes. */
+  --color-brand: #fc6d26;
+  --color-brand-hover: #ff7e3a;
+  --color-brand-soft: #fc6d2614;
+
+  /* State: status dots, badges, toasts. The soft tones are badge fills. */
+  --color-success: #22c55e;
+  --color-success-soft: #22c55e1f;
+  --color-danger: #ef4444;
+  --color-danger-soft: #ef44441f;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #f59e0b1f;
+  --color-info: #38bdf8;
+  --color-info-soft: #38bdf81f;
+
+  /* The agent's terminal stays dark in both themes: the engines draw their
+     own colours and expect a dark screen. */
+  --color-terminal: #0e1014;
+
+  /* Inter for prose, JetBrains Mono for ids, paths, commands and times:
+     anything a person compares character by character. */
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Dense rows: an admin tool shows fifty rows, not eight. */
+  --spacing-row-nav: 32px;
+  --spacing-row-list: 36px;
+
+  /* The shell's fixed sizes. */
+  --spacing-topbar: 48px;
+  --spacing-statusbar: 28px;
+  --spacing-sidebar: 240px;
+  --spacing-sidebar-collapsed: 56px;
+  --spacing-inspector: 320px;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  /* Sharp motion: a tool should feel instant, not springy. */
+  --ease-snap: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+}
+
+/* Light theme: the same names, new values. Applied by <html class="light">. */
+html.light {
+  --color-surface-0: #ffffff;
+  --color-surface-1: #fafafa;
+  --color-surface-2: #f0f1f4;
+  --color-surface-3: #e3e5ea;
+
+  --color-divider: #e3e5ea;
+  --color-divider-2: #cdd1d8;
+
+  --color-ink-primary: #1f2329;
+  --color-ink-secondary: #424854;
+  --color-ink-muted: #6b7280;
+  --color-ink-faint: #9aa0ac;
+
+  --color-success: #16a34a;
+  --color-warning: #b45309;
+  --color-info: #0284c7;
+}
+
+html {
+  font-family: var(--font-sans);
+  color: var(--color-ink-primary);
+  background: var(--color-surface-0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11", "calt";
+  color-scheme: dark;
+}
+html.light {
+  color-scheme: light;
+}
+
+body {
+  height: 100dvh;
+  overflow: hidden; /* the shell's content area is the only thing that scrolls */
+}
+
+#root {
+  height: 100%;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-divider-2) transparent;
+}
+
+/* Focus: one 1px orange line on the element's own edge, only when the
+   keyboard moved focus there. Not on form fields: their wrapper's border
+   turns orange instead, and two lines look like a rendering bug. */
+*:focus-visible {
+  outline: 1px solid var(--color-brand);
+  outline-offset: 0;
+  transition-property: color, background-color, border-color; /* the line appears at once, never fades in */
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

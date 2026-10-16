@@ -119,7 +119,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil})
+	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil})
 }
 
 // showPolicy is the policy in force, and why the file on disk isn't, if it isn't.
@@ -130,6 +130,7 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	current := s.config.Policy.Current()
 	reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
+		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
 		"profiles": current.Summary(), "text": current.Text()})
 }
 

@@ -1,5 +1,5 @@
-// Package web is the HTTP side of `agentry serve`: the one page, the API it
-// uses, and the endpoint the hooks post to.
+// Package web is the HTTP side of `agentry serve`: the UI, the API it uses,
+// and the endpoint the hooks post to.
 package web
 
 import (
@@ -15,8 +15,10 @@ import (
 
 type Config struct {
 	UIToken     string // opens the page and the API; printed when the server starts
+	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
 	Policy      PolicySource
+	Desk        http.Handler // the desk's terminal websocket; nil when there is no desk
 }
 
 // PolicySource is the policy in force and any problem with the file on disk.
@@ -43,12 +45,14 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("POST "+hookcall.Path, s.hooks) // has its own token
 
-	mux.HandleFunc("GET /{$}", s.page)
+	mux.HandleFunc("GET /", s.page) // the UI: its files, and index.html for its pages
 	api := func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, s.requireUI(handler)) }
-	api("GET /api/tasks", s.listTasks)
-	api("POST /api/tasks", s.createTask)
-	api("GET /api/tasks/{task}", s.showTask)
-	api("POST /api/tasks/{task}/answer", s.answer)
+	// What the desk may do too: hand work to the coordinator and read it back.
+	deskToo := func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, s.requireUIOrDesk(handler)) }
+	deskToo("GET /api/tasks", s.listTasks)
+	deskToo("POST /api/tasks", s.createTask)
+	deskToo("GET /api/tasks/{task}", s.showTask)
+	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/agents", s.listAgents)
@@ -57,6 +61,9 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/changes", s.waitForChanges)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
+	}
+	if s.config.Desk != nil {
+		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
 	return mux
 }
@@ -71,6 +78,20 @@ const uiCookie = "agentry_ui"
 func (s *Server) requireUI(next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.carriesUIToken(r) {
+			http.Error(w, "open the link `agentry serve` printed", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	})
+}
+
+// requireUIOrDesk also lets in the desk's token. Approving an action never
+// takes it: the desk runs as a model, and a model doesn't approve agents.
+func (s *Server) requireUIOrDesk(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		desk := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		isDesk := s.config.DeskToken != "" && subtle.ConstantTimeCompare([]byte(desk), []byte(s.config.DeskToken)) == 1
+		if !isDesk && !s.carriesUIToken(r) {
 			http.Error(w, "open the link `agentry serve` printed", http.StatusUnauthorized)
 			return
 		}

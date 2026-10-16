@@ -42,6 +42,12 @@ func (p *Policy) Hash() string { return p.hash }
 // Text is the file as loaded.
 func (p *Policy) Text() string { return p.text }
 
+// DefaultProfile is the profile of an agent that doesn't name one.
+func (p *Policy) DefaultProfile() string { return p.defaultProfile }
+
+// UseForEveryone is the profile every agent uses whatever its own, or "".
+func (p *Policy) UseForEveryone() string { return p.useForEveryone }
+
 // ProfileNames lists the profiles, sorted.
 func (p *Policy) ProfileNames() []string {
 	names := make([]string, 0, len(p.profiles))

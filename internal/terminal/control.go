@@ -120,6 +120,21 @@ func (c *control) typeBytes(keys []byte) {
 	}
 }
 
+// size is the session's window size, in columns and rows.
+func (c *control) size() (cols, rows int) {
+	output, _ := exec.Command("tmux", "-L", c.socket, "display-message", "-p", "-t", sessions.Pane, "#{window_width} #{window_height}").Output()
+	if n, _ := fmt.Sscan(string(output), &cols, &rows); n != 2 {
+		return sessions.Columns, sessions.Rows
+	}
+	return cols, rows
+}
+
+// resize sets the session's window size; tmux then redraws the pane, and the
+// program in it gets SIGWINCH as in any terminal.
+func (c *control) resize(cols, rows int) {
+	c.run(fmt.Sprintf("resize-window -t %s -x %d -y %d", sessions.Pane, cols, rows))
+}
+
 // snapshot is what a new viewer sees first: the current screen with colours,
 // and the cursor where it really is.
 func (c *control) snapshot() []byte {

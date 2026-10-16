@@ -1,5 +1,6 @@
 // Command agentry is the whole of Agentry in one binary: the server, the
-// worker that runs agents on a machine, and the hook the engines call.
+// worker that runs agents on a machine, the task command the desk uses, and
+// the hook the engines call.
 package main
 
 import (
@@ -18,6 +19,7 @@ type command struct {
 var commands = []command{
 	{"serve", "run Agentry: the page, the coordinator, the agents", runServe},
 	{"worker", "run agents on this machine for the server", notBuilt("worker", "T-022")},
+	{"task", "create, list, show or answer tasks; used by the desk", runTask},
 	{"hook", "called by an engine's hooks; not run by hand", runHook},
 }
 

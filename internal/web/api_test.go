@@ -183,11 +183,94 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 
 	_, body := call(t, server, "GET", "/api/policy", "")
 	var shown struct {
-		Path, Hash, Problem string
-		Profiles            []policy.ProfileSummary
+		Path, Hash, Problem, UseForEveryone string
+		Profiles                            []policy.ProfileSummary
 	}
 	json.Unmarshal([]byte(body), &shown)
-	if shown.Path != path || shown.Hash != live.Current().Hash() || !strings.Contains(shown.Problem, "version must be 1") || len(shown.Profiles) != 4 {
+	if shown.Path != path || shown.Hash != live.Current().Hash() || !strings.Contains(shown.Problem, "version must be 1") ||
+		len(shown.Profiles) != 4 || shown.UseForEveryone != "allow-everything" {
 		t.Errorf("policy: %+v", shown)
+	}
+}
+
+func TestServesTheUI(t *testing.T) {
+	server, _ := newTestServer(t)
+	get := func(path string) (*http.Response, string) {
+		response, err := http.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		content, _ := io.ReadAll(response.Body)
+		return response, string(content)
+	}
+
+	// The UI routes in the browser, so each of its pages is index.html,
+	// which needs no token: the data behind it does.
+	for _, path := range []string{"/", "/tasks", "/tasks/task-1?tab=events", "/policy"} {
+		if response, body := get(path); response.StatusCode != 200 || !strings.Contains(body, `<div id="root">`) {
+			t.Errorf("%s: %d, not the UI", path, response.StatusCode)
+		}
+	}
+
+	// The bundles index.html names are served, and may be kept for good.
+	_, index := get("/")
+	start := strings.Index(index, "/assets/")
+	if start < 0 {
+		t.Fatal("index.html names no bundle")
+	}
+	bundle := index[start : start+strings.IndexByte(index[start:], '"')]
+	if response, _ := get(bundle); response.StatusCode != 200 || !strings.Contains(response.Header.Get("Cache-Control"), "immutable") {
+		t.Errorf("%s: %d %q", bundle, response.StatusCode, response.Header.Get("Cache-Control"))
+	}
+
+	// An API path that doesn't exist is not a page.
+	if code, _ := call(t, server, "GET", "/api/nothing", ""); code != http.StatusNotFound {
+		t.Errorf("/api/nothing: %d", code)
+	}
+}
+
+// The desk hands work to the coordinator and reads it back, and nothing
+// more: approving an agent's action takes the UI token.
+func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DeskToken: "desk-secret"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	asDesk := func(method, path, body string) int {
+		request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer desk-secret")
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		return response.StatusCode
+	}
+
+	for _, allowed := range []struct{ method, path, body string }{
+		{"POST", "/api/tasks", `{"title":"From the desk","repo":"/src/app"}`},
+		{"GET", "/api/tasks", ""},
+		{"GET", "/api/tasks/task-1", ""},
+	} {
+		if code := asDesk(allowed.method, allowed.path, allowed.body); code != 200 {
+			t.Errorf("desk %s %s: %d", allowed.method, allowed.path, code)
+		}
+	}
+	for _, refused := range []struct{ method, path string }{
+		{"POST", "/api/tasks/task-1/actions/push-1/approve"},
+		{"POST", "/api/tasks/task-1/actions/push-1/deny"},
+		{"GET", "/api/policy"},
+		{"GET", "/api/changes"},
+	} {
+		if code := asDesk(refused.method, refused.path, `{}`); code != http.StatusUnauthorized {
+			t.Errorf("desk %s %s: %d, want 401", refused.method, refused.path, code)
+		}
 	}
 }

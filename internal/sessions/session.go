@@ -12,7 +12,8 @@ import (
 	"strings"
 )
 
-// One fixed size, whoever is watching: viewers never resize the session (proof 04).
+// The size a session starts at. A viewer can resize it to fit their screen
+// (internal/terminal), and the program in it sees the change as in any terminal.
 const (
 	Columns = 120
 	Rows    = 36
@@ -38,7 +39,10 @@ func Start(spec Spec) error {
 	Stop(spec.Socket)
 	removeStaleSocket(spec.Socket)
 
+	// focus-events lets programs such as Claude Code know when the terminal
+	// has focus; without it they print a notice asking for it.
 	args := []string{"start-server", ";", "set-option", "-g", "remain-on-exit", "on", ";",
+		"set-option", "-g", "focus-events", "on", ";",
 		"new-session", "-d", "-s", Pane, "-x", fmt.Sprint(Columns), "-y", fmt.Sprint(Rows), "-c", spec.Dir}
 	for _, name := range sortedKeys(spec.Env) {
 		args = append(args, "-e", name+"="+spec.Env[name])

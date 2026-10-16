@@ -11,9 +11,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 )
 
-// Hub holds one watch per task being watched: the control client and its
-// viewers. A watch starts with the first viewer and ends with the last one,
-// or when the session ends (each turn is a new session; the page reconnects).
+// Hub holds one watch per session being watched, a task's or the desk's:
+// the control client and its viewers. A watch starts with the first viewer
+// and ends with the last one, or when the session ends (each turn is a new
+// session; the page reconnects).
 type Hub struct {
 	mu      sync.Mutex
 	watches map[string]*viewers
@@ -23,50 +24,58 @@ func NewHub() *Hub { return &Hub{watches: map[string]*viewers{}} }
 
 // Handler serves the websocket for the task in the path's {task}:
 //
-//	server → browser  binary: terminal bytes   text: {"type":"state",...}
+//	server → browser  binary: terminal bytes   text: {"type":"state", ..., "cols", "rows"}
 //	browser → server  binary: keystrokes       text: {"type":"take"} / {"type":"release"}
+//	                                                 {"type":"resize","cols":c,"rows":r}
+//
+// The session has one size, sent in every state, and each viewer shows it at
+// that size. A viewer may resize it to fit their screen while nobody else is
+// in control.
 func (h *Hub) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		task := r.PathValue("task")
-		if !sessions.Exists(sessions.SocketFor(task)) {
-			http.Error(w, "no agent is running on "+task, http.StatusNotFound)
-			return
-		}
-		conn, err := websocket.Accept(w, r, nil)
-		if err != nil {
-			return
-		}
-		conn.SetReadLimit(1 << 20)
-		defer conn.CloseNow()
-
-		watch, err := h.watch(task)
-		if err != nil {
-			conn.Close(websocket.StatusInternalError, err.Error())
-			return
-		}
-		connect(r.Context(), conn, watch, func() { h.leave(task, watch) })
-	})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.Serve(w, r, r.PathValue("task")) })
 }
 
-// watch returns the task's watch, attaching a control client if there is none.
-func (h *Hub) watch(task string) (*viewers, error) {
+// Serve connects one viewer to the session named name: a task's, or the desk's.
+func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, name string) {
+	if !sessions.Exists(sessions.SocketFor(name)) {
+		http.Error(w, "no session is running for "+name, http.StatusNotFound)
+		return
+	}
+	conn, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	conn.SetReadLimit(1 << 20)
+	defer conn.CloseNow()
+
+	watch, err := h.watch(name)
+	if err != nil {
+		conn.Close(websocket.StatusInternalError, err.Error())
+		return
+	}
+	connect(r.Context(), conn, watch, func() { h.leave(name, watch) })
+}
+
+// watch returns the session's watch, attaching a control client if there is none.
+func (h *Hub) watch(name string) (*viewers, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if watch, ok := h.watches[task]; ok {
+	if watch, ok := h.watches[name]; ok {
 		return watch, nil
 	}
 	watch := newViewers()
-	c, err := attach(sessions.SocketFor(task), watch.broadcast)
+	c, err := attach(sessions.SocketFor(name), watch.broadcast)
 	if err != nil {
 		return nil, err
 	}
 	watch.control = c // set before anyone joins, so typeFrom always has it
-	h.watches[task] = watch
+	watch.cols, watch.rows = c.size()
+	h.watches[name] = watch
 	go func() {
 		<-c.ended // the session ended: everyone reconnects to the next one
 		h.mu.Lock()
-		if h.watches[task] == watch {
-			delete(h.watches, task)
+		if h.watches[name] == watch {
+			delete(h.watches, name)
 		}
 		h.mu.Unlock()
 		watch.closeAll()
@@ -74,11 +83,11 @@ func (h *Hub) watch(task string) (*viewers, error) {
 	return watch, nil
 }
 
-func (h *Hub) leave(task string, watch *viewers) {
+func (h *Hub) leave(name string, watch *viewers) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.watches[task] == watch {
-		delete(h.watches, task)
+	if h.watches[name] == watch {
+		delete(h.watches, name)
 	}
 	watch.control.detach()
 }
@@ -127,13 +136,18 @@ func connect(ctx context.Context, conn *websocket.Conn, watch *viewers, lastOneO
 			watch.typeFrom(me, message)
 			continue
 		}
-		var request struct{ Type string }
+		var request struct {
+			Type       string
+			Cols, Rows int
+		}
 		json.Unmarshal(message, &request)
 		switch request.Type {
 		case "take":
 			watch.takeControl(me)
 		case "release":
 			watch.releaseControl(me)
+		case "resize":
+			watch.resizeFrom(me, request.Cols, request.Rows)
 		}
 	}
 }

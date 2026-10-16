@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -135,4 +136,44 @@ func TestNoSessionNoWatch(t *testing.T) {
 	if response.StatusCode != http.StatusNotFound {
 		t.Errorf("got %d", response.StatusCode)
 	}
+}
+
+// The session has one size: a viewer may set it while nobody else is in
+// control, and every viewer is told the new size.
+func TestAViewerResizesTheSession(t *testing.T) {
+	task := fmt.Sprintf("terminal-resize-%d", time.Now().UnixNano())
+	socket := sessions.SocketFor(task)
+	defer sessions.Stop(socket)
+	if err := sessions.Start(sessions.Spec{Socket: socket, Dir: t.TempDir(), Command: []string{"sh", "-c", "cat"}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	mux := http.NewServeMux()
+	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler())
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	url := "ws" + strings.TrimPrefix(server.URL, "http") + "/tasks/" + task + "/terminal"
+
+	ctx := context.Background()
+	alice, bob := connectWatcher(t, ctx, url), connectWatcher(t, ctx, url)
+	defer alice.conn.CloseNow()
+	defer bob.conn.CloseNow()
+	sized := func(w *watcher, cols, rows int) func() bool {
+		return func() bool { return w.state["cols"] == float64(cols) && w.state["rows"] == float64(rows) }
+	}
+	alice.readUntil(ctx, sized(alice, sessions.Columns, sessions.Rows))
+	bob.readUntil(ctx, func() bool { return bob.state["viewers"] == float64(2) })
+
+	alice.send(ctx, websocket.MessageText, `{"type":"resize","cols":90,"rows":50}`)
+	bob.readUntil(ctx, sized(bob, 90, 50))
+	if size, _ := exec.Command("tmux", "-L", socket, "display-message", "-p", "#{window_width}x#{window_height}").Output(); strings.TrimSpace(string(size)) != "90x50" {
+		t.Errorf("tmux window is %s, want 90x50", size)
+	}
+
+	// Once bob has control, alice's resize is ignored.
+	bob.send(ctx, websocket.MessageText, `{"type":"take"}`)
+	bob.readUntil(ctx, func() bool { return bob.state["controller"] == bob.state["you"] })
+	alice.send(ctx, websocket.MessageText, `{"type":"resize","cols":60,"rows":20}`)
+	bob.send(ctx, websocket.MessageText, `{"type":"resize","cols":9999,"rows":1}`) // clamped
+	alice.readUntil(ctx, sized(alice, maxCols, minRows))
 }

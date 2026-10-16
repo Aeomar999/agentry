@@ -13,6 +13,7 @@ type viewers struct {
 	mu         sync.Mutex
 	all        map[string]*viewer
 	controller string // id of the viewer in control, or ""
+	cols, rows int    // the session's size, which every viewer shows
 	nextID     int
 	control    *control
 }
@@ -110,11 +111,37 @@ func (v *viewers) typeFrom(viewer *viewer, keys []byte) {
 	}
 }
 
-// sendStateLocked tells every viewer who they are and who is in control.
+// The sizes a viewer may ask for: big enough to be usable, small enough
+// that a bad request can't make tmux allocate a huge screen.
+const (
+	minCols, maxCols = 20, 500
+	minRows, maxRows = 5, 200
+)
+
+// resizeFrom resizes the session for a viewer, unless someone else is in
+// control: then the size is theirs to set.
+func (v *viewers) resizeFrom(viewer *viewer, cols, rows int) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.controller != "" && v.controller != viewer.id {
+		return
+	}
+	cols, rows = max(minCols, min(maxCols, cols)), max(minRows, min(maxRows, rows))
+	if cols == v.cols && rows == v.rows {
+		return
+	}
+	v.cols, v.rows = cols, rows
+	v.control.resize(cols, rows)
+	v.sendStateLocked()
+}
+
+// sendStateLocked tells every viewer who they are, who is in control, and
+// the session's size.
 func (v *viewers) sendStateLocked() {
 	for _, viewer := range v.all {
 		message, _ := json.Marshal(map[string]any{
 			"type": "state", "you": viewer.id, "controller": v.controller, "viewers": len(v.all),
+			"cols": v.cols, "rows": v.rows,
 		})
 		select {
 		case viewer.state <- message:
