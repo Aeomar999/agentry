@@ -28,7 +28,7 @@ check:
     # The tests run real tmux sessions and git worktrees.
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends tmux >/dev/null
   script:
-    - test -f internal/web/dist/index.html || { echo "The UI isn't built: run make ui and commit internal/web/dist"; exit 1; }
+    - 'test -f internal/web/dist/index.html || { echo "The UI is not built. Run make ui and commit internal/web/dist."; exit 1; }'
     - go vet ./...
     - go test ./...
   rules:
