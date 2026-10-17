@@ -1,6 +1,7 @@
 package workerlink
 
 import (
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
@@ -19,6 +20,13 @@ const (
 	methodRead        = "read"        // read → workspace.Contents
 	methodAttach      = "attach"      // attach → size; the worker dials the stream first
 	methodAbout       = "about"       // nothing → machines.About
+
+	// A task's shared files; the worker sends and gets them over HTTP
+	// (sharedfiles.Hub), and these say which.
+	methodSharedManifest = "sharedManifest" // sharedIn → []sharedfiles.File
+	methodSharedDeliver  = "sharedDeliver"  // sharedIn → nothing
+	methodSharedUpload   = "sharedUpload"   // sharedIn → []sharedfiles.File
+	methodSharedFetch    = "sharedFetch"    // sharedFetch → []sharedfiles.File
 )
 
 // The worker's notices.
@@ -34,6 +42,18 @@ type handOff struct {
 
 type taskOnly struct {
 	Task string `json:"task"`
+}
+
+type sharedIn struct {
+	Worktree string             `json:"worktree"`
+	Files    []sharedfiles.File `json:"files,omitempty"` // for deliver
+	Names    []string           `json:"names,omitempty"` // for upload
+}
+
+type sharedFetch struct {
+	Path     string `json:"path"`
+	As       string `json:"as"`
+	Anywhere bool   `json:"anywhere"`
 }
 
 type read struct {

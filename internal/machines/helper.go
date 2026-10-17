@@ -50,14 +50,12 @@ func (l *Local) StartHelper(_ context.Context, h Helper) error {
 	if self, err := os.Executable(); err == nil {
 		path = filepath.Dir(self) + string(os.PathListSeparator) + path // `agentry send` is this agentry
 	}
-	env := map[string]string{hookcall.EnvServer: l.ServerURL}
+	env := map[string]string{hookcall.EnvServer: l.ServerURL, "PATH": path}
 	for name, value := range h.Env {
 		env[name] = value
 	}
 	return sessions.Start(sessions.Spec{Socket: socket, Dir: h.Worktree, Env: env,
-		// PATH goes through env in the command: tmux gives a new session the
-		// client's PATH, whatever -e says.
-		Command: []string{"env", "PATH=" + path, "claude", "--append-system-prompt", h.Prompt, "--settings", string(settings),
+		Command: []string{"claude", "--append-system-prompt", h.Prompt, "--settings", string(settings),
 			// Nothing is pre-approved, `agentry send` least of all: Claude Code
 			// asks you before it runs any command.
 			"--permission-mode", "default",

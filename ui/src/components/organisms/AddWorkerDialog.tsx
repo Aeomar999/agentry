@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/atoms/Button";
 import { Banner } from "@/components/molecules/Banner";
-import { CommandLine } from "@/components/molecules/CommandLine";
+import { InstallCommand } from "@/components/molecules/InstallCommand";
 import { Dialog } from "@/components/molecules/Dialog";
 import { api } from "@/api/client";
 import type { Invite, Worker } from "@/api/types";
@@ -39,14 +39,19 @@ export function AddWorkerDialog({ workers, onClose }: AddWorkerDialogProps) {
           <>
             <p>
               On the machine you want agents to run on, run this. It installs agentry, joins this server and keeps the worker running. That
-              machine needs git, tmux and Claude Code signed in.
+              machine needs git and Claude Code signed in.
             </p>
-            {invite ? <CommandLine command={invite.command} /> : <div className="h-10 rounded-md bg-surface-2" />}
+            {invite ? (
+              <InstallCommand command={invite.command} windowsCommand={invite.windowsCommand} />
+            ) : (
+              <div className="h-10 rounded-md bg-surface-2" />
+            )}
             <p className="text-[12px] text-ink-muted">
               The code in it works once{invite && <>, until {clockTime(invite.expires)}</>}. To name the machine, put{" "}
-              <code className="font-mono text-ink-secondary">AGENTRY_WORKER_NAME=name</code> before <code className="font-mono">sh</code>.
-              Run on a machine that has joined, it updates it instead. There,{" "}
-              <code className="font-mono text-ink-secondary">agentry worker</code> does the rest: status, logs, stop, start, update, leave.
+              <code className="font-mono text-ink-secondary">AGENTRY_WORKER_NAME=name</code> before <code className="font-mono">sh</code>{" "}
+              (on Windows, set <code className="font-mono text-ink-secondary">$env:AGENTRY_WORKER_NAME</code> first). Run on a machine that
+              has joined, it updates it instead. There, <code className="font-mono text-ink-secondary">agentry worker</code> does the rest:
+              status, logs, stop, start, update, leave.
             </p>
           </>
         )}

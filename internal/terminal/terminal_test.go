@@ -1,13 +1,11 @@
 package terminal
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -16,21 +14,6 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 )
-
-func TestUnescape(t *testing.T) {
-	cases := map[string][]byte{
-		`plain text`:           []byte("plain text"),
-		`\033[32mgreen\033[0m`: []byte("\x1b[32mgreen\x1b[0m"),
-		`line\015\012next`:     []byte("line\r\nnext"),
-		`back\134slash`:        []byte(`back\slash`),
-		`ends with \01`:        []byte(`ends with \01`), // too short to be an escape
-	}
-	for escaped, want := range cases {
-		if got := unescape(escaped); !bytes.Equal(got, want) {
-			t.Errorf("unescape(%q) = %q, want %q", escaped, got, want)
-		}
-	}
-}
 
 // watcher is one browser tab: it collects what the server sends.
 type watcher struct {
@@ -166,8 +149,8 @@ func TestAViewerResizesTheSession(t *testing.T) {
 
 	alice.send(ctx, websocket.MessageText, `{"type":"resize","cols":90,"rows":50}`)
 	bob.readUntil(ctx, sized(bob, 90, 50))
-	if size, _ := exec.Command("tmux", "-L", socket, "display-message", "-p", "#{window_width}x#{window_height}").Output(); strings.TrimSpace(string(size)) != "90x50" {
-		t.Errorf("tmux window is %s, want 90x50", size)
+	if cols, rows := sessions.Size(socket); cols != 90 || rows != 50 {
+		t.Errorf("the session is %dx%d, want 90x50", cols, rows)
 	}
 
 	// Once bob has control, alice's resize is ignored.

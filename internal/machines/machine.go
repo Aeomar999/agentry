@@ -7,6 +7,7 @@ package machines
 import (
 	"context"
 
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -43,6 +44,15 @@ type Machine interface {
 	Attach(task string, onOutput func([]byte)) (terminal.Pane, error)
 	// About reads the machine's details now, for the Workers page.
 	About(ctx context.Context) (About, error)
+
+	// A task's shared files (package sharedfiles), in its worktree's folder:
+	// what is there, making it hold what the task has, and sending files to
+	// the server. Fetch sends a file or folder from elsewhere on the machine:
+	// from inside its worktrees only (sharedfiles.ErrOutside), unless anywhere.
+	SharedManifest(ctx context.Context, worktree string) ([]sharedfiles.File, error)
+	SharedDeliver(ctx context.Context, worktree string, files []sharedfiles.File) error
+	SharedUpload(ctx context.Context, worktree string, names []string) ([]sharedfiles.File, error)
+	SharedFetch(ctx context.Context, path, as string, anywhere bool) ([]sharedfiles.File, error)
 }
 
 // WorktreeRequest is what a machine needs to make a task's worktree.

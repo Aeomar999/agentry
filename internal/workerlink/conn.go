@@ -18,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -157,7 +158,7 @@ func (c *conn) send(ctx context.Context, m message) error {
 // knownError gives back the errors callers tell apart, which only their
 // text survives the link.
 func knownError(text string) error {
-	for _, known := range []error{worktrees.ErrNotMerged, terminal.ErrNoSession, workspace.ErrOutside} {
+	for _, known := range []error{worktrees.ErrNotMerged, terminal.ErrNoSession, workspace.ErrOutside, sharedfiles.ErrOutside} {
 		if text == known.Error() {
 			return known
 		}

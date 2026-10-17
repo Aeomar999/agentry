@@ -41,6 +41,12 @@ var catalogue = map[Type]spec{
 	EpicLeft:           {fields: []string{"epic"}, writers: []ActorKind{Human}},
 	StoryAdded:         {fields: []string{"story", "title"}, writers: []ActorKind{Human}}, // "done" and "summary" when it is done already
 	StoryRemoved:       {fields: []string{"story"}, writers: []ActorKind{Human}},
+	FileAdded:          {fields: []string{"name", "hash", "size"}, writers: []ActorKind{Human, System}}, // "by": the agent, or you; "turn"
+	FileRemoved:        {fields: []string{"name"}, writers: []ActorKind{Human, System}},
+	FilesCollected:     {fields: []string{"turn"}, writers: []ActorKind{System}},
+	FilesDelivered:     {fields: []string{"worker", "version"}, writers: []ActorKind{System}},
+	FileFetching:       {fields: []string{"machine", "path"}, writers: []ActorKind{Agent}},       // "as": the name to keep it by
+	FilesFetched:       {fields: []string{"files", "from"}, writers: []ActorKind{Human, System}}, // yours when you approved it: "answers"
 	WorktreeReady:      {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
 	WorktreeMoved:      {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
 

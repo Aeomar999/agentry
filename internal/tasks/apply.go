@@ -35,6 +35,7 @@ func (t *Task) apply(e events.Event) {
 		}
 	}
 
+	t.applyFiles(e)
 	switch e.Type {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
@@ -232,6 +233,7 @@ func (t *Task) apply(e events.Event) {
 		}
 
 	case events.IssueRaised:
+		t.Fetching = nil // a fetch that failed is told as an issue
 		if turn := t.OpenTurn(); turn != nil {
 			turn.Ended, turn.Issue = true, e.Text("reason")
 			t.moveRepo()
@@ -250,6 +252,10 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskNeedsYou:
 		t.Question = e.Text("question")
 		t.Asked = Asked{By: e.Actor.ID, At: e.At, Options: e.List("options"), Page: e.Text("page")}
+		if e.Text("fetchPath") != "" {
+			t.Asked.Fetch = &Fetch{Machine: e.Text("fetchMachine"), Path: e.Text("fetchPath"), As: e.Text("fetchAs")}
+			t.Fetching = nil // it waits for you now
+		}
 		t.Closing = e.Text("closing")
 		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Question)

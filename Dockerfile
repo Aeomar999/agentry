@@ -1,5 +1,5 @@
 # Agentry in one image: the server, with its UI built in, and what agents
-# need to work: git, tmux and Claude Code. Everything worth keeping lives in
+# need to work: git and Claude Code. Everything worth keeping lives in
 # the agentry user's home, which the stack mounts as a volume (deploy/).
 
 FROM golang:1.27-bookworm AS build
@@ -16,7 +16,7 @@ FROM node:24-bookworm-slim
 ARG CLAUDE_CODE_VERSION=2.1.301
 ENV DISABLE_AUTOUPDATER=1
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git tmux ca-certificates curl openssh-client procps less \
+ && apt-get install -y --no-install-recommends git ca-certificates curl openssh-client procps less \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
  && npm cache clean --force \

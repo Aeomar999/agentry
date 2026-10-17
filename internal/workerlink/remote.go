@@ -12,6 +12,7 @@ import (
 	"github.com/coder/websocket"
 
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -108,6 +109,28 @@ func (r *remote) About(ctx context.Context) (machines.About, error) {
 
 // Attach asks the worker to attach to the task's session and dial a stream
 // back with it; the pane is that stream.
+func (r *remote) SharedManifest(ctx context.Context, worktree string) ([]sharedfiles.File, error) {
+	var files []sharedfiles.File
+	err := r.link.call(ctx, methodSharedManifest, sharedIn{Worktree: worktree}, &files)
+	return files, err
+}
+
+func (r *remote) SharedDeliver(ctx context.Context, worktree string, files []sharedfiles.File) error {
+	return r.link.call(ctx, methodSharedDeliver, sharedIn{Worktree: worktree, Files: files}, nil)
+}
+
+func (r *remote) SharedUpload(ctx context.Context, worktree string, names []string) ([]sharedfiles.File, error) {
+	var files []sharedfiles.File
+	err := r.link.call(ctx, methodSharedUpload, sharedIn{Worktree: worktree, Names: names}, &files)
+	return files, err
+}
+
+func (r *remote) SharedFetch(ctx context.Context, path, as string, anywhere bool) ([]sharedfiles.File, error) {
+	var files []sharedfiles.File
+	err := r.link.call(ctx, methodSharedFetch, sharedFetch{Path: path, As: as, Anywhere: anywhere}, &files)
+	return files, err
+}
+
 func (r *remote) Attach(task string, onOutput func([]byte)) (terminal.Pane, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

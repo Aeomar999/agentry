@@ -24,7 +24,7 @@ func Describe() workers.Machine {
 			m.Engines = append(m.Engines, strings.TrimSpace(name+" "+version))
 		}
 	}
-	for _, tool := range []string{"git", "tmux"} {
+	for _, tool := range []string{"git"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			m.Missing = append(m.Missing, tool)
 		}

@@ -14,10 +14,13 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/procs"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 
@@ -201,6 +204,7 @@ func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
 		Server: config.Server, Credential: config.Credential, About: machines.Describe(), Log: logger.Printf, SelfUpdate: true,
 		OnLink: func(up bool, err error) { saveLinkState(dir, up, err) },
 		Machine: &machines.Local{Label: config.Name, ServerURL: config.Server, HookCommand: shellQuote(self) + " hook",
+			Blobs:        sharedfiles.Hub{Server: config.Server, Credential: config.Credential},
 			WorktreeRoot: filepath.Join(dir, "worktrees"),
 			Hub: &machines.Hub{URL: workerlink.HubURL(config.Server), Credential: config.Credential,
 				MirrorRoot: filepath.Join(dir, "repos")}},
@@ -208,7 +212,14 @@ func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
 	err = worker.Run(ctx)
 	if errors.Is(err, workerlink.ErrUpdated) {
 		logger.Print("agentry was updated to the server's; restarting")
-		return syscall.Exec(self, os.Args, os.Environ()) // the same process, the new program
+		pid, err := procs.Restart(self) // on Unix it returns only if it fails
+		if err == nil && pid != 0 {
+			// Windows: a new process carries on, so the service follows it.
+			if _, statErr := os.Stat(filepath.Join(dir, "worker.pid")); statErr == nil {
+				os.WriteFile(filepath.Join(dir, "worker.pid"), []byte(strconv.Itoa(pid)), 0o644)
+			}
+		}
+		return err
 	}
 	return err
 }

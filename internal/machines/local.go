@@ -12,6 +12,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
@@ -19,7 +20,7 @@ import (
 )
 
 // Local is this machine: the one Agentry runs on, or, inside `agentry
-// worker`, the worker's own. Its sessions are tmux servers here, and its
+// worker`, the worker's own. Its sessions are kept by their hosts here (package sessions), and its
 // worktrees folders here.
 type Local struct {
 	Label        string // its name: workers.Local, or the worker's
@@ -30,6 +31,10 @@ type Local struct {
 	// Hub is set on a worker: where tasks' work comes from and goes back
 	// to. On the machine Agentry runs on, the repos themselves are the hub.
 	Hub *Hub
+
+	// Blobs is where tasks' shared files are kept: the server's own folder
+	// on the machine Agentry runs on, or the server, from a worker.
+	Blobs sharedfiles.Blobs
 }
 
 // Hub is the Agentry server's git side, as a worker reaches it.
@@ -156,6 +161,28 @@ func (l *Local) StartTurn(_ context.Context, t Turn) error {
 func (l *Local) session(t Turn) engines.Session {
 	return engines.Session{Worktree: t.Worktree, StateDir: filepath.Join(t.Worktree, StateDir),
 		HookCommand: l.HookCommand, Model: t.Model, Theme: t.Theme}
+}
+
+func (l *Local) SharedManifest(_ context.Context, worktree string) ([]sharedfiles.File, error) {
+	return sharedfiles.Manifest(worktree)
+}
+
+func (l *Local) SharedDeliver(_ context.Context, worktree string, files []sharedfiles.File) error {
+	return sharedfiles.Deliver(worktree, files, l.Blobs)
+}
+
+func (l *Local) SharedUpload(_ context.Context, worktree string, names []string) ([]sharedfiles.File, error) {
+	return sharedfiles.Upload(worktree, names, l.Blobs)
+}
+
+// SharedFetch takes from inside this machine's worktrees freely; anywhere
+// else needs you (the coordinator loop asks).
+func (l *Local) SharedFetch(_ context.Context, path, as string, anywhere bool) ([]sharedfiles.File, error) {
+	boundary := l.WorktreeRoot
+	if anywhere {
+		boundary = ""
+	}
+	return sharedfiles.Fetch(path, boundary, as, l.Blobs)
 }
 
 func (l *Local) Stop(task string)           { sessions.Stop(sessions.SocketFor(task)) }

@@ -30,7 +30,7 @@ fi
 chmod +x "$bin/agentry.part"
 mv "$bin/agentry.part" "$bin/agentry"
 
-for tool in git tmux claude; do
+for tool in git claude; do
   command -v "$tool" >/dev/null 2>&1 || say "Note: $tool isn't installed here; agents need it."
 done
 

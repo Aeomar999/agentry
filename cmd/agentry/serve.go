@@ -29,6 +29,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
@@ -124,7 +125,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	currentTheme := func() string { return theme.Load().(string) }
 
 	// Agents work here, and on any worker that joins and is online.
-	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook",
+	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
+	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
 		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
 	fleet := machines.NewFleet(here)
 	if err := workerlink.ForgetConnections(log, fleet); err != nil {
@@ -182,7 +184,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
-		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe()},
+		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe(), Blobs: blobs},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL}); err != nil {
@@ -259,8 +261,10 @@ func newToken() string {
 }
 
 // shellQuote quotes a path for the hook command, which engines run in a shell.
+// On Windows, engines run hooks with Git Bash, so the path is written with
+// forward slashes, which it and Windows both read.
 func shellQuote(path string) string {
-	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+	return "'" + strings.ReplaceAll(filepath.ToSlash(path), "'", `'\''`) + "'"
 }
 
 func rejectionError(rejection *events.Rejection) error {

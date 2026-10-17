@@ -39,7 +39,7 @@ type Worker struct {
 	Since   time.Time `json:"since"`   // when it last came online or went offline
 	Version string    `json:"version"` // of agentry on it
 	Engines []string  `json:"engines"` // the engines it has, as "claude 2.1.301"
-	Missing []string  `json:"missing"` // tools agents need that it lacks, such as tmux
+	Missing []string  `json:"missing"` // tools agents need that it lacks, such as git
 
 	credential string // its hash
 }

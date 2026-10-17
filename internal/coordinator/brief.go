@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -16,12 +17,13 @@ import (
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
 
-func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine) string {
+func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File) string {
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
 	section(&b, "The task", taskText(task))
 	section(&b, "Where the work is", whereText(task))
+	section(&b, "Shared files", sharedText(task, shared, true))
 	plan(&b, task, coordinator.Name, "your plan for the task as a whole: the stages it goes through, which agent does each, and what is done")
 
 	var team strings.Builder
@@ -49,13 +51,14 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	return b.String()
 }
 
-func workerBrief(task *tasks.Task, agent agents.Agent, instructions string) string {
+func workerBrief(task *tasks.Task, agent agents.Agent, instructions string, shared []sharedfiles.File) string {
 	var b strings.Builder
 	header(&b, agent, task)
 	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
 	section(&b, "Your instructions from the coordinator", instructions)
 	section(&b, "Where the work is", whereText(task))
+	section(&b, "Shared files", sharedText(task, shared, false))
 	plan(&b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
 	finish := "End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. " +
 		"The coordinator reads only this report, so make it complete. Don't stop to ask questions: put them in the report."
@@ -184,6 +187,51 @@ func whereText(task *tasks.Task) string {
 		"Markdown link to its path from the worktree's root, such as [the design](docs/design.md). They open it from the "+
 		"chat straight into the task's Workspace, rendered, with its diagrams.",
 		w.Path, w.Branch, w.Base, w.Port)
+}
+
+// sharedText is what the task's shared files are, and how they work.
+func sharedText(task *tasks.Task, shared []sharedfiles.File, coordinator bool) string {
+	var b strings.Builder
+	b.WriteString("Files that aren't in git, such as data, builds, documents or images, are shared with the task in " +
+		"the folder .agentry/files of this worktree (git ignores it). They follow the task to whichever machine works on it " +
+		"next: what you add, change or remove there is kept when your turn ends, and the next agent finds it there. Put what " +
+		"the next agent or the user needs there, and keep code in git.")
+	if task.Epic != "" {
+		b.WriteString(" Your epic's files are in .agentry/files/" + sharedfiles.EpicFolder + ", to read: changes there aren't kept.")
+	}
+	if coordinator {
+		b.WriteString("\n\nTo bring a file or folder from a machine (one in \"Machines\", or this one, \"local\") into the " +
+			"shared files, decide \"fetch\" with its machine and path: from inside that machine's worktrees it comes at once; " +
+			"from anywhere else the user is asked first. You hear when it has come.")
+	}
+	if len(shared) == 0 {
+		b.WriteString("\n\nThe task has no shared files yet.")
+		return b.String()
+	}
+	b.WriteString("\n\nIts shared files now:\n")
+	for _, f := range shared {
+		by := ""
+		if kept, ok := task.Files[f.Name]; ok {
+			by = ", from " + kept.By
+			if kept.From != "" {
+				by = ", copied from " + kept.From
+			}
+		}
+		fmt.Fprintf(&b, "- %s (%s%s)\n", f.Name, humanSize(f.Size), by)
+	}
+	return b.String()
+}
+
+func humanSize(n int64) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	}
+	return fmt.Sprintf("%d bytes", n)
 }
 
 func refusedActions(task *tasks.Task) string {

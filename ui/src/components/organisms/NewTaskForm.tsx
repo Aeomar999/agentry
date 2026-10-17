@@ -15,6 +15,7 @@ import { knownLabels } from "@/lib/labels";
 import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";
 import { useToast } from "./Toasts";
+import { share, sizeOf } from "@/lib/shared";
 
 // A task is what you describe. The title is optional: the coordinator reads
 // the task and names it, and renames a title that doesn't say what the task
@@ -33,6 +34,7 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
+  const [attached, setAttached] = useState<File[]>([]); // shared with the task once it is made
   const [budget, setBudget] = useState("");
   const [where, setWhere] = useState<"default" | "existing" | "new">("default");
   const teams = teamsOf(useResource<Agent[]>("/api/agents").data ?? []);
@@ -77,6 +79,15 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
         `Created ${created.stream}`,
         epic ? `A story of ${epic}, in your Backlog until you start it.` : "The coordinator reads it next.",
       );
+      const unshared: string[] = [];
+      for (const file of attached) {
+        try {
+          await share(created.stream, file);
+        } catch (failure) {
+          unshared.push(`${file.name}: ${(failure as Error).message}`);
+        }
+      }
+      if (unshared.length) notify("danger", "Some files weren't shared", unshared.join("\n"));
       onCreated(created.stream);
     } catch (failure) {
       setError((failure as Error).message);
@@ -181,6 +192,38 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
               onChange={(e) => setRepo(e.target.value)}
               placeholder={where === "new" ? "/home/you/projects/new-project" : "/home/you/projects/existing-repo"}
             />
+          )}
+        </div>
+      </Field>
+      <Field
+        label="Files"
+        htmlFor="task-files"
+        hint="Optional. Shared with the task: its agents find them in .agentry/files, on whichever machine works on it."
+      >
+        <div className="flex flex-col gap-2">
+          <input
+            id="task-files"
+            type="file"
+            multiple
+            onChange={(e) => e.target.files && setAttached([...attached, ...e.target.files])}
+            className="max-w-md text-[12px] text-ink-secondary file:mr-3 file:cursor-pointer file:rounded-sm file:border file:border-divider file:bg-surface-1 file:px-2 file:py-1 file:text-ink-primary"
+          />
+          {attached.length > 0 && (
+            <ul className="flex max-w-md flex-col gap-1">
+              {attached.map((file, n) => (
+                <li key={`${file.name}-${n}`} className="flex items-center gap-2 text-[12px] text-ink-secondary">
+                  <span className="truncate font-mono">{file.name}</span>
+                  <span className="text-ink-faint">{sizeOf(file.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttached(attached.filter((_, i) => i !== n))}
+                    className="ml-auto cursor-pointer text-ink-faint hover:text-danger"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </Field>

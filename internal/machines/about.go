@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/engines"
@@ -35,7 +34,7 @@ type About struct {
 	Time       time.Time `json:"time"`     // its clock now
 	Zone       string    `json:"zone"`
 
-	Tools []Tool `json:"tools"` // engines, git and tmux: what agents run
+	Tools []Tool `json:"tools"` // engines and git: what agents run
 
 	Agentry   string   `json:"agentry"`   // its version
 	Binary    string   `json:"binary"`    // where it is
@@ -88,15 +87,11 @@ func tools() []Tool {
 		return toolsSeen
 	}
 	toolsSeen = nil
-	for _, name := range append(engines.Names(), "git", "tmux") {
+	for _, name := range append(engines.Names(), "git") {
 		tool := Tool{Name: name}
 		if path, err := exec.LookPath(name); err == nil {
 			tool.Path = path
-			flag := "--version"
-			if name == "tmux" {
-				flag = "-V"
-			}
-			tool.Version, _ = versionOf(name, flag)
+			tool.Version, _ = versionOf(name, "--version")
 		}
 		toolsSeen = append(toolsSeen, tool)
 	}
@@ -206,20 +201,6 @@ func darwinFreeMemory() uint64 {
 
 // diskSpace is the size of the disk dir is on, and what is free on it. A
 // folder not made yet is measured by the nearest one that is.
-func diskSpace(dir string) (total, free uint64) {
-	for dir != "" && dir != "/" {
-		if _, err := os.Stat(dir); err == nil {
-			break
-		}
-		dir = filepath.Dir(dir)
-	}
-	var fs syscall.Statfs_t
-	if dir == "" || syscall.Statfs(dir, &fs) != nil {
-		return 0, 0
-	}
-	return uint64(fs.Blocks) * uint64(fs.Bsize), uint64(fs.Bavail) * uint64(fs.Bsize)
-}
-
 func numbers(text string) []float64 {
 	var values []float64
 	for _, field := range strings.Fields(text) {

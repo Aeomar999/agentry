@@ -27,6 +27,8 @@ type Decision struct {
 	Reason       string   `json:"reason,omitempty"`  // for transfer: why the task is theirs
 	Request      string   `json:"request,omitempty"` // for request: what this task needs from them
 	Stories      []Story  `json:"stories,omitempty"` // for split: the stories to add
+	Path         string   `json:"path,omitempty"`    // for fetch: the file or folder on Machine
+	As           string   `json:"as,omitempty"`      // for fetch: the name to share it by; "" for its own
 }
 
 // Story is one story a split adds to the epic.
@@ -72,6 +74,7 @@ const (
 	Request      Action = "request"  // this task needs something from another team: a task of theirs, which this one waits for
 	Split        Action = "split"    // the task is too big for one story: it becomes an epic, with Stories
 	AwaitStories Action = "wait"     // for an epic: nothing to do until more of its stories are done
+	FetchFile    Action = "fetch"    // bring a file or folder from a machine into the task's shared files
 )
 
 // DecisionFormat closes every coordinator brief. It is code, not part of the
@@ -83,6 +86,7 @@ const DecisionFormat = "End your reply with exactly one decision: a JSON object,
 	`{"action": "transfer", "team": "<team>", "reason": "<why this task is that team's work>"}` + "\n" +
 	`{"action": "request", "team": "<team>", "request": "<what this task needs from them, and what done looks like>"}` + "\n" +
 	`{"action": "wait"} (for an epic, while its stories run and nothing needs you)` + "\n" +
+	`{"action": "fetch", "machine": "<a machine>", "path": "<the file or folder there>", "as": "<optional: the name to share it by>"}` + "\n" +
 	`{"action": "split", "stories": [{"title": "<the story>", "brief": "<its goal and what done looks like>", "team": "<optional: another team>", "after": [<optional: the stories it builds on: 1 for the first in this list, or an existing story's id>]}]}` + "\n\n" +
 	`Use "transfer" and "request" only with a team named in "Other teams" in this brief.` + "\n\n" +
 	`An "ask" may also carry "options": a short list of answers the user can pick with one click, and "page": ` +
@@ -152,8 +156,12 @@ func (d Decision) check() error {
 	case Split:
 		return checkStories(d.Stories)
 	case AwaitStories:
+	case FetchFile:
+		if d.Machine == "" || d.Path == "" {
+			return errors.New(`a "fetch" decision needs "machine" and "path"`)
+		}
 	default:
-		return fmt.Errorf(`unknown action %q: use "assign", "done", "ask", "transfer", "request", "split" or "wait"`, d.Action)
+		return fmt.Errorf(`unknown action %q: use "assign", "done", "ask", "transfer", "request", "split", "wait" or "fetch"`, d.Action)
 	}
 	return nil
 }

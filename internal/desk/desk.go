@@ -17,7 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 )
 
-// Name is the desk's session name; its tmux server is agentry-desk. Tasks
+// Name is the desk's session name; its session is agentry-desk. Tasks
 // are named task-N, so it never collides with one.
 const Name = "desk"
 
@@ -38,11 +38,11 @@ type Config struct {
 	Theme     string // "light" or "dark": the page's, so Claude's colours suit the terminal
 }
 
-// socket is the desk's tmux server. Tests use their own, so they never
+// socket is the desk's session. Tests use their own, so they never
 // touch a desk you have open.
 var socket = sessions.SocketFor(Name)
 
-// Socket is the desk's tmux server.
+// Socket is the desk's session.
 func Socket() string { return socket }
 
 var (
@@ -69,8 +69,7 @@ func Start(c Config) error {
 	if c.Theme == "" {
 		settings = []byte("{}")
 	}
-	command := []string{"env", "PATH=" + filepath.Dir(c.Binary) + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"claude", "--append-system-prompt", prompt, "--settings", string(settings),
+	command := []string{"claude", "--append-system-prompt", prompt, "--settings", string(settings),
 		// It talks and hands over work; it never changes the code. Only
 		// `agentry task` runs without asking; anything else asks you.
 		"--permission-mode", "default",
@@ -88,10 +87,9 @@ func Start(c Config) error {
 	return sessions.Start(sessions.Spec{
 		Socket: Socket(),
 		Dir:    c.Dir,
-		Env:    map[string]string{EnvServer: c.ServerURL, EnvToken: c.Token},
-		// PATH goes through env in the command: tmux gives a new session the
-		// client's PATH, whatever -e says. This binary comes first, so
-		// `agentry task` is it.
+		// This binary comes first on the PATH, so `agentry task` is it.
+		Env: map[string]string{EnvServer: c.ServerURL, EnvToken: c.Token,
+			"PATH": filepath.Dir(c.Binary) + string(os.PathListSeparator) + os.Getenv("PATH")},
 		Command: command,
 	})
 }

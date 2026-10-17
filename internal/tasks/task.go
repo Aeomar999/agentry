@@ -51,8 +51,15 @@ type Task struct {
 	Stories     []string // for an epic: its stories, in the order they were planned
 	StoriesDone []string // for an epic: the stories whose summary came back
 	Closing     string   // for an epic: the summary its coordinator closes it with, while it asks you to approve
-	storyNews   bool     // a story finished while the coordinator was busy deciding: it hears it next
-	CreatedAt   time.Time
+
+	// Shared files (files.go).
+	Files        map[string]SharedFile
+	FilesVersion int             // goes up with every change to Files
+	Delivered    string          // "machine@version": the folder last made to hold them
+	Fetching     *Fetch          // a fetch the coordinator asked for, on its way
+	collected    map[string]bool // the turns whose folder was read back
+	storyNews    bool            // a story finished while the coordinator was busy deciding: it hears it next
+	CreatedAt    time.Time
 
 	Worktree *Worktree // nil until the worktree is ready
 	Turns    []*Turn   // every agent turn, in order
@@ -218,4 +225,5 @@ type Asked struct {
 	At      time.Time
 	Options []string // answers to pick from; you may still write your own
 	Page    string   // a small HTML page the coordinator wrote to ask it, shown in a sandbox
+	Fetch   *Fetch   // a file to copy from a machine, from outside its worktrees, which you approve
 }

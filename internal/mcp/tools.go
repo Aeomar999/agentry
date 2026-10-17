@@ -29,6 +29,10 @@ type detail struct {
 	task
 	Description, Summary, Coordinator string
 	Trail                             []struct{ From, To, Text string }
+	Shared                            []struct {
+		Name, By, From string
+		Size           int64
+	}
 }
 
 type question struct {
@@ -69,6 +73,10 @@ func (s *Server) tools() []tool {
 			object(props{"tasks": texts("their ids, in the order wanted")}, "tasks"), s.setPriority},
 		{"start", "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
 			object(props{"tasks": texts("their ids")}, "tasks"), s.start},
+		{"attach_file", "Share a file on this machine with a task: its agents find it in .agentry/files, on whichever machine works on it. For data, documents or builds that aren't in git.",
+			object(props{"task": text("its id"), "path": text("the file's path here"), "as": text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), s.attachFile},
+		{"get_file", "Download one of a task's shared files to this machine.",
+			object(props{"task": text("its id"), "name": text("the shared file's name"), "to": text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
 	}
 }
 
@@ -181,6 +189,12 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	if t.Summary != "" {
 		fmt.Fprintf(&b, "\nSummary: %s\n", t.Summary)
 	}
+	if len(t.Shared) > 0 {
+		b.WriteString("\nShared files (get_file downloads one):\n")
+		for _, f := range t.Shared {
+			fmt.Fprintf(&b, "- %s (%d bytes, %s)\n", f.Name, f.Size, firstOf(f.From, f.By))
+		}
+	}
 	if len(t.Trail) > 0 {
 		b.WriteString("\nLatest steps:\n")
 		for _, step := range t.Trail[max(0, len(t.Trail)-8):] {
@@ -244,6 +258,8 @@ func (s *Server) answer(ctx context.Context, arguments json.RawMessage) (string,
 	json.Unmarshal(arguments, &a)
 	if q, ok := s.questionOf(a.Task); ok && closes(q, a.Answer) {
 		return s.closeEpic(ctx, json.RawMessage(fmt.Sprintf(`{"epic": %q}`, a.Task)))
+	} else if ok && copies(q, a.Answer) {
+		return s.approveCopy(ctx, q)
 	}
 	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/answer", map[string]string{"answer": a.Answer}, nil); err != nil {
 		return "", err
@@ -380,6 +396,32 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 // closeEpic is the answer that approves closing an epic (coordinator.CloseEpic).
 const closeEpic = "Close the epic"
 
+// copyFile is the answer that lets a file be copied from outside a
+// machine's worktrees (coordinator.CopyFile).
+const copyFile = "Copy it"
+
+func copies(q question, answer string) bool {
+	return slices.Contains(q.Options, copyFile) && strings.EqualFold(strings.TrimSpace(answer), copyFile)
+}
+
+// approveCopy asks you, in Claude Code, whether to let the file be copied.
+func (s *Server) approveCopy(ctx context.Context, q question) (string, error) {
+	if !s.canElicit {
+		return "Copying a file from outside a machine's worktrees is the user's to allow. Give them this link: " + s.agentry.PageURL("/tasks/"+q.Task), nil
+	}
+	answer, ok, err := s.elicit(ctx, q.Text, object(props{"decision": enum("Copy it into the task's shared files, or not", "copy", "don't copy")}, "decision"))
+	if err != nil {
+		return "", err
+	}
+	if !ok || answer["decision"] != "copy" {
+		return "The user didn't allow it. Send their reason, if they give one, with answer_question.", nil
+	}
+	if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/answer", map[string]string{"answer": copyFile}, nil); err != nil {
+		return "", err
+	}
+	return "The user allowed it: the file is in " + q.Task + "'s shared files.", nil
+}
+
 func closes(q question, answer string) bool {
 	return slices.Contains(q.Options, closeEpic) && strings.EqualFold(strings.TrimSpace(answer), closeEpic)
 }
@@ -457,6 +499,9 @@ func describe(q question) string {
 	if slices.Contains(q.Options, closeEpic) {
 		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", q.Task, q.TaskTitle)
 	}
+	if slices.Contains(q.Options, copyFile) {
+		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, oneLine(q.Text, 200), copyFile)
+	}
 	asker := q.Agent
 	if asker == "coordinator-loop" {
 		asker = "Agentry" // its own stops: a budget, a limit of turns
@@ -507,6 +552,15 @@ func lines[T any](items []T, line func(T) (string, bool)) []string {
 		}
 	}
 	return out
+}
+
+func firstOf(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func oneLine(text string, limit int) string {

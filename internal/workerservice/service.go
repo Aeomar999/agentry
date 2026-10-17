@@ -18,7 +18,7 @@ type Spec struct {
 	Binary string // agentry
 	Dir    string // the worker's folder, passed as -dir
 	Log    string // where its output goes
-	Path   string // the PATH it runs with: the one it was started from, so it finds claude, git and tmux
+	Path   string // the PATH it runs with: the one it was started from, so it finds claude and git
 }
 
 func (s Spec) command() []string { return []string{s.Binary, "worker", "run", "-dir", s.Dir} }
@@ -38,15 +38,17 @@ type Service interface {
 // ForThisMachine picks the service this machine supports.
 func ForThisMachine(dir string) Service {
 	switch {
+	case runtime.GOOS == "windows":
+		return loginTask{background{pidFile: pidFile(dir)}}
 	case runtime.GOOS == "darwin":
 		// launchd won't take an agent from a session with no login, as over
 		// SSH; then it runs in the background, until a start from the Mac
 		// itself sets the agent up.
-		return fallback{first: launchd{}, second: background{pidFile: dir + "/worker.pid"}}
+		return fallback{first: launchd{}, second: background{pidFile: pidFile(dir)}}
 	case hasSystemdUser():
 		return systemd{}
 	default:
-		return background{pidFile: dir + "/worker.pid"}
+		return background{pidFile: pidFile(dir)}
 	}
 }
 

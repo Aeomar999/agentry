@@ -40,11 +40,14 @@ func (claude) Prepare(s Session) error {
 
 // unattended are the settings that keep Claude from stopping to offer or
 // ask things nobody is there to answer. The renderer is chosen, so it never
-// offers the fullscreen one; tips and the feedback survey are off.
+// offers the fullscreen one; tips and the feedback survey are off; and the
+// one-time warning about bypass mode isn't shown, since an agent always
+// runs in it, with Agentry's policy deciding what it may do.
 var unattended = map[string]any{
-	"tui":                "default",
-	"spinnerTipsEnabled": false,
-	"env":                map[string]string{"CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"},
+	"tui":                               "default",
+	"spinnerTipsEnabled":                false,
+	"skipDangerousModePermissionPrompt": true,
+	"env":                               map[string]string{"CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"},
 }
 
 func (claude) Launch(s Session, prompt string) []string {

@@ -27,6 +27,7 @@ type Loop struct {
 	store  *store.Store
 	runner *turns.Runner
 	fleet  *machines.Fleet
+	files  fileWork // shared files being moved (files.go)
 }
 
 var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
@@ -98,6 +99,11 @@ func (l *Loop) act(id string) {
 	if !task.IsDone && task.Worktree == nil && l.blocked(task) {
 		return // it starts from dev once the stories it builds on are in
 	}
+	if task.Fetching != nil && !task.IsDone {
+		fetch := *task.Fetching
+		l.beside(task.ID, func(ctx context.Context) { l.fetch(ctx, task, fetch) })
+		return
+	}
 
 	switch move := Next(task, roster); move.Kind {
 	case PrepareWorktree:
@@ -161,13 +167,21 @@ func (l *Loop) startTurn(task *tasks.Task, roster agents.Roster, move Move) {
 // startOn starts the turn on target, moving the work there first if it is
 // somewhere else.
 func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target machines.Machine) {
+	if last := task.LastEndedTurn(); last != nil && !task.FilesCollected(last.ID) {
+		l.readyForTurn(task, task.Worktree.Worker) // read the last turn's files back where it ran, before the work moves
+		return
+	}
 	if target.Name() != task.Worktree.Worker {
 		l.moveWork(task, target, move.Agent) // when it has moved, the loop comes back here
 		return
 	}
-	brief := workerBrief(task, move.Agent, move.Handoff)
+	if !l.readyForTurn(task, target.Name()) {
+		return // the task's files are on their way: the loop comes back here
+	}
+	shared, _ := l.filesFor(task)
+	brief := workerBrief(task, move.Agent, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines())
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared)
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -244,6 +258,13 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 		l.request(task, roster, coordinator, decision)
 	case Split:
 		l.split(task, roster, coordinator, decision)
+	case FetchFile:
+		machine, ok := l.machineNamed(decision.Machine)
+		if !ok {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "there is no machine called " + decision.Machine})
+			return
+		}
+		l.propose(task.ID, coordinator, events.FileFetching, map[string]any{"machine": machine, "path": decision.Path, "as": decision.As})
 	case AwaitStories:
 		l.propose(task.ID, coordinator, events.EpicWaits, map[string]any{"toYou": decision.ToYou})
 	case Finish:

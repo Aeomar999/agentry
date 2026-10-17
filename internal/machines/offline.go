@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -42,4 +43,15 @@ func (o Offline) Read(context.Context, workspace.Workspace, string) (workspace.C
 	return workspace.Contents{}, o.err()
 }
 func (o Offline) Attach(string, func([]byte)) (terminal.Pane, error) { return nil, o.err() }
-func (o Offline) About(context.Context) (About, error)               { return About{}, o.err() }
+
+func (o Offline) SharedManifest(context.Context, string) ([]sharedfiles.File, error) {
+	return nil, o.err()
+}
+func (o Offline) SharedDeliver(context.Context, string, []sharedfiles.File) error { return o.err() }
+func (o Offline) SharedUpload(context.Context, string, []string) ([]sharedfiles.File, error) {
+	return nil, o.err()
+}
+func (o Offline) SharedFetch(context.Context, string, string, bool) ([]sharedfiles.File, error) {
+	return nil, o.err()
+}
+func (o Offline) About(context.Context) (About, error) { return About{}, o.err() }

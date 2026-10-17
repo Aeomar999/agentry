@@ -1,15 +1,21 @@
-// Package sessions runs each task's agent in its own tmux server, on its own
-// socket, so nothing touches the user's tmux and a crash is visible as a dead
-// pane (proofs 03 and 04).
+// Package sessions runs each task's agent in a session of its own: a
+// terminal that a small host process keeps (host.go), so it runs on when
+// Agentry restarts, a viewer can watch it and take control (package
+// terminal), and a crash is visible as a dead session, its last screen kept
+// (proofs 03 and 04). It works the same on Linux, macOS and Windows.
 package sessions
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
 // The size a session starts at. A viewer can resize it to fit their screen
@@ -19,100 +25,96 @@ const (
 	Rows    = 36
 )
 
-// Pane is the one tmux target each task's server has.
-const Pane = "agent"
-
-// Spec is one agent turn's session.
+// Spec is one session: an agent's turn, the desk, or a Claude beside a task.
 type Spec struct {
-	Socket  string            // the tmux server's socket name, from SocketFor
+	Socket  string            // the session's name, from SocketFor
 	Dir     string            // where the command starts
 	Env     map[string]string // added to the command's environment
 	Command []string
 }
 
+// SocketFor is the name of a task's (or the desk's) session.
 func SocketFor(task string) string { return "agentry-" + task }
 
-// Start replaces whatever the task's server was running with a new session.
-// remain-on-exit is set before the command starts, so even a command that
-// exits at once leaves a dead pane behind instead of vanishing (proof 03).
+// Start replaces whatever the session was running with the command, in a
+// host of its own that outlives this process.
 func Start(spec Spec) error {
 	Stop(spec.Socket)
-	removeStaleSocket(spec.Socket)
-
-	// focus-events lets programs such as Claude Code know when the terminal
-	// has focus; without it they print a notice asking for it.
-	args := []string{"start-server", ";", "set-option", "-g", "remain-on-exit", "on", ";",
-		"set-option", "-g", "focus-events", "on", ";",
-		"new-session", "-d", "-s", Pane, "-x", fmt.Sprint(Columns), "-y", fmt.Sprint(Rows), "-c", spec.Dir}
-	for _, name := range sortedKeys(spec.Env) {
-		args = append(args, "-e", name+"="+spec.Env[name])
+	self, err := os.Executable()
+	if err != nil {
+		return err
 	}
-	args = append(args, spec.Command...)
-	args = append(args, ";", "set-option", "-t", Pane, "window-size", "manual")
-	if _, err := tmux(spec.Socket, args...); err != nil {
+	os.MkdirAll(Dir(), 0o700)
+	log, err := os.Create(filepath.Join(Dir(), spec.Socket+".log"))
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	encoded, _ := json.Marshal(spec)
+	host := exec.Command(self)
+	host.Env = append(os.Environ(), hostEnv+"="+spec.Socket, specEnv+"="+string(encoded))
+	host.Stdout, host.Stderr = log, log
+	procs.Detach(host)
+	if err := host.Start(); err != nil {
 		return fmt.Errorf("starting the session: %w", err)
 	}
-	return nil
+	exited := make(chan struct{})
+	go func() { host.Wait(); close(exited) }()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if Exists(spec.Socket) {
+			return nil
+		}
+		select {
+		case <-exited:
+			said, _ := os.ReadFile(log.Name())
+			return fmt.Errorf("starting the session: %s", strings.TrimSpace(string(said)))
+		default:
+		}
+	}
+	return fmt.Errorf("starting the session: its host didn't answer")
 }
 
-// IsRunning is true while the session exists and its process is alive.
-func IsRunning(socket string) bool {
-	output, err := tmux(socket, "display-message", "-p", "-t", Pane, "#{pane_dead}")
-	return err == nil && output == "0"
+// IsRunning is true while the session exists and its program is alive.
+func IsRunning(name string) bool {
+	a, err := ask(name, request{Op: "status"})
+	return err == nil && a.Alive
 }
 
-// Exists is true while the task's tmux server has the session, alive or dead.
-func Exists(socket string) bool {
-	_, err := tmux(socket, "has-session", "-t", Pane)
+// Exists is true while the session has a host, its program alive or not.
+func Exists(name string) bool {
+	_, err := ask(name, request{Op: "status"})
 	return err == nil
 }
 
 // Screen is the session's visible text, without colours.
-func Screen(socket string) string {
-	output, _ := tmux(socket, "capture-pane", "-p", "-t", Pane)
-	return output
+func Screen(name string) string {
+	a, _ := ask(name, request{Op: "screen"})
+	return a.Text
 }
 
-// Stop ends the task's tmux server and everything in it.
-func Stop(socket string) {
-	tmux(socket, "kill-server")
+// Stop ends the session, its program and everything that started.
+func Stop(name string) {
+	if a, err := ask(name, request{Op: "stop"}); err == nil {
+		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline) && procs.Alive(a.PID); {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	os.Remove(socketPath(name)) // a host that died left it behind
 }
 
-// Running are the tasks whose agent process is alive on this machine, found
-// by their tmux servers' sockets, so a worker that restarts still knows.
+// Running are the tasks whose agent is alive on this machine, found by
+// their sessions' sockets, so a worker that restarts still knows.
 func Running() []string {
-	entries, _ := os.ReadDir(socketDir())
+	entries, _ := os.ReadDir(Dir())
 	var tasks []string
 	for _, entry := range entries {
-		task, ok := strings.CutPrefix(entry.Name(), "agentry-")
-		if ok && IsRunning(entry.Name()) {
+		name, ok := strings.CutSuffix(entry.Name(), ".sock")
+		task, isTask := strings.CutPrefix(name, "agentry-")
+		if ok && isTask && IsRunning(name) {
 			tasks = append(tasks, task)
 		}
 	}
 	return tasks
-}
-
-// removeStaleSocket deletes the socket file a killed tmux server can leave
-// behind; a new server on it dies at once, "server exited unexpectedly" (proof 04).
-func removeStaleSocket(socket string) {
-	os.Remove(filepath.Join(socketDir(), socket))
-}
-
-func socketDir() string {
-	dir := os.Getenv("TMUX_TMPDIR")
-	if dir == "" {
-		dir = "/tmp"
-	}
-	return filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()))
-}
-
-func tmux(socket string, args ...string) (string, error) {
-	output, err := exec.Command("tmux", append([]string{"-L", socket}, args...)...).CombinedOutput()
-	text := strings.TrimSpace(string(output))
-	if err != nil {
-		return text, fmt.Errorf("tmux %s: %v: %s", args[0], err, text)
-	}
-	return text, nil
 }
 
 func sortedKeys(values map[string]string) []string {

@@ -112,7 +112,7 @@ func (v *viewers) typeFrom(viewer *viewer, keys []byte) {
 }
 
 // The sizes a viewer may ask for: big enough to be usable, small enough
-// that a bad request can't make tmux allocate a huge screen.
+// that a bad request can't make the session allocate a huge screen.
 const (
 	minCols, maxCols = 20, 500
 	minRows, maxRows = 5, 200

@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -32,6 +33,7 @@ type Config struct {
 	PublicURL string             // the address people and workers reach; "" for the one a request came to
 	Binary    string             // this agentry, which a joining machine can download
 	Local     workers.Machine    // what this machine is, as a worker would say it, for the Workers page
+	Blobs     sharedfiles.Disk   // where tasks' shared files are kept
 }
 
 // PolicySource is the policy in force and any problem with the file on disk.
@@ -68,6 +70,10 @@ func (s *Server) Handler() http.Handler {
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)
+	deskToo("GET /api/tasks/{task}/shared", s.listShared)
+	deskToo("GET /api/tasks/{task}/shared/file", s.downloadShared)
+	deskToo("POST /api/tasks/{task}/shared", s.uploadShared)
+	api("DELETE /api/tasks/{task}/shared", s.removeShared)
 	api("PUT /api/tasks/{task}/labels", s.label)
 	api("PUT /api/tasks/{task}/budget", s.setBudget)
 	api("PUT /api/tasks/{task}/repo", s.changeRepo)
@@ -102,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	api("DELETE /api/integrations/connections/{id}", s.revokeConnection)
 	// A machine connecting its Claude Code, with its install command's code.
 	mux.HandleFunc("GET /integrations/claude-code.sh", s.claudeCodeScript)
+	mux.HandleFunc("GET /integrations/claude-code.ps1", s.claudeCodeWindowsScript)
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
 	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
@@ -111,6 +118,7 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Workers != nil {
 		// A machine joining: with its code, then with the credential it got.
 		mux.HandleFunc("GET /worker/install.sh", s.installScript)
+		mux.HandleFunc("GET /worker/install.ps1", s.installWindowsScript)
 		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
 		mux.HandleFunc("POST /api/worker/join", s.join)
 		worker := func(pattern string, handler func(http.ResponseWriter, *http.Request, workers.Worker)) {
@@ -123,6 +131,9 @@ func (s *Server) Handler() http.Handler {
 		worker("POST "+workerlink.GitPath+"{task}/bundle", s.receiveBundle)
 		worker("GET "+workerlink.UpdatePath, s.updateBinary)
 		worker("POST "+workerlink.LeavePath, s.leave)
+		worker("HEAD "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
+		worker("GET "+sharedfiles.BlobsPath+"/{hash}", s.blobFor)
+		worker("POST "+sharedfiles.BlobsPath, s.blobFrom)
 	}
 	if s.config.Helper != nil {
 		mux.Handle("GET /api/tasks/{task}/claude/terminal", s.requireUI(s.config.Helper.ServeHTTP))

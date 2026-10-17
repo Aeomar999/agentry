@@ -4,7 +4,7 @@ import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Banner } from "@/components/molecules/Banner";
-import { CommandLine } from "@/components/molecules/CommandLine";
+import { InstallCommand } from "@/components/molecules/InstallCommand";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
@@ -46,7 +46,7 @@ export function IntegrationsPage() {
 
 function ClaudeCode({ connections, onChanged }: { connections: Connection[]; onChanged: () => void }) {
   const notify = useToast();
-  const [invite, setInvite] = useState<{ command: string; expires: string } | null>(null);
+  const [invite, setInvite] = useState<{ command: string; windowsCommand: string; expires: string } | null>(null);
   const [error, setError] = useState("");
   const before = useRef<Set<string> | null>(null);
   const joined = invite && before.current ? connections.find((c) => !before.current!.has(c.id)) : undefined;
@@ -121,7 +121,7 @@ function ClaudeCode({ connections, onChanged }: { connections: Connection[]; onC
             ) : invite ? (
               <>
                 <p>Run this in a terminal on the machine. It installs agentry, connects it and sets up Claude Code.</p>
-                <CommandLine command={invite.command} />
+                <InstallCommand command={invite.command} windowsCommand={invite.windowsCommand} />
                 <p className="text-[12px] text-ink-muted">
                   It works once, until {clockTime(invite.expires)}, and holds no password: the machine gets its own credential, which you
                   can revoke here.

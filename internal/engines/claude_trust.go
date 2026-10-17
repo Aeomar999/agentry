@@ -44,15 +44,20 @@ func trustFolder(dir string) error {
 		projects = map[string]any{}
 		config["projects"] = projects
 	}
-	project, _ := projects[dir].(map[string]any)
-	if project == nil {
-		project = map[string]any{}
-		projects[dir] = project
+	changed := false
+	for _, key := range folderKeys(dir) {
+		project, _ := projects[key].(map[string]any)
+		if project == nil {
+			project = map[string]any{}
+			projects[key] = project
+		}
+		if project["hasTrustDialogAccepted"] != true {
+			project["hasTrustDialogAccepted"], changed = true, true
+		}
 	}
-	if project["hasTrustDialogAccepted"] == true {
+	if !changed {
 		return nil
 	}
-	project["hasTrustDialogAccepted"] = true
 
 	// Written whole and moved into place, so Claude never reads half a file.
 	updated, err := json.MarshalIndent(config, "", "  ")
@@ -65,6 +70,15 @@ func trustFolder(dir string) error {
 		return err
 	}
 	return os.Rename(temporary, path)
+}
+
+// folderKeys are the ways Claude may name dir in its config. On Windows it
+// writes C:/Users/…, with forward slashes; both forms are trusted.
+func folderKeys(dir string) []string {
+	if slashed := filepath.ToSlash(dir); slashed != dir {
+		return []string{dir, slashed}
+	}
+	return []string{dir}
 }
 
 // TrustFolder trusts dir for a Claude session that isn't an agent's turn,

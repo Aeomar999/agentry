@@ -52,16 +52,28 @@ func parsePayload(payload []byte) (hookPayload, error) {
 // command, or the file path for file tools.
 func commandOf(toolInput json.RawMessage) string {
 	var input struct {
-		Command  string `json:"command"`
-		FilePath string `json:"file_path"`
-		Path     string `json:"path"`
-		Pattern  string `json:"pattern"`
+		Command      string `json:"command"`
+		FilePath     string `json:"file_path"`
+		NotebookPath string `json:"notebook_path"`
+		Path         string `json:"path"`
+		Pattern      string `json:"pattern"`
+		URL          string `json:"url"`
+		Query        string `json:"query"`
+		Prompt       string `json:"prompt"`
 	}
 	json.Unmarshal(toolInput, &input)
-	for _, value := range []string{input.Command, input.FilePath, input.Path, input.Pattern} {
+	for _, value := range []string{input.Command, input.FilePath, input.NotebookPath, input.Path, input.Pattern, input.URL} {
 		if value != "" {
 			return value
 		}
+	}
+	// Not a path: labelled, so the policy never takes it for one, and two
+	// different searches never look like the same command.
+	switch {
+	case input.Query != "":
+		return "search: " + input.Query
+	case input.Prompt != "":
+		return "prompt: " + input.Prompt
 	}
 	return ""
 }

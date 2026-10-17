@@ -295,6 +295,10 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	reply(w, detail)
 }
 
+// answer sends your answer to the coordinator's question. Two answers are
+// approvals, which only you give, on the page (or through Claude Code, which
+// asks you itself): closing an epic, and copying a file from outside a
+// machine's worktrees. The desk passes on what you say, and approves nothing.
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Answer string }
 	if !decode(w, r, &request) {
@@ -302,19 +306,39 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	}
 	answer := strings.TrimSpace(request.Answer)
 	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil || task.Closing == "" || !strings.EqualFold(answer, coordinator.CloseEpic) {
+	closes := err == nil && task != nil && task.Closing != "" && strings.EqualFold(answer, coordinator.CloseEpic)
+	copies := err == nil && task != nil && task.Asked.Fetch != nil && strings.EqualFold(answer, coordinator.CopyFile)
+	switch {
+	case !closes && !copies:
 		s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+	case !s.carriesUIToken(r):
+		http.Error(w, "that is approved on the page", http.StatusForbidden)
+	case closes:
+		// One event, the answer and the close together: an answer alone
+		// would start the coordinator's next turn.
+		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
+	default:
+		s.copyApproved(w, r, task.ID, *task.Asked.Fetch)
+	}
+}
+
+// copyApproved copies the file you allowed, and answers with it.
+func (s *Server) copyApproved(w http.ResponseWriter, r *http.Request, id string, f tasks.Fetch) {
+	if s.config.Fleet == nil {
+		http.Error(w, "this server has no machines to copy from", http.StatusConflict)
 		return
 	}
-	// Closing an epic is yours to approve, on the page: the desk passes on
-	// what you say, and doesn't approve for you.
-	if !s.carriesUIToken(r) {
-		http.Error(w, "closing an epic is approved on the page", http.StatusForbidden)
+	m, online := s.config.Fleet.Get(f.Machine)
+	if !online {
+		http.Error(w, f.Machine+" is offline; answer again once it is back", http.StatusConflict)
 		return
 	}
-	// One event, the answer and the close together: an answer alone would
-	// start the coordinator's next turn.
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
+	files, err := m.SharedFetch(r.Context(), f.Path, f.As, true)
+	if err != nil {
+		http.Error(w, "copying "+f.Machine+":"+f.Path+": "+err.Error(), http.StatusConflict)
+		return
+	}
+	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.FilesFetched, Data: coordinator.Fetched(f, files, true)})
 }
 
 func (s *Server) approve(w http.ResponseWriter, r *http.Request) {

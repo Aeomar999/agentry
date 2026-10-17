@@ -58,6 +58,7 @@ type taskDetail struct {
 	TeamChosen  bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
 	EpicTitle   string        `json:"epicTitle"`  // a story's epic's
 	StoryList   []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
+	Shared      []sharedFile  `json:"shared"`     // its shared files
 	MovingTo    string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
 	Summary     string        `json:"summary"`
 	Worktree    *worktree     `json:"worktree"`
@@ -177,6 +178,10 @@ func stageOf(t *tasks.Task) string {
 func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
+	detail.Shared = []sharedFile{}
+	for _, f := range t.SharedFiles() {
+		detail.Shared = append(detail.Shared, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})
+	}
 	if w := t.Worktree; w != nil {
 		detail.Worktree = &worktree{Worker: w.Worker, Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}

@@ -55,6 +55,12 @@ export function chatOf(task: TaskDetail): ChatItem[] {
       case "task.epic_waits":
         reply();
         break;
+      case "file.fetching":
+        said("note", `Fetching ${text(e, "machine")}:${text(e, "path")} into the task's shared files.`, { who: "agentry" });
+        break;
+      case "files.fetched":
+        said("note", `Copied ${text(e, "from")} into the task's shared files.`, { who: "agentry" });
+        break;
       case "task.story_done":
         said("report", `${text(e, "story")} is done: ${text(e, "summary")}`, { who: text(e, "coordinator") });
         break;

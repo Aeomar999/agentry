@@ -183,7 +183,7 @@ func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 }
 
 func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
-	if closeEpic != coordinator.CloseEpic {
-		t.Errorf("the close answer is %q here and %q in the coordinator", closeEpic, coordinator.CloseEpic)
+	if closeEpic != coordinator.CloseEpic || copyFile != coordinator.CopyFile {
+		t.Errorf("the approving answers differ: %q/%q here, %q/%q in the coordinator", closeEpic, copyFile, coordinator.CloseEpic, coordinator.CopyFile)
 	}
 }

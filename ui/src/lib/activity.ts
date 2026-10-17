@@ -253,6 +253,17 @@ function rowOf(
       return { ...base, kind: "note", title: `${text(e, "story")} is done, from ${text(e, "coordinator")}`, body: text(e, "summary") };
     case "task.request_answered":
       return { ...base, kind: "note", title: `${text(e, "child")} is done, from ${text(e, "coordinator")}`, body: text(e, "summary") };
+    case "file.added":
+      return { ...base, kind: "note", title: `Shared ${text(e, "name")}${text(e, "by") === "you" ? "" : `, left by ${text(e, "by")}`}` };
+    case "file.removed":
+      return { ...base, kind: "note", title: `Stopped sharing ${text(e, "name")}` };
+    case "file.fetching":
+      return { ...base, kind: "note", title: `Fetching ${text(e, "machine")}:${text(e, "path")} into the shared files` };
+    case "files.fetched":
+      return { ...base, kind: "note", title: `Copied ${text(e, "from")} into the shared files` };
+    case "files.collected":
+    case "files.delivered":
+      return null; // the folder kept in step: what changed shows as file.added and file.removed
     case "task.repo_changed":
       return { ...base, kind: "note", title: `You moved the task to the repo at ${text(e, "repo")}` };
     case "worktree.ready":

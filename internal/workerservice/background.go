@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
 // background is a plain background process, for machines with neither
@@ -29,7 +30,7 @@ func (b background) Start(spec Spec) error {
 	process := exec.Command(command[0], command[1:]...)
 	process.Env = append(os.Environ(), "PATH="+spec.Path)
 	process.Stdout, process.Stderr = log, log
-	process.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // out of this shell's session, so it outlives it
+	procs.Detach(process) // out of this shell's session, so it outlives it
 	if err := process.Start(); err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func (b background) Stop() error {
 	if !ok {
 		return nil
 	}
-	process.Signal(syscall.SIGTERM)
+	procs.Terminate(process)
 	for i := 0; i < 50 && b.Running(); i++ {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -57,7 +58,7 @@ func (b background) Stop() error {
 
 func (b background) Running() bool {
 	process, ok := b.process()
-	return ok && process.Signal(syscall.Signal(0)) == nil
+	return ok && procs.Alive(process.Pid)
 }
 
 func (b background) Remove() error { return b.Stop() }

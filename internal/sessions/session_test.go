@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -37,11 +38,23 @@ func TestASessionRunsWithItsEnvironmentAndShowsACrash(t *testing.T) {
 		t.Errorf("running %v, screen %q", IsRunning(socket), Screen(socket))
 	}
 
-	// Kill the process, not the session: the pane stays, dead (proof 03).
-	tmux(socket, "send-keys", "-t", Pane, "C-c")
-	waitFor(t, "the pane to die", func() bool { return !IsRunning(socket) })
-	if !Exists(socket) {
-		t.Error("with remain-on-exit the dead pane should still exist")
+	// Kill the program, not the session: the session stays, dead, with its
+	// last screen (proof 03).
+	died := make(chan struct{}, 1)
+	watch, err := Attach(socket, func([]byte) {}, func() { died <- struct{}{} })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watch.Close()
+	watch.Type([]byte{3}) // Ctrl-C
+	waitFor(t, "the program to die", func() bool { return !IsRunning(socket) })
+	select {
+	case <-died:
+	case <-time.After(5 * time.Second):
+		t.Error("the watch wasn't told the program died")
+	}
+	if !Exists(socket) || !strings.Contains(Screen(socket), "task=task-1") {
+		t.Errorf("the dead session should still exist with its screen: %q", Screen(socket))
 	}
 }
 
@@ -56,10 +69,10 @@ func TestStartReplacesTheTurnBefore(t *testing.T) {
 	}
 }
 
-// Proof 04: a socket file left by a killed server makes the next one die.
+// Proof 04: a socket file left by a killed host doesn't stop the next.
 func TestAStaleSocketIsRemoved(t *testing.T) {
 	socket, dir := testSocket(t), t.TempDir()
-	stale := filepath.Join("/tmp", fmt.Sprintf("tmux-%d", os.Getuid()), socket)
+	stale := socketPath(socket)
 	os.MkdirAll(filepath.Dir(stale), 0o700)
 	if err := os.WriteFile(stale, nil, 0o600); err != nil {
 		t.Skip("can't write a stale socket:", err)
@@ -73,5 +86,31 @@ func TestNoServerMeansNotRunning(t *testing.T) {
 	socket := testSocket(t)
 	if IsRunning(socket) || Exists(socket) {
 		t.Error("a socket with no server is neither running nor existing")
+	}
+}
+
+// A session outlives the program that started it, sizes like a terminal,
+// and its snapshot carries colours and the cursor.
+func TestASessionResizesAndSnapshots(t *testing.T) {
+	socket, dir := testSocket(t), t.TempDir()
+	if err := Start(Spec{Socket: socket, Dir: dir, Command: []string{"sh", "-c", `printf '\033[31mred\033[0m\n'; while true; do stty size; sleep 0.2; done`}}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the size", func() bool { return strings.Contains(Screen(socket), "36 120") })
+	watch, err := Attach(socket, func([]byte) {}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watch.Close()
+	watch.Resize(100, 30)
+	waitFor(t, "the new size", func() bool { return strings.Contains(Screen(socket), "30 100") })
+	if cols, rows := Size(socket); cols != 100 || rows != 30 {
+		t.Errorf("size %dx%d", cols, rows)
+	}
+	if snapshot := string(Snapshot(socket)); !strings.Contains(snapshot, "red") || !strings.Contains(snapshot, "\x1b[") {
+		t.Errorf("the snapshot should keep the colours: %q", snapshot)
+	}
+	if !slices.Contains(Running(), strings.TrimPrefix(socket, "agentry-")) {
+		t.Errorf("running: %v", Running())
 	}
 }

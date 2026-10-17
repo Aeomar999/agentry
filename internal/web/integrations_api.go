@@ -19,26 +19,29 @@ import (
 //go:embed claude-code.sh
 var claudeCodeTemplate string
 
+//go:embed claude-code.ps1
+var claudeCodeWindowsTemplate string
+
+const unknownInstallCode = "That install command is unknown, used or expired. Make a new one on the Integrations page."
+
 // inviteClaudeCode makes a one-time install command.
 func (s *Server) inviteClaudeCode(w http.ResponseWriter, r *http.Request) {
 	code, invited := connections.Invite(you, time.Now())
 	if !s.proposeOrRefuse(w, invited) {
 		return
 	}
-	script := s.publicURL(r) + "/integrations/claude-code.sh?code=" + code
-	reply(w, map[string]any{"command": "curl -fsSL '" + script + "' | sh", "expires": time.Now().Add(connections.InviteLifetime)})
+	answer := commands(s.publicURL(r), "/integrations/claude-code", code)
+	answer["expires"] = time.Now().Add(connections.InviteLifetime)
+	reply(w, answer)
 }
 
-// claudeCodeScript is the install script, with this server and the code in
-// it. Anyone can fetch it, but it does nothing without a code that works.
+// claudeCodeScript is the install script: for sh, or for PowerShell on Windows.
 func (s *Server) claudeCodeScript(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if !s.connectionCodeWorks(code) {
-		http.Error(w, "echo 'That install command is unknown, used or expired. Make a new one on the Integrations page.' >&2; exit 1", http.StatusUnauthorized)
-		return
-	}
-	w.Header().Set("Content-Type", "text/x-shellscript")
-	w.Write([]byte(strings.NewReplacer("{{SERVER}}", shellQuoted(s.publicURL(r)), "{{CODE}}", shellQuoted(code)).Replace(claudeCodeTemplate)))
+	s.serveScript(w, r, shScript(claudeCodeTemplate), s.connectionCodeWorks, unknownInstallCode)
+}
+
+func (s *Server) claudeCodeWindowsScript(w http.ResponseWriter, r *http.Request) {
+	s.serveScript(w, r, powerShellScript(claudeCodeWindowsTemplate), s.connectionCodeWorks, unknownInstallCode)
 }
 
 // integrationBinary sends agentry for the machine, for a code that works.

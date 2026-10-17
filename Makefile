@@ -14,7 +14,7 @@ build:
 
 # The builds a machine downloads, next to bin/agentry, for the kinds of
 # machine the server isn't: joining as a worker, or connecting Claude Code.
-WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
+WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64
 
 workers:
 	for p in $(WORKER_PLATFORMS); do \

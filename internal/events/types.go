@@ -39,8 +39,16 @@ const (
 	EpicLeft        Type = "task.epic_left"        // you took the task out of its epic
 	StoryAdded      Type = "task.story_added"      // you added a task of yours to the epic, as a story
 	StoryRemoved    Type = "task.story_removed"    // you took a story out of the epic
-	WorktreeReady   Type = "worktree.ready"
-	WorktreeMoved   Type = "worktree.moved" // the task's work went to another machine, for the agent working next
+
+	// A task's shared files (package sharedfiles).
+	FileAdded      Type = "file.added"      // a file shared with the task, or a new version of one: yours, or from a turn's folder
+	FileRemoved    Type = "file.removed"    // a file no longer shared with it
+	FilesCollected Type = "files.collected" // a turn's folder was read back: what it changed is in file.added and file.removed
+	FilesDelivered Type = "files.delivered" // a machine's folder holds the task's files as they are now
+	FileFetching   Type = "file.fetching"   // the coordinator asked for a file from a machine; it is coming
+	FilesFetched   Type = "files.fetched"   // it came: a file, or a folder's files
+	WorktreeReady  Type = "worktree.ready"
+	WorktreeMoved  Type = "worktree.moved" // the task's work went to another machine, for the agent working next
 
 	TaskAssigned       Type = "task.assigned" // the coordinator hands the task to an agent
 	TurnStarted        Type = "turn.started"  // an agent's session started, with its prompt

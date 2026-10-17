@@ -95,7 +95,27 @@ func (w *Worker) replace(ctx context.Context, self string) (bool, error) {
 		os.Remove(next)
 		return false, err
 	}
-	return true, os.Rename(next, self)
+	return true, swap(next, self)
+}
+
+// swap puts the new agentry at self. Windows won't replace a program while
+// it runs, but lets it be moved aside: the old one goes to self.old, and
+// the next update removes it.
+func swap(next, self string) error {
+	if runtime.GOOS != "windows" {
+		return os.Rename(next, self)
+	}
+	old := self + ".old"
+	os.Remove(old)
+	if err := os.Rename(self, old); err != nil {
+		os.Remove(next)
+		return err
+	}
+	if err := os.Rename(next, self); err != nil {
+		os.Rename(old, self)
+		return err
+	}
+	return nil
 }
 
 func fileHash(path string) (string, error) {

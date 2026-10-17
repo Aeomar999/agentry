@@ -14,13 +14,14 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// The whole loop on a real store, tmux and git, with a fake `claude` that
+// The whole loop on a real store, real sessions and git, with a fake `claude` that
 // just waits. The test plays the agents: it ends each turn with a report,
 // the way the Stop hook would.
 func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
@@ -238,6 +239,7 @@ func readBrief(t *testing.T, task *tasks.Task, turn string) string {
 
 // newLoop is a loop with this machine only, its worktrees in root.
 func newLoop(s *store.Store, root string) *Loop {
-	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root})
+	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root,
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
 	return NewLoop(s, turns.NewRunner(s, fleet, turns.Config{}), fleet)
 }

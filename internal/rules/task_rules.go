@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -36,6 +37,13 @@ var taskRules = map[events.Type]rule{
 	events.EpicLeft:        all(inThatEpic),
 	events.StoryAdded:      all(anEpic, notItsStoryYet),
 	events.StoryRemoved:    all(itsStory),
+
+	events.FileAdded:      all(aSharedFileName, aFileHash),
+	events.FileRemoved:    all(aSharedFile),
+	events.FilesCollected: all(anEndedTurn, notCollectedYet),
+	events.FilesDelivered: all(),
+	events.FileFetching:   all(byTheCoordinator, noOpenTurn, noQuestionOpen, notFetchingAlready),
+	events.FilesFetched:   all(approvedIfAnswer),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -380,6 +388,58 @@ func noQuestionOpen(t *tasks.Task, _ events.Proposal) string {
 func questionOpen(t *tasks.Task, _ events.Proposal) string {
 	if t.Question == "" {
 		return "the task isn't waiting for an answer"
+	}
+	return ""
+}
+
+// ---- shared files ---------------------------------------------------------------
+
+func aSharedFileName(_ *tasks.Task, p events.Proposal) string {
+	if name, err := sharedfiles.CleanName(p.Text("name")); err != nil || name != p.Text("name") {
+		return "not a shared file's name: " + p.Text("name")
+	}
+	return ""
+}
+
+func aFileHash(_ *tasks.Task, p events.Proposal) string {
+	if hash := p.Text("hash"); len(hash) != 64 || strings.Trim(hash, "0123456789abcdef") != "" {
+		return "not a file's hash"
+	}
+	return ""
+}
+
+func aSharedFile(t *tasks.Task, p events.Proposal) string {
+	if _, ok := t.Files[p.Text("name")]; !ok {
+		return "the task has no shared file " + p.Text("name")
+	}
+	return ""
+}
+
+func anEndedTurn(t *tasks.Task, p events.Proposal) string {
+	if turn := t.Turn(p.Text("turn")); turn == nil || !turn.Ended {
+		return p.Text("turn") + " isn't a turn that has ended"
+	}
+	return ""
+}
+
+func notCollectedYet(t *tasks.Task, p events.Proposal) string {
+	if t.FilesCollected(p.Text("turn")) {
+		return p.Text("turn") + "'s files were read back already"
+	}
+	return ""
+}
+
+func notFetchingAlready(t *tasks.Task, _ events.Proposal) string {
+	if t.Fetching != nil {
+		return "a file is on its way already: " + t.Fetching.Machine + ":" + t.Fetching.Path
+	}
+	return ""
+}
+
+// approvedIfAnswer: a fetch you approved answers the question that asked.
+func approvedIfAnswer(t *tasks.Task, p events.Proposal) string {
+	if p.Flag("answers") && (t.Question == "" || t.Asked.Fetch == nil) {
+		return "no fetch waits for your approval"
 	}
 	return ""
 }

@@ -126,7 +126,9 @@ func runningTool(task *tasks.Task, turn *tasks.Turn) *tasks.Action {
 }
 
 // repeatedCommand is the turn's last command and how many times in a row it
-// was requested. It compares the command itself, never its description (proof 03).
+// was requested. It compares the tool and the command itself, never its
+// description (proof 03). A call whose command Agentry can't read says
+// nothing about a loop, so it is never counted as a repeat.
 func repeatedCommand(task *tasks.Task, turn *tasks.Turn) (string, int) {
 	var last string
 	times := 0
@@ -134,10 +136,14 @@ func repeatedCommand(task *tasks.Task, turn *tasks.Turn) (string, int) {
 		if action.Turn != turn.ID {
 			continue
 		}
-		if action.Command == last {
+		call := action.Tool + ": " + action.Command
+		switch {
+		case action.Command == "":
+			last, times = "", 0
+		case call == last:
 			times++
-		} else {
-			last, times = action.Command, 1
+		default:
+			last, times = call, 1
 		}
 	}
 	return last, times

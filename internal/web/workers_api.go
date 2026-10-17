@@ -137,9 +137,9 @@ func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
 		failed(w, firstError(err, rejection))
 		return
 	}
-	install := s.publicURL(r) + "/worker/install.sh?code=" + code
-	reply(w, map[string]any{"code": code, "expires": time.Now().Add(workers.InviteLifetime),
-		"command": "curl -fsSL '" + install + "' | sh"})
+	answer := commands(s.publicURL(r), "/worker/install", code)
+	answer["code"], answer["expires"] = code, time.Now().Add(workers.InviteLifetime)
+	reply(w, answer)
 }
 
 func (s *Server) removeWorker(w http.ResponseWriter, r *http.Request) {
@@ -255,17 +255,19 @@ func (s *Server) workerStream(w http.ResponseWriter, r *http.Request, worker wor
 //go:embed install.sh
 var installTemplate string
 
-// installScript is the script the join command pipes to sh, with the code
-// in it. Anyone can fetch it, but it does nothing without a code that works.
+//go:embed install.ps1
+var installWindowsTemplate string
+
+const unknownJoinCode = "That join code is unknown, used or expired. Make a new one on the Workers page."
+
+// installScript is the script the join command runs: for sh, or for
+// PowerShell on Windows.
 func (s *Server) installScript(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if !s.codeWorks(code) {
-		http.Error(w, "echo 'That join code is unknown, used or expired. Make a new one on the Workers page.' >&2; exit 1", http.StatusUnauthorized)
-		return
-	}
-	w.Header().Set("Content-Type", "text/x-shellscript")
-	script := strings.NewReplacer("{{SERVER}}", shellQuoted(s.publicURL(r)), "{{CODE}}", shellQuoted(code)).Replace(installTemplate)
-	w.Write([]byte(script))
+	s.serveScript(w, r, shScript(installTemplate), s.codeWorks, unknownJoinCode)
+}
+
+func (s *Server) installWindowsScript(w http.ResponseWriter, r *http.Request) {
+	s.serveScript(w, r, powerShellScript(installWindowsTemplate), s.codeWorks, unknownJoinCode)
 }
 
 // downloadBinary sends agentry for the joining machine's kind, for a code

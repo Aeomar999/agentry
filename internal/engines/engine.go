@@ -12,7 +12,7 @@ type Engine interface {
 	// Prepare writes the engine's hook configuration for a session.
 	Prepare(s Session) error
 
-	// Launch is the command to run in the session's tmux pane, in never-ask
+	// Launch is the command to run in the session's terminal, in never-ask
 	// mode so Agentry's gate is the only one, starting on the given prompt.
 	Launch(s Session, prompt string) []string
 

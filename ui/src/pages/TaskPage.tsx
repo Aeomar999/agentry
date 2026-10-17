@@ -30,6 +30,7 @@ import { HandoffPath } from "@/components/molecules/HandoffPath";
 import { terminalURL } from "@/api/client";
 import { StoryTable } from "@/components/organisms/StoryTable";
 import { EpicPicker } from "@/components/organisms/EpicPicker";
+import { SharedFiles } from "@/components/organisms/SharedFiles";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 import { waitingLine } from "@/lib/epics";
 import type { Action, Agent, LogEvent, TaskDetail, Turn } from "@/api/types";
@@ -124,7 +125,7 @@ const TURN_COLUMNS: Column<Turn>[] = [
 ];
 
 // Most used first: talk to the coordinator, watch the work, then the records.
-const TABS = ["stories", "coordinator", "activity", "terminal", "handoffs", "actions", "events", "details"] as const;
+const TABS = ["stories", "coordinator", "activity", "terminal", "files", "handoffs", "actions", "events", "details"] as const;
 type TabId = (typeof TABS)[number];
 
 export function TaskPage() {
@@ -322,6 +323,7 @@ export function TaskPage() {
                 },
                 { id: "activity", label: "Activity", count: items.length, live: Boolean(now) },
                 { id: "terminal", label: "Terminal", live: Boolean(working) },
+                { id: "files", label: "Files", count: task.shared?.length ?? 0 },
                 { id: "handoffs", label: "Handoffs", count: task.trail?.length ?? 0 },
                 { id: "actions", label: "Actions", count: actions.length },
                 { id: "events", label: "Events", count: task.events?.length ?? 0 },
@@ -350,6 +352,7 @@ export function TaskPage() {
               </Scroll>
             )}
             {tab === "stories" && <StoryTable epic={task} onChanged={reload} />}
+            {tab === "files" && <SharedFiles task={task.id} files={task.shared ?? []} onChanged={reload} />}
             {tab === "coordinator" && <CoordinatorChat task={task} onSent={reload} />}
             {tab === "activity" && (
               <ActivityFeed

@@ -1,3 +1,4 @@
+import type { SharedFile } from "@/lib/shared";
 // The JSON `agentry serve` answers with, as defined in internal/web/views.go.
 
 export type TaskStatus = "working" | "needs you" | "done" | "held";
@@ -39,6 +40,7 @@ export interface TaskDetail extends TaskSummary {
   teamChosen: boolean; // false: its coordinator may still pass it to the right team
   epicTitle: string; // a story's epic's
   storyList: TaskSummary[]; // an epic's stories, in the order they were planned
+  shared: SharedFile[]; // its shared files
   movingTo: string; // the repo it moves to when the turn in progress ends
   summary: string;
   worktree: Worktree | null;
@@ -213,7 +215,8 @@ export interface WorkerDetail {
 export interface Invite {
   code: string;
   expires: string;
-  command: string; // what to run on the other machine
+  command: string; // what to run on the other machine: macOS and Linux
+  windowsCommand: string; // the same, for Windows (PowerShell)
 }
 
 export interface CreatedEvent {

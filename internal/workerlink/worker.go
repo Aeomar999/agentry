@@ -191,6 +191,25 @@ func (w *Worker) handle(ctx context.Context, method string, params json.RawMessa
 		return m.Read(ctx, request.Workspace, request.Path)
 	case methodAbout:
 		return m.About(ctx)
+	case methodSharedManifest, methodSharedDeliver, methodSharedUpload:
+		var request sharedIn
+		if err := json.Unmarshal(params, &request); err != nil {
+			return nil, err
+		}
+		switch method {
+		case methodSharedManifest:
+			return m.SharedManifest(ctx, request.Worktree)
+		case methodSharedDeliver:
+			return nil, m.SharedDeliver(ctx, request.Worktree, request.Files)
+		}
+		return m.SharedUpload(ctx, request.Worktree, request.Names)
+	case methodSharedFetch:
+		var request sharedFetch
+		if err := json.Unmarshal(params, &request); err != nil {
+			return nil, err
+		}
+		w.Log("sending %s to the server, as a shared file", request.Path)
+		return m.SharedFetch(ctx, request.Path, request.As, request.Anywhere)
 	case methodAttach:
 		var request attach
 		if err := json.Unmarshal(params, &request); err != nil {

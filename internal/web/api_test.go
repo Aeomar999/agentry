@@ -20,6 +20,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -36,7 +37,8 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/src/app"}, hooks, nil).Handler())
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/src/app",
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }
@@ -781,5 +783,68 @@ func TestClaudeCodeConnectsFromTheIntegrationsPage(t *testing.T) {
 	}
 	if code := asConnection(); code != http.StatusUnauthorized {
 		t.Errorf("a revoked credential still works: %d", code)
+	}
+}
+
+// Windows gets PowerShell versions of both install commands, with the
+// server and the code quoted for PowerShell.
+func TestInstallCommandsForWindows(t *testing.T) {
+	server, _ := newTestServer(t)
+	for _, c := range []struct{ invite, script, from string }{
+		{"/api/integrations/claude-code", "/integrations/claude-code.ps1", "/integrations/agentry?code="},
+	} {
+		_, body := call(t, server, "POST", c.invite, "")
+		var invite struct{ Command, WindowsCommand string }
+		json.Unmarshal([]byte(body), &invite)
+		if !strings.HasPrefix(invite.WindowsCommand, "irm '") || !strings.HasSuffix(invite.WindowsCommand, "' | iex") || !strings.Contains(invite.WindowsCommand, c.script+"?code=") {
+			t.Fatalf("windows command: %q", invite.WindowsCommand)
+		}
+		code := invite.WindowsCommand[strings.Index(invite.WindowsCommand, "code=")+5 : strings.Index(invite.WindowsCommand, "' | iex")]
+		response, err := http.Get(server.URL + c.script + "?code=" + code)
+		if err != nil || response.StatusCode != 200 {
+			t.Fatalf("script: %v %v", err, response.StatusCode)
+		}
+		script, _ := io.ReadAll(response.Body)
+		if !strings.Contains(string(script), "$code = '"+code+"'") || !strings.Contains(string(script), c.from) {
+			t.Errorf("the script should carry its code, quoted for PowerShell:\n%s", script)
+		}
+		if response, _ := http.Get(server.URL + c.script + "?code=wrong"); response.StatusCode != http.StatusUnauthorized {
+			t.Errorf("a wrong code got a script: %d", response.StatusCode)
+		}
+	}
+	if got := powerShellQuoted("it's"); got != "'it''s'" {
+		t.Errorf("quoted %q", got)
+	}
+}
+
+// You share files with a task, download them, and take them away.
+func TestYouShareFilesWithATask(t *testing.T) {
+	server, _ := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Crunch the numbers"}`)
+	request, _ := http.NewRequest("POST", server.URL+"/api/tasks/task-1/shared?name=data/sales.csv", strings.NewReader("a,b\n1,2\n"))
+	request.Header.Set("Authorization", "Bearer "+token)
+	if response, err := http.DefaultClient.Do(request); err != nil || response.StatusCode != 200 {
+		t.Fatalf("upload: %v %v", err, response.StatusCode)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1/shared", "")
+	if !strings.Contains(body, `"name":"data/sales.csv"`) || !strings.Contains(body, `"size":8`) || !strings.Contains(body, `"by":"you"`) {
+		t.Errorf("list: %s", body)
+	}
+	if _, body := call(t, server, "GET", "/api/tasks/task-1", ""); !strings.Contains(body, `"shared":[{"name":"data/sales.csv"`) {
+		t.Errorf("the task should show it: %s", body)
+	}
+	if code, body := call(t, server, "GET", "/api/tasks/task-1/shared/file?name=data/sales.csv", ""); code != 200 || body != "a,b\n1,2\n" {
+		t.Errorf("download: %d %q", code, body)
+	}
+	bad, _ := http.NewRequest("POST", server.URL+"/api/tasks/task-1/shared?name=../escape", strings.NewReader("x"))
+	bad.Header.Set("Authorization", "Bearer "+token)
+	if response, _ := http.DefaultClient.Do(bad); response.StatusCode != http.StatusBadRequest {
+		t.Errorf("a name outside the folder: %d", response.StatusCode)
+	}
+	if code, body := call(t, server, "DELETE", "/api/tasks/task-1/shared?name=data/sales.csv", ""); code != 200 {
+		t.Fatalf("remove: %d %s", code, body)
+	}
+	if _, body := call(t, server, "GET", "/api/tasks/task-1/shared", ""); strings.TrimSpace(body) != "[]" {
+		t.Errorf("after removing: %s", body)
 	}
 }
