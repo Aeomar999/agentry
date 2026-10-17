@@ -23,6 +23,8 @@ var commands = []command{
 	{"send", "send a task's coordinator what you asked; used by Claude in a task's Workspace", runSend},
 	{"mcp", "Agentry's tools for Claude Code in any repo; `agentry mcp install` adds them", runMCP},
 	{"statusline", "the line Claude Code shows: what needs you, what runs", runStatusLine},
+	{"wait", "wait until something new needs you or a task finishes, then say what", runWait},
+	{"claude-hook", "called by Claude Code's hooks, so it hears from Agentry; not run by hand", runClaudeHook},
 	{"hook", "called by an engine's hooks; not run by hand", runHook},
 }
 

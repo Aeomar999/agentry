@@ -59,6 +59,7 @@ type Task struct {
 	Actions  []*Action // every action an agent asked to take, in order
 	Trail    []Step    // the handoffs, as the page shows them
 
+	Told         Step   // the last thing a coordinator told you that is neither a question nor a summary: a reply, a split
 	Question     string // an open question for the user, "" when there is none
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
 	Summary      string // the coordinator's summary, once done

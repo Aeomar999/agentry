@@ -14,27 +14,29 @@ import (
 
 const notifyEvery = 15 * time.Second
 
-// Watch notifies of everything that starts waiting for you after it starts,
-// until ctx ends. What waits already is on the status line.
+// Watch notifies of what starts waiting for you after it starts, and of
+// tasks that finish, until ctx ends. What waits already is on the status line.
 func (s *Server) Watch(ctx context.Context) {
-	seen := map[string]bool{}
-	first := true
-	for {
-		if _, waiting, err := s.board(); err == nil {
-			now := map[string]bool{}
-			for _, q := range waiting {
-				key := q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text
-				now[key] = true
-				if !first && !seen[key] {
-					notify("Agentry: "+q.Task+" needs you", describe(q)+"\n"+s.agentry.PageURL("/tasks/"+q.Task))
-				}
-			}
-			seen, first = now, false
+	waiting, err := News(s.agentry)
+	for err != nil && ctx.Err() == nil { // the server may be starting
+		time.Sleep(notifyEvery)
+		waiting, err = News(s.agentry)
+	}
+	seen := Seen(waiting)
+	for ctx.Err() == nil {
+		fresh, err := WaitForNew(ctx, s.agentry, seen)
+		if err != nil {
+			time.Sleep(notifyEvery)
+			continue
 		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(notifyEvery):
+		for _, w := range fresh {
+			title := map[string]string{"done": "Agentry: " + w.Task + " is done", "said": "Agentry: " + w.Task + "'s coordinator",
+				"offline": "Agentry: a machine went offline"}[w.Kind]
+			if title == "" {
+				title = "Agentry: " + w.Task + " needs you"
+			}
+			notify(title, w.Line+"\n"+s.agentry.PageURL("/tasks/"+w.Task))
+			seen[w.Key] = true
 		}
 	}
 }

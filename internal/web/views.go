@@ -37,8 +37,15 @@ type taskSummary struct {
 	BlockedBy    []string     `json:"blockedBy"`  // of those, the ones not done, so it hasn't started
 	Stories      int          `json:"stories"`    // an epic's
 	StoriesDone  int          `json:"storiesDone"`
+	Told         *told        `json:"told"` // the coordinator's latest word to you besides questions and summaries
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
+}
+
+type told struct {
+	At   time.Time `json:"at"`
+	From string    `json:"from"`
+	Text string    `json:"text"`
 }
 
 type taskDetail struct {
@@ -122,7 +129,11 @@ func summaryOf(t *tasks.Task) taskSummary {
 	if open := t.OpenTurn(); needsYou == "" && open != nil {
 		needsYou = open.Waiting
 	}
-	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+	var said *told
+	if t.Told.Text != "" {
+		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
+	}
+	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget, Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone),

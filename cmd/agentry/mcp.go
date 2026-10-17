@@ -141,6 +141,11 @@ func installMCP(server, token string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "Added Agentry to Claude Code for every repo. Start `claude` in a repo and ask it for your board, or type /mcp__agentry__board.")
 
 	settings := filepath.Join(filepath.Dir(defaultDataDir()), ".claude", "settings.json")
+	if err := addHooks(settings, shellQuote(self)+" claude-hook"); err != nil {
+		fmt.Fprintf(stderr, "Claude Code's hooks weren't set (%v), so Claude hears what waits for you only when it calls Agentry.\n", err)
+	} else {
+		fmt.Fprintln(stdout, "Set Claude Code's hooks, so Claude tells you when something needs you, even between your messages.")
+	}
 	statusLine := map[string]any{"type": "command", "command": shellQuote(self) + " statusline"}
 	switch added, err := addStatusLine(settings, statusLine); {
 	case err != nil:
@@ -151,6 +156,46 @@ func installMCP(server, token string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "You have a status line already, so it was left as it is. To show Agentry's, run %s statusline from it.\n", self)
 	}
 	return 0
+}
+
+// addHooks adds Agentry's hooks to Claude Code's settings, once, keeping
+// every other hook: what waits for you when a session starts and with each
+// message, and after each reply a waiter that wakes Claude when something
+// new waits (asyncRewake: exit 2 wakes it).
+func addHooks(path, command string) error {
+	settings := map[string]any{}
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return fmt.Errorf("%s isn't JSON I can read", path)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	add := func(event string, group map[string]any) {
+		groups, _ := hooks[event].([]any)
+		kept := []any{}
+		for _, g := range groups { // an earlier install's goes: this one replaces it
+			if data, _ := json.Marshal(g); !strings.Contains(string(data), "claude-hook") {
+				kept = append(kept, g)
+			}
+		}
+		hooks[event] = append(kept, group)
+	}
+	say := map[string]any{"type": "command", "command": command + " context", "timeout": 5}
+	add("SessionStart", map[string]any{"hooks": []any{say}})
+	add("UserPromptSubmit", map[string]any{"hooks": []any{say}})
+	add("Stop", map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command + " rewake", "async": true, "asyncRewake": true,
+		"timeout": int(waiterLifetime / time.Second)}}}) // it waits for hours, by design
+	settings["hooks"] = hooks
+	data, _ := json.MarshalIndent(settings, "", "  ")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 // addStatusLine sets statusLine in Claude Code's settings if there is none,
@@ -164,8 +209,9 @@ func addStatusLine(path string, statusLine map[string]any) (bool, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
-	if _, has := settings["statusLine"]; has {
-		return false, nil
+	if existing, has := settings["statusLine"]; has {
+		data, _ := json.Marshal(existing)
+		return strings.Contains(string(data), "agentry"), nil // Agentry's is there already, or yours is kept
 	}
 	settings["statusLine"] = statusLine
 	data, _ := json.MarshalIndent(settings, "", "  ")

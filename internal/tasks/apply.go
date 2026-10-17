@@ -117,6 +117,8 @@ func (t *Task) apply(e events.Event) {
 		t.Stories = append(t.Stories, e.List("stories")...)
 		t.reply(e)
 		t.step(e, t.Coordinator, You, "Split into stories: "+e.Text("titles"))
+		t.Told = Step{At: e.At, From: t.Coordinator, To: You,
+			Text: "Split into stories: " + e.Text("titles") + ". They wait in your Backlog until you start them."}
 		t.hearStoryNews(e)
 	case events.EpicWaits:
 		t.reply(e)
@@ -299,7 +301,8 @@ func (t *Task) step(e events.Event, from, to, text string) {
 // decision may carry, to the trail before the decision itself.
 func (t *Task) reply(e events.Event) {
 	if text := e.Text("toYou"); text != "" {
-		t.Trail = append(t.Trail, Step{At: e.At, From: e.Actor.ID, To: You, Text: text})
+		t.Told = Step{At: e.At, From: e.Actor.ID, To: You, Text: text}
+		t.Trail = append(t.Trail, t.Told)
 	}
 }
 

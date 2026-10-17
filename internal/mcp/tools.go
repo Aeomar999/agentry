@@ -22,6 +22,7 @@ type task struct {
 	Labels, BlockedBy                                                   []string
 	Stories, StoriesDone                                                int
 	Rank                                                                float64
+	Told                                                                *struct{ At, From, Text string }
 }
 
 type detail struct {
