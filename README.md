@@ -1,70 +1,86 @@
 # Agentry
 
-A task board where the workers are AI agents. You add a task on the page, or tell Claude in the page's terminal and it writes the task for you. A coordinator agent decides who works on it next: the engineer, reviewer, tester or deployer. Every agent hands its report back to the coordinator, and any problem goes back to it too, until the coordinator says the task is done.
+A task board where the workers are AI agents. You describe a task; a coordinator agent hands it from agent to agent (an engineer, a reviewer, a tester, a deployer, or another team's) and reads every report back, until the work is checked and done. You watch it all live, step in when you want, and approve what matters.
 
-Every action an agent takes passes Agentry's gate first, and your policy file decides what runs, what is refused and what waits for you. A watchdog catches agents that crash or go silent. You can watch any agent's terminal live and take control of it. Every step is an event in one append-only log.
+Every action an agent takes passes Agentry's gate first, and your policy decides what runs, what is refused and what waits for you. Agents can work on any of your machines, Linux, macOS or Windows, and you can drive it all from the browser or from Claude Code in any repo. Every step is an event in one append-only log.
 
 `PLAN.md` has what's built, what's next, and the decisions behind it.
 
-## How it works
-
-### How it fits together
-
-Everything is one program, `agentry serve`. Its pieces never call each other to say what happened: they write events to the log, and the others read the log. Each agent runs in its own terminal session (kept by agentry itself, so it runs on when Agentry restarts), in its own git worktree of your repo, and every action it takes comes back through the gate.
+## Install
 
 <p align="center">
-  <img src="docs/diagrams/how-it-fits.svg" alt="How Agentry fits together: the page, the log, the coordinator loop, the gate and the watchdog in one program, and each task in its own terminal session and worktree" width="100%">
-  <br><sub>The page, the coordinator loop, the gate and the watchdog only talk through the log.</sub>
+  <img src="docs/diagrams/getting-started.svg" alt="Getting started: on Mac, Windows or Linux, download the zip, unzip it and double-click Start Agentry; Agentry opens in your browser, signed in. Then add machines, connect Claude Code and hand it work from the page." width="100%">
+  <br><sub>Download, unzip, double-click Start Agentry: the same three steps on every system.</sub>
 </p>
 
-### How a task moves
+### What you need
 
-The coordinator is an ordinary agent. It never starts anyone itself: it ends each turn with a decision, and the loop carries it out. Every agent's report, and every issue the watchdog finds, goes back to the coordinator, until it says the task is done.
+- **git:** [git-scm.com/downloads](https://git-scm.com/downloads)
+- **Claude Code**, signed in: [claude.com/claude-code](https://claude.com/claude-code). The agents run in it. Codex works too, if you have it.
 
-<p align="center">
-  <img src="docs/diagrams/how-a-task-moves.svg" alt="How a task moves: the coordinator at the centre sends a brief to the engineer, reviewer, tester or deployer and gets a report back" width="100%">
-  <br><sub>The coordinator sends each agent a brief and gets its report back; a real run took 7 turns.</sub>
-</p>
+Agentry itself needs nothing else: no Docker, no Node, no tmux. Start Agentry says if git or Claude Code is missing.
 
-### What happens to one action
+### Mac
 
-Before an agent runs a command or edits a file, its engine calls `agentry hook`. Anything short of a clear yes blocks the action, including the server being down or slow: the gate fails closed.
+1. Download `agentry-<version>-mac-apple-silicon.zip` (M1 and later) or `agentry-<version>-mac-intel.zip`.
+2. Unzip it, and double-click **Start Agentry.command** in the Agentry folder.
+3. The first time, macOS says it can't check the developer, since Agentry isn't signed yet: right-click Start Agentry.command, choose **Open**, then **Open** again. After that it opens with a double-click.
 
-<p align="center">
-  <img src="docs/diagrams/one-action.svg" alt="What happens to one action: the hook, the log, the built-in protection, the profile rule, then allow, ask or deny" width="100%">
-  <br><sub>Five checks before anything runs, and every way out that is not a clear yes blocks it.</sub>
-</p>
+### Windows
 
-## Run it
+1. Download `agentry-<version>-windows-x64.zip` (or `-windows-arm64.zip` on an ARM PC).
+2. Unzip it (right-click, Extract All), and double-click **Start Agentry.cmd** in the Agentry folder.
+3. The first time, Windows may say it protected your PC, since Agentry isn't signed yet: click **More info**, then **Run anyway**.
 
-You need Go 1.27 and git. For the agents, install Claude Code (signed in) and, optionally, Codex.
+### Linux
+
+1. Download `agentry-<version>-linux-x64.zip` (or `-linux-arm64.zip`).
+2. Unzip it with a tool that keeps permissions (`unzip` does), and run `./start-agentry.sh` in the Agentry folder.
+3. If it won't run: `chmod +x agentry start-agentry.sh stop-agentry.sh`.
+
+### What Start Agentry does
+
+It starts Agentry in the background, if it isn't already running, and opens it in your browser, signed in. Close the browser or the window whenever you like: Agentry keeps running. Run Start Agentry again to open the page again, and **Stop Agentry** (`Stop Agentry.command`, `Stop Agentry.cmd` or `./stop-agentry.sh`) to stop it. Agents' sessions carry on across a stop and start.
+
+- **Where things are:** the log, settings and the tasks' worktrees are in `.agentry` in your home folder; delete it to start afresh.
+- **Your work:** new tasks work in the git repo `Agentry` in your home folder (made the first time), unless you give a task another repo, or a new one.
+- **The address:** `127.0.0.1:7800`, or the next free port. It's only reachable from this computer.
+- **The other programs in the folder** (`agentry-linux-amd64` and so on) are what Agentry hands other computers that join as workers. Keep them next to `agentry`.
+
+### From the source
+
+You need Go 1.27 and git.
 
 ```sh
 go build -o bin/agentry ./cmd/agentry
-./bin/agentry serve -repo /path/to/your/repo
+./bin/agentry open                          # start in the background and open the browser
+./bin/agentry serve -repo /path/to/repo     # or run it in the foreground
 ```
 
-The UI is built into the binary, so this needs no Node. To change the UI, see [Work on it](#work-on-it).
+`serve` prints a link with the page's token in it, which signs the browser in and stays the same across restarts. The UI is built into the binary, so this needs no Node; to change the UI, see [Work on it](#work-on-it). `make package` makes the zips above, for every system, from any one machine, into `release/`.
 
-Open the link it prints. The token in the link signs the page in, and stays the same across restarts. The default address is `127.0.0.1:7800`. If you're on a remote machine, forward that port.
-
-- **Repo:** each task works in its own git worktree of the repo (`-repo` sets the default; the page can name another), on branch `agentry/<task>`, with its own port in `PORT`.
-- **Data:** `~/.agentry` holds the log (`agentry.db`), the worktrees and the policy. Change it with `-data`.
+- **Repo:** `-repo` sets the default repo for new tasks; the page can name another, or make a new one.
+- **Data:** `-data` moves `~/.agentry`.
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
-- **Trust:** Claude asks whether to trust each new folder. Agentry answers for every task's worktree before Claude starts there, in Claude's own config (`~/.claude.json`), so turns don't stop at the question.
-- **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. As shipped, agents allow everything, so the push goes straight through; with the profiles on, every push waits for your approval on the page.
+- **Address:** `-addr` (default `127.0.0.1:7800`); `-public-url` is the address people and machines reach, for links and install commands.
 
-## Deploy it
+## First steps
 
-`agentry.chempa.dev` runs from the `dev` branch: GitLab tests the commit, builds the image (`Dockerfile`: the server, git and Claude Code) and asks Berth to deploy `docker-stack.dev.yml`, pinned to the workstation. Everything worth keeping is in the container's home, a volume: Claude's sign-in, the repos under `~/work`, and Agentry's log and policy in `~/.agentry`.
+1. **Add a task:** New task (or press `n`). Describe what you want in your own words; the coordinator reads it, names it, and decides who works on it. A big one becomes an epic, split into stories.
+2. **Watch it:** the task's page shows its plan, the path its work took, a chat with its coordinator, the live terminal of the agent at work, and everything that happened.
+3. **Answer it:** when a coordinator asks you something, or an agent needs your approval, it shows in Questions (`Ctrl+J`), and in Claude Code if you connected it.
+4. **Add a team:** Agentry starts with a Software team. Add Writing, Research or Design on the Agents page.
 
-- **The link:** the server prints it with its token: `ssh vps berth logs agentry dev server`.
-- **Signing Claude in:** once, after the first deploy: open the dock's Claude tab and follow Claude's sign-in. The agents use the same sign-in.
-- **Repos:** clone them into `~/work` (ask the desk, or from an agent's terminal) and name them on a task.
+## Add machines
 
-## Add workers
+Agents can run on your other computers, so work can go where the tools, the data or the power are. On the **Workers** page, Add worker shows one command for the machine's system. Run it there:
 
-Agents can run on other machines, Linux, macOS or Windows, that have Claude Code and git. On the Workers page, Add worker shows one command with a one-time code in it; run it on the other machine. It installs the `agentry` command (in `~/.local/bin`, added to your PATH), joins the server, and starts the worker in the background: a systemd user service on Linux, a launchd agent on macOS. Run on a machine that has joined, it updates it instead.
+| System | Run |
+| --- | --- |
+| macOS, Linux | `curl -fsSL '<server>/worker/install.sh?code=…' \| sh` in a terminal |
+| Windows | `irm '<server>/worker/install.ps1?code=…' \| iex` in PowerShell |
+
+It installs `agentry` (in `~/.local/bin`, or `%LOCALAPPDATA%\Agentry\bin` on Windows, added to your PATH), joins with a code that works once, and starts the worker in the background, started again at login: a systemd user service on Linux, a launchd agent on macOS, a Task Scheduler task on Windows. Run on a machine that has joined, it updates it instead. The machine needs git and Claude Code signed in; it dials out to the server, so it needs no open port.
 
 On the worker, `agentry worker` does the rest:
 
@@ -77,31 +93,85 @@ On the worker, `agentry worker` does the rest:
 | `agentry worker leave [-purge]` | take the machine off the server and stop; `-purge` deletes its repos and worktrees too |
 | `agentry worker run` | run in the foreground (what the service runs) |
 
-Give an agent workers under Runs on in its settings; it uses the first one online, in that order. A task's work moves to the machine of the agent working next, through git: the repo on the server is the hub, and what was left uncommitted goes too. The worker dials out to the server, so it needs no open port; its sessions post their hooks to the server's address. The server hands out agentry for macOS and Linux, on Intel and ARM (`make workers` builds them next to `bin/agentry`).
+Give an agent its machines under Runs on in its settings. A coordinator can also send an agent to a particular machine, among those it may run on. A task's branch and its shared files follow the work to whichever machine runs the next turn.
+
+## Use it from Claude Code
+
+With Agentry in Claude Code, plain `claude` in any repo can hand work to Agentry and hear back from it. On the **Integrations** page, make an install command and run it on the machine you use Claude Code on:
+
+| System | Run |
+| --- | --- |
+| macOS, Linux | `curl -fsSL '<server>/integrations/claude-code.sh?code=…' \| sh` in a terminal |
+| Windows | `irm '<server>/integrations/claude-code.ps1?code=…' \| iex` in PowerShell |
+| The machine Agentry runs on | `agentry mcp install` |
+
+Then, in any repo:
+
+- **Hand it work:** "make a task to add retries to the webhook sender", or an epic, in the repo you're in; file stories under epics, set their order, start them.
+- **See your board:** ask, or type `/mcp__agentry__board`. Claude Code's status line shows `agentry · 1 needs you · 3 running`.
+- **Hear from it:** Claude tells you, without being asked, when something needs you, a task finishes, a coordinator replies, or a machine goes offline. A notification shows on your computer too.
+- **Answer and approve:** send a coordinator your answer. Approving an agent's action, closing an epic or copying a file from outside a machine's worktrees is asked of you by Claude Code itself, so the model can't approve for you.
+- **Share files:** `attach_file` shares a file from your machine with a task; `get_file` downloads one.
+
+Each machine connected gets its own credential (the log keeps only its hash); the Integrations page lists them, and Revoke stops one at once. Everything it does is on the page at once.
+
+## How it works
+
+### How it fits together
+
+Everything is one program. Its pieces never call each other to say what happened: they write events to the log, and the others read the log. Each agent runs in its own terminal session, which Agentry keeps itself, so it runs on when Agentry restarts, in its own git worktree, and every action it takes comes back through the gate.
+
+<p align="center">
+  <img src="docs/diagrams/how-it-fits.svg" alt="How Agentry fits together: you use the page or Claude Code; the server has the page and its API, the log, the gate, the watchdog, the loop and the shared files; agents run on this machine and on workers, every action coming back through the gate" width="100%">
+  <br><sub>One server keeps the log; you drive it from the browser or Claude Code, and agents work on any machine.</sub>
+</p>
+
+### How a task moves
+
+The coordinator is an ordinary agent. It never starts anyone itself: it ends each turn with a decision, and the loop carries it out. Every agent's report, and every issue the watchdog finds, goes back to the coordinator. It can't finish until the checks approve the last change, so a fix made after a review always gets reviewed again.
+
+<p align="center">
+  <img src="docs/diagrams/how-a-task-moves.svg" alt="How a task moves: the coordinator sends a brief to the engineer, reviewer, tester or deployer and gets a report back; a real run goes engineer, review asks for changes, engineer fixes, review approves, test approves, deployer merges, done" width="100%">
+  <br><sub>The coordinator hands out each step and reads every report; nothing is done until the checks approve it.</sub>
+</p>
+
+### What happens to one action
+
+Before an agent runs a command, edits a file or fetches a page, its engine calls `agentry hook`. Anything short of a clear yes blocks the action, including the server being down or slow: the gate fails closed.
+
+<p align="center">
+  <img src="docs/diagrams/one-action.svg" alt="What happens to one action: the hook, the log, the built-in protection, the agent's profile, then allow, ask you or deny" width="100%">
+  <br><sub>Four checks before anything runs, and every way out that isn't a clear yes blocks it.</sub>
+</p>
+
+### Work across machines
+
+A task's work is its branch, which goes through the repo on the server, and its shared files, kept on the server: both follow the agent to whichever machine works on it next. A coordinator can also bring a file from any machine: from inside its worktrees at once, from anywhere else only once you allow it.
+
+<p align="center">
+  <img src="docs/diagrams/across-machines.svg" alt="Work across machines: an engineer's branch and shared files on a Linux worker go to the server, and on to a reviewer on a Windows PC; a file on a Mac outside its worktrees comes only once you approve it" width="100%">
+  <br><sub>The branch and the shared files follow the agent.</sub>
+</p>
 
 ## Use it
 
-The page is an admin console: tasks, agents, workers and the policy in the sidebar, and everything updates live.
+The page is an admin console: Tasks and Plan, then Agents, Workers, Integrations and the policy, in the sidebar. Everything updates live.
 
-- **Add a task:** New task (or press `n`). Describe it in your own words; a title, labels and a token budget are optional. Its work goes in the default repo, another repo, or a new repo Agentry makes at the path you give (`--new-repo` from the desk). Every task works in a worktree of its repo, so a new project should be a new repo, not a task in the default one. A task made in the wrong repo moves with Change repo in its Details: when the turn in progress ends, its worktree is made again in the new repo, the old one is kept aside, and the coordinator is told. The coordinator reads it first and gives it a title that says what it is.
-- **Tasks:** a list, or a board (keys `1` and `2`) with Backlog, To do, In progress, Review and Done. Drag a card onto any column to tell the coordinator what you want: park it, start it, have it reviewed, send it back, wrap it up, or reopen a finished one. Drag within a column, or a row in the list, to set your priority order. The Backlog shows when you ask for it. Labels filter with a click.
-- **A task:** its plan down the left, and the path its work took (`engineer › reviewer › tester`) above the tabs. Each agent writes its plan before it starts, as a checklist in `.agentry/<turn>-plan.md`, and ticks it off and changes it as it works; the page follows it live, with earlier agents' plans greyed and closed under it. The tabs: Coordinator, a chat with the task's coordinator (what you send stops the turn in progress so it reads it at once, and it replies with what it changed; its questions show here and are answered in Questions), Activity (everything that happened, newest first, with times and what is still running down the right), the agent's live Terminal (you watch; Take control lets you type into it), Handoffs, Actions, Events and Details. A handoff, an action or an event opens the activity of its turn, with the row you clicked picked out.
-- **A task's Workspace** (its button on the task page): the worktree as an editor's git view shows it. Source control lists what isn't committed, then the branch's commits, newest first, each opening to the files it changed; the explorer shows every file with its git status (M, A, D, U). A file opens next to its last committed version, or in a commit next to the version before it, so each round of work is the commits at the top. `Ctrl+J` opens its dock: the Coordinator chat, Claude, the agent's Terminal and the Agents who worked here.
-- **Claude in the Workspace:** a plain Claude Code session of your own in the task's worktree, on whichever machine has it, for your own questions. It changes no files and has none of Agentry's hooks. When you ask it to send the coordinator a change, it runs `agentry send "..."`: the message goes at once, as yours, the same as typing it in the chat, and the chat marks it as sent from Claude. Claude Code asks you before it runs that command, so Claude never sends one on its own.
-- **Showing work:** agents write what they want you to see as files in the task's worktree (a design in Markdown, its SVG diagrams) and link them in the chat, as `[the design](docs/design.md)`. A link opens the file in the task's Workspace, in a new tab, already in its preview.
-- **Claude Code in any repo:** `agentry mcp install` adds Agentry to Claude Code for every repo, and its status line (`agentry · 1 needs you · 3 running`). Then plain `claude` in a repo can create tasks and epics there, file and order stories, start them, tell a coordinator something, answer its questions, and show your board (`/mcp__agentry__board`). Every reply ends with what waits for you. Approving an agent's action or closing an epic is asked of you by Claude Code itself (MCP elicitation), so the model can't approve for you; where that isn't supported, Claude gives you the page's link. Claude also hears from Agentry between your messages, through Claude Code's hooks: what waits for you is added when a session starts and with each message, and after each reply a waiter runs in the background that wakes Claude with news the moment there is some, so it tells you without being asked: something new waiting for you (a question, an approval, a budget stop, an agent stuck on a prompt, an epic to close), a task that finished with its summary, a coordinator's reply to what you told it, an epic split into stories that wait for you to start them, and a machine gone offline with work on it. While Claude Code runs, the same news shows as a notification on your computer. It all goes into the same log, so the page shows it at once. To connect any machine, open **Integrations** in the sidebar and make an install command: `curl -fsSL '<server>/integrations/claude-code.sh?code=…' | sh` on macOS and Linux, or `irm '<server>/integrations/claude-code.ps1?code=…' | iex` in PowerShell on Windows (the page shows the one for your system). It installs agentry, connects with a code that works once for 15 minutes, and sets up Claude Code there. The machine gets its own credential (kept in `~/.config/agentry/connection.json`; the log holds only its hash), the page lists every machine connected, and Revoke stops one at once. On the machine Agentry runs on, `agentry mcp install` does the same with nothing to connect, since `serve` writes where it is to `~/.agentry/server.json`. Machines of another kind download the builds `make workers` makes.
-- **Plan:** a page for shaping work before it runs. Each epic is a column of its stories, and one more column holds the tasks of no epic. Drag a card up or down its column to set its priority, or to another column to file it there, at the place you drop it; the epic's Stories tab reorders the same way, and its coordinator reads its stories in that order. A story that hasn't started has Start, and each epic has Start the ready ones, for its stories that wait for no other. Started work is on the Tasks board, which shows the Backlog only when you ask. Finished epics fold away at the end.
-- **New task** is a modal over any page (`N`, the sidebar, or + Story and + Task on Plan); its address (`?new=task`, `?new=epic`, `?new=story&newIn=task-E`) can be linked.
-- **Epics and stories:** a task is a story: one goal, on one branch, checked before it is done. A goal too big for that is an epic. Its coordinator splits it into stories with a `split` decision, and each story is a task of its own, run by its team's coordinator (another team's, for a story given to them). Stories run side by side, except that one that builds on others (`after`) starts once they are done, from dev with their work in it. Each finished story's summary goes back to the epic, whose coordinator adds stories, waits for the rest, or asks you. Agentry refuses the epic's "done" while any story isn't, and once they all are, the epic asks you: Close the epic, or say what else it needs and its coordinator plans it. Stories close on their own; only you close an epic, on the page. A story can't be split, so there are only two levels. New task can make a task a Story or an Epic; by default the coordinator splits a task that is too big. The epic's page has a Stories tab with their progress. In the list, stories sit under their epic and fold away. New stories wait in your Backlog, grouped by epic, until you drag them on. Tasks you have already can be filed under an epic: drag the card to the epic's column on Plan, pick the epic in a task's Details, or use Add tasks on the epic's Stories tab, which also has New story and Take out. A task is in one epic at most, so filing it again moves it. The desk does the same, with `agentry task create --kind epic --story task-N`, `--epic task-E` on create, and `agentry task epic task-E --add task-N --remove task-M`. Done keeps only the last 7 days; the list keeps everything.
-- **Shared files:** what agents and you hand each other that isn't in git (data, builds, documents, images) is a task's shared files. In a worktree they are the folder `.agentry/files`, which git ignores: before each turn Agentry fills it with the task's files on whichever machine runs it, and after the turn it reads it back, so what an agent adds, changes or removes reaches the next agent wherever it works. A story also has its epic's files, to read, in `.agentry/files/epic`. Each file is kept once on the server, by the hash of what is in it, up to 2 GB; machines download only what they lack. A coordinator can bring a file or folder from any machine with `"fetch"`: from inside that machine's worktrees at once, from anywhere else only once you allow it (Copy it, on the page or asked by Claude Code itself). The task page has a Files tab to drop files in, download them and take them away; New task can attach files; and Claude Code in any repo can `attach_file` and `get_file`.
-- **Machines:** a coordinator can choose where an agent works, with `"machine"` on an assign: any machine that agent may run on (its Runs on). Its brief lists the machines, whether each is online, what engines it has, which agents may run there, and where the task's work is now; Agentry moves the work there, with its branch, before the turn. A machine the agent may not use, one that isn't there, or one that is offline goes back to the coordinator with why. Unchosen, a turn runs where the work is if the agent may run there, or else on the first of its machines that is online.
-- **Checks:** a coordinator can't finish a task until its work is checked. Each agent's work counts as building, review or shipping. The reviewer, tester, fact-checker and critics review, and end their reports with `Verdict: approved` or `Verdict: changes needed`. After the last turn that changed the work, every reviewer that has checked it must approve it again, so a fix made after a review always gets another round. Agentry refuses "done" until then, and tells the coordinator what is missing. The deployer ships, so deploying doesn't call for another review. To finish a task unchecked, drag it to Done on the board.
-- **Teams:** agents work in teams, one for each kind of work. Each team has a coordinator, which hands a task's steps only to its own agents. Agentry starts with the Software team; Add a team on the Agents page adds Writing (an editor, researcher, writer and fact-checker), Research (a lead, investigator, analyst and critic) or Design (a product lead, product designer, UX writer and design critic), each agent with a prompt written for that work. New task can pick the team (`--team` from the desk); by default the coordinators decide: the first team's coordinator reads the task and passes it to the team whose work it is. A coordinator that needs something from another team asks it: Agentry makes that team a task, linked to the one that asked, and the asking task waits until it is done, then carries on with its summary. Requests can go three deep, so teams can't ask each other in circles. The Agents page shows the teams as cards, as org charts, or as one list. Remove team takes a team and all its agents, and an agent card's bin removes one agent; Agentry refuses while an unfinished task needs them, and names the tasks. The last team stays, since every task needs a coordinator.
-- **Agents:** add, edit and remove them: prompt, engine, model, policy profile, colour, which column their work counts as, and the machines they may run on (none: the one Agentry runs on). Each agent's colour marks its work everywhere.
-- **The dock:** `Ctrl+J`, or Terminal in the status bar, opens a panel under the page; drag its top edge to make it taller, up to the whole page. If you open the page inside VS Code, VS Code keeps `Ctrl+J` for itself, so use the button. Whenever something is waiting for you, it opens on Questions. Its tabs:
-  - **Questions:** everything waiting for you, from every task: approvals, the coordinator's questions (sometimes with options, or a small page it made to show you something), a task stopped at its budget, an agent stuck on a prompt. The status bar counts them.
-  - **Claude:** a Claude Code session Agentry runs for you in the default repo. Tell it what you want done; it reads the code, drafts the task, and hands it to the coordinator. It can also answer a coordinator's question for you. It can't approve an agent's actions or edit files.
-- **Budgets:** every task has a token budget (`-budget`, 5M by default). When a task reaches it, it stops before the next turn and asks you to raise it or wrap up.
+- **Add a task:** New task is a modal over any page (`n`, or the buttons on Tasks and Plan); its address (`?new=task`, `?new=epic`, `?new=story&newIn=task-E`) can be linked. Describe it in your own words; a title, team, kind, labels, files and a token budget are optional. Its work goes in the default repo, another repo, or a new repo Agentry makes at the path you give. Every task works in a worktree of its repo, so a new project should be a new repo. A task made in the wrong repo moves with Change repo in its Details.
+- **Tasks:** a list, or a board (keys `1` and `2`) with To do, In progress, Review and Done (the Backlog when you ask). Drag a card onto any column to tell the coordinator what you want: park it, start it, have it reviewed, send it back, wrap it up, or reopen a finished one. Drag within a column, or a row in the list, to set your priority order. Done keeps the last 7 days; the list keeps everything. Labels filter with a click.
+- **A task:** its plan down the left, and the path its work took (`engineer › reviewer › tester`) above the tabs. Each agent writes its plan before it starts and ticks it off as it works; the page follows it live. The tabs: Coordinator, a chat with the task's coordinator (what you send stops the turn in progress so it reads it at once, and it replies with what it changed); Activity, everything that happened, newest first; the agent's live Terminal (Take control lets you type into it); Files; Handoffs, Actions, Events and Details.
+- **Plan:** a page for shaping work before it runs: each epic is a column of its stories, and one more holds the tasks of no epic. Drag a card up or down to set its priority, or to another column to file it there. A story that hasn't started has Start, and each epic has Start the ready ones.
+- **Epics and stories:** a task is a story: one goal, on one branch, checked before it is done. A goal too big for that is an epic, which its coordinator splits into stories, each a task of its own, run by its team's coordinator (another team's, for a story given to them). New stories wait in your Backlog until you start them; one that builds on others starts once they are done, from dev with their work in it. Each finished story's summary goes back to the epic. Only you close an epic: once its stories are all done, it asks you. A story can't be split, so there are only two levels. File tasks you have already under an epic from Plan, a task's Details, or the epic's Stories tab.
+- **Shared files:** what agents and you hand each other that isn't in git (data, builds, documents, images). In a worktree they are the folder `.agentry/files`, which git ignores: before each turn Agentry fills it with the task's files on whichever machine runs it, and after the turn it reads it back. A story also has its epic's files, in `.agentry/files/epic`. Each file is kept once on the server, by the hash of what is in it, up to 2 GB. A coordinator can `fetch` a file or folder from any machine. The Files tab drops files in, downloads them and takes them away.
+- **Checks:** each agent's work counts as building, review or shipping. The reviewer, tester, fact-checker and critics end their reports with `Verdict: approved` or `Verdict: changes needed`; after the last change, every one that has checked the work must approve it again before the coordinator may finish. To finish a task unchecked, drag it to Done.
+- **Teams:** each team has a coordinator, which hands a task's steps only to its own agents. Agentry starts with Software; Add a team adds Writing, Research or Design, each agent with a prompt written for that work. By default the coordinators decide whose work a task is. A coordinator that needs something from another team asks it: that team gets a task, and the asking task carries on with its summary.
+- **Machines:** a coordinator can choose where an agent works, with `"machine"` on an assign, among the machines that agent may run on. Unchosen, a turn runs where the work is, if the agent may run there.
+- **Agents:** add, edit, rename and remove them: prompt, engine, model, policy profile, colour, what their work counts as, and the machines they may run on. Remove team takes a team and all its agents; Agentry refuses while an unfinished task needs them.
+- **A task's Workspace** (its button on the task page): the worktree as an editor's git view shows it, with what isn't committed, the branch's commits, every file with its git status, and previews of Markdown and SVG. Its dock has the Coordinator chat, Claude, the agent's Terminal and the agents who worked there.
+- **Claude in the Workspace:** a Claude Code session of your own in the task's worktree, for your questions. When you ask it to send the coordinator a change, it runs `agentry send "..."`, which Claude Code asks you before it runs.
+- **Showing work:** agents write what they want you to see as files (a design in Markdown, its SVG diagrams) and link them in the chat; a link opens the file in the Workspace, in its preview.
+- **The dock:** `Ctrl+J`, or Terminal in the status bar. Questions has everything waiting for you, from every task; Claude is a Claude Code session in the default repo that drafts tasks for you (`agentry task`), but can't approve anything.
+- **Budgets:** every task has a token budget (`-budget`, 5M by default). When it reaches it, it stops and asks you to raise it or wrap up.
 - **Keys:** `Ctrl+K` searches everything, and `?` lists every shortcut.
 
 ## The policy
@@ -111,23 +181,34 @@ What agents may do is in `~/.agentry/policy.toml`, written on first start from [
 - **Profiles:** each agent has one. The reviewer and coordinator are `read-only`, and the engineer, tester and deployer are `developer`. There are also `autonomous` (anything on this machine, asks before acting outside it) and `allow-everything`.
 - **Rules:** in a profile, rules are read top to bottom and the first match decides `allow`, `ask` or `deny`. A rule can match `tools`, commands (`runs_any`, `runs_only`), `paths`, and `where` (the workspace or outside). Every rule has a `why`, which the page shows.
 - **Allow everything, as shipped:** the default sets `use_for_everyone = "allow-everything"`, so every agent runs anything. Comment that line out to give each agent its own profile instead.
-- **Built in:** no agent may touch the policy, the log or the sign-in token, whatever the file says.
+- **Built in:** no agent may touch the policy, the log or the sign-in tokens, whatever the file says.
+
+## Deploy it
+
+`agentry.chempa.dev` runs from the `dev` branch: GitLab tests the commit, builds the image (`Dockerfile`: the server, git and Claude Code) and asks Berth to deploy `docker-stack.dev.yml`, pinned to the workstation. Everything worth keeping is in the container's home, a volume: Claude's sign-in, the repos under `~/work`, and Agentry's log and policy in `~/.agentry`.
+
+- **The link:** the server prints it with its token: `ssh vps berth logs agentry dev server`.
+- **Signing Claude in:** once, after the first deploy: open the dock's Claude tab and follow Claude's sign-in. The agents use the same sign-in.
+- **Repos:** clone them into `~/work` and name them on a task.
 
 ## Work on it
 
 ```sh
-make test    # go vet, go test, and the UI's type and format checks
-make         # rebuild the UI, then the binary
+make test       # go vet, go test, and the UI's type and format checks
+make            # rebuild the UI, then the binary
+make workers    # the builds other machines download, next to bin/agentry
+make package    # the zips for every system, in release/
 ```
 
-The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built into `internal/web/dist`, which is committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in.
+The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built into `internal/web/dist`, which is committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
 
 Each folder in `internal/` does one job, and folders only depend on the ones below them:
 - `events` lists what can happen.
 - `store` keeps the log.
-- `tasks` and `agents` compute state from the log.
+- `tasks`, `agents`, `workers` and `connections` compute state from the log.
 - `rules` checks each event before it's written.
-- `policy`, `hooks`, `engines`, `worktrees`, `sessions` and `turns` run the agents.
+- `policy`, `hooks`, `engines`, `worktrees`, `sessions`, `sharedfiles` and `turns` run the agents.
 - `coordinator` and `watchdog` move tasks along.
+- `machines` and `workerlink` reach this machine and the workers.
 - `terminal` and `web` serve the UI and its live terminals.
-- `desk` runs the Claude you talk to; `agentry task` is how it hands work over.
+- `desk` runs the Claude you talk to; `mcp` is Agentry for Claude Code in any repo.

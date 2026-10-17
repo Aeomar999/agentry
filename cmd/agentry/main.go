@@ -17,6 +17,8 @@ type command struct {
 }
 
 var commands = []command{
+	{"open", "start Agentry here in the background if it isn't running, and open it in your browser", runOpen},
+	{"stop", "stop the Agentry that open started", runStopServer},
 	{"serve", "run Agentry: the page, the coordinator, the agents", runServe},
 	{"worker", "run agents on this machine for a server; join it first", runWorker},
 	{"task", "create, list, show or answer tasks; used by the desk", runTask},

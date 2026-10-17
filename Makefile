@@ -2,7 +2,7 @@
 # Node is needed only for `make ui`; the built UI is committed, so
 # `go build` and `go install` work without it.
 
-.PHONY: all ui build workers test
+.PHONY: all ui build workers test package
 
 all: ui build workers
 
@@ -24,3 +24,8 @@ workers:
 test:
 	go vet ./... && go test ./...
 	cd ui && npm run lint
+
+# The downloads: a zip for each kind of computer, in release/, with all it
+# needs to run Agentry (Start Agentry opens it in the browser).
+package: ui
+	go run ./packaging

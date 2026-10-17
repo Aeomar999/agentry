@@ -1,5 +1,6 @@
 # Built binaries: `go build -o bin/<name> .` recreates them
 bin/
+release/
 /agentry
 
 # Dependencies and local databases
