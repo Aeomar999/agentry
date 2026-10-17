@@ -7,9 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 )
 
 func TestRun(t *testing.T) {
+	// Run inside an Agentry session, the hook case would call the live server.
+	t.Setenv(hookcall.EnvTask, "")
+	t.Setenv(hookcall.EnvServer, "")
 	cases := []struct {
 		args     []string
 		wantCode int
