@@ -3,6 +3,9 @@ bin/
 release/
 /agentry
 
+# Python bytecode from drawing the diagrams
+__pycache__/
+
 # Dependencies and local databases
 node_modules/
 *.db
