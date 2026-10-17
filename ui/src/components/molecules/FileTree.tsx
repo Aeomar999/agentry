@@ -4,8 +4,12 @@ import { cn } from "@/lib/cn";
 
 export interface WorkspaceFile {
   path: string;
-  change: "" | "M" | "A" | "D"; // since the task started: modified, added, deleted
+  change: Change;
 }
+
+// A file's git status, as an editor shows it (internal/workspace): modified,
+// added, deleted, untracked, or "" as committed.
+export type Change = "" | "M" | "A" | "D" | "U";
 
 interface Node {
   name: string;
@@ -13,20 +17,26 @@ interface Node {
   file?: WorkspaceFile;
   children: Node[];
   changes: number; // changed files at or below this node
+  change: Change; // the one its folder shows, from the files below it
 }
 
-const CHANGE_COLOR = { M: "text-warning", A: "text-success", D: "text-danger" };
+export const CHANGE_COLOR = { M: "text-warning", A: "text-success", D: "text-danger", U: "text-success" };
+
+// Which change a folder shows when the files below it differ: a modified
+// file before a deleted one, before a new one.
+const WEIGHT: Record<Change, number> = { "": 0, U: 1, A: 2, D: 3, M: 4 };
 
 function build(files: WorkspaceFile[]): Node {
-  const root: Node = { name: "", path: "", children: [], changes: 0 };
+  const root: Node = { name: "", path: "", children: [], changes: 0, change: "" };
   for (const file of files) {
     let node = root;
     const parts = file.path.split("/");
     parts.forEach((name, i) => {
       if (file.change) node.changes++;
+      if (WEIGHT[file.change] > WEIGHT[node.change]) node.change = file.change;
       let child = node.children.find((c) => c.name === name && (i === parts.length - 1) === Boolean(c.file));
       if (!child) {
-        child = { name, path: parts.slice(0, i + 1).join("/"), children: [], changes: 0 };
+        child = { name, path: parts.slice(0, i + 1).join("/"), children: [], changes: 0, change: "" };
         node.children.push(child);
       }
       if (i === parts.length - 1) {
@@ -49,12 +59,15 @@ interface FileTreeProps {
   selected: string;
   onSelect: (path: string) => void;
   changedOnly: boolean;
+  empty?: string; // what to say when there is nothing to show
 }
 
-// The workspace's folders and files, with what changed since the task
-// started: M modified, A added, D deleted. Folders holding changes are
-// open from the start.
-export function FileTree({ files, selected, onSelect, changedOnly }: FileTreeProps) {
+// The workspace's folders and files, each with its git status against the
+// last commit, as an editor's explorer shows it: M modified, A added, D
+// deleted, U untracked; a committed file has none. A folder holding changes
+// shows them too, as an editor does: its name in their colour and a dot, all
+// the way up. Such folders are open from the start.
+export function FileTree({ files, selected, onSelect, changedOnly, empty }: FileTreeProps) {
   const shown = changedOnly ? files.filter((f) => f.change) : files;
   const root = useMemo(() => build(shown), [shown]);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -95,8 +108,14 @@ export function FileTree({ files, selected, onSelect, changedOnly }: FileTreePro
           >
             <ChevronRight className={cn("text-ink-faint transition-transform duration-(--dur-fast)", open && "rotate-90")} />
             {open ? <FolderOpen className="text-ink-faint" /> : <Folder className="text-ink-faint" />}
-            <span className="min-w-0 flex-1 truncate">{child.name}</span>
-            {child.changes > 0 && <span className="font-mono text-[11px] text-ink-faint">{child.changes}</span>}
+            <span className={cn("min-w-0 flex-1 truncate", child.change && CHANGE_COLOR[child.change])}>{child.name}</span>
+            {child.change && (
+              <span
+                className={cn("mr-0.5 size-1.5 shrink-0 rounded-full bg-current", CHANGE_COLOR[child.change])}
+                title={`${child.changes} ${child.changes === 1 ? "change" : "changes"} inside`}
+                aria-label={`${child.changes} changes inside`}
+              />
+            )}
           </button>
           {open && render(child, depth + 1)}
         </div>
@@ -105,6 +124,6 @@ export function FileTree({ files, selected, onSelect, changedOnly }: FileTreePro
   }
 
   if (shown.length === 0)
-    return <p className="px-3 py-4 text-[12px] text-ink-muted">{changedOnly ? "Nothing has changed yet." : "No files."}</p>;
+    return <p className="px-3 py-4 text-[12px] text-ink-muted">{empty ?? (changedOnly ? "Nothing has changed yet." : "No files.")}</p>;
   return <div className="py-1">{render(root, 0)}</div>;
 }

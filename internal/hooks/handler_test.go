@@ -249,3 +249,35 @@ func TestWhatTheAgentLearnedIsKept(t *testing.T) {
 		t.Errorf("%d agent.learned events, want 1", learned)
 	}
 }
+
+func TestThePlanFollowsTheFile(t *testing.T) {
+	s := engineerAtWork(t)
+	h := NewHandler(s, judgeByCommand)
+	withPlan := func(call hookcall.Call, plan string) hookcall.Call {
+		call.Plan = &plan
+		return call
+	}
+	result := `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"t1"}`
+	h.Handle(context.Background(), withPlan(hookCall("PostToolUse", result), "- [ ] read\n- [ ] fix\n"))
+	h.Handle(context.Background(), withPlan(hookCall("PostToolUse", result), "- [ ] read\n- [ ] fix"))
+	if plan := taskIn(t, s).Turn("turn-2").Plan; plan != "- [ ] read\n- [ ] fix" {
+		t.Errorf("plan %q", plan)
+	}
+
+	stop := withPlan(hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`), "- [x] read\n- [x] fix")
+	h.Handle(context.Background(), stop)
+	if turn := taskIn(t, s).Turn("turn-2"); !turn.Ended || turn.Plan != "- [x] read\n- [x] fix" {
+		t.Errorf("ended %v with plan %q: the last plan should be kept before the turn ends", turn.Ended, turn.Plan)
+	}
+
+	stream, _ := s.Stream("task-1")
+	updates := 0
+	for _, e := range stream {
+		if e.Type == events.PlanUpdated {
+			updates++
+		}
+	}
+	if updates != 2 {
+		t.Errorf("%d plan.updated events, want 2: an unchanged plan isn't recorded again", updates)
+	}
+}

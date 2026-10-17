@@ -62,6 +62,8 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	turn := machines.Turn{Task: task.ID, ID: id, Worktree: task.Worktree.Path, Engine: agent.Engine, Model: agent.Model,
 		Brief: brief, BriefFile: filepath.Join(machines.StateDir, id+".md"), Knowledge: agent.Knowledge,
 		Env: r.environment(task, id, agent)}
+	plan, planFrom := task.PlanToContinue(agent.Name) // its unfinished plan, to continue or replace
+	turn.Plan = plan
 	turn.Prompt = "Read " + turn.BriefFile + " and do what it says."
 	if r.config.Theme != nil {
 		turn.Theme = r.config.Theme()
@@ -75,7 +77,7 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	// Recorded before the session starts, so its first hook call finds the turn open.
 	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
 		Correlation: id, Data: map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
-			"worker": machine.Name()}})
+			"worker": machine.Name(), "planFrom": planFrom}})
 	if err != nil {
 		return err
 	}

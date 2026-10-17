@@ -36,9 +36,14 @@ var taskRules = map[events.Type]rule{
 	events.ActionDenied:    all(actionUndecided),
 	events.ActionResult:    all(actionApproved, noResultYet),
 
+	events.PlanUpdated:  all(isTheOpenTurn),
 	events.AgentWaiting: all(isTheOpenTurn),
 	events.TurnEnded:    all(isTheOpenTurn, sameAgentAsTheTurn),
 	events.IssueRaised:  all(),
+	events.TurnStopped:  all(isTheOpenTurn),
+
+	events.MessageDrafted: all(isNewDraft),
+	events.DraftDiscarded: all(draftOpen),
 
 	events.TaskNeedsYou: all(byTheCoordinatorOrAgentry, noOpenTurn, noQuestionOpen),
 	events.TaskAnswered: all(questionOpen),
@@ -158,6 +163,20 @@ func noOpenTurn(t *tasks.Task, _ events.Proposal) string {
 func isTheNextTurn(t *tasks.Task, p events.Proposal) string {
 	if p.Correlation != t.NextTurnID() {
 		return "the next turn is " + t.NextTurnID() + ", not " + p.Correlation
+	}
+	return ""
+}
+
+func isNewDraft(t *tasks.Task, p events.Proposal) string {
+	if t.Draft(p.Correlation) != nil {
+		return p.Correlation + " was drafted already"
+	}
+	return ""
+}
+
+func draftOpen(t *tasks.Task, p events.Proposal) string {
+	if d := t.Draft(p.Correlation); d == nil || d.Sent || d.Discarded {
+		return p.Correlation + " is not a draft waiting for you"
 	}
 	return ""
 }

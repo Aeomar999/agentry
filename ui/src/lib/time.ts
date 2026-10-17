@@ -17,3 +17,14 @@ export function timeAgo(iso: string, now = Date.now()): string {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
 }
+
+// How long something took, or has taken so far: 0.4s, 12s, 3m 05s, 1h 04m.
+export function duration(fromIso: string, toIso?: string, now = Date.now()): string {
+  const ms = Math.max(0, (toIso ? new Date(toIso).getTime() : now) - new Date(fromIso).getTime());
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${pad(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${pad(Math.floor(seconds / 60) % 60)}m`;
+}

@@ -32,6 +32,7 @@ type Task struct {
 	Turns    []*Turn   // every agent turn, in order
 	Actions  []*Action // every action an agent asked to take, in order
 	Trail    []Step    // the handoffs, as the page shows them
+	Drafts   []*Draft  // messages the Workspace's Claude wrote for the coordinator, in order
 
 	Question     string // an open question for the user, "" when there is none
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
@@ -67,9 +68,12 @@ type Turn struct {
 	LastEventAt  time.Time
 	Acknowledged bool   // the engine echoed the prompt's hash (proof 02)
 	Waiting      string // what the agent is waiting on, until it does something
+	Plan         string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
+	PlanFrom     string // the turn whose unfinished plan this turn started with, "" for a fresh one
 	Ended        bool
 	Report       string // the agent's final message
 	Issue        string // why the turn was cut short, if it was
+	Stopped      bool   // you ended it, to tell the coordinator something
 	Tokens       int    // what it used, when the engine said
 }
 
@@ -96,6 +100,26 @@ type Action struct {
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
+// Draft is a message the Workspace's Claude session wrote for the coordinator. Nothing
+// reaches the coordinator until you send it, since it would start work.
+type Draft struct {
+	ID        string
+	At        time.Time
+	Text      string
+	Sent      bool // you sent it, as it was or changed
+	Discarded bool
+}
+
+// Draft is the draft with this id, or nil.
+func (t *Task) Draft(id string) *Draft {
+	for _, d := range t.Drafts {
+		if d.ID == id {
+			return d
+		}
+	}
+	return nil
+}
+
 type Step struct {
 	At   time.Time
 	From string

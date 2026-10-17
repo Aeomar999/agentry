@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CheckCheck, Gauge, MessageCircleQuestionMark, ShieldAlert, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
@@ -23,11 +23,19 @@ const KINDS: Record<Question["kind"], { label: string; icon: React.ReactNode }> 
   waiting: { label: "Waiting", icon: <SquareTerminal /> },
 };
 
-export function QuestionsPanel({ onOpenTerminal }: { onOpenTerminal: (taskId: string) => void }) {
+interface QuestionsPanelProps {
+  onOpenTerminal: (taskId: string) => void;
+  focus?: { id: string; asked: number }; // a question a page asked to show
+}
+
+export function QuestionsPanel({ onOpenTerminal, focus }: QuestionsPanelProps) {
   const { data, reload } = useResource<Question[]>("/api/questions");
   const questions = data ?? [];
   const [picked, setPicked] = useState("");
   const current = questions.find((q) => q.id === picked) ?? questions[0];
+  useEffect(() => {
+    if (focus?.id) setPicked(focus.id);
+  }, [focus?.id, focus?.asked]);
 
   if (data && questions.length === 0) {
     return (

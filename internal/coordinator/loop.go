@@ -184,12 +184,13 @@ func (l *Loop) apply(task *tasks.Task, decision Decision) {
 	}
 	switch decision.Action {
 	case Assign:
-		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions})
+		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions,
+			"toYou": decision.ToYou})
 	case Ask:
 		l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": decision.Question,
-			"options": decision.Options, "page": decision.Page})
+			"options": decision.Options, "page": decision.Page, "toYou": decision.ToYou})
 	case Finish:
-		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": decision.Summary}) {
+		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": decision.Summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)
 		}
 	}

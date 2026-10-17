@@ -32,9 +32,13 @@ type Machine interface {
 	Stop(task string)           // ends the task's session
 	IsRunning(task string) bool // the task's session exists and its process is alive
 
-	// For the page's peek into the worktree.
+	// For the task's Workspace page.
 	Files(ctx context.Context, w workspace.Workspace) ([]workspace.File, error)
+	Commits(ctx context.Context, w workspace.Workspace) ([]workspace.Commit, error)
 	Read(ctx context.Context, w workspace.Workspace, path string) (workspace.Contents, error)
+	// StartHelper starts your own Claude session beside a task, in its
+	// worktree (helper.go); Attach watches it as HelperSession(task).
+	StartHelper(ctx context.Context, h Helper) error
 	// Attach watches the task's session, for the page's terminal.
 	Attach(task string, onOutput func([]byte)) (terminal.Pane, error)
 	// About reads the machine's details now, for the Workers page.
@@ -65,6 +69,7 @@ type Turn struct {
 	Brief     string            `json:"brief"`     // what the agent is to do, written to BriefFile
 	BriefFile string            `json:"briefFile"` // relative to the worktree
 	Knowledge string            `json:"knowledge"` // what the agent knows, written to its knowledge file
+	Plan      string            `json:"plan"`      // a plan carried over from the agent's last turn, written to its plan file; "" for none
 	Prompt    string            `json:"prompt"`    // the one line the engine starts on
 	Env       map[string]string `json:"env"`       // the session's environment; the machine adds where its hooks post
 }

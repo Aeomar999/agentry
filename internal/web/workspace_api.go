@@ -9,8 +9,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
 )
 
-// The peek into a task's worktree: its files and what changed, and one
-// file at a time. Read only.
+// A task's Workspace page, as an editor's git view shows it: its
+// files with their git status, the branch's commits since the task
+// started, and one file at a time, now or in a commit (?commit=). Read only.
 
 // workspaceOf is the task's worktree and the machine it is on, which reads it.
 func (s *Server) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.Workspace, machines.Machine, bool) {
@@ -27,7 +28,7 @@ func (s *Server) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.
 	if s.config.Fleet != nil {
 		machine = s.config.Fleet.Of(task.Worktree.Worker)
 	}
-	return workspace.Workspace{Dir: task.Worktree.Path, Base: task.Worktree.Base}, machine, true
+	return workspace.Workspace{Dir: task.Worktree.Path, Base: task.Worktree.Base, Commit: r.URL.Query().Get("commit")}, machine, true
 }
 
 func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +45,22 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 		files = []workspace.File{}
 	}
 	reply(w, map[string]any{"base": ws.Base, "files": files})
+}
+
+func (s *Server) listCommits(w http.ResponseWriter, r *http.Request) {
+	ws, machine, ok := s.workspaceOf(w, r)
+	if !ok {
+		return
+	}
+	commits, err := machine.Commits(r.Context(), ws)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if commits == nil {
+		commits = []workspace.Commit{}
+	}
+	reply(w, commits)
 }
 
 func (s *Server) readFile(w http.ResponseWriter, r *http.Request) {

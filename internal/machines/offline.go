@@ -34,6 +34,10 @@ func (o Offline) IsRunning(string) bool                                     { re
 func (o Offline) Files(context.Context, workspace.Workspace) ([]workspace.File, error) {
 	return nil, o.err()
 }
+func (o Offline) Commits(context.Context, workspace.Workspace) ([]workspace.Commit, error) {
+	return nil, o.err()
+}
+func (o Offline) StartHelper(context.Context, Helper) error { return o.err() }
 func (o Offline) Read(context.Context, workspace.Workspace, string) (workspace.Contents, error) {
 	return workspace.Contents{}, o.err()
 }

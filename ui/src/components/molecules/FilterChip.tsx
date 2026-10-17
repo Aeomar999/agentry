@@ -14,7 +14,7 @@ export function FilterChip({ label, count, active, onClick }: FilterChipProps) {
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium",
+        "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium whitespace-nowrap",
         "transition-colors duration-(--dur-fast)",
         active
           ? "border-divider-2 bg-surface-3 text-ink-primary"

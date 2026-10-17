@@ -48,6 +48,11 @@ export function terminalURL(taskId: string): string {
   return socketURL(`/api/tasks/${encodeURIComponent(taskId)}/terminal`);
 }
 
+// Your own Claude session beside a task, in its worktree; started on the way.
+export function helperTerminalURL(taskId: string, theme: "light" | "dark"): string {
+  return socketURL(`/api/tasks/${encodeURIComponent(taskId)}/claude/terminal`, `&theme=${theme}`);
+}
+
 // The Claude session that turns what you say into tasks for the coordinator.
 // It starts in the page's theme, and restarts in a new one, keeping the
 // conversation, when the address's theme changes.

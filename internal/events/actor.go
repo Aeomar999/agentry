@@ -9,6 +9,7 @@ const (
 	Worker ActorKind = "worker" // the machine running the agents' sessions
 	Policy ActorKind = "policy" // the allow / ask / deny rules deciding on their own
 	System ActorKind = "system" // Agentry itself: the coordinator loop, the watchdog, the validator
+	Helper ActorKind = "helper" // a Claude session you opened beside a task; it only drafts messages for you to send
 )
 
 type Actor struct {

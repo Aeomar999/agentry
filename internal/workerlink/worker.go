@@ -170,6 +170,19 @@ func (w *Worker) handle(ctx context.Context, method string, params json.RawMessa
 			return nil, err
 		}
 		return m.Files(ctx, ws)
+	case methodCommits:
+		var ws workspace.Workspace
+		if err := json.Unmarshal(params, &ws); err != nil {
+			return nil, err
+		}
+		return m.Commits(ctx, ws)
+	case methodStartHelper:
+		var h machines.Helper
+		if err := json.Unmarshal(params, &h); err != nil {
+			return nil, err
+		}
+		w.Log("%s: starting Claude in the Workspace", h.Task)
+		return nil, m.StartHelper(ctx, h)
 	case methodRead:
 		var request read
 		if err := json.Unmarshal(params, &request); err != nil {

@@ -19,13 +19,15 @@ import (
 type Config struct {
 	UIToken     string // opens the page and the API; printed when the server starts
 	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
+	HelperToken string // the Claude sessions' beside tasks: drafts messages for you, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
 	Budget      int    // the token budget a new task gets when it names none; 0 is no limit
 	Policy      PolicySource
 	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk
+	Helper      http.Handler       // the terminal of the Claude session beside a task, started on the way; nil for none
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
 
-	Fleet     *machines.Fleet    // where tasks' work is: for the peek into a workspace
+	Fleet     *machines.Fleet    // where tasks' work is: for their Workspace page
 	Workers   *workerlink.Server // the server's end of the workers' links; nil for none
 	PublicURL string             // the address people and workers reach; "" for the one a request came to
 	Binary    string             // this agentry, which a joining machine can download
@@ -70,7 +72,12 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("GET /api/tasks/{task}/files", s.listFiles)
 	api("GET /api/tasks/{task}/file", s.readFile)
+	api("GET /api/tasks/{task}/commits", s.listCommits)
 	api("POST /api/tasks/{task}/direct", s.direct)
+	api("POST /api/tasks/{task}/message", s.message) // your chat with its coordinator
+	mux.Handle("POST /api/tasks/{task}/drafts", s.requireUIOrHelper(s.draft))
+	api("POST /api/tasks/{task}/drafts/{draft}/send", s.sendDraft)
+	api("POST /api/tasks/{task}/drafts/{draft}/discard", s.discardDraft)
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/agents", s.listAgents)
@@ -105,6 +112,9 @@ func (s *Server) Handler() http.Handler {
 		worker("POST "+workerlink.GitPath+"{task}/bundle", s.receiveBundle)
 		worker("GET "+workerlink.UpdatePath, s.updateBinary)
 		worker("POST "+workerlink.LeavePath, s.leave)
+	}
+	if s.config.Helper != nil {
+		mux.Handle("GET /api/tasks/{task}/claude/terminal", s.requireUI(s.config.Helper.ServeHTTP))
 	}
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))

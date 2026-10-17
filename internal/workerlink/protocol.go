@@ -14,6 +14,8 @@ const (
 	methodStartTurn   = "startTurn"   // machines.Turn → nothing
 	methodStop        = "stop"        // taskOnly → nothing
 	methodFiles       = "files"       // workspace.Workspace → []workspace.File
+	methodCommits     = "commits"     // workspace.Workspace → []workspace.Commit
+	methodStartHelper = "startHelper" // machines.Helper → nothing
 	methodRead        = "read"        // read → workspace.Contents
 	methodAttach      = "attach"      // attach → size; the worker dials the stream first
 	methodAbout       = "about"       // nothing → machines.About

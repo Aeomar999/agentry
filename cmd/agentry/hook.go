@@ -39,6 +39,7 @@ func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return fail(stderr, "not running in an Agentry session ("+hookcall.EnvTask+" and "+hookcall.EnvServer+" are unset)")
 	}
 	call.Ending = ending(call)
+	call.Plan = plan(call)
 
 	reply, err := post(call)
 	if err != nil {
@@ -68,6 +69,16 @@ func ending(call hookcall.Call) *hookcall.Ending {
 		}
 	}
 	return nil
+}
+
+// plan is the turn's plan file as the agent has left it, or nil if there is none.
+func plan(call hookcall.Call) *string {
+	text, err := os.ReadFile(filepath.Join(os.Getenv(hookcall.EnvWorktree), machines.PlanFile(call.Turn)))
+	if err != nil {
+		return nil
+	}
+	plan := string(text)
+	return &plan
 }
 
 // post sends the call. If the engine's hook timeout killed us, the engine

@@ -20,6 +20,7 @@ var commands = []command{
 	{"serve", "run Agentry: the page, the coordinator, the agents", runServe},
 	{"worker", "run agents on this machine for a server; join it first", runWorker},
 	{"task", "create, list, show or answer tasks; used by the desk", runTask},
+	{"draft", "draft a message to a task's coordinator, for you to send; used by the Claude session in a task's Workspace", runDraft},
 	{"hook", "called by an engine's hooks; not run by hand", runHook},
 }
 

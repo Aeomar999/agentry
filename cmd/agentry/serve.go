@@ -23,11 +23,13 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
@@ -101,8 +103,20 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	hookToken := newToken()                // new each start: only sessions started by this server have it
-	deskToken := newToken()                // the same, for the desk's session
+	// Kept across restarts like the UI token: a session outlives the server
+	// that started it, and a new token would lock its hooks out (fail closed).
+	hookToken, err := keptToken(filepath.Join(o.dataDir, hookTokenFile))
+	if err != nil {
+		return err
+	}
+	deskToken, err := keptToken(filepath.Join(o.dataDir, deskTokenFile)) // the same, for the desk's session
+	if err != nil {
+		return err
+	}
+	helperToken, err := keptToken(filepath.Join(o.dataDir, helperTokenFile)) // the Claude sessions beside tasks, which only draft
+	if err != nil {
+		return err
+	}
 	serverURL := localURL(listener.Addr()) // what agents' hooks and the desk call, on this machine
 	var theme atomic.Value                 // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
@@ -141,9 +155,32 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	taskTerminal := hub.Handler(func(task string, onOutput func([]byte)) (terminal.Pane, error) {
 		return runner.MachineOf(task).Attach(task, onOutput)
 	})
+	// Your own Claude session beside a task, on the machine its work is on:
+	// started when you first open it, and kept, so you come back to it.
+	helperTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("task")
+		stream, err := log.Stream(id)
+		task := tasks.FromEvents(stream)
+		if err != nil || task == nil || task.Worktree == nil {
+			http.Error(w, "the task has no worktree to open Claude in", http.StatusNotFound)
+			return
+		}
+		machine := runner.MachineOf(id)
+		start, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		defer cancel()
+		err = machine.StartHelper(start, machines.Helper{Task: id, Worktree: task.Worktree.Path, Theme: currentTheme(),
+			Prompt: machines.HelperPrompt(id, task.Title, task.Worktree.Branch),
+			Env:    map[string]string{machines.EnvHelperToken: helperToken, hookcall.EnvTask: id}})
+		if err != nil {
+			http.Error(w, "starting Claude: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hub.Serve(w, r, machines.HelperSession(id), machine.Attach)
+	})
 	defer desk.Stop()
 
-	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
+	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
+		DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe()},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
@@ -194,8 +231,15 @@ func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Han
 	return nil
 }
 
-// keptToken reads the UI token from path, or makes and saves one, so the
-// printed link keeps working across restarts.
+// The tokens kept in the data folder, next to the UI token.
+const (
+	hookTokenFile   = "hook-token"
+	deskTokenFile   = "desk-token"
+	helperTokenFile = "helper-token"
+)
+
+// keptToken reads a token from path, or makes and saves one, so whatever
+// holds it (the printed link, a running session) keeps working across restarts.
 func keptToken(path string) (string, error) {
 	if saved, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(saved))) == 32 {
 		return strings.TrimSpace(string(saved)), nil

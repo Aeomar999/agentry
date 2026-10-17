@@ -66,3 +66,7 @@ func trustFolder(dir string) error {
 	}
 	return os.Rename(temporary, path)
 }
+
+// TrustFolder trusts dir for a Claude session that isn't an agent's turn,
+// such as the one you open beside a task, so it starts without asking.
+func TrustFolder(dir string) error { return trustFolder(dir) }

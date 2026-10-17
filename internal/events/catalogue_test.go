@@ -61,7 +61,7 @@ func TestCheckShapeAndWriter(t *testing.T) {
 func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskRanked, TaskHeld, TaskReopened, WorktreeReady, TaskAssigned, TurnStarted,
 		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
-		ActionResult, AgentWaiting, TurnEnded, IssueRaised, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
+		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, MessageDrafted, DraftDiscarded, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
 		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved}
 	for _, kind := range all {

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FileQuestion, SquareTerminal } from "lucide-react";
+import { FileQuestion, GitBranch, MessagesSquare } from "lucide-react";
 import { LogoTile } from "@/components/atoms/LogoTile";
 import { Banner } from "@/components/molecules/Banner";
 import { EmptyState } from "@/components/molecules/EmptyState";
-import { FileTree, WorkspaceFile } from "@/components/molecules/FileTree";
+import { CHANGE_COLOR, FileTree, WorkspaceFile } from "@/components/molecules/FileTree";
 import { FileView } from "@/components/molecules/FileView";
-import { FilterChip } from "@/components/molecules/FilterChip";
 import { Mono } from "@/components/molecules/Mono";
 import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { WorkspaceDock } from "@/components/organisms/WorkspaceDock";
+import { Commit, Section, SourceControl } from "@/components/organisms/SourceControl";
 import type { Agent, TaskDetail } from "@/api/types";
 import { AgentColorsProvider } from "@/live/agent-colors";
 import { useResource } from "@/live/use-resource";
@@ -17,10 +17,12 @@ import { modKey } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
 import { cn } from "@/lib/cn";
 
-// A peek into a task's workspace, in its own tab: the folder tree with what
-// changed since the task started, each file in Monaco (changed ones as a
-// diff), and Ctrl+J for the dock with the agent's terminal and who has
-// worked here. Read only: the agents do the work.
+// A task's Workspace, in its own tab, laid out like an editor's
+// git view: source control (what isn't committed, then the branch's commits,
+// newest first) and the explorer, every file with its git status. A file
+// opens in Monaco next to its last committed version; in a commit, next to
+// the version before it. Ctrl+J opens the dock: the coordinator, the agent's
+// terminal, and who has worked here. Read only: the agents do the work.
 
 interface Contents {
   path: string;
@@ -36,14 +38,22 @@ export function WorkspacePage() {
   const { taskId = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const selected = params.get("file") ?? "";
-  const task = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`).data;
+  const commit = params.get("commit") ?? "";
+  const task_ = encodeURIComponent(taskId);
+  const taskResource = useResource<TaskDetail>(`/api/tasks/${task_}`);
+  const task = taskResource.data;
   const agents = useResource<Agent[]>("/api/agents").data ?? [];
-  const listing = useResource<{ base: string; files: WorkspaceFile[] }>(`/api/tasks/${encodeURIComponent(taskId)}/files`);
+  const listing = useResource<{ base: string; files: WorkspaceFile[] }>(`/api/tasks/${task_}/files`);
+  const commits = useResource<Commit[]>(`/api/tasks/${task_}/commits`).data ?? [];
   const files = listing.data?.files ?? [];
-  const [changedOnly, setChangedOnly] = useState(true);
-  const file = files.find((f) => f.path === selected);
+  const changes = files.filter((f) => f.change);
+  const open = (path: string, inCommit: string) =>
+    setParams(inCommit ? { file: path, commit: inCommit } : { file: path }, { replace: true });
+
+  const inCommit = commits.find((c) => c.hash === commit);
+  const file = inCommit ? inCommit.files.find((f) => f.path === selected) : files.find((f) => f.path === selected);
   const contents = useResource<Contents>(
-    selected ? `/api/tasks/${encodeURIComponent(taskId)}/file?path=${encodeURIComponent(selected)}` : null,
+    selected ? `/api/tasks/${task_}/file?path=${encodeURIComponent(selected)}${commit ? `&commit=${commit}` : ""}` : null,
   ).data;
 
   // The dock: Ctrl+J, from anywhere on the page.
@@ -69,8 +79,9 @@ export function WorkspacePage() {
     document.title = `${taskId} workspace · Agentry`;
   }, [taskId]);
 
-  const counts = { M: 0, A: 0, D: 0 };
-  for (const f of files) if (f.change) counts[f.change]++;
+  const counts = { M: 0, A: 0, D: 0, U: 0 };
+  for (const f of changes) if (f.change) counts[f.change]++;
+  const showsDiff = file?.change === "M" || file?.change === "D";
 
   return (
     <AgentColorsProvider agents={agents}>
@@ -82,64 +93,72 @@ export function WorkspacePage() {
           <Mono className="text-ink-muted">{taskId}</Mono>
           <span className="min-w-0 truncate text-[13px] font-medium text-ink-primary">{task?.title}</span>
           {task && <TaskStatusBadge status={task.status} />}
-          {task?.worktree && <Mono className="text-ink-faint max-md:hidden">{task.worktree.branch}</Mono>}
           <span className="ml-auto flex items-center gap-3 font-mono text-[12px]">
-            <span className="text-warning">M {counts.M}</span>
-            <span className="text-success">A {counts.A}</span>
-            <span className="text-danger">D {counts.D}</span>
+            {task?.worktree && (
+              <span className="flex items-center gap-1.5 text-ink-muted max-md:hidden">
+                <GitBranch className="size-3.5" />
+                {task.worktree.branch}
+              </span>
+            )}
+            {changes.length === 0 ? (
+              <span className="text-ink-faint">nothing to commit</span>
+            ) : (
+              (["M", "A", "D", "U"] as const).map(
+                (c) =>
+                  counts[c] > 0 && (
+                    <span key={c} className={CHANGE_COLOR[c]}>
+                      {c} {counts[c]}
+                    </span>
+                  ),
+              )
+            )}
           </span>
           <button
             type="button"
             onClick={() => setDockOpen((open) => !open)}
-            title={`The agent's terminal (${modKey} J)`}
+            title={`The coordinator, Claude and the agent's terminal (${modKey} J)`}
             className={cn(
               "flex h-7 cursor-pointer items-center gap-1.5 rounded-sm px-2 text-[12px] text-ink-muted hover:bg-surface-2 hover:text-ink-primary",
               dockOpen && "bg-surface-3 text-ink-primary",
             )}
           >
-            <SquareTerminal className="size-3.5" /> Terminal
+            <MessagesSquare className="size-3.5" /> Dock
           </button>
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <aside className="flex w-72 shrink-0 flex-col border-r border-divider bg-surface-1">
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b border-divider px-2">
-              <FilterChip
-                label="Changed"
-                count={counts.M + counts.A + counts.D}
-                active={changedOnly}
-                onClick={() => setChangedOnly(true)}
-              />
-              <FilterChip label="All files" count={files.length} active={!changedOnly} onClick={() => setChangedOnly(false)} />
-            </div>
-            <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
-              {listing.error ? (
-                <p className="px-3 py-4 text-[12px] text-ink-muted">{listing.error}</p>
-              ) : (
-                <FileTree
-                  files={files}
-                  selected={selected}
-                  onSelect={(path) => setParams({ file: path }, { replace: true })}
-                  changedOnly={changedOnly}
-                />
-              )}
-            </div>
+          <aside className="flex w-80 shrink-0 scrollbar-thin flex-col overflow-y-auto border-r border-divider bg-surface-1 py-1">
+            {listing.error ? (
+              <p className="px-3 py-4 text-[12px] text-ink-muted">{listing.error}</p>
+            ) : (
+              <>
+                <SourceControl changes={changes} commits={commits} selected={{ path: selected, commit }} onOpen={open} />
+                <Section title="Explorer" count={files.length} startOpen>
+                  <FileTree files={files} selected={commit ? "" : selected} onSelect={(path) => open(path, "")} changedOnly={false} />
+                </Section>
+              </>
+            )}
           </aside>
 
           <div ref={column} className="flex min-w-0 flex-1 flex-col">
             <main className="flex min-h-0 flex-1 flex-col">
               {!selected ? (
                 <EmptyState icon={<FileQuestion />} title="Pick a file">
-                  Changed files open side by side with how they were when the task started.
+                  A changed file opens next to its last committed version; a file in a commit, next to the version before it.
                 </EmptyState>
               ) : (
                 <>
                   <div className="flex h-9 shrink-0 items-center gap-2 border-b border-divider px-3">
                     <Mono className="truncate text-ink-primary">{selected}</Mono>
                     {file?.change && (
-                      <span className="font-mono text-[11px] text-ink-muted">
-                        {{ M: "modified", A: "added", D: "deleted" }[file.change]}
+                      <span className={cn("font-mono text-[11px]", CHANGE_COLOR[file.change])}>{CHANGE_NAME[file.change]}</span>
+                    )}
+                    {inCommit ? (
+                      <span className="min-w-0 truncate text-[11px] text-ink-muted">
+                        in <Mono className="text-[11px]">{inCommit.hash.slice(0, 7)}</Mono> {inCommit.subject}
                       </span>
+                    ) : (
+                      file?.change && <span className="text-[11px] text-ink-faint">not committed</span>
                     )}
                   </div>
                   <div className="min-h-0 flex-1">
@@ -149,20 +168,30 @@ export function WorkspacePage() {
                       </div>
                     ) : (
                       <FileView
-                        key={selected}
+                        key={`${commit}:${selected}`}
                         path={selected}
                         now={contents.now}
-                        before={file?.change === "M" || file?.change === "D" ? contents.before : undefined}
+                        before={showsDiff ? contents.before : undefined}
                       />
                     )}
                   </div>
                 </>
               )}
             </main>
-            {dockOpen && task && <WorkspaceDock task={task} height={dockHeight} onResize={resize} onClose={() => setDockOpen(false)} />}
+            {dockOpen && task && (
+              <WorkspaceDock
+                task={task}
+                height={dockHeight}
+                onResize={resize}
+                onClose={() => setDockOpen(false)}
+                onChanged={taskResource.reload}
+              />
+            )}
           </div>
         </div>
       </div>
     </AgentColorsProvider>
   );
 }
+
+const CHANGE_NAME = { M: "modified", A: "added", D: "deleted", U: "untracked" };

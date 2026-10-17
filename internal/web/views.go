@@ -45,6 +45,13 @@ type taskDetail struct {
 	Approvals   []action     `json:"approvals"` // waiting for you
 	Actions     []action     `json:"actions"`
 	Events      []eventEntry `json:"events"`
+	Drafts      []draft      `json:"drafts"` // waiting for you to send or discard
+}
+
+type draft struct {
+	ID   string    `json:"id"`
+	At   time.Time `json:"at"`
+	Text string    `json:"text"`
 }
 
 type worktree struct {
@@ -60,6 +67,7 @@ type step struct {
 	From string    `json:"from"`
 	To   string    `json:"to"`
 	Text string    `json:"text"`
+	Turn string    `json:"turn"` // the turn it led to, "" when none has started
 }
 
 type turn struct {
@@ -67,10 +75,14 @@ type turn struct {
 	Agent        string    `json:"agent"`
 	Worker       string    `json:"worker"` // the machine it ran on
 	StartedAt    time.Time `json:"startedAt"`
+	LastEventAt  time.Time `json:"lastEventAt"` // when it ended, once it has
 	Acknowledged bool      `json:"acknowledged"`
 	Ended        bool      `json:"ended"`
 	Issue        string    `json:"issue"`
 	Tokens       int       `json:"tokens"`
+	Plan         string    `json:"plan"`     // a Markdown checklist, "" until the agent writes one
+	PlanFrom     string    `json:"planFrom"` // the turn whose unfinished plan it started on, "" for a fresh one
+	Stopped      bool      `json:"stopped"`  // you ended it, to tell the coordinator something
 }
 
 type action struct {
@@ -83,6 +95,7 @@ type action struct {
 	Asked       bool      `json:"asked"`
 	Decision    string    `json:"decision"`
 	Reason      string    `json:"reason"`
+	Finished    bool      `json:"finished"` // the tool ran and returned
 }
 
 type eventEntry struct {
@@ -133,18 +146,24 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 		detail.Worktree = &worktree{Worker: w.Worker, Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}
 	for _, s := range t.Trail {
-		detail.Trail = append(detail.Trail, step{At: s.At, From: s.From, To: s.To, Text: s.Text})
+		detail.Trail = append(detail.Trail, step{At: s.At, From: s.From, To: s.To, Text: s.Text, Turn: turnOf(t, s)})
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
-			Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens})
+			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
 	}
 	for _, a := range t.Actions {
 		view := action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command,
-			RequestedAt: a.RequestedAt, Asked: a.Asked, Decision: string(a.Decision), Reason: a.Reason}
+			RequestedAt: a.RequestedAt, Asked: a.Asked, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
 		detail.Actions = append(detail.Actions, view)
 		if a.Asked && a.Decision == tasks.Undecided {
 			detail.Approvals = append(detail.Approvals, view)
+		}
+	}
+	detail.Drafts = []draft{}
+	for _, d := range t.Drafts {
+		if !d.Sent && !d.Discarded {
+			detail.Drafts = append(detail.Drafts, draft{ID: d.ID, At: d.At, Text: d.Text})
 		}
 	}
 	for _, e := range log {
@@ -152,6 +171,22 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 			Actor: e.Actor.String(), Correlation: e.Correlation, Data: e.Data})
 	}
 	return detail
+}
+
+// turnOf is the turn a trail step leads to: the next turn of the agent it
+// was said to, so every turn is reached from the step that started it. What
+// is said to you starts no turn: it belongs to the turn that said it.
+func turnOf(t *tasks.Task, s tasks.Step) string {
+	found := ""
+	for _, turn := range t.Turns {
+		if s.To == tasks.You && turn.Agent == s.From && !turn.StartedAt.After(s.At) {
+			found = turn.ID
+		}
+		if s.To != tasks.You && turn.Agent == s.To && !turn.StartedAt.Before(s.At) {
+			return turn.ID
+		}
+	}
+	return found
 }
 
 func agentsOf(roster agents.Roster) []agents.Agent {

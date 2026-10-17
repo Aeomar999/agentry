@@ -1,0 +1,225 @@
+import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
+import { readPlan } from "./plan";
+import { tokens } from "./tokens";
+
+// A task's activity: its whole event log read as rows a person follows,
+// oldest first (newestFirst turns it round for the page). An action's request, decision and result are one row, and
+// each turn opens with a row of its own. The Events tab keeps the raw log.
+
+export type ActivityKind = "turn" | "action" | "message" | "waiting" | "issue" | "ended" | "note";
+export type ActivityTone = "default" | "success" | "warning" | "danger" | "info";
+
+export interface ActivityItem {
+  key: string;
+  kind: ActivityKind;
+  at: string;
+  until?: string; // when it finished; none while it is still happening
+  live: boolean; // still happening
+  turn: string; // the turn it happened in, "" between turns
+  leadsTo?: string; // a handoff: the turn it started
+  from?: string; // who said it, for a message
+  to?: string;
+  title: string;
+  body?: string; // longer text: instructions, a report, a question
+  tone: ActivityTone;
+  action?: Action;
+  turnInfo?: Turn;
+}
+
+// Kinds you can narrow the activity to; "all" is every row.
+export const SHOWS = ["all", "actions", "messages"] as const;
+export type Show = (typeof SHOWS)[number];
+
+export function activityOf(task: TaskDetail): ActivityItem[] {
+  const actions = new Map((task.actions ?? []).map((a) => [a.id, a]));
+  const turns = new Map((task.turnList ?? []).map((t) => [t.id, t]));
+  const log = task.events ?? [];
+
+  // When each action was settled: its result, or its denial.
+  const settledAt = new Map<string, string>();
+  for (const e of log) {
+    if ((e.type === "action.result" || e.type === "action.denied") && e.correlation) settledAt.set(e.correlation, e.at);
+  }
+
+  const items: ActivityItem[] = [];
+  let handoff: ActivityItem | undefined; // the last handoff to an agent, until its turn starts
+  for (const e of log) {
+    const turn = turnOfEvent(e, turns, actions);
+    const item = rowOf(e, turn, turns, actions, settledAt, task.coordinator);
+    if (!item) continue;
+    if (item.kind === "message" && item.to && item.to !== "you") handoff = item;
+    if (item.kind === "turn" && handoff && handoff.to === item.turnInfo?.agent) {
+      handoff.leadsTo = item.turn;
+      handoff = undefined;
+    }
+    items.push(item);
+  }
+  return items;
+}
+
+// Only the rows of one turn, with the handoff that started it.
+export function inTurn(items: ActivityItem[], turn: string): ActivityItem[] {
+  return items.filter((item) => item.turn === turn || item.leadsTo === turn);
+}
+
+export function shown(items: ActivityItem[], show: Show): ActivityItem[] {
+  if (show === "actions") return items.filter((item) => item.kind === "action" || item.kind === "turn");
+  if (show === "messages") return items.filter((item) => item.kind !== "action" && item.kind !== "note");
+  return items;
+}
+
+// rowFor is the row an action, or an event, shows in: the action's own row
+// for every event about it. "" when it has none, as for a new priority.
+export function rowFor(items: ActivityItem[], target: { action?: string; event?: LogEvent }): string {
+  const { action, event } = target;
+  const exact = event && items.find((item) => item.key === String(event.position));
+  if (exact) return exact.key;
+  const id = action ?? event?.correlation;
+  return (id && items.find((item) => item.action?.id === id)?.key) || "";
+}
+
+// newestFirst puts the latest rows first, but keeps each turn's band above
+// the rows of its turn, as a heading stays above what it heads.
+export function newestFirst(items: ActivityItem[]): ActivityItem[] {
+  const blocks: ActivityItem[][] = [];
+  for (const item of items) {
+    const block = blocks[blocks.length - 1];
+    if (item.kind !== "turn" && item.turn && block?.[0].kind === "turn" && block[0].turn === item.turn) block.push(item);
+    else blocks.push([item]);
+  }
+  return blocks.reverse().flatMap(([first, ...rest]) => [first, ...rest.reverse()]);
+}
+
+function turnOfEvent(e: LogEvent, turns: Map<string, Turn>, actions: Map<string, Action>): string {
+  if (!e.correlation) return "";
+  if (turns.has(e.correlation)) return e.correlation;
+  return actions.get(e.correlation)?.turn ?? "";
+}
+
+// who is the name an event's actor goes by in the trail: "agent:dev" is
+// dev, and a person is you.
+function who(e: LogEvent): string {
+  const [kind, id] = e.actor.split(":", 2);
+  return kind === "human" ? "you" : (id ?? kind);
+}
+
+function text(e: LogEvent, key: string): string {
+  const value = e.data?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function rowOf(
+  e: LogEvent,
+  turn: string,
+  turns: Map<string, Turn>,
+  actions: Map<string, Action>,
+  settledAt: Map<string, string>,
+  coordinator: string,
+): ActivityItem | null {
+  const base = { key: String(e.position), at: e.at, turn, live: false, tone: "default" as ActivityTone };
+  const message = (from: string, to: string, body: string, tone: ActivityTone = "default"): ActivityItem => ({
+    ...base,
+    kind: "message",
+    from,
+    to,
+    title: `${from} to ${to}`,
+    body,
+    tone,
+  });
+
+  switch (e.type) {
+    case "task.created":
+      return message("you", coordinator, text(e, "description") || text(e, "title"));
+    case "task.directed":
+    case "task.reopened":
+      return message("you", coordinator, text(e, "text"));
+    case "task.answered":
+      return message("you", coordinator, text(e, "answer"));
+    case "task.assigned":
+      return message(who(e), text(e, "agent"), text(e, "instructions"));
+    case "task.needs_you":
+      return message(who(e), "you", text(e, "question"), "warning");
+    case "task.done":
+      return message(who(e), "you", text(e, "summary"), "success");
+
+    case "turn.started": {
+      const info = turns.get(turn);
+      if (!info) return null;
+      const ended = info.ended ? info.lastEventAt : undefined;
+      return {
+        ...base,
+        kind: "turn",
+        title: info.agent,
+        turnInfo: info,
+        until: ended,
+        live: !info.ended,
+        tone: info.issue ? "danger" : "info",
+      };
+    }
+    case "turn.ended": {
+      const used = Number(e.data?.tokens ?? 0);
+      const title = used > 0 ? `Finished, ${tokens(used)} tokens` : "Finished";
+      return { ...base, kind: "ended", title, body: text(e, "report"), tone: "success" };
+    }
+    case "turn.stopped":
+      return { ...base, kind: "note", title: "You stopped this turn, so the coordinator reads what you said" };
+    case "issue.raised":
+      return { ...base, kind: "issue", title: "Something went wrong", body: text(e, "reason"), tone: "danger" };
+    case "agent.waiting":
+      return { ...base, kind: "waiting", title: "Waiting", body: text(e, "question"), tone: "warning" };
+
+    case "action.requested": {
+      const action = e.correlation ? actions.get(e.correlation) : undefined;
+      if (!action) return null;
+      const until = settledAt.get(action.id);
+      const waiting = action.asked && !action.decision;
+      return {
+        ...base,
+        kind: "action",
+        title: action.tool,
+        body: action.command,
+        action,
+        until,
+        live: !until,
+        tone: action.decision === "denied" ? "danger" : waiting ? "warning" : "default",
+      };
+    }
+    case "action.asked":
+    case "action.approved":
+    case "action.denied":
+    case "action.result":
+    case "task.ranked":
+      return null; // folded into the action's row; a new priority is not news
+
+    case "plan.updated": {
+      const plan = readPlan(text(e, "plan"));
+      return {
+        ...base,
+        kind: "note",
+        title: plan.steps ? `Updated its plan: ${plan.done} of ${plan.steps} steps done` : "Cleared its plan",
+      };
+    }
+    case "prompt.acknowledged":
+      return { ...base, kind: "note", title: "Read its brief" };
+    case "session.started":
+      return { ...base, kind: "note", title: `Engine session ${text(e, "engineSession").slice(0, 8)}` };
+    case "task.renamed":
+      return { ...base, kind: "note", title: `Renamed to "${text(e, "title")}"` };
+    case "task.labeled": {
+      const labels = Array.isArray(e.data?.labels) ? (e.data.labels as string[]) : [];
+      return { ...base, kind: "note", title: labels.length ? `Labeled ${labels.join(", ")}` : "Labels removed" };
+    }
+    case "task.budgeted":
+      return { ...base, kind: "note", title: `Budget set to ${tokens(Number(e.data?.budget ?? 0))} tokens` };
+    case "task.held": {
+      const place = text(e, "place");
+      return { ...base, kind: "note", title: place ? `Held in ${place}` : "Moved on" };
+    }
+    case "worktree.ready":
+      return { ...base, kind: "note", title: `Worktree ready on ${text(e, "worker") || "local"}: ${text(e, "branch")}` };
+    case "worktree.moved":
+      return { ...base, kind: "note", title: `Work moved to ${text(e, "worker")}` };
+    default:
+      return { ...base, kind: "note", title: e.type };
+  }
+}

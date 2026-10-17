@@ -127,10 +127,16 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 	s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Worker, ID: "laptop"}, Type: events.WorktreeMoved,
 		Data: map[string]any{"worker": "laptop", "path": there.Path, "port": there.Port}})
 
-	// The page peeks at its files there.
-	files, err := laptop.Files(ctx, workspace.Workspace{Dir: there.Path, Base: w.Base})
-	if err != nil || !slices.ContainsFunc(files, func(f workspace.File) bool { return f.Path == "notes.md" && f.Change == workspace.Added }) {
+	// The page peeks at its files there: notes.md, committed when the work
+	// left, is a plain file, and the commit that holds it is in the history.
+	ws := workspace.Workspace{Dir: there.Path, Base: w.Base}
+	files, err := laptop.Files(ctx, ws)
+	if err != nil || !slices.ContainsFunc(files, func(f workspace.File) bool { return f.Path == "notes.md" && f.Change == workspace.Unchanged }) {
 		t.Errorf("files on the worker: %+v %v", files, err)
+	}
+	commits, err := laptop.Commits(ctx, ws)
+	if err != nil || len(commits) == 0 || !slices.ContainsFunc(commits[0].Files, func(f workspace.File) bool { return f.Path == "notes.md" && f.Change == workspace.Added }) {
+		t.Errorf("commits on the worker: %+v %v", commits, err)
 	}
 
 	// A turn runs there, and its terminal shows here.

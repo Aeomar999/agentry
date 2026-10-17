@@ -8,10 +8,11 @@ import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { Action, TaskDetail } from "@/api/types";
 import { useToast } from "./Toasts";
-import { QuestionPage } from "@/components/molecules/QuestionPage";
 
-// What a task is waiting on you for: actions the policy held, a question
-// from the coordinator, or an agent stuck on a prompt in its terminal.
+// What a task's agents are waiting on you for: actions the policy held, or
+// an agent stuck on a prompt in its terminal. A question from the
+// coordinator (or Agentry) isn't here: it is in the task's chat, and
+// answered in the dock's Questions.
 
 interface NeedsYouPanelProps {
   task: TaskDetail;
@@ -20,24 +21,18 @@ interface NeedsYouPanelProps {
 }
 
 export function NeedsYouPanel({ task, onChanged, onOpenTerminal }: NeedsYouPanelProps) {
-  const [fromPage, setFromPage] = useState("");
   const approvals = task.approvals ?? [];
-  const question = task.status === "needs you" && approvals.length === 0 ? task.needsYou : "";
-  if (approvals.length === 0 && !question) return null;
+  const waiting = task.status === "needs you" && approvals.length === 0 && !task.hasQuestion ? task.needsYou : "";
+  if (approvals.length === 0 && !waiting) return null;
 
-  const trail = task.trail ?? [];
-  const askedByCoordinator = trail.length > 0 && trail[trail.length - 1].to === "you";
   return (
     <Panel tone="warning" title={<span className="text-warning">Needs you</span>}>
       <div className="flex flex-col gap-4">
         {approvals.map((action) => (
           <Approval key={action.id} taskId={task.id} action={action} onChanged={onChanged} />
         ))}
-        {question && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{question}</p>}
-        {question && task.overBudget && <BudgetChoice task={task} onChanged={onChanged} />}
-        {question && task.page && <QuestionPage page={task.page} onAnswer={setFromPage} />}
-        {question && askedByCoordinator && <Answer taskId={task.id} onChanged={onChanged} options={task.options} prefill={fromPage} />}
-        {question && !askedByCoordinator && (
+        {waiting && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{waiting}</p>}
+        {waiting && (
           <div className="flex flex-wrap items-center gap-3 text-[12px] text-ink-muted">
             The agent is waiting on something in its terminal.
             <Button size="sm" icon={<SquareTerminal />} onClick={onOpenTerminal}>

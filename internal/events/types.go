@@ -35,9 +35,14 @@ const (
 	ActionDenied    Type = "action.denied"
 	ActionResult    Type = "action.result"
 
+	PlanUpdated  Type = "plan.updated" // the turn's plan, all of it, as the agent last wrote it
 	AgentWaiting Type = "agent.waiting"
 	TurnEnded    Type = "turn.ended"   // the agent finished; its final message is its report
 	IssueRaised  Type = "issue.raised" // something went wrong; ends the open turn
+	TurnStopped  Type = "turn.stopped" // you ended the open turn, to tell the coordinator something
+
+	MessageDrafted Type = "message.drafted" // the Workspace's Claude wrote a message for the coordinator, for you to send or not
+	DraftDiscarded Type = "draft.discarded" // you chose not to send it
 
 	TaskNeedsYou Type = "task.needs_you"
 	TaskAnswered Type = "task.answered"

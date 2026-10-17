@@ -42,9 +42,14 @@ var catalogue = map[Type]spec{
 	ActionDenied:    {fields: []string{"reason"}, correlation: true, writers: []ActorKind{Policy, Human}},
 	ActionResult:    {correlation: true, writers: []ActorKind{Worker}},
 
+	PlanUpdated:  {correlation: true, writers: []ActorKind{Worker}}, // "plan" may be empty: the agent cleared it
 	AgentWaiting: {fields: []string{"question"}, correlation: true, writers: []ActorKind{Worker, System}},
 	TurnEnded:    {fields: []string{"agent", "report"}, correlation: true, writers: []ActorKind{Worker}},
 	IssueRaised:  {fields: []string{"reason"}, writers: []ActorKind{Worker, System}},
+	TurnStopped:  {correlation: true, writers: []ActorKind{Human}},
+
+	MessageDrafted: {fields: []string{"text"}, correlation: true, writers: []ActorKind{Helper}},
+	DraftDiscarded: {correlation: true, writers: []ActorKind{Human}},
 
 	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}},
 	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},

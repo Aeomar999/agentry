@@ -35,6 +35,13 @@ export interface TaskDetail extends TaskSummary {
   approvals: Action[] | null;
   actions: Action[] | null;
   events: LogEvent[] | null;
+  drafts: Draft[]; // messages Claude, in the Workspace, wrote for the coordinator, waiting for you
+}
+
+export interface Draft {
+  id: string;
+  at: string;
+  text: string;
 }
 
 export interface Worktree {
@@ -50,6 +57,7 @@ export interface Step {
   from: string;
   to: string;
   text: string;
+  turn: string; // the turn it led to (or, said to you, came from); "" when none
 }
 
 export interface Turn {
@@ -57,10 +65,14 @@ export interface Turn {
   agent: string;
   worker: string; // the machine it ran on
   startedAt: string;
+  lastEventAt: string; // when it ended, once it has
   acknowledged: boolean;
   ended: boolean;
   issue: string;
   tokens: number;
+  plan: string; // a Markdown checklist, "" until the agent writes one
+  planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
+  stopped: boolean; // you ended it, to tell the coordinator something
 }
 
 export interface Action {
@@ -73,6 +85,7 @@ export interface Action {
   asked: boolean;
   decision: string;
   reason: string;
+  finished: boolean; // the tool ran and returned
 }
 
 export interface LogEvent {

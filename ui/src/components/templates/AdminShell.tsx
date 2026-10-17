@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Outlet, useMatch, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Bot, KeyRound, ListTodo, Moon, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
 import { CommandPalette, PaletteItem } from "@/components/organisms/CommandPalette";
 import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
 import { StatusBar } from "@/components/organisms/StatusBar";
 import { TopBar } from "@/components/organisms/TopBar";
-import { DESK, QUESTIONS, TerminalDock } from "@/components/organisms/TerminalDock";
+import { DESK, DockTab, QUESTIONS, TerminalDock } from "@/components/organisms/TerminalDock";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import type { Crumb } from "@/components/molecules/Breadcrumbs";
 import type { Agent, Question, ServerConfig, TaskSummary } from "@/api/types";
@@ -20,7 +20,8 @@ import { readStored, writeStored } from "@/lib/stored";
 // The one template: top bar, sidebar, status bar, the terminal dock, the
 // palette and shortcuts around every page. It stays mounted while pages
 // change, and a page only supplies its breadcrumb (with useBreadcrumb) and
-// its content. A page can open the dock on a task with useTerminal.
+// its content. An agent's terminal is on its task's page, not in the dock.
+// A page opens the dock on one question with useOpenQuestion.
 
 const CrumbContext = createContext<(crumbs: Crumb[]) => void>(() => {});
 
@@ -30,11 +31,12 @@ export function useBreadcrumb(...crumbs: Crumb[]): void {
   useEffect(() => setCrumbs(JSON.parse(key)), [key, setCrumbs]);
 }
 
-const TerminalContext = createContext<(taskId?: string) => void>(() => {});
+const QuestionContext = createContext<(questionId: string) => void>(() => {});
 
-// useTerminal opens the dock, on the task's terminal when given one.
-export function useTerminal(): (taskId?: string) => void {
-  return useContext(TerminalContext);
+// useOpenQuestion opens the dock's Questions on one question, tall enough
+// for the page the coordinator may have made for it.
+export function useOpenQuestion(): (questionId: string) => void {
+  return useContext(QuestionContext);
 }
 
 const sidebarKey = "agentry-sidebar-collapsed";
@@ -56,24 +58,34 @@ export function AdminShell() {
   const [palette, setPalette] = useState(false);
   const [overlay, setOverlay] = useState(false);
 
-  // The dock: open or not, its height, and which tab. On a task's page it
-  // opens on that task's terminal.
+  // The dock: open or not, its height, and which tab: Questions or Claude.
   const column = useRef<HTMLDivElement>(null);
   const [dockOpen, setDockOpen] = useState(false);
   const [dockHeight, setDockHeight] = useState(() => Number(readStored(dockKey)) || 320);
-  const [dockTab, setDockTab] = useState(DESK);
-  const routeTask = useMatch("/tasks/:taskId")?.params.taskId;
+  const [dockTab, setDockTab] = useState<DockTab>(DESK);
   const resizeDock = useCallback((height: number) => {
     const most = column.current?.clientHeight ?? height; // up to the whole content area, never over the top bar
     setDockHeight(Math.round(Math.max(minDockHeight, Math.min(most, height))));
   }, []);
-  const openTerminal = useCallback(
-    (taskId?: string) => {
-      setDockTab(taskId ?? routeTask ?? DESK);
+  // Opened without a tab, the dock opens on Questions whenever something
+  // is waiting for you, and otherwise where you left it.
+  const waiting = questions.length;
+  const openDock = useCallback(
+    (tab?: DockTab) => {
+      if (tab) setDockTab(tab);
+      else if (waiting > 0) setDockTab(QUESTIONS);
       setDockOpen(true);
     },
-    [routeTask],
+    [waiting],
   );
+  const openTaskTerminal = useCallback((taskId: string) => navigate(`/tasks/${taskId}?tab=terminal`), [navigate]);
+  const [dockQuestion, setDockQuestion] = useState({ id: "", asked: 0 }); // asked counts, so the same one opens again
+  const openQuestion = useCallback((id: string) => {
+    setDockQuestion((last) => ({ id, asked: last.asked + 1 }));
+    setDockTab(QUESTIONS);
+    setDockHeight((height) => Math.max(height, Math.round((column.current?.clientHeight ?? 800) * 0.6)));
+    setDockOpen(true);
+  }, []);
 
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => writeStored(sidebarKey, String(collapsed)), [collapsed]);
@@ -88,7 +100,7 @@ export function AdminShell() {
   // they are caught before the focused element sees them. Every other key
   // is in useKeys.
   const toggleDock = useRef(() => {});
-  toggleDock.current = () => (dockOpen ? setDockOpen(false) : openTerminal());
+  toggleDock.current = () => (dockOpen ? setDockOpen(false) : openDock());
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -118,7 +130,7 @@ export function AdminShell() {
       { id: "go-agents", group: "Go to", label: "Agents", icon: <Bot />, run: () => navigate("/agents") },
       { id: "go-policy", group: "Go to", label: "Policy", icon: <ShieldCheck />, run: () => navigate("/policy") },
       { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => navigate("/tasks/new") },
-      { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openTerminal(DESK) },
+      { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
       ...tasks
         .filter((task) => task.status === "working" && task.currentAgent)
         .map((task) => ({
@@ -127,7 +139,7 @@ export function AdminShell() {
           label: `Open the terminal of ${task.id}`,
           hint: task.currentAgent,
           icon: <SquareTerminal />,
-          run: () => openTerminal(task.id),
+          run: () => openTaskTerminal(task.id),
         })),
       {
         id: "theme",
@@ -153,14 +165,13 @@ export function AdminShell() {
         run: () => navigate(`/agents/${encodeURIComponent(agent.name)}`),
       })),
     ],
-    [tasks, agents, theme, navigate, toggleTheme, openTerminal],
+    [tasks, agents, theme, navigate, toggleTheme, openDock, openTaskTerminal],
   );
 
   const needsYou = tasks.filter((task) => task.status === "needs you").length;
-  const working = tasks.filter((task) => task.status !== "done" && task.currentAgent); // their terminals, in the dock
   return (
     <CrumbContext.Provider value={setCrumbs}>
-      <TerminalContext.Provider value={openTerminal}>
+      <QuestionContext.Provider value={openQuestion}>
         <AgentColorsProvider agents={agents}>
           <div className="flex h-full flex-col">
             <TopBar
@@ -187,10 +198,11 @@ export function AdminShell() {
                   <TerminalDock
                     height={dockHeight}
                     onResize={resizeDock}
-                    working={working}
                     selected={dockTab}
+                    question={dockQuestion}
                     waiting={questions.length}
                     onSelect={setDockTab}
+                    onOpenTaskTerminal={openTaskTerminal}
                     onClose={() => setDockOpen(false)}
                     theme={theme}
                   />
@@ -203,7 +215,7 @@ export function AdminShell() {
               defaultRepo={config?.defaultRepo ?? ""}
               working={tasks.filter((task) => task.status === "working").length}
               needsYou={questions.length}
-              onOpenQuestions={() => openTerminal(QUESTIONS)}
+              onOpenQuestions={() => openDock(QUESTIONS)}
               terminalOpen={dockOpen}
               onToggleTerminal={() => toggleDock.current()}
             />
@@ -211,7 +223,7 @@ export function AdminShell() {
           <CommandPalette open={palette} items={paletteItems} onClose={() => setPalette(false)} />
           <ShortcutOverlay open={overlay} onClose={() => setOverlay(false)} />
         </AgentColorsProvider>
-      </TerminalContext.Provider>
+      </QuestionContext.Provider>
     </CrumbContext.Provider>
   );
 }

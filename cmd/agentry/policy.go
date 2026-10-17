@@ -13,12 +13,13 @@ const policyFile = "policy.toml"
 
 // openPolicy loads the policy agents follow, writing the default on first
 // start, and records it in the log if it isn't the one recorded last. The
-// log, the policy itself and the sign-in token are protected: no agent may
+// log, the policy itself and the tokens are protected: no agent may
 // touch them, whatever the policy says.
 func openPolicy(dataDir string, log *store.Store) (*policy.Live, error) {
 	path := filepath.Join(dataDir, policyFile)
 	home, _ := os.UserHomeDir()
-	protected := []string{filepath.Join(dataDir, "agentry.db"), path, filepath.Join(dataDir, "ui-token")}
+	protected := []string{filepath.Join(dataDir, "agentry.db"), path, filepath.Join(dataDir, "ui-token"),
+		filepath.Join(dataDir, hookTokenFile), filepath.Join(dataDir, deskTokenFile), filepath.Join(dataDir, helperTokenFile)}
 	live, err := policy.OpenLive(path, home, protected)
 	if err != nil {
 		return nil, err

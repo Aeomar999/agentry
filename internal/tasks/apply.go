@@ -47,6 +47,7 @@ func (t *Task) apply(e events.Event) {
 		// Only noted in the trail: the work in hand goes on, and the
 		// coordinator reads it at its next turn.
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
+		t.sent(e)
 
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
@@ -60,6 +61,7 @@ func (t *Task) apply(e events.Event) {
 		t.IsDone, t.Summary, t.Worktree = false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("text"))
+		t.sent(e)
 
 	case events.TaskRanked:
 		t.Rank = e.Real("rank")
@@ -81,11 +83,12 @@ func (t *Task) apply(e events.Event) {
 		t.Worktree.Worker, t.Worktree.Path, t.Worktree.Port = e.Text("worker"), e.Text("path"), e.Number("port")
 
 	case events.TaskAssigned:
+		t.reply(e)
 		t.step(e, e.Actor.ID, e.Text("agent"), e.Text("instructions"))
 
 	case events.TurnStarted:
 		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Worker: cmp.Or(e.Text("worker"), workers.Local), Hash: e.Text("hash"),
-			StartedAt: e.At, LastEventAt: e.At})
+			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
 
@@ -107,6 +110,9 @@ func (t *Task) apply(e events.Event) {
 		t.decide(e, Denied)
 	case events.ActionResult:
 		t.Action(e.Correlation).HasResult = true
+
+	case events.PlanUpdated:
+		t.Turn(e.Correlation).Plan = e.Text("plan")
 
 	case events.AgentWaiting:
 		t.Turn(e.Correlation).Waiting = e.Text("question")
@@ -131,16 +137,31 @@ func (t *Task) apply(e events.Event) {
 		t.IssuesInARow++
 		t.step(e, Agentry, t.Coordinator, e.Text("reason"))
 
+	case events.MessageDrafted:
+		t.Drafts = append(t.Drafts, &Draft{ID: e.Correlation, At: e.At, Text: e.Text("text")})
+	case events.DraftDiscarded:
+		t.Draft(e.Correlation).Discarded = true
+
+	case events.TurnStopped:
+		// Not an issue: nothing went wrong, so it doesn't count towards
+		// asking you. What you said is just above it in the trail.
+		turn := t.Turn(e.Correlation)
+		turn.Ended, turn.Stopped = true, true
+		t.step(e, Agentry, t.Coordinator, stoppedText(turn, t.Coordinator))
+
 	case events.TaskNeedsYou:
 		t.Question = e.Text("question")
 		t.Asked = Asked{By: e.Actor.ID, At: e.At, Options: e.List("options"), Page: e.Text("page")}
+		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Question)
 	case events.TaskAnswered:
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("answer"))
+		t.sent(e)
 
 	case events.TaskDone:
 		t.IsDone, t.Summary = true, e.Text("summary")
+		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Summary)
 	}
 }
@@ -159,6 +180,32 @@ func (t *Task) step(e events.Event, from, to, text string) {
 	if to != You {
 		t.Handoff = &step
 	}
+}
+
+// sent marks the draft you sent with these words, if they came from one.
+func (t *Task) sent(e events.Event) {
+	if d := t.Draft(e.Text("draft")); d != nil {
+		d.Sent = true
+	}
+}
+
+// reply adds the coordinator's answer to what you told it, which any
+// decision may carry, to the trail before the decision itself.
+func (t *Task) reply(e events.Event) {
+	if text := e.Text("toYou"); text != "" {
+		t.Trail = append(t.Trail, Step{At: e.At, From: e.Actor.ID, To: You, Text: text})
+	}
+}
+
+// stoppedText tells the coordinator a turn was stopped for it to hear you.
+func stoppedText(turn *Turn, coordinator string) string {
+	if turn.Agent == coordinator {
+		return "The user stopped your " + turn.ID + " to tell you what is just above. Decide again with it in mind."
+	}
+	return "The user stopped " + turn.Agent + "'s " + turn.ID + " to tell you what is just above. " + turn.Agent +
+		" wrote no report, but its work so far is in the worktree, and its unfinished plan carries over to its next turn. " +
+		"Unless what they said changes the direction, hand the task back to " + turn.Agent + " to carry on, with its " +
+		"instructions brought up to date for what they said."
 }
 
 func turnID(number int) string { return fmt.Sprintf("turn-%d", number) }

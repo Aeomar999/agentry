@@ -129,6 +129,11 @@ func (l *Local) PrepareTurn(_ context.Context, t Turn) error {
 	if err := writeFile(filepath.Join(t.Worktree, KnowledgeFile), t.Knowledge+"\n"); err != nil {
 		return err
 	}
+	if t.Plan != "" {
+		if err := writeFile(filepath.Join(t.Worktree, PlanFile(t.ID)), t.Plan+"\n"); err != nil {
+			return err
+		}
+	}
 	if err := engine.Prepare(l.session(t)); err != nil {
 		return fmt.Errorf("preparing %s's hooks: %w", t.Engine, err)
 	}
@@ -160,6 +165,10 @@ func (l *Local) Files(_ context.Context, w workspace.Workspace) ([]workspace.Fil
 	return w.Files()
 }
 
+func (l *Local) Commits(_ context.Context, w workspace.Workspace) ([]workspace.Commit, error) {
+	return w.Commits()
+}
+
 func (l *Local) Read(_ context.Context, w workspace.Workspace, path string) (workspace.Contents, error) {
 	return w.Read(path)
 }
@@ -184,6 +193,11 @@ const StateDir = ".agentry"
 // of its turn, for it to keep up to date; `agentry hook` reads it back when
 // the turn ends.
 var KnowledgeFile = filepath.Join(StateDir, "knowledge.md")
+
+// PlanFile is where the agent keeps its plan for a turn, a checklist it
+// ticks as it goes; `agentry hook` sends it with every call, so the page
+// follows it live. One file per turn, so no turn starts on another's plan.
+func PlanFile(turn string) string { return filepath.Join(StateDir, turn+"-plan.md") }
 
 func writeFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

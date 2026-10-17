@@ -1,32 +1,54 @@
-import { useState } from "react";
-import { SquareTerminal, Users, X } from "lucide-react";
+import { ReactNode, useState } from "react";
+import { Inbox, MessagesSquare, Sparkles, SquareTerminal, Users, X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { Kbd } from "@/components/atoms/Kbd";
 import { AgentName } from "@/components/molecules/AgentName";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { ResizeHandle } from "@/components/molecules/ResizeHandle";
-import { terminalURL } from "@/api/client";
+import { helperTerminalURL, terminalURL } from "@/api/client";
 import type { TaskDetail } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { modKey } from "@/lib/shortcuts";
 import { clockTime } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { TerminalView } from "./TerminalView";
+import { CoordinatorChat } from "./CoordinatorChat";
+import { QuestionsPanel } from "./QuestionsPanel";
+import { Drafts } from "./Drafts";
 
-// The workspace page's dock: the one terminal there is, the task's agent
-// session, and the agents that have worked in this workspace, turn by turn.
+// The Workspace page's dock: your chat with the task's coordinator, which
+// can put the task back to work; your own Claude, in the worktree, for your
+// questions, which can only draft messages to the coordinator for you to
+// send; the agent's terminal; the agents that have worked here, turn by
+// turn; and, while the coordinator waits for you, Questions.
 
 interface WorkspaceDockProps {
   task: TaskDetail;
   height: number;
   onResize: (height: number) => void;
   onClose: () => void;
+  onChanged: () => void; // something you sent: read the task again
 }
 
-export function WorkspaceDock({ task, height, onResize, onClose }: WorkspaceDockProps) {
-  const [tab, setTab] = useState<"terminal" | "agents">("terminal");
+type Tab = "coordinator" | "claude" | "terminal" | "agents" | "questions";
+
+export function WorkspaceDock({ task, height, onResize, onClose, onChanged }: WorkspaceDockProps) {
   const working = task.status !== "done" && task.currentAgent;
+  const [tab, setTab] = useState<Tab>(working ? "terminal" : "coordinator");
+  const [question, setQuestion] = useState({ id: "", asked: 0 });
   const turns = [...(task.turnList ?? [])].reverse();
+  const theme = document.documentElement.classList.contains("light") ? "light" : "dark";
+  const openQuestion = (id: string) => {
+    setQuestion((last) => ({ id, asked: last.asked + 1 }));
+    setTab("questions");
+  };
+  const tabs: [Tab, string, ReactNode][] = [
+    ["coordinator", task.hasQuestion ? "Coordinator · asks you" : "Coordinator", <MessagesSquare key="c" />],
+    ["claude", task.drafts.length ? `Claude · ${task.drafts.length} draft` : "Claude", <Sparkles key="y" />],
+    ["terminal", "Terminal", <SquareTerminal key="t" />],
+    ["agents", `Agents ${turns.length}`, <Users key="a" />],
+    ...(task.hasQuestion || tab === "questions" ? [["questions", "Questions", <Inbox key="q" />] as [Tab, string, ReactNode]] : []),
+  ];
   return (
     <section
       aria-label="Terminal"
@@ -35,12 +57,7 @@ export function WorkspaceDock({ task, height, onResize, onClose }: WorkspaceDock
     >
       <ResizeHandle height={height} onResize={onResize} />
       <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-divider px-2">
-        {(
-          [
-            ["terminal", "Terminal", <SquareTerminal key="t" />],
-            ["agents", `Agents ${turns.length}`, <Users key="a" />],
-          ] as const
-        ).map(([id, label, icon]) => (
+        {tabs.map(([id, label, icon]) => (
           <button
             key={id}
             type="button"
@@ -60,6 +77,20 @@ export function WorkspaceDock({ task, height, onResize, onClose }: WorkspaceDock
         </span>
       </div>
       <div className="min-h-0 flex-1">
+        {tab === "coordinator" && <CoordinatorChat task={task} onSent={onChanged} onOpenQuestion={openQuestion} />}
+        {tab === "questions" && <QuestionsPanel onOpenTerminal={() => setTab("terminal")} focus={question} />}
+        {tab === "claude" && (
+          <div className="flex h-full min-h-0 flex-col">
+            {task.drafts.length > 0 && (
+              <div className="max-h-[50%] shrink-0 scrollbar-thin overflow-y-auto border-b border-divider p-3">
+                <Drafts task={task} onChanged={onChanged} />
+              </div>
+            )}
+            <div className="min-h-0 flex-1">
+              <TerminalView key={`claude-${theme}`} url={helperTerminalURL(task.id, theme)} title="claude" takeControlOnConnect />
+            </div>
+          </div>
+        )}
         {tab === "terminal" &&
           (working ? (
             <TerminalView key={`${task.id}-${task.turns}`} url={terminalURL(task.id)} title={task.currentAgent} />

@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,9 +25,10 @@ func write(t *testing.T, path, text string) {
 	}
 }
 
-// A workspace after some work: one file changed and committed, one deleted,
-// one new and not yet committed, one left alone.
-func TestFilesShowWhatChangedSinceTheBase(t *testing.T) {
+// A workspace after two rounds of work: both committed, then some work in
+// progress: a file changed, one staged new, one new and not added, one
+// deleted.
+func TestFilesShowTheirGitStatus(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GIT_AUTHOR_NAME", "Test")
 	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
@@ -42,9 +44,17 @@ func TestFilesShowWhatChangedSinceTheBase(t *testing.T) {
 	base := git(t, dir, "rev-parse", "HEAD")[:40]
 
 	write(t, filepath.Join(dir, "main.go"), "package main\n")
+	write(t, filepath.Join(dir, "first.go"), "package main // round one\n")
+	git(t, dir, "add", ".")
+	git(t, dir, "commit", "-qm", "round one")
 	git(t, dir, "rm", "-q", "old.txt")
-	git(t, dir, "commit", "-qam", "work")
+	git(t, dir, "commit", "-qm", "round two")
+
+	write(t, filepath.Join(dir, "docs", "readme.md"), "# Hello\n")
+	write(t, filepath.Join(dir, "staged.go"), "package main\n")
+	git(t, dir, "add", "staged.go")
 	write(t, filepath.Join(dir, "new.go"), "package main\n")
+	os.Remove(filepath.Join(dir, "first.go"))
 	write(t, filepath.Join(dir, "bin", "app"), "\x00binary")
 
 	w := Workspace{Dir: dir, Base: base}
@@ -56,26 +66,42 @@ func TestFilesShowWhatChangedSinceTheBase(t *testing.T) {
 	for _, f := range files {
 		got[f.Path] = f.Change
 	}
-	want := map[string]Change{".gitignore": Unchanged, "docs/readme.md": Unchanged, "main.go": Modified, "new.go": Added, "old.txt": Deleted}
-	if len(got) != len(want) {
-		t.Errorf("files: %v", got)
-	}
-	for path, change := range want {
-		if got[path] != change {
-			t.Errorf("%s: %q, want %q", path, got[path], change)
-		}
+	// Committed work is plain, as in an editor: main.go was changed, but in a commit.
+	want := map[string]Change{".gitignore": Unchanged, "main.go": Unchanged, "docs/readme.md": Modified,
+		"staged.go": Added, "new.go": Untracked, "first.go": Deleted}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("files:\n got %v\nwant %v", got, want)
 	}
 
-	c, err := w.Read("main.go")
-	if err != nil || c.Before != "package main // TODO\n" || c.Now != "package main\n" {
-		t.Errorf("main.go: %+v %v", c, err)
+	commits, err := w.Commits()
+	if err != nil || len(commits) != 2 {
+		t.Fatalf("commits: %+v %v", commits, err)
 	}
-	if c, _ := w.Read("old.txt"); c.Before != "going\n" || c.Now != "" {
-		t.Errorf("a deleted file: %+v", c)
+	if c := commits[0]; c.Subject != "round two" || fmt.Sprint(c.Files) != "[{old.txt D}]" {
+		t.Errorf("the newest commit: %+v", c)
+	}
+	if c := commits[1]; c.Subject != "round one" || fmt.Sprint(c.Files) != "[{first.go A} {main.go M}]" || c.Author != "Test" {
+		t.Errorf("the first commit: %+v", c)
+	}
+
+	// Now, next to the last commit; in a commit, next to the one before it.
+	if c, _ := w.Read("docs/readme.md"); c.Before != "# Hi\n" || c.Now != "# Hello\n" {
+		t.Errorf("readme now: %+v", c)
+	}
+	inRoundOne := Workspace{Dir: dir, Base: base, Commit: commits[1].Hash}
+	if c, _ := inRoundOne.Read("main.go"); c.Before != "package main // TODO\n" || c.Now != "package main\n" {
+		t.Errorf("main.go in round one: %+v", c)
+	}
+	if _, err := (Workspace{Dir: dir, Base: base, Commit: "--output=/tmp/x"}).Read("main.go"); err == nil {
+		t.Error("a commit that isn't a hash should be refused")
+	}
+	if c, _ := w.Read("old.txt"); c.Before != "" || c.Now != "" {
+		t.Errorf("a file deleted in a commit is gone now: %+v", c)
 	}
 	if c, _ := w.Read("bin/app"); !c.Binary {
 		t.Errorf("a binary file: %+v", c)
 	}
+
 	// Paths are pinned inside the worktree: a file beside it is never read.
 	write(t, filepath.Join(filepath.Dir(dir), "secret.txt"), "secret\n")
 	for _, outside := range []string{"../secret.txt", "docs/../../secret.txt", "/../secret.txt"} {

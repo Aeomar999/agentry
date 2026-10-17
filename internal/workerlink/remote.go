@@ -84,6 +84,16 @@ func (r *remote) Files(ctx context.Context, w workspace.Workspace) ([]workspace.
 	return files, err
 }
 
+func (r *remote) Commits(ctx context.Context, w workspace.Workspace) ([]workspace.Commit, error) {
+	var commits []workspace.Commit
+	err := r.link.call(ctx, methodCommits, w, &commits)
+	return commits, err
+}
+
+func (r *remote) StartHelper(ctx context.Context, h machines.Helper) error {
+	return r.link.call(ctx, methodStartHelper, h, nil)
+}
+
 func (r *remote) Read(ctx context.Context, w workspace.Workspace, path string) (workspace.Contents, error) {
 	var contents workspace.Contents
 	err := r.link.call(ctx, methodRead, read{Workspace: w, Path: path}, &contents)

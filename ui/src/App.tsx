@@ -18,7 +18,7 @@ import { WorkspacePage } from "@/pages/WorkspacePage";
 // that isn't the API or a file with index.html, so these addresses can be
 // bookmarked and reloaded.
 const router = createBrowserRouter([
-  // The peek into a task's workspace is its own page, in its own tab.
+  // A task's Workspace is its own page, in its own tab.
   { path: "/tasks/:taskId/workspace", element: <WorkspacePage />, errorElement: <ErrorPage /> },
   {
     element: <AdminShell />,

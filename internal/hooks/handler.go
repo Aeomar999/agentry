@@ -45,6 +45,7 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 		return h.refuse(engine, call, "Agentry couldn't read the hook payload: "+err.Error())
 	}
 
+	h.recordPlan(call)
 	for _, signal := range signals {
 		if signal.Kind == engines.ActionRequested && engine.IsGate(call.Event) {
 			decision, reason := h.gate(ctx, call, signal)
@@ -84,6 +85,25 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
 		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
 	}
+}
+
+// recordPlan keeps the turn's plan when the agent has changed it. It goes
+// before what the call reports, so a plan ticked off at the end is kept
+// before the turn ends.
+func (h *Handler) recordPlan(call hookcall.Call) {
+	if call.Plan == nil {
+		return
+	}
+	plan := strings.TrimSpace(*call.Plan)
+	task, err := h.task(call.Task)
+	if err != nil {
+		return
+	}
+	if turn := task.Turn(call.Turn); turn == nil || turn.Ended || turn.Plan == plan {
+		return
+	}
+	h.store.Propose(events.Proposal{Stream: call.Task, Actor: h.machineOf(call.Task), Type: events.PlanUpdated,
+		Correlation: call.Turn, Data: map[string]any{"plan": plan}})
 }
 
 // machineOf is the worker actor for the machine the task's session runs on,

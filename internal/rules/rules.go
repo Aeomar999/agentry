@@ -62,8 +62,9 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 }
 
 // afterDone are what may happen to a finished task: labels and order sort
-// finished work too, and you can reopen it.
-var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened}
+// finished work too, and you can reopen it, as sending a draft the Workspace's
+// Claude wrote for it does.
+var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.MessageDrafted, events.DraftDiscarded}
 
 func refuse(reason string) *events.Rejection {
 	return &events.Rejection{Check: "order", Reason: reason}

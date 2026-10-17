@@ -1,0 +1,61 @@
+package web
+
+import (
+	"net/http"
+	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
+)
+
+// message is your chat with a task's coordinator. What you say is the answer
+// to its open question, or a direction for it; on a finished task it opens
+// the task again. Any turn in progress is stopped, so the coordinator reads
+// it at once: the agent's work stays in the worktree, and its plan carries
+// on when it is handed back.
+func (s *Server) message(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Text string }
+	if !decode(w, r, &request) {
+		return
+	}
+	task, err := s.task(r.PathValue("task"))
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	s.say(w, task, request.Text, "")
+}
+
+// say is what you send the coordinator, typed or from a draft you approved.
+func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, draft string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		http.Error(w, "say something", http.StatusBadRequest)
+		return
+	}
+	if task.IsDone {
+		reopen := s.reopen(task, text, "")
+		if draft != "" {
+			reopen.Data["draft"] = draft
+		}
+		s.propose(w, reopen)
+		return
+	}
+	kind, field := events.TaskDirected, "text"
+	if task.Question != "" {
+		kind, field = events.TaskAnswered, "answer"
+	}
+	said := events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}}
+	if draft != "" {
+		said.Data["draft"] = draft
+	}
+	open := task.OpenTurn()
+	if open == nil {
+		s.propose(w, said)
+		return
+	}
+	if !s.proposeOrRefuse(w, said) {
+		return
+	}
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TurnStopped, Correlation: open.ID})
+}

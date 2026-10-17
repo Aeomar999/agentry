@@ -37,6 +37,10 @@ type Call struct {
 	// agent's knowledge file. The session may be on a worker, where the
 	// server can't read either.
 	Ending *Ending `json:"ending,omitempty"`
+
+	// The turn's plan file as it is at this call, read on the machine
+	// running the session; nil when the agent hasn't written one.
+	Plan *string `json:"plan,omitempty"`
 }
 
 type Ending struct {

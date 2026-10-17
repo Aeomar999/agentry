@@ -1,40 +1,47 @@
-import { Inbox, Sparkles, SquareTerminal, X } from "lucide-react";
+import { Inbox, Sparkles, X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { Kbd } from "@/components/atoms/Kbd";
-import { EmptyState } from "@/components/molecules/EmptyState";
 import { ResizeHandle } from "@/components/molecules/ResizeHandle";
-import { terminalURL, deskTerminalURL } from "@/api/client";
-import type { TaskSummary } from "@/api/types";
+import { deskTerminalURL } from "@/api/client";
 import { cn } from "@/lib/cn";
 import type { Theme } from "@/lib/theme";
 import { modKey } from "@/lib/shortcuts";
 import { TerminalView } from "./TerminalView";
 import { QuestionsPanel } from "./QuestionsPanel";
-import { AgentName } from "@/components/molecules/AgentName";
 
 // The dock at the bottom of the content area, toggled with Ctrl+J and
 // resized by dragging its top edge. Its tabs: Questions, everything waiting
-// for you from every task; Claude, your own session that turns what you say
-// into tasks for the coordinator; then the terminal of every agent working
-// right now.
+// for you from every task; and Claude, your own session that turns what you
+// say into tasks for the coordinator. An agent's terminal is on its task's
+// page, in the Terminal tab.
 
 export const QUESTIONS = "questions";
 export const DESK = "claude";
+export type DockTab = typeof QUESTIONS | typeof DESK;
 
 interface TerminalDockProps {
   height: number;
   onResize: (height: number) => void; // the shell clamps it
-  working: TaskSummary[];
-  selected: string; // QUESTIONS, DESK or a task id
+  selected: DockTab;
+  question: { id: string; asked: number }; // the question to show, when a page asked for one
   waiting: number; // how many questions wait for you
-  onSelect: (tab: string) => void;
+  onSelect: (tab: DockTab) => void;
+  onOpenTaskTerminal: (taskId: string) => void; // on the task's page
   onClose: () => void;
   theme: Theme;
 }
 
-export function TerminalDock({ height, onResize, working, selected, waiting, onSelect, onClose, theme }: TerminalDockProps) {
-  const task = working.find((t) => t.id === selected);
-  const tab = task ? task.id : selected === QUESTIONS ? QUESTIONS : DESK;
+export function TerminalDock({
+  height,
+  onResize,
+  selected: tab,
+  question,
+  waiting,
+  onSelect,
+  onOpenTaskTerminal,
+  onClose,
+  theme,
+}: TerminalDockProps) {
   return (
     <section
       aria-label="Terminal"
@@ -51,15 +58,6 @@ export function TerminalDock({ height, onResize, working, selected, waiting, onS
           attention={waiting > 0}
         />
         <DockTab active={tab === DESK} onClick={() => onSelect(DESK)} icon={<Sparkles />} label="Claude" />
-        {working.map((t) => (
-          <DockTab
-            key={t.id}
-            active={tab === t.id}
-            onClick={() => onSelect(t.id)}
-            icon={<AgentName name={t.currentAgent} dotOnly />}
-            label={`${t.id} · ${t.currentAgent}`}
-          />
-        ))}
         <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-3 text-[11px] text-ink-faint">
           <Kbd>{modKey} J</Kbd>
           <IconButton icon={<X />} label="Close the dock" onClick={onClose} className="size-7" />
@@ -67,14 +65,9 @@ export function TerminalDock({ height, onResize, working, selected, waiting, onS
       </div>
       <div className="min-h-0 flex-1">
         {tab === QUESTIONS ? (
-          <QuestionsPanel onOpenTerminal={onSelect} />
-        ) : tab === DESK ? (
-          <TerminalView key={`desk-${theme}`} url={deskTerminalURL(theme)} title="claude" takeControlOnConnect />
-        ) : task ? (
-          // A new key each turn: every turn is a new session.
-          <TerminalView key={`${task.id}-${task.turns}`} url={terminalURL(task.id)} title={task.currentAgent} />
+          <QuestionsPanel onOpenTerminal={onOpenTaskTerminal} focus={question} />
         ) : (
-          <EmptyState icon={<SquareTerminal />} title="No agent is working right now" />
+          <TerminalView key={`desk-${theme}`} url={deskTerminalURL(theme)} title="claude" takeControlOnConnect />
         )}
       </div>
     </section>
