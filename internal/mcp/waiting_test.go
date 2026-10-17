@@ -20,7 +20,7 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	board := map[string]any{
 		"/api/tasks":        []map[string]any{{"id": "task-1", "title": "Old", "status": "done"}},
 		"/api/questions":    []any{},
-		"/api/workers":      map[string]any{"workers": []map[string]any{{"name": "omni", "online": true, "tasks": []string{"task-2"}}}},
+		"/api/workers":      map[string]any{"workers": []map[string]any{{"name": "build-box", "online": true, "tasks": []string{"task-2"}}}},
 		"/api/tasks/task-2": map[string]any{"summary": "The game runs."},
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,9 +49,9 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	mu.Lock()
 	board["/api/tasks"] = []map[string]any{
 		{"id": "task-1", "title": "Old", "status": "done"},
-		{"id": "task-2", "title": "Snake", "status": "done", "told": map[string]string{"at": "2026-10-17T21:00:00Z", "from": "tech-lead", "text": "Moved it to workstation."}},
+		{"id": "task-2", "title": "Snake", "status": "done", "told": map[string]string{"at": "2026-10-17T21:00:00Z", "from": "tech-lead", "text": "Moved it to the desktop."}},
 	}
-	board["/api/workers"] = map[string]any{"workers": []map[string]any{{"name": "omni", "online": false, "since": "t", "tasks": []string{"task-2"}}}}
+	board["/api/workers"] = map[string]any{"workers": []map[string]any{{"name": "build-box", "online": false, "since": "t", "tasks": []string{"task-2"}}}}
 	mu.Unlock()
 
 	var lines []string
@@ -64,8 +64,8 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 		t.Fatal("no news")
 	}
 	got := strings.Join(lines, "\n")
-	for _, want := range []string{"done: task-2 is done: Snake. The game runs.", "said: task-2 (Snake): tech-lead says: Moved it to workstation.",
-		"offline: the machine omni went offline; task-2 waits until it is back"} {
+	for _, want := range []string{"done: task-2 is done: Snake. The game runs.", "said: task-2 (Snake): tech-lead says: Moved it to the desktop.",
+		"offline: the machine build-box went offline; task-2 waits until it is back"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}

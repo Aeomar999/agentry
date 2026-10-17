@@ -113,7 +113,7 @@ save(f, "one-action")
 # 5. Work across machines ----------------------------------------------------
 f = Figure(1200, 680, "Work across machines", "Agentry",
            "A task's branch and its shared files follow the agent to whichever machine works on it next.")
-f.panel(48, 150, 300, 300, "A worker: omni, Linux")
+f.panel(48, 150, 300, 300, "A worker: a Linux box")
 f.panel(450, 150, 300, 300, "Agentry server")
 f.panel(852, 150, 300, 300, "Your Windows PC")
 for x, who in ((68, "engineer, turn 3"), (872, "reviewer, turn 4")):

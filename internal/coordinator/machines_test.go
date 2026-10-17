@@ -56,7 +56,7 @@ func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 
 	refusals := []struct{ decision, why string }{
 		{`{"action": "assign", "agent": "engineer", "instructions": "Go.", "machine": "laptop"}`, "engineer may not run on laptop; it runs on local"},
-		{`{"action": "assign", "agent": "engineer", "instructions": "Go.", "machine": "omni"}`, "there is no machine called omni; the machines are local, laptop"},
+		{`{"action": "assign", "agent": "engineer", "instructions": "Go.", "machine": "build-box"}`, "there is no machine called build-box; the machines are local, laptop"},
 		{`{"action": "assign", "agent": "tester", "instructions": "Go.", "machine": "laptop.lan"}`, "the turn couldn't start where you chose: laptop is offline"},
 	}
 	for i, r := range refusals {
