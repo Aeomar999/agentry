@@ -42,9 +42,9 @@ func newWorld(t *testing.T) *world {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	w.propose(you, events.TaskCreated, "", map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"})
+	w.propose(you, events.TaskCreated, "", map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"})
 	w.propose(worker, events.WorktreeReady, "", map[string]any{"path": "/w", "branch": "b", "port": 7901})
-	w.propose(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "coordinator", "hash": "h"})
+	w.propose(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "tech-lead", "hash": "h"})
 	w.propose(worker, events.PromptAcknowledged, "turn-1", map[string]any{"hash": "h"})
 	return w
 }
@@ -101,8 +101,8 @@ func TestASilentTurnIsAStall(t *testing.T) {
 
 func TestWaitingForYouIsNotAStall(t *testing.T) {
 	w := newWorld(t)
-	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "coordinator", "report": "r"})
-	w.propose(events.Actor{Kind: events.Agent, ID: "coordinator"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
+	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
+	w.propose(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
 	w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2"})
 	w.propose(worker, events.PromptAcknowledged, "turn-2", map[string]any{"hash": "h2"})
 	w.propose(engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"})
@@ -114,7 +114,7 @@ func TestWaitingForYouIsNotAStall(t *testing.T) {
 
 func TestAToolOpenTooLong(t *testing.T) {
 	w := newWorld(t)
-	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	w.propose(coordinator, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "npm test"})
 	w.propose(policy, events.ActionApproved, "toolu_1", map[string]any{"reason": "ok"})
 	if issue := w.after(15 * time.Minute); issue != "" {
@@ -127,7 +127,7 @@ func TestAToolOpenTooLong(t *testing.T) {
 
 func TestTheSameCommandRepeated(t *testing.T) {
 	w := newWorld(t)
-	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	for i := range DefaultLimits.Repeats {
 		id := fmt.Sprintf("toolu_%d", i)
 		w.propose(coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "go test ./..."})
@@ -141,8 +141,8 @@ func TestTheSameCommandRepeated(t *testing.T) {
 
 func TestAPromptThatNeverArrivesWaitsForYou(t *testing.T) {
 	w := newWorld(t)
-	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "coordinator", "report": "r"})
-	w.propose(events.Actor{Kind: events.Agent, ID: "coordinator"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
+	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
+	w.propose(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
 	w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2"})
 
 	w.after(61 * time.Second)

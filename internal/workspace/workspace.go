@@ -8,6 +8,7 @@ package workspace
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -108,9 +109,14 @@ func statusOf(x, y byte) Change {
 }
 
 // Commits are the branch's commits since the task started, newest first,
-// each with the files it changed.
+// each with the files it changed. With no base, every commit is the task's,
+// as in a repo made for it.
 func (w Workspace) Commits() ([]Commit, error) {
-	log, err := w.git("log", "--format=%x1e%H%x1f%an%x1f%cI%x1f%s", "--name-status", "--no-renames", w.Base+"..HEAD")
+	since := "HEAD"
+	if w.Base != "" {
+		since = w.Base + "..HEAD"
+	}
+	log, err := w.git("log", "--format=%x1e%H%x1f%an%x1f%cI%x1f%s", "--name-status", "--no-renames", since)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +156,7 @@ type Contents struct {
 	Now    string `json:"now"`
 	Before string `json:"before"` // last committed, or before the commit; "" for a file new since
 	Binary bool   `json:"binary"`
+	Data   string `json:"data,omitempty"` // a binary file's bytes now, in base64, as for an image a preview shows
 	TooBig bool   `json:"tooBig"`
 }
 
@@ -177,7 +184,7 @@ func (w Workspace) Read(path string) (Contents, error) {
 	case len(now) > mostBytes || len(before) > mostBytes:
 		c.TooBig = true
 	case isBinary(now) || isBinary([]byte(before)):
-		c.Binary = true
+		c.Binary, c.Data = true, base64.StdEncoding.EncodeToString(now)
 	default:
 		c.Now, c.Before = string(now), before
 	}

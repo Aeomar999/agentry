@@ -19,7 +19,7 @@ import (
 type Config struct {
 	UIToken     string // opens the page and the API; printed when the server starts
 	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
-	HelperToken string // the Claude sessions' beside tasks: drafts messages for you, and nothing else
+	HelperToken string // the Claude sessions' in tasks' Workspaces: sends the messages you ask them to, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
 	Budget      int    // the token budget a new task gets when it names none; 0 is no limit
 	Policy      PolicySource
@@ -66,24 +66,28 @@ func (s *Server) Handler() http.Handler {
 	deskToo("POST /api/tasks", s.createTask)
 	deskToo("GET /api/tasks/{task}", s.showTask)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
+	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)
 	api("PUT /api/tasks/{task}/labels", s.label)
 	api("PUT /api/tasks/{task}/budget", s.setBudget)
+	api("PUT /api/tasks/{task}/repo", s.changeRepo)
 	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("GET /api/tasks/{task}/files", s.listFiles)
 	api("GET /api/tasks/{task}/file", s.readFile)
 	api("GET /api/tasks/{task}/commits", s.listCommits)
 	api("POST /api/tasks/{task}/direct", s.direct)
 	api("POST /api/tasks/{task}/message", s.message) // your chat with its coordinator
-	mux.Handle("POST /api/tasks/{task}/drafts", s.requireUIOrHelper(s.draft))
-	api("POST /api/tasks/{task}/drafts/{draft}/send", s.sendDraft)
-	api("POST /api/tasks/{task}/drafts/{draft}/discard", s.discardDraft)
+	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/agents", s.listAgents)
+	api("GET /api/teams/templates", s.teamTemplates)
+	api("POST /api/teams", s.addTeam)
+	api("DELETE /api/teams/{team}", s.removeTeam)
 	api("POST /api/agents", s.createAgent)
 	api("PUT /api/agents/{name}", s.changeAgent)
 	api("DELETE /api/agents/{name}", s.removeAgent)
+	api("POST /api/agents/{name}/rename", s.renameAgent)
 	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
@@ -93,6 +97,13 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/workers/{name}", s.showWorker)
 	api("DELETE /api/workers/{name}", s.removeWorker)
 	api("GET /api/changes", s.waitForChanges)
+	api("POST /api/integrations/claude-code", s.inviteClaudeCode)
+	api("GET /api/integrations/connections", s.listConnections)
+	api("DELETE /api/integrations/connections/{id}", s.revokeConnection)
+	// A machine connecting its Claude Code, with its install command's code.
+	mux.HandleFunc("GET /integrations/claude-code.sh", s.claudeCodeScript)
+	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
+	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
@@ -163,5 +174,5 @@ func (s *Server) carriesUIToken(r *http.Request) bool {
 			return true
 		}
 	}
-	return false
+	return s.carriesConnection(r)
 }

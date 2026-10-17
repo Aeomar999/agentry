@@ -12,8 +12,8 @@ ui:
 build:
 	go build -o bin/agentry ./cmd/agentry
 
-# The builds a machine joining as a worker downloads, next to bin/agentry,
-# for the kinds of machine the server isn't.
+# The builds a machine downloads, next to bin/agentry, for the kinds of
+# machine the server isn't: joining as a worker, or connecting Claude Code.
 WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 
 workers:

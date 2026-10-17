@@ -10,6 +10,8 @@ import type { Agent, TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { useToast } from "./Toasts";
 import { rankAt } from "@/lib/rank";
+import { DropLine, slotAt, slotIndex } from "@/lib/drag";
+import { DONE_DAYS, onBoard } from "@/lib/epics";
 
 // The board's columns are the stages of the work, the same whichever agents
 // you have: Backlog (shown when you ask), To do, In progress, Review, Done.
@@ -42,36 +44,20 @@ function columnOf(task: TaskSummary, agents: Agent[]): string {
   return agents.find((a) => a.name === task.stage)?.column === "review" ? "review" : "in-progress";
 }
 
-// slotAt is where in a column a card being moved would land: the number of
-// the other cards above the pointer.
-function slotAt(column: HTMLElement, y: number, movingId: string): number {
-  const cards = [...column.querySelectorAll<HTMLElement>("[data-task]")].filter((card) => card.dataset.task !== movingId);
-  return cards.filter((card) => {
-    const box = card.getBoundingClientRect();
-    return box.top + box.height / 2 < y;
-  }).length;
-}
-
-// slotIndex is the slot just above the card at index, or -1 above the card
-// being moved, which has no slot of its own.
-function slotIndex(cards: TaskSummary[], movingId: string, index: number): number {
-  if (cards[index].id === movingId) return -1;
-  return cards.slice(0, index).filter((card) => card.id !== movingId).length;
-}
-
-function DropLine() {
-  return <div className="h-px shrink-0 bg-brand" aria-hidden />;
-}
-
 interface TaskBoardProps {
   tasks: TaskSummary[];
   agents: Agent[];
   showBacklog: boolean;
   onOpen: (task: TaskSummary) => void;
   onPickLabel: (label: string) => void;
+  onPickEpic: (epic: string) => void;
+  everyTask: TaskSummary[]; // unfiltered: for the epics' titles
 }
 
-export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel }: TaskBoardProps) {
+export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onPickEpic, everyTask }: TaskBoardProps) {
+  const byId = new Map(everyTask.map((task) => [task.id, task]));
+  const onTheBoard = tasks.filter((task) => task.kind !== "epic" && onBoard(task, byId));
+  const older = tasks.filter((task) => task.kind !== "epic").length - onTheBoard.length;
   const notify = useToast();
   const columns = COLUMNS.filter((column) => showBacklog || column.id !== BACKLOG);
   const coordinator = agents.find((a) => a.coordinates)?.name ?? "coordinator";
@@ -117,9 +103,10 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel }: T
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 scrollbar-thin gap-3 overflow-x-auto p-4">
+      <div className="flex min-h-0 min-w-0 flex-1 scrollbar-thin gap-3 overflow-x-auto p-4">
         {columns.map((column) => {
-          const cards = tasks.filter((task) => columnOf(task, agents) === column.id);
+          let cards = onTheBoard.filter((task) => columnOf(task, agents) === column.id);
+          if (column.id === BACKLOG) cards = byEpic(cards, everyTask);
           const droppable = canDrop(column) && !isHome(column);
           return (
             <section
@@ -152,10 +139,19 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel }: T
               <div className="flex min-h-24 scrollbar-thin flex-col gap-2 overflow-y-auto p-2">
                 {cards.map((task, index) => (
                   <Fragment key={task.id}>
+                    {column.id === BACKLOG && (index === 0 || cards[index - 1].epic !== task.epic) && (
+                      <EpicHeading
+                        epic={byId.get(task.epic)}
+                        count={cards.filter((card) => card.epic === task.epic).length}
+                        onPick={onPickEpic}
+                      />
+                    )}
                     {slot?.column === column.id && slot.at === slotIndex(cards, dragged!.id, index) && <DropLine />}
                     <TaskCard
                       task={task}
                       onPickLabel={onPickLabel}
+                      onPickEpic={onPickEpic}
+                      epicTitle={byId.get(task.epic)?.title ?? ""}
                       coordinator={coordinator}
                       onOpen={() => onOpen(task)}
                       draggable
@@ -175,6 +171,11 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel }: T
                 ))}
                 {slot?.column === column.id && slot.at === cards.filter((card) => card.id !== dragged!.id).length && <DropLine />}
                 {cards.length === 0 && <p className="px-1 py-3 text-center text-[11px] text-ink-faint">Nothing here</p>}
+                {column.id === DONE && older > 0 && (
+                  <p className="px-1 py-2 text-center text-[11px] text-ink-faint">
+                    {older} more, done over {DONE_DAYS} days ago or in a finished epic, are in the list
+                  </p>
+                )}
               </div>
             </section>
           );
@@ -199,6 +200,30 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel }: T
         />
       )}
     </>
+  );
+}
+
+// byEpic groups the Backlog's cards by epic, in the epics' order, keeping
+// your order within each; work of no epic comes last.
+function byEpic(cards: TaskSummary[], everyTask: TaskSummary[]): TaskSummary[] {
+  const rank = new Map(everyTask.filter((task) => task.kind === "epic").map((epic) => [epic.id, epic.rank]));
+  const order = (task: TaskSummary) => (task.epic ? (rank.get(task.epic) ?? 0) : Infinity);
+  return [...cards].sort((a, b) => order(a) - order(b) || a.epic.localeCompare(b.epic));
+}
+
+// EpicHeading starts an epic's stories in the Backlog.
+function EpicHeading({ epic, count, onPick }: { epic?: TaskSummary; count: number; onPick: (epic: string) => void }) {
+  if (!epic) return <p className="px-1 pt-2 text-[11px] font-semibold tracking-wide text-ink-faint uppercase">No epic · {count}</p>;
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(epic.id)}
+      title={`Show only ${epic.id}'s stories`}
+      className="flex cursor-pointer items-center gap-1.5 px-1 pt-2 text-left text-[11px] font-semibold text-ink-secondary hover:text-ink-primary"
+    >
+      <span className="truncate">{epic.title}</span>
+      <span className="shrink-0 font-mono font-normal text-ink-faint">{count}</span>
+    </button>
   );
 }
 

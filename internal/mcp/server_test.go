@@ -1,0 +1,189 @@
+package mcp
+
+import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+)
+
+// A fake Agentry: two tasks, one action waiting for approval and an epic
+// asking to be closed. It records what the tools ask of it.
+func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
+	var mu sync.Mutex
+	calls := &[]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer secret" {
+			http.Error(w, "no", http.StatusUnauthorized)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		*calls = append(*calls, r.Method+" "+r.URL.Path+" "+strings.TrimSpace(string(body)))
+		mu.Unlock()
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/tasks":
+			io.WriteString(w, `[{"id":"task-2","title":"Ship it","repo":"/repo","status":"needs you","kind":"epic","stories":2,"storiesDone":2,"rank":-2},
+				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1},
+				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
+		case "GET /api/questions":
+			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
+				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
+		case "POST /api/tasks":
+			io.WriteString(w, `{"stream":"task-10","notFiled":[]}`)
+		default:
+			io.WriteString(w, `{}`)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server, calls
+}
+
+// claude plays Claude Code: it sends requests and answers the server's.
+type claude struct {
+	t       *testing.T
+	in      io.Writer
+	out     *bufio.Scanner
+	next    int
+	answers func(method string, params json.RawMessage) any // to the server's requests
+}
+
+func start(t *testing.T, canElicit bool, answers func(string, json.RawMessage) any) (*claude, *[]string) {
+	agentry, calls := fakeAgentry(t)
+	s := &Server{agentry: client.Client{Where: client.Where{URL: agentry.URL, Page: "https://agentry.example"}, Token: "secret"}, repo: "/repo", version: "test"}
+	toServer, fromClaude := io.Pipe()
+	fromServer, toClaude := io.Pipe()
+	go s.Serve(context.Background(), toServer, toClaude)
+	t.Cleanup(func() { fromClaude.Close(); toClaude.Close() })
+	c := &claude{t: t, in: fromClaude, out: bufio.NewScanner(fromServer), answers: answers}
+	capabilities := map[string]any{}
+	if canElicit {
+		capabilities["elicitation"] = map[string]any{}
+	}
+	c.call("initialize", map[string]any{"protocolVersion": latest, "capabilities": capabilities})
+	return c, calls
+}
+
+func (c *claude) call(method string, params any) json.RawMessage {
+	c.t.Helper()
+	c.next++
+	encoded, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": c.next, "method": method, "params": params})
+	c.in.Write(append(encoded, '\n'))
+	for c.out.Scan() {
+		var m message
+		json.Unmarshal(c.out.Bytes(), &m)
+		if m.Method != "" { // the server asks something
+			result, _ := json.Marshal(c.answers(m.Method, m.Params))
+			reply, _ := json.Marshal(message{JSONRPC: "2.0", ID: m.ID, Result: result})
+			c.in.Write(append(reply, '\n'))
+			continue
+		}
+		if string(m.ID) == strconv.Itoa(c.next) {
+			if m.Error != nil {
+				c.t.Fatalf("%s: %s", method, m.Error.Message)
+			}
+			return m.Result
+		}
+	}
+	c.t.Fatalf("%s: no answer", method)
+	return nil
+}
+
+func (c *claude) tool(name string, arguments any) string {
+	c.t.Helper()
+	var result struct {
+		IsError bool
+		Content []struct{ Text string }
+	}
+	json.Unmarshal(c.call("tools/call", map[string]any{"name": name, "arguments": arguments}), &result)
+	if len(result.Content) == 0 {
+		c.t.Fatalf("%s: no content", name)
+	}
+	if result.IsError {
+		return "error: " + result.Content[0].Text
+	}
+	return result.Content[0].Text
+}
+
+func TestTheBoardAndHandingOverWork(t *testing.T) {
+	c, calls := start(t, false, nil)
+	var listed struct{ Tools []struct{ Name string } }
+	json.Unmarshal(c.call("tools/list", nil), &listed)
+	if len(listed.Tools) < 10 {
+		t.Errorf("tools: %+v", listed.Tools)
+	}
+
+	board := c.tool("status", map[string]any{})
+	for _, want := range []string{"Agentry board for /repo", "task-1: deployer asks to run git push origin dev", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done"} {
+		if !strings.Contains(board, want) {
+			t.Errorf("the board is missing %q:\n%s", want, board)
+		}
+	}
+	if strings.Contains(board, "Elsewhere") {
+		t.Errorf("another repo's task is on this repo's board:\n%s", board)
+	}
+
+	created := c.tool("create_task", map[string]any{"title": "Add a retry", "description": "Retry on 503."})
+	if !strings.Contains(created, "Created task-10") || !strings.Contains(created, "https://agentry.example/tasks/task-10") ||
+		!strings.Contains(created, "Waiting for the user (2)") {
+		t.Errorf("create: %s", created)
+	}
+	if !strings.Contains(strings.Join(*calls, "\n"), `POST /api/tasks {"description":"Retry on 503.","epic":"","kind":"","labels":null,"repo":"/repo"`) {
+		t.Errorf("the task should be made in this repo: %v", *calls)
+	}
+
+	// Without elicitation, approving is left to the page.
+	if text := c.tool("review_approvals", map[string]any{}); !strings.Contains(text, "theirs to give") || !strings.Contains(text, "https://agentry.example/tasks?status=needs-you") {
+		t.Errorf("approvals without elicitation: %s", text)
+	}
+	if text := c.tool("answer_question", map[string]any{"task": "task-2", "answer": "close the epic"}); !strings.Contains(text, "the user's to approve") {
+		t.Errorf("the model closed an epic by answering: %s", text)
+	}
+	for _, call := range *calls {
+		if strings.Contains(call, "/approve") || strings.Contains(call, "Close the epic") {
+			t.Errorf("approved without the user: %s", call)
+		}
+	}
+}
+
+func TestApprovalsAreAskedOfTheUser(t *testing.T) {
+	var asked []string
+	c, calls := start(t, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = append(asked, method+": "+p.Message)
+		if strings.Contains(p.Message, "Close the epic") {
+			return map[string]any{"action": "accept", "content": map[string]any{"decision": "close"}}
+		}
+		return map[string]any{"action": "accept", "content": map[string]any{"decision": "deny", "reason": "not on a Friday"}}
+	})
+	if text := c.tool("review_approvals", map[string]any{}); !strings.Contains(text, "task-1 push-1: denied by the user") {
+		t.Errorf("review: %s", text)
+	}
+	if text := c.tool("close_epic", map[string]any{"epic": "task-2"}); !strings.Contains(text, "The user closed task-2") {
+		t.Errorf("close: %s", text)
+	}
+	if len(asked) != 2 || !strings.Contains(asked[0], "elicitation/create: deployer, on task-1 (Fix the login), asks to run") {
+		t.Errorf("asked: %v", asked)
+	}
+	all := strings.Join(*calls, "\n")
+	if !strings.Contains(all, `POST /api/tasks/task-1/actions/push-1/deny {"reason":"not on a Friday"}`) ||
+		!strings.Contains(all, `POST /api/tasks/task-2/answer {"answer":"Close the epic"}`) {
+		t.Errorf("calls: %s", all)
+	}
+}
+
+func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
+	if closeEpic != coordinator.CloseEpic {
+		t.Errorf("the close answer is %q here and %q in the coordinator", closeEpic, coordinator.CloseEpic)
+	}
+}

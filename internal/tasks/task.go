@@ -14,6 +14,17 @@ const (
 	Held     Status = "held" // parked in To do or the Backlog until you move it on
 )
 
+// Kind is what a task is. A story is one goal, done on one branch and
+// checked before it is done; an epic is a goal too big for that, whose
+// coordinator splits it into stories and finishes it once they are all done.
+// Only two levels: a story has no stories of its own.
+type Kind string
+
+const (
+	Story Kind = ""
+	Epic  Kind = "epic"
+)
+
 type Task struct {
 	ID          string
 	Title       string
@@ -25,14 +36,28 @@ type Task struct {
 	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string
+	MovingTo    string // a repo you moved the task to while a turn was running: it moves when the turn ends
 	Coordinator string // the agent that decides who works on the task next
+	TeamChosen  bool   // you chose its team; otherwise the coordinator may pass it to the right one
+	Parent      string // the task that asked for this one, from another team; "" for yours
+	Depth       int    // how many requests deep it is: yours are 0
+	WaitingOn   string // another team's task this one asked for and waits for, "" for none
+	FinishAsIs  bool   // you said to finish it as it is, checked or not
+
+	Kind        Kind
+	KindChosen  bool     // you chose story or epic; otherwise the coordinator may split a story that is too big
+	Epic        string   // for a story of an epic: the epic
+	After       []string // for a story: the epic's stories it builds on, which must be done before it starts
+	Stories     []string // for an epic: its stories, in the order they were planned
+	StoriesDone []string // for an epic: the stories whose summary came back
+	Closing     string   // for an epic: the summary its coordinator closes it with, while it asks you to approve
+	storyNews   bool     // a story finished while the coordinator was busy deciding: it hears it next
 	CreatedAt   time.Time
 
 	Worktree *Worktree // nil until the worktree is ready
 	Turns    []*Turn   // every agent turn, in order
 	Actions  []*Action // every action an agent asked to take, in order
 	Trail    []Step    // the handoffs, as the page shows them
-	Drafts   []*Draft  // messages the Workspace's Claude wrote for the coordinator, in order
 
 	Question     string // an open question for the user, "" when there is none
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
@@ -100,31 +125,12 @@ type Action struct {
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
-// Draft is a message the Workspace's Claude session wrote for the coordinator. Nothing
-// reaches the coordinator until you send it, since it would start work.
-type Draft struct {
-	ID        string
-	At        time.Time
-	Text      string
-	Sent      bool // you sent it, as it was or changed
-	Discarded bool
-}
-
-// Draft is the draft with this id, or nil.
-func (t *Task) Draft(id string) *Draft {
-	for _, d := range t.Drafts {
-		if d.ID == id {
-			return d
-		}
-	}
-	return nil
-}
-
 type Step struct {
-	At   time.Time
-	From string
-	To   string
-	Text string
+	At      time.Time
+	From    string
+	To      string
+	Text    string
+	Machine string // for a handoff to an agent: where the coordinator wants it to work; "" lets Agentry choose
 }
 
 // Names used in the trail for the people and things that are not agents.

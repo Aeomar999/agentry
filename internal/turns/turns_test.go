@@ -42,7 +42,7 @@ func taskWithWorktree(t *testing.T, s *store.Store, id string) *tasks.Task {
 	worker := events.Actor{Kind: events.Worker, ID: "local"}
 	worktree := t.TempDir()
 	for _, p := range []events.Proposal{
-		{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Remove the TODOs", "repo": "/r", "coordinator": "coordinator"}},
+		{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Remove the TODOs", "repo": "/r", "coordinator": "tech-lead"}},
 		{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": worktree, "branch": "agentry/" + id, "port": 7901}},
 	} {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
@@ -59,7 +59,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	defer s.Close()
 	task := taskWithWorktree(t, s, "task-turns-1")
 	defer sessions.Stop(sessions.SocketFor(task.ID))
-	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("coordinator")
+	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 
 	runner := NewRunner(s, here(), Config{HookToken: "secret"})
 	if err := runner.Start(task, coordinator, "# Brief\nDecide who works next."); err != nil {
@@ -75,7 +75,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	}
 	updated := tasks.FromEvents(mustStream(t, s, task.ID))
 	prompt := "Read .agentry/turn-1.md and do what it says."
-	if turn := updated.OpenTurn(); turn == nil || turn.Agent != "coordinator" || turn.Hash != events.Hash(prompt) {
+	if turn := updated.OpenTurn(); turn == nil || turn.Agent != "tech-lead" || turn.Hash != events.Hash(prompt) {
 		t.Fatalf("open turn: %+v", turn)
 	}
 
@@ -85,7 +85,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 		launched = string(content)
 	}
 	for _, want := range []string{"--permission-mode\nbypassPermissions\n", prompt + "\n",
-		"AGENTRY_AGENT=coordinator", "AGENTRY_TASK=task-turns-1", "AGENTRY_TURN=turn-1", "AGENTRY_HOOK_TOKEN=secret",
+		"AGENTRY_AGENT=tech-lead", "AGENTRY_TASK=task-turns-1", "AGENTRY_TURN=turn-1", "AGENTRY_HOOK_TOKEN=secret",
 		"AGENTRY_HOOK_DEADLINE=29m50s", "AGENTRY_SERVER=http://127.0.0.1:7800", "AGENTRY_WORKTREE=" + task.Worktree.Path, "PORT=7901"} {
 		if !strings.Contains(launched, want) {
 			t.Errorf("launch is missing %q:\n%s", want, launched)

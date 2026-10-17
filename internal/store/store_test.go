@@ -12,7 +12,7 @@ var you = events.Actor{Kind: events.Human, ID: "you"}
 
 func newTask(id string) events.Proposal {
 	return events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "coordinator"}}
+		Data: map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "tech-lead"}}
 }
 
 // onlyOnce is a stand-in order check: a task can be created once.

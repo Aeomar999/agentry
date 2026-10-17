@@ -6,7 +6,9 @@ import {
   ChevronRight,
   CircleCheck,
   FileText,
+  LayoutTemplate,
   MessageCircleQuestionMark,
+  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import { Markdown } from "@/components/molecules/Markdown";
@@ -18,7 +20,6 @@ import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { useAgentColor } from "@/live/agent-colors";
 import { useToast } from "./Toasts";
-import { Drafts } from "./Drafts";
 import { useOpenQuestion } from "@/components/templates/AdminShell";
 
 // Talk to the task's coordinator while the task goes on. What you send
@@ -139,6 +140,7 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
                 entry={entry}
                 answering={asked && entry.key === lastQuestion}
                 hasPage={Boolean(task.page)}
+                taskId={task.id}
                 onOpenQuestion={() => openQuestion(`${task.id}/question/open`)}
               />
             ))}
@@ -160,7 +162,6 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
 
       <div className="shrink-0 px-6 pt-1 pb-4">
         <div className="mx-auto flex max-w-3xl flex-col gap-2">
-          <Drafts task={task} onChanged={onSent} />
           {!draft && !asked && task.status !== "done" && (
             <div className="flex flex-wrap gap-1.5">
               {SUGGESTIONS.map((text) => (
@@ -229,6 +230,7 @@ interface QuestionProps {
   answering: boolean; // the question still waiting for you
   hasPage: boolean; // it came with a page the coordinator made
   onOpenQuestion: () => void;
+  taskId: string; // for the address of a file its messages link to
 }
 
 function Entry({ entry, ...question }: { entry: ChatEntry } & QuestionProps) {
@@ -241,16 +243,42 @@ function Entry({ entry, ...question }: { entry: ChatEntry } & QuestionProps) {
       </li>
     );
   }
-  if (entry.type === "work") return <Work items={entry.items} />;
+  if (entry.type === "work") return <Work items={entry.items} taskId={question.taskId} />;
   const { item, opensRun } = entry;
-  if (item.kind === "you") return <Mine text={item.text} at={item.at} opensRun={opensRun} />;
+  if (item.kind === "you")
+    return <Mine text={item.text} at={item.at} opensRun={opensRun} viaClaude={item.viaClaude} viaArtifact={item.viaArtifact} />;
   return <Theirs item={item} opensRun={opensRun} {...question} />;
 }
 
 // What you said: a filled bubble on the right.
-function Mine({ text, at, opensRun, pending = false }: { text: string; at: string; opensRun: boolean; pending?: boolean }) {
+// Sent through Claude in the Workspace, it says so under it.
+function Mine({
+  text,
+  at,
+  opensRun,
+  pending = false,
+  viaClaude = false,
+  viaArtifact = false,
+}: {
+  text: string;
+  at: string;
+  opensRun: boolean;
+  pending?: boolean;
+  viaClaude?: boolean;
+  viaArtifact?: boolean;
+}) {
   return (
     <li className={cn("group flex flex-col items-end", opensRun ? "mt-5" : "mt-1", pending && "opacity-60")}>
+      {viaClaude && (
+        <span className="mb-1 inline-flex items-center gap-1 text-[11px] text-ink-muted [&>svg]:size-3">
+          <Sparkles /> sent from Claude in the Workspace
+        </span>
+      )}
+      {viaArtifact && (
+        <span className="mb-1 inline-flex items-center gap-1 text-[11px] text-ink-muted [&>svg]:size-3">
+          <LayoutTemplate /> from an artifact
+        </span>
+      )}
       <div className="max-w-[80%] rounded-lg rounded-br-sm bg-surface-3 px-3.5 py-2 text-[13px] leading-[1.6] break-words whitespace-pre-wrap text-ink-primary">
         {text}
       </div>
@@ -265,7 +293,7 @@ function Mine({ text, at, opensRun, pending = false }: { text: string; at: strin
 // text, as assistants read in a chat. A question or the task's summary is a
 // card. The question waiting for you is answered in one place, the dock's
 // Questions, with its page and choices: the card opens it there.
-function Theirs({ item, opensRun, answering, hasPage, onOpenQuestion }: { item: ChatItem; opensRun: boolean } & QuestionProps) {
+function Theirs({ item, opensRun, answering, hasPage, onOpenQuestion, taskId }: { item: ChatItem; opensRun: boolean } & QuestionProps) {
   const card = item.kind === "question" || item.kind === "done";
   return (
     <li className={cn("group flex gap-3", opensRun ? "mt-5" : "mt-1.5")}>
@@ -298,7 +326,7 @@ function Theirs({ item, opensRun, answering, hasPage, onOpenQuestion }: { item: 
               {item.kind === "question" ? <MessageCircleQuestionMark /> : <CircleCheck />}
               {item.kind === "question" ? (answering ? "Asks you" : "Asked you") : "Done"}
             </span>
-            <Long text={item.text} />
+            <Long text={item.text} taskId={taskId} />
             {answering && (
               <span className="flex items-center gap-3 border-t border-warning/30 pt-2.5 text-[12px] font-medium text-warning">
                 Answer in Questions{hasPage && <span className="font-normal text-ink-muted">· it made a page for this</span>}
@@ -307,7 +335,7 @@ function Theirs({ item, opensRun, answering, hasPage, onOpenQuestion }: { item: 
             )}
           </div>
         ) : (
-          <Long text={item.text} />
+          <Long text={item.text} taskId={taskId} />
         )}
       </div>
     </li>
@@ -316,7 +344,7 @@ function Theirs({ item, opensRun, answering, hasPage, onOpenQuestion }: { item: 
 
 // The work between two messages: one quiet line, which opens into what
 // happened, each step with its own text.
-function Work({ items }: { items: ChatItem[] }) {
+function Work({ items, taskId }: { items: ChatItem[]; taskId: string }) {
   const [open, setOpen] = useState(false);
   const summary = items
     .slice(-3)
@@ -341,7 +369,7 @@ function Work({ items }: { items: ChatItem[] }) {
       {open && (
         <ol className="relative mt-2 flex flex-col gap-3 pl-5 before:absolute before:top-1 before:bottom-1 before:left-[6px] before:w-px before:bg-divider">
           {items.map((item) => (
-            <WorkStep key={item.key} item={item} />
+            <WorkStep key={item.key} item={item} taskId={taskId} />
           ))}
         </ol>
       )}
@@ -349,7 +377,7 @@ function Work({ items }: { items: ChatItem[] }) {
   );
 }
 
-function WorkStep({ item }: { item: ChatItem }) {
+function WorkStep({ item, taskId }: { item: ChatItem; taskId: string }) {
   const icon = item.kind === "handoff" ? <ArrowRight /> : item.kind === "report" ? <FileText /> : <TriangleAlert />;
   return (
     <li className="relative">
@@ -367,13 +395,15 @@ function WorkStep({ item }: { item: ChatItem }) {
         </span>
         <Mono className="text-[11px] text-ink-faint">{clockTime(item.at)}</Mono>
       </span>
-      <Long text={item.text} short className="mt-1 text-ink-secondary [&_*]:text-[12px]" />
+      <Long text={item.text} taskId={taskId} short className="mt-1 text-ink-secondary [&_*]:text-[12px]" />
     </li>
   );
 }
 
-// Long text, cut to a height until you ask for all of it.
-function Long({ text, short = false, className }: { text: string; short?: boolean; className?: string }) {
+// Long text, cut to a height until you ask for all of it. A link to a file
+// of the task, as agents link what they made, opens it in the task's
+// Workspace, in a new tab, as it reads: a document rendered, a diagram drawn.
+function Long({ text, taskId, short = false, className }: { text: string; taskId: string; short?: boolean; className?: string }) {
   const [all, setAll] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const [cut, setCut] = useState(false);
@@ -383,7 +413,7 @@ function Long({ text, short = false, className }: { text: string; short?: boolea
   return (
     <div className={className}>
       <div ref={box} className={cn(!all && (short ? "max-h-24" : "max-h-80"), "overflow-hidden")}>
-        <Markdown text={text} />
+        <Markdown text={text} link={(href) => linkInto(taskId, href)} />
       </div>
       {(cut || all) && (
         <button
@@ -396,6 +426,17 @@ function Long({ text, short = false, className }: { text: string; short?: boolea
       )}
     </div>
   );
+}
+
+// linkInto is where a link in a message goes: the web as it is, a file of the
+// task into its Workspace.
+function linkInto(taskId: string, href: string): { href: string; external: boolean } {
+  if (/^(https?:|mailto:)/i.test(href) || href.startsWith("#")) return { href, external: /^(https?:|mailto:)/i.test(href) };
+  const path = href
+    .split("#")[0]
+    .replace(/^(\.\/)+/, "")
+    .replace(/^\//, "");
+  return { href: `/tasks/${encodeURIComponent(taskId)}/workspace?file=${encodeURIComponent(path)}&view=preview`, external: true };
 }
 
 // An agent's avatar: the first letter of its name on a tint of its colour.

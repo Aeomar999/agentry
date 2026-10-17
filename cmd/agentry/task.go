@@ -21,8 +21,12 @@ import (
 // action isn't here: that takes the UI token, which only the page has.
 
 const taskUsage = `Usage:
-  agentry task create --title "..." [--repo /abs/path] [--label bug --label ...] [--description "..."]
+  agentry task create --title "..." [--team Writing] [--kind story|epic] [--repo /abs/path [--new-repo]] [--label bug --label ...] [--description "..."]
+                      [--story task-N ...]   (an epic, with tasks there already as its stories)
+                      [--epic task-N]        (a story of that epic)
                       (or the description on stdin)
+  agentry task epic task-E --add task-N [--add ...] [--remove task-M ...]
+                      (file tasks under the epic task-E as its stories, or take them out)
   agentry task list
   agentry task show task-N
   agentry task answer task-N "answer"   (or the answer on stdin)`
@@ -41,6 +45,8 @@ func runTask(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "create":
 		err = client.create(args[1:], stdin, stdout)
+	case "epic":
+		err = client.epic(args[1:], stdout)
 	case "list":
 		err = client.list(stdout)
 	case "show":
@@ -65,9 +71,14 @@ func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) err
 	flags.SetOutput(io.Discard)
 	title := flags.String("title", "", "")
 	repo := flags.String("repo", "", "")
+	newRepo := flags.Bool("new-repo", false, "")
+	team := flags.String("team", "", "")
+	kind := flags.String("kind", "", "")
+	epic := flags.String("epic", "", "")
 	description := flags.String("description", "", "")
-	var labels []string
+	var labels, stories []string
 	flags.Func("label", "", func(label string) error { labels = append(labels, label); return nil })
+	flags.Func("story", "", func(story string) error { stories = append(stories, story); return nil })
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("%v\n%s", err, taskUsage)
 	}
@@ -77,18 +88,61 @@ func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) err
 	if *description == "" {
 		*description = readPiped(stdin)
 	}
-	var created struct{ Stream string }
-	request := map[string]any{"title": *title, "description": *description, "repo": *repo, "labels": labels}
+	var created struct {
+		Stream   string
+		NotFiled []string
+	}
+	if *newRepo && *repo == "" {
+		return fmt.Errorf("--new-repo makes the repo named by --repo: give it a path")
+	}
+	request := map[string]any{"title": *title, "description": *description, "repo": *repo, "newRepo": *newRepo, "team": *team, "kind": *kind, "labels": labels,
+		"stories": stories, "epic": *epic}
 	if err := c.call("POST", "/api/tasks", request, &created); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Created %s: %s\nThe coordinator reads it next. On the page: %s/tasks/%s\n", created.Stream, *title, c.server, created.Stream)
+	for _, refused := range created.NotFiled {
+		fmt.Fprintf(stdout, "Not filed: %s\n", refused)
+	}
+	return nil
+}
+
+// epic files tasks under an epic, or takes them out of it.
+func (c taskClient) epic(args []string, stdout io.Writer) error {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("which epic?\n%s", taskUsage)
+	}
+	epic := args[0]
+	flags := flag.NewFlagSet("task epic", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	var add, remove []string
+	flags.Func("add", "", func(id string) error { add = append(add, id); return nil })
+	flags.Func("remove", "", func(id string) error { remove = append(remove, id); return nil })
+	if err := flags.Parse(args[1:]); err != nil {
+		return fmt.Errorf("%v\n%s", err, taskUsage)
+	}
+	if len(add)+len(remove) == 0 {
+		return fmt.Errorf("give --add or --remove\n%s", taskUsage)
+	}
+	for _, id := range add {
+		if err := c.call("PUT", "/api/tasks/"+id+"/epic", map[string]string{"epic": epic}, nil); err != nil {
+			return fmt.Errorf("%s: %w", id, err)
+		}
+		fmt.Fprintf(stdout, "%s is a story of %s now\n", id, epic)
+	}
+	for _, id := range remove {
+		if err := c.call("PUT", "/api/tasks/"+id+"/epic", map[string]string{"epic": ""}, nil); err != nil {
+			return fmt.Errorf("%s: %w", id, err)
+		}
+		fmt.Fprintf(stdout, "%s is out of %s\n", id, epic)
+	}
 	return nil
 }
 
 type taskLine struct {
-	ID, Title, Status, CurrentAgent, NeedsYou, Repo string
-	Labels                                          []string
+	ID, Title, Status, CurrentAgent, NeedsYou, Repo, Kind, Epic string
+	Labels                                                      []string
+	Stories, StoriesDone                                        int
 }
 
 func (c taskClient) list(stdout io.Writer) error {
@@ -101,6 +155,12 @@ func (c taskClient) list(stdout io.Writer) error {
 	}
 	for _, t := range tasks {
 		fmt.Fprintf(stdout, "%-8s %-10s %s", t.ID, t.Status, t.Title)
+		switch {
+		case t.Kind == "epic":
+			fmt.Fprintf(stdout, "  (epic, %d of %d stories done)", t.StoriesDone, t.Stories)
+		case t.Epic != "":
+			fmt.Fprintf(stdout, "  (story of %s)", t.Epic)
+		}
 		if len(t.Labels) > 0 {
 			fmt.Fprintf(stdout, "  [%s]", strings.Join(t.Labels, ", "))
 		}

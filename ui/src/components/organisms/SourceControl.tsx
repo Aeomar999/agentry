@@ -25,9 +25,12 @@ interface SourceControlProps {
   commits: Commit[];
   selected: { path: string; commit: string };
   onOpen: (path: string, commit: string) => void;
+  onContext?: FileContext; // right-click on a file
 }
 
-export function SourceControl({ changes, commits, selected, onOpen }: SourceControlProps) {
+export type FileContext = (event: React.MouseEvent, path: string, commit: string, change: WorkspaceFile["change"]) => void;
+
+export function SourceControl({ changes, commits, selected, onOpen, onContext }: SourceControlProps) {
   return (
     <div className="flex flex-col">
       <Section title="Changes" count={changes.length}>
@@ -40,6 +43,7 @@ export function SourceControl({ changes, commits, selected, onOpen }: SourceCont
               file={file}
               active={selected.path === file.path && !selected.commit}
               onClick={() => onOpen(file.path, "")}
+              onContext={onContext && ((event) => onContext(event, file.path, "", file.change))}
             />
           ))
         )}
@@ -47,7 +51,7 @@ export function SourceControl({ changes, commits, selected, onOpen }: SourceCont
       <Section title="Commits" count={commits.length}>
         {commits.length === 0 && <p className="px-3 pb-2 text-[12px] text-ink-faint">No commits on the branch yet.</p>}
         {commits.map((commit) => (
-          <CommitRow key={commit.hash} commit={commit} selected={selected} onOpen={onOpen} />
+          <CommitRow key={commit.hash} commit={commit} selected={selected} onOpen={onOpen} onContext={onContext} />
         ))}
       </Section>
     </div>
@@ -85,7 +89,19 @@ export function Section({
 }
 
 // A changed file: its name, then its folder faint, then its letter.
-function FileRow({ file, active, onClick, inset = false }: { file: WorkspaceFile; active: boolean; onClick: () => void; inset?: boolean }) {
+function FileRow({
+  file,
+  active,
+  onClick,
+  onContext,
+  inset = false,
+}: {
+  file: WorkspaceFile;
+  active: boolean;
+  onClick: () => void;
+  onContext?: (event: React.MouseEvent) => void;
+  inset?: boolean;
+}) {
   const slash = file.path.lastIndexOf("/");
   const name = file.path.slice(slash + 1);
   const folder = slash > 0 ? file.path.slice(0, slash) : "";
@@ -93,6 +109,7 @@ function FileRow({ file, active, onClick, inset = false }: { file: WorkspaceFile
     <button
       type="button"
       onClick={onClick}
+      onContextMenu={onContext && ((event) => (event.preventDefault(), onContext(event)))}
       title={file.path}
       className={cn(
         "flex h-6 w-full cursor-pointer items-center gap-1.5 pr-2 text-left text-[12.5px]",
@@ -119,10 +136,12 @@ function CommitRow({
   commit,
   selected,
   onOpen,
+  onContext,
 }: {
   commit: Commit;
   selected: { path: string; commit: string };
   onOpen: (path: string, commit: string) => void;
+  onContext?: FileContext;
 }) {
   const [open, setOpen] = useState(selected.commit === commit.hash); // closed until you open it
   return (
@@ -157,6 +176,7 @@ function CommitRow({
             inset
             active={selected.commit === commit.hash && selected.path === file.path}
             onClick={() => onOpen(file.path, commit.hash)}
+            onContext={onContext && ((event) => onContext(event, file.path, commit.hash, file.change))}
           />
         ))}
     </div>

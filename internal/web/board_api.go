@@ -52,7 +52,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the task is done already", http.StatusConflict)
 			return
 		}
-		s.tell(w, task, "Wrap this task up: finish it as it is.", note)
+		s.tell(w, task, "Wrap this task up: finish it as it is, checked or not.", note, true)
 		return
 	case "in-progress", "review":
 	default:
@@ -87,12 +87,14 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]string{"task": task.ID})
 		return
 	}
-	s.tell(w, task, text, note)
+	s.tell(w, task, text, note, false)
 }
 
 // tell gives the coordinator your words: as the answer, if it asked you
 // something, or as a direction it reads at its next turn.
-func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string) {
+// tell sends the coordinator what you said; asIs lets it finish the task
+// without the checks it needs otherwise.
+func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string, asIs bool) {
 	if note != "" {
 		text += " " + note
 	}
@@ -100,7 +102,11 @@ func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string
 	if task.Question != "" {
 		kind, field = events.TaskAnswered, "answer"
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}})
+	data := map[string]any{field: text}
+	if asIs {
+		data["asIs"] = true
+	}
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: data})
 }
 
 func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {

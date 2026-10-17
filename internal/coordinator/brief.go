@@ -16,7 +16,7 @@ import (
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
 
-func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster) string {
+func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine) string {
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
@@ -25,10 +25,15 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	plan(&b, task, coordinator.Name, "your plan for the task as a whole: the stages it goes through, which agent does each, and what is done")
 
 	var team strings.Builder
-	for _, agent := range roster.Assignees() {
+	for _, agent := range roster.Assignees(coordinator.TeamName()) {
 		fmt.Fprintf(&team, "- %s: %s\n", agent.Name, agent.Description)
 	}
 	section(&b, "The agents you can hand work to", team.String())
+	if text := machinesText(task, machines, roster.Assignees(coordinator.TeamName())); text != "" {
+		section(&b, "Machines", text)
+	}
+	otherTeams(&b, task, coordinator, roster)
+	epicSection(&b, task, f)
 
 	var trail strings.Builder
 	for i, step := range task.Trail {
@@ -39,6 +44,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	if refused := refusedActions(task); refused != "" {
 		section(&b, "Actions Agentry refused", refused)
 	}
+	checks(&b, task, roster)
 	section(&b, "Your decision", DecisionFormat)
 	return b.String()
 }
@@ -51,10 +57,36 @@ func workerBrief(task *tasks.Task, agent agents.Agent, instructions string) stri
 	section(&b, "Your instructions from the coordinator", instructions)
 	section(&b, "Where the work is", whereText(task))
 	plan(&b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
-	section(&b, "When you finish",
-		"End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. "+
-			"The coordinator reads only this report, so make it complete. Don't stop to ask questions: put them in the report.")
+	finish := "End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. " +
+		"The coordinator reads only this report, so make it complete. Don't stop to ask questions: put them in the report."
+	if agent.Column == agents.Reviews {
+		finish += "\n\n" + VerdictFormat
+	}
+	section(&b, "When you finish", finish)
 	return b.String()
+}
+
+// checks tells the coordinator what finishing the task waits on: its
+// checkers' approval of the last change (unchecked).
+func checks(b *strings.Builder, task *tasks.Task, roster agents.Roster) {
+	rule := "Before you finish, the work must be checked. Since the last turn that changed it, every agent of your team " +
+		"that checks work and has checked it must approve it again, in the verdict its report ends with. When a check asks for " +
+		"changes, hand the findings to the agent that builds it; once they are made, hand it back for another check. Agentry " +
+		"refuses \"done\" until then."
+	if why := unchecked(task, roster); why != "" {
+		section(b, "Before you finish", rule+"\n\nNow: "+why+".")
+	} else if lead, _ := roster.Get(task.Coordinator); hasCheckers(roster, lead.TeamName()) {
+		section(b, "Before you finish", rule+"\n\nNow: the work as it is has been checked, or nothing has changed it yet.")
+	}
+}
+
+func hasCheckers(roster agents.Roster, team string) bool {
+	for _, agent := range roster.Assignees(team) {
+		if agent.Column == agents.Reviews {
+			return true
+		}
+	}
+	return false
 }
 
 // knowledge is the agent's notes from earlier tasks, and how to keep them.
@@ -90,6 +122,39 @@ func plan(b *strings.Builder, task *tasks.Task, agent, what string) {
 		"`- [ ] step`. Keep it short and concrete. "+keep)
 }
 
+// otherTeams lists the other teams, and when to pass the task to one or ask
+// one for something.
+func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, roster agents.Roster) {
+	var list strings.Builder
+	for _, team := range roster.Teams() {
+		lead, ok := roster.Coordinator(team)
+		if team == coordinator.TeamName() || !ok {
+			continue
+		}
+		about := lead.Description
+		if template, found := agents.TemplateNamed(team); found && template.Description != "" {
+			about = template.Description
+		}
+		fmt.Fprintf(&list, "- %s, coordinated by %s: %s\n", team, lead.Name, about)
+	}
+	if list.Len() == 0 {
+		return
+	}
+	ask := "ask them with a \"request\" decision: they get a task of their own, this one waits for it, and their " +
+		"summary comes back to you here, so you carry on"
+	if task.Kind == tasks.Epic {
+		ask = "give them a story of this epic, with \"team\" in the split"
+	}
+	text := list.String() + "\nYou are in the " + coordinator.TeamName() + " team. When this task needs something only " +
+		"another team does well (a document from Writing, research from Research, a design from Design, code from " +
+		"Software), " + ask + ". Ask for one thing at a time, and say exactly what you need and what done looks like."
+	if !task.TeamChosen && task.Parent == "" {
+		text += "\n\nThe user didn't choose a team for this task. Before anyone works on it, decide whose work it is: if it " +
+			"is another team's, pass it to them with a \"transfer\" decision, saying why; if it is your team's, go on."
+	}
+	section(b, "Other teams", text)
+}
+
 func header(b *strings.Builder, agent agents.Agent, task *tasks.Task) {
 	fmt.Fprintf(b, "# Agentry brief: %s, %s, %s\n\n%s\n\n", agent.Name, task.ID, task.NextTurnID(), agent.Prompt)
 }
@@ -108,7 +173,16 @@ func taskText(task *tasks.Task) string {
 func whereText(task *tasks.Task) string {
 	w := task.Worktree
 	return fmt.Sprintf("You are in the task's own git worktree, %s, on branch %s, which started from commit %s. "+
-		"Other tasks have their own worktrees. If you run a server, use port %d (also in the PORT environment variable).",
+		"Other tasks have their own worktrees. If you run a server, use port %d (also in the PORT environment variable).\n\n"+
+		"All of the task's work happens here, in this worktree, and is committed on its branch. The next agent may work "+
+		"on another machine: only what is committed on this branch goes there with the task, so never create or change "+
+		"repos or folders outside the worktree. If the task asks for work somewhere else, such as a new repo at some "+
+		"path, the coordinator asks the user to move the task there (the task's Details have Change repo, which can make a "+
+		"new repo), rather than having anyone work outside the worktree.\n\n"+
+		"To show the user a document, a design or a diagram, write it as a file in the worktree (Markdown, with SVG "+
+		"diagrams beside it), commit it, and link it where they read you: in your report, a reply or a summary, as a "+
+		"Markdown link to its path from the worktree's root, such as [the design](docs/design.md). They open it from the "+
+		"chat straight into the task's Workspace, rendered, with its diagrams.",
 		w.Path, w.Branch, w.Base, w.Port)
 }
 

@@ -14,15 +14,28 @@ type rule func(t *tasks.Task, p events.Proposal) string
 // taskRules has one entry per task event type, except task.created, which
 // Check handles. Each lists the conditions that must all hold.
 var taskRules = map[events.Type]rule{
-	events.WorktreeReady: all(noWorktreeYet),
-	events.WorktreeMoved: all(worktreeReady, noOpenTurn, toAnotherMachine),
-	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
-	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
-	events.TaskLabeled:   all(labelsAreValid),
-	events.TaskBudgeted:  all(aPositiveBudget),
-	events.TaskRanked:    all(),
-	events.TaskHeld:      all(aKnownPlace),
-	events.TaskReopened:  all(isDone),
+	events.WorktreeReady:      all(noWorktreeYet),
+	events.WorktreeMoved:      all(worktreeReady, noOpenTurn, toAnotherMachine),
+	events.TaskRenamed:        all(byTheCoordinatorOrYou, aNewTitle),
+	events.TaskDirected:       all(noQuestionOpen), // an open question takes an answer instead
+	events.TaskLabeled:        all(labelsAreValid),
+	events.TaskBudgeted:       all(aPositiveBudget),
+	events.TaskRanked:         all(),
+	events.TaskHeld:           all(aKnownPlace),
+	events.TaskReopened:       all(isDone),
+	events.RepoChanged:        all(anotherRepo),
+	events.AgentRenamedInTask: all(),
+
+	events.TaskTransferred: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
+	events.TaskRequested:   all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
+	events.RequestAnswered: all(waitingOnIt),
+	events.TaskSplit:       all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother, notAStory),
+	events.StoryDone:       all(itsStory, notYetHeard),
+	events.EpicWaits:       all(byTheCoordinator, noOpenTurn, anEpic),
+	events.EpicJoined:      all(notAnEpic, inNoEpic, notItself),
+	events.EpicLeft:        all(inThatEpic),
+	events.StoryAdded:      all(anEpic, notItsStoryYet),
+	events.StoryRemoved:    all(itsStory),
 
 	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
@@ -42,12 +55,9 @@ var taskRules = map[events.Type]rule{
 	events.IssueRaised:  all(),
 	events.TurnStopped:  all(isTheOpenTurn),
 
-	events.MessageDrafted: all(isNewDraft),
-	events.DraftDiscarded: all(draftOpen),
-
 	events.TaskNeedsYou: all(byTheCoordinatorOrAgentry, noOpenTurn, noQuestionOpen),
 	events.TaskAnswered: all(questionOpen),
-	events.TaskDone:     all(byTheCoordinator, noOpenTurn),
+	events.TaskDone:     all(byTheCoordinatorOrYou, noOpenTurn, closedByYouIfAnEpic),
 }
 
 func all(rules ...rule) rule {
@@ -167,16 +177,99 @@ func isTheNextTurn(t *tasks.Task, p events.Proposal) string {
 	return ""
 }
 
-func isNewDraft(t *tasks.Task, p events.Proposal) string {
-	if t.Draft(p.Correlation) != nil {
-		return p.Correlation + " was drafted already"
+func anotherRepo(t *tasks.Task, p events.Proposal) string {
+	if repo := p.Text("repo"); repo == t.Repo && t.MovingTo == "" || repo == t.MovingTo {
+		return "the task is in " + repo + " already"
 	}
 	return ""
 }
 
-func draftOpen(t *tasks.Task, p events.Proposal) string {
-	if d := t.Draft(p.Correlation); d == nil || d.Sent || d.Discarded {
-		return p.Correlation + " is not a draft waiting for you"
+func notWaitingOnAnother(t *tasks.Task, _ events.Proposal) string {
+	if t.WaitingOn != "" {
+		return "the task is waiting for " + t.WaitingOn + " already"
+	}
+	return ""
+}
+
+func waitingOnIt(t *tasks.Task, p events.Proposal) string {
+	if t.WaitingOn != p.Text("child") {
+		return "the task isn't waiting for " + p.Text("child")
+	}
+	return ""
+}
+
+// notAStory keeps to two levels: an epic's story has no stories of its own.
+func notAStory(t *tasks.Task, _ events.Proposal) string {
+	if t.Epic != "" {
+		return "the task is a story of " + t.Epic + ", and a story can't be split; the epic's coordinator adds stories"
+	}
+	return ""
+}
+
+func anEpic(t *tasks.Task, _ events.Proposal) string {
+	if t.Kind != tasks.Epic {
+		return "only an epic waits for its stories"
+	}
+	return ""
+}
+
+// closedByYouIfAnEpic: an epic closes when you approve it, and only then,
+// since you may have more for it; a story closes when its coordinator says.
+func closedByYouIfAnEpic(t *tasks.Task, p events.Proposal) string {
+	switch {
+	case t.Kind == tasks.Epic && p.Actor.Kind != events.Human:
+		return "an epic closes when the user approves it"
+	case t.Kind != tasks.Epic && p.Actor.Kind == events.Human:
+		return "a task is finished by its coordinator; move it to Done on the board to have it finished as it is"
+	}
+	return ""
+}
+
+func notAnEpic(t *tasks.Task, _ events.Proposal) string {
+	if t.Kind == tasks.Epic {
+		return "the task is an epic, and an epic can't be a story of another"
+	}
+	return ""
+}
+
+func inNoEpic(t *tasks.Task, _ events.Proposal) string {
+	if t.Epic != "" {
+		return "the task is a story of " + t.Epic + " already; take it out of that one first"
+	}
+	return ""
+}
+
+func notItself(t *tasks.Task, p events.Proposal) string {
+	if p.Text("epic") == t.ID {
+		return "a task can't be a story of itself"
+	}
+	return ""
+}
+
+func inThatEpic(t *tasks.Task, p events.Proposal) string {
+	if t.Epic != p.Text("epic") {
+		return "the task isn't a story of " + p.Text("epic")
+	}
+	return ""
+}
+
+func notItsStoryYet(t *tasks.Task, p events.Proposal) string {
+	if slices.Contains(t.Stories, p.Text("story")) {
+		return p.Text("story") + " is one of this epic's stories already"
+	}
+	return ""
+}
+
+func itsStory(t *tasks.Task, p events.Proposal) string {
+	if !slices.Contains(t.Stories, p.Text("story")) {
+		return p.Text("story") + " is not a story of this task"
+	}
+	return ""
+}
+
+func notYetHeard(t *tasks.Task, p events.Proposal) string {
+	if slices.Contains(t.StoriesDone, p.Text("story")) {
+		return "the task has heard that " + p.Text("story") + " is done already"
 	}
 	return ""
 }

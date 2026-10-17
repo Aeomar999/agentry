@@ -15,7 +15,7 @@ var (
 	worker      = events.Actor{Kind: events.Worker, ID: "local"}
 	policy      = events.Actor{Kind: events.Policy, ID: "rules"}
 	agentry     = events.Actor{Kind: events.System, ID: "watchdog"}
-	coordinator = events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator = events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	engineer    = events.Actor{Kind: events.Agent, ID: "engineer"}
 )
 
@@ -62,7 +62,7 @@ func run(t *testing.T, steps []step) *tasks.Task {
 }
 
 var (
-	created  = step{you, events.TaskCreated, "", map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "coordinator"}, true}
+	created  = step{you, events.TaskCreated, "", map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "tech-lead"}, true}
 	worktree = step{worker, events.WorktreeReady, "", map[string]any{"path": "/w/task-1", "branch": "agentry/task-1", "port": 7901}, true}
 )
 
@@ -77,17 +77,17 @@ func turnEnded(id, agent, report string) step {
 func TestATaskGoesRoundTheCoordinator(t *testing.T) {
 	task := run(t, []step{
 		created,
-		{you, events.TaskCreated, "", created.data, false},                                                 // only once
-		{worker, events.TurnStarted, "turn-1", map[string]any{"agent": "coordinator", "hash": "h"}, false}, // no worktree yet
+		{you, events.TaskCreated, "", created.data, false},                                               // only once
+		{worker, events.TurnStarted, "turn-1", map[string]any{"agent": "tech-lead", "hash": "h"}, false}, // no worktree yet
 		worktree,
-		turnStarted("turn-1", "coordinator"),
+		turnStarted("turn-1", "tech-lead"),
 		{worker, events.PromptAcknowledged, "turn-1", map[string]any{"hash": "wrong"}, false},
 		{worker, events.PromptAcknowledged, "turn-1", map[string]any{"hash": "h-turn-1"}, true},
 		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "remove them"}, false}, // still in its turn
-		turnEnded("turn-1", "coordinator", `{"action":"assign"}`),
-		{engineer, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "x"}, false},       // only the coordinator assigns
-		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "coordinator", "instructions": "x"}, false}, // not to itself
-		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "designer", "instructions": "x"}, false},    // no such agent
+		turnEnded("turn-1", "tech-lead", `{"action":"assign"}`),
+		{engineer, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "x"}, false},     // only the coordinator assigns
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "tech-lead", "instructions": "x"}, false}, // not to itself
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "designer", "instructions": "x"}, false},  // no such agent
 		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "remove them"}, true},
 		{worker, events.TurnStarted, "turn-5", map[string]any{"agent": "engineer", "hash": "h"}, false}, // wrong turn number
 		turnStarted("turn-2", "engineer"),
@@ -97,8 +97,8 @@ func TestATaskGoesRoundTheCoordinator(t *testing.T) {
 		{policy, events.ActionDenied, "toolu_1", map[string]any{"reason": "x"}, false}, // decided once
 		{worker, events.ActionResult, "toolu_1", nil, true},
 		turnEnded("turn-2", "engineer", "Removed 3 TODOs."),
-		turnStarted("turn-3", "coordinator"),
-		turnEnded("turn-3", "coordinator", `{"action":"done"}`),
+		turnStarted("turn-3", "tech-lead"),
+		turnEnded("turn-3", "tech-lead", `{"action":"done"}`),
 		{coordinator, events.TaskDone, "", map[string]any{"summary": "TODOs removed"}, true},
 		{agentry, events.IssueRaised, "", map[string]any{"reason": "late"}, false}, // nothing after done
 	})
@@ -107,10 +107,10 @@ func TestATaskGoesRoundTheCoordinator(t *testing.T) {
 		t.Errorf("status %s, %d turns, first acknowledged %v", task.Status(), len(task.Turns), task.Turns[0].Acknowledged)
 	}
 	want := []tasks.Step{
-		{From: "you", To: "coordinator", Text: "Remove the TODOs"},
-		{From: "coordinator", To: "engineer", Text: "remove them"},
-		{From: "engineer", To: "coordinator", Text: "Removed 3 TODOs."},
-		{From: "coordinator", To: "you", Text: "TODOs removed"},
+		{From: "you", To: "tech-lead", Text: "Remove the TODOs"},
+		{From: "tech-lead", To: "engineer", Text: "remove them"},
+		{From: "engineer", To: "tech-lead", Text: "Removed 3 TODOs."},
+		{From: "tech-lead", To: "you", Text: "TODOs removed"},
 	}
 	if len(task.Trail) != len(want) {
 		t.Fatalf("trail: %+v", task.Trail)
@@ -124,7 +124,7 @@ func TestATaskGoesRoundTheCoordinator(t *testing.T) {
 
 func TestOnlyAskedActionsAndQuestionsNeedYou(t *testing.T) {
 	steps := []step{
-		created, worktree, turnStarted("turn-1", "coordinator"), turnEnded("turn-1", "coordinator", "assign"),
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
 		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
 		turnStarted("turn-2", "engineer"),
 		{engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push"}, true},
@@ -180,7 +180,7 @@ func TestAgentRules(t *testing.T) {
 		{"no prompt", agent("writer", "claude", "  ", false).Proposal(you, false), false},
 		{"change an agent", agent("engineer", "codex", "Only Go.", false).Proposal(you, true), true},
 		{"change one that doesn't exist", agent("ghost", "claude", "x", false).Proposal(you, true), false},
-		{"leave no coordinator", agent("coordinator", "claude", "x", false).Proposal(you, true), false},
+		{"leave no coordinator", agent("tech-lead", "claude", "x", false).Proposal(you, true), false},
 		{"a worker that doesn't exist", agents.Agent{Name: "tester", Engine: "claude", Prompt: "x", Workers: []string{"build-box"}}.Proposal(you, true), false},
 		{"no workers: runs on this machine", agents.Agent{Name: "tester", Engine: "claude", Prompt: "x", Workers: nil}.Proposal(you, true), true},
 		{"an agent keeps its own notes", agent("engineer", "", "", false).Learned(engineer, "Use gofmt."), true},
@@ -188,7 +188,15 @@ func TestAgentRules(t *testing.T) {
 		{"you can edit anyone's", agent("reviewer", "", "", false).Learned(you, "Be strict."), true},
 		{"remove an agent", agent("designer", "codex", "x", false).Removal(you), true},
 		{"remove it twice", agent("designer", "codex", "x", false).Removal(you), false},
-		{"remove the only coordinator", agent("coordinator", "claude", "x", true).Removal(you), false},
+		{"remove the only coordinator", agent("tech-lead", "claude", "x", true).Removal(you), false},
+		{"a second team, with its coordinator", agents.Agent{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"}.Proposal(you, false), true},
+		{"and its writer", agents.Agent{Name: "writer", Engine: "claude", Prompt: "Write.", Team: "Writing"}.Proposal(you, false), true},
+		{"its coordinator can't stop coordinating", agents.Agent{Name: "editor", Engine: "claude", Prompt: "Edit.", Team: "Writing"}.Proposal(you, true), false},
+		{"or go while the team has agents", agents.Agent{Name: "editor"}.Removal(you), false},
+		{"a coordinator hands work only to its own team", events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
+			Type: events.TaskAssigned, Data: map[string]any{"agent": "writer", "instructions": "x"}}, false},
+		{"an agent makes a task only for another, as a request", events.Proposal{Stream: "task-9", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
+			Type: events.TaskCreated, Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead"}}, false},
 		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-9", Actor: you, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "engineer"}}, false},
 	}
@@ -225,8 +233,8 @@ func TestDirectionsWaitForNoQuestion(t *testing.T) {
 		{you, events.TaskDirected, "", map[string]any{"text": "Hand this task to reviewer next."}, true},
 		{coordinator, events.TaskDirected, "", map[string]any{"text": "x"}, false}, // only you
 		worktree,
-		turnStarted("turn-1", "coordinator"),
-		turnEnded("turn-1", "coordinator", `{"action":"ask"}`),
+		turnStarted("turn-1", "tech-lead"),
+		turnEnded("turn-1", "tech-lead", `{"action":"ask"}`),
 		{coordinator, events.TaskNeedsYou, "", map[string]any{"question": "Which branch?"}, true},
 		{you, events.TaskDirected, "", map[string]any{"text": "Wrap it up."}, false},
 	})

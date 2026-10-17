@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,7 @@ import (
 type Decision struct {
 	Action       Action   `json:"action"`
 	Agent        string   `json:"agent,omitempty"`
+	Machine      string   `json:"machine,omitempty"` // for assign: where the agent works; "" lets Agentry choose
 	Instructions string   `json:"instructions,omitempty"`
 	Summary      string   `json:"summary,omitempty"`
 	Question     string   `json:"question,omitempty"`
@@ -21,7 +23,43 @@ type Decision struct {
 	Options      []string `json:"options,omitempty"` // for ask: answers the user can pick
 	Page         string   `json:"page,omitempty"`    // for ask: a small HTML page that asks it
 	ToYou        string   `json:"toYou,omitempty"`   // any decision: its answer to what the user told it
+	Team         string   `json:"team,omitempty"`    // for transfer and request: the other team
+	Reason       string   `json:"reason,omitempty"`  // for transfer: why the task is theirs
+	Request      string   `json:"request,omitempty"` // for request: what this task needs from them
+	Stories      []Story  `json:"stories,omitempty"` // for split: the stories to add
 }
+
+// Story is one story a split adds to the epic.
+type Story struct {
+	Title string `json:"title"`
+	Brief string `json:"brief"`          // what the story's coordinator needs to know: the goal, what done looks like
+	Team  string `json:"team,omitempty"` // "" for the epic's own team
+	// After are the stories it builds on: numbers count the stories in this
+	// split from 1, and ids ("task-14") name the epic's stories already there.
+	After []StoryRef `json:"after,omitempty"`
+}
+
+// StoryRef is a story another builds on: Number in this split, or ID.
+type StoryRef struct {
+	Number int
+	ID     string
+}
+
+func (r *StoryRef) UnmarshalJSON(data []byte) error {
+	if json.Unmarshal(data, &r.Number) == nil {
+		return nil
+	}
+	if err := json.Unmarshal(data, &r.ID); err != nil {
+		return err
+	}
+	if n, err := strconv.Atoi(r.ID); err == nil { // "2" is the second story too
+		r.Number, r.ID = n, ""
+	}
+	return nil
+}
+
+// MaxStories is how many stories one split may add.
+const MaxStories = 12
 
 type Action string
 
@@ -29,14 +67,24 @@ const (
 	Assign Action = "assign" // hand the task to Agent with Instructions
 	Finish Action = "done"   // the task is done; Summary says what was done
 	Ask    Action = "ask"    // the user must answer Question first
+
+	Transfer     Action = "transfer" // the task is another team's work: their coordinator takes it, with Reason
+	Request      Action = "request"  // this task needs something from another team: a task of theirs, which this one waits for
+	Split        Action = "split"    // the task is too big for one story: it becomes an epic, with Stories
+	AwaitStories Action = "wait"     // for an epic: nothing to do until more of its stories are done
 )
 
 // DecisionFormat closes every coordinator brief. It is code, not part of the
 // coordinator's prompt, so editing the prompt can't break the parser.
 const DecisionFormat = "End your reply with exactly one decision: a JSON object, on its own, as the very last thing you write. One of:\n\n" +
-	`{"action": "assign", "agent": "<agent name>", "instructions": "<what to do, what done looks like, what it needs to know>"}` + "\n" +
+	`{"action": "assign", "agent": "<agent name>", "instructions": "<what to do, what done looks like, what it needs to know>", "machine": "<optional: a machine from \"Machines\">"}` + "\n" +
 	`{"action": "done", "summary": "<what was done, for the user>"}` + "\n" +
-	`{"action": "ask", "question": "<what you need the user to decide>"}` + "\n\n" +
+	`{"action": "ask", "question": "<what you need the user to decide>"}` + "\n" +
+	`{"action": "transfer", "team": "<team>", "reason": "<why this task is that team's work>"}` + "\n" +
+	`{"action": "request", "team": "<team>", "request": "<what this task needs from them, and what done looks like>"}` + "\n" +
+	`{"action": "wait"} (for an epic, while its stories run and nothing needs you)` + "\n" +
+	`{"action": "split", "stories": [{"title": "<the story>", "brief": "<its goal and what done looks like>", "team": "<optional: another team>", "after": [<optional: the stories it builds on: 1 for the first in this list, or an existing story's id>]}]}` + "\n\n" +
+	`Use "transfer" and "request" only with a team named in "Other teams" in this brief.` + "\n\n" +
 	`An "ask" may also carry "options": a short list of answers the user can pick with one click, and "page": ` +
 	`a self-contained HTML page (inline CSS and SVG, no links or scripts from elsewhere) that shows what you need ` +
 	`them to see, such as a diagram of two designs. The page can call answer("text") to send that as the user's answer. ` +
@@ -93,8 +141,36 @@ func (d Decision) check() error {
 		if d.Question == "" {
 			return errors.New(`an "ask" decision needs a "question"`)
 		}
+	case Transfer:
+		if d.Team == "" || d.Reason == "" {
+			return errors.New(`a "transfer" decision needs "team" and "reason"`)
+		}
+	case Request:
+		if d.Team == "" || d.Request == "" {
+			return errors.New(`a "request" decision needs "team" and "request"`)
+		}
+	case Split:
+		return checkStories(d.Stories)
+	case AwaitStories:
 	default:
-		return fmt.Errorf(`unknown action %q: use "assign", "done" or "ask"`, d.Action)
+		return fmt.Errorf(`unknown action %q: use "assign", "done", "ask", "transfer", "request", "split" or "wait"`, d.Action)
+	}
+	return nil
+}
+
+func checkStories(stories []Story) error {
+	if len(stories) == 0 || len(stories) > MaxStories {
+		return fmt.Errorf(`a "split" decision needs "stories": 1 to %d of them`, MaxStories)
+	}
+	for i, story := range stories {
+		if strings.TrimSpace(story.Title) == "" || strings.TrimSpace(story.Brief) == "" {
+			return fmt.Errorf(`story %d needs a "title" and a "brief"`, i+1)
+		}
+		for _, after := range story.After {
+			if after.ID == "" && (after.Number < 1 || after.Number > i) {
+				return fmt.Errorf(`story %d builds on story %d: "after" names a story before it in the list, from 1, or an existing story's id`, i+1, after.Number)
+			}
+		}
 	}
 	return nil
 }

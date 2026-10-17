@@ -19,17 +19,30 @@ var catalogue = map[Type]spec{
 	AgentChanged: {fields: []string{"name", "prompt", "engine"}, writers: []ActorKind{Human, System}},
 	AgentRemoved: {fields: []string{"name"}, writers: []ActorKind{Human}},
 	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
+	AgentRenamed: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 
-	TaskCreated:   {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human}},
-	TaskRenamed:   {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
-	TaskDirected:  {fields: []string{"text"}, writers: []ActorKind{Human}},
-	TaskLabeled:   {writers: []ActorKind{Human}}, // "labels" may be empty: that removes them all
-	TaskBudgeted:  {fields: []string{"budget"}, writers: []ActorKind{Human}},
-	TaskRanked:    {fields: []string{"rank"}, writers: []ActorKind{Human}},
-	TaskHeld:      {writers: []ActorKind{Human}}, // "place" "" lets it go
-	TaskReopened:  {fields: []string{"text"}, writers: []ActorKind{Human}},
-	WorktreeReady: {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
-	WorktreeMoved: {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
+	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent}}, // an agent's: with "parent", for another team, or "epic", a story
+	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
+	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}},
+	TaskLabeled:        {writers: []ActorKind{Human}}, // "labels" may be empty: that removes them all
+	TaskBudgeted:       {fields: []string{"budget"}, writers: []ActorKind{Human}},
+	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
+	TaskHeld:           {writers: []ActorKind{Human}}, // "place" "" lets it go
+	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},
+	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human}},
+	AgentRenamedInTask: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
+	TaskTransferred:    {fields: []string{"coordinator", "reason"}, writers: []ActorKind{Agent}},
+	TaskRequested:      {fields: []string{"child", "team", "request", "coordinator"}, writers: []ActorKind{Agent}},
+	RequestAnswered:    {fields: []string{"child", "summary", "coordinator"}, writers: []ActorKind{System}},
+	TaskSplit:          {fields: []string{"stories"}, writers: []ActorKind{Agent}},
+	StoryDone:          {fields: []string{"story", "summary", "coordinator"}, writers: []ActorKind{System}},
+	EpicWaits:          {writers: []ActorKind{Agent}}, // "note" may say what for
+	EpicJoined:         {fields: []string{"epic"}, writers: []ActorKind{Human}},
+	EpicLeft:           {fields: []string{"epic"}, writers: []ActorKind{Human}},
+	StoryAdded:         {fields: []string{"story", "title"}, writers: []ActorKind{Human}}, // "done" and "summary" when it is done already
+	StoryRemoved:       {fields: []string{"story"}, writers: []ActorKind{Human}},
+	WorktreeReady:      {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
+	WorktreeMoved:      {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
 
 	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}},
 	TurnStarted:        {fields: []string{"agent", "hash"}, correlation: true, writers: []ActorKind{Worker}},
@@ -48,14 +61,14 @@ var catalogue = map[Type]spec{
 	IssueRaised:  {fields: []string{"reason"}, writers: []ActorKind{Worker, System}},
 	TurnStopped:  {correlation: true, writers: []ActorKind{Human}},
 
-	MessageDrafted: {fields: []string{"text"}, correlation: true, writers: []ActorKind{Helper}},
-	DraftDiscarded: {correlation: true, writers: []ActorKind{Human}},
-
 	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}},
 	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},
-	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent}},
+	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}}, // yours: an epic you approved closing
 
 	WorkerInvited:      {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},
+	ConnectionInvited:  {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},
+	ConnectionMade:     {fields: []string{"id", "code", "credential"}, writers: []ActorKind{System}},
+	ConnectionRevoked:  {fields: []string{"id"}, writers: []ActorKind{Human}},
 	WorkerJoined:       {fields: []string{"name", "code", "credential"}, writers: []ActorKind{System}},
 	WorkerConnected:    {fields: []string{"name"}, writers: []ActorKind{System}},
 	WorkerDisconnected: {fields: []string{"name"}, writers: []ActorKind{System}},
@@ -69,15 +82,16 @@ var catalogue = map[Type]spec{
 
 // streamOf is the stream a type must be in; types not listed go in a task's stream.
 var streamOf = map[Type]string{
-	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream, AgentLearned: AgentsStream,
+	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream, AgentLearned: AgentsStream, AgentRenamed: AgentsStream,
 	PolicyLoaded: PolicyStream, PolicyRefused: PolicyStream,
 	WorkerInvited: WorkersStream, WorkerJoined: WorkersStream, WorkerConnected: WorkersStream,
 	WorkerDisconnected: WorkersStream, WorkerRemoved: WorkersStream,
+	ConnectionInvited: ConnectionsStream, ConnectionMade: ConnectionsStream, ConnectionRevoked: ConnectionsStream,
 }
 
-// IsTaskStream is false for the agents, policy and workers streams.
+// IsTaskStream is false for the agents, policy, workers and connections streams.
 func IsTaskStream(stream string) bool {
-	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream
+	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream && stream != ConnectionsStream
 }
 
 // CheckShape is check 1: the type is known and the proposal carries what it must.

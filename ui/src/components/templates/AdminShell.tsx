@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { NewTaskDialog } from "@/components/organisms/NewTaskDialog";
+import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Bot, KeyRound, ListTodo, Moon, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import { Bot, KeyRound, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
 import { CommandPalette, PaletteItem } from "@/components/organisms/CommandPalette";
 import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
@@ -115,9 +117,10 @@ export function AdminShell() {
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
 
+  const newTask = useNewTask();
   useKeys({
     "?": () => setOverlay(true),
-    n: () => navigate("/tasks/new"),
+    n: () => newTask(),
     "/": () => document.querySelector<HTMLInputElement>("[data-page-search] input")?.focus(),
     "g t": () => navigate("/tasks"),
     "g a": () => navigate("/agents"),
@@ -129,7 +132,10 @@ export function AdminShell() {
       { id: "go-tasks", group: "Go to", label: "Tasks", icon: <ListTodo />, run: () => navigate("/tasks") },
       { id: "go-agents", group: "Go to", label: "Agents", icon: <Bot />, run: () => navigate("/agents") },
       { id: "go-policy", group: "Go to", label: "Policy", icon: <ShieldCheck />, run: () => navigate("/policy") },
-      { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => navigate("/tasks/new") },
+      { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => newTask() },
+      { id: "new-epic", group: "Commands", label: "New epic", icon: <Plus />, run: () => newTask("epic") },
+      { id: "go-plan", group: "Go to", label: "Plan", icon: <MapIcon />, run: () => navigate("/plan") },
+      { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
       { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
       ...tasks
         .filter((task) => task.status === "working" && task.currentAgent)
@@ -165,7 +171,7 @@ export function AdminShell() {
         run: () => navigate(`/agents/${encodeURIComponent(agent.name)}`),
       })),
     ],
-    [tasks, agents, theme, navigate, toggleTheme, openDock, openTaskTerminal],
+    [tasks, agents, theme, navigate, newTask, toggleTheme, openDock, openTaskTerminal],
   );
 
   const needsYou = tasks.filter((task) => task.status === "needs you").length;
@@ -191,7 +197,10 @@ export function AdminShell() {
                       Open the link <span className="font-mono">agentry serve</span> printed. Its token signs this browser in.
                     </EmptyState>
                   ) : (
-                    <Outlet />
+                    <>
+                      <Outlet />
+                      <NewTaskDialog />
+                    </>
                   )}
                 </main>
                 {dockOpen && (

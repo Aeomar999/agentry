@@ -20,12 +20,14 @@ var agentName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown),
-	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator),
-	events.AgentRemoved: allOf(agentExists, removalKeepsACoordinator),
-	events.AgentLearned: allOf(agentExists, onlyItsOwnKnowledge),
-	events.TaskCreated:  allOf(coordinatorExists),
-	events.TaskAssigned: allOf(assigneeExists),
+	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown),
+	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator),
+	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
+	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge),
+	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
+	events.TaskCreated:     allOf(coordinatorExists),
+	events.TaskAssigned:    allOf(assigneeExists),
+	events.TaskTransferred: allOf(coordinatorExists), // the new coordinator, which must be one
 }
 
 func allOf(rules ...rosterRule) rosterRule {
@@ -42,6 +44,17 @@ func allOf(rules ...rosterRule) rosterRule {
 func nameIsNew(roster agents.Roster, p events.Proposal) string {
 	if _, exists := roster.Get(p.Text("name")); exists {
 		return "an agent called " + p.Text("name") + " already exists"
+	}
+	return ""
+}
+
+func newNameIsFree(roster agents.Roster, p events.Proposal) string {
+	to := p.Text("to")
+	if !agentName.MatchString(to) {
+		return "an agent's name is lowercase letters, digits and dashes, starting with a letter: " + to
+	}
+	if _, exists := roster.Get(to); exists {
+		return "an agent called " + to + " already exists"
 	}
 	return ""
 }
@@ -74,17 +87,27 @@ func agentExists(roster agents.Roster, p events.Proposal) string {
 	return ""
 }
 
-// keepsACoordinator stops a change that would leave no agent to send tasks to.
+// keepsACoordinator stops a change that would leave a team with agents but
+// no coordinator to send its tasks to: the agent's team, or the one it moves to.
 func keepsACoordinator(roster agents.Roster, p events.Proposal) string {
-	if p.Flag("coordinates") {
-		return ""
-	}
-	for _, a := range roster {
-		if a.Coordinates && a.Name != p.Text("name") {
-			return ""
+	before, _ := roster.Get(p.Text("name"))
+	after := slices.Clone(roster)
+	for i := range after {
+		if after[i].Name == before.Name {
+			after[i].Coordinates, after[i].Team = p.Flag("coordinates"), p.Text("team")
 		}
 	}
-	return "this would leave no coordinator"
+	changed, _ := after.Get(before.Name)
+	return teamsKeepCoordinators(after, before.TeamName(), changed.TeamName())
+}
+
+func teamsKeepCoordinators(after agents.Roster, teams ...string) string {
+	for _, team := range teams {
+		if _, ok := after.Coordinator(team); !ok && slices.Contains(after.Teams(), team) {
+			return "this would leave the " + team + " team with no coordinator"
+		}
+	}
+	return ""
 }
 
 func colorIsKnown(_ agents.Roster, p events.Proposal) string {
@@ -95,8 +118,10 @@ func colorIsKnown(_ agents.Roster, p events.Proposal) string {
 }
 
 func columnIsKnown(_ agents.Roster, p events.Proposal) string {
-	if column := p.Text("column"); column != "" && column != "review" {
-		return `an agent's work counts as In progress ("") or Review ("review"), not ` + column
+	switch column := p.Text("column"); column {
+	case agents.Builds, agents.Reviews, agents.Ships:
+	default:
+		return `an agent's work counts as building (""), review ("review") or shipping ("ship"), not ` + column
 	}
 	return ""
 }
@@ -111,15 +136,11 @@ func onlyItsOwnKnowledge(_ agents.Roster, p events.Proposal) string {
 
 func removalKeepsACoordinator(roster agents.Roster, p events.Proposal) string {
 	agent, _ := roster.Get(p.Text("name"))
-	if !agent.Coordinates {
-		return ""
+	after := slices.DeleteFunc(slices.Clone(roster), func(a agents.Agent) bool { return a.Name == agent.Name })
+	if len(after.Teams()) == 0 {
+		return "this would leave no coordinator"
 	}
-	for _, a := range roster {
-		if a.Coordinates && a.Name != agent.Name {
-			return ""
-		}
-	}
-	return "this would leave no coordinator"
+	return teamsKeepCoordinators(after, agent.TeamName())
 }
 
 func coordinatorExists(roster agents.Roster, p events.Proposal) string {
@@ -140,6 +161,10 @@ func assigneeExists(roster agents.Roster, p events.Proposal) string {
 		return "no agent called " + p.Text("agent")
 	case agent.Coordinates:
 		return p.Text("agent") + " is a coordinator and doesn't take work"
+	}
+	// A coordinator hands work only to its own team.
+	if coordinator, ok := roster.Get(p.Actor.ID); ok && coordinator.TeamName() != agent.TeamName() {
+		return p.Text("agent") + " is in the " + agent.TeamName() + " team, not " + coordinator.TeamName()
 	}
 	return ""
 }

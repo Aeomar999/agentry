@@ -13,6 +13,13 @@ import { App } from "./App";
 
 applyTheme(savedTheme());
 
+// A pinch on a trackpad (Ctrl and the wheel, to the browser) never zooms the
+// app, as in an editor: Ctrl + and Ctrl - do. A view that zooms what it
+// shows, such as the image viewer, takes the pinch for itself. The listener
+// can't be passive, or the browser zooms before it is asked.
+window.addEventListener("wheel", (event) => event.ctrlKey && event.preventDefault(), { passive: false });
+for (const gesture of ["gesturestart", "gesturechange"]) window.addEventListener(gesture, (event) => event.preventDefault()); // Safari
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

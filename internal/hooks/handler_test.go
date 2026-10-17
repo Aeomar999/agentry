@@ -48,12 +48,12 @@ func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
 		s.Propose(p)
 	}
 	you := events.Actor{Kind: events.Human, ID: "you"}
-	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"}},
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}},
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": worktree, "branch": "b", "port": 7901}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": "r"}},
 		{Stream: "task-1", Actor: coordinator, Type: events.TaskAssigned, Data: map[string]any{"agent": "engineer", "instructions": "go"}},
 		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2",
 			Data: map[string]any{"agent": "engineer", "hash": events.Hash("Read .agentry/turn-2.md and do what it says.")}},

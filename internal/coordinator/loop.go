@@ -1,10 +1,12 @@
 package coordinator
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -74,6 +76,28 @@ func (l *Loop) act(id string) {
 	if task.OpenTurn() == nil {
 		l.runner.Stop(id) // the turn is over: end its session
 	}
+	// A request between teams never stalls: a finished task answers the one
+	// that asked for it, and a waiting task checks on its own, so an answer
+	// missed (as across a restart) is given on the next pass.
+	if task.IsDone && task.Parent != "" {
+		l.answer(task)
+	}
+	if task.WaitingOn != "" {
+		if child, _, err := l.load(task.WaitingOn); err == nil && child != nil && child.IsDone {
+			l.answer(child)
+		}
+	}
+	// Stories the same way: a finished one reports to its epic, and the
+	// epic checks on the rest, starting any whose stories before it are done.
+	if task.IsDone && task.Epic != "" {
+		l.storyDone(task)
+	}
+	if task.Kind == tasks.Epic && !task.IsDone {
+		l.wakeStories(task)
+	}
+	if !task.IsDone && task.Worktree == nil && l.blocked(task) {
+		return // it starts from dev once the stories it builds on are in
+	}
 
 	switch move := Next(task, roster); move.Kind {
 	case PrepareWorktree:
@@ -81,7 +105,7 @@ func (l *Loop) act(id string) {
 	case StartTurn:
 		l.startTurn(task, roster, move)
 	case ApplyDecision:
-		l.apply(task, move.Decision)
+		l.apply(task, roster, move.Decision)
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
 	case AskYou:
@@ -115,18 +139,35 @@ func (l *Loop) prepare(m machines.Machine, task *tasks.Task, base string) (workt
 func (l *Loop) startTurn(task *tasks.Task, roster agents.Roster, move Move) {
 	ctx, cancel := context.WithTimeout(context.Background(), machines.OfflineGrace)
 	defer cancel()
+	if move.Machine != "" {
+		// The coordinator chose it: if it can't be had, the coordinator
+		// hears why and chooses again.
+		target, err := l.fleet.WaitOn(ctx, move.Agent, move.Machine)
+		if err != nil {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the turn couldn't start where you chose: " + sentence(err)})
+			return
+		}
+		l.startOn(task, roster, move, target)
+		return
+	}
 	target, err := l.fleet.WaitFor(ctx, move.Agent, task.Worktree.Worker)
 	if err != nil {
 		l.askYou(task, sentence(err)+" Bring one of its workers online, or change where it runs, and answer to carry on.")
 		return
 	}
+	l.startOn(task, roster, move, target)
+}
+
+// startOn starts the turn on target, moving the work there first if it is
+// somewhere else.
+func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target machines.Machine) {
 	if target.Name() != task.Worktree.Worker {
 		l.moveWork(task, target, move.Agent) // when it has moved, the loop comes back here
 		return
 	}
 	brief := workerBrief(task, move.Agent, move.Handoff)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster)
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines())
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -177,23 +218,190 @@ func workerActor(m machines.Machine) events.Actor {
 func sentence(err error) string { return strings.TrimRight(err.Error(), ". ") + "." }
 
 // apply turns the coordinator's decision into its event, written as the coordinator.
-func (l *Loop) apply(task *tasks.Task, decision Decision) {
+func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) {
 	coordinator := events.Actor{Kind: events.Agent, ID: task.Coordinator}
 	if title := strings.TrimSpace(decision.Title); title != "" && title != task.Title {
 		l.propose(task.ID, coordinator, events.TaskRenamed, map[string]any{"title": title})
 	}
 	switch decision.Action {
 	case Assign:
+		agent, _ := roster.Get(decision.Agent)
+		machine, refused := l.machineFor(agent, decision.Machine)
+		if refused != "" {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": refused})
+			return
+		}
 		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions,
-			"toYou": decision.ToYou})
+			"machine": machine, "toYou": decision.ToYou})
 	case Ask:
 		l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": decision.Question,
 			"options": decision.Options, "page": decision.Page, "toYou": decision.ToYou})
+	case Transfer:
+		lead, _ := roster.Coordinator(teamNamed(roster, decision.Team))
+		l.propose(task.ID, coordinator, events.TaskTransferred, map[string]any{"coordinator": lead.Name,
+			"team": lead.TeamName(), "reason": decision.Reason})
+	case Request:
+		l.request(task, roster, coordinator, decision)
+	case Split:
+		l.split(task, roster, coordinator, decision)
+	case AwaitStories:
+		l.propose(task.ID, coordinator, events.EpicWaits, map[string]any{"toYou": decision.ToYou})
 	case Finish:
+		if task.Kind == tasks.Epic { // you close an epic: there may be more you want in it
+			l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": "Every story of this epic is done. " +
+				"Close it? Its summary:\n\n" + decision.Summary + "\n\nOr say what else it needs, and " + task.Coordinator + " plans it.",
+				"options": []string{CloseEpic}, "closing": decision.Summary, "toYou": decision.ToYou})
+			return
+		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": decision.Summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)
 		}
 	}
+}
+
+// request opens a task for another team, for what this one needs from it,
+// in the same repo, and makes this one wait for it.
+func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator events.Actor, decision Decision) {
+	lead, _ := roster.Coordinator(teamNamed(roster, decision.Team))
+	asker, _ := roster.Get(task.Coordinator)
+	description := decision.Request + "\n\n(Asked by the " + asker.TeamName() + " team's coordinator, " + task.Coordinator +
+		", for " + task.ID + ": " + task.Title + ". When this is done, your summary goes back to them.)"
+	child, refused := l.newTask(coordinator, map[string]any{
+		"title": firstLine(decision.Request), "description": description, "repo": task.Repo, "coordinator": lead.Name,
+		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": task.Budget, "labels": listOf(task.Labels)})
+	if refused != "" {
+		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the request to the " + lead.TeamName() + " team failed: " + refused})
+		return
+	}
+	l.propose(task.ID, coordinator, events.TaskRequested, map[string]any{"child": child, "team": lead.TeamName(),
+		"request": decision.Request, "coordinator": lead.Name})
+}
+
+// split makes the decision's stories, each a task of its team in the same
+// repo, in your Backlog until you start it, and adds them to the task,
+// which is an epic from then on. If one
+// can't be made, the ones before it are kept and the coordinator hears why.
+func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.Actor, decision Decision) {
+	own, _ := roster.Get(task.Coordinator)
+	var ids, titles []string
+	refused := ""
+	for i, story := range decision.Stories {
+		team := cmp.Or(teamNamed(roster, story.Team), own.TeamName())
+		lead, ok := roster.Coordinator(team)
+		if !ok {
+			refused = fmt.Sprintf("story %d is for the %s team, which has no coordinator", i+1, team)
+			break
+		}
+		after := []string{}
+		for _, ref := range story.After {
+			after = append(after, cmp.Or(ref.ID, ids[ref.Number-1]))
+		}
+		description := strings.TrimSpace(story.Brief) + "\n\n(A story of " + task.ID + ", the epic \"" + task.Title +
+			"\". When it is done, your summary goes back to the epic's coordinator, " + task.Coordinator + ".)"
+		var id string
+		if id, refused = l.newTask(coordinator, map[string]any{
+			"title": strings.TrimSpace(story.Title), "description": description, "repo": task.Repo, "coordinator": lead.Name,
+			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": task.Budget,
+			"labels": listOf(task.Labels)}); refused != "" {
+			refused = fmt.Sprintf("story %d wasn't made: %s", i+1, refused)
+			break
+		}
+		ids, titles = append(ids, id), append(titles, id+" "+strings.TrimSpace(story.Title))
+	}
+	if len(ids) > 0 {
+		l.propose(task.ID, coordinator, events.TaskSplit, map[string]any{"stories": ids, "titles": strings.Join(titles, "; "),
+			"toYou": decision.ToYou})
+	}
+	if refused != "" {
+		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": refused})
+	}
+}
+
+// newTask makes a task with the next free id, and returns the id, or why it
+// wasn't made. Another task made at the same moment can take the id: then
+// it tries the one after.
+func (l *Loop) newTask(by events.Actor, data map[string]any) (string, string) {
+	for attempt := 0; attempt < 5; attempt++ {
+		ids, err := l.store.TaskIDs()
+		if err != nil {
+			return "", "Agentry couldn't list the tasks: " + err.Error()
+		}
+		id := fmt.Sprintf("task-%d", len(ids)+1)
+		_, rejection, err := l.store.Propose(events.Proposal{Stream: id, Actor: by, Type: events.TaskCreated, Data: data})
+		switch {
+		case err != nil:
+			return "", "Agentry couldn't write it: " + err.Error()
+		case rejection != nil && strings.Contains(rejection.Reason, "already exists"):
+			continue // taken a moment ago: the next id
+		case rejection != nil:
+			return "", rejection.Reason
+		}
+		return id, ""
+	}
+	return "", "no task id was free"
+}
+
+// storyDone gives a finished story's summary to its epic, if the epic
+// hasn't heard it yet.
+func (l *Loop) storyDone(story *tasks.Task) {
+	epic, _, err := l.load(story.Epic)
+	if err != nil || epic == nil || !slices.Contains(epic.Stories, story.ID) || slices.Contains(epic.StoriesDone, story.ID) {
+		return
+	}
+	l.propose(epic.ID, agentry, events.StoryDone, map[string]any{"story": story.ID, "summary": story.Summary,
+		"coordinator": story.Coordinator})
+}
+
+// wakeStories hears from the epic's finished stories and starts any that
+// can start now.
+func (l *Loop) wakeStories(epic *tasks.Task) {
+	for _, id := range openStories(epic) {
+		story, _, err := l.load(id)
+		switch {
+		case err != nil || story == nil:
+		case story.IsDone:
+			l.storyDone(story)
+		case story.Worktree == nil:
+			l.act(id)
+		}
+	}
+}
+
+// blocked is a story whose stories before it aren't done: its worktree
+// would start from a dev without their work.
+func (l *Loop) blocked(story *tasks.Task) bool {
+	for _, id := range story.After {
+		if before, _, err := l.load(id); err != nil || before == nil || !before.IsDone {
+			return true
+		}
+	}
+	return false
+}
+
+// answer gives a finished task's summary to the task that asked for it, if
+// that one still waits for it.
+func (l *Loop) answer(child *tasks.Task) {
+	parent, _, err := l.load(child.Parent)
+	if err != nil || parent == nil || parent.WaitingOn != child.ID {
+		return
+	}
+	l.propose(parent.ID, agentry, events.RequestAnswered, map[string]any{"child": child.ID, "summary": child.Summary,
+		"coordinator": child.Coordinator})
+}
+
+func firstLine(text string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if len([]rune(line)) > 80 {
+		line = string([]rune(line)[:77]) + "..."
+	}
+	return line
+}
+
+func listOf(items []string) []string {
+	if items == nil {
+		return []string{}
+	}
+	return items
 }
 
 // removeWorktree cleans up a finished task, unless its branch isn't in dev

@@ -1,3 +1,4 @@
+import { onMachine } from "./machines";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { readPlan } from "./plan";
 import { tokens } from "./tokens";
@@ -136,7 +137,7 @@ function rowOf(
     case "task.answered":
       return message("you", coordinator, text(e, "answer"));
     case "task.assigned":
-      return message(who(e), text(e, "agent"), text(e, "instructions"));
+      return message(who(e), onMachine(text(e, "agent"), text(e, "machine")), text(e, "instructions"));
     case "task.needs_you":
       return message(who(e), "you", text(e, "question"), "warning");
     case "task.done":
@@ -161,6 +162,26 @@ function rowOf(
       const title = used > 0 ? `Finished, ${tokens(used)} tokens` : "Finished";
       return { ...base, kind: "ended", title, body: text(e, "report"), tone: "success" };
     }
+    case "artifact.published":
+      return {
+        ...base,
+        kind: "note",
+        title: `Published the artifact "${text(e, "title")}" (${e.correlation})${e.data?.wait ? ", waiting for you" : ""}`,
+      };
+    case "artifact.commented":
+      return { ...base, kind: "note", title: `You commented on ${e.correlation}: ${text(e, "text")}` };
+    case "artifact.replied":
+      return {
+        ...base,
+        kind: "note",
+        title: `${who(e)} replied on ${e.correlation} ${text(e, "comment")}${e.data?.resolved ? ", resolved" : ""}`,
+      };
+    case "artifact.acted":
+      return {
+        ...base,
+        kind: "note",
+        title: text(e, "action") ? `You chose "${text(e, "action")}" on ${e.correlation}` : `You sent your comments on ${e.correlation}`,
+      };
     case "turn.stopped":
       return { ...base, kind: "note", title: "You stopped this turn, so the coordinator reads what you said" };
     case "issue.raised":
@@ -215,6 +236,25 @@ function rowOf(
       const place = text(e, "place");
       return { ...base, kind: "note", title: place ? `Held in ${place}` : "Moved on" };
     }
+    case "task.transferred":
+      return {
+        ...base,
+        kind: "note",
+        title: `Passed to the ${text(e, "team")} team: ${text(e, "coordinator")} coordinates it now`,
+        body: text(e, "reason"),
+      };
+    case "task.requested":
+      return { ...base, kind: "note", title: `Asked the ${text(e, "team")} team, as ${text(e, "child")}`, body: text(e, "request") };
+    case "task.split":
+      return { ...base, kind: "note", title: "Split into stories", body: text(e, "titles").split("; ").join("\n") };
+    case "task.epic_waits":
+      return { ...base, kind: "note", title: "Waiting for its stories" };
+    case "task.story_done":
+      return { ...base, kind: "note", title: `${text(e, "story")} is done, from ${text(e, "coordinator")}`, body: text(e, "summary") };
+    case "task.request_answered":
+      return { ...base, kind: "note", title: `${text(e, "child")} is done, from ${text(e, "coordinator")}`, body: text(e, "summary") };
+    case "task.repo_changed":
+      return { ...base, kind: "note", title: `You moved the task to the repo at ${text(e, "repo")}` };
     case "worktree.ready":
       return { ...base, kind: "note", title: `Worktree ready on ${text(e, "worker") || "local"}: ${text(e, "branch")}` };
     case "worktree.moved":

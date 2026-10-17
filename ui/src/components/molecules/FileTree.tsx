@@ -60,6 +60,7 @@ interface FileTreeProps {
   onSelect: (path: string) => void;
   changedOnly: boolean;
   empty?: string; // what to say when there is nothing to show
+  onContext?: (event: React.MouseEvent, path: string, change: Change) => void; // right-click on a file
 }
 
 // The workspace's folders and files, each with its git status against the
@@ -67,7 +68,7 @@ interface FileTreeProps {
 // deleted, U untracked; a committed file has none. A folder holding changes
 // shows them too, as an editor does: its name in their colour and a dot, all
 // the way up. Such folders are open from the start.
-export function FileTree({ files, selected, onSelect, changedOnly, empty }: FileTreeProps) {
+export function FileTree({ files, selected, onSelect, changedOnly, empty, onContext }: FileTreeProps) {
   const shown = changedOnly ? files.filter((f) => f.change) : files;
   const root = useMemo(() => build(shown), [shown]);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
@@ -83,6 +84,7 @@ export function FileTree({ files, selected, onSelect, changedOnly, empty }: File
             key={child.path}
             type="button"
             onClick={() => onSelect(child.path)}
+            onContextMenu={onContext ? (event) => (event.preventDefault(), onContext(event, child.path, change)) : undefined}
             style={pad}
             className={cn(
               "flex h-6 w-full cursor-pointer items-center gap-1.5 pr-2 text-left text-[12.5px] [&>svg]:size-3.5 [&>svg]:shrink-0",

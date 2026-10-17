@@ -26,8 +26,9 @@ func (s *Server) message(w http.ResponseWriter, r *http.Request) {
 	s.say(w, task, request.Text, "")
 }
 
-// say is what you send the coordinator, typed or from a draft you approved.
-func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, draft string) {
+// say is what you send the coordinator: typed in the chat, or asked of
+// Claude in the Workspace (via "claude"), which sends it for you.
+func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, via string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		http.Error(w, "say something", http.StatusBadRequest)
@@ -35,8 +36,8 @@ func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, draft string
 	}
 	if task.IsDone {
 		reopen := s.reopen(task, text, "")
-		if draft != "" {
-			reopen.Data["draft"] = draft
+		if via != "" {
+			reopen.Data["via"] = via
 		}
 		s.propose(w, reopen)
 		return
@@ -46,8 +47,8 @@ func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, draft string
 		kind, field = events.TaskAnswered, "answer"
 	}
 	said := events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}}
-	if draft != "" {
-		said.Data["draft"] = draft
+	if via != "" {
+		said.Data["via"] = via
 	}
 	open := task.OpenTurn()
 	if open == nil {

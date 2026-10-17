@@ -161,3 +161,25 @@ func (f *Fleet) has(name, engine string) bool {
 	defer f.mu.Unlock()
 	return (workers.Worker{Engines: f.online[name].Engines}).Has(engine)
 }
+
+// WaitOn is the named machine, for an agent the coordinator sent there: it
+// must be online and have the agent's engine. One that went offline within
+// OfflineGrace is waited for, as in WaitFor.
+func (f *Fleet) WaitOn(ctx context.Context, agent agents.Agent, name string) (Machine, error) {
+	for {
+		m, online := f.Get(name)
+		switch {
+		case online && f.has(name, agent.Engine):
+			return m, nil
+		case online:
+			return nil, fmt.Errorf("%s has no %s, which %s runs on", name, agent.Engine, agent.Name)
+		case !f.comingBack([]string{name}):
+			return nil, fmt.Errorf("%s is offline", name)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("%s is offline", name)
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}

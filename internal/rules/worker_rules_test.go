@@ -57,12 +57,12 @@ func TestWorkerRules(t *testing.T) {
 func TestWorkMovesOnlyToAnotherMachine(t *testing.T) {
 	move := func(to string) map[string]any { return map[string]any{"worker": to, "path": "/w/task-1", "port": 7901} }
 	run(t, []step{
-		{you, events.TaskCreated, "", map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"}, true},
+		{you, events.TaskCreated, "", map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}, true},
 		{worker, events.WorktreeMoved, "", move("laptop"), false}, // no worktree yet
 		{worker, events.WorktreeReady, "", map[string]any{"worker": "local", "path": "/r/w", "branch": "b", "port": 7900}, true},
 		{worker, events.WorktreeMoved, "", move("local"), false}, // it is there already
 		{worker, events.WorktreeMoved, "", move("laptop"), true},
-		{worker, events.TurnStarted, "turn-1", map[string]any{"agent": "coordinator", "hash": "h"}, true},
+		{worker, events.TurnStarted, "turn-1", map[string]any{"agent": "tech-lead", "hash": "h"}, true},
 		{worker, events.WorktreeMoved, "", move("local"), false}, // not while a turn runs
 	})
 }

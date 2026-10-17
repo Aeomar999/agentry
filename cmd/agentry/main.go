@@ -20,7 +20,9 @@ var commands = []command{
 	{"serve", "run Agentry: the page, the coordinator, the agents", runServe},
 	{"worker", "run agents on this machine for a server; join it first", runWorker},
 	{"task", "create, list, show or answer tasks; used by the desk", runTask},
-	{"draft", "draft a message to a task's coordinator, for you to send; used by the Claude session in a task's Workspace", runDraft},
+	{"send", "send a task's coordinator what you asked; used by Claude in a task's Workspace", runSend},
+	{"mcp", "Agentry's tools for Claude Code in any repo; `agentry mcp install` adds them", runMCP},
+	{"statusline", "the line Claude Code shows: what needs you, what runs", runStatusLine},
 	{"hook", "called by an engine's hooks; not run by hand", runHook},
 }
 

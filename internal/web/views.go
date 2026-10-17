@@ -1,6 +1,8 @@
 package web
 
 import (
+	"fmt"
+	"maps"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -27,31 +29,36 @@ type taskSummary struct {
 	OverBudget   bool         `json:"overBudget"` // stopped, or about to stop, for its budget
 	Rank         float64      `json:"rank"`       // your priority order, lower first
 	Parked       string       `json:"parked"`     // "todo" or "backlog" while you hold it there
+	Parent       string       `json:"parent"`     // the task, of another team, that asked for this one
+	WaitingOn    string       `json:"waitingOn"`  // another team's task this one waits for
+	Kind         tasks.Kind   `json:"kind"`       // "" for a story, "epic"
+	Epic         string       `json:"epic"`       // a story's epic
+	After        []string     `json:"after"`      // the stories it builds on
+	BlockedBy    []string     `json:"blockedBy"`  // of those, the ones not done, so it hasn't started
+	Stories      int          `json:"stories"`    // an epic's
+	StoriesDone  int          `json:"storiesDone"`
 	CreatedAt    time.Time    `json:"createdAt"`
 	LastActiveAt time.Time    `json:"lastActiveAt"`
 }
 
 type taskDetail struct {
 	taskSummary
-	Description string       `json:"description"`
-	FirstTitle  string       `json:"firstTitle"` // when the coordinator renamed the task
-	Options     []string     `json:"options"`    // answers the open question offers
-	Page        string       `json:"page"`       // the page the open question came with
-	Coordinator string       `json:"coordinator"`
-	Summary     string       `json:"summary"`
-	Worktree    *worktree    `json:"worktree"`
-	Trail       []step       `json:"trail"`
-	Turns       []turn       `json:"turnList"`
-	Approvals   []action     `json:"approvals"` // waiting for you
-	Actions     []action     `json:"actions"`
-	Events      []eventEntry `json:"events"`
-	Drafts      []draft      `json:"drafts"` // waiting for you to send or discard
-}
-
-type draft struct {
-	ID   string    `json:"id"`
-	At   time.Time `json:"at"`
-	Text string    `json:"text"`
+	Description string        `json:"description"`
+	FirstTitle  string        `json:"firstTitle"` // when the coordinator renamed the task
+	Options     []string      `json:"options"`    // answers the open question offers
+	Page        string        `json:"page"`       // the page the open question came with
+	Coordinator string        `json:"coordinator"`
+	TeamChosen  bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
+	EpicTitle   string        `json:"epicTitle"`  // a story's epic's
+	StoryList   []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
+	MovingTo    string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
+	Summary     string        `json:"summary"`
+	Worktree    *worktree     `json:"worktree"`
+	Trail       []step        `json:"trail"`
+	Turns       []turn        `json:"turnList"`
+	Approvals   []action      `json:"approvals"` // waiting for you
+	Actions     []action      `json:"actions"`
+	Events      []eventEntry  `json:"events"`
 }
 
 type worktree struct {
@@ -117,7 +124,24 @@ func summaryOf(t *tasks.Task) taskSummary {
 	}
 	return taskSummary{ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget, Rank: t.Rank, Parked: t.Parked,
+		Parent: t.Parent, WaitingOn: t.WaitingOn,
+		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone),
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
+}
+
+// blockedBy are the stories a story builds on that aren't done, while it
+// waits to start for them.
+func blockedBy(t *tasks.Task, done func(id string) bool) []string {
+	blocked := []string{}
+	if t.IsDone || t.Worktree != nil {
+		return blocked
+	}
+	for _, id := range t.After {
+		if !done(id) {
+			blocked = append(blocked, id)
+		}
+	}
+	return blocked
 }
 
 // listOf makes nil an empty list, so the page reads [], never null.
@@ -141,7 +165,7 @@ func stageOf(t *tasks.Task) string {
 
 func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
-		Coordinator: t.Coordinator, Summary: t.Summary}
+		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
 	if w := t.Worktree; w != nil {
 		detail.Worktree = &worktree{Worker: w.Worker, Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}
@@ -160,15 +184,14 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 			detail.Approvals = append(detail.Approvals, view)
 		}
 	}
-	detail.Drafts = []draft{}
-	for _, d := range t.Drafts {
-		if !d.Sent && !d.Discarded {
-			detail.Drafts = append(detail.Drafts, draft{ID: d.ID, At: d.At, Text: d.Text})
-		}
-	}
 	for _, e := range log {
+		data := e.Data
+		if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
+			data = maps.Clone(data)
+			data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
+		}
 		detail.Events = append(detail.Events, eventEntry{Position: e.Position, At: e.At, Type: e.Type,
-			Actor: e.Actor.String(), Correlation: e.Correlation, Data: e.Data})
+			Actor: e.Actor.String(), Correlation: e.Correlation, Data: data})
 	}
 	return detail
 }

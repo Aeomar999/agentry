@@ -14,12 +14,10 @@ import { tokens } from "@/lib/tokens";
 import { TerminalView } from "./TerminalView";
 import { CoordinatorChat } from "./CoordinatorChat";
 import { QuestionsPanel } from "./QuestionsPanel";
-import { Drafts } from "./Drafts";
 
 // The Workspace page's dock: your chat with the task's coordinator, which
 // can put the task back to work; your own Claude, in the worktree, for your
-// questions, which can only draft messages to the coordinator for you to
-// send; the agent's terminal; the agents that have worked here, turn by
+// questions, which sends the coordinator a change when you ask it to; the agent's terminal; the agents that have worked here, turn by
 // turn; and, while the coordinator waits for you, Questions.
 
 interface WorkspaceDockProps {
@@ -44,7 +42,7 @@ export function WorkspaceDock({ task, height, onResize, onClose, onChanged }: Wo
   };
   const tabs: [Tab, string, ReactNode][] = [
     ["coordinator", task.hasQuestion ? "Coordinator · asks you" : "Coordinator", <MessagesSquare key="c" />],
-    ["claude", task.drafts.length ? `Claude · ${task.drafts.length} draft` : "Claude", <Sparkles key="y" />],
+    ["claude", "Claude", <Sparkles key="y" />],
     ["terminal", "Terminal", <SquareTerminal key="t" />],
     ["agents", `Agents ${turns.length}`, <Users key="a" />],
     ...(task.hasQuestion || tab === "questions" ? [["questions", "Questions", <Inbox key="q" />] as [Tab, string, ReactNode]] : []),
@@ -80,16 +78,7 @@ export function WorkspaceDock({ task, height, onResize, onClose, onChanged }: Wo
         {tab === "coordinator" && <CoordinatorChat task={task} onSent={onChanged} onOpenQuestion={openQuestion} />}
         {tab === "questions" && <QuestionsPanel onOpenTerminal={() => setTab("terminal")} focus={question} />}
         {tab === "claude" && (
-          <div className="flex h-full min-h-0 flex-col">
-            {task.drafts.length > 0 && (
-              <div className="max-h-[50%] shrink-0 scrollbar-thin overflow-y-auto border-b border-divider p-3">
-                <Drafts task={task} onChanged={onChanged} />
-              </div>
-            )}
-            <div className="min-h-0 flex-1">
-              <TerminalView key={`claude-${theme}`} url={helperTerminalURL(task.id, theme)} title="claude" takeControlOnConnect />
-            </div>
-          </div>
+          <TerminalView key={`claude-${theme}`} url={helperTerminalURL(task.id, theme)} title="claude" takeControlOnConnect />
         )}
         {tab === "terminal" &&
           (working ? (

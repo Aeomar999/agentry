@@ -1,6 +1,10 @@
-import { ReactNode } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { ReactNode, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CircleCheck, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
+import { Button } from "@/components/atoms/Button";
+import { Input } from "@/components/atoms/Input";
+import { useToast } from "@/components/organisms/Toasts";
+import { api } from "@/api/client";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { Badge } from "@/components/atoms/Badge";
 import { PageHeader } from "@/components/molecules/PageHeader";
@@ -24,7 +28,12 @@ import { PlanRail } from "@/components/organisms/PlanRail";
 import { CoordinatorChat } from "@/components/organisms/CoordinatorChat";
 import { HandoffPath } from "@/components/molecules/HandoffPath";
 import { terminalURL } from "@/api/client";
-import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
+import { StoryTable } from "@/components/organisms/StoryTable";
+import { EpicPicker } from "@/components/organisms/EpicPicker";
+import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
+import { waitingLine } from "@/lib/epics";
+import type { Action, Agent, LogEvent, TaskDetail, Turn } from "@/api/types";
+import { teamOf, teamsOf } from "@/lib/teams";
 import { SHOWS, Show, activityOf, rowFor } from "@/lib/activity";
 import { LOCAL, machineName } from "@/lib/machines";
 import { tokens } from "@/lib/tokens";
@@ -115,7 +124,7 @@ const TURN_COLUMNS: Column<Turn>[] = [
 ];
 
 // Most used first: talk to the coordinator, watch the work, then the records.
-const TABS = ["coordinator", "activity", "terminal", "handoffs", "actions", "events", "details"] as const;
+const TABS = ["stories", "coordinator", "activity", "terminal", "handoffs", "actions", "events", "details"] as const;
 type TabId = (typeof TABS)[number];
 
 export function TaskPage() {
@@ -124,6 +133,7 @@ export function TaskPage() {
   const [params, setParams] = useSearchParams();
   const { data: task, error, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
+  const roster = useResource<Agent[]>("/api/agents").data ?? [];
 
   if (error && !task) {
     return (
@@ -135,7 +145,8 @@ export function TaskPage() {
   if (!task) return null;
 
   const asked = params.get("tab") as TabId | null;
-  const tab: TabId = asked && TABS.includes(asked) ? asked : TABS[0];
+  const isEpic = task.kind === "epic";
+  const tab: TabId = asked && TABS.includes(asked) && (isEpic || asked !== "stories") ? asked : isEpic ? "stories" : "coordinator";
   const turn = params.get("turn") ?? "";
   const row = params.get("row") ?? "";
   const askedShow = params.get("show") as Show | null;
@@ -164,8 +175,14 @@ export function TaskPage() {
       ? { label: "Waiting for you", tone: "warning" }
       : working && task.status === "working"
         ? { label: `${working} is working`, tone: "success" }
-        : null;
+        : task.waitingOn
+          ? { label: `Waiting on ${task.waitingOn}, from another team`, tone: "success" }
+          : waitingLine(task)
+            ? { label: waitingLine(task), tone: "success" }
+            : null;
   const w = task.worktree;
+  const coordinatorAgent = roster.find((a) => a.name === task.coordinator);
+  const team = coordinatorAgent && teamsOf(roster).length > 1 ? teamOf(coordinatorAgent) : "";
   const turnOfEvent = (e: LogEvent) =>
     e.correlation && turns.some((t) => t.id === e.correlation) ? e.correlation : actions.find((a) => a.id === e.correlation)?.turn;
 
@@ -174,7 +191,12 @@ export function TaskPage() {
     <div className="flex flex-col md:h-full md:min-h-0">
       <PageHeader
         title={task.title}
-        badges={<TaskStatusBadge status={task.status} />}
+        badges={
+          <>
+            {isEpic && <EpicBadge />}
+            <TaskStatusBadge status={task.status} />
+          </>
+        }
         actions={[
           ...(w ? [{ label: "Workspace", icon: <FolderGit2 />, onClick: () => window.open(`/tasks/${task.id}/workspace`, "_blank") }] : []),
           ...(working ? [{ label: "Terminal", icon: <SquareTerminal />, onClick: watch }] : []),
@@ -182,6 +204,37 @@ export function TaskPage() {
         meta={
           <>
             <Mono>{task.id}</Mono>
+            {team && (
+              <>
+                <span>·</span>
+                <span>{team} team</span>
+              </>
+            )}
+            {task.epic && (
+              <>
+                <span>·</span>
+                <span>
+                  story of <TaskLink id={task.epic} />
+                  {task.epicTitle && <span className="text-ink-muted"> {task.epicTitle}</span>}
+                </span>
+              </>
+            )}
+            {task.parent && (
+              <>
+                <span>·</span>
+                <span>
+                  asked for by <TaskLink id={task.parent} />
+                </span>
+              </>
+            )}
+            {task.waitingOn && (
+              <>
+                <span>·</span>
+                <span>
+                  waiting on <TaskLink id={task.waitingOn} />
+                </span>
+              </>
+            )}
             <span>·</span>
             <Mono>{task.repo}</Mono>
             {w ? (
@@ -198,6 +251,11 @@ export function TaskPage() {
       />
 
       <div className="flex shrink-0 flex-wrap items-stretch border-b border-divider">
+        {isEpic && (
+          <Fact label="Stories" className="w-40">
+            <StoryProgress done={task.storiesDone} total={task.stories} />
+          </Fact>
+        )}
         <Fact label="Agent">
           {working ? <AgentName name={working} className="text-[12px]" /> : <Mono className="text-ink-muted">none</Mono>}
         </Fact>
@@ -256,6 +314,7 @@ export function TaskPage() {
               active={tab}
               onChange={(id) => go({ tab: id as TabId })}
               tabs={[
+                ...(isEpic ? [{ id: "stories", label: "Stories", count: task.stories }] : []),
                 {
                   id: "coordinator",
                   label: task.hasQuestion ? "Coordinator · asks you" : "Coordinator",
@@ -290,6 +349,7 @@ export function TaskPage() {
                 </div>
               </Scroll>
             )}
+            {tab === "stories" && <StoryTable epic={task} onChanged={reload} />}
             {tab === "coordinator" && <CoordinatorChat task={task} onSent={reload} />}
             {tab === "activity" && (
               <ActivityFeed
@@ -342,7 +402,8 @@ export function TaskPage() {
                       items={[
                         { label: "Id", value: <Mono>{task.id}</Mono> },
                         { label: "Status", value: <TaskStatusBadge status={task.status} /> },
-                        { label: "Repo", value: <Mono className="break-all">{task.repo}</Mono> },
+                        { label: "Repo", value: <RepoEditor task={task} onChanged={reload} /> },
+                        ...(isEpic ? [] : [{ label: "Epic", value: <EpicPicker task={task} onChanged={reload} /> }]),
                         { label: "Coordinator", value: <AgentName name={task.coordinator} /> },
                         { label: "Budget", value: <Mono>{task.budget > 0 ? `${tokens(task.budget)} tokens` : "no limit"}</Mono> },
                         { label: "Created", value: dateTime(task.createdAt) },
@@ -387,6 +448,54 @@ export function TaskPage() {
   );
 }
 
+// The task's repo, and moving its work to another one between turns: its
+// worktree is made again there, and the coordinator is told.
+function RepoEditor({ task, onChanged }: { task: TaskDetail; onChanged: () => void }) {
+  const notify = useToast();
+  const [editing, setEditing] = useState<string | null>(null);
+  async function save() {
+    try {
+      await api("PUT", `/api/tasks/${encodeURIComponent(task.id)}/repo`, { repo: editing });
+      notify("success", "The task moved repos", "Its worktree is made again there before the next turn.");
+      setEditing(null);
+      onChanged();
+    } catch (failure) {
+      notify("danger", "The task didn't move", (failure as Error).message);
+    }
+  }
+  if (editing === null) {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <Mono className="break-all">{task.repo}</Mono>
+        {task.movingTo && (
+          <span className="text-[11px] text-warning">
+            moves to <span className="font-mono">{task.movingTo}</span> when this turn ends
+          </span>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => setEditing(task.repo)}>
+          Change
+        </Button>
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col gap-2">
+      <Input mono autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+      <span className="text-[11px] text-ink-muted">
+        A git repository on this machine. The task moves when the turn in progress ends, and the agents work in it from the next turn on.
+      </span>
+      <span className="flex gap-2">
+        <Button size="sm" variant="primary" disabled={!editing.trim() || editing.trim() === task.repo} onClick={save}>
+          Move the task
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+          Cancel
+        </Button>
+      </span>
+    </span>
+  );
+}
+
 // One fact in the strip under the header.
 function Fact({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
@@ -399,4 +508,13 @@ function Fact({ label, className, children }: { label: string; className?: strin
 
 function Scroll({ children }: { children: ReactNode }) {
   return <div className="h-full scrollbar-thin overflow-y-auto">{children}</div>;
+}
+
+// TaskLink goes to another task, such as the one another team does for this.
+function TaskLink({ id }: { id: string }) {
+  return (
+    <Link to={`/tasks/${id}`} className="font-mono text-info hover:underline">
+      {id}
+    </Link>
+  );
 }

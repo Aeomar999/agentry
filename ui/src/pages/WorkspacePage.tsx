@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FileQuestion, GitBranch, MessagesSquare } from "lucide-react";
+import { Columns2, FileQuestion, GitBranch, MessagesSquare } from "lucide-react";
 import { LogoTile } from "@/components/atoms/LogoTile";
 import { Banner } from "@/components/molecules/Banner";
 import { EmptyState } from "@/components/molecules/EmptyState";
@@ -9,7 +9,9 @@ import { FileView } from "@/components/molecules/FileView";
 import { Mono } from "@/components/molecules/Mono";
 import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { WorkspaceDock } from "@/components/organisms/WorkspaceDock";
-import { Commit, Section, SourceControl } from "@/components/organisms/SourceControl";
+import { Commit, FileContext, Section, SourceControl } from "@/components/organisms/SourceControl";
+import { SvgPreview, WorkspacePreview, previewable } from "@/components/organisms/WorkspacePreview";
+import { ContextMenu, MenuItem } from "@/components/molecules/ContextMenu";
 import type { Agent, TaskDetail } from "@/api/types";
 import { AgentColorsProvider } from "@/live/agent-colors";
 import { useResource } from "@/live/use-resource";
@@ -29,8 +31,14 @@ interface Contents {
   now: string;
   before: string;
   binary: boolean;
+  data?: string; // a binary file's bytes, in base64
   tooBig: boolean;
 }
+
+// How a file is shown: as it reads (Markdown, SVG, images), as its code, as
+// its changes, or its code with its preview to the side. In the address.
+type View = "preview" | "code" | "changes" | "split";
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
 
 const dockKey = "agentry-workspace-dock";
 
@@ -39,6 +47,8 @@ export function WorkspacePage() {
   const [params, setParams] = useSearchParams();
   const selected = params.get("file") ?? "";
   const commit = params.get("commit") ?? "";
+  const askedView = params.get("view") as View | null;
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string; commit: string; change: string } | null>(null);
   const task_ = encodeURIComponent(taskId);
   const taskResource = useResource<TaskDetail>(`/api/tasks/${task_}`);
   const task = taskResource.data;
@@ -47,8 +57,9 @@ export function WorkspacePage() {
   const commits = useResource<Commit[]>(`/api/tasks/${task_}/commits`).data ?? [];
   const files = listing.data?.files ?? [];
   const changes = files.filter((f) => f.change);
-  const open = (path: string, inCommit: string) =>
-    setParams(inCommit ? { file: path, commit: inCommit } : { file: path }, { replace: true });
+  const open = (path: string, inCommit: string, view?: View) =>
+    setParams({ file: path, ...(inCommit ? { commit: inCommit } : {}), ...(view ? { view } : {}) }, { replace: true });
+  const showView = (view: View) => open(selected, commit, view);
 
   const inCommit = commits.find((c) => c.hash === commit);
   const file = inCommit ? inCommit.files.find((f) => f.path === selected) : files.find((f) => f.path === selected);
@@ -82,6 +93,37 @@ export function WorkspacePage() {
   const counts = { M: 0, A: 0, D: 0, U: 0 };
   for (const f of changes) if (f.change) counts[f.change]++;
   const showsDiff = file?.change === "M" || file?.change === "D";
+  const canPreview = previewable(selected) || IMAGE.test(selected);
+  const views: View[] = [...(canPreview ? (["preview"] as View[]) : []), "code", ...(showsDiff ? (["changes"] as View[]) : [])];
+  const view: View =
+    askedView && (views.includes(askedView) || (askedView === "split" && previewable(selected)))
+      ? askedView
+      : canPreview
+        ? "preview"
+        : showsDiff
+          ? "changes"
+          : "code";
+
+  // The right-click menu on a file, wherever it is listed.
+  const onContext: FileContext = (event, path, inCommit, change) =>
+    setMenu({ x: event.clientX, y: event.clientY, path, commit: inCommit, change });
+  const menuItems = (m: NonNullable<typeof menu>): MenuItem[] => {
+    const changed = m.change === "M" || m.change === "D";
+    const full = `${task?.worktree?.path ?? ""}/${m.path}`;
+    return [
+      ...(previewable(m.path) || IMAGE.test(m.path)
+        ? [
+            { label: "Open Preview", onClick: () => open(m.path, m.commit, "preview") },
+            ...(previewable(m.path) ? [{ label: "Open Preview to the Side", onClick: () => open(m.path, m.commit, "split") }] : []),
+          ]
+        : []),
+      { label: "Open Code", onClick: () => open(m.path, m.commit, "code") },
+      { label: "Open Changes", disabled: !changed, onClick: () => open(m.path, m.commit, "changes") },
+      "separator",
+      { label: "Copy Path", onClick: () => navigator.clipboard?.writeText(m.path) },
+      { label: "Copy Full Path", disabled: !task?.worktree, onClick: () => navigator.clipboard?.writeText(full) },
+    ];
+  };
 
   return (
     <AgentColorsProvider agents={agents}>
@@ -132,9 +174,21 @@ export function WorkspacePage() {
               <p className="px-3 py-4 text-[12px] text-ink-muted">{listing.error}</p>
             ) : (
               <>
-                <SourceControl changes={changes} commits={commits} selected={{ path: selected, commit }} onOpen={open} />
+                <SourceControl
+                  changes={changes}
+                  commits={commits}
+                  selected={{ path: selected, commit }}
+                  onOpen={(p, c) => open(p, c)}
+                  onContext={onContext}
+                />
                 <Section title="Explorer" count={files.length} startOpen>
-                  <FileTree files={files} selected={commit ? "" : selected} onSelect={(path) => open(path, "")} changedOnly={false} />
+                  <FileTree
+                    files={files}
+                    selected={commit ? "" : selected}
+                    onSelect={(path) => open(path, "")}
+                    changedOnly={false}
+                    onContext={(event, path, change) => onContext(event, path, "", change)}
+                  />
                 </Section>
               </>
             )}
@@ -160,24 +214,90 @@ export function WorkspacePage() {
                     ) : (
                       file?.change && <span className="text-[11px] text-ink-faint">not committed</span>
                     )}
+                    <span className="ml-auto flex items-center gap-2">
+                      {views.length > 1 && (
+                        <span role="radiogroup" aria-label="View" className="flex rounded-md border border-divider p-0.5">
+                          {views.map((v) => (
+                            <button
+                              key={v}
+                              type="button"
+                              role="radio"
+                              aria-checked={view === v}
+                              onClick={() => showView(v)}
+                              className={cn(
+                                "h-6 cursor-pointer rounded-sm px-2 text-[11px] capitalize",
+                                view === v ? "bg-surface-3 text-ink-primary" : "text-ink-muted hover:text-ink-primary",
+                              )}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </span>
+                      )}
+                      {previewable(selected) && (
+                        <button
+                          type="button"
+                          onClick={() => showView(view === "split" ? "preview" : "split")}
+                          aria-pressed={view === "split"}
+                          title="Open Preview to the Side"
+                          className={cn(
+                            "inline-flex size-7 cursor-pointer items-center justify-center rounded-sm text-ink-muted hover:bg-surface-2 hover:text-ink-primary [&>svg]:size-4",
+                            view === "split" && "bg-surface-3 text-ink-primary",
+                          )}
+                        >
+                          <Columns2 />
+                        </button>
+                      )}
+                    </span>
                   </div>
                   <div className="min-h-0 flex-1">
-                    {!contents ? null : contents.binary || contents.tooBig ? (
+                    {!contents ? null : contents.binary && IMAGE.test(selected) && contents.data ? (
+                      <SvgPreview
+                        src={`data:image/${selected.split(".").pop()!.toLowerCase().replace("jpg", "jpeg")};base64,${contents.data}`}
+                        name={selected}
+                      />
+                    ) : contents.binary || contents.tooBig ? (
                       <div className="p-6">
                         <Banner tone="info" title={contents.binary ? "Not a text file" : "Too big to show"} />
                       </div>
+                    ) : view === "preview" ? (
+                      <WorkspacePreview
+                        key={`${commit}:${selected}`}
+                        taskId={taskId}
+                        path={selected}
+                        commit={commit}
+                        text={contents.now}
+                        onOpen={(p) => open(p, "")}
+                      />
+                    ) : view === "split" ? (
+                      <div className="grid h-full grid-cols-2">
+                        <div className="min-w-0 border-r border-divider">
+                          <FileView key={`${commit}:${selected}:code`} path={selected} now={contents.now} />
+                        </div>
+                        <div className="min-w-0">
+                          <WorkspacePreview
+                            taskId={taskId}
+                            path={selected}
+                            commit={commit}
+                            text={contents.now}
+                            onOpen={(p) => open(p, "")}
+                            outline={false}
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <FileView
-                        key={`${commit}:${selected}`}
+                        key={`${commit}:${selected}:${view}`}
                         path={selected}
                         now={contents.now}
-                        before={showsDiff ? contents.before : undefined}
+                        before={view === "changes" ? contents.before : undefined}
                       />
                     )}
                   </div>
                 </>
               )}
             </main>
+            {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu)} onClose={() => setMenu(null)} />}
             {dockOpen && task && (
               <WorkspaceDock
                 task={task}

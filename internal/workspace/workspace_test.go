@@ -84,6 +84,11 @@ func TestFilesShowTheirGitStatus(t *testing.T) {
 		t.Errorf("the first commit: %+v", c)
 	}
 
+	// With no base, as in a repo made for the task, every commit is its work.
+	if all, err := (Workspace{Dir: dir}).Commits(); err != nil || len(all) != 3 || all[2].Subject != "base" {
+		t.Errorf("all of the repo's commits: %d %v", len(all), err)
+	}
+
 	// Now, next to the last commit; in a commit, next to the one before it.
 	if c, _ := w.Read("docs/readme.md"); c.Before != "# Hi\n" || c.Now != "# Hello\n" {
 		t.Errorf("readme now: %+v", c)
@@ -98,8 +103,8 @@ func TestFilesShowTheirGitStatus(t *testing.T) {
 	if c, _ := w.Read("old.txt"); c.Before != "" || c.Now != "" {
 		t.Errorf("a file deleted in a commit is gone now: %+v", c)
 	}
-	if c, _ := w.Read("bin/app"); !c.Binary {
-		t.Errorf("a binary file: %+v", c)
+	if c, _ := w.Read("bin/app"); !c.Binary || c.Data != "AGJpbmFyeQ==" {
+		t.Errorf("a binary file, with its bytes for a preview: %+v", c)
 	}
 
 	// Paths are pinned inside the worktree: a file beside it is never read.

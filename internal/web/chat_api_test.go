@@ -13,11 +13,11 @@ func TestAMessageStopsTheTurnForTheCoordinator(t *testing.T) {
 	server, s := newTestServer(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Add a cache"}`)
 	worker := events.Actor{Kind: events.Worker, ID: "local"}
-	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": "r"}},
 		{Stream: "task-1", Actor: coordinator, Type: events.TaskAssigned, Data: map[string]any{"agent": "engineer", "instructions": "go"}},
 		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2", Data: map[string]any{"agent": "engineer", "hash": "h"}},
 	} {
@@ -36,10 +36,10 @@ func TestAMessageStopsTheTurnForTheCoordinator(t *testing.T) {
 		t.Errorf("the engineer's turn should be stopped, not failed: %+v, issues in a row %d", turn, task.IssuesInARow)
 	}
 	trail := task.Trail[len(task.Trail)-2:]
-	if trail[0].From != tasks.You || trail[0].Text != "Use Redis, not memory." || trail[1].To != "coordinator" || !strings.Contains(trail[1].Text, "carry on") {
+	if trail[0].From != tasks.You || trail[0].Text != "Use Redis, not memory." || trail[1].To != "tech-lead" || !strings.Contains(trail[1].Text, "carry on") {
 		t.Errorf("the coordinator should read what you said, then why the engineer stopped: %+v", trail)
 	}
-	if task.Handoff == nil || task.Handoff.To != "coordinator" {
+	if task.Handoff == nil || task.Handoff.To != "tech-lead" {
 		t.Errorf("the coordinator should be next: %+v", task.Handoff)
 	}
 
@@ -56,8 +56,8 @@ func TestAMessageStopsTheTurnForTheCoordinator(t *testing.T) {
 func TestTheCoordinatorsReplyComesBeforeItsDecision(t *testing.T) {
 	task := tasks.FromEvents([]events.Event{
 		{Stream: "task-1", Type: events.TaskCreated, Actor: events.Actor{Kind: events.Human, ID: "you"},
-			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"}},
-		{Stream: "task-1", Type: events.TaskAssigned, Actor: events.Actor{Kind: events.Agent, ID: "coordinator"},
+			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-1", Type: events.TaskAssigned, Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
 			Data: map[string]any{"agent": "engineer", "instructions": "go", "toYou": "Switched to Redis."}},
 	})
 	trail := task.Trail[1:]

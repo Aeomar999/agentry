@@ -35,6 +35,8 @@ var ErrNotMerged = errors.New("the task branch isn't merged into dev")
 // starting from the repo's current commit. A task reopened after it was done
 // may still have its worktree or its branch, if its work wasn't merged: then
 // that worktree is used, or made again on that branch, so no work is lost.
+// A worktree there of another repo, left by a task that moved repos, is
+// moved aside, not used.
 func Create(repo, root, task string, port int) (Worktree, error) {
 	top, err := git(repo, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -48,6 +50,11 @@ func Create(repo, root, task string, port int) (Worktree, error) {
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return Worktree{}, err
+	}
+	if isWorktree(w.Path) && !sameRepo(w.Path, top) {
+		if err := moveAside(w.Path); err != nil {
+			return Worktree{}, err
+		}
 	}
 	switch {
 	case isWorktree(w.Path):
@@ -151,6 +158,30 @@ func (w Worktree) since(top string) (Worktree, error) {
 func isWorktree(path string) bool {
 	_, err := os.Stat(filepath.Join(path, ".git"))
 	return err == nil
+}
+
+// sameRepo says whether the worktree at path belongs to the repo at top.
+func sameRepo(path, top string) bool {
+	here, err1 := git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	there, err2 := git(top, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	return err1 == nil && err2 == nil && filepath.Clean(here) == filepath.Clean(there)
+}
+
+// moveAside moves a worktree of another repo out of the way, with git, so
+// that repo still knows where it is and nothing in it is lost.
+func moveAside(path string) error {
+	common, err := git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	aside := path + ".before-move"
+	for n := 2; isWorktree(aside); n++ {
+		aside = fmt.Sprintf("%s.before-move-%d", path, n)
+	}
+	if _, err := exec.Command("git", "--git-dir="+common, "worktree", "move", path, aside).CombinedOutput(); err != nil {
+		return fmt.Errorf("moving the worktree of the task's old repo aside: %w", err)
+	}
+	return nil
 }
 
 func branchExists(repo, branch string) bool {

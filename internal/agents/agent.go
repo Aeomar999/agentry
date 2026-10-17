@@ -17,13 +17,17 @@ type Agent struct {
 	Model       string `json:"model"`       // "" means the engine's default
 	Profile     string `json:"profile"`     // its policy profile in policy.toml; "" means the default profile
 	Coordinates bool   `json:"coordinates"` // decides who works next, instead of working
+	// Team is the group it works in, such as Software or Writing: a task
+	// goes to one team's coordinator, which hands it only to that team's
+	// agents. "" is DefaultTeam, the team agents had before there were teams.
+	Team string `json:"team"`
 	// Workers are the machines it may run on. None means the machine Agentry
 	// runs on, which is always there; workers are other machines (T-022).
 	Workers []string `json:"workers"`
 	// Color tells it apart on the page; one of Colors, or "" for the next free one.
 	Color string `json:"color"`
-	// Column is where its work shows on the board: "" for In progress, or
-	// "review" for agents that check work, such as a reviewer or tester.
+	// Column is what its work counts as, and where a task shows on the
+	// board while it has it: Builds (In progress), Reviews, or Ships.
 	Column string `json:"column"`
 
 	// Knowledge is what the agent has learned as it works, in its own words
@@ -40,6 +44,15 @@ func (a Agent) Learned(by events.Actor, knowledge string) events.Proposal {
 		Data: map[string]any{"name": a.Name, "knowledge": knowledge}}
 }
 
+// What an agent's work counts as. Builders change the work; reviewers
+// check it, and a task can't be done until they approve its last change;
+// shippers deploy or publish checked work without changing it.
+const (
+	Builds  = ""
+	Reviews = "review"
+	Ships   = "ship"
+)
+
 // Colors an agent can have. The page has a shade of each for both themes.
 var Colors = []string{"blue", "violet", "teal", "green", "amber", "orange", "red", "pink", "slate"}
 
@@ -52,8 +65,13 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
-		"workers": a.workers(), "color": a.Color, "column": a.Column,
+		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team,
 	}}
+}
+
+// Renaming is the event that gives this agent a new name.
+func (a Agent) Renaming(by events.Actor, to string) events.Proposal {
+	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentRenamed, Data: map[string]any{"name": a.Name, "to": to}}
 }
 
 // Removal is the event that removes this agent.
@@ -71,7 +89,7 @@ func (a Agent) workers() []string {
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
 		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
-		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), untouched: e.Actor.Kind == events.System}
+		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), untouched: e.Actor.Kind == events.System}
 }
 
 // Roster is every agent, in the order they were created.
@@ -88,6 +106,10 @@ func FromEvents(stream []events.Event) Roster {
 				knowledge := roster[i].Knowledge
 				roster[i] = fromEvent(e)
 				roster[i].Knowledge = knowledge
+			}
+		case events.AgentRenamed:
+			if i := roster.index(e.Text("name")); i >= 0 {
+				roster[i].Name = e.Text("to")
 			}
 		case events.AgentLearned:
 			if i := roster.index(e.Text("name")); i >= 0 {
@@ -109,19 +131,46 @@ func (r Roster) Get(name string) (Agent, bool) {
 	return Agent{}, false
 }
 
-// Coordinator is the first agent that coordinates, the one new tasks go to.
-func (r Roster) Coordinator() (Agent, bool) {
-	if i := slices.IndexFunc(r, func(a Agent) bool { return a.Coordinates }); i >= 0 {
+// DefaultTeam is the team of agents that name none.
+const DefaultTeam = "Software"
+
+// TeamName is the agent's team, DefaultTeam when it names none.
+func (a Agent) TeamName() string {
+	if a.Team == "" {
+		return DefaultTeam
+	}
+	return a.Team
+}
+
+// Teams are the teams the agents are in, in the order the first agent of
+// each was created.
+func (r Roster) Teams() []string {
+	var teams []string
+	for _, a := range r {
+		if !slices.Contains(teams, a.TeamName()) {
+			teams = append(teams, a.TeamName())
+		}
+	}
+	return teams
+}
+
+// Coordinator is the coordinator of team, the one its tasks go to: the first
+// of its agents that coordinates. With team "", the first team's.
+func (r Roster) Coordinator(team string) (Agent, bool) {
+	if team == "" && len(r.Teams()) > 0 {
+		team = r.Teams()[0]
+	}
+	if i := slices.IndexFunc(r, func(a Agent) bool { return a.Coordinates && a.TeamName() == team }); i >= 0 {
 		return r[i], true
 	}
 	return Agent{}, false
 }
 
-// Assignees are the agents a coordinator can hand work to.
-func (r Roster) Assignees() Roster {
+// Assignees are the agents of team a coordinator can hand work to.
+func (r Roster) Assignees(team string) Roster {
 	var assignees Roster
 	for _, a := range r {
-		if !a.Coordinates {
+		if !a.Coordinates && a.TeamName() == team {
 			assignees = append(assignees, a)
 		}
 	}

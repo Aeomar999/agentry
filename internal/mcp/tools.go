@@ -1,0 +1,517 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"sort"
+	"strings"
+)
+
+// A tool is one thing Claude can do with Agentry.
+type tool struct {
+	name, description string
+	input             map[string]any // JSON Schema of its arguments
+	run               func(ctx context.Context, arguments json.RawMessage) (string, error)
+}
+
+// The parts of the API's tasks and questions the tools read.
+type task struct {
+	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked string
+	Labels, BlockedBy                                                   []string
+	Stories, StoriesDone                                                int
+	Rank                                                                float64
+}
+
+type detail struct {
+	task
+	Description, Summary, Coordinator string
+	Trail                             []struct{ From, To, Text string }
+}
+
+type question struct {
+	Kind, Task, TaskTitle, Agent, Text, Action, Tool, Reason string
+	Options                                                  []string
+}
+
+func (s *Server) tools() []tool {
+	return []tool{
+		{"status", "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
+			object(props{"all": boolean("every repo, not only this one")}), s.status},
+		{"list_tasks", "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
+			object(props{"all": boolean("every repo, not only this one"), "status": text("only this status: working, needs you, held, done")}), s.listTasks},
+		{"show_task", "One task: its description, what it waits for, its summary when done, and its latest steps.",
+			object(props{"task": text("its id, such as task-4")}, "task"), s.showTask},
+		{"create_task", "Hand work to Agentry: a task (a story), or an epic of stories. It works in this repo unless repo says otherwise. Show the user the title and description before creating it, unless they said to go ahead.",
+			object(props{
+				"title":       text("one imperative line under 80 characters"),
+				"description": text("what to change and why, the areas involved, and how to tell it works"),
+				"kind":        enum("story: one change, never split; epic: split into stories; leave it out to let the coordinator decide", "story", "epic"),
+				"team":        text("the team that does it, such as Software or Writing; leave it out to let the coordinators decide"),
+				"labels":      texts("one to three short lowercase words, such as bug or docs"),
+				"epic":        text("for a new story of an epic: the epic's id"),
+				"stories":     texts("for a new epic: ids of tasks there already, to file under it"),
+				"repo":        text("the repo's absolute path, when not this one"),
+			}, "title"), s.createTask},
+		{"tell_coordinator", "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
+			object(props{"task": text("its id"), "text": text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
+		{"answer_question", "Send the user's answer to a coordinator's question. Only ever their own answer.",
+			object(props{"task": text("its id"), "answer": text("the user's answer")}, "task", "answer"), s.answer},
+		{"close_epic", "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done. Only they can.",
+			object(props{"epic": text("the epic's id")}, "epic"), s.closeEpic},
+		{"review_approvals", "Ask the user, directly in Claude Code, to approve or deny each action an agent is waiting to take (of one task, or all). Only they can.",
+			object(props{"task": text("only this task's")}), s.reviewApprovals},
+		{"file_under_epic", "Make a task a story of an epic, move it to another, or with an empty epic take it out of its epic.",
+			object(props{"task": text("its id"), "epic": text(`the epic's id, or "" to take it out`)}, "task", "epic"), s.fileUnder},
+		{"set_priority", "Put tasks (such as an epic's stories) in this priority order, first first.",
+			object(props{"tasks": texts("their ids, in the order wanted")}, "tasks"), s.setPriority},
+		{"start", "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
+			object(props{"tasks": texts("their ids")}, "tasks"), s.start},
+	}
+}
+
+// ---- reading -------------------------------------------------------------------
+
+func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ All bool }
+	json.Unmarshal(arguments, &a)
+	all, waiting, err := s.board()
+	if err != nil {
+		return "", err
+	}
+	shown := s.inScope(all, a.All)
+	var b strings.Builder
+	fmt.Fprintf(&b, "Agentry board for %s (%s)\n", s.scope(a.All), s.agentry.PageURL("/tasks"))
+	// What needs you is everywhere: it waits for you whichever repo it is in.
+	repoOf := map[string]string{}
+	for _, t := range all {
+		repoOf[t.ID] = t.Repo
+	}
+	section(&b, "Needs you", lines(waiting, func(q question) (string, bool) {
+		if repo := repoOf[q.Task]; s.repo != "" && repo != s.repo {
+			return describe(q) + " [in " + repo + "]", true
+		}
+		return describe(q), true
+	}))
+	section(&b, "Running", lines(shown, func(t task) (string, bool) {
+		if t.Status != "working" || t.Kind == "epic" {
+			return "", false
+		}
+		what := "the coordinator is next"
+		if t.CurrentAgent != "" {
+			what = t.CurrentAgent + " is working"
+		}
+		if len(t.BlockedBy) > 0 {
+			what = "waits for " + strings.Join(t.BlockedBy, ", ")
+		}
+		return t.ID + " " + t.Title + ": " + what, true
+	}))
+	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
+		return fmt.Sprintf("%s %s: %d of %d stories done", t.ID, t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
+	}))
+	section(&b, "Not started (in the Backlog or To do)", lines(shown, func(t task) (string, bool) {
+		line := t.ID + " " + t.Title
+		if t.Epic != "" {
+			line += " (story of " + t.Epic + ")"
+		}
+		return line, t.Status == "held"
+	}))
+	return b.String(), nil
+}
+
+func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct {
+		All    bool
+		Status string
+	}
+	json.Unmarshal(arguments, &a)
+	all, _, err := s.board()
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, t := range s.inScope(all, a.All) {
+		if a.Status != "" && t.Status != a.Status {
+			continue
+		}
+		fmt.Fprintf(&b, "%s [%s] %s", t.ID, t.Status, t.Title)
+		switch {
+		case t.Kind == "epic":
+			fmt.Fprintf(&b, " (epic, %d of %d stories done)", t.StoriesDone, t.Stories)
+		case t.Epic != "":
+			fmt.Fprintf(&b, " (story of %s)", t.Epic)
+		}
+		if len(t.Labels) > 0 {
+			fmt.Fprintf(&b, " {%s}", strings.Join(t.Labels, ", "))
+		}
+		if t.NeedsYou != "" {
+			fmt.Fprintf(&b, "\n    needs you: %s", oneLine(t.NeedsYou, 200))
+		}
+		b.WriteString("\n")
+	}
+	if b.Len() == 0 {
+		return "No tasks for " + s.scope(a.All) + ".", nil
+	}
+	return b.String(), nil
+}
+
+func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Task string }
+	json.Unmarshal(arguments, &a)
+	var t detail
+	if err := s.agentry.Call("GET", "/api/tasks/"+a.Task, nil, &t); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, t.Status, t.Coordinator, t.Repo,
+		s.agentry.PageURL("/tasks/"+t.ID))
+	if t.Kind == "epic" {
+		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
+	} else if t.Epic != "" {
+		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
+	}
+	if t.Description != "" {
+		fmt.Fprintf(&b, "\n%s\n", t.Description)
+	}
+	if t.NeedsYou != "" {
+		fmt.Fprintf(&b, "\nWaiting for the user: %s\n", t.NeedsYou)
+	}
+	if t.Summary != "" {
+		fmt.Fprintf(&b, "\nSummary: %s\n", t.Summary)
+	}
+	if len(t.Trail) > 0 {
+		b.WriteString("\nLatest steps:\n")
+		for _, step := range t.Trail[max(0, len(t.Trail)-8):] {
+			fmt.Fprintf(&b, "- %s → %s: %s\n", step.From, step.To, oneLine(step.Text, 300))
+		}
+	}
+	return b.String(), nil
+}
+
+// ---- handing over work ---------------------------------------------------------
+
+func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct {
+		Title, Description, Kind, Team, Epic, Repo string
+		Labels, Stories                            []string
+	}
+	if err := json.Unmarshal(arguments, &a); err != nil {
+		return "", err
+	}
+	if a.Repo == "" {
+		a.Repo = s.repo
+	}
+	if a.Epic != "" {
+		a.Repo = "" // a story works where its epic does
+	}
+	var created struct {
+		Stream   string
+		NotFiled []string
+	}
+	err := s.agentry.Call("POST", "/api/tasks", map[string]any{"title": a.Title, "description": a.Description, "kind": a.Kind,
+		"team": a.Team, "labels": a.Labels, "epic": a.Epic, "stories": a.Stories, "repo": a.Repo}, &created)
+	if err != nil {
+		return "", err
+	}
+	text := fmt.Sprintf("Created %s: %s\n%s", created.Stream, a.Title, s.agentry.PageURL("/tasks/"+created.Stream))
+	switch {
+	case a.Epic != "":
+		text += "\nIt waits in the user's Backlog until they start it."
+	case a.Kind == "epic":
+		text += "\nIts coordinator splits it into stories next; they wait in the user's Backlog until started."
+	default:
+		text += "\nIts coordinator reads it next."
+	}
+	for _, refused := range created.NotFiled {
+		text += "\nNot filed: " + refused
+	}
+	return text, nil
+}
+
+func (s *Server) tell(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Task, Text string }
+	json.Unmarshal(arguments, &a)
+	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/message", map[string]string{"text": a.Text}, nil); err != nil {
+		return "", err
+	}
+	return "Sent to " + a.Task + "'s coordinator. It reads it now; the task's chat shows it.", nil
+}
+
+func (s *Server) answer(ctx context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Task, Answer string }
+	json.Unmarshal(arguments, &a)
+	if q, ok := s.questionOf(a.Task); ok && closes(q, a.Answer) {
+		return s.closeEpic(ctx, json.RawMessage(fmt.Sprintf(`{"epic": %q}`, a.Task)))
+	}
+	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/answer", map[string]string{"answer": a.Answer}, nil); err != nil {
+		return "", err
+	}
+	return "Answered " + a.Task + ". Its coordinator carries on.", nil
+}
+
+func (s *Server) fileUnder(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Task, Epic string }
+	json.Unmarshal(arguments, &a)
+	if err := s.agentry.Call("PUT", "/api/tasks/"+a.Task+"/epic", map[string]string{"epic": a.Epic}, nil); err != nil {
+		return "", err
+	}
+	if a.Epic == "" {
+		return a.Task + " is out of its epic.", nil
+	}
+	return a.Task + " is a story of " + a.Epic + ".", nil
+}
+
+// setPriority gives the tasks their own ranks back, in the order wanted, so
+// they move only among themselves.
+func (s *Server) setPriority(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Tasks []string }
+	json.Unmarshal(arguments, &a)
+	all, _, err := s.board()
+	if err != nil {
+		return "", err
+	}
+	var ranks []float64
+	for _, id := range a.Tasks {
+		i := slices.IndexFunc(all, func(t task) bool { return t.ID == id })
+		if i < 0 {
+			return "", fmt.Errorf("no task %s", id)
+		}
+		ranks = append(ranks, all[i].Rank)
+	}
+	sort.Float64s(ranks)
+	for i, id := range a.Tasks {
+		if err := s.agentry.Call("PUT", "/api/tasks/"+id+"/rank", map[string]float64{"rank": ranks[i]}, nil); err != nil {
+			return "", fmt.Errorf("%s: %w", id, err)
+		}
+	}
+	return "In this order now: " + strings.Join(a.Tasks, ", ") + ".", nil
+}
+
+func (s *Server) start(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Tasks []string }
+	json.Unmarshal(arguments, &a)
+	for _, id := range a.Tasks {
+		if err := s.agentry.Call("POST", "/api/tasks/"+id+"/direct", map[string]string{"to": "in-progress"}, nil); err != nil {
+			return "", fmt.Errorf("%s: %w", id, err)
+		}
+	}
+	return "Started " + strings.Join(a.Tasks, ", ") + ". They are on the Tasks board now.", nil
+}
+
+// ---- what only the user decides -----------------------------------------------
+
+// closeEpic asks you, in Claude Code, whether to close the epic.
+func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Epic string }
+	json.Unmarshal(arguments, &a)
+	q, ok := s.questionOf(a.Epic)
+	if !ok || !slices.Contains(q.Options, closeEpic) {
+		return "", fmt.Errorf("%s isn't asking to be closed", a.Epic)
+	}
+	if !s.canElicit {
+		return "Closing an epic is the user's to approve. Give them this link: " + s.agentry.PageURL("/tasks/"+a.Epic), nil
+	}
+	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+q.TaskTitle+"?\n\n"+q.Text, object(props{
+		"decision": enum("Close it, or keep it open to tell its coordinator what else it needs", "close", "keep open"),
+	}, "decision"))
+	if err != nil {
+		return "", err
+	}
+	if !ok || answer["decision"] != "close" {
+		return "The user kept " + a.Epic + " open. Ask them what else it needs, and send it with answer_question.", nil
+	}
+	if err := s.agentry.Call("POST", "/api/tasks/"+a.Epic+"/answer", map[string]string{"answer": closeEpic}, nil); err != nil {
+		return "", err
+	}
+	return "The user closed " + a.Epic + ".", nil
+}
+
+// reviewApprovals asks you, in Claude Code, about each waiting action.
+func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ Task string }
+	json.Unmarshal(arguments, &a)
+	_, waiting, err := s.board()
+	if err != nil {
+		return "", err
+	}
+	var approvals []question
+	for _, q := range waiting {
+		if q.Kind == "approval" && (a.Task == "" || q.Task == a.Task) {
+			approvals = append(approvals, q)
+		}
+	}
+	if len(approvals) == 0 {
+		return "No action is waiting for approval.", nil
+	}
+	if !s.canElicit {
+		return fmt.Sprintf("%d actions wait for the user's approval, which is theirs to give. Give them this link: %s", len(approvals),
+			s.agentry.PageURL("/tasks?status=needs-you")), nil
+	}
+	var done []string
+	for _, q := range approvals {
+		answer, ok, err := s.elicit(ctx, fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.Task, q.TaskTitle,
+			q.Tool, q.Text, q.Reason), object(props{
+			"decision": enum("Let it run, or refuse it", "approve", "deny"),
+			"reason":   text("Optional: why, for the agent"),
+		}, "decision"))
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			done = append(done, q.Task+" "+q.Action+": left for later")
+			break
+		}
+		verb, past := "approve", "approved"
+		if answer["decision"] == "deny" {
+			verb, past = "deny", "denied"
+		}
+		reason, _ := answer["reason"].(string)
+		if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/actions/"+q.Action+"/"+verb, map[string]string{"reason": reason}, nil); err != nil {
+			done = append(done, q.Task+" "+q.Action+": "+err.Error())
+			continue
+		}
+		done = append(done, q.Task+" "+q.Action+": "+past+" by the user")
+	}
+	return strings.Join(done, "\n"), nil
+}
+
+// closeEpic is the answer that approves closing an epic (coordinator.CloseEpic).
+const closeEpic = "Close the epic"
+
+func closes(q question, answer string) bool {
+	return slices.Contains(q.Options, closeEpic) && strings.EqualFold(strings.TrimSpace(answer), closeEpic)
+}
+
+// ---- the board -----------------------------------------------------------------
+
+// board is every task, and everything waiting for you.
+func (s *Server) board() ([]task, []question, error) {
+	var all []task
+	if err := s.agentry.Call("GET", "/api/tasks", nil, &all); err != nil {
+		return nil, nil, err
+	}
+	var waiting []question
+	if err := s.agentry.Call("GET", "/api/questions", nil, &waiting); err != nil {
+		return nil, nil, err
+	}
+	return all, waiting, nil
+}
+
+func (s *Server) questionOf(id string) (question, bool) {
+	_, waiting, err := s.board()
+	if err != nil {
+		return question{}, false
+	}
+	for _, q := range waiting {
+		if q.Task == id && q.Kind != "approval" {
+			return q, true
+		}
+	}
+	return question{}, false
+}
+
+// inScope are the tasks of this repo, or all of them.
+func (s *Server) inScope(all []task, everywhere bool) []task {
+	if everywhere || s.repo == "" {
+		return all
+	}
+	var mine []task
+	for _, t := range all {
+		if t.Repo == s.repo {
+			mine = append(mine, t)
+		}
+	}
+	return mine
+}
+
+func (s *Server) scope(everywhere bool) string {
+	if everywhere || s.repo == "" {
+		return "every repo"
+	}
+	return s.repo
+}
+
+// waitingNote is what waits for you anywhere, for the end of every reply.
+func (s *Server) waitingNote() string {
+	_, waiting, err := s.board()
+	if err != nil || len(waiting) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n\nWaiting for the user (%d):", len(waiting))
+	for _, q := range waiting[:min(5, len(waiting))] {
+		b.WriteString("\n- " + describe(q))
+	}
+	return b.String()
+}
+
+func describe(q question) string {
+	switch q.Kind {
+	case "approval":
+		return fmt.Sprintf("%s: %s asks to run %s (review_approvals)", q.Task, q.Agent, oneLine(q.Text, 120))
+	case "waiting":
+		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, oneLine(q.Text, 120))
+	}
+	if slices.Contains(q.Options, closeEpic) {
+		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", q.Task, q.TaskTitle)
+	}
+	asker := q.Agent
+	if asker == "coordinator-loop" {
+		asker = "Agentry" // its own stops: a budget, a limit of turns
+	}
+	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, oneLine(q.Text, 160))
+}
+
+// ---- small helpers -------------------------------------------------------------
+
+type props map[string]any
+
+func object(properties props, required ...string) map[string]any {
+	schema := map[string]any{"type": "object", "properties": properties}
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+	return schema
+}
+
+func text(description string) map[string]any {
+	return map[string]any{"type": "string", "description": description}
+}
+func texts(description string) map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": description}
+}
+func boolean(description string) map[string]any {
+	return map[string]any{"type": "boolean", "description": description}
+}
+func enum(description string, values ...string) map[string]any {
+	return map[string]any{"type": "string", "enum": values, "description": description}
+}
+
+func section(b *strings.Builder, title string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n%s:\n", title)
+	for _, item := range items {
+		b.WriteString("- " + item + "\n")
+	}
+}
+
+func lines[T any](items []T, line func(T) (string, bool)) []string {
+	var out []string
+	for _, item := range items {
+		if text, ok := line(item); ok {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+func oneLine(text string, limit int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if len([]rune(text)) > limit {
+		text = string([]rune(text)[:limit-1]) + "…"
+	}
+	return text
+}

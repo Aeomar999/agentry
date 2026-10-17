@@ -24,11 +24,11 @@ func TestTheDefaultsAreFiveAgentsWithPrompts(t *testing.T) {
 			t.Errorf("%s: prompt %d chars, description %q, engine %q", agent.Name, len(agent.Prompt), agent.Description, agent.Engine)
 		}
 	}
-	coordinator, ok := roster.Coordinator()
-	if !ok || coordinator.Name != "coordinator" {
+	coordinator, ok := roster.Coordinator("")
+	if !ok || coordinator.Name != "tech-lead" {
 		t.Errorf("the coordinator: %+v", coordinator)
 	}
-	if assignees := roster.Assignees(); len(assignees) != 4 || assignees[0].Name != "engineer" {
+	if assignees := roster.Assignees(DefaultTeam); len(assignees) != 4 || assignees[0].Name != "engineer" {
 		t.Errorf("assignees: %+v", assignees)
 	}
 }
@@ -52,7 +52,7 @@ func TestAChangeReplacesTheAgent(t *testing.T) {
 }
 
 func TestEachDefaultAgentHasAProfile(t *testing.T) {
-	want := map[string]string{"coordinator": "read-only", "engineer": "developer", "reviewer": "read-only", "tester": "developer", "deployer": "developer"}
+	want := map[string]string{"tech-lead": "read-only", "engineer": "developer", "reviewer": "read-only", "tester": "developer", "deployer": "developer"}
 	for _, agent := range FromEvents(seeded()) {
 		if agent.Profile != want[agent.Name] {
 			t.Errorf("%s: profile %q, want %q", agent.Name, agent.Profile, want[agent.Name])
@@ -141,5 +141,54 @@ func TestKnowledgeSurvivesSettingsChanges(t *testing.T) {
 	}
 	if got, _ := FromEvents(stream).Get("engineer"); got.Knowledge != "Use gofmt -s." || got.Engine != "codex" {
 		t.Errorf("after a settings change: %+v", got)
+	}
+}
+
+func TestTeamsComeFromTemplatesWithTheirOwnCoordinator(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	writing, _ := TemplateNamed("writing")
+	log := seeded()
+	for _, p := range AddTeam(writing, FromEvents(log), you) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	roster := FromEvents(log)
+	if teams := roster.Teams(); len(teams) != 2 || teams[0] != DefaultTeam || teams[1] != "Writing" {
+		t.Fatalf("teams: %v", teams)
+	}
+	editor, ok := roster.Coordinator("Writing")
+	if !ok || editor.Name != "editor" || len(editor.Prompt) < 200 {
+		t.Errorf("the Writing team's coordinator: %+v", editor)
+	}
+	if first, _ := roster.Coordinator(""); first.Name != "tech-lead" {
+		t.Errorf("tasks that name no team still go to the first team's coordinator, not %s", first.Name)
+	}
+	if assignees := roster.Assignees("Writing"); len(assignees) != 3 || assignees[2].Name != "fact-checker" {
+		t.Errorf("the Writing team's agents: %+v", assignees)
+	}
+
+	// Adding it again keeps everything you have: a new team, new names.
+	for _, p := range AddTeam(writing, roster, you) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	again := FromEvents(log)
+	if lead, _ := again.Coordinator("Writing 2"); lead.Name != "editor-2" {
+		t.Errorf("a second Writing team: %+v", again.Teams())
+	}
+}
+
+func TestEveryTemplateHasACoordinatorAndPrompts(t *testing.T) {
+	for _, template := range Templates {
+		coordinators := 0
+		for _, agent := range template.prompted() {
+			if len(agent.Prompt) < 400 || agent.Description == "" {
+				t.Errorf("%s/%s: prompt %d chars, description %q", template.Team, agent.Name, len(agent.Prompt), agent.Description)
+			}
+			if agent.Coordinates {
+				coordinators++
+			}
+		}
+		if coordinators != 1 {
+			t.Errorf("%s has %d coordinators, want 1", template.Team, coordinators)
+		}
 	}
 }

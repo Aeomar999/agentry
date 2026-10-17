@@ -9,6 +9,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -61,19 +62,23 @@ func TestCreateListAndShowATask(t *testing.T) {
 	if code, _ := call(t, server, "POST", "/api/tasks", `{"title":"  "}`); code != http.StatusBadRequest {
 		t.Errorf("a task without a title: %d", code)
 	}
-	call(t, server, "POST", "/api/tasks", `{"title":"Second","repo":"/src/other"}`)
+	other := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Second","repo":"`+other+`"}`)
+	if code, _ := call(t, server, "POST", "/api/tasks", `{"title":"Third","repo":"/no/such/repo"}`); code != http.StatusBadRequest {
+		t.Errorf("a repo that isn't there: %d", code)
+	}
 
 	_, body := call(t, server, "GET", "/api/tasks", "")
 	var list []taskSummary
 	json.Unmarshal([]byte(body), &list)
-	if len(list) != 2 || list[0].ID != "task-2" || list[1].Repo != "/src/app" || list[0].Repo != "/src/other" || list[1].Status != "working" {
+	if len(list) != 2 || list[0].ID != "task-2" || list[1].Repo != "/src/app" || list[0].Repo != other || list[1].Status != "working" {
 		t.Errorf("list (newest first, default repo): %+v", list)
 	}
 
 	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Coordinator != "coordinator" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "coordinator" || len(detail.Events) != 1 {
+	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" || len(detail.Events) != 1 {
 		t.Errorf("detail: %+v", detail)
 	}
 	if code, _ := call(t, server, "GET", "/api/tasks/task-9", ""); code != http.StatusNotFound {
@@ -87,8 +92,8 @@ func TestApproveOnlyWhatWasAsked(t *testing.T) {
 	worker := events.Actor{Kind: events.Worker, ID: "local"}
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
-		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "coordinator"}, Type: events.ActionRequested, Correlation: "toolu_1",
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.ActionRequested, Correlation: "toolu_1",
 			Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}},
 		{Stream: "task-1", Actor: events.Actor{Kind: events.Policy, ID: "rules"}, Type: events.ActionAsked, Correlation: "toolu_1",
 			Data: map[string]any{"reason": "every push"}},
@@ -98,7 +103,7 @@ func TestApproveOnlyWhatWasAsked(t *testing.T) {
 		}
 	}
 	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
-	if !strings.Contains(body, `"needsYou":"coordinator asks to run: git push origin HEAD:dev"`) || !strings.Contains(body, `"approvals":[{`) {
+	if !strings.Contains(body, `"needsYou":"tech-lead asks to run: git push origin HEAD:dev"`) || !strings.Contains(body, `"approvals":[{`) {
 		t.Errorf("the task should show the approval it needs:\n%s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/tasks/task-1/actions/toolu_1/approve", `{"reason":"looks right"}`); code != 200 {
@@ -143,7 +148,7 @@ func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
-			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "coordinator"}})
+			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
 	}()
 	began := time.Now()
 	_, body := call(t, server, "GET", "/api/changes?after="+itoa(start), "")
@@ -256,7 +261,7 @@ func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {
 	}
 
 	for _, allowed := range []struct{ method, path, body string }{
-		{"POST", "/api/tasks", `{"title":"From the desk","repo":"/src/app"}`},
+		{"POST", "/api/tasks", `{"title":"From the desk"}`},
 		{"GET", "/api/tasks", ""},
 		{"GET", "/api/tasks/task-1", ""},
 	} {
@@ -313,7 +318,7 @@ func TestAgentsAreEditedFromThePage(t *testing.T) {
 	if code, _ := call(t, server, "PUT", "/api/agents/engineer", `{"engine":"claude","prompt":"x","workers":["build-box"]}`); code != http.StatusConflict {
 		t.Errorf("a worker that doesn't exist: %d", code)
 	}
-	if code, _ := call(t, server, "DELETE", "/api/agents/coordinator", ""); code != http.StatusConflict {
+	if code, _ := call(t, server, "DELETE", "/api/agents/tech-lead", ""); code != http.StatusConflict {
 		t.Errorf("removing the only coordinator: %d", code)
 	}
 	if code, body := call(t, server, "DELETE", "/api/agents/designer", ""); code != 200 {
@@ -429,7 +434,7 @@ func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
 	call(t, server, "POST", "/api/tasks", `{"description":"Pick a layout"}`)
 	call(t, server, "POST", "/api/tasks", `{"description":"Ship it"}`)
 	worker := events.Actor{Kind: events.Worker, ID: "laptop"}
-	coordinator := events.Actor{Kind: events.Agent, ID: "coordinator"}
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	propose := func(p events.Proposal) {
 		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
 			t.Fatalf("%s: %v %v", p.Type, err, rejection)
@@ -437,9 +442,9 @@ func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
 	}
 	for _, id := range []string{"task-1", "task-2"} {
 		propose(events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901}})
-		propose(events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}})
+		propose(events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
 	}
-	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}})
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": "r"}})
 	propose(events.Proposal{Stream: "task-1", Actor: coordinator, Type: events.TaskNeedsYou,
 		Data: map[string]any{"question": "Which layout?", "options": []string{"Tabs", "One page"}, "page": "<svg></svg>"}})
 	propose(events.Proposal{Stream: "task-2", Actor: coordinator, Type: events.ActionRequested, Correlation: "push-1", Data: map[string]any{"tool": "Bash", "command": "git push"}})
@@ -499,11 +504,11 @@ func TestCardsMoveThroughTheStages(t *testing.T) {
 	}
 
 	// Done, then back for more work.
-	worker, coordinator := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "coordinator"}
+	worker, coordinator := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "hash": "h"}},
-		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "coordinator", "report": "r"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": "r"}},
 		{Stream: "task-1", Actor: coordinator, Type: events.TaskDone, Data: map[string]any{"summary": "Fixed."}},
 	} {
 		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
@@ -535,5 +540,246 @@ func TestYouEditWhatAnAgentKnows(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/agents/engineer/knowledge", "")
 	if !strings.Contains(body, `"by":"you"`) || !strings.Contains(body, "Prefer table tests.") {
 		t.Errorf("history: %s", body)
+	}
+}
+
+func TestATaskCanStartANewRepo(t *testing.T) {
+	t.Setenv("GIT_AUTHOR_NAME", "Test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "Test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@example.com")
+	server, _ := newTestServer(t)
+	path := filepath.Join(t.TempDir(), "exchange-market-data-design")
+	if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Design market data","repo":"`+path+`","newRepo":true}`); code != 200 {
+		t.Fatalf("a task in a new repo: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Repo != path {
+		t.Errorf("the task's repo: %q", detail.Repo)
+	}
+	if out, err := exec.Command("git", "-C", path, "log", "--format=%s").Output(); err != nil || strings.TrimSpace(string(out)) != "Start: Design market data" {
+		t.Errorf("the new repo's history: %q %v", out, err)
+	}
+	if code, _ := call(t, server, "POST", "/api/tasks", `{"title":"Again","repo":"`+path+`","newRepo":true}`); code != http.StatusBadRequest {
+		t.Errorf("a new repo where one already is: %d", code)
+	}
+}
+
+func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"research"}`); code != 200 {
+		t.Fatalf("adding the Research team: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	roster := agents.FromEvents(stream)
+	if lead, ok := roster.Coordinator("Research"); !ok || lead.Name != "research-lead" || len(roster.Assignees("Research")) != 3 {
+		t.Fatalf("the Research team: %v", roster.Teams())
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Size the market","team":"Research"}`)
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "research-lead" {
+		t.Errorf("a Research task goes to its lead, not %q", detail.Coordinator)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Fix the login"}`)
+	_, body = call(t, server, "GET", "/api/tasks/task-2", "")
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "tech-lead" {
+		t.Errorf("a task that names no team goes to the first team's coordinator, not %q", detail.Coordinator)
+	}
+}
+
+func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
+	server, s := newTestServer(t)
+	stream, _ := s.Stream(events.AgentsStream)
+	lead, _ := agents.FromEvents(stream).Coordinator("")
+	call(t, server, "POST", "/api/tasks", `{"title":"Fix the login"}`)
+	call(t, server, "PUT", "/api/agents/"+lead.Name+"/knowledge", `{"knowledge":"Slice big tasks."}`)
+
+	if code, body := call(t, server, "POST", "/api/agents/"+lead.Name+"/rename", `{"to":"lead-dev"}`); code != 200 {
+		t.Fatalf("renaming: %d %s", code, body)
+	}
+	stream, _ = s.Stream(events.AgentsStream)
+	renamed, ok := agents.FromEvents(stream).Get("lead-dev")
+	if !ok || !renamed.Coordinates || renamed.Prompt != lead.Prompt || renamed.Knowledge != "Slice big tasks." {
+		t.Errorf("the agent keeps everything but its name: %+v", renamed)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "lead-dev" || detail.Trail[0].To != lead.Name {
+		t.Errorf("the task goes on with lead-dev, and its history keeps the old name: coordinator %q, first step to %q", detail.Coordinator, detail.Trail[0].To)
+	}
+	if code, _ := call(t, server, "POST", "/api/agents/lead-dev/rename", `{"to":"engineer"}`); code != http.StatusConflict {
+		t.Errorf("renaming to a name in use: %d", code)
+	}
+}
+
+// A team goes with all its agents, once no unfinished task needs them; the
+// last team stays.
+func TestATeamIsRemovedWithItsAgents(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "DELETE", "/api/teams/Software", ""); code != http.StatusConflict || !strings.Contains(body, "the only one") {
+		t.Errorf("the last team: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Writing"}`); code != 200 {
+		t.Fatalf("add Writing: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"description":"Write the launch post","team":"Writing"}`)
+	if code, body := call(t, server, "DELETE", "/api/teams/writing", ""); code != http.StatusConflict || !strings.Contains(body, "task-1") {
+		t.Errorf("a team a task needs: %d %s", code, body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/agents/editor", ""); code != http.StatusConflict || !strings.Contains(body, "task-1") {
+		t.Errorf("an agent a task needs: %d %s", code, body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/agents/fact-checker", ""); code != 200 {
+		t.Errorf("an agent no task needs: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/teams", `{"template":"Research"}`)
+	if code, body := call(t, server, "DELETE", "/api/teams/Research", ""); code != 200 {
+		t.Fatalf("remove Research: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/agents", "")
+	if strings.Contains(body, `"Research"`) || strings.Contains(body, "research-lead") {
+		t.Errorf("Research should be gone: %s", body)
+	}
+}
+
+// Tasks are filed under epics, from the page or the desk: made with their
+// stories, moved between epics, and taken out.
+func TestTasksAreFiledUnderEpics(t *testing.T) {
+	server, _ := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Add the store","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Add the command","kind":"story"}`)
+	code, body := call(t, server, "POST", "/api/tasks", `{"title":"Ship the TODO tool","stories":["task-1","task-9"]}`)
+	if code != 200 || !strings.Contains(body, `"stream":"task-3"`) || !strings.Contains(body, "task-9: no task task-9") {
+		t.Fatalf("an epic made with its stories: %d %s", code, body)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-2/epic", `{"epic":"task-3"}`); code != 200 {
+		t.Fatalf("file a story: %d %s", code, body)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-3", "")
+	if !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"stories":2`) || !strings.Contains(body, "I added task-2 to this epic") {
+		t.Errorf("the epic should have both stories: %s", body)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-3/epic", `{"epic":"task-1"}`); code != http.StatusConflict || !strings.Contains(body, "isn't an epic") {
+		t.Errorf("filed under a story: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Another epic","kind":"epic"}`)
+	if code, body := call(t, server, "PUT", "/api/tasks/task-2/epic", `{"epic":"task-4"}`); code != 200 {
+		t.Fatalf("move a story: %d %s", code, body)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/epic", `{"epic":""}`); code != 200 {
+		t.Fatalf("take a story out: %d %s", code, body)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-3", "")
+	if !strings.Contains(body, `"stories":0`) {
+		t.Errorf("the first epic should have no stories left: %s", body)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-2", "")
+	if !strings.Contains(body, `"epic":"task-4"`) {
+		t.Errorf("task-2 should be in task-4: %s", body)
+	}
+}
+
+// You approve closing an epic, on the page; the desk can't for you, and
+// any other answer goes to its coordinator.
+func TestYouCloseAnEpic(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
+	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	s.Propose(events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskNeedsYou, Data: map[string]any{
+		"question": "Close it?", "options": []string{"Close the epic"}, "closing": "All shipped."}})
+
+	request, _ := http.NewRequest("POST", server.URL+"/api/tasks/task-1/answer", strings.NewReader(`{"answer":"Close the epic"}`))
+	request.Header.Set("Authorization", "Bearer desk-secret")
+	if response, err := http.DefaultClient.Do(request); err != nil || response.StatusCode != http.StatusForbidden {
+		t.Errorf("the desk closed an epic: %v %v", response.StatusCode, err)
+	}
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/answer", `{"answer":"close the epic"}`); code != 200 {
+		t.Fatalf("close: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	if !strings.Contains(body, `"status":"done"`) || !strings.Contains(body, `"summary":"All shipped."`) {
+		t.Errorf("the epic should be closed: %s", body)
+	}
+}
+
+// Claude Code on another machine connects with an install command from the
+// Integrations page: its code works once, the credential it gets opens the
+// API, and revoking the connection closes it again.
+func TestClaudeCodeConnectsFromTheIntegrationsPage(t *testing.T) {
+	server, _ := newTestServer(t)
+	code, body := call(t, server, "POST", "/api/integrations/claude-code", "")
+	if code != 200 || !strings.Contains(body, "| sh") {
+		t.Fatalf("invite: %d %s", code, body)
+	}
+	var invite struct{ Command string }
+	json.Unmarshal([]byte(body), &invite)
+	installCode := invite.Command[strings.Index(invite.Command, "code=")+5 : strings.LastIndex(invite.Command, "'")]
+
+	response, err := http.Get(server.URL + "/integrations/claude-code.sh?code=" + installCode)
+	if err != nil || response.StatusCode != 200 {
+		t.Fatalf("script: %v %v", err, response.StatusCode)
+	}
+	script, _ := io.ReadAll(response.Body)
+	if !strings.Contains(string(script), "code='"+installCode+"'") || !strings.Contains(string(script), "mcp connect") {
+		t.Errorf("the script should carry its code:\n%s", script)
+	}
+
+	connect := func() (int, string) {
+		response, _ := http.Post(server.URL+"/api/integrations/connect", "application/json",
+			strings.NewReader(`{"code":"`+installCode+`","host":"laptop","user":"me","os":"darwin"}`))
+		got, _ := io.ReadAll(response.Body)
+		return response.StatusCode, string(got)
+	}
+	status, got := connect()
+	var made struct{ Credential string }
+	json.Unmarshal([]byte(got), &made)
+	if status != 200 || made.Credential == "" {
+		t.Fatalf("connect: %d %s", status, got)
+	}
+	if status, _ := connect(); status != http.StatusConflict {
+		t.Errorf("the code worked twice: %d", status)
+	}
+	if response, _ := http.Get(server.URL + "/integrations/claude-code.sh?code=" + installCode); response.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the script came with a used code: %d", response.StatusCode)
+	}
+
+	asConnection := func() int {
+		request, _ := http.NewRequest("GET", server.URL+"/api/tasks", nil)
+		request.Header.Set("Authorization", "Bearer "+made.Credential)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response.StatusCode
+	}
+	if code := asConnection(); code != 200 {
+		t.Errorf("the credential should open the API: %d", code)
+	}
+	_, body = call(t, server, "GET", "/api/integrations/connections", "")
+	var listed struct{ Connections []struct{ ID, Host string } }
+	json.Unmarshal([]byte(body), &listed)
+	if len(listed.Connections) != 1 || listed.Connections[0].Host != "laptop" || strings.Contains(body, made.Credential) {
+		t.Fatalf("connections: %s", body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/integrations/connections/"+listed.Connections[0].ID, ""); code != 200 {
+		t.Fatalf("revoke: %d %s", code, body)
+	}
+	if code := asConnection(); code != http.StatusUnauthorized {
+		t.Errorf("a revoked credential still works: %d", code)
 	}
 }

@@ -1,4 +1,4 @@
-import { Bot, ListTodo, Plus, Server, ShieldCheck } from "lucide-react";
+import { Bot, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
 
@@ -14,7 +14,7 @@ const SECTIONS = [
     title: "Work",
     items: [
       { to: "/tasks", label: "Tasks", icon: <ListTodo />, countsNeedsYou: true },
-      { to: "/tasks/new", label: "New task", icon: <Plus /> },
+      { to: "/plan", label: "Plan", icon: <MapIcon /> },
     ],
   },
   {
@@ -22,6 +22,7 @@ const SECTIONS = [
     items: [
       { to: "/agents", label: "Agents", icon: <Bot /> },
       { to: "/workers", label: "Workers", icon: <Server /> },
+      { to: "/integrations", label: "Integrations", icon: <Plug /> },
       { to: "/policy", label: "Policy", icon: <ShieldCheck /> },
     ],
   },

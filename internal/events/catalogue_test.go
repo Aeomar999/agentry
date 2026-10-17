@@ -11,7 +11,7 @@ func TestCheckShapeAndWriter(t *testing.T) {
 		wantCheck string // "" means accepted
 	}{
 		{"a valid task", Proposal{Stream: "task-1", Actor: human, Type: TaskCreated,
-			Data: map[string]any{"title": "Remove TODOs", "repo": "/src/app", "coordinator": "coordinator"}}, ""},
+			Data: map[string]any{"title": "Remove TODOs", "repo": "/src/app", "coordinator": "tech-lead"}}, ""},
 		{"unknown type", Proposal{Stream: "task-1", Actor: human, Type: "task.exploded"}, "shape"},
 		{"missing field", Proposal{Stream: "task-1", Actor: human, Type: TaskCreated,
 			Data: map[string]any{"title": "Remove TODOs"}}, "shape"},
@@ -23,8 +23,8 @@ func TestCheckShapeAndWriter(t *testing.T) {
 			Data: map[string]any{"name": "x", "prompt": "y", "engine": "claude"}}, "shape"},
 		{"task event in the agents stream", Proposal{Stream: AgentsStream, Actor: human, Type: TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "y"}}, "shape"},
-		{"an agent may not create tasks", Proposal{Stream: "task-1", Actor: coordinator, Type: TaskCreated,
-			Data: map[string]any{"title": "x", "repo": "y", "coordinator": "coordinator"}}, "who"},
+		{"the policy may not create tasks", Proposal{Stream: "task-1", Actor: Actor{Kind: Policy, ID: "rules"}, Type: TaskCreated,
+			Data: map[string]any{"title": "x", "repo": "y", "coordinator": "tech-lead"}}, "who"},
 		{"a human may not assign: the coordinator does", Proposal{Stream: "task-1", Actor: human, Type: TaskAssigned,
 			Data: map[string]any{"agent": "engineer", "instructions": "go"}}, "who"},
 		{"nobody proposes a rejection", Proposal{Stream: "task-1", Actor: Actor{System, "x"}, Type: ProposalRejected}, "who"},
@@ -59,9 +59,9 @@ func TestCheckShapeAndWriter(t *testing.T) {
 }
 
 func TestEveryTypeIsInTheCatalogue(t *testing.T) {
-	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskRanked, TaskHeld, TaskReopened, WorktreeReady, TaskAssigned, TurnStarted,
+	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, AgentRenamed, AgentRenamedInTask, TaskTransferred, TaskRequested, RequestAnswered, ConnectionInvited, ConnectionMade, ConnectionRevoked, TaskSplit, StoryDone, EpicWaits, EpicJoined, EpicLeft, StoryAdded, StoryRemoved, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskRanked, TaskHeld, TaskReopened, RepoChanged, WorktreeReady, TaskAssigned, TurnStarted,
 		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
-		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, MessageDrafted, DraftDiscarded, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
+		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
 		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved}
 	for _, kind := range all {

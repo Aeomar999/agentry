@@ -43,21 +43,21 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 	go loop.Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "coordinator"}})
+		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
 
-	task := waitForTurn(t, s, id, "turn-1", "coordinator")
+	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	if task.Worktree == nil || !strings.HasSuffix(task.Worktree.Path, id) || task.Worktree.Port == 0 {
 		t.Fatalf("worktree: %+v", task.Worktree)
 	}
 	brief := readBrief(t, task, "turn-1")
-	for _, want := range []string{"You are the coordinator", "- engineer: ", "1. you → coordinator: Remove the TODOs", `"action": "assign"`} {
+	for _, want := range []string{"You are the tech lead", "- engineer: ", "1. you → tech-lead: Remove the TODOs", `"action": "assign"`} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("the coordinator's brief is missing %q", want)
 		}
 	}
 
 	// The coordinator renames the task as it decides.
-	endTurn(t, s, id, "turn-1", "coordinator", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO in src/.", "title": "Remove the TODO comments in src/"}`)
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO in src/.", "title": "Remove the TODO comments in src/"}`)
 	task = waitForTurn(t, s, id, "turn-2", "engineer")
 	if task.Title != "Remove the TODO comments in src/" || task.FirstTitle != "Remove the TODOs" {
 		t.Errorf("title %q, first title %q", task.Title, task.FirstTitle)
@@ -68,12 +68,46 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 
 	commitIn(t, task.Worktree.Path) // the engineer's work, not yet in dev
 	endTurn(t, s, id, "turn-2", "engineer", "Removed 3 TODOs and committed.")
-	task = waitForTurn(t, s, id, "turn-3", "coordinator")
-	if brief := readBrief(t, task, "turn-3"); !strings.Contains(brief, "engineer → coordinator: Removed 3 TODOs and committed.") {
+	task = waitForTurn(t, s, id, "turn-3", "tech-lead")
+	if brief := readBrief(t, task, "turn-3"); !strings.Contains(brief, "engineer → tech-lead: Removed 3 TODOs and committed.") {
 		t.Errorf("the engineer's report should be in the coordinator's brief:\n%s", brief)
 	}
 
-	endTurn(t, s, id, "turn-3", "coordinator", `{"action": "done", "summary": "TODOs removed."}`)
+	// Unreviewed work can't be done: the tech lead hears why.
+	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "done", "summary": "TODOs removed."}`)
+	task = waitForTurn(t, s, id, "turn-4", "tech-lead")
+	if brief := readBrief(t, task, "turn-4"); !strings.Contains(brief, "no one has checked it since it last changed (turn-2, by engineer)") {
+		t.Errorf("the tech lead should hear the work needs checking:\n%s", brief)
+	}
+
+	// The reviewer wants a change; once it is made, it reviews again.
+	endTurn(t, s, id, "turn-4", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review it."}`)
+	task = waitForTurn(t, s, id, "turn-5", "reviewer")
+	if brief := readBrief(t, task, "turn-5"); !strings.Contains(brief, "Verdict: changes needed") {
+		t.Errorf("the reviewer should be told how to give its verdict:\n%s", brief)
+	}
+	endTurn(t, s, id, "turn-5", "reviewer", "One TODO is left in src/b.go.\n\n**Verdict: changes needed**")
+	waitForTurn(t, s, id, "turn-6", "tech-lead")
+	endTurn(t, s, id, "turn-6", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove the TODO in src/b.go."}`)
+	waitForTurn(t, s, id, "turn-7", "engineer")
+	endTurn(t, s, id, "turn-7", "engineer", "Removed it.")
+	waitForTurn(t, s, id, "turn-8", "tech-lead")
+	endTurn(t, s, id, "turn-8", "tech-lead", `{"action": "done", "summary": "TODOs removed."}`)
+	task = waitForTurn(t, s, id, "turn-9", "tech-lead")
+	if brief := readBrief(t, task, "turn-9"); !strings.Contains(brief, "reviewer checked it in turn-5, and it changed after that (turn-7, by engineer)") {
+		t.Errorf("a change after a review needs another review:\n%s", brief)
+	}
+	endTurn(t, s, id, "turn-9", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review the fix."}`)
+	waitForTurn(t, s, id, "turn-10", "reviewer")
+	endTurn(t, s, id, "turn-10", "reviewer", "All TODOs are gone.\n\nVerdict: approved")
+
+	// The deployer ships it without changing it, so the review still holds.
+	waitForTurn(t, s, id, "turn-11", "tech-lead")
+	endTurn(t, s, id, "turn-11", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Merge it."}`)
+	waitForTurn(t, s, id, "turn-12", "deployer")
+	endTurn(t, s, id, "turn-12", "deployer", "Merged.")
+	waitForTurn(t, s, id, "turn-13", "tech-lead")
+	endTurn(t, s, id, "turn-13", "tech-lead", `{"action": "done", "summary": "TODOs removed."}`)
 	task = waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
 	if task.Summary != "TODOs removed." || sessions.IsRunning(sessions.SocketFor(id)) {
 		t.Errorf("summary %q, session still running %v", task.Summary, sessions.IsRunning(sessions.SocketFor(id)))
@@ -111,9 +145,9 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	go newLoop(s, t.TempDir()).Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "coordinator"}})
-	waitForTurn(t, s, id, "turn-1", "coordinator")
-	endTurn(t, s, id, "turn-1", "coordinator", `{"action": "assign", "agent": "engineer", "instructions": "Go."}`)
+		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+	waitForTurn(t, s, id, "turn-1", "tech-lead")
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Go."}`)
 	task := waitUntil(t, s, id, "a question", func(task *tasks.Task) bool { return task.Question != "" })
 	if !strings.Contains(task.Question, "engineer can't run anywhere now: laptop is offline") || len(task.Turns) != 1 {
 		t.Errorf("question %q after %d turns", task.Question, len(task.Turns))

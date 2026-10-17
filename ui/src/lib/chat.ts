@@ -1,4 +1,5 @@
 import type { LogEvent, TaskDetail } from "@/api/types";
+import { onMachine } from "./machines";
 
 // Your chat with a task's coordinator, read from the task's events, oldest
 // first: what you said, what it said back, its questions and its summary,
@@ -15,6 +16,8 @@ export interface ChatItem {
   to?: string; // a handoff's agent
   text: string;
   tone?: "warning" | "danger";
+  viaClaude?: boolean; // you asked Claude, in the Workspace, to send it
+  viaArtifact?: boolean; // you acted on an artifact, when Agentry had them
 }
 
 export function chatOf(task: TaskDetail): ChatItem[] {
@@ -27,18 +30,55 @@ export function chatOf(task: TaskDetail): ChatItem[] {
     const reply = () => said("reply", text(e, "toYou"));
     switch (e.type) {
       case "task.created":
-        said("you", text(e, "description") || text(e, "title"), { who: "you" });
+        if (text(e, "parent"))
+          said("report", text(e, "description"), { who: askedBy(e, task.coordinator) }); // another team asked
+        else said("you", text(e, "description") || text(e, "title"), { who: "you" });
+        break;
+      case "task.transferred":
+        reply();
+        said("handoff", `This is the ${text(e, "team")} team's work: ${text(e, "reason")}`, {
+          who: askedBy(e, task.coordinator),
+          to: text(e, "coordinator"),
+        });
+        break;
+      case "task.requested":
+        reply();
+        said("handoff", `${text(e, "child")}: ${text(e, "request")}`, {
+          who: askedBy(e, task.coordinator),
+          to: `the ${text(e, "team")} team`,
+        });
+        break;
+      case "task.split":
+        reply();
+        said("handoff", text(e, "titles").split("; ").join("\n"), { who: askedBy(e, task.coordinator), to: "its stories" });
+        break;
+      case "task.epic_waits":
+        reply();
+        break;
+      case "task.story_done":
+        said("report", `${text(e, "story")} is done: ${text(e, "summary")}`, { who: text(e, "coordinator") });
+        break;
+      case "task.request_answered":
+        said("report", `${text(e, "child")} is done: ${text(e, "summary")}`, { who: text(e, "coordinator") });
         break;
       case "task.directed":
       case "task.reopened":
-        said("you", text(e, "text"), { who: "you" });
+        said("you", yourWords(e, "text"), {
+          who: "you",
+          viaClaude: text(e, "via") === "claude",
+          viaArtifact: text(e, "via") === "artifact",
+        });
         break;
       case "task.answered":
-        said("you", text(e, "answer"), { who: "you" });
+        said("you", yourWords(e, "answer"), {
+          who: "you",
+          viaClaude: text(e, "via") === "claude",
+          viaArtifact: text(e, "via") === "artifact",
+        });
         break;
       case "task.assigned":
         reply();
-        said("handoff", text(e, "instructions"), { to: text(e, "agent") });
+        said("handoff", text(e, "instructions"), { to: onMachine(text(e, "agent"), text(e, "machine")) });
         break;
       case "task.needs_you":
         reply();
@@ -70,6 +110,16 @@ export function chatOf(task: TaskDetail): ChatItem[] {
 // task reaches its budget or its limit of turns.
 function askedBy(e: LogEvent, coordinator: string): string {
   return e.actor.startsWith("agent:") ? e.actor.slice("agent:".length) : e.actor.startsWith("system:") ? "agentry" : coordinator;
+}
+
+// yourWords is what you said; an artifact's message to the coordinator is
+// cut to what you chose and wrote, with a count of the comments sent with it.
+function yourWords(e: LogEvent, key: string): string {
+  const words = text(e, key);
+  if (text(e, "via") !== "artifact") return words;
+  const [said, comments = ""] = words.split("\n\nMy comments on it:");
+  const count = (comments.match(/\n- /g) ?? []).length;
+  return count ? `${said}\n\n(${count} ${count === 1 ? "comment" : "comments"} sent with it)` : said;
 }
 
 function text(e: LogEvent, key: string): string {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Columns3, Inbox, List, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3, Inbox, List, Plus } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { FilterChip } from "@/components/molecules/FilterChip";
@@ -22,7 +22,11 @@ import { api } from "@/api/client";
 import { useToast } from "@/components/organisms/Toasts";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
+import { useNewTask } from "@/lib/new-task";
 import { timeAgo } from "@/lib/time";
+import { cn } from "@/lib/cn";
+import { grouped, waitingLine } from "@/lib/epics";
+import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 
 // The filter lives in the address (?status=needs-you), so a link can open
 // the list already filtered: the bell in the top bar does.
@@ -34,16 +38,46 @@ const FILTERS: { id: string; label: string; status?: TaskStatus }[] = [
   { id: "done", label: "Done", status: "done" },
 ];
 
-function columnsFor(pickLabel: (label: string) => void): Column<TaskSummary>[] {
+// Epics show their stories under them, folded or not by a click on the
+// chevron; a finished epic starts folded.
+interface Folding {
+  depth: (task: TaskSummary) => number;
+  folded: (epic: string) => boolean;
+  toggle: (epic: string) => void;
+}
+
+function columnsFor(pickLabel: (label: string) => void, folding: Folding): Column<TaskSummary>[] {
   return [
-    { header: "Task", className: "w-24", render: (task) => <Mono className="text-ink-muted">{task.id}</Mono> },
+    {
+      header: "Task",
+      className: "w-28",
+      render: (task) => (
+        <span className={cn("flex items-center gap-1", folding.depth(task) && "pl-4")}>
+          {task.kind === "epic" ? (
+            <button
+              type="button"
+              aria-label={folding.folded(task.id) ? "Show its stories" : "Hide its stories"}
+              onClick={(event) => (event.stopPropagation(), folding.toggle(task.id))}
+              className="-ml-1 flex size-4 cursor-pointer items-center justify-center text-ink-faint hover:text-ink-primary [&>svg]:size-3.5"
+            >
+              {folding.folded(task.id) ? <ChevronRight /> : <ChevronDown />}
+            </button>
+          ) : (
+            <span className="w-3" />
+          )}
+          <Mono className="text-ink-muted">{task.id}</Mono>
+        </span>
+      ),
+    },
     {
       header: "Title",
       className: "w-full max-w-0",
       render: (task) => (
         <div className="min-w-0 py-0.5">
           <p className="flex items-center gap-2">
+            {task.kind === "epic" && <EpicBadge />}
             <span className="truncate font-medium text-ink-primary">{task.title}</span>
+            {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} className="shrink-0" />}
             <LabelList labels={task.labels} onPick={pickLabel} />
           </p>
           <p className="truncate text-[12px] text-ink-muted">
@@ -78,17 +112,28 @@ function columnsFor(pickLabel: (label: string) => void): Column<TaskSummary>[] {
 
 function describe(task: TaskSummary): string {
   if (task.status === "done") return "Done";
+  if (waitingLine(task)) return waitingLine(task);
   return task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next";
 }
 
 type View = "list" | "board";
 const viewKey = "agentry-tasks-view";
 const backlogKey = "agentry-show-backlog";
+const foldKey = "agentry-folded-epics";
+
+function readFolds(): Record<string, boolean> {
+  try {
+    return JSON.parse(readStored(foldKey) ?? "{}");
+  } catch {
+    return {};
+  }
+}
 
 export function TasksPage() {
   useBreadcrumb({ label: "Tasks" });
   const navigate = useNavigate();
   const notify = useToast();
+  const newTask = useNewTask();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const { data, error } = useResource<TaskSummary[]>("/api/tasks");
@@ -113,8 +158,8 @@ export function TasksPage() {
   useKeys({ "1": () => showView("list"), "2": () => showView("board") });
 
   const filter = FILTERS.find((f) => f.id === params.get("status")) ?? FILTERS[0];
-  // The Backlog can grow long, so it shows only when you ask; remembered here.
-  const [showBacklog, setShowBacklog] = useState(() => readStored(backlogKey) === "true");
+  // The Backlog shows when you ask; remembered here.
+  const [showBacklog, setShowBacklog] = useState(() => readStored(backlogKey) === "true"); // Plan is where unstarted work is shaped
   const toggleBacklog = () => {
     writeStored(backlogKey, String(!showBacklog));
     setShowBacklog(!showBacklog);
@@ -122,6 +167,10 @@ export function TasksPage() {
   const inBacklog = tasks.filter((task) => task.parked === "backlog").length;
   const label = params.get("label");
   const pickLabel = (picked: string) => setParam("label", picked);
+  const epic = params.get("epic");
+  const pickEpic = (picked: string) => setParam("epic", picked);
+  const epicTitle = tasks.find((task) => task.id === epic)?.title;
+  const [folds, setFolds] = useState(readFolds);
   const shown = useMemo(() => {
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return tasks.filter(
@@ -129,16 +178,30 @@ export function TasksPage() {
         (!filter.status || task.status === filter.status) &&
         (showBacklog || task.parked !== "backlog") &&
         (!label || task.labels.includes(label)) &&
+        (!epic || task.id === epic || task.epic === epic) &&
         words.every((word) =>
           `${task.id} ${task.title} ${task.repo} ${task.currentAgent} ${task.labels.join(" ")}`.toLowerCase().includes(word),
         ),
     );
-  }, [tasks, filter, label, search, showBacklog]);
+  }, [tasks, filter, label, epic, search, showBacklog]);
+
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const shownIds = new Set(shown.map((task) => task.id));
+  const folding: Folding = {
+    depth: (task) => (task.epic && shownIds.has(task.epic) ? 1 : 0),
+    folded: (id) => !epic && (folds[id] ?? byId.get(id)?.status === "done"),
+    toggle: (id) => {
+      const next = { ...folds, [id]: !folding.folded(id) };
+      writeStored(foldKey, JSON.stringify(next));
+      setFolds(next);
+    },
+  };
+  const rows = grouped(shown, folding.folded).map((row) => row.task);
 
   const open = (task: TaskSummary) => navigate(`/tasks/${task.id}`);
   // Dragging a row sets its place in your priority order, as on the board.
   const reorder = async (task: TaskSummary, at: number) => {
-    const rank = rankAt(shown, task, at);
+    const rank = rankAt(rows, task, at);
     if (rank === null) return;
     try {
       await api("PUT", `/api/tasks/${encodeURIComponent(task.id)}/rank`, { rank });
@@ -146,14 +209,14 @@ export function TasksPage() {
       notify("danger", "The order wasn't saved", (failure as Error).message);
     }
   };
-  const cursor = useRowCursor(view === "list" ? shown.length : 0, (index) => open(shown[index]));
+  const cursor = useRowCursor(view === "list" ? rows.length : 0, (index) => open(rows[index]));
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Tasks"
-        meta="Each task goes to the coordinator, which hands it from agent to agent until it says done. Drag tasks to put them in your order."
-        actions={[{ label: "New task", icon: <Plus />, to: "/tasks/new", primary: true }]}
+        meta="The work under way: each task goes to its coordinator, which hands it from agent to agent until it is done. Shape epics and their stories in Plan. Drag tasks to put them in your order."
+        actions={[{ label: "New task", icon: <Plus />, onClick: () => newTask(), primary: true }]}
       />
       <div className="flex flex-wrap items-center gap-2 border-b border-divider px-6 py-3">
         {FILTERS.map((f) => (
@@ -166,6 +229,7 @@ export function TasksPage() {
           />
         ))}
         {label && <FilterChip label={`label: ${label}  ×`} active onClick={() => setParam("label", null)} />}
+        {epic && <FilterChip label={`epic: ${epicTitle ?? epic}  ×`} active onClick={() => setParam("epic", null)} />}
         <div className="ml-auto flex items-center gap-2" data-page-search>
           <FilterChip
             label={showBacklog ? "Hide the backlog" : "Show the backlog"}
@@ -190,15 +254,23 @@ export function TasksPage() {
         </div>
       )}
       {view === "board" && data && (
-        <TaskBoard tasks={shown} agents={agents} showBacklog={showBacklog} onOpen={open} onPickLabel={pickLabel} />
+        <TaskBoard
+          tasks={shown}
+          everyTask={tasks}
+          agents={agents}
+          showBacklog={showBacklog}
+          onOpen={open}
+          onPickLabel={pickLabel}
+          onPickEpic={pickEpic}
+        />
       )}
       {view === "list" && (
         <ResourceTable
-          columns={columnsFor(pickLabel)}
-          rows={shown}
+          columns={columnsFor(pickLabel, folding)}
+          rows={rows}
           rowKey={(task) => task.id}
           onOpen={open}
-          activeKey={shown[cursor]?.id}
+          activeKey={rows[cursor]?.id}
           onReorder={reorder}
           empty={
             data && (

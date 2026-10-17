@@ -103,11 +103,17 @@ type Mirror struct {
 // Worktree makes the task's worktree in root/<task> from the hub's copy of
 // its branch; base is where the task started, kept from the hub. A worktree
 // left from an earlier visit is out of date, so it goes first: git won't
-// fetch into a branch a worktree has checked out.
+// fetch into a branch a worktree has checked out. One of another repo, left
+// by a task that moved repos, is moved aside instead.
 func (m Mirror) Worktree(root, task, base string, port int) (Worktree, error) {
 	w := Worktree{Repo: m.Dir, Path: filepath.Join(root, task), Branch: "agentry/" + task, Base: base, Port: port}
 	if err := m.open(); err != nil {
 		return Worktree{}, err
+	}
+	if isWorktree(w.Path) && !sameRepo(w.Path, m.Dir) { // left by the task's old repo
+		if err := moveAside(w.Path); err != nil {
+			return Worktree{}, err
+		}
 	}
 	if err := w.Discard(); err != nil {
 		return Worktree{}, err

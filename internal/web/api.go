@@ -14,9 +14,11 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 var you = events.Actor{Kind: events.Human, ID: "you"}
@@ -27,20 +29,69 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	summaries := []taskSummary{}
+	var all []*tasks.Task
+	done := map[string]bool{}
 	for i := len(ids) - 1; i >= 0; i-- { // newest first, which a tie keeps
 		if task, err := s.task(ids[i]); err == nil && task != nil {
-			summaries = append(summaries, summaryOf(task))
+			all, done[task.ID] = append(all, task), task.IsDone
 		}
+	}
+	summaries := []taskSummary{}
+	for _, task := range all {
+		summary := summaryOf(task)
+		summary.BlockedBy = blockedBy(task, func(id string) bool { return done[id] })
+		summaries = append(summaries, summary)
 	}
 	// In your priority order; a new task starts first.
 	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
+// changeRepo moves a task's work to another repo: when the turn in progress
+// ends, or at once between turns. A finished task gets its worktree of the
+// new repo here and now, its whole history counted as the task's work, so
+// its Workspace shows what was done there.
+func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Repo string }
+	if !decode(w, r, &request) {
+		return
+	}
+	repo := strings.TrimSpace(request.Repo)
+	if reason := worktrees.IsRepo(repo); reason != "" {
+		http.Error(w, reason, http.StatusBadRequest)
+		return
+	}
+	task, err := s.task(r.PathValue("task"))
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	moved := events.Proposal{Stream: task.ID, Actor: you, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}
+	if !task.IsDone || s.config.Fleet == nil {
+		s.propose(w, moved)
+		return
+	}
+	if !s.proposeOrRefuse(w, moved) {
+		return
+	}
+	here := s.config.Fleet.Of(workers.Local)
+	made, err := here.Prepare(r.Context(), machines.WorktreeRequest{Task: task.ID, Repo: repo})
+	if err != nil {
+		failed(w, err)
+		return
+	}
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
+		Data: map[string]any{"repo": made.Repo, "worker": here.Name(), "path": made.Path, "branch": made.Branch, "base": "", "port": made.Port}})
+}
+
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Title, Description, Repo string
+		NewRepo                  bool     // make Repo, a new folder, the task's own new git repo
+		Team                     string   // whose agents work on it; "" for the first team
+		Kind                     string   // "story" or "epic"; "" lets the coordinator split it if it is too big
+		Stories                  []string // for an epic: tasks there already, to file under it as its stories
+		Epic                     string   // for a story: the epic to file it under
 		Labels                   []string
 		Budget                   int // tokens; 0 takes the default
 	}
@@ -53,11 +104,42 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "describe the task", http.StatusBadRequest)
 		return
 	}
+	if len(request.Stories) > 0 {
+		request.Kind = "epic"
+	}
+	if request.Epic != "" {
+		request.Kind = "story"
+	}
+	kind := tasks.Story
+	switch request.Kind {
+	case "", "story":
+	case "epic":
+		kind = tasks.Epic
+	default:
+		http.Error(w, "a task is a story or an epic, not "+request.Kind, http.StatusBadRequest)
+		return
+	}
 	if request.Title == "" {
 		request.Title = titleFrom(request.Description) // the coordinator renames it once it has read the task
 	}
-	if request.Repo == "" {
+	switch {
+	case request.NewRepo:
+		if err := worktrees.NewRepo(request.Repo, request.Title); err != nil {
+			http.Error(w, "making the new repo: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	case request.Repo == "" && request.Epic != "":
+		if epic, _ := s.task(request.Epic); epic != nil {
+			request.Repo = epic.Repo // a story works where its epic does
+		}
+		request.Repo = cmp.Or(request.Repo, s.config.DefaultRepo)
+	case request.Repo == "":
 		request.Repo = s.config.DefaultRepo
+	default:
+		if reason := worktrees.IsRepo(request.Repo); reason != "" {
+			http.Error(w, reason, http.StatusBadRequest)
+			return
+		}
 	}
 	budget := request.Budget
 	if budget <= 0 {
@@ -68,9 +150,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	coordinator, ok := roster.Coordinator()
+	coordinator, ok := roster.Coordinator(request.Team)
 	if !ok {
-		http.Error(w, "there is no coordinator agent", http.StatusConflict)
+		http.Error(w, "there is no coordinator in the "+cmp.Or(request.Team, "first")+" team", http.StatusConflict)
 		return
 	}
 
@@ -82,9 +164,36 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := fmt.Sprintf("task-%d", len(ids)+1)
-	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
+	parked := ""
+	if request.Epic != "" {
+		parked = "backlog" // with the epic's other stories, until you start it
+	}
+	created, rejection, err := s.store.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels), "budget": budget}})
+		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels), "budget": budget,
+		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
+	switch {
+	case err != nil:
+		failed(w, err)
+		return
+	case rejection != nil:
+		http.Error(w, rejection.Reason, http.StatusConflict)
+		return
+	}
+	// The task is made: filing it is a second step, and what fails there
+	// is said, with the task kept.
+	var refused []string
+	for _, story := range request.Stories {
+		if why := s.fileUnder(story, id); why != "" {
+			refused = append(refused, story+": "+why)
+		}
+	}
+	if request.Epic != "" {
+		if why := s.fileUnder(id, request.Epic); why != "" {
+			refused = append(refused, why)
+		}
+	}
+	reply(w, map[string]any{"stream": created.Stream, "position": created.Position, "notFiled": refused})
 }
 
 // setBudget gives the task a new token budget. A task stopped at its budget
@@ -169,7 +278,21 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	reply(w, detailOf(task, log))
+	detail := detailOf(task, log)
+	isDone := func(id string) bool { other, _ := s.task(id); return other != nil && other.IsDone }
+	detail.BlockedBy = blockedBy(task, isDone)
+	if epic, _ := s.task(task.Epic); epic != nil {
+		detail.EpicTitle = epic.Title
+	}
+	detail.StoryList = []taskSummary{}
+	for _, id := range task.Stories {
+		if story, _ := s.task(id); story != nil {
+			summary := summaryOf(story)
+			summary.BlockedBy = blockedBy(story, isDone)
+			detail.StoryList = append(detail.StoryList, summary)
+		}
+	}
+	reply(w, detail)
 }
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
@@ -177,8 +300,21 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &request) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskAnswered,
-		Data: map[string]any{"answer": strings.TrimSpace(request.Answer)}})
+	answer := strings.TrimSpace(request.Answer)
+	task, err := s.task(r.PathValue("task"))
+	if err != nil || task == nil || task.Closing == "" || !strings.EqualFold(answer, coordinator.CloseEpic) {
+		s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+		return
+	}
+	// Closing an epic is yours to approve, on the page: the desk passes on
+	// what you say, and doesn't approve for you.
+	if !s.carriesUIToken(r) {
+		http.Error(w, "closing an epic is approved on the page", http.StatusForbidden)
+		return
+	}
+	// One event, the answer and the close together: an answer alone would
+	// start the coordinator's next turn.
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
 }
 
 func (s *Server) approve(w http.ResponseWriter, r *http.Request) {

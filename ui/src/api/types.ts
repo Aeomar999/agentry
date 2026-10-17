@@ -18,6 +18,14 @@ export interface TaskSummary {
   overBudget: boolean;
   rank: number; // your priority order, lower first
   parked: "" | "todo" | "backlog"; // while you hold it there
+  parent: string; // the task, of another team, that asked for this one
+  waitingOn: string; // another team's task this one waits for
+  kind: "" | "epic"; // "" is a story
+  epic: string; // a story's epic
+  after: string[]; // the stories it builds on
+  blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
+  stories: number; // an epic's
+  storiesDone: number;
   createdAt: string;
   lastActiveAt: string;
 }
@@ -28,6 +36,10 @@ export interface TaskDetail extends TaskSummary {
   options: string[]; // answers the open question offers
   page: string; // the page the open question came with
   coordinator: string;
+  teamChosen: boolean; // false: its coordinator may still pass it to the right team
+  epicTitle: string; // a story's epic's
+  storyList: TaskSummary[]; // an epic's stories, in the order they were planned
+  movingTo: string; // the repo it moves to when the turn in progress ends
   summary: string;
   worktree: Worktree | null;
   trail: Step[] | null;
@@ -35,13 +47,6 @@ export interface TaskDetail extends TaskSummary {
   approvals: Action[] | null;
   actions: Action[] | null;
   events: LogEvent[] | null;
-  drafts: Draft[]; // messages Claude, in the Workspace, wrote for the coordinator, waiting for you
-}
-
-export interface Draft {
-  id: string;
-  at: string;
-  text: string;
 }
 
 export interface Worktree {
@@ -105,9 +110,10 @@ export interface Agent {
   model: string;
   profile: string;
   coordinates: boolean;
+  team: string; // the team it works in; "" for Software, the team agents had before there were teams
   workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
-  column: "" | "review"; // where its work shows on the board: In progress, or Review
+  column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
 }
 

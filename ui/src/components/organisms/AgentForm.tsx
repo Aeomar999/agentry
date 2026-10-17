@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
@@ -8,6 +8,7 @@ import { Select } from "@/components/atoms/Select";
 import { Banner } from "@/components/molecules/Banner";
 import { CodeViewer } from "@/components/molecules/CodeViewer";
 import { Field } from "@/components/molecules/Field";
+import { DEFAULT_TEAM, teamsOf } from "@/lib/teams";
 import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { Agent, Policy, ServerConfig } from "@/api/types";
@@ -17,9 +18,10 @@ import { AGENT_COLORS } from "@/live/agent-colors";
 import { cn } from "@/lib/cn";
 import { LOCAL, machineName } from "@/lib/machines";
 
-// Add an agent, or change one. The name is fixed once it exists: tasks and
-// the log refer to agents by name. Workers are the machines it may run on,
-// in order; none means the machine Agentry runs on.
+// Add an agent, or change one. A new name renames it: it keeps its prompt,
+// settings and knowledge, and the tasks that name it go on with the new
+// name. Workers are the machines it may run on, in order; none means the
+// machine Agentry runs on.
 
 // Model names each engine understands besides a full model id.
 const MODELS: Record<string, string[]> = { claude: ["opus", "sonnet", "haiku"], codex: [] };
@@ -32,6 +34,7 @@ const BLANK: Agent = {
   model: "",
   profile: "",
   coordinates: false,
+  team: "",
   workers: [],
   color: "",
   column: "",
@@ -43,7 +46,9 @@ export function AgentForm({ agent }: { agent?: Agent }) {
   const notify = useToast();
   const config = useResource<ServerConfig>("/api/config").data;
   const policy = useResource<Policy>("/api/policy").data;
-  const [draft, setDraft] = useState<Agent>(agent ?? BLANK);
+  const [params] = useSearchParams();
+  const [draft, setDraft] = useState<Agent>(agent ?? { ...BLANK, team: params.get("team") ?? "" });
+  const teams = teamsOf(useResource<Agent[]>("/api/agents").data ?? []).map((t) => t.team);
   const [error, setError] = useState({ title: "", reason: "" });
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -56,7 +61,11 @@ export function AgentForm({ agent }: { agent?: Agent }) {
     setError({ title: "", reason: "" });
     try {
       if (isNew) await api("POST", "/api/agents", draft);
-      else await api("PUT", `/api/agents/${encodeURIComponent(draft.name)}`, draft);
+      else {
+        // A new name first: the agent keeps everything, and its tasks follow it.
+        if (draft.name !== agent.name) await api("POST", `/api/agents/${encodeURIComponent(agent.name)}/rename`, { to: draft.name });
+        await api("PUT", `/api/agents/${encodeURIComponent(draft.name)}`, draft);
+      }
       notify("success", isNew ? `Added ${draft.name}` : `Saved ${draft.name}`, "The coordinator sees it from its next turn.");
       navigate(`/agents/${encodeURIComponent(draft.name)}`);
     } catch (failure) {
@@ -97,17 +106,39 @@ export function AgentForm({ agent }: { agent?: Agent }) {
             <Field
               label="Name"
               htmlFor="agent-name"
-              hint={isNew ? "Lowercase letters, digits and dashes. It can't change later." : undefined}
+              hint={
+                isNew
+                  ? "Lowercase letters, digits and dashes."
+                  : draft.name !== agent.name
+                    ? `Renames ${agent.name}: it keeps its prompt, settings and what it knows, and its tasks go on with the new name.`
+                    : "Lowercase letters, digits and dashes."
+              }
             >
               <Input
                 id="agent-name"
                 mono
                 required
-                disabled={!isNew}
                 value={draft.name}
                 onChange={(e) => set({ name: e.target.value.toLowerCase() })}
                 placeholder="designer"
               />
+            </Field>
+            <Field
+              label="Team"
+              htmlFor="agent-team"
+              hint="The team it works in. Its coordinator hands it work; a new name starts a new team, which needs a coordinator first."
+            >
+              <Input
+                id="agent-team"
+                list="agent-teams"
+                value={draft.team || DEFAULT_TEAM}
+                onChange={(e) => set({ team: e.target.value })}
+              />
+              <datalist id="agent-teams">
+                {teams.map((team) => (
+                  <option key={team} value={team} />
+                ))}
+              </datalist>
             </Field>
             <Field label="Description" htmlFor="agent-description" hint="One line. The coordinator reads it to choose who works next.">
               <Input id="agent-description" value={draft.description} onChange={(e) => set({ description: e.target.value })} />
@@ -134,17 +165,28 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                 ))}
               </div>
             </div>
-            <Field label="Its work counts as" htmlFor="agent-column" hint="The board column a task is in while this agent has it.">
+            <Field
+              label="Its work counts as"
+              htmlFor="agent-column"
+              hint={
+                draft.column === "review"
+                  ? "Checking. Its report ends with a verdict, and its coordinator can't finish a task until it approves the last change."
+                  : draft.column === "ship"
+                    ? "Shipping checked work, such as deploying it: it doesn't change the work, so the checks still hold."
+                    : "Building. A change it makes is checked again by the team's reviewers before the task is done."
+              }
+            >
               <Select id="agent-column" value={draft.column} onChange={(e) => set({ column: e.target.value as Agent["column"] })}>
-                <option value="">In progress</option>
+                <option value="">Building</option>
                 <option value="review">Review</option>
+                <option value="ship">Shipping</option>
               </Select>
             </Field>
             <Checkbox
               checked={draft.coordinates}
               onChange={(coordinates) => set({ coordinates })}
               label="Coordinates"
-              hint="Decides who works next instead of working. New tasks go to the first coordinator."
+              hint="Decides who works next in its team instead of working. The team's tasks go to it."
             />
           </div>
         </Panel>

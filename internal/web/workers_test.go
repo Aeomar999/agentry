@@ -108,7 +108,7 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": hub, "coordinator": "coordinator"}},
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": hub, "coordinator": "tech-lead"}},
 		{Stream: "task-1", Actor: events.Actor{Kind: events.Worker, ID: "local"}, Type: events.WorktreeReady,
 			Data: map[string]any{"repo": hub, "worker": "local", "path": w.Path, "branch": w.Branch, "base": w.Base, "port": 7901}},
 	} {

@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -20,6 +21,7 @@ type Move struct {
 	Kind     MoveKind
 	Agent    agents.Agent // for StartTurn
 	Handoff  string       // for StartTurn: what the agent is given
+	Machine  string       // for StartTurn: where the coordinator wants it to work, "" for Agentry to choose
 	Decision Decision     // for ApplyDecision
 	Reason   string       // for RaiseIssue and AskYou
 }
@@ -39,7 +41,7 @@ const (
 // the loop can stop and restart at any point and pick up where it was.
 func Next(task *tasks.Task, roster agents.Roster) Move {
 	switch {
-	case task.IsDone, task.Question != "", task.OpenTurn() != nil, task.Parked != "":
+	case task.IsDone, task.Question != "", task.OpenTurn() != nil, task.Parked != "", task.WaitingOn != "":
 		return Move{Kind: Wait}
 	case task.Worktree == nil:
 		return Move{Kind: PrepareWorktree}
@@ -67,7 +69,96 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 	if !exists {
 		return Move{Kind: RaiseIssue, Reason: "there is no agent called " + task.Handoff.To}
 	}
-	return Move{Kind: StartTurn, Agent: agent, Handoff: task.Handoff.Text}
+	return Move{Kind: StartTurn, Agent: agent, Handoff: task.Handoff.Text, Machine: task.Handoff.Machine}
+}
+
+// MaxRequestDepth is how many requests deep tasks may go: a task asking a
+// team, whose task asks another, and so on. It stops two teams asking each
+// other round and round.
+const MaxRequestDepth = 3
+
+// otherTeam says why a transfer or request can't go to the team it names, or "".
+func otherTeam(task *tasks.Task, roster agents.Roster, d Decision) string {
+	own, _ := roster.Get(task.Coordinator)
+	switch {
+	case strings.EqualFold(d.Team, own.TeamName()):
+		return "the coordinator named its own team, " + d.Team + "; " + string(d.Action) + " goes to another team"
+	case !hasTeam(roster, d.Team):
+		return "there is no team called " + d.Team + "; the teams are " + strings.Join(roster.Teams(), ", ")
+	case d.Action == Request && task.Depth >= MaxRequestDepth:
+		return fmt.Sprintf("this task is already %d requests deep; do the work in this team, or ask the user", task.Depth)
+	}
+	if _, ok := roster.Coordinator(teamNamed(roster, d.Team)); !ok {
+		return "the " + d.Team + " team has no coordinator"
+	}
+	return ""
+}
+
+// epicOrStory says why the decision doesn't fit what the task is, or "".
+// An epic's work is done in its stories, and it is done once they all are.
+func epicOrStory(task *tasks.Task, roster agents.Roster, d Decision) string {
+	if task.Kind == tasks.Epic {
+		switch d.Action {
+		case Assign:
+			return "this task is an epic: its work is done in its stories, so add a story with split, rather than assigning it"
+		case Request:
+			return "this task is an epic: to have another team do part of it, split it with a story for that team"
+		case Transfer:
+			if len(task.Stories) > 0 {
+				return "this epic has stories already, so it stays with its team"
+			}
+		case Finish:
+			if open := openStories(task); len(open) > 0 {
+				return "the epic can't be done while its stories aren't: " + strings.Join(open, ", ") + " still going"
+			}
+		}
+	}
+	if d.Action == AwaitStories && (task.Kind != tasks.Epic || len(openStories(task)) == 0) {
+		return "only an epic with stories still going can wait; decide what happens next"
+	}
+	if d.Action != Split {
+		return ""
+	}
+	switch {
+	case task.Epic != "":
+		return "this task is a story of " + task.Epic + ", and a story can't be split: finish this part, and say in your summary what else is needed, for the epic's coordinator to add"
+	case task.Kind == tasks.Story && task.KindChosen:
+		return "the user made this task a story, so it isn't split; if it is too big for one, ask them"
+	}
+	for i, story := range d.Stories {
+		if story.Team != "" && !hasTeam(roster, story.Team) {
+			return fmt.Sprintf("story %d is for the %s team, and there is no such team; the teams are %s", i+1, story.Team, strings.Join(roster.Teams(), ", "))
+		}
+		for _, after := range story.After {
+			if after.ID != "" && !slices.Contains(task.Stories, after.ID) {
+				return fmt.Sprintf("story %d builds on %s, which is not one of this epic's stories", i+1, after.ID)
+			}
+		}
+	}
+	return ""
+}
+
+// openStories are an epic's stories that haven't reported done.
+func openStories(task *tasks.Task) []string {
+	var open []string
+	for _, id := range task.Stories {
+		if !slices.Contains(task.StoriesDone, id) {
+			open = append(open, id)
+		}
+	}
+	return open
+}
+
+func hasTeam(roster agents.Roster, team string) bool { return teamNamed(roster, team) != "" }
+
+// teamNamed is the team's name as the roster has it, matched without case.
+func teamNamed(roster agents.Roster, team string) string {
+	for _, t := range roster.Teams() {
+		if strings.EqualFold(t, strings.TrimSpace(team)) {
+			return t
+		}
+	}
+	return ""
 }
 
 func decide(task *tasks.Task, roster agents.Roster) Move {
@@ -75,9 +166,22 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 	if err != nil {
 		return Move{Kind: RaiseIssue, Reason: "the coordinator's reply had no usable decision: " + err.Error()}
 	}
+	if why := epicOrStory(task, roster, decision); why != "" {
+		return Move{Kind: RaiseIssue, Reason: why}
+	}
 	if decision.Action == Assign {
 		if _, exists := roster.Get(decision.Agent); !exists {
 			return Move{Kind: RaiseIssue, Reason: "the coordinator assigned the task to " + decision.Agent + ", and there is no agent by that name"}
+		}
+	}
+	if decision.Action == Finish {
+		if why := unchecked(task, roster); why != "" {
+			return Move{Kind: RaiseIssue, Reason: why}
+		}
+	}
+	if decision.Action == Transfer || decision.Action == Request {
+		if reason := otherTeam(task, roster, decision); reason != "" {
+			return Move{Kind: RaiseIssue, Reason: reason}
 		}
 	}
 	return Move{Kind: ApplyDecision, Decision: decision}

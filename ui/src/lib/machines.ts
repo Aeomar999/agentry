@@ -22,3 +22,8 @@ export function bytes(n: number): string {
   }
   return `${n >= 100 || i === 0 ? Math.round(n) : n.toFixed(1).replace(/\.0$/, "")} ${units[i]}`;
 }
+
+// onMachine is an agent, and the machine its coordinator sent it to, if it chose one.
+export function onMachine(agent: string, machine: string): string {
+  return machine ? `${agent} on ${machine === "local" ? "this machine" : machine}` : agent;
+}
