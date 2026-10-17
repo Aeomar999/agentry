@@ -38,7 +38,8 @@ export interface TaskDetail extends TaskSummary {
 }
 
 export interface Worktree {
-  path: string;
+  worker: string; // the machine it is on: "local", or a worker's name
+  path: string; // on that machine
   branch: string;
   base: string;
   port: number;
@@ -54,6 +55,7 @@ export interface Step {
 export interface Turn {
   id: string;
   agent: string;
+  worker: string; // the machine it ran on
   startedAt: string;
   acknowledged: boolean;
   ended: boolean;
@@ -90,7 +92,7 @@ export interface Agent {
   model: string;
   profile: string;
   coordinates: boolean;
-  workers: string[]; // the machines it may run on; none: the machine Agentry runs on
+  workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review"; // where its work shows on the board: In progress, or Review
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
@@ -121,7 +123,78 @@ export interface ServerConfig {
   hasTerminal: boolean;
   hasDesk: boolean;
   engines: string[];
-  workers: string[]; // the machines agents can be given; none yet
+  workers: string[]; // the machines agents can be given: "local" first, then every worker
+  canAddWorkers: boolean;
+}
+
+// A machine, besides the one Agentry runs on, that agents can run on.
+export interface Worker {
+  name: string;
+  host: string;
+  os: string;
+  arch: string;
+  joinedAt: string;
+  online: boolean;
+  since: string; // when it last came online or went offline
+  version: string; // of agentry on it
+  engines: string[]; // as "claude 2.1.301"
+  missing: string[]; // tools agents need that it lacks
+  tasks: string[]; // unfinished tasks whose work is on it
+}
+
+export interface WorkerList {
+  workers: Worker[];
+  local: { tasks: string[]; machine: MachineFacts };
+}
+
+// What a machine says about itself when it connects (or, for this one, when Agentry starts).
+export interface MachineFacts {
+  host: string;
+  os: string;
+  arch: string;
+  version: string;
+  engines: string[];
+  missing: string[];
+}
+
+// A machine in detail, read from it when asked (internal/machines/about.go).
+export interface MachineAbout {
+  host: string;
+  os: string; // "macOS 15.3", "Ubuntu 24.04.1 LTS"
+  kernel: string;
+  arch: string;
+  cpu: string;
+  cpus: number;
+  memory: number; // bytes
+  memoryFree: number;
+  load: number[] | null; // 1, 5, 15 minutes
+  bootedAt: string;
+  disk: number; // where the worktrees are
+  diskFree: number;
+  time: string;
+  zone: string;
+  tools: { name: string; version: string; path: string }[];
+  agentry: string;
+  binary: string;
+  folder: string;
+  path: string[];
+  running: string[];
+  worktrees: string[];
+  repos: string[];
+}
+
+export interface WorkerDetail {
+  worker: Worker;
+  about: MachineAbout | null;
+  aboutError: string;
+  agents: string[]; // that may run on it
+  history: { at: string; what: "joined" | "online" | "offline" }[]; // newest first
+}
+
+export interface Invite {
+  code: string;
+  expires: string;
+  command: string; // what to run on the other machine
 }
 
 export interface CreatedEvent {

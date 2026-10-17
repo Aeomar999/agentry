@@ -15,6 +15,7 @@ type rule func(t *tasks.Task, p events.Proposal) string
 // Check handles. Each lists the conditions that must all hold.
 var taskRules = map[events.Type]rule{
 	events.WorktreeReady: all(noWorktreeYet),
+	events.WorktreeMoved: all(worktreeReady, noOpenTurn, toAnotherMachine),
 	events.TaskRenamed:   all(byTheCoordinatorOrYou, aNewTitle),
 	events.TaskDirected:  all(noQuestionOpen), // an open question takes an answer instead
 	events.TaskLabeled:   all(labelsAreValid),
@@ -192,6 +193,13 @@ func hashMatches(t *tasks.Task, p events.Proposal) string {
 func worktreeReady(t *tasks.Task, _ events.Proposal) string {
 	if t.Worktree == nil {
 		return "the task's worktree isn't ready"
+	}
+	return ""
+}
+
+func toAnotherMachine(t *tasks.Task, p events.Proposal) string {
+	if p.Text("worker") == t.Worktree.Worker {
+		return "the task's work is on " + t.Worktree.Worker + " already"
 	}
 	return ""
 }

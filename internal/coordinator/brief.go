@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // A brief is everything an agent is given for one turn: its own prompt, then
@@ -62,7 +62,7 @@ func knowledge(b *strings.Builder, agent agents.Agent) {
 		notes = "(Nothing yet.)"
 	}
 	section(b, "What you know from earlier tasks", notes+"\n\n"+
-		"These notes are yours, kept across tasks, in "+turns.KnowledgeFile+". Before you finish, update that file: add what "+
+		"These notes are yours, kept across tasks, in "+machines.KnowledgeFile+". Before you finish, update that file: add what "+
 		"you learned that will help on a later task (how this codebase does things, a trap you hit, what the user prefers), "+
 		"fix what turned out wrong, and drop what no longer matters. Keep it short: a few lines per point. Leave it as it is "+
 		"if you learned nothing new.")

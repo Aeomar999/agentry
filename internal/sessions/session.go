@@ -78,14 +78,32 @@ func Stop(socket string) {
 	tmux(socket, "kill-server")
 }
 
+// Running are the tasks whose agent process is alive on this machine, found
+// by their tmux servers' sockets, so a worker that restarts still knows.
+func Running() []string {
+	entries, _ := os.ReadDir(socketDir())
+	var tasks []string
+	for _, entry := range entries {
+		task, ok := strings.CutPrefix(entry.Name(), "agentry-")
+		if ok && IsRunning(entry.Name()) {
+			tasks = append(tasks, task)
+		}
+	}
+	return tasks
+}
+
 // removeStaleSocket deletes the socket file a killed tmux server can leave
 // behind; a new server on it dies at once, "server exited unexpectedly" (proof 04).
 func removeStaleSocket(socket string) {
+	os.Remove(filepath.Join(socketDir(), socket))
+}
+
+func socketDir() string {
 	dir := os.Getenv("TMUX_TMPDIR")
 	if dir == "" {
 		dir = "/tmp"
 	}
-	os.Remove(filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()), socket))
+	return filepath.Join(dir, fmt.Sprintf("tmux-%d", os.Getuid()))
 }
 
 func tmux(socket string, args ...string) (string, error) {

@@ -24,6 +24,10 @@ export function ActionBadge({ action }: { action: Action }) {
   return action.asked ? <Badge variant="warning">waiting for you</Badge> : <Badge>deciding</Badge>;
 }
 
+export function WorkerStatusBadge({ online }: { online: boolean }) {
+  return online ? <Badge variant="success">online</Badge> : <Badge>offline</Badge>;
+}
+
 export function RoleBadge({ agent }: { agent: Agent }) {
   return agent.coordinates ? <Badge variant="brand">coordinator</Badge> : <Badge>worker</Badge>;
 }

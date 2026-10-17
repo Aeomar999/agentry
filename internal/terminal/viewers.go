@@ -15,7 +15,7 @@ type viewers struct {
 	controller string // id of the viewer in control, or ""
 	cols, rows int    // the session's size, which every viewer shows
 	nextID     int
-	control    *control
+	control    Pane
 }
 
 type viewer struct {
@@ -107,7 +107,7 @@ func (v *viewers) typeFrom(viewer *viewer, keys []byte) {
 	inControl := v.controller == viewer.id
 	v.mu.Unlock()
 	if inControl {
-		v.control.typeBytes(keys)
+		v.control.Type(keys)
 	}
 }
 
@@ -131,7 +131,7 @@ func (v *viewers) resizeFrom(viewer *viewer, cols, rows int) {
 		return
 	}
 	v.cols, v.rows = cols, rows
-	v.control.resize(cols, rows)
+	v.control.Resize(cols, rows)
 	v.sendStateLocked()
 }
 
@@ -139,13 +139,24 @@ func (v *viewers) resizeFrom(viewer *viewer, cols, rows int) {
 // the session's size.
 func (v *viewers) sendStateLocked() {
 	for _, viewer := range v.all {
-		message, _ := json.Marshal(map[string]any{
-			"type": "state", "you": viewer.id, "controller": v.controller, "viewers": len(v.all),
-			"cols": v.cols, "rows": v.rows,
-		})
 		select {
-		case viewer.state <- message:
+		case viewer.state <- v.stateLocked(viewer):
 		default:
 		}
 	}
+}
+
+// stateFor is the state message for one viewer, as sendStateLocked sends it.
+func (v *viewers) stateFor(viewer *viewer) []byte {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.stateLocked(viewer)
+}
+
+func (v *viewers) stateLocked(viewer *viewer) []byte {
+	message, _ := json.Marshal(map[string]any{
+		"type": "state", "you": viewer.id, "controller": v.controller, "viewers": len(v.all),
+		"cols": v.cols, "rows": v.rows,
+	})
+	return message
 }

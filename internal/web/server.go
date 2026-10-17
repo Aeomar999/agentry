@@ -9,8 +9,11 @@ import (
 	"sync"
 
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 type Config struct {
@@ -21,6 +24,12 @@ type Config struct {
 	Policy      PolicySource
 	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
+
+	Fleet     *machines.Fleet    // where tasks' work is: for the peek into a workspace
+	Workers   *workerlink.Server // the server's end of the workers' links; nil for none
+	PublicURL string             // the address people and workers reach; "" for the one a request came to
+	Binary    string             // this agentry, which a joining machine can download
+	Local     workers.Machine    // what this machine is, as a worker would say it, for the Workers page
 }
 
 // PolicySource is the policy in force and any problem with the file on disk.
@@ -72,10 +81,30 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
 	api("GET /api/policy", s.showPolicy)
+	api("GET /api/workers", s.listWorkers)
+	api("POST /api/workers/invite", s.invite)
+	api("GET /api/workers/{name}", s.showWorker)
+	api("DELETE /api/workers/{name}", s.removeWorker)
 	api("GET /api/changes", s.waitForChanges)
 	api("POST /api/theme", s.setTheme)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
+	}
+	if s.config.Workers != nil {
+		// A machine joining: with its code, then with the credential it got.
+		mux.HandleFunc("GET /worker/install.sh", s.installScript)
+		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
+		mux.HandleFunc("POST /api/worker/join", s.join)
+		worker := func(pattern string, handler func(http.ResponseWriter, *http.Request, workers.Worker)) {
+			mux.Handle(pattern, s.requireWorker(handler))
+		}
+		worker("GET "+workerlink.ConnectPath, s.connectWorker)
+		worker("GET "+workerlink.StreamPath+"{id}", s.workerStream)
+		worker("GET "+workerlink.GitPath+"{task}/", s.gitFetch)
+		worker("POST "+workerlink.GitPath+"{task}/git-upload-pack", s.gitFetch)
+		worker("POST "+workerlink.GitPath+"{task}/bundle", s.receiveBundle)
+		worker("GET "+workerlink.UpdatePath, s.updateBinary)
+		worker("POST "+workerlink.LeavePath, s.leave)
 	}
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))

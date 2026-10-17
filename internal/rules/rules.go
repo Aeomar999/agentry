@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Check is the store's OrderCheck.
@@ -17,8 +18,18 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 	if err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
+	roster := agents.FromEvents(agentEvents)
 	if rule := rosterRules[p.Type]; rule != nil {
-		if reason := rule(agents.FromEvents(agentEvents), p); reason != "" {
+		if reason := rule(roster, p); reason != "" {
+			return refuse(reason)
+		}
+	}
+	if rule := workerRules[p.Type]; rule != nil {
+		workerEvents, err := history.Stream(events.WorkersStream)
+		if err != nil {
+			return refuse("could not read the workers: " + err.Error())
+		}
+		if reason := rule(roster, workers.FromEvents(workerEvents), p); reason != "" {
 			return refuse(reason)
 		}
 	}

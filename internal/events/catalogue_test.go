@@ -34,6 +34,12 @@ func TestCheckShapeAndWriter(t *testing.T) {
 			Data: map[string]any{"hash": "ab12", "path": "/p"}}, "shape"},
 		{"a task event in the policy stream", Proposal{Stream: PolicyStream, Actor: human, Type: TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "y", "coordinator": "c"}}, "shape"},
+		{"a join code", Proposal{Stream: WorkersStream, Actor: human, Type: WorkerInvited,
+			Data: map[string]any{"code": "ab12", "expires": "2026-10-17T12:00:00Z"}}, ""},
+		{"an agent may not make join codes", Proposal{Stream: WorkersStream, Actor: coordinator, Type: WorkerInvited,
+			Data: map[string]any{"code": "ab12", "expires": "2026-10-17T12:00:00Z"}}, "who"},
+		{"a worker event in a task", Proposal{Stream: "task-1", Actor: Actor{System, "workers"}, Type: WorkerConnected,
+			Data: map[string]any{"name": "laptop"}}, "shape"},
 		{"the policy asks", Proposal{Stream: "task-1", Actor: Actor{Policy, "rules"}, Type: ActionAsked, Correlation: "toolu_1",
 			Data: map[string]any{"reason": "may reach outside the worktree"}}, ""},
 	}
@@ -56,7 +62,8 @@ func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskRanked, TaskHeld, TaskReopened, WorktreeReady, TaskAssigned, TurnStarted,
 		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
 		ActionResult, AgentWaiting, TurnEnded, IssueRaised, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
-		PolicyLoaded, PolicyRefused}
+		PolicyLoaded, PolicyRefused, WorktreeMoved,
+		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved}
 	for _, kind := range all {
 		if _, ok := catalogue[kind]; !ok {
 			t.Errorf("%s is not in the catalogue", kind)

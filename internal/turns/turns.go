@@ -3,53 +3,40 @@
 package turns
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// StateDir is where Agentry keeps a task's files inside its worktree. Git
-// ignores it (package worktrees).
-const StateDir = ".agentry"
-
-// KnowledgeFile is where the working agent's knowledge is put at the start
-// of its turn, for it to keep up to date; read back when the turn ends.
-var KnowledgeFile = filepath.Join(StateDir, "knowledge.md")
-
-// ReadKnowledge is what the agent left in the knowledge file.
-func ReadKnowledge(worktree string) (string, error) {
-	content, err := os.ReadFile(filepath.Join(worktree, KnowledgeFile))
-	return strings.TrimSpace(string(content)), err
-}
-
 type Config struct {
-	HookCommand string // runs `agentry hook`, e.g. "/usr/local/bin/agentry hook"
-	ServerURL   string // where the hook posts its calls
-	HookToken   string
-	Theme       func() string // the page's theme now; nil leaves the engine's own
+	HookToken string        // lets a session's hooks post to the server
+	Theme     func() string // the page's theme now; nil leaves the engine's own
 }
 
+// Runner starts turns on the machine the task's work is on.
 type Runner struct {
 	store  *store.Store
+	fleet  *machines.Fleet
 	config Config
 }
 
-var worker = events.Actor{Kind: events.Worker, ID: "local"}
-
-func NewRunner(s *store.Store, config Config) *Runner {
-	return &Runner{store: s, config: config}
+func NewRunner(s *store.Store, fleet *machines.Fleet, config Config) *Runner {
+	return &Runner{store: s, fleet: fleet, config: config}
 }
+
+// startTimeout is how long a machine has to set a turn up and start it.
+const startTimeout = 2 * time.Minute
 
 // Start begins the task's next turn: the agent works from brief. If it
 // can't, it raises an issue, so the coordinator hears about it.
@@ -67,50 +54,57 @@ func (r *Runner) Start(task *tasks.Task, agent agents.Agent, brief string) error
 }
 
 func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error {
-	engine, ok := engines.Get(agent.Engine)
-	if !ok {
+	if _, ok := engines.Get(agent.Engine); !ok {
 		return fmt.Errorf("%s uses engine %q, which has no adapter", agent.Name, agent.Engine)
 	}
-	turn := task.NextTurnID()
-	briefFile := filepath.Join(StateDir, turn+".md")
-	if err := writeFile(filepath.Join(task.Worktree.Path, briefFile), brief); err != nil {
-		return err
-	}
-	if err := writeFile(filepath.Join(task.Worktree.Path, KnowledgeFile), agent.Knowledge+"\n"); err != nil {
-		return err
-	}
-	prompt := "Read " + briefFile + " and do what it says."
-
-	session := engines.Session{Worktree: task.Worktree.Path, StateDir: filepath.Join(task.Worktree.Path, StateDir),
-		HookCommand: r.config.HookCommand, Model: agent.Model}
+	machine := r.fleet.Of(task.Worktree.Worker)
+	id := task.NextTurnID()
+	turn := machines.Turn{Task: task.ID, ID: id, Worktree: task.Worktree.Path, Engine: agent.Engine, Model: agent.Model,
+		Brief: brief, BriefFile: filepath.Join(machines.StateDir, id+".md"), Knowledge: agent.Knowledge,
+		Env: r.environment(task, id, agent)}
+	turn.Prompt = "Read " + turn.BriefFile + " and do what it says."
 	if r.config.Theme != nil {
-		session.Theme = r.config.Theme()
-	}
-	if err := engine.Prepare(session); err != nil {
-		return fmt.Errorf("preparing %s's hooks: %w", agent.Engine, err)
+		turn.Theme = r.config.Theme()
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+	defer cancel()
+	if err := machine.PrepareTurn(ctx, turn); err != nil {
+		return err
+	}
 	// Recorded before the session starts, so its first hook call finds the turn open.
-	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: worker, Type: events.TurnStarted,
-		Correlation: turn, Data: map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(prompt)}})
+	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
+		Correlation: id, Data: map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
+			"worker": machine.Name()}})
 	if err != nil {
 		return err
 	}
 	if rejection != nil {
 		return rejection
 	}
-
-	return sessions.Start(sessions.Spec{Socket: sessions.SocketFor(task.ID), Dir: task.Worktree.Path,
-		Env: r.environment(task, turn, agent), Command: engine.Launch(session, prompt)})
+	return machine.StartTurn(ctx, turn)
 }
 
-// Stop ends the task's session. The turn itself ends by its own event.
-func (r *Runner) Stop(task string) { sessions.Stop(sessions.SocketFor(task)) }
+// Stop ends the task's session, wherever it runs. The turn itself ends by its own event.
+func (r *Runner) Stop(task string) { r.MachineOf(task).Stop(task) }
+
+// IsRunning says whether the task's agent process is alive, wherever it runs.
+func (r *Runner) IsRunning(task string) bool { return r.MachineOf(task).IsRunning(task) }
+
+// MachineOf is the machine the task's work is on.
+func (r *Runner) MachineOf(id string) machines.Machine {
+	stream, err := r.store.Stream(id)
+	if task := tasks.FromEvents(stream); err == nil && task != nil && task.Worktree != nil {
+		return r.fleet.Of(task.Worktree.Worker)
+	}
+	return r.fleet.Of(workers.Local)
+}
+
+func workerOf(machine string) events.Actor { return events.Actor{Kind: events.Worker, ID: machine} }
 
 func (r *Runner) environment(task *tasks.Task, turn string, agent agents.Agent) map[string]string {
 	deadline := time.Duration(engines.GateTimeoutSeconds-10) * time.Second
 	return map[string]string{
-		hookcall.EnvServer:   r.config.ServerURL,
 		hookcall.EnvToken:    r.config.HookToken,
 		hookcall.EnvTask:     task.ID,
 		hookcall.EnvTurn:     turn,
@@ -122,13 +116,6 @@ func (r *Runner) environment(task *tasks.Task, turn string, agent agents.Agent) 
 }
 
 func (r *Runner) raiseIssue(task, reason string) {
-	r.store.Propose(events.Proposal{Stream: task, Actor: worker, Type: events.IssueRaised,
+	r.store.Propose(events.Proposal{Stream: task, Actor: events.Actor{Kind: events.System, ID: "turns"}, Type: events.IssueRaised,
 		Data: map[string]any{"reason": reason}})
-}
-
-func writeFile(path, content string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(content), 0o644)
 }

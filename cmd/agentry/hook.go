@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 )
 
 // runHook is `agentry hook <event>`, which an engine runs with the event's
@@ -35,6 +38,7 @@ func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if call.Task == "" || os.Getenv(hookcall.EnvServer) == "" {
 		return fail(stderr, "not running in an Agentry session ("+hookcall.EnvTask+" and "+hookcall.EnvServer+" are unset)")
 	}
+	call.Ending = ending(call)
 
 	reply, err := post(call)
 	if err != nil {
@@ -42,6 +46,28 @@ func runHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	io.WriteString(stdout, reply.Stdout)
 	return reply.ExitCode
+}
+
+// ending is what only this machine can tell the server when the call ends
+// the turn: the tokens the transcript says were used, and what the agent
+// left in its knowledge file. The server may be on another machine.
+func ending(call hookcall.Call) *hookcall.Ending {
+	engine, ok := engines.Get(call.Engine)
+	if !ok {
+		return nil
+	}
+	signals, _ := engine.ParseHook(call.Event, call.Payload)
+	for _, signal := range signals {
+		if signal.Kind == engines.TurnEnded {
+			end := &hookcall.Ending{Tokens: signal.Tokens, Report: signal.Report}
+			if knowledge, err := os.ReadFile(filepath.Join(os.Getenv(hookcall.EnvWorktree), machines.KnowledgeFile)); err == nil {
+				text := string(knowledge)
+				end.Knowledge = &text
+			}
+			return end
+		}
+	}
+	return nil
 }
 
 // post sends the call. If the engine's hook timeout killed us, the engine

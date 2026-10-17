@@ -58,6 +58,7 @@ func TestNext(t *testing.T) {
 			Wait, ""},
 		{"apply the coordinator's decision", started().turn("turn-1", "coordinator", assignEngineer).task(), ApplyDecision, ""},
 		{"a reply with no decision is an issue", started().turn("turn-1", "coordinator", "I think the engineer.").task(), RaiseIssue, "no usable decision"},
+		{"so is no reply at all", started().turn("turn-1", "coordinator", "").task(), RaiseIssue, "no usable decision"},
 		{"assigning to nobody is an issue", started().turn("turn-1", "coordinator", `{"action":"assign","agent":"designer","instructions":"x"}`).task(),
 			RaiseIssue, "no agent by that name"},
 		{"the assigned agent goes next", started().turn("turn-1", "coordinator", assignEngineer).

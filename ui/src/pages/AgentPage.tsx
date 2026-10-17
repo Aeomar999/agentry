@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
 import { KnowledgeEditor } from "@/components/organisms/KnowledgeEditor";
 import { AgentName } from "@/components/molecules/AgentName";
+import { runsOn } from "@/lib/machines";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
@@ -46,7 +47,7 @@ export function AgentPage() {
                 { label: "Model", value: <Mono>{agent.model || "the engine's default"}</Mono> },
                 { label: "Policy profile", value: <Mono>{agent.profile || "the default profile"}</Mono> },
                 { label: "Role", value: agent.coordinates ? "Decides who works next" : "Works on the task" },
-                { label: "Runs on", value: agent.workers.length ? <Mono>{agent.workers.join(", ")}</Mono> : "This machine" },
+                { label: "Runs on", value: runsOn(agent.workers) },
               ]}
             />
           </Panel>

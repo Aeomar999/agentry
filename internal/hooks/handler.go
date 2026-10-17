@@ -4,6 +4,7 @@
 package hooks
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Judge gives the policy's verdict on a call by an agent with a profile.
@@ -30,10 +31,7 @@ func NewHandler(s *store.Store, judge Judge) *Handler {
 	return &Handler{store: s, judge: judge}
 }
 
-var (
-	worker  = events.Actor{Kind: events.Worker, ID: "local"}
-	ruleset = events.Actor{Kind: events.Policy, ID: "rules"}
-)
+var ruleset = events.Actor{Kind: events.Policy, ID: "rules"}
 
 // Handle answers one hook call. A gate call that can't be decided is denied:
 // the gate fails closed.
@@ -63,43 +61,49 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 // report records what a reporting hook says happened. A refusal is recorded
 // by the store as proposal.rejected; the engine is never blocked by it.
 func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
-	p := events.Proposal{Stream: call.Task, Actor: worker, Correlation: call.Turn}
+	p := events.Proposal{Stream: call.Task, Actor: h.machineOf(call.Task), Correlation: call.Turn}
 	switch signal.Kind {
 	case engines.SessionStarted:
 		p.Type, p.Data = events.SessionStarted, map[string]any{"engineSession": signal.EngineSession}
 	case engines.PromptReceived:
 		p.Type, p.Data = events.PromptAcknowledged, map[string]any{"hash": events.Hash(signal.Prompt)}
 	case engines.ActionFinished:
-		p.Type, p.Correlation = events.ActionResult, signal.ToolUseID
+		p.Type, p.Correlation = events.ActionResult, cmp.Or(signal.ToolUseID, actionID(call.Turn, signal))
 	case engines.Waiting:
 		p.Type, p.Data = events.AgentWaiting, map[string]any{"question": signal.Question}
 	case engines.TurnEnded:
-		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": signal.Report, "tokens": signal.Tokens}
+		tokens, report := signal.Tokens, signal.Report
+		if call.Ending != nil { // read where the transcript is
+			tokens, report = call.Ending.Tokens, cmp.Or(report, call.Ending.Report)
+		}
+		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": report, "tokens": tokens}
 	default:
 		return
 	}
 	h.store.Propose(p)
-	if signal.Kind == engines.TurnEnded {
-		h.recordWhatWasLearned(call)
+	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
+		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
 	}
+}
+
+// machineOf is the worker actor for the machine the task's session runs on,
+// which reports what happens in it.
+func (h *Handler) machineOf(id string) events.Actor {
+	machine := workers.Local
+	if task, err := h.task(id); err == nil {
+		machine = task.Worktree.Worker
+	}
+	return events.Actor{Kind: events.Worker, ID: machine}
 }
 
 // recordWhatWasLearned keeps what the agent wrote in its knowledge file this
 // turn, if it changed anything.
-func (h *Handler) recordWhatWasLearned(call hookcall.Call) {
-	task, err := h.task(call.Task)
-	if err != nil || task == nil || task.Worktree == nil {
-		return
-	}
-	learned, err := turns.ReadKnowledge(task.Worktree.Path)
-	if err != nil {
-		return
-	}
+func (h *Handler) recordWhatWasLearned(name, learned string) {
 	stream, err := h.store.Stream(events.AgentsStream)
 	if err != nil {
 		return
 	}
-	agent, ok := agents.FromEvents(stream).Get(call.Agent)
+	agent, ok := agents.FromEvents(stream).Get(name)
 	if ok && learned != strings.TrimSpace(agent.Knowledge) {
 		h.store.Propose(agent.Learned(events.Actor{Kind: events.Agent, ID: agent.Name}, learned))
 	}
@@ -119,10 +123,7 @@ func replyOf(r engines.Reply) hookcall.Reply {
 // gate records the request, asks the policy, and returns the decision the
 // agent gets. When the policy asks the user, it waits for their answer.
 func (h *Handler) gate(ctx context.Context, call hookcall.Call, signal engines.Signal) (engines.Decision, string) {
-	action := signal.ToolUseID
-	if action == "" {
-		action = fmt.Sprintf("%s-%s-%s", call.Turn, call.Event, events.Hash(signal.Tool+signal.Command))
-	}
+	action := cmp.Or(signal.ToolUseID, actionID(call.Turn, signal))
 	requested := events.Proposal{Stream: call.Task, Actor: events.Actor{Kind: events.Agent, ID: call.Agent},
 		Type: events.ActionRequested, Correlation: action, Data: map[string]any{"tool": signal.Tool, "command": signal.Command}}
 	if _, rejection, err := h.store.Propose(requested); err != nil || rejection != nil {
@@ -138,6 +139,12 @@ func (h *Handler) gate(ctx context.Context, call hookcall.Call, signal engines.S
 		return h.decide(call.Task, action, verdict)
 	}
 	return h.askTheUser(ctx, call.Task, action, verdict)
+}
+
+// actionID ties an action's request to its result when the engine gives no
+// id of its own (Claude Code before 2.1): the turn, the tool and the command.
+func actionID(turn string, signal engines.Signal) string {
+	return fmt.Sprintf("%s-%s", turn, events.Hash(signal.Tool+signal.Command))
 }
 
 func refusal(reason string) policy.Verdict {

@@ -18,7 +18,7 @@ type command struct {
 
 var commands = []command{
 	{"serve", "run Agentry: the page, the coordinator, the agents", runServe},
-	{"worker", "run agents on this machine for the server", notBuilt("worker", "T-022")},
+	{"worker", "run agents on this machine for a server; join it first", runWorker},
 	{"task", "create, list, show or answer tasks; used by the desk", runTask},
 	{"hook", "called by an engine's hooks; not run by hand", runHook},
 }
@@ -48,14 +48,5 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	for _, c := range commands {
 		fmt.Fprintf(w, "  %-8s %s\n", c.name, c.summary)
-	}
-}
-
-// notBuilt stands in for a command until the task that builds it lands.
-// It exits 2 so that a hook wired up too early fails closed (proof 01).
-func notBuilt(name, task string) func([]string, io.Reader, io.Writer, io.Writer) int {
-	return func(_ []string, _ io.Reader, _, stderr io.Writer) int {
-		fmt.Fprintf(stderr, "agentry %s: not built yet (%s in PLAN.md)\n", name, task)
-		return 2
 	}
 }

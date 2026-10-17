@@ -11,11 +11,13 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // The whole loop on a real store, tmux and git, with a fake `claude` that
@@ -37,7 +39,7 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	loop := NewLoop(s, turns.NewRunner(s, turns.Config{HookCommand: "agentry hook", ServerURL: "http://x"}), t.TempDir())
+	loop := newLoop(s, t.TempDir())
 	go loop.Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
@@ -81,6 +83,52 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 	}
 }
 
+// An agent that runs only on a worker that is offline doesn't start: the
+// task asks you, saying why, instead of waiting where nobody sees it.
+func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
+	fakeClaudeOnPath(t)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	code, invited := workers.Invite(you, time.Now())
+	_, joined := workers.Join("laptop", code, workers.Machine{})
+	s.Propose(invited)
+	s.Propose(joined)
+	engineer, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("engineer")
+	engineer.Workers = []string{"laptop"}
+	if _, rejection, _ := s.Propose(engineer.Proposal(you, true)); rejection != nil {
+		t.Fatal(rejection)
+	}
+	const id = "task-loop-2"
+	defer sessions.Stop(sessions.SocketFor(id))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go newLoop(s, t.TempDir()).Run(ctx)
+
+	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "coordinator"}})
+	waitForTurn(t, s, id, "turn-1", "coordinator")
+	endTurn(t, s, id, "turn-1", "coordinator", `{"action": "assign", "agent": "engineer", "instructions": "Go."}`)
+	task := waitUntil(t, s, id, "a question", func(task *tasks.Task) bool { return task.Question != "" })
+	if !strings.Contains(task.Question, "engineer can't run anywhere now: laptop is offline") || len(task.Turns) != 1 {
+		t.Errorf("question %q after %d turns", task.Question, len(task.Turns))
+	}
+}
+
+func mustStream(t *testing.T, s *store.Store, name string) []events.Event {
+	t.Helper()
+	stream, err := s.Stream(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stream
+}
+
 func fakeClaudeOnPath(t *testing.T) {
 	bin := t.TempDir()
 	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nsleep 60\n"), 0o755)
@@ -105,6 +153,8 @@ func git(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %v: %v %s", args, err, output)
 	}
 }
+
+var worker = events.Actor{Kind: events.Worker, ID: "local"}
 
 func endTurn(t *testing.T, s *store.Store, id, turn, agent, report string) {
 	t.Helper()
@@ -145,9 +195,15 @@ func waitUntil(t *testing.T, s *store.Store, id, what string, condition func(*ta
 
 func readBrief(t *testing.T, task *tasks.Task, turn string) string {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(task.Worktree.Path, turns.StateDir, turn+".md"))
+	content, err := os.ReadFile(filepath.Join(task.Worktree.Path, machines.StateDir, turn+".md"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(content)
+}
+
+// newLoop is a loop with this machine only, its worktrees in root.
+func newLoop(s *store.Store, root string) *Loop {
+	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root})
+	return NewLoop(s, turns.NewRunner(s, fleet, turns.Config{}), fleet)
 }

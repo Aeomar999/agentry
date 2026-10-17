@@ -3,14 +3,18 @@ package coordinator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -18,19 +22,20 @@ import (
 // Next says. Its own proposals are events too, so each one wakes it again:
 // the task moves step by step, and a restart picks up where it was.
 type Loop struct {
-	store        *store.Store
-	runner       *turns.Runner
-	worktreeRoot string
+	store  *store.Store
+	runner *turns.Runner
+	fleet  *machines.Fleet
 }
 
-var (
-	agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
-	worker  = events.Actor{Kind: events.Worker, ID: "local"}
-)
+var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
 
-func NewLoop(s *store.Store, runner *turns.Runner, worktreeRoot string) *Loop {
-	return &Loop{store: s, runner: runner, worktreeRoot: worktreeRoot}
+func NewLoop(s *store.Store, runner *turns.Runner, fleet *machines.Fleet) *Loop {
+	return &Loop{store: s, runner: runner, fleet: fleet}
 }
+
+// gitTimeout is how long a machine has to make, move or remove a worktree:
+// a worker's first copy of a repo can take a while.
+const gitTimeout = 10 * time.Minute
 
 func (l *Loop) Run(ctx context.Context) error {
 	reader := l.store.NewReader(0)
@@ -80,25 +85,45 @@ func (l *Loop) act(id string) {
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
 	case AskYou:
-		l.propose(task.ID, agentry, events.TaskNeedsYou, map[string]any{"question": move.Reason})
+		l.askYou(task, move.Reason)
 	}
 }
 
+// prepareWorktree makes the task's worktree here, where its repo is. If an
+// agent that runs on a worker takes the task, the work moves there.
 func (l *Loop) prepareWorktree(task *tasks.Task) {
-	port, err := worktrees.LeasePort(l.portsInUse())
-	if err == nil {
-		var w worktrees.Worktree
-		if w, err = worktrees.Create(task.Repo, l.worktreeRoot, task.ID, port); err == nil {
-			l.propose(task.ID, worker, events.WorktreeReady, map[string]any{
-				"repo": w.Repo, "path": w.Path, "branch": w.Branch, "base": w.Base, "port": w.Port})
-			return
-		}
+	here, _ := l.fleet.Get(workers.Local)
+	w, err := l.prepare(here, task, "")
+	if err != nil {
+		l.askYou(task, "Agentry couldn't set up the task's worktree: "+sentence(err)+" Fix it and answer, and it tries again.")
+		return
 	}
-	l.propose(task.ID, agentry, events.TaskNeedsYou, map[string]any{
-		"question": "Agentry couldn't set up the task's worktree: " + strings.TrimRight(err.Error(), ". ") + ". Fix it and answer, and it tries again."})
+	l.propose(task.ID, workerActor(here), events.WorktreeReady, map[string]any{
+		"repo": w.Repo, "worker": here.Name(), "path": w.Path, "branch": w.Branch, "base": w.Base, "port": w.Port})
 }
 
+func (l *Loop) prepare(m machines.Machine, task *tasks.Task, base string) (worktrees.Worktree, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	origin, _ := worktrees.Origin(task.Repo)
+	return m.Prepare(ctx, machines.WorktreeRequest{Task: task.ID, Repo: task.Repo, Base: base,
+		Ports: l.portsInUse(m.Name()), Origin: origin, RepoKey: worktrees.RepoKey(task.Repo)})
+}
+
+// startTurn starts the agent's turn on a machine it may run on, moving the
+// work there first if it is somewhere else.
 func (l *Loop) startTurn(task *tasks.Task, roster agents.Roster, move Move) {
+	ctx, cancel := context.WithTimeout(context.Background(), machines.OfflineGrace)
+	defer cancel()
+	target, err := l.fleet.WaitFor(ctx, move.Agent, task.Worktree.Worker)
+	if err != nil {
+		l.askYou(task, sentence(err)+" Bring one of its workers online, or change where it runs, and answer to carry on.")
+		return
+	}
+	if target.Name() != task.Worktree.Worker {
+		l.moveWork(task, target, move.Agent) // when it has moved, the loop comes back here
+		return
+	}
 	brief := workerBrief(task, move.Agent, move.Handoff)
 	if move.Agent.Coordinates {
 		brief = coordinatorBrief(task, move.Agent, roster)
@@ -107,6 +132,49 @@ func (l *Loop) startTurn(task *tasks.Task, roster agents.Roster, move Move) {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
 	}
 }
+
+// moveWork takes the task's work from the machine it is on to target: the
+// first commits what was left and hands the branch to the hub, then target
+// makes its worktree from it.
+func (l *Loop) moveWork(task *tasks.Task, target machines.Machine, agent agents.Agent) {
+	from, online := l.fleet.Get(task.Worktree.Worker)
+	if !online {
+		l.askYou(task, "The task's work is on "+task.Worktree.Worker+", which is offline, and "+agent.Name+
+			" works on "+target.Name()+". Bring "+task.Worktree.Worker+" online and answer to carry on.")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	message := fmt.Sprintf("Agentry: work left uncommitted on %s, moving to %s for %s", from.Name(), target.Name(), agent.Name)
+	if err := from.HandOff(ctx, l.worktreeOf(task), message); err != nil {
+		l.askYou(task, "Agentry couldn't move the work off "+from.Name()+": "+sentence(err)+" Fix it and answer, and it tries again.")
+		return
+	}
+	w, err := l.prepare(target, task, task.Worktree.Base)
+	if err != nil {
+		l.askYou(task, "Agentry couldn't set the work up on "+target.Name()+": "+sentence(err)+
+			" Its branch is safe in "+task.Repo+". Fix it and answer, and it tries again.")
+		return
+	}
+	l.propose(task.ID, workerActor(target), events.WorktreeMoved, map[string]any{
+		"worker": target.Name(), "from": from.Name(), "path": w.Path, "port": w.Port})
+}
+
+func (l *Loop) worktreeOf(task *tasks.Task) worktrees.Worktree {
+	return worktrees.Worktree{Repo: task.Worktree.Repo, Path: task.Worktree.Path, Branch: task.Worktree.Branch,
+		Base: task.Worktree.Base, Port: task.Worktree.Port}
+}
+
+func (l *Loop) askYou(task *tasks.Task, question string) {
+	l.propose(task.ID, agentry, events.TaskNeedsYou, map[string]any{"question": question})
+}
+
+func workerActor(m machines.Machine) events.Actor {
+	return events.Actor{Kind: events.Worker, ID: m.Name()}
+}
+
+// sentence is an error as the end of a sentence.
+func sentence(err error) string { return strings.TrimRight(err.Error(), ". ") + "." }
 
 // apply turns the coordinator's decision into its event, written as the coordinator.
 func (l *Loop) apply(task *tasks.Task, decision Decision) {
@@ -128,19 +196,28 @@ func (l *Loop) apply(task *tasks.Task, decision Decision) {
 }
 
 // removeWorktree cleans up a finished task, unless its branch isn't in dev
-// yet: then the worktree is kept, so no work is lost (proof 06).
+// yet: then the worktree is kept, so no work is lost (proof 06). On a
+// worker, the hub's copy of the branch goes too once the worker's is merged.
 func (l *Loop) removeWorktree(task *tasks.Task) {
-	w := worktrees.Worktree{Repo: task.Worktree.Repo, Path: task.Worktree.Path, Branch: task.Worktree.Branch}
-	if err := w.Remove(); err != nil && !errors.Is(err, worktrees.ErrNotMerged) {
+	m := l.fleet.Of(task.Worktree.Worker)
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	err := m.Remove(ctx, l.worktreeOf(task))
+	if err == nil && !machines.IsLocal(m.Name()) {
+		err = worktrees.DeleteBranch(task.Worktree.Repo, task.Worktree.Branch)
+	}
+	if err != nil && !errors.Is(err, worktrees.ErrNotMerged) {
 		slog.Warn("coordinator loop: removing the worktree", "task", task.ID, "err", err)
 	}
 }
 
-func (l *Loop) portsInUse() []int {
+// portsInUse are the ports of unfinished tasks whose work is on the machine.
+func (l *Loop) portsInUse(machine string) []int {
 	ids, _ := l.store.TaskIDs()
 	var ports []int
 	for _, id := range ids {
-		if task, _, err := l.load(id); err == nil && task != nil && !task.IsDone && task.Worktree != nil {
+		task, _, err := l.load(id)
+		if err == nil && task != nil && !task.IsDone && task.Worktree != nil && task.Worktree.Worker == machine {
 			ports = append(ports, task.Worktree.Port)
 		}
 	}

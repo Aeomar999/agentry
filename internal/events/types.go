@@ -22,6 +22,7 @@ const (
 	TaskHeld      Type = "task.held"     // parked in a place ("todo", "backlog") until you move it on ("")
 	TaskReopened  Type = "task.reopened" // a finished task back to work, with what you want done
 	WorktreeReady Type = "worktree.ready"
+	WorktreeMoved Type = "worktree.moved" // the task's work went to another machine, for the agent working next
 
 	TaskAssigned       Type = "task.assigned" // the coordinator hands the task to an agent
 	TurnStarted        Type = "turn.started"  // an agent's session started, with its prompt
@@ -43,6 +44,15 @@ const (
 	TaskDone     Type = "task.done"
 )
 
+// The workers stream: the machines, besides Agentry's own, that run agents.
+const (
+	WorkerInvited      Type = "worker.invited"      // a join code was made; only its hash is kept
+	WorkerJoined       Type = "worker.joined"       // a machine used a code, and got its credential (hash kept)
+	WorkerConnected    Type = "worker.connected"    // it is online, with what it has (engines, tools)
+	WorkerDisconnected Type = "worker.disconnected" // it went offline
+	WorkerRemoved      Type = "worker.removed"      // its credential no longer works
+)
+
 // The policy stream: every policy.toml Agentry loaded or refused.
 const (
 	PolicyLoaded  Type = "policy.loaded"
@@ -54,6 +64,7 @@ const ProposalRejected Type = "proposal.rejected"
 
 // Streams that aren't tasks. Every other stream is one task's, named by its ID.
 const (
-	AgentsStream = "agents" // every agent event
-	PolicyStream = "policy" // every policy event
+	AgentsStream  = "agents"  // every agent event
+	PolicyStream  = "policy"  // every policy event
+	WorkersStream = "workers" // every worker event
 )

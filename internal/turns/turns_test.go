@@ -9,10 +9,12 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // fakeClaude puts a `claude` on PATH that writes its arguments and
@@ -59,7 +61,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("coordinator")
 
-	runner := NewRunner(s, Config{HookCommand: "/bin/agentry hook", ServerURL: "http://127.0.0.1:7800", HookToken: "secret"})
+	runner := NewRunner(s, here(), Config{HookToken: "secret"})
 	if err := runner.Start(task, coordinator, "# Brief\nDecide who works next."); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +86,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	}
 	for _, want := range []string{"--permission-mode\nbypassPermissions\n", prompt + "\n",
 		"AGENTRY_AGENT=coordinator", "AGENTRY_TASK=task-turns-1", "AGENTRY_TURN=turn-1", "AGENTRY_HOOK_TOKEN=secret",
-		"AGENTRY_HOOK_DEADLINE=29m50s", "PORT=7901"} {
+		"AGENTRY_HOOK_DEADLINE=29m50s", "AGENTRY_SERVER=http://127.0.0.1:7800", "AGENTRY_WORKTREE=" + task.Worktree.Path, "PORT=7901"} {
 		if !strings.Contains(launched, want) {
 			t.Errorf("launch is missing %q:\n%s", want, launched)
 		}
@@ -95,10 +97,15 @@ func TestAnEngineWithNoAdapterIsRefused(t *testing.T) {
 	s, _ := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
 	defer s.Close()
 	task := taskWithWorktree(t, s, "task-turns-2")
-	err := NewRunner(s, Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
+	err := NewRunner(s, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {
 		t.Errorf("got %v", err)
 	}
+}
+
+// here is a fleet of this machine only.
+func here() *machines.Fleet {
+	return machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://127.0.0.1:7800", HookCommand: "/bin/agentry hook"})
 }
 
 func mustStream(t *testing.T, s *store.Store, name string) []events.Event {

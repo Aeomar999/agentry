@@ -40,8 +40,8 @@ var recorded = []struct {
 		engines.Signal{Kind: engines.ActionRequested, ToolUseID: "toolu_01Eq", Tool: "Bash", Command: "echo ok"}},
 	{"claude", "PreToolUse", `{"hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"/w/a.go"},"tool_use_id":"toolu_02"}`,
 		engines.Signal{Kind: engines.ActionRequested, ToolUseID: "toolu_02", Tool: "Edit", Command: "/w/a.go"}},
-	{"claude", "PostToolUse", `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_use_id":"toolu_01Eq"}`,
-		engines.Signal{Kind: engines.ActionFinished, ToolUseID: "toolu_01Eq"}},
+	{"claude", "PostToolUse", `{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo ok"},"tool_use_id":"toolu_01Eq"}`,
+		engines.Signal{Kind: engines.ActionFinished, ToolUseID: "toolu_01Eq", Tool: "Bash", Command: "echo ok"}},
 	{"claude", "Notification", `{"hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt"}`,
 		engines.Signal{Kind: engines.Waiting, Question: "Claude needs your permission"}},
 	{"claude", "Stop", `{"hook_event_name":"Stop","last_assistant_message":"Removed 3 TODOs.","stop_hook_active":false}`,
@@ -132,6 +132,25 @@ func TestPrepareWritesHooksThatFailClosed(t *testing.T) {
 	}
 }
 
+// Claude's settings choose its renderer, so it never stops to offer the
+// fullscreen one, and turn off what else it shows on its own.
+func TestClaudeSettingsKeepItUnattended(t *testing.T) {
+	worktree := t.TempDir()
+	if err := engine(t, "claude").Prepare(engines.Session{Worktree: worktree, StateDir: filepath.Join(worktree, ".agentry"), HookCommand: "agentry hook"}); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := os.ReadFile(filepath.Join(worktree, ".agentry", "claude-settings.json"))
+	var settings struct {
+		TUI         string            `json:"tui"`
+		SpinnerTips *bool             `json:"spinnerTipsEnabled"`
+		Env         map[string]string `json:"env"`
+	}
+	json.Unmarshal(content, &settings)
+	if settings.TUI != "default" || settings.SpinnerTips == nil || *settings.SpinnerTips || settings.Env["CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY"] != "1" {
+		t.Errorf("settings:\n%s", content)
+	}
+}
+
 func TestLaunchIsNeverAskWithThePrompt(t *testing.T) {
 	s := engines.Session{StateDir: "/w/.agentry", Model: "haiku"}
 	claude := strings.Join(engine(t, "claude").Launch(s, "Read .agentry/turn-1.md"), " ")
@@ -156,5 +175,45 @@ not json
 	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`))
 	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 {
 		t.Errorf("signals %+v, err %v", signals, err)
+	}
+}
+
+// Claude Code before 2.1 sends no last_assistant_message with Stop: the
+// report is the last thing the model said, from the transcript.
+func TestOlderClaudesReportComesFromTheTranscript(t *testing.T) {
+	transcript := filepath.Join(t.TempDir(), "session.jsonl")
+	os.WriteFile(transcript, []byte(`{"type":"user","message":{"role":"user","content":"go"}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Looking."},{"type":"tool_use","name":"Bash"}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Assign it. {\"action\":\"done\",\"summary\":\"ok\"}"}]}}
+`), 0o644)
+	claude, _ := engines.Get("claude")
+	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","transcript_path":"`+transcript+`"}`))
+	if err != nil || len(signals) != 1 || signals[0].Report != `Assign it. {"action":"done","summary":"ok"}` {
+		t.Errorf("got %+v %v", signals, err)
+	}
+}
+
+// Preparing a Claude session trusts its worktree in Claude's config, so it
+// doesn't stop at "Do you trust this folder?", and keeps the rest as it was.
+func TestPrepareTrustsTheWorktree(t *testing.T) {
+	config := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
+	os.WriteFile(config, []byte(`{"userID":"u1","projects":{"/home/dev/app":{"hasTrustDialogAccepted":true,"allowedTools":["Bash"]}}}`), 0o600)
+	worktree := t.TempDir()
+	claude, _ := engines.Get("claude")
+	if err := claude.Prepare(engines.Session{Worktree: worktree, StateDir: filepath.Join(worktree, ".agentry"), HookCommand: "agentry hook"}); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := os.ReadFile(config)
+	var got struct {
+		UserID   string                    `json:"userID"`
+		Projects map[string]map[string]any `json:"projects"`
+	}
+	json.Unmarshal(content, &got)
+	if got.UserID != "u1" || got.Projects["/home/dev/app"]["allowedTools"] == nil || got.Projects[worktree]["hasTrustDialogAccepted"] != true {
+		t.Errorf("config after: %s", content)
+	}
+	if info, _ := os.Stat(config); info.Mode().Perm() != 0o600 {
+		t.Errorf("mode %v, want it kept at 0600", info.Mode().Perm())
 	}
 }

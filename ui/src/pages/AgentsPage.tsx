@@ -7,6 +7,7 @@ import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
 import { AgentName } from "@/components/molecules/AgentName";
+import { runsOn } from "@/lib/machines";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
@@ -29,7 +30,7 @@ const COLUMNS: Column<Agent>[] = [
   {
     header: "Runs on",
     className: "w-36 max-lg:hidden",
-    render: (agent) => <Mono className="text-ink-muted">{agent.workers.length ? agent.workers.join(", ") : "this machine"}</Mono>,
+    render: (agent) => <span className="text-ink-muted">{runsOn(agent.workers)}</span>,
   },
 ];
 

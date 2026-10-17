@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
@@ -15,11 +15,11 @@ import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { cn } from "@/lib/cn";
+import { LOCAL, machineName } from "@/lib/machines";
 
 // Add an agent, or change one. The name is fixed once it exists: tasks and
-// the log refer to agents by name. Workers are the machines it may run on;
-// none means the machine Agentry runs on, which is all there is until
-// workers can be added (T-022).
+// the log refer to agents by name. Workers are the machines it may run on,
+// in order; none means the machine Agentry runs on.
 
 // Model names each engine understands besides a full model id.
 const MODELS: Record<string, string[]> = { claude: ["opus", "sonnet", "haiku"], codex: [] };
@@ -78,7 +78,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
     }
   }
 
-  const workers = config?.workers ?? [];
+  const workers = config?.workers ?? [LOCAL];
   const toggleWorker = (worker: string, on: boolean) =>
     set({ workers: on ? [...draft.workers, worker] : draft.workers.filter((w) => w !== worker) });
 
@@ -190,9 +190,13 @@ export function AgentForm({ agent }: { agent?: Agent }) {
         </Panel>
 
         <Panel title="Runs on">
-          {workers.length === 0 ? (
+          {workers.length <= 1 ? (
             <p className="text-[12px] text-ink-muted">
-              This machine, where Agentry runs. Other machines can join as workers later; then you can pick several here.
+              This machine, where Agentry runs.{" "}
+              <Link to="/workers" className="text-ink-secondary underline hover:text-ink-primary">
+                Add a worker
+              </Link>{" "}
+              to run it on another machine.
             </p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -201,10 +205,17 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                   key={worker}
                   checked={draft.workers.includes(worker)}
                   onChange={(on) => toggleWorker(worker, on)}
-                  label={<span className="font-mono">{worker}</span>}
+                  label={
+                    <span className="flex items-center gap-2">
+                      <span className={worker === LOCAL ? "" : "font-mono"}>{machineName(worker)}</span>
+                      {draft.workers.includes(worker) && draft.workers.length > 1 && (
+                        <span className="font-mono text-[11px] text-ink-faint">{draft.workers.indexOf(worker) + 1}</span>
+                      )}
+                    </span>
+                  }
                 />
               ))}
-              <p className="text-[11px] text-ink-muted">None picked: this machine.</p>
+              <p className="text-[11px] text-ink-muted">The first one online, in the order you pick them. None picked: this machine.</p>
             </div>
           )}
         </Panel>

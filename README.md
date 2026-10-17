@@ -51,7 +51,7 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 - **Repo:** each task works in its own git worktree of the repo (`-repo` sets the default; the page can name another), on branch `agentry/<task>`, with its own port in `PORT`.
 - **Data:** `~/.agentry` holds the log (`agentry.db`), the worktrees and the policy. Change it with `-data`.
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
-- **Trust:** open the repo with Claude Code once beforehand. Claude asks whether to trust a new folder, and a worktree inherits its repo's answer. If you skip this, the first task shows "needs you". Open its terminal on the page and answer the question there.
+- **Trust:** Claude asks whether to trust each new folder. Agentry answers for every task's worktree before Claude starts there, in Claude's own config (`~/.claude.json`), so turns don't stop at the question.
 - **Deploying:** the deployer merges `origin/dev` and pushes the task branch to `dev`. As shipped, agents allow everything, so the push goes straight through; with the profiles on, every push waits for your approval on the page.
 
 ## Deploy it
@@ -62,9 +62,26 @@ Open the link it prints. The token in the link signs the page in, and stays the 
 - **Signing Claude in:** once, after the first deploy: open the dock's Claude tab and follow Claude's sign-in. The agents use the same sign-in.
 - **Repos:** clone them into `~/work` (ask the desk, or from an agent's terminal) and name them on a task.
 
+## Add workers
+
+Agents can run on other machines that have Claude Code, git and tmux. On the Workers page, Add worker shows one command with a one-time code in it; run it on the other machine. It installs the `agentry` command (in `~/.local/bin`, added to your PATH), joins the server, and starts the worker in the background: a systemd user service on Linux, a launchd agent on macOS. Run on a machine that has joined, it updates it instead.
+
+On the worker, `agentry worker` does the rest:
+
+| Command | Does |
+| --- | --- |
+| `agentry worker status` | the server, the service, the link, the engines and tools found, the tasks running here |
+| `agentry worker logs [-f]` | its log, `~/.agentry-worker/worker.log` |
+| `agentry worker stop` / `start` / `restart` | stop or start the background service |
+| `agentry worker update` | get the server's agentry now and restart; the worker also does this whenever it connects |
+| `agentry worker leave [-purge]` | take the machine off the server and stop; `-purge` deletes its repos and worktrees too |
+| `agentry worker run` | run in the foreground (what the service runs) |
+
+Give an agent workers under Runs on in its settings; it uses the first one online, in that order. A task's work moves to the machine of the agent working next, through git: the repo on the server is the hub, and what was left uncommitted goes too. The worker dials out to the server, so it needs no open port; its sessions post their hooks to the server's address. The server hands out agentry for macOS and Linux, on Intel and ARM (`make workers` builds them next to `bin/agentry`).
+
 ## Use it
 
-The page is an admin console: tasks, agents and the policy in the sidebar, and everything updates live.
+The page is an admin console: tasks, agents, workers and the policy in the sidebar, and everything updates live.
 
 - **Add a task:** New task (or press `n`). Describe it in your own words; a title, labels and a token budget are optional. The coordinator reads it first and gives it a title that says what it is.
 - **Tasks:** a list, or a board (keys `1` and `2`) with Backlog, To do, In progress, Review and Done. Drag a card onto any column to tell the coordinator what you want: park it, start it, have it reviewed, send it back, wrap it up, or reopen a finished one. Drag within a column, or a row in the list, to set your priority order. The Backlog shows when you ask for it. Labels filter with a click.

@@ -9,6 +9,7 @@ import { AgentsPage } from "@/pages/AgentsPage";
 import { AgentPage } from "@/pages/AgentPage";
 import { AgentEditPage } from "@/pages/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
+import { WorkersPage } from "@/pages/WorkersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
@@ -33,6 +34,7 @@ const router = createBrowserRouter([
           { path: "/agents/new", element: <AgentEditPage /> },
           { path: "/agents/:name", element: <AgentPage /> },
           { path: "/agents/:name/edit", element: <AgentEditPage /> },
+          { path: "/workers", element: <WorkersPage /> },
           { path: "/policy", element: <PolicyPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],

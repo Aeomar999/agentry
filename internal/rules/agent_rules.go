@@ -20,8 +20,8 @@ var agentName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown),
-	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, workersAreKnown, colorIsKnown, columnIsKnown, keepsACoordinator),
+	events.AgentCreated: allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown),
+	events.AgentChanged: allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator),
 	events.AgentRemoved: allOf(agentExists, removalKeepsACoordinator),
 	events.AgentLearned: allOf(agentExists, onlyItsOwnKnowledge),
 	events.TaskCreated:  allOf(coordinatorExists),
@@ -85,22 +85,6 @@ func keepsACoordinator(roster agents.Roster, p events.Proposal) string {
 		}
 	}
 	return "this would leave no coordinator"
-}
-
-// KnownWorkers are the machines an agent may name. None yet: workers come
-// with T-022, and until then every agent runs on the machine Agentry runs on.
-var KnownWorkers []string
-
-func workersAreKnown(_ agents.Roster, p events.Proposal) string {
-	for _, worker := range p.List("workers") {
-		if !slices.Contains(KnownWorkers, worker) {
-			if len(KnownWorkers) == 0 {
-				return "no worker called " + worker + ": there are no workers yet, so agents run on this machine"
-			}
-			return "no worker called " + worker + "; known: " + strings.Join(KnownWorkers, ", ")
-		}
-	}
-	return ""
 }
 
 func colorIsKnown(_ agents.Roster, p events.Proposal) string {

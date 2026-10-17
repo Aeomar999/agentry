@@ -6,6 +6,7 @@ package terminal
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -15,6 +16,33 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 )
+
+// Pane is a session being watched: what the hub needs from it. On this
+// machine it is a tmux control client; a worker's sessions come through
+// its link (package workerlink).
+type Pane interface {
+	Type(keys []byte)
+	Resize(cols, rows int)
+	Snapshot() []byte // the current screen, for a viewer joining
+	Size() (cols, rows int)
+	Detach()                // stop watching; the session keeps running
+	Ended() <-chan struct{} // closed when the session ends, or the pane is detached
+}
+
+// ErrNoSession is a session that isn't running.
+var ErrNoSession = errors.New("no session is running")
+
+// Opener attaches to the named session, sending what it prints to onOutput.
+type Opener func(name string, onOutput func([]byte)) (Pane, error)
+
+// Attach opens a session on this machine: a task's (by its ID) or the desk's.
+func Attach(name string, onOutput func([]byte)) (Pane, error) {
+	socket := sessions.SocketFor(name)
+	if !sessions.Exists(socket) {
+		return nil, ErrNoSession
+	}
+	return attach(socket, onOutput)
+}
 
 // control is the one control-mode client attached to a task's session.
 type control struct {
@@ -53,17 +81,10 @@ func (c *control) run(command string) {
 	io.WriteString(c.commands, command+"\n")
 }
 
-func (c *control) hasEnded() bool {
-	select {
-	case <-c.ended:
-		return true
-	default:
-		return false
-	}
-}
+func (c *control) Ended() <-chan struct{} { return c.ended }
 
-// detach ends this client only; the session keeps running.
-func (c *control) detach() {
+// Detach ends this client only; the session keeps running.
+func (c *control) Detach() {
 	c.detached.Do(func() {
 		c.process.Process.Kill()
 		c.process.Wait()
@@ -115,9 +136,9 @@ func unescape(data string) []byte {
 	return out
 }
 
-// typeBytes sends keystrokes to the pane exactly as given, as hex, so arrows,
+// Type sends keystrokes to the pane exactly as given, as hex, so arrows,
 // Ctrl-C and pastes all arrive unchanged.
-func (c *control) typeBytes(keys []byte) {
+func (c *control) Type(keys []byte) {
 	for len(keys) > 0 {
 		chunk := keys[:min(len(keys), 256)]
 		keys = keys[len(chunk):]
@@ -129,8 +150,8 @@ func (c *control) typeBytes(keys []byte) {
 	}
 }
 
-// size is the session's window size, in columns and rows.
-func (c *control) size() (cols, rows int) {
+// Size is the session's window size, in columns and rows.
+func (c *control) Size() (cols, rows int) {
 	output, _ := exec.Command("tmux", "-L", c.socket, "display-message", "-p", "-t", sessions.Pane, "#{window_width} #{window_height}").Output()
 	if n, _ := fmt.Sscan(string(output), &cols, &rows); n != 2 {
 		return sessions.Columns, sessions.Rows
@@ -138,15 +159,15 @@ func (c *control) size() (cols, rows int) {
 	return cols, rows
 }
 
-// resize sets the session's window size; tmux then redraws the pane, and the
+// Resize sets the session's window size; tmux then redraws the pane, and the
 // program in it gets SIGWINCH as in any terminal.
-func (c *control) resize(cols, rows int) {
+func (c *control) Resize(cols, rows int) {
 	c.run(fmt.Sprintf("resize-window -t %s -x %d -y %d", sessions.Pane, cols, rows))
 }
 
-// snapshot is what a new viewer sees first: the current screen with colours,
+// Snapshot is what a new viewer sees first: the current screen with colours,
 // and the cursor where it really is.
-func (c *control) snapshot() []byte {
+func (c *control) Snapshot() []byte {
 	screen, _ := exec.Command("tmux", "-L", c.socket, "capture-pane", "-p", "-e", "-t", sessions.Pane).Output()
 	cursor, _ := exec.Command("tmux", "-L", c.socket, "display-message", "-p", "-t", sessions.Pane, "#{cursor_x} #{cursor_y}").Output()
 	var x, y int

@@ -48,6 +48,7 @@ type taskDetail struct {
 }
 
 type worktree struct {
+	Worker string `json:"worker"` // the machine it is on: "local", or a worker's name
 	Path   string `json:"path"`
 	Branch string `json:"branch"`
 	Base   string `json:"base"`
@@ -64,6 +65,7 @@ type step struct {
 type turn struct {
 	ID           string    `json:"id"`
 	Agent        string    `json:"agent"`
+	Worker       string    `json:"worker"` // the machine it ran on
 	StartedAt    time.Time `json:"startedAt"`
 	Acknowledged bool      `json:"acknowledged"`
 	Ended        bool      `json:"ended"`
@@ -128,13 +130,13 @@ func detailOf(t *tasks.Task, log []events.Event) taskDetail {
 	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, Summary: t.Summary}
 	if w := t.Worktree; w != nil {
-		detail.Worktree = &worktree{Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
+		detail.Worktree = &worktree{Worker: w.Worker, Path: w.Path, Branch: w.Branch, Base: w.Base, Port: w.Port}
 	}
 	for _, s := range t.Trail {
 		detail.Trail = append(detail.Trail, step{At: s.At, From: s.From, To: s.To, Text: s.Text})
 	}
 	for _, tu := range t.Turns {
-		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, StartedAt: tu.StartedAt,
+		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
 			Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens})
 	}
 	for _, a := range t.Actions {

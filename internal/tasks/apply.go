@@ -1,9 +1,11 @@
 package tasks
 
 import (
+	"cmp"
 	"fmt"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // FromEvents builds a task by applying its accepted events in order.
@@ -72,13 +74,17 @@ func (t *Task) apply(e events.Event) {
 		t.Title = e.Text("title")
 
 	case events.WorktreeReady:
-		t.Worktree = &Worktree{Repo: e.Text("repo"), Path: e.Text("path"), Branch: e.Text("branch"), Base: e.Text("base"), Port: e.Number("port")}
+		t.Worktree = &Worktree{Repo: e.Text("repo"), Worker: cmp.Or(e.Text("worker"), workers.Local), Path: e.Text("path"),
+			Branch: e.Text("branch"), Base: e.Text("base"), Port: e.Number("port")}
+
+	case events.WorktreeMoved:
+		t.Worktree.Worker, t.Worktree.Path, t.Worktree.Port = e.Text("worker"), e.Text("path"), e.Number("port")
 
 	case events.TaskAssigned:
 		t.step(e, e.Actor.ID, e.Text("agent"), e.Text("instructions"))
 
 	case events.TurnStarted:
-		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Hash: e.Text("hash"),
+		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Worker: cmp.Or(e.Text("worker"), workers.Local), Hash: e.Text("hash"),
 			StartedAt: e.At, LastEventAt: e.At})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
@@ -111,7 +117,9 @@ func (t *Task) apply(e events.Event) {
 		t.TokensUsed += turn.Tokens
 		t.IssuesInARow = 0
 		if turn.Agent == t.Coordinator {
-			t.PendingDecision = turn.Report
+			// An empty reply is still one to decide on: it has no decision
+			// in it, so it goes back to the coordinator as an issue.
+			t.PendingDecision = cmp.Or(turn.Report, "(the coordinator's turn ended with no reply)")
 		} else {
 			t.step(e, turn.Agent, t.Coordinator, turn.Report)
 		}

@@ -29,6 +29,7 @@ var catalogue = map[Type]spec{
 	TaskHeld:      {writers: []ActorKind{Human}}, // "place" "" lets it go
 	TaskReopened:  {fields: []string{"text"}, writers: []ActorKind{Human}},
 	WorktreeReady: {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
+	WorktreeMoved: {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
 
 	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}},
 	TurnStarted:        {fields: []string{"agent", "hash"}, correlation: true, writers: []ActorKind{Worker}},
@@ -49,6 +50,12 @@ var catalogue = map[Type]spec{
 	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},
 	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent}},
 
+	WorkerInvited:      {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},
+	WorkerJoined:       {fields: []string{"name", "code", "credential"}, writers: []ActorKind{System}},
+	WorkerConnected:    {fields: []string{"name"}, writers: []ActorKind{System}},
+	WorkerDisconnected: {fields: []string{"name"}, writers: []ActorKind{System}},
+	WorkerRemoved:      {fields: []string{"name"}, writers: []ActorKind{Human, System}}, // System: the worker left by itself
+
 	PolicyLoaded:  {fields: []string{"hash", "path"}, writers: []ActorKind{System}},
 	PolicyRefused: {fields: []string{"reason", "path"}, writers: []ActorKind{System}},
 
@@ -59,10 +66,14 @@ var catalogue = map[Type]spec{
 var streamOf = map[Type]string{
 	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream, AgentLearned: AgentsStream,
 	PolicyLoaded: PolicyStream, PolicyRefused: PolicyStream,
+	WorkerInvited: WorkersStream, WorkerJoined: WorkersStream, WorkerConnected: WorkersStream,
+	WorkerDisconnected: WorkersStream, WorkerRemoved: WorkersStream,
 }
 
-// IsTaskStream is false for the agents and policy streams.
-func IsTaskStream(stream string) bool { return stream != AgentsStream && stream != PolicyStream }
+// IsTaskStream is false for the agents, policy and workers streams.
+func IsTaskStream(stream string) bool {
+	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream
+}
 
 // CheckShape is check 1: the type is known and the proposal carries what it must.
 func CheckShape(p Proposal) *Rejection {

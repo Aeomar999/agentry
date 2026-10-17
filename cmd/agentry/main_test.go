@@ -16,7 +16,11 @@ func TestRun(t *testing.T) {
 		{nil, 0, "Usage: agentry", ""},
 		{[]string{"help"}, 0, "serve", ""},
 		{[]string{"serve", "-bogus"}, 2, "", "flag provided but not defined"},
-		{[]string{"worker"}, 2, "", "not built yet (T-022"},
+		{[]string{"worker", "-dir", "/nonexistent/agentry-worker"}, 1, "", "hasn't joined a server yet"},
+		{[]string{"worker", "join", "https://agentry.example.com"}, 2, "", "usage: agentry worker join"},
+		{[]string{"worker", "help"}, 0, "leave [-purge]", ""},
+		{[]string{"worker", "status", "-dir", "/nonexistent/agentry-worker"}, 1, "", "hasn't joined a server yet"},
+		{[]string{"worker", "explode"}, 2, "", `unknown command "explode"`},
 		{[]string{"hook", "PreToolUse"}, 2, "", "not running in an Agentry session"},
 		{[]string{"deploy"}, 2, "", `unknown command "deploy"`},
 	}

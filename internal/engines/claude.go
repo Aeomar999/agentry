@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 )
 
 // claude is Claude Code, measured in proofs 01 to 03 (Claude Code 2.1.301).
@@ -22,12 +23,28 @@ var (
 
 // Prepare writes a settings file for `claude --settings`: the hooks, and
 // the page's theme, so the session's colours suit the terminal showing it.
+// It also trusts the worktree, so the session doesn't stop to ask.
 func (claude) Prepare(s Session) error {
 	settings := hookSettings(s.HookCommand, claudeGates, claudeReports)
+	for key, value := range unattended {
+		settings[key] = value
+	}
 	if s.Theme != "" {
 		settings["theme"] = s.Theme
 	}
-	return writeJSON(claudeSettings(s), settings)
+	if err := writeJSON(claudeSettings(s), settings); err != nil {
+		return err
+	}
+	return trustFolder(s.Worktree)
+}
+
+// unattended are the settings that keep Claude from stopping to offer or
+// ask things nobody is there to answer. The renderer is chosen, so it never
+// offers the fullscreen one; tips and the feedback survey are off.
+var unattended = map[string]any{
+	"tui":                "default",
+	"spinnerTipsEnabled": false,
+	"env":                map[string]string{"CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"},
 }
 
 func (claude) Launch(s Session, prompt string) []string {
@@ -56,8 +73,49 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
 		signals[0].Tokens = claudeTokens(p.TranscriptPath)
+		if signals[0].Report == "" {
+			// Claude Code before 2.1 has no last_assistant_message.
+			signals[0].Report = claudeLastMessage(p.TranscriptPath)
+		}
 	}
 	return signals, nil
+}
+
+// claudeLastMessage is the text of the last thing the model said in a
+// session's transcript.
+func claudeLastMessage(transcript string) string {
+	file, err := os.Open(transcript)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	last := ""
+	lines := bufio.NewScanner(file)
+	lines.Buffer(make([]byte, 0, 1<<20), 16<<20)
+	for lines.Scan() {
+		var entry struct {
+			Type    string `json:"type"`
+			Message struct {
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(lines.Bytes(), &entry) != nil || entry.Type != "assistant" {
+			continue
+		}
+		var text []string
+		for _, part := range entry.Message.Content {
+			if part.Type == "text" && strings.TrimSpace(part.Text) != "" {
+				text = append(text, part.Text)
+			}
+		}
+		if len(text) > 0 {
+			last = strings.Join(text, "\n")
+		}
+	}
+	return last
 }
 
 // claudeTokens adds up what a session's transcript says it used: every

@@ -16,6 +16,7 @@ import { TokenMeter } from "@/components/molecules/TokenMeter";
 import { tokens } from "@/lib/tokens";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
 import { LabelEditor } from "@/components/organisms/LabelEditor";
+import { LOCAL, machineName } from "@/lib/machines";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { clockTime, dateTime, timeAgo } from "@/lib/time";
@@ -111,6 +112,12 @@ export function TaskPage() {
               <>
                 <span>·</span>
                 <Mono>{w.branch}</Mono>
+                {w.worker !== LOCAL && (
+                  <>
+                    <span>·</span>
+                    <span>on {machineName(w.worker)}</span>
+                  </>
+                )}
               </>
             ) : (
               task.status !== "done" && <span>· setting up the worktree</span>
@@ -219,6 +226,7 @@ function TurnList({ turns }: { turns: Turn[] }) {
           <div className="flex items-center gap-2 text-[12px]">
             <AgentName name={turn.agent} className="font-semibold text-ink-primary" />
             <Mono className="text-ink-faint">{clockTime(turn.startedAt)}</Mono>
+            {turn.worker && turn.worker !== LOCAL && <span className="text-[11px] text-ink-muted">on {turn.worker}</span>}
             {turn.tokens > 0 && <Mono className="ml-auto text-[11px] text-ink-faint">{tokens(turn.tokens)}</Mono>}
             <span className={turn.tokens > 0 ? "text-[11px] text-ink-muted" : "ml-auto text-[11px] text-ink-muted"}>
               {turn.ended ? (turn.issue ? "issue" : "ended") : "running"}

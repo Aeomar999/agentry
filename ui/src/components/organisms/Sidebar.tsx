@@ -1,4 +1,4 @@
-import { Bot, ListTodo, Plus, ShieldCheck } from "lucide-react";
+import { Bot, ListTodo, Plus, Server, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +21,7 @@ const SECTIONS = [
     title: "Setup",
     items: [
       { to: "/agents", label: "Agents", icon: <Bot /> },
+      { to: "/workers", label: "Workers", icon: <Server /> },
       { to: "/policy", label: "Policy", icon: <ShieldCheck /> },
     ],
   },

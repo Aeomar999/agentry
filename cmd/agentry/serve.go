@@ -24,14 +24,16 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
+	"gitlab.com/dev.chempa/agentry/internal/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 type serveOptions struct {
@@ -106,11 +108,18 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	theme.Store("dark")
 	currentTheme := func() string { return theme.Load().(string) }
 
-	runner := turns.NewRunner(log, turns.Config{HookCommand: shellQuote(self) + " hook",
-		ServerURL: serverURL, HookToken: hookToken, Theme: currentTheme})
-	isRunning := func(task string) bool { return sessions.IsRunning(sessions.SocketFor(task)) }
-	go coordinator.NewLoop(log, runner, filepath.Join(o.dataDir, "worktrees")).Run(ctx)
-	go watchdog.New(log, watchdog.DefaultLimits, isRunning, runner.Stop).Run(ctx)
+	// Agents work here, and on any worker that joins and is online.
+	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook",
+		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
+	fleet := machines.NewFleet(here)
+	if err := workerlink.ForgetConnections(log, fleet); err != nil {
+		return err
+	}
+	links := workerlink.NewServer(log, fleet)
+
+	runner := turns.NewRunner(log, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
+	go coordinator.NewLoop(log, runner, fleet).Run(ctx)
+	go watchdog.New(log, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Policy, refused error) { recordPolicy(log, agentPolicy, refused) })
 
 	// The desk starts when you first open it on the page, and stops with the server.
@@ -126,13 +135,17 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 			http.Error(w, "starting Claude: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		hub.Serve(w, r, desk.Name)
+		hub.Serve(w, r, desk.Name, terminal.Attach)
+	})
+	// A task's terminal is on the machine its work is on.
+	taskTerminal := hub.Handler(func(task string, onOutput func([]byte)) (terminal.Pane, error) {
+		return runner.MachineOf(task).Attach(task, onOutput)
 	})
 	defer desk.Stop()
 
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
-		SetTheme: func(t string) { theme.Store(t) }},
-		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), hub.Handler())
+		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe()},
+		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)

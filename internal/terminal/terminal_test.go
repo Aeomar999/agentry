@@ -82,7 +82,7 @@ func TestOnlyTheViewerInControlCanType(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler())
+	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler(Attach))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	url := "ws" + strings.TrimPrefix(server.URL, "http") + "/tasks/" + task + "/terminal"
@@ -129,7 +129,7 @@ func TestOnlyTheViewerInControlCanType(t *testing.T) {
 
 func TestNoSessionNoWatch(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler())
+	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler(Attach))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	response, _ := http.Get(server.URL + "/tasks/task-none/terminal")
@@ -149,7 +149,7 @@ func TestAViewerResizesTheSession(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	mux := http.NewServeMux()
-	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler())
+	mux.Handle("GET /tasks/{task}/terminal", NewHub().Handler(Attach))
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	url := "ws" + strings.TrimPrefix(server.URL, "http") + "/tasks/" + task + "/terminal"

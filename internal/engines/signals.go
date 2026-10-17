@@ -76,7 +76,7 @@ func sharedSignals(p hookPayload) []Signal {
 	case "PreToolUse":
 		return []Signal{{Kind: ActionRequested, ToolUseID: p.ToolUseID, Tool: p.ToolName, Command: commandOf(p.ToolInput)}}
 	case "PostToolUse":
-		return []Signal{{Kind: ActionFinished, ToolUseID: p.ToolUseID}}
+		return []Signal{{Kind: ActionFinished, ToolUseID: p.ToolUseID, Tool: p.ToolName, Command: commandOf(p.ToolInput)}}
 	case "Stop":
 		return []Signal{{Kind: TurnEnded, Report: p.LastAssistantMessage}}
 	case "SessionEnd":

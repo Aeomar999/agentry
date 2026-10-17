@@ -16,6 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 var you = events.Actor{Kind: events.Human, ID: "you"}
@@ -209,7 +210,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
-		"engines": rules.KnownEngines, "workers": knownWorkers(), "colors": agents.Colors})
+		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil})
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started
@@ -229,12 +230,11 @@ func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"theme": request.Theme})
 }
 
-// knownWorkers are the machines an agent can be given; none until T-022.
-func knownWorkers() []string {
-	if rules.KnownWorkers == nil {
-		return []string{}
-	}
-	return rules.KnownWorkers
+// workerChoices are the machines an agent can be given: this one, then
+// every worker that has joined.
+func (s *Server) workerChoices() []string {
+	roster, _ := s.workers()
+	return append([]string{workers.Local}, roster.Names()...)
 }
 
 // showPolicy is the policy in force, and why the file on disk isn't, if it isn't.

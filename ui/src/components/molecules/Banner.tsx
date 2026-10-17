@@ -1,16 +1,17 @@
 import { ReactNode } from "react";
-import { CircleAlert, Info, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-type Tone = "danger" | "warning" | "info";
+type Tone = "danger" | "warning" | "info" | "success";
 
 const TONES: Record<Tone, string> = {
   danger: "border-danger/40 bg-danger-soft text-danger",
   warning: "border-warning/40 bg-warning-soft text-warning",
   info: "border-info/40 bg-info-soft text-info",
+  success: "border-success/40 bg-success-soft text-success",
 };
 
-const ICONS = { danger: CircleAlert, warning: TriangleAlert, info: Info };
+const ICONS = { danger: CircleAlert, warning: TriangleAlert, info: Info, success: CircleCheck };
 
 export function Banner({ tone = "danger", title, children }: { tone?: Tone; title: string; children?: ReactNode }) {
   const Icon = ICONS[tone];

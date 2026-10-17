@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
 // judgeByCommand: "ls" is allowed, "sudo" denied, anything else asks.
@@ -66,6 +64,8 @@ func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
 	}
 	return s
 }
+
+var worker = events.Actor{Kind: events.Worker, ID: "local"}
 
 func hookCall(event, payload string) hookcall.Call {
 	return hookcall.Call{Task: "task-1", Turn: "turn-2", Agent: "engineer", Engine: "claude", Event: event, Payload: json.RawMessage(payload)}
@@ -218,15 +218,18 @@ func TestTheGateUsesTheWorkingAgentsProfile(t *testing.T) {
 	}
 }
 
-// What the agent wrote in its knowledge file during the turn is kept when
-// the turn ends; a file left as it was writes nothing.
+// What the agent wrote in its knowledge file, which the hook sends with the
+// call that ends the turn, is kept, and so are the tokens the hook counted.
 func TestWhatTheAgentLearnedIsKept(t *testing.T) {
-	worktree := t.TempDir()
-	s := engineerAtWorkIn(t, worktree)
+	s := engineerAtWorkIn(t, t.TempDir())
 	h := NewHandler(s, judgeByCommand)
-	os.MkdirAll(filepath.Join(worktree, ".agentry"), 0o755)
-	os.WriteFile(filepath.Join(worktree, turns.KnowledgeFile), []byte("This repo formats with gofmt -s.\n"), 0o644)
-	h.Handle(context.Background(), hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`))
+	learnedText := "This repo formats with gofmt -s.\n"
+	stop := hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`)
+	stop.Ending = &hookcall.Ending{Tokens: 1234, Knowledge: &learnedText}
+	h.Handle(context.Background(), stop)
+	if task := taskIn(t, s); task.TokensUsed != 1234 {
+		t.Errorf("tokens used: %d, want what the hook counted", task.TokensUsed)
+	}
 
 	stream, _ := s.Stream(events.AgentsStream)
 	engineer, _ := agents.FromEvents(stream).Get("engineer")

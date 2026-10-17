@@ -14,6 +14,7 @@ const (
 	EnvAgent    = "AGENTRY_AGENT"
 	EnvEngine   = "AGENTRY_ENGINE"
 	EnvDeadline = "AGENTRY_HOOK_DEADLINE" // shorter than the engine's hook timeout (proof 01)
+	EnvWorktree = "AGENTRY_WORKTREE"      // the task's worktree, on the machine the session runs on
 )
 
 // Path is where the server takes hook calls, and TokenHeader carries EnvToken.
@@ -30,6 +31,18 @@ type Call struct {
 	Engine  string          `json:"engine"`
 	Event   string          `json:"event"`   // the engine's hook event name, e.g. PreToolUse
 	Payload json.RawMessage `json:"payload"` // the engine's stdin, unchanged
+
+	// When the call ends the turn, what only the machine running the
+	// session can read: the tokens its transcript says it used, and the
+	// agent's knowledge file. The session may be on a worker, where the
+	// server can't read either.
+	Ending *Ending `json:"ending,omitempty"`
+}
+
+type Ending struct {
+	Tokens    int     `json:"tokens"`
+	Report    string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
+	Knowledge *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
 }
 
 // Reply is what the hook prints and exits with.

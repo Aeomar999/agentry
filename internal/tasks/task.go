@@ -49,8 +49,9 @@ type Task struct {
 }
 
 type Worktree struct {
-	Repo   string // the main checkout it was made from
-	Path   string
+	Repo   string // the main checkout it was made from, on the machine Agentry runs on
+	Worker string // the machine it is on: workers.Local, or a worker's name
+	Path   string // on that machine
 	Branch string
 	Base   string // the commit the branch started from
 	Port   int
@@ -60,6 +61,7 @@ type Worktree struct {
 type Turn struct {
 	ID           string // also the correlation of its events
 	Agent        string
+	Worker       string // the machine it ran on
 	Hash         string // of the prompt line it was started with
 	StartedAt    time.Time
 	LastEventAt  time.Time
