@@ -185,9 +185,9 @@ What agents may do is in `~/.agentry/policy.toml`, written on first start from [
 
 ## Deploy it
 
-`agentry.chempa.dev` runs from the `dev` branch: GitLab tests the commit, builds the image (`Dockerfile`: the server, git and Claude Code) and asks Berth to deploy `docker-stack.dev.yml`, pinned to the workstation. Everything worth keeping is in the container's home, a volume: Claude's sign-in, the repos under `~/work`, and Agentry's log and policy in `~/.agentry`.
+`agentry.chempa.dev` runs from the `dev` branch: GitLab tests the commit, builds the image (`Dockerfile`: the server, git and Claude Code) and asks Berth to deploy `docker-stack.dev.yml`, pinned to one node (`NODE` in the app's .env). Everything worth keeping is in the container's home, a volume: Claude's sign-in, the repos under `~/work`, and Agentry's log and policy in `~/.agentry`.
 
-- **The link:** the server prints it with its token: `ssh vps berth logs agentry dev server`.
+- **The link:** the server prints it with its token: `ssh <manager> berth logs agentry dev server`.
 - **Signing Claude in:** once, after the first deploy: open the dock's Claude tab and follow Claude's sign-in. The agents use the same sign-in.
 - **Repos:** clone them into `~/work` and name them on a task.
 
