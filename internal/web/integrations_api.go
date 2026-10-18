@@ -30,7 +30,7 @@ func (s *Server) inviteClaudeCode(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, invited) {
 		return
 	}
-	answer := commands(s.publicURL(r), "/integrations/claude-code", code)
+	answer := s.installCommands(r, "/integrations/claude-code", code)
 	answer["expires"] = time.Now().Add(connections.InviteLifetime)
 	reply(w, answer)
 }

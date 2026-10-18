@@ -212,11 +212,26 @@ export interface WorkerDetail {
   history: { at: string; what: "joined" | "online" | "offline" }[]; // newest first
 }
 
-export interface Invite {
-  code: string;
-  expires: string;
+// An install command to run on another machine, for one of the server's
+// addresses (internal/web/addresses.go).
+export interface InstallAddress {
+  url: string;
+  label: string; // such as On your network, or This computer only
   command: string; // what to run on the other machine: macOS and Linux
   windowsCommand: string; // the same, for Windows (PowerShell)
+}
+
+// The install commands for every address, and the one picked first.
+export interface InstallCommands {
+  command: string; // for the picked address
+  windowsCommand: string;
+  address: string; // the picked address's url
+  addresses: InstallAddress[];
+  expires: string;
+}
+
+export interface Invite extends InstallCommands {
+  code: string;
 }
 
 export interface CreatedEvent {

@@ -65,7 +65,7 @@ go build -o bin/agentry ./cmd/agentry
 - **Repo:** `-repo` sets the default repo for new tasks; the page can name another, or make a new one.
 - **Data:** `-data` moves `~/.agentry`.
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
-- **Address:** `-addr` (default `0.0.0.0:7800`, every interface; `127.0.0.1:7800` for this computer only); on every interface it prints a link for each of this machine's network addresses as well. `-public-url` is the address people and machines reach, for links and install commands; with it, it prints only that one.
+- **Address:** `-addr` (default `0.0.0.0:7800`, every interface; `127.0.0.1:7800` for this computer only); on every interface it prints a link for each of this machine's network addresses as well. `-public-url` is the address people and machines reach, for links and install commands; with it, it prints only that one, and the install commands start on it.
 
 ## First steps
 
@@ -84,6 +84,8 @@ Agents can run on your other computers, so work can go where the tools, the data
 | Windows | `irm '<server>/worker/install.ps1?code=…' \| iex` in PowerShell |
 
 It installs `agentry` (in `~/.local/bin`, or `%LOCALAPPDATA%\Agentry\bin` on Windows, added to your PATH), joins with a code that works once, and starts the worker in the background, started again at login: a systemd user service on Linux, a launchd agent on macOS, a Task Scheduler task on Windows. Run on a machine that has joined, it updates it instead. The machine needs git and Claude Code signed in; it dials out to the server, so it needs no open port.
+
+`<server>` is an address that machine reaches. The command comes for every address the server has: `-public-url`, each network address, the one the page is open at, and localhost (this computer only). A picker above the command switches between them; it starts on the public URL, or on the first network address when the page is open at localhost.
 
 On the worker, `agentry worker` does the rest:
 
@@ -107,6 +109,8 @@ With Agentry in Claude Code, plain `claude` in any repo can hand work to Agentry
 | macOS, Linux | `curl -fsSL '<server>/integrations/claude-code.sh?code=…' \| sh` in a terminal |
 | Windows | `irm '<server>/integrations/claude-code.ps1?code=…' \| iex` in PowerShell |
 | The machine Agentry runs on | `agentry mcp install` |
+
+As on the Workers page, the command comes for every address the server has, with a picker to choose the one that machine reaches.
 
 Then, in any repo:
 

@@ -119,8 +119,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	serverURL := localURL(listener.Addr()) // what agents' hooks and the desk call, on this machine
-	var theme atomic.Value                 // the page's theme, which the sessions it watches start in
+	serverURL := localURL(listener.Addr())  // what agents' hooks and the desk call, on this machine
+	network := networkURLs(listener.Addr()) // what other machines reach, when listening on every address
+	var theme atomic.Value                  // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
 	currentTheme := func() string { return theme.Load().(string) }
 
@@ -187,7 +188,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
-		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe(), Blobs: blobs},
+		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
+		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
@@ -195,7 +197,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
 	if o.publicURL == "" {
-		for _, other := range networkURLs(listener.Addr()) {
+		for _, other := range network {
 			fmt.Fprintf(stdout, "From another machine: %s/?token=%s\n", other, uiToken)
 		}
 	}
@@ -212,6 +214,16 @@ func localURL(addr net.Addr) string {
 		return "http://" + addr.String()
 	}
 	return fmt.Sprintf("http://127.0.0.1:%d", tcp.Port)
+}
+
+// localhostURL is the server at localhost, as a page on this machine opens
+// it, or "" when it listens on one address that isn't loopback.
+func localhostURL(addr net.Addr) string {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok || !tcp.IP.IsUnspecified() && !tcp.IP.IsLoopback() {
+		return ""
+	}
+	return fmt.Sprintf("http://localhost:%d", tcp.Port)
 }
 
 // networkURLs are the server as other machines on the network reach it,

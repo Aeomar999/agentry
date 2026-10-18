@@ -21,6 +21,22 @@ func TestLocalURL(t *testing.T) {
 	}
 }
 
+// A page on this machine opens the server at localhost, unless it listens on
+// one address that isn't loopback.
+func TestLocalhostURL(t *testing.T) {
+	for addr, want := range map[string]string{
+		"0.0.0.0:7800":     "http://localhost:7800",
+		"127.0.0.1:7801":   "http://localhost:7801",
+		"[::]:7802":        "http://localhost:7802",
+		"192.168.1.5:7803": "",
+	} {
+		tcp, _ := net.ResolveTCPAddr("tcp", addr)
+		if got := localhostURL(tcp); got != want {
+			t.Errorf("localhostURL(%s) = %s, want %s", addr, got, want)
+		}
+	}
+}
+
 // Listening on every address, serve prints a link for each of this machine's
 // own addresses other machines reach; listening on one, it prints none.
 func TestNetworkURLs(t *testing.T) {

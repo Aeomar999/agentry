@@ -41,11 +41,7 @@ export function AddWorkerDialog({ workers, onClose }: AddWorkerDialogProps) {
               On the machine you want agents to run on, run this. It installs agentry, joins this server and keeps the worker running. That
               machine needs git and Claude Code signed in.
             </p>
-            {invite ? (
-              <InstallCommand command={invite.command} windowsCommand={invite.windowsCommand} />
-            ) : (
-              <div className="h-10 rounded-md bg-surface-2" />
-            )}
+            {invite ? <InstallCommand commands={invite} /> : <div className="h-10 rounded-md bg-surface-2" />}
             <p className="text-[12px] text-ink-muted">
               The code in it works once{invite && <>, until {clockTime(invite.expires)}</>}. To name the machine, put{" "}
               <code className="font-mono text-ink-secondary">AGENTRY_WORKER_NAME=name</code> before <code className="font-mono">sh</code>{" "}

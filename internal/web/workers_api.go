@@ -137,7 +137,7 @@ func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
 		failed(w, firstError(err, rejection))
 		return
 	}
-	answer := commands(s.publicURL(r), "/worker/install", code)
+	answer := s.installCommands(r, "/worker/install", code)
 	answer["code"], answer["expires"] = code, time.Now().Add(workers.InviteLifetime)
 	reply(w, answer)
 }
@@ -156,11 +156,7 @@ func (s *Server) publicURL(r *http.Request) string {
 	if s.config.PublicURL != "" {
 		return strings.TrimSuffix(s.config.PublicURL, "/")
 	}
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
+	return requestURL(r)
 }
 
 // joinRequest is what `agentry worker join` sends with its code.

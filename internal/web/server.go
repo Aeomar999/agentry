@@ -29,12 +29,14 @@ type Config struct {
 	Helper      http.Handler       // the terminal of the Claude session beside a task, started on the way; nil for none
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
 
-	Fleet     *machines.Fleet    // where tasks' work is: for their Workspace page
-	Workers   *workerlink.Server // the server's end of the workers' links; nil for none
-	PublicURL string             // the address people and workers reach; "" for the one a request came to
-	Binary    string             // this agentry, which a joining machine can download
-	Local     workers.Machine    // what this machine is, as a worker would say it, for the Workers page
-	Blobs     sharedfiles.Disk   // where tasks' shared files are kept
+	Fleet       *machines.Fleet    // where tasks' work is: for their Workspace page
+	Workers     *workerlink.Server // the server's end of the workers' links; nil for none
+	PublicURL   string             // the address people and workers reach; "" for the one a request came to
+	NetworkURLs []string           // the server on each of this machine's network addresses, when it listens on every one
+	LocalURL    string             // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
+	Binary      string             // this agentry, which a joining machine can download
+	Local       workers.Machine    // what this machine is, as a worker would say it, for the Workers page
+	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
 }
 
 // PolicySource is the policy in force and any problem with the file on disk.
