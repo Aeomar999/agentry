@@ -190,7 +190,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe(), Blobs: blobs},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
-	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL}); err != nil {
+	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
 		return err // `agentry mcp` and the status line find the server by it
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)

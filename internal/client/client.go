@@ -20,10 +20,12 @@ import (
 const ServerFile = "server.json"
 
 // Where is how a server is reached: URL for the API, Page for links people
-// open (the public address, when it has one).
+// open (the public address, when it has one), Listen for the address it
+// listens on, which says whether other machines reach it.
 type Where struct {
-	URL  string `json:"url"`
-	Page string `json:"page"`
+	URL    string `json:"url"`
+	Page   string `json:"page"`
+	Listen string `json:"listen,omitempty"`
 }
 
 // Save writes where the server is, in its data folder.

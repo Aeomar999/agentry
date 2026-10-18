@@ -8,10 +8,12 @@ import "@fontsource-variable/archivo/standard.css";
 import "@fontsource-variable/jetbrains-mono";
 import "@/styles/globals.css";
 import { applyTheme, savedTheme } from "@/lib/theme";
+import { watchInstall } from "@/lib/install";
 import "@/api/client"; // reads the token from the link before the router sees the address
 import { App } from "./App";
 
 applyTheme(savedTheme());
+watchInstall();
 
 // A pinch on a trackpad (Ctrl and the wheel, to the browser) never zooms the
 // app, as in an editor: Ctrl + and Ctrl - do. A view that zooms what it

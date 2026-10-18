@@ -4,6 +4,7 @@ import { IconButton } from "@/components/atoms/IconButton";
 import { Kbd } from "@/components/atoms/Kbd";
 import { LogoTile } from "@/components/atoms/LogoTile";
 import { Breadcrumbs, Crumb } from "@/components/molecules/Breadcrumbs";
+import { InstallAppButton } from "@/components/molecules/InstallAppButton";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 import { modKey } from "@/lib/shortcuts";
@@ -44,6 +45,7 @@ export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar
         <Kbd className="max-md:hidden">{modKey} K</Kbd>
       </button>
 
+      <InstallAppButton />
       <IconButton
         icon={theme === "dark" ? <Sun /> : <Moon />}
         label={theme === "dark" ? "Light theme" : "Dark theme"}

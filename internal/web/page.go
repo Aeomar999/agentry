@@ -27,6 +27,10 @@ var ui = func() fs.FS {
 // them. Every other path is a page of the UI, which routes in the browser,
 // so it gets index.html.
 //
+// The page's files, the manifest, service worker and icons that install it
+// as an app among them, need no token: browsers fetch those without one.
+// The data behind the page does.
+//
 // The UI keeps the token from ?token= and sends it on every call, so
 // signing in doesn't depend on a cookie surviving port forwarding or a
 // change between localhost and 127.0.0.1. The cookie is still set, for
@@ -38,8 +42,14 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 	}
 	file := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 	if info, err := fs.Stat(ui, file); file != "" && err == nil && !info.IsDir() {
-		if strings.HasPrefix(file, "assets/") {
+		switch {
+		case strings.HasPrefix(file, "assets/"):
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case file == "sw.js" || file == "manifest.webmanifest":
+			w.Header().Set("Cache-Control", "no-cache") // so an installed app picks up a new version
+		}
+		if path.Ext(file) == ".webmanifest" {
+			w.Header().Set("Content-Type", "application/manifest+json") // not in every system's MIME table
 		}
 		http.ServeFileFS(w, r, ui, file)
 		return

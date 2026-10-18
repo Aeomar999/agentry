@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,16 +166,55 @@ func defaultRepo(repo string) error {
 }
 
 func openPage(c client.Client, stdout, stderr io.Writer) int {
-	link := c.PageURL("/?token=" + c.Token)
-	if err := openBrowser(link); err != nil {
-		fmt.Fprintf(stdout, "Agentry is running. Open %s in your browser.\n", link)
+	links := pageLinks(c)
+	fmt.Fprintln(stdout, "Agentry is running. These links sign you in, so share them only with people you trust:")
+	for _, link := range links {
+		fmt.Fprintf(stdout, "  %-17s%s\n", link.label+":", link.url)
+	}
+	if err := openBrowser(links[0].url); err != nil {
+		fmt.Fprintln(stdout, "Open the first link in your browser. Agentry keeps running; Stop Agentry stops it.")
 		return 0
 	}
-	fmt.Fprintf(stdout, "Agentry is running at %s and opened in your browser.\nYou can close this window: it keeps running. Stop Agentry stops it.\n", c.PageURL(""))
+	fmt.Fprintln(stdout, "Opened the first one in your browser. You can close this window: Agentry keeps running; Stop Agentry stops it.")
 	return 0
 }
 
-func openBrowser(link string) error {
+type pageLink struct{ label, url string }
+
+// pageLinks are the signed-in links to a running server: this computer's
+// first, then its public address if it was given one, and one for each
+// network address when it listens on every interface.
+func pageLinks(c client.Client) []pageLink {
+	signedIn := "/?token=" + c.Token
+	here, err := url.Parse(c.URL)
+	if err != nil {
+		return []pageLink{{"This computer", c.PageURL(signedIn)}}
+	}
+	if ip := net.ParseIP(here.Hostname()); ip != nil && ip.IsLoopback() {
+		here.Host = net.JoinHostPort("localhost", here.Port())
+	}
+	links := []pageLink{{"This computer", strings.TrimSuffix(here.String(), "/") + signedIn}}
+	if c.Page != "" && c.Page != c.URL {
+		links = append(links, pageLink{"Public address", c.PageURL(signedIn)})
+	}
+	for _, other := range networkURLs(listenAddress(c.Listen)) {
+		links = append(links, pageLink{"On your network", other + signedIn})
+	}
+	return links
+}
+
+// listenAddress is where the server listens. A server started before it
+// saved that gets no network links, rather than links that may not work.
+func listenAddress(listen string) net.Addr {
+	addr, err := net.ResolveTCPAddr("tcp", listen)
+	if listen == "" || err != nil {
+		return nil
+	}
+	return addr
+}
+
+// openBrowser opens link in the default browser; tests replace it.
+var openBrowser = func(link string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", link).Start()

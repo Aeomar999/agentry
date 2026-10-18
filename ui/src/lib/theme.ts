@@ -18,6 +18,8 @@ export function savedTheme(): Theme {
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle("light", theme === "light");
+  // The installed app's title bar, the colour of the top bar (surface-1).
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#fafafa" : "#16181d");
   api("POST", "/api/theme", { theme }).catch(() => {}); // not signed in yet: the next change tells it
   try {
     localStorage.setItem(key, theme);

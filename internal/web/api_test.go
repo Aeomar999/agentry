@@ -238,6 +238,59 @@ func TestServesTheUI(t *testing.T) {
 	}
 }
 
+// The browser fetches what installs the page as an app without the token:
+// the manifest, the service worker and the icons, at the root, with the
+// types it checks. The API still needs the token.
+func TestServesTheAppFilesWithoutTheToken(t *testing.T) {
+	server, _ := newTestServer(t)
+	get := func(path string) (*http.Response, string) {
+		response, err := http.Get(server.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		content, _ := io.ReadAll(response.Body)
+		return response, string(content)
+	}
+
+	response, body := get("/manifest.webmanifest")
+	var manifest struct {
+		StartURL string `json:"start_url"`
+		Display  string
+		Icons    []struct{ Src, Purpose string }
+	}
+	if response.StatusCode != 200 || response.Header.Get("Content-Type") != "application/manifest+json" || json.Unmarshal([]byte(body), &manifest) != nil {
+		t.Fatalf("manifest: %d %q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+	if manifest.StartURL != "/" || manifest.Display != "standalone" || len(manifest.Icons) != 3 {
+		t.Errorf("manifest: %+v", manifest)
+	}
+	files := map[string]string{"/sw.js": "text/javascript", "/icons/apple-touch-icon.png": "image/png", "/icons/icon.svg": "image/svg+xml"}
+	for _, icon := range manifest.Icons {
+		files[icon.Src] = "image/png"
+	}
+	for path, kind := range files {
+		if response, _ := get(path); response.StatusCode != 200 || !strings.HasPrefix(response.Header.Get("Content-Type"), kind) {
+			t.Errorf("%s: %d %q", path, response.StatusCode, response.Header.Get("Content-Type"))
+		}
+	}
+	if response, _ := get("/sw.js"); response.Header.Get("Cache-Control") != "no-cache" {
+		t.Errorf("sw.js may be kept: %q", response.Header.Get("Cache-Control"))
+	}
+	_, index := get("/")
+	for _, link := range []string{`rel="manifest" href="/manifest.webmanifest"`, `rel="apple-touch-icon"`, `name="theme-color"`} {
+		if !strings.Contains(index, link) {
+			t.Errorf("index.html has no %s", link)
+		}
+	}
+
+	for _, path := range []string{"/api/config", "/api/tasks", "/api/agents"} {
+		if response, _ := get(path); response.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s without the token: %d", path, response.StatusCode)
+		}
+	}
+}
+
 // The desk hands work to the coordinator and reads it back, and nothing
 // more: approving an agent's action takes the UI token.
 func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {

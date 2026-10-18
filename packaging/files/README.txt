@@ -8,9 +8,15 @@ Start
 -----
 {{START}}
 
-It starts Agentry in the background and opens it in your browser, signed
-in. Close the window whenever you like: Agentry keeps running. Run Start
-Agentry again to open the page again.
+It starts Agentry in the background, prints a link for this computer and
+one for each of its network addresses, and opens the first in your browser.
+The links sign you in, so share them only with people you trust. Close the
+window whenever you like: Agentry keeps running. Run Start Agentry again to
+open the page again.
+
+To use it as an app with its own window, click Install app at the top of
+the page. Browsers install it only from http://localhost on this computer,
+or over https, not from a plain http network address.
 
 {{FIRST}}
 
