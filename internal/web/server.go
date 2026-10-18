@@ -22,6 +22,7 @@ type Config struct {
 	DeskToken   string // the desk's: creates, reads and answers tasks, and nothing else
 	HelperToken string // the Claude sessions' in tasks' Workspaces: sends the messages you ask them to, and nothing else
 	DefaultRepo string // the repo a new task gets when it names none
+	Clones      string // where repos named by a git address are cloned
 	Budget      int    // the token budget a new task gets when it names none; 0 is no limit
 	Policy      PolicySource
 	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk

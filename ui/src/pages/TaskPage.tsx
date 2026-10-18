@@ -485,7 +485,8 @@ function RepoEditor({ task, onChanged }: { task: TaskDetail; onChanged: () => vo
     <span className="flex flex-col gap-2">
       <Input mono autoFocus value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
       <span className="text-[11px] text-ink-muted">
-        A git repository on this machine. The task moves when the turn in progress ends, and the agents work in it from the next turn on.
+        A git repository on this machine, or an address to copy it from: a git address or a link to a .zip or .tar.gz, which Agentry clones
+        or downloads. The task moves when the turn in progress ends, and the agents work in it from the next turn on.
       </span>
       <span className="flex gap-2">
         <Button size="sm" variant="primary" disabled={!editing.trim() || editing.trim() === task.repo} onClick={save}>

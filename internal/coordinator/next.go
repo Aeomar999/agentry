@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -184,7 +186,62 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 			return Move{Kind: RaiseIssue, Reason: reason}
 		}
 	}
+	if decision.Action == MoveRepo && !namedByYou(task, strings.TrimSpace(decision.Repo)) {
+		return Move{Kind: RaiseIssue, Reason: "the coordinator can move the task only to a repo the user named for it, " +
+			"as they wrote it, and " + decision.Repo + " isn't one; to work somewhere else, ask the user"}
+	}
 	return Move{Kind: ApplyDecision, Decision: decision}
+}
+
+// namedByYou says whether the user named repo for the task: in its title,
+// its description, or something they told its coordinator. A coordinator
+// moves a task only where the user asked for it to work.
+func namedByYou(task *tasks.Task, repo string) bool {
+	said := []string{task.Title, task.Description}
+	for _, step := range task.Trail {
+		if step.From == tasks.You {
+			said = append(said, step.Text)
+		}
+	}
+	for _, text := range said {
+		if mentions(text, repo) {
+			return true
+		}
+	}
+	return false
+}
+
+// mentions says whether text names name whole, not as the start of a longer
+// path or address: it stands alone, or in quotes, backticks, <> or (), and
+// may end a sentence.
+func mentions(text, name string) bool {
+	if name == "" {
+		return false
+	}
+	for from := 0; ; {
+		i := strings.Index(text[from:], name)
+		if i < 0 {
+			return false
+		}
+		start, end := from+i, from+i+len(name)
+		if opensName(text[:start]) && closesName(text[end:]) {
+			return true
+		}
+		from = start + 1
+	}
+}
+
+// opensName says whether a name may start just after before.
+func opensName(before string) bool {
+	last, _ := utf8.DecodeLastRuneInString(before)
+	return before == "" || unicode.IsSpace(last) || strings.ContainsRune("\"'`<(‘“", last)
+}
+
+// closesName says whether a name may end just before after.
+func closesName(after string) bool {
+	after = strings.TrimLeft(after, ".,;:")
+	first, _ := utf8.DecodeRuneInString(after)
+	return after == "" || unicode.IsSpace(first) || strings.ContainsRune("\"'`>)’”", first)
 }
 
 // Tokens writes a count of tokens as people read it: 950, 12.4k, 3.1M.

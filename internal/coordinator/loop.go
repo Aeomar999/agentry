@@ -28,6 +28,8 @@ type Loop struct {
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
+
+	Clones string // where repos the user names by a git address are cloned, for a "move"
 }
 
 var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
@@ -265,6 +267,8 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		l.propose(task.ID, coordinator, events.FileFetching, map[string]any{"machine": machine, "path": decision.Path, "as": decision.As})
+	case MoveRepo:
+		l.moveRepo(task, coordinator, strings.TrimSpace(decision.Repo))
 	case AwaitStories:
 		l.propose(task.ID, coordinator, events.EpicWaits, map[string]any{"toYou": decision.ToYou})
 	case Finish:
@@ -278,6 +282,36 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			l.removeWorktree(task)
 		}
 	}
+}
+
+// moveRepo moves the task to the repo the user named for it: a folder here,
+// or a git address or archive, cloned here first beside the loop, as that
+// can take minutes. The decision waits until the move is told, so a restart
+// clones again. If it can't be worked in, the coordinator hears why, and
+// can ask the user.
+func (l *Loop) moveRepo(task *tasks.Task, coordinator events.Actor, repo string) {
+	if !worktrees.IsAddress(repo) {
+		l.movedTo(task, coordinator, repo, repo, worktrees.IsRepo(repo))
+		return
+	}
+	l.beside(task.ID, func(context.Context) {
+		folder, err := worktrees.Clone(l.Clones, repo)
+		reason := ""
+		if err != nil {
+			reason = sentence(err) + " Ask the user to give Agentry access to it, or to clone it here themselves."
+		}
+		l.movedTo(task, coordinator, repo, folder, reason)
+	})
+}
+
+// movedTo tells the move to folder, the repo named as repo, or why it
+// couldn't be made.
+func (l *Loop) movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason string) {
+	if reason != "" {
+		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the task couldn't move to " + repo + ": " + reason})
+		return
+	}
+	l.propose(task.ID, coordinator, events.RepoChanged, map[string]any{"repo": folder})
 }
 
 // request opens a task for another team, for what this one needs from it,

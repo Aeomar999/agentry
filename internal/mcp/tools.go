@@ -7,6 +7,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
 // A tool is one thing Claude can do with Agentry.
@@ -57,7 +60,7 @@ func (s *Server) tools() []tool {
 				"labels":      texts("one to three short lowercase words, such as bug or docs"),
 				"epic":        text("for a new story of an epic: the epic's id"),
 				"stories":     texts("for a new epic: ids of tasks there already, to file under it"),
-				"repo":        text("the repo's absolute path, when not this one"),
+				"repo":        text("when not this one: the repo's absolute path, a git address to clone (git@host:team/app.git, https://...), or a link to a .zip or .tar.gz of it"),
 			}, "title"), s.createTask},
 		{"tell_coordinator", "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
 			object(props{"task": text("its id"), "text": text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
@@ -224,7 +227,9 @@ func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (strin
 		Stream   string
 		NotFiled []string
 	}
-	err := s.agentry.Call("POST", "/api/tasks", map[string]any{"title": a.Title, "description": a.Description, "kind": a.Kind,
+	agentry := s.agentry
+	agentry.Timeout = worktrees.CloneTimeout + time.Minute // a repo named by its address is cloned before the task is made
+	err := agentry.Call("POST", "/api/tasks", map[string]any{"title": a.Title, "description": a.Description, "kind": a.Kind,
 		"team": a.Team, "labels": a.Labels, "epic": a.Epic, "stories": a.Stories, "repo": a.Repo}, &created)
 	if err != nil {
 		return "", err

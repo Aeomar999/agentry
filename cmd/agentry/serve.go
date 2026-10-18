@@ -54,7 +54,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	var options serveOptions
-	flags.StringVar(&options.address, "addr", "127.0.0.1:7800", "where to listen")
+	flags.StringVar(&options.address, "addr", "0.0.0.0:7800", "where to listen: every interface by default, so other machines reach it; 127.0.0.1:7800 for this machine only")
 	flags.StringVar(&options.publicURL, "public-url", "", "the address people open, for the printed link, such as https://agentry.example.com")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
@@ -125,6 +125,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	currentTheme := func() string { return theme.Load().(string) }
 
 	// Agents work here, and on any worker that joins and is online.
+	clones := filepath.Join(o.dataDir, "repos")                       // repos named by a git address or an archive link
 	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
 	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
 		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
@@ -135,7 +136,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	links := workerlink.NewServer(log, fleet)
 
 	runner := turns.NewRunner(log, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
-	go coordinator.NewLoop(log, runner, fleet).Run(ctx)
+	loop := coordinator.NewLoop(log, runner, fleet)
+	loop.Clones = clones
+	go loop.Run(ctx)
 	go watchdog.New(log, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Policy, refused error) { recordPolicy(log, agentPolicy, refused) })
 
@@ -183,7 +186,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	defer desk.Stop()
 
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
-		DefaultRepo: o.repo, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
+		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, Binary: self, Local: machines.Describe(), Blobs: blobs},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
@@ -191,6 +194,11 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err // `agentry mcp` and the status line find the server by it
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
+	if o.publicURL == "" {
+		for _, other := range networkURLs(listener.Addr()) {
+			fmt.Fprintf(stdout, "From another machine: %s/?token=%s\n", other, uiToken)
+		}
+	}
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)
 	fmt.Fprintf(stdout, "Agents follow the policy in %s; edits take effect when you save.\n", agentPolicy.Path())
 	return serveUntilDone(ctx, listener, server.Handler())
@@ -204,6 +212,40 @@ func localURL(addr net.Addr) string {
 		return "http://" + addr.String()
 	}
 	return fmt.Sprintf("http://127.0.0.1:%d", tcp.Port)
+}
+
+// networkURLs are the server as other machines on the network reach it,
+// when it listens on every address: one for each of this machine's own
+// IPv4 addresses, leaving out loopback and the bridges containers use, which
+// no other machine reaches.
+func networkURLs(addr net.Addr) []string {
+	tcp, ok := addr.(*net.TCPAddr)
+	if !ok || !tcp.IP.IsUnspecified() {
+		return nil
+	}
+	interfaces, _ := net.Interfaces()
+	var urls []string
+	for _, i := range interfaces {
+		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 || isBridge(i.Name) {
+			continue
+		}
+		addresses, _ := i.Addrs()
+		for _, address := range addresses {
+			if ip, ok := address.(*net.IPNet); ok && ip.IP.To4() != nil && !ip.IP.IsLinkLocalUnicast() {
+				urls = append(urls, fmt.Sprintf("http://%s:%d", ip.IP, tcp.Port))
+			}
+		}
+	}
+	return urls
+}
+
+func isBridge(name string) bool {
+	for _, prefix := range []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "vEthernet"} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func seedAgents(log *store.Store) error {

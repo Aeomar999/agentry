@@ -29,7 +29,7 @@ var catalogue = map[Type]spec{
 	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
 	TaskHeld:           {writers: []ActorKind{Human}}, // "place" "" lets it go
 	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},
-	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human}},
+	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human, Agent}}, // an agent: the coordinator, to a repo you named
 	AgentRenamedInTask: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 	TaskTransferred:    {fields: []string{"coordinator", "reason"}, writers: []ActorKind{Agent}},
 	TaskRequested:      {fields: []string{"child", "team", "request", "coordinator"}, writers: []ActorKind{Agent}},

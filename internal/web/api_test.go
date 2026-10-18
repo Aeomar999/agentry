@@ -37,7 +37,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/src/app",
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
@@ -566,6 +566,27 @@ func TestATaskCanStartANewRepo(t *testing.T) {
 	}
 	if code, _ := call(t, server, "POST", "/api/tasks", `{"title":"Again","repo":"`+path+`","newRepo":true}`); code != http.StatusBadRequest {
 		t.Errorf("a new repo where one already is: %d", code)
+	}
+}
+
+// A task, or a move, can name its repo by a git address: it is cloned here.
+func TestATaskInARepoNamedByItsAddressWorksInAClone(t *testing.T) {
+	server, _ := newTestServer(t)
+	address := "file://" + filepath.ToSlash(gitRepo(t))
+	if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Make it a PWA","repo":"`+address+`"}`); code != 200 {
+		t.Fatalf("a task in a repo by its address: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if !strings.Contains(detail.Repo, string(filepath.Separator)+"repos"+string(filepath.Separator)) {
+		t.Fatalf("the task should work in a clone: %q", detail.Repo)
+	}
+	if out, err := exec.Command("git", "-C", detail.Repo, "remote", "get-url", "origin").Output(); err != nil || strings.TrimSpace(string(out)) != address {
+		t.Errorf("the clone's origin: %q %v", out, err)
+	}
+	if code, _ := call(t, server, "POST", "/api/tasks", `{"title":"Nowhere","repo":"file:///no/such/repo"}`); code != http.StatusBadRequest {
+		t.Errorf("an address with no repo: %d", code)
 	}
 }
 

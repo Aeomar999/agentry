@@ -56,8 +56,8 @@ func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &request) {
 		return
 	}
-	repo := strings.TrimSpace(request.Repo)
-	if reason := worktrees.IsRepo(repo); reason != "" {
+	repo, reason := s.repoFor(strings.TrimSpace(request.Repo))
+	if reason != "" {
 		http.Error(w, reason, http.StatusBadRequest)
 		return
 	}
@@ -82,6 +82,20 @@ func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	s.propose(w, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
 		Data: map[string]any{"repo": made.Repo, "worker": here.Name(), "path": made.Path, "branch": made.Branch, "base": "", "port": made.Port}})
+}
+
+// repoFor is the folder a task's work goes in, for a repo named by its
+// folder on this machine or by a git address, which is cloned here; or why
+// it can't be worked in.
+func (s *Server) repoFor(repo string) (string, string) {
+	if worktrees.IsAddress(repo) {
+		folder, err := worktrees.Clone(s.config.Clones, repo)
+		if err != nil {
+			return "", err.Error()
+		}
+		return folder, ""
+	}
+	return repo, worktrees.IsRepo(repo)
 }
 
 func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
@@ -136,10 +150,12 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	case request.Repo == "":
 		request.Repo = s.config.DefaultRepo
 	default:
-		if reason := worktrees.IsRepo(request.Repo); reason != "" {
+		repo, reason := s.repoFor(request.Repo)
+		if reason != "" {
 			http.Error(w, reason, http.StatusBadRequest)
 			return
 		}
+		request.Repo = repo
 	}
 	budget := request.Budget
 	if budget <= 0 {

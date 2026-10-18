@@ -85,7 +85,11 @@ func (t *Task) apply(e events.Event) {
 			t.moveRepo()
 			when = ""
 		}
-		t.step(e, You, t.Coordinator, "I moved this task to the repo at "+repo+when+". From now on its work goes there: "+
+		from, moved := You, "I moved this task"
+		if e.Actor.Kind == events.Agent { // the coordinator, to the repo you named
+			from, moved = t.Coordinator, "You moved this task, as the user asked,"
+		}
+		t.step(e, from, t.Coordinator, moved+" to the repo at "+repo+when+". From now on its work goes there: "+
 			"the task has a new worktree of that repo, on its own branch, and every agent works in it.")
 
 	case events.AgentRenamedInTask:

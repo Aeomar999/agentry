@@ -170,7 +170,7 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
               ? "The epic's repo."
               : `The default repo${config ? `, ${config.defaultRepo}` : ""}.`
             : where === "existing"
-              ? "A git repository on this machine, by its full path."
+              ? "A git repository on this machine by its full path, or an address to copy it from: any git address (git@host:team/app.git, https://…) or a link to a .zip or .tar.gz. Agentry clones or downloads it."
               : "Agentry makes a new git repository at this path, with a first commit, and the task works in it."
         }
       >
@@ -190,7 +190,7 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
               mono
               value={repo}
               onChange={(e) => setRepo(e.target.value)}
-              placeholder={where === "new" ? "/home/you/projects/new-project" : "/home/you/projects/existing-repo"}
+              placeholder={where === "new" ? "/home/you/projects/new-project" : "/home/you/projects/app or git@github.com:team/app.git"}
             />
           )}
         </div>

@@ -46,7 +46,7 @@ It starts Agentry in the background, if it isn't already running, and opens it i
 
 - **Where things are:** the log, settings and the tasks' worktrees are in `.agentry` in your home folder; delete it to start afresh.
 - **Your work:** new tasks work in the git repo `Agentry` in your home folder (made the first time), unless you give a task another repo, or a new one.
-- **The address:** `127.0.0.1:7800`, or the next free port. It's only reachable from this computer.
+- **The address:** port 7800, or the next free one, on every network interface, so your other machines and your phone can open it too. The page's token keeps everyone else out; `agentry serve -addr 127.0.0.1:7800` keeps it to this computer.
 - **The other programs in the folder** (`agentry-linux-amd64` and so on) are what Agentry hands other computers that join as workers. Keep them next to `agentry`.
 
 ### From the source
@@ -64,7 +64,7 @@ go build -o bin/agentry ./cmd/agentry
 - **Repo:** `-repo` sets the default repo for new tasks; the page can name another, or make a new one.
 - **Data:** `-data` moves `~/.agentry`.
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
-- **Address:** `-addr` (default `127.0.0.1:7800`); `-public-url` is the address people and machines reach, for links and install commands.
+- **Address:** `-addr` (default `0.0.0.0:7800`, every interface; `127.0.0.1:7800` for this computer only); on every interface it prints a link for each of this machine's network addresses as well. `-public-url` is the address people and machines reach, for links and install commands; with it, it prints only that one.
 
 ## First steps
 
@@ -159,7 +159,7 @@ A task's work is its branch, which goes through the repo on the server, and its 
 
 The page is an admin console: Tasks and Plan, then Agents, Workers, Integrations and the policy, in the sidebar. Everything updates live.
 
-- **Add a task:** New task is a modal over any page (`n`, or the buttons on Tasks and Plan); its address (`?new=task`, `?new=epic`, `?new=story&newIn=task-E`) can be linked. Describe it in your own words; a title, team, kind, labels, files and a token budget are optional. Its work goes in the default repo, another repo, or a new repo Agentry makes at the path you give. Every task works in a worktree of its repo, so a new project should be a new repo. A task made in the wrong repo moves with Change repo in its Details.
+- **Add a task:** New task is a modal over any page (`n`, or the buttons on Tasks and Plan); its address (`?new=task`, `?new=epic`, `?new=story&newIn=task-E`) can be linked. Describe it in your own words; a title, team, kind, labels, files and a token budget are optional. Its work goes in the default repo, another repo, or a new repo Agentry makes at the path you give. Another repo can be a folder on this machine or an address to copy it from: any git address (`git@github.com:team/app.git`, `https://…`, `ssh://…`), which Agentry clones into `~/.agentry/repos` and brings up to date for each new task, or a link to a `.zip` or `.tar.gz`, which it downloads and makes a repo. Name one in a task's description and its coordinator moves the task there itself. Every task works in a worktree of its repo, so a new project should be a new repo. A task made in the wrong repo moves with Change repo in its Details.
 - **Tasks:** a list, or a board (keys `1` and `2`) with To do, In progress, Review and Done (the Backlog when you ask). Drag a card onto any column to tell the coordinator what you want: park it, start it, have it reviewed, send it back, wrap it up, or reopen a finished one. Drag within a column, or a row in the list, to set your priority order. Done keeps the last 7 days; the list keeps everything. Labels filter with a click.
 - **A task:** its plan down the left, and the path its work took (`engineer › reviewer › tester`) above the tabs. Each agent writes its plan before it starts and ticks it off as it works; the page follows it live. The tabs: Coordinator, a chat with the task's coordinator (what you send stops the turn in progress so it reads it at once, and it replies with what it changed); Activity, everything that happened, newest first; the agent's live Terminal (Take control lets you type into it); Files; Handoffs, Actions, Events and Details.
 - **Plan:** a page for shaping work before it runs: each epic is a column of its stories, and one more holds the tasks of no epic. Drag a card up or down to set its priority, or to another column to file it there. A story that hasn't started has Start, and each epic has Start the ready ones.

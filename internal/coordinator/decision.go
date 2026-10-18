@@ -29,6 +29,7 @@ type Decision struct {
 	Stories      []Story  `json:"stories,omitempty"` // for split: the stories to add
 	Path         string   `json:"path,omitempty"`    // for fetch: the file or folder on Machine
 	As           string   `json:"as,omitempty"`      // for fetch: the name to share it by; "" for its own
+	Repo         string   `json:"repo,omitempty"`    // for move: the repo the user named: a folder, a git address or an archive link
 }
 
 // Story is one story a split adds to the epic.
@@ -75,6 +76,7 @@ const (
 	Split        Action = "split"    // the task is too big for one story: it becomes an epic, with Stories
 	AwaitStories Action = "wait"     // for an epic: nothing to do until more of its stories are done
 	FetchFile    Action = "fetch"    // bring a file or folder from a machine into the task's shared files
+	MoveRepo     Action = "move"     // the task's work goes in the repo the user named for it, with Repo
 )
 
 // DecisionFormat closes every coordinator brief. It is code, not part of the
@@ -87,6 +89,7 @@ const DecisionFormat = "End your reply with exactly one decision: a JSON object,
 	`{"action": "request", "team": "<team>", "request": "<what this task needs from them, and what done looks like>"}` + "\n" +
 	`{"action": "wait"} (for an epic, while its stories run and nothing needs you)` + "\n" +
 	`{"action": "fetch", "machine": "<a machine>", "path": "<the file or folder there>", "as": "<optional: the name to share it by>"}` + "\n" +
+	`{"action": "move", "repo": "<the repo the user named for this task: a folder on this machine, a git address or a link to an archive, exactly as they wrote it>"}` + "\n" +
 	`{"action": "split", "stories": [{"title": "<the story>", "brief": "<its goal and what done looks like>", "team": "<optional: another team>", "after": [<optional: the stories it builds on: 1 for the first in this list, or an existing story's id>]}]}` + "\n\n" +
 	`Use "transfer" and "request" only with a team named in "Other teams" in this brief.` + "\n\n" +
 	`An "ask" may also carry "options": a short list of answers the user can pick with one click, and "page": ` +
@@ -160,8 +163,12 @@ func (d Decision) check() error {
 		if d.Machine == "" || d.Path == "" {
 			return errors.New(`a "fetch" decision needs "machine" and "path"`)
 		}
+	case MoveRepo:
+		if strings.TrimSpace(d.Repo) == "" {
+			return errors.New(`a "move" decision needs "repo"`)
+		}
 	default:
-		return fmt.Errorf(`unknown action %q: use "assign", "done", "ask", "transfer", "request", "split", "wait" or "fetch"`, d.Action)
+		return fmt.Errorf(`unknown action %q: use "assign", "done", "ask", "transfer", "request", "split", "wait", "fetch" or "move"`, d.Action)
 	}
 	return nil
 }

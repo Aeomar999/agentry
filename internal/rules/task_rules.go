@@ -24,7 +24,7 @@ var taskRules = map[events.Type]rule{
 	events.TaskRanked:         all(),
 	events.TaskHeld:           all(aKnownPlace),
 	events.TaskReopened:       all(isDone),
-	events.RepoChanged:        all(anotherRepo),
+	events.RepoChanged:        all(byTheCoordinatorOrYou, anotherRepo),
 	events.AgentRenamedInTask: all(),
 
 	events.TaskTransferred: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother),

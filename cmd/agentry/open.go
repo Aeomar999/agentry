@@ -31,7 +31,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	dataDir := flags.String("data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	repo := flags.String("repo", filepath.Join(home, "Agentry"), "the repo a new task works on when it names none")
-	port := flags.Int("port", 7800, "the first port to try, on this machine only")
+	port := flags.Int("port", 7800, "the first port to try; Agentry listens on it on every interface")
 	if flags.Parse(args) != nil {
 		return 2
 	}
@@ -128,11 +128,11 @@ func startServer(dataDir, repo, address string) error {
 	return server.Process.Release()
 }
 
-// freeAddress is this machine's first free port from first on: only this
-// machine reaches it.
+// freeAddress is this machine's first free port from first on, on every
+// interface, so other machines (workers, a phone) reach it too.
 func freeAddress(first int) (string, error) {
 	for port := first; port < first+20; port++ {
-		address := fmt.Sprintf("127.0.0.1:%d", port)
+		address := fmt.Sprintf("0.0.0.0:%d", port)
 		if listener, err := net.Listen("tcp", address); err == nil {
 			listener.Close()
 			return address, nil
