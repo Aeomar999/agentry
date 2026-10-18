@@ -167,6 +167,6 @@ Every finding the MVP depends on, and the task that must use it. A task is not d
 - 2026-10-16 The policy is a TOML file, not code, at the user's request ("I don't want rules in code please"; "let use toml please"). TOML because a hand-edited safety file must not guess types (YAML), must allow comments (JSON) and must keep patterns readable (single-quoted literal strings). Rules match with words and globs over a parsed shell command (mvdan.cc/sh), not regexes; every rule carries a `why` field, which survives the page rewriting the file where comments wouldn't. One protection stays in code: agents can never touch the policy file or Agentry's data, or an agent could delete that rule and allow itself anything.
 - 2026-10-16 The shipped policy allows everything (`use_for_everyone = "allow-everything"` in `default.toml`), at the user's request. The profiles stay in the file and are one commented-out line away; Agentry's own files stay protected either way.
 - 2026-10-17 Released publicly, at the user's request: the repo is public on GitHub (the `github` remote), and `dev` is pushed to both GitLab and GitHub. This replaces the 2026-10-15 private-project decision.
-- 2026-10-17 Downloads are published as GitHub releases (tag vX.Y.Z on dev, zips from make package); GitLab keeps only the check/build/deploy pipeline.
+- 2026-10-17 Downloads are published as GitHub releases, at the user's request (tag vX.Y.Z on dev, zips from make package); GitLab keeps only the check/build/deploy pipeline.
 
 ## Blocked
