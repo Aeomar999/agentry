@@ -3,7 +3,9 @@ import { IDEAS, addTeam, missingProfilesOf, useTeamWith } from "@/lib/teams";
 import { useNewTask } from "@/lib/new-task";
 
 export interface AskVisionaries {
-  ready: boolean; // the templates and the agents are read, so has says what you have
+  read: boolean; // the templates and the agents are read
+  ready: boolean; // read, and a template turns Ideas on, so has says what you have
+  loadError: string; // why the templates or the agents couldn't be read
   has: boolean; // you have a team made from the Visionaries template
   team: string; // its name: yours, or the template's while you have none
   adding: boolean; // adding the team, or waiting for it to show before opening New task
@@ -18,9 +20,10 @@ export interface AskVisionaries {
 // from the template that turns Ideas on, whatever you called it. With none
 // yet, it adds one from the template first, then opens New task once the
 // agents show it, by the name the server gave it, or says it didn't show
-// if the agents read after adding it lack it (it was removed at once).
+// if the agents read after adding it lack it (it was removed at once), or
+// that they couldn't be read.
 export function useAskVisionaries(): AskVisionaries {
-  const { ready, template, team, reload } = useTeamWith(IDEAS);
+  const { ready, error: loadError, template, team, reload } = useTeamWith(IDEAS);
   const newTask = useNewTask();
   const [adding, setAdding] = useState(false);
   const [opening, setOpening] = useState(false); // added: New task opens when the team shows
@@ -35,9 +38,11 @@ export function useAskVisionaries(): AskVisionaries {
       newTask("task", "", team);
     } else if (reloaded) {
       setOpening(false);
-      setError("The team was added but didn't show up; try again.");
+      setError(
+        loadError ? "The team was added, but the agents couldn't be read; try again." : "The team was added but didn't show up; try again.",
+      );
     }
-  }, [opening, reloaded, team, newTask]);
+  }, [opening, reloaded, team, loadError, newTask]);
 
   async function ask(addingProfiles = false) {
     if (team) {
@@ -69,7 +74,9 @@ export function useAskVisionaries(): AskVisionaries {
 
   const has = team !== undefined;
   return {
+    read: ready,
     ready: ready && template !== undefined,
+    loadError,
     has,
     team: team ?? template?.team ?? "Visionaries",
     adding: adding || opening,

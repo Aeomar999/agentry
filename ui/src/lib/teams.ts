@@ -23,6 +23,7 @@ export function teamMadeFrom(agents: Agent[], template: string): string | undefi
 
 export interface TeamWith {
   ready: boolean; // the templates and the agents are read, so team says what you have
+  error: string; // why the templates or the agents couldn't be read, the last time they were
   template?: TeamTemplate; // the template that turns the feature on
   team?: string; // the team you have made from it, by its name now
   reload: () => Promise<void>; // reads the agents again, returning once they are shown
@@ -31,11 +32,12 @@ export interface TeamWith {
 // useTeamWith finds the team that turns a feature on: the template that
 // lists it, and the team you made from that template, whatever it is called.
 export function useTeamWith(feature: string): TeamWith {
-  const templates = useResource<TeamTemplate[]>("/api/teams/templates").data;
+  const templates = useResource<TeamTemplate[]>("/api/teams/templates");
   const agents = useResource<Agent[]>("/api/agents");
-  const template = templates?.find((t) => t.features.includes(feature));
+  const template = templates.data?.find((t) => t.features.includes(feature));
   return {
-    ready: templates !== undefined && agents.data !== undefined,
+    ready: templates.data !== undefined && agents.data !== undefined,
+    error: templates.error || agents.error,
     template,
     team: template && teamMadeFrom(agents.data ?? [], template.id),
     reload: agents.reload,

@@ -18,6 +18,7 @@ import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
 import type { Idea } from "./types";
+import { ideasView } from "./view";
 import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
@@ -32,6 +33,7 @@ import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 // Agentry didn't accept it. With no Visionaries team and no ideas, Ideas is
 // off: the page only says what it is and offers to ask the visionaries,
 // which adds the team; the settings wait until there is a team or an idea.
+// With no team template that turns Ideas on, it says so instead of offering.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -52,12 +54,8 @@ export function IdeasPage() {
   const open = ideas.filter((idea) => idea.state === "open");
   const decided = ideas.filter((idea) => idea.state !== "open");
   const ask = visionaries.has ? "Ask the visionaries" : "Add the Visionaries team";
-  // Off waits for the ideas, so a slow or failed load never shows the
-  // explainer to someone who has ideas. Until it can tell, the page shows
-  // neither way of asking, nor the settings, so nothing turns into another.
-  const settled = (visionaries.ready && loaded) || !!error;
-  const off = visionaries.ready && !visionaries.has && loaded && !error && ideas.length === 0;
-  const on = settled && !off;
+  const view = ideasView({ loaded, failed: !!error, count: ideas.length }, visionaries);
+  const on = view === "on";
 
   return (
     <>
@@ -80,6 +78,7 @@ export function IdeasPage() {
       />
       <div className="flex flex-col gap-8 p-6">
         {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
+        {visionaries.loadError && <Banner title="Couldn't read the teams">{visionaries.loadError}</Banner>}
         {visionaries.missingProfiles.length > 0 && (
           <MissingProfilesOffer
             team={visionaries.team}
@@ -89,7 +88,7 @@ export function IdeasPage() {
           />
         )}
         {visionaries.error && <Banner title="The Visionaries team isn't there">{visionaries.error}</Banner>}
-        {off && <IdeasOff visionaries={visionaries} />}
+        {(view === "off" || view === "unavailable") && <IdeasOff visionaries={visionaries} />}
         {on && <IdeaSettings />}
         {on && data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
@@ -156,7 +155,8 @@ export function IdeasPage() {
 }
 
 // IdeasOff is the page with Ideas off: what Ideas is, and the one way to
-// turn it on, asking the visionaries, which adds the team first.
+// turn it on, asking the visionaries, which adds the team first, or that
+// there is no way when no team template turns Ideas on.
 function IdeasOff({ visionaries }: { visionaries: AskVisionaries }) {
   return (
     <EmptyState icon={<Lightbulb />} title="Ideas: features the Visionaries suggest">
@@ -166,14 +166,20 @@ function IdeasOff({ visionaries }: { visionaries: AskVisionaries }) {
           argue it out from several viewpoints, and change no code. The features they agree are worth it come here as ideas, for you to
           accept into your Backlog as a task or an epic, or dismiss.
         </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button variant="primary" icon={<Lightbulb />} disabled={!visionaries.ready || visionaries.adding} onClick={visionaries.ask}>
-            {visionaries.adding ? "Adding the team…" : "Ask the visionaries"}
-          </Button>
-        </div>
-        <p className="text-ink-faint">
-          This adds the {visionaries.team} team from its template, then opens New task for your theme or question.
-        </p>
+        {visionaries.ready ? (
+          <>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="primary" icon={<Lightbulb />} disabled={visionaries.adding} onClick={visionaries.ask}>
+                {visionaries.adding ? "Adding the team…" : "Ask the visionaries"}
+              </Button>
+            </div>
+            <p className="text-ink-faint">
+              This adds the {visionaries.team} team from its template, then opens New task for your theme or question.
+            </p>
+          </>
+        ) : (
+          <p className="text-ink-faint">This Agentry has no team template that turns Ideas on, so there is no team to ask.</p>
+        )}
       </div>
     </EmptyState>
   );
