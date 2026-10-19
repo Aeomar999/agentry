@@ -12,17 +12,34 @@ import (
 	"unicode/utf8"
 )
 
-// Validate checks a JSON value against a schema, both as encoding/json
-// decodes them. It knows only the keywords Schema writes, and refuses a
-// schema with any other, so Schema can't start writing one that goes
-// unchecked. Each problem names where in the value it is, as
-// "data.summary: required field missing".
+// Validate checks a JSON value, as encoding/json decodes it, against a
+// schema: Schema's output or a decoded schema file. It knows only the
+// keywords Schema writes, and refuses a schema with any other, so Schema
+// can't start writing one that goes unchecked. Each problem names where in
+// the value it is, as "data.summary: required field missing".
 func Validate(schema map[string]any, value any) error {
-	problems, err := validate(schema, value, "")
+	decoded, err := asDecoded(schema)
+	if err != nil {
+		return fmt.Errorf("the schema isn't JSON: %w", err)
+	}
+	problems, err := validate(decoded, value, "")
 	if err != nil {
 		return err
 	}
 	return errors.Join(problems...)
+}
+
+// asDecoded is the schema as encoding/json decodes it, so the checks see a
+// rule Schema wrote as a Go int, []string or Type as a float64, []any or
+// string.
+func asDecoded(schema map[string]any) (map[string]any, error) {
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	var decoded map[string]any
+	err = json.Unmarshal(encoded, &decoded)
+	return decoded, err
 }
 
 // A check is one keyword's: the problems with the value at path, or what

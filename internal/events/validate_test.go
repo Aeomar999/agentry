@@ -81,6 +81,22 @@ func TestAnEventValidatesAgainstItsSchema(t *testing.T) {
 	}
 }
 
+// Validate takes Schema's output as it is, not only a decoded schema file.
+func TestAnEventValidatesAgainstSchemasOwnOutput(t *testing.T) {
+	schema := events.Schema(events.TurnStarted, events.Spec{Fields: []string{"agent"}, Correlation: true})
+	good := decode(t, `{"stream":"task-4","actor":{"kind":"agent","id":"editor"},"type":"turn.started","correlation":"turn-1","data":{"agent":"editor"}}`)
+	if err := events.Validate(schema, good); err != nil {
+		t.Errorf("a good event: %v", err)
+	}
+	bad := decode(t, `{"stream":"task-4","actor":{"kind":"agent","id":""},"type":"turn.started","correlation":"turn-1","data":{}}`)
+	err := events.Validate(schema, bad)
+	for _, problem := range []string{"actor.id: want at least 1 characters", "data.agent: required field missing"} {
+		if err == nil || !strings.Contains(err.Error(), problem) {
+			t.Errorf("a bad event: got %v, want %q", err, problem)
+		}
+	}
+}
+
 // Validate refuses a keyword Schema doesn't write, even where the event
 // lacks the field, so the two can't drift apart unseen.
 func TestASchemaWithAnUnknownKeywordIsRefused(t *testing.T) {
