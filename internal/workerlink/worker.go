@@ -24,6 +24,9 @@ import (
 type Worker struct {
 	Server     string // the server's address, as https://agentry.example.com
 	Credential string
+	// HTTP calls the server, and dials its websockets: pinned to its CA when
+	// it is served over https with Agentry's own. Nil is the default client.
+	HTTP       *http.Client
 	Machine    *machines.Local // this machine, which does the work
 	About      workers.Machine // what it says about itself
 	Log        func(format string, args ...any)
@@ -80,7 +83,7 @@ func (w *Worker) Run(ctx context.Context) error {
 
 // connect runs one link until it drops, and says whether it was up at all.
 func (w *Worker) connect(ctx context.Context) (bool, error) {
-	ws, response, err := websocket.Dial(ctx, w.Server+ConnectPath, &websocket.DialOptions{HTTPHeader: w.header()})
+	ws, response, err := websocket.Dial(ctx, w.Server+ConnectPath, w.dialOptions())
 	if response != nil && response.StatusCode == http.StatusUnauthorized {
 		return false, ErrRemoved
 	}
@@ -103,6 +106,17 @@ func (w *Worker) connect(ctx context.Context) (bool, error) {
 
 func (w *Worker) header() http.Header {
 	return http.Header{"Authorization": {"Bearer " + w.Credential}}
+}
+
+func (w *Worker) client() *http.Client {
+	if w.HTTP == nil {
+		return http.DefaultClient
+	}
+	return w.HTTP
+}
+
+func (w *Worker) dialOptions() *websocket.DialOptions {
+	return &websocket.DialOptions{HTTPHeader: w.header(), HTTPClient: w.client()}
 }
 
 // sendStatus says which tasks have a live agent here, every StatusEvery.
@@ -223,7 +237,7 @@ func (w *Worker) handle(ctx context.Context, method string, params json.RawMessa
 // stream dials the terminal stream the server asked for and carries the
 // task's session over it (the shape is on remotePane), until either ends.
 func (w *Worker) stream(ctx context.Context, request attach) (size, error) {
-	ws, _, err := websocket.Dial(ctx, w.Server+StreamPath+request.Stream, &websocket.DialOptions{HTTPHeader: w.header()})
+	ws, _, err := websocket.Dial(ctx, w.Server+StreamPath+request.Stream, w.dialOptions())
 	if err != nil {
 		return size{}, err
 	}
