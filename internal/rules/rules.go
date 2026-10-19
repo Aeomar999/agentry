@@ -68,7 +68,7 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		}
 		return nil
 	case errors.Is(err, current.ErrArchived):
-		return refuse(p.Stream + " is archived: an archived task takes no events")
+		return refuse(ArchivedRefusal(p.Stream))
 	case err != nil:
 		return refuse("could not read the task: " + err.Error())
 	}
@@ -144,6 +144,12 @@ var duringWrapUp = []events.Type{events.TaskNeedsYou, events.TaskAnswered, event
 	events.ActionRequested, events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult,
 	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
 	events.WorktreeMoved, events.FileAdded, events.FileRemoved, events.FilesCollected, events.FilesDelivered}
+
+// ArchivedRefusal is why an archived task takes no event, for the rules
+// and for a route that refuses one before proposing anything.
+func ArchivedRefusal(stream string) string {
+	return stream + " is archived: an archived task takes no events"
+}
 
 func refuse(reason string) *events.Rejection {
 	return &events.Rejection{Check: "order", Reason: reason}

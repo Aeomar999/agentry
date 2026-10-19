@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -45,7 +46,12 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	task, err := s.task(r.PathValue("task"))
+	id := r.PathValue("task")
+	task, err := s.task(id)
+	if errors.Is(err, current.ErrArchived) {
+		http.Error(w, rules.ArchivedRefusal(id), http.StatusConflict)
+		return
+	}
 	if err != nil || task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return

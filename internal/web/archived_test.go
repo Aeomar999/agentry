@@ -212,3 +212,35 @@ func TestAnEpicShowsItsQueuedStory(t *testing.T) {
 	storetest.Archive(t, s, state, "task-1")
 	queued("task-1 archived")
 }
+
+// Moving an archived task's card is refused as every other write to it
+// is, with the same words; a task that doesn't exist is still not found.
+func TestMovingAnArchivedTaskIsRefused(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	call(t, server, "POST", "/api/tasks", `{"title":"Shipped"}`)
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {
+		t.Fatalf("task-1 onto Done: %d %s", code, body)
+	}
+	storetest.Archive(t, s, state, "task-1")
+
+	const refused = "task-1 is archived: an archived task takes no events\n"
+	for _, write := range []struct{ method, path, body string }{
+		{"PUT", "/api/tasks/task-1/rank", `{"rank":1}`},
+		{"PUT", "/api/tasks/task-1/labels", `{"labels":["x"]}`},
+		{"POST", "/api/tasks/task-1/answer", `{"answer":"yes"}`},
+		{"POST", "/api/tasks/task-1/direct", `{"to":"todo"}`},
+		{"POST", "/api/tasks/task-1/direct", `{"to":"done"}`},
+	} {
+		if code, body := call(t, server, write.method, write.path, write.body); code != http.StatusConflict || body != refused {
+			t.Errorf("%s %s on an archived task: %d %q, want 409 %q", write.method, write.path, code, body, refused)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/tasks/task-9/direct", `{"to":"todo"}`); code != http.StatusNotFound || body != "no such task\n" {
+		t.Errorf("moving a task that doesn't exist: %d %q, want 404", code, body)
+	}
+}
