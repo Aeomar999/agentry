@@ -121,6 +121,11 @@ func (c *conn) request(ctx context.Context, method string, params any, into any)
 	}
 }
 
+// notify tells Claude Code something that needs no answer.
+func (c *conn) notify(method string) error {
+	return c.write(message{JSONRPC: "2.0", Method: method})
+}
+
 func (c *conn) write(m message) error {
 	data, err := json.Marshal(m)
 	if err != nil {

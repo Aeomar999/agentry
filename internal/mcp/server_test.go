@@ -60,11 +60,13 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 
 // claude plays Claude Code: it sends requests and answers the server's.
 type claude struct {
-	t       *testing.T
-	in      io.Writer
-	out     *bufio.Scanner
-	next    int
-	answers func(method string, params json.RawMessage) any // to the server's requests
+	t        *testing.T
+	in       io.Writer
+	out      *bufio.Scanner
+	next     int
+	answers  func(method string, params json.RawMessage) any // to the server's requests
+	hello    json.RawMessage                                 // what initialize answered
+	notified []string                                        // the server's notifications, oldest first
 }
 
 func start(t *testing.T, canElicit bool, answers func(string, json.RawMessage) any) (*claude, *[]string) {
@@ -89,7 +91,7 @@ func startWith(t *testing.T, agentry client.Client, list []features.Feature, can
 	if canElicit {
 		capabilities["elicitation"] = map[string]any{}
 	}
-	c.call("initialize", map[string]any{"protocolVersion": latest, "capabilities": capabilities})
+	c.hello = c.call("initialize", map[string]any{"protocolVersion": latest, "capabilities": capabilities})
 	return c
 }
 
@@ -101,6 +103,10 @@ func (c *claude) call(method string, params any) json.RawMessage {
 	for c.out.Scan() {
 		var m message
 		json.Unmarshal(c.out.Bytes(), &m)
+		if m.Method != "" && m.ID == nil { // the server tells something
+			c.notified = append(c.notified, m.Method)
+			continue
+		}
 		if m.Method != "" { // the server asks something
 			result, _ := json.Marshal(c.answers(m.Method, m.Params))
 			reply, _ := json.Marshal(message{JSONRPC: "2.0", ID: m.ID, Result: result})
@@ -116,6 +122,21 @@ func (c *claude) call(method string, params any) json.RawMessage {
 	}
 	c.t.Fatalf("%s: no answer", method)
 	return nil
+}
+
+// waitFor reads what the server sends until it notifies method.
+func (c *claude) waitFor(method string) {
+	c.t.Helper()
+	for !slices.Contains(c.notified, method) {
+		if !c.out.Scan() {
+			c.t.Fatalf("no %s", method)
+		}
+		var m message
+		json.Unmarshal(c.out.Bytes(), &m)
+		if m.Method != "" && m.ID == nil {
+			c.notified = append(c.notified, m.Method)
+		}
+	}
 }
 
 func (c *claude) tool(name string, arguments any) string {

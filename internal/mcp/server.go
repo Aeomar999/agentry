@@ -22,8 +22,9 @@ type Server struct {
 	version   string
 	features  []features.Feature // every feature in this binary
 
-	mu    sync.Mutex
-	shown map[string]bool // the features whose tools are listed, by name: enabled or visible, as GET /api/features last said
+	mu        sync.Mutex
+	shown     map[string]bool // the features whose tools are listed, by name: enabled or visible, as GET /api/features last said
+	following sync.Once       // the loop that sees when shown changes, started at initialize
 }
 
 // New is the server for Claude Code started in dir, with list the features
@@ -34,6 +35,8 @@ func New(agentry client.Client, dir, version string, list []features.Feature) *S
 
 // Serve speaks MCP on in and out until in ends.
 func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	ctx, stop := context.WithCancel(ctx) // ends followFeatures with the session
+	defer stop()
 	s.conn = newConn(out)
 	return s.conn.serve(ctx, in, s.handle)
 }
@@ -58,9 +61,12 @@ func (s *Server) handle(ctx context.Context, method string, params json.RawMessa
 			version = hello.ProtocolVersion
 		}
 		s.showFeatures()
+		if len(s.features) > 0 {
+			s.following.Do(func() { go s.followFeatures(ctx) })
+		}
 		return map[string]any{
 			"protocolVersion": version,
-			"capabilities":    map[string]any{"tools": map[string]any{}, "prompts": map[string]any{}},
+			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}, "prompts": map[string]any{}},
 			"serverInfo":      map[string]any{"name": "agentry", "version": s.version},
 			"instructions":    s.instructions(),
 		}, nil
