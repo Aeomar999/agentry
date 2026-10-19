@@ -76,6 +76,7 @@ func TestClosingAnEpicStartsOneVisionariesSessionAboutIt(t *testing.T) {
 	newEpic(t, s, "task-epic", repo)
 	closed := closeEpic(t, s, "task-epic")
 	loop := newLoop(s, state, t.TempDir())
+	loop.Defaults = tasks.Limits{Budget: 5_000_000, MaxTurns: 24}
 	followUpsOf(t, s, loop)
 	followUpsOf(t, s, loop) // a second pass over the same close, as a re-run would
 
@@ -84,8 +85,8 @@ func TestClosingAnEpicStartsOneVisionariesSessionAboutIt(t *testing.T) {
 		t.Fatalf("one close, one session: %d", len(found))
 	}
 	session := found[0]
-	if session.AboutClose != closed.Position || session.Coordinator != "editor" || session.Budget != FollowUpBudget ||
-		session.MaxTurns != FollowUpMaxTurns || session.Parked != "" || session.Repo != repo || session.Kind != tasks.Story || !session.KindChosen {
+	if session.AboutClose != closed.Position || session.Coordinator != "editor" || session.Limits() != loop.Defaults ||
+		session.Parked != "" || session.Repo != repo || session.Kind != tasks.Story || !session.KindChosen {
 		t.Errorf("the session: %+v", session)
 	}
 	if session.Title != "Follow-ups after Ideas list" {
@@ -116,6 +117,9 @@ func TestAReopenedEpicClosedAgainGetsASecondSession(t *testing.T) {
 	found := sessionsAbout(state, "task-epic")
 	if len(found) != 2 || found[0].AboutClose != first.Position || found[1].AboutClose != second.Position {
 		t.Fatalf("two closes, two sessions: %+v", found)
+	}
+	if found[1].Limits() != (tasks.Limits{}) {
+		t.Errorf("the server's limits are none, so the session has none: %+v", found[1].Limits())
 	}
 }
 
