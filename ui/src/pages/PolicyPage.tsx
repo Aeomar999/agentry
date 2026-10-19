@@ -49,8 +49,8 @@ export function PolicyPage() {
             <>
               <Mono>{policy.path}</Mono>
               <span>·</span>
-              <span>
-                version <Mono>{policy.hash.slice(0, 8)}</Mono>
+              <span title="Hash of the policy.toml in force">
+                file <Mono>{policy.hash.slice(0, 8)}</Mono>
               </span>
             </>
           )
