@@ -147,6 +147,18 @@ func TestARefusedIDMadeFromTheTeamsNameSaysSo(t *testing.T) {
 	}
 }
 
+// Giving an id won't fix a refusal of something else, so it gets no hint.
+func TestARefusalNotOfTheIDMadeFromTheTeamsNameHasNoHint(t *testing.T) {
+	server, _ := newTestServer(t)
+	long := "a-coordinator-with-a-long-name"
+	madeAgent(t, server, long, "Long Names", true)
+	code, body := call(t, server, "POST", "/api/teams/Long%20Names/template", `{}`)
+	want := "agent " + long + ": a template's agent names are at most 28 characters, to leave room for a number when the name is taken"
+	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
+		t.Errorf("a long agent name in a team saved without an id: %d %s", code, body)
+	}
+}
+
 func TestARefusedIDYouGaveIsNamedAsItIs(t *testing.T) {
 	server, _ := newTestServer(t)
 	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"id":"software"}`)

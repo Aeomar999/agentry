@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
 
 // Saving a team as a template of your own, and removing one. The rules in
@@ -31,9 +32,14 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(request.ID)
-	derived := id == ""
-	if derived {
+	if id == "" {
 		id = templateIDFor(team)
+		if reason := rules.CheckTemplateID(id); reason != "" {
+			// The id is ours, not theirs: say where it came from, or the
+			// refusal names an id they never typed.
+			http.Error(w, reason+` (made from the team's name "`+team+`"): give the template an id`, http.StatusBadRequest)
+			return
+		}
 	}
 	proposal, err := agents.SaveTemplate(roster, team, id, strings.TrimSpace(request.Description), httpapi.You)
 	if err != nil {
@@ -45,13 +51,7 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	case rejection != nil:
-		reason := rejection.Reason
-		if derived {
-			// The id is ours, not theirs: say where it came from, or the
-			// refusal names an id they never typed.
-			reason += ` (made from the team's name "` + team + `"): give the template an id`
-		}
-		http.Error(w, reason, http.StatusBadRequest)
+		http.Error(w, rejection.Reason, http.StatusBadRequest)
 		return
 	}
 	saved, _ := s.state.Templates().WithID(id)
