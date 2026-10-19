@@ -554,8 +554,8 @@ How each core package changes, with the real types:
   `GET /api/features` calls every `Manifest`.
 - `mcp`: `tool` becomes `features.Tool`; `tools()` appends every feature's.
   Its schema builders (`object`, `text`, ...) move to `internal/schema`,
-  which both use. Until `GET /api/waiting` (story 13), `Waiting` is
-  `func(API, repo string) []Waiting`, read in `agentry mcp` over the API.
+  which both use. `Waiting` is `func(Reader, repo string) []Waiting`, and
+  the server lists it in `GET /api/waiting`.
   `WaitingFor` reads `GET /api/waiting`, where the server lists the core's
   waiting entries and every feature's `Waiting`. The MCP process reads
   `GET /api/features` at `initialize` and lists only the tools of enabled or
