@@ -10,17 +10,11 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
-
-// A tool is one thing Claude can do with Agentry.
-type tool struct {
-	name, description string
-	input             map[string]any // JSON Schema of its arguments
-	run               func(ctx context.Context, arguments json.RawMessage) (string, error)
-}
 
 // The parts of the API's tasks and questions the tools read.
 type task struct {
@@ -50,16 +44,17 @@ type question struct {
 	HeldAt                                                   time.Time
 }
 
-func (s *Server) tools() []tool {
-	return []tool{
-		{"status", "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
-			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one")}), s.status},
-		{"list_tasks", "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
-			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "status": schema.Text("only this status: working, needs you, held, done")}), s.listTasks},
-		{"show_task", "One task: its description, what it waits for, its summary when done, and its latest steps.",
-			schema.Object(schema.Props{"task": schema.Text("its id, such as task-4")}, "task"), s.showTask},
-		{"create_task", "Hand work to Agentry: a task (a story), or an epic of stories. It works in this repo unless repo says otherwise. Show the user the title and description before creating it, unless they said to go ahead.",
-			schema.Object(schema.Props{
+// tools are the core's tools, then those of every feature shown.
+func (s *Server) tools() []features.Tool {
+	tools := []features.Tool{
+		{Name: "status", Description: "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
+			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one")}), Run: s.status},
+		{Name: "list_tasks", Description: "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
+			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "status": schema.Text("only this status: working, needs you, held, done")}), Run: s.listTasks},
+		{Name: "show_task", Description: "One task: its description, what it waits for, its summary when done, and its latest steps.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id, such as task-4")}, "task"), Run: s.showTask},
+		{Name: "create_task", Description: "Hand work to Agentry: a task (a story), or an epic of stories. It works in this repo unless repo says otherwise. Show the user the title and description before creating it, unless they said to go ahead.",
+			Input: schema.Object(schema.Props{
 				"title":       schema.Text("one imperative line under 80 characters"),
 				"description": schema.Text("what to change and why, the areas involved, and how to tell it works"),
 				"kind":        schema.Enum("story: one change, never split; epic: split into stories; leave it out to let the coordinator decide", "story", "epic"),
@@ -70,34 +65,32 @@ func (s *Server) tools() []tool {
 				"repo":        schema.Text("when not this one: the repo's absolute path, a git address to clone (git@host:team/app.git, https://...), or a link to a .zip or .tar.gz of it"),
 				"budget":      schema.Integer("the tokens it may use before it asks the user, such as 2000000; -1 for no limit; leave it out for the server's default"),
 				"maxTurns":    schema.Integer("the turns it may have without the user's answer before it asks them; -1 for no limit; leave it out for the server's default"),
-			}, "title"), s.createTask},
-		{"tell_coordinator", "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
-			schema.Object(schema.Props{"task": schema.Text("its id"), "text": schema.Text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
-		{"answer_question", "Send the user's answer to a coordinator's question. Only ever their own answer.",
-			schema.Object(schema.Props{"task": schema.Text("its id"), "answer": schema.Text("the user's answer")}, "task", "answer"), s.answer},
-		{"close_epic", "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done, whether it is asking or they left it open. Only they can.",
-			schema.Object(schema.Props{"epic": schema.Text("the epic's id")}, "epic"), s.closeEpic},
-		{"review_approvals", "Ask the user, directly in Claude Code, to approve or deny each action an agent is waiting to take (of one task, or all). Only they can.",
-			schema.Object(schema.Props{"task": schema.Text("only this task's")}), s.reviewApprovals},
-		{"file_under_epic", "Make a task a story of an epic, move it to another, or with an empty epic take it out of its epic.",
-			schema.Object(schema.Props{"task": schema.Text("its id"), "epic": schema.Text(`the epic's id, or "" to take it out`)}, "task", "epic"), s.fileUnder},
-		{"set_priority", "Put tasks (such as an epic's stories) in this priority order, first first.",
-			schema.Object(schema.Props{"tasks": schema.Texts("their ids, in the order wanted")}, "tasks"), s.setPriority},
-		{"start", "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
-			schema.Object(schema.Props{"tasks": schema.Texts("their ids")}, "tasks"), s.start},
-		{"attach_file", "Share a file on this machine with a task: its agents find it in .agentry/files, on whichever machine works on it. For data, documents or builds that aren't in git.",
-			schema.Object(schema.Props{"task": schema.Text("its id"), "path": schema.Text("the file's path here"), "as": schema.Text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), s.attachFile},
-		{"get_file", "Download one of a task's shared files to this machine.",
-			schema.Object(schema.Props{"task": schema.Text("its id"), "name": schema.Text("the shared file's name"), "to": schema.Text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
-		{"list_ideas", "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
-			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "state": schema.Enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
-		{"accept_idea", "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
-			schema.Object(schema.Props{"id": schema.Text("the idea's id, such as idea-3"), "kind": schema.Enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
-				"note":  schema.Text("optional: what the user said, for the task's coordinator"),
-				"start": schema.Boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), s.acceptIdea},
-		{"dismiss_idea", "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
-			schema.Object(schema.Props{"id": schema.Text("the idea's id"), "note": schema.Text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
+			}, "title"), Run: s.createTask},
+		{Name: "tell_coordinator", Description: "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "text": schema.Text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), Run: s.tell},
+		{Name: "answer_question", Description: "Send the user's answer to a coordinator's question. Only ever their own answer.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "answer": schema.Text("the user's answer")}, "task", "answer"), Run: s.answer},
+		{Name: "close_epic", Description: "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done, whether it is asking or they left it open. Only they can.",
+			Input: schema.Object(schema.Props{"epic": schema.Text("the epic's id")}, "epic"), Run: s.closeEpic},
+		{Name: "review_approvals", Description: "Ask the user, directly in Claude Code, to approve or deny each action an agent is waiting to take (of one task, or all). Only they can.",
+			Input: schema.Object(schema.Props{"task": schema.Text("only this task's")}), Run: s.reviewApprovals},
+		{Name: "file_under_epic", Description: "Make a task a story of an epic, move it to another, or with an empty epic take it out of its epic.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "epic": schema.Text(`the epic's id, or "" to take it out`)}, "task", "epic"), Run: s.fileUnder},
+		{Name: "set_priority", Description: "Put tasks (such as an epic's stories) in this priority order, first first.",
+			Input: schema.Object(schema.Props{"tasks": schema.Texts("their ids, in the order wanted")}, "tasks"), Run: s.setPriority},
+		{Name: "start", Description: "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
+			Input: schema.Object(schema.Props{"tasks": schema.Texts("their ids")}, "tasks"), Run: s.start},
+		{Name: "attach_file", Description: "Share a file on this machine with a task: its agents find it in .agentry/files, on whichever machine works on it. For data, documents or builds that aren't in git.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "path": schema.Text("the file's path here"), "as": schema.Text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), Run: s.attachFile},
+		{Name: "get_file", Description: "Download one of a task's shared files to this machine.",
+			Input: schema.Object(schema.Props{"task": schema.Text("its id"), "name": schema.Text("the shared file's name"), "to": schema.Text("optional: where to save it; this folder if left out")}, "task", "name"), Run: s.getFile},
 	}
+	for _, f := range s.shownFeatures() {
+		if f.Tools != nil {
+			tools = append(tools, f.Tools(s.agentry, s.repo)...)
+		}
+	}
+	return tools
 }
 
 // ---- reading -------------------------------------------------------------------
@@ -593,8 +586,8 @@ func (s *Server) waitingNote() string {
 		return ""
 	}
 	notes := lines(waiting, func(q question) (string, bool) { return describe(q), true })
-	if ideas, ok := openIdeas(s.agentry, s.repo); ok {
-		notes = append(notes, ideas.Line)
+	for _, w := range featuresWaiting(s.agentry, s.features, s.repo) {
+		notes = append(notes, w.Line)
 	}
 	if len(notes) == 0 {
 		return ""

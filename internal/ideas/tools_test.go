@@ -1,6 +1,7 @@
-package mcp
+package ideas_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
 // A fake Agentry with ideas in every state and nothing else waiting. It
@@ -109,10 +112,67 @@ func (f *ideasAgentry) posts() []string {
 	return posts
 }
 
-// startOnIdeas is start, on the ideas fake.
+// claude plays Claude Code calling ideas' tools in agentry mcp, for a
+// session in /repo. When it can elicit, answers plays the user.
+type claude struct {
+	t         *testing.T
+	tools     []features.Tool
+	canElicit bool
+	answers   func(method string, params json.RawMessage) any
+}
+
+// startOnIdeas starts the ideas' tools on the ideas fake.
 func startOnIdeas(t *testing.T, canElicit bool, answers func(string, json.RawMessage) any) (*claude, *ideasAgentry) {
 	fake, agentry := newIdeasAgentry(t)
-	return startOn(t, agentry, canElicit, answers), fake
+	return &claude{t: t, tools: ideas.Feature().Tools(agentry, "/repo"), canElicit: canElicit, answers: answers}, fake
+}
+
+// tool is a tool's reply, or "error: " and its error, as agentry mcp
+// answers a tools/call.
+func (c *claude) tool(name string, arguments any) string {
+	c.t.Helper()
+	ctx := context.Background()
+	if c.canElicit {
+		ctx = features.WithAsk(ctx, c.ask)
+	}
+	encoded, _ := json.Marshal(arguments)
+	for _, tool := range c.tools {
+		if tool.Name == name {
+			text, err := tool.Run(ctx, encoded)
+			if err != nil {
+				return "error: " + err.Error()
+			}
+			return text
+		}
+	}
+	c.t.Fatalf("no tool %s", name)
+	return ""
+}
+
+// ask is an elicitation/create, answered by answers.
+func (c *claude) ask(_ context.Context, text string, schema map[string]any) (map[string]any, bool, error) {
+	params, _ := json.Marshal(map[string]any{"message": text, "requestedSchema": schema})
+	encoded, _ := json.Marshal(c.answers("elicitation/create", params))
+	var reply struct {
+		Action  string
+		Content map[string]any
+	}
+	json.Unmarshal(encoded, &reply)
+	return reply.Content, reply.Action == "accept", nil
+}
+
+// waitingFor is what of ideas waits for you, about repo.
+func waitingFor(agentry client.Client, repo string) []features.Waiting {
+	return ideas.Feature().Waiting(agentry, repo)
+}
+
+// seen is the keys of waiting.
+func seen(waiting []features.Waiting) map[string]bool {
+	keys := map[string]bool{}
+	for _, w := range waiting {
+		keys[w.Key] = true
+	}
+	return keys
 }
 
 func TestListIdeasShowsTheOpenOnesUnlessAsked(t *testing.T) {
@@ -227,8 +287,8 @@ func TestWithoutElicitationTheArgumentsAreTheDecision(t *testing.T) {
 // decided isn't.
 func TestOpenIdeasWaitForYou(t *testing.T) {
 	fake, agentry := newIdeasAgentry(t)
-	ideasIn := func(waiting []Waiting) []Waiting {
-		var found []Waiting
+	ideasIn := func(waiting []features.Waiting) []features.Waiting {
+		var found []features.Waiting
 		for _, w := range waiting {
 			if w.Kind == "ideas" {
 				found = append(found, w)
@@ -236,10 +296,7 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 		}
 		return found
 	}
-	before, err := WaitingFor(agentry)
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := waitingFor(agentry, "")
 	if got := ideasIn(before); len(got) != 1 || got[0].Line != "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)" || got[0].Task != "task-24" {
 		t.Fatalf("waiting: %+v", before)
 	}
@@ -247,16 +304,16 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 	fake.mu.Lock()
 	fake.ideas[0]["state"] = "dismissed"
 	fake.mu.Unlock()
-	after, _ := WaitingFor(agentry)
-	if got := ideasIn(after); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !Seen(before)[got[0].Key] {
+	after := waitingFor(agentry, "")
+	if got := ideasIn(after); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !seen(before)[got[0].Key] {
 		t.Errorf("an idea decided isn't news: %+v, before %+v", after, before)
 	}
 
 	fake.mu.Lock()
 	fake.ideas = append([]map[string]any{{"id": "idea-8", "title": "Search", "task": "task-40", "state": "accepted", "autoAccepted": true}}, fake.ideas...)
 	fake.mu.Unlock()
-	agreed, _ := WaitingFor(agentry)
-	if got := ideasIn(agreed); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !Seen(before)[got[0].Key] {
+	agreed := waitingFor(agentry, "")
+	if got := ideasIn(agreed); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !seen(before)[got[0].Key] {
 		t.Errorf("an idea Agentry accepted for you isn't news: %+v, before %+v", agreed, before)
 	}
 
@@ -265,8 +322,8 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 		{"id": "idea-6", "title": "Bulk start", "task": "task-40", "state": "open"},
 		{"id": "idea-7", "title": "Tags", "task": "task-40", "state": "open"}}, fake.ideas...)
 	fake.mu.Unlock()
-	news, _ := WaitingFor(agentry)
-	if got := ideasIn(news); len(got) != 1 || got[0].Line != "4 open ideas from the Visionaries: Undo a move, Bulk start, Tags, and 1 more (list_ideas all)" || Seen(before)[got[0].Key] {
+	news := waitingFor(agentry, "")
+	if got := ideasIn(news); len(got) != 1 || got[0].Line != "4 open ideas from the Visionaries: Undo a move, Bulk start, Tags, and 1 more (list_ideas all)" || seen(before)[got[0].Key] {
 		t.Errorf("new ideas are news: %+v", news)
 	}
 
@@ -275,30 +332,14 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 		idea["state"] = "accepted"
 	}
 	fake.mu.Unlock()
-	if none, _ := WaitingFor(agentry); len(ideasIn(none)) != 0 {
+	if none := waitingFor(agentry, ""); len(ideasIn(none)) != 0 {
 		t.Errorf("no open ideas, yet: %+v", none)
 	}
 	fake.mu.Lock()
 	fake.fail = true
 	fake.mu.Unlock()
-	if _, err := WaitingFor(agentry); err != nil {
-		t.Errorf("ideas the server can't list should be left out: %v", err)
-	}
-}
-
-// Every reply ends with the open ideas among what waits for you.
-func TestRepliesEndWithTheOpenIdeas(t *testing.T) {
-	c, fake := startOnIdeas(t, false, nil)
-	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)") {
-		t.Errorf("reply: %s", text)
-	}
-	fake.mu.Lock()
-	for _, idea := range fake.ideas {
-		idea["state"] = "dismissed"
-	}
-	fake.mu.Unlock()
-	if text := c.tool("list_tasks", map[string]any{}); strings.Contains(text, "Waiting for the user") {
-		t.Errorf("nothing waits, yet: %s", text)
+	if failed := waitingFor(agentry, ""); len(failed) != 0 {
+		t.Errorf("ideas the server can't list should be left out: %+v", failed)
 	}
 }
 
@@ -308,21 +349,21 @@ func TestRepliesEndWithTheOpenIdeas(t *testing.T) {
 // where an idea is isn't news.
 func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
 	fake, agentry := newIdeasAgentry(t)
-	elsewhere, _ := openIdeas(agentry, "/repo")
+	elsewhere := waitingFor(agentry, "/repo")[0]
 	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)"; elsewhere.Line != want {
 		t.Errorf("some in another repo: %q, want %q", elsewhere.Line, want)
 	}
 	fake.mu.Lock()
 	fake.ideas[0]["repo"] = "/repo"
 	fake.mu.Unlock()
-	here, _ := openIdeas(agentry, "/repo")
+	here := waitingFor(agentry, "/repo")[0]
 	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas)"; here.Line != want {
 		t.Errorf("all in this repo: %q, want %q", here.Line, want)
 	}
 	if here.Key != "ideas/4" || elsewhere.Key != here.Key {
 		t.Errorf("keys %q and %q, want ideas/4 for both", elsewhere.Key, here.Key)
 	}
-	waiting, _ := WaitingFor(agentry)
+	waiting := waitingFor(agentry, "")
 	if len(waiting) != 1 || !strings.HasSuffix(waiting[0].Line, "(list_ideas all)") || waiting[0].Key != here.Key {
 		t.Errorf("repo not known: %+v, want (list_ideas all) and key %q", waiting, here.Key)
 	}

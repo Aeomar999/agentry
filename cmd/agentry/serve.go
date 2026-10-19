@@ -195,12 +195,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	links := workerlink.NewServer(log, fleet)
 
-	// Every feature in this binary, written out here: no feature registers
-	// itself. The loop and the server are given the same list. Each writes
+	// The loop and the server are given the same features. Each writes
 	// through its own checked proposer, made here once, never the store.
-	installed := []features.Feature{
-		ideas.Feature(),
-	}
+	installed := installedFeatures()
 	logs := map[string]features.Proposer{
 		ideas.Name: features.Checked(ideas.Feature(), ideas.Registration(), log),
 	}
@@ -412,4 +409,12 @@ func rejectionError(rejection *events.Rejection) error {
 		return nil
 	}
 	return rejection
+}
+
+// installedFeatures is every feature in this binary, written out here: no
+// feature registers itself. serve and agentry mcp use the same list.
+func installedFeatures() []features.Feature {
+	return []features.Feature{
+		ideas.Feature(),
+	}
 }

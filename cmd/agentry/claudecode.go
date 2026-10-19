@@ -60,7 +60,7 @@ func runClaudeHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 // sayWhatWaits adds what waits for you to what Claude reads.
 func sayWhatWaits(agentry client.Client, event string, stdout io.Writer) int {
 	agentry.Timeout = 3 * time.Second
-	waiting, err := mcp.WaitingFor(agentry)
+	waiting, err := mcp.WaitingFor(agentry, installedFeatures())
 	if err != nil || len(waiting) == 0 {
 		return 0
 	}
@@ -96,11 +96,11 @@ func waitToWake(agentry client.Client, session string, stderr io.Writer) int {
 		}
 		cancel()
 	}()
-	now, err := mcp.News(agentry)
+	now, err := mcp.News(agentry, installedFeatures())
 	if err != nil {
 		return 0
 	}
-	fresh, err := mcp.WaitForNew(ctx, agentry, mcp.Seen(now))
+	fresh, err := mcp.WaitForNew(ctx, agentry, installedFeatures(), mcp.Seen(now))
 	if err != nil {
 		return 0
 	}
@@ -148,12 +148,12 @@ func runWait(_ []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	now, err := mcp.News(agentry)
+	now, err := mcp.News(agentry, installedFeatures())
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry wait:", err)
 		return 1
 	}
-	fresh, err := mcp.WaitForNew(ctx, agentry, mcp.Seen(now))
+	fresh, err := mcp.WaitForNew(ctx, agentry, installedFeatures(), mcp.Seen(now))
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry wait:", err)
 		return 1

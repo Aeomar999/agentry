@@ -13,10 +13,12 @@ import (
 // their history. Its badge is the number of open ideas. Those coordinators'
 // done decisions carry the ideas Agentry keeps (coordinator.go). Of the
 // core's types it writes the task an accepted idea becomes (makeTask), and
-// the task.held that starts one Agentry accepted (startIdea).
+// the task.held that starts one Agentry accepted (startIdea). In agentry mcp
+// it brings its tools and their instructions (tools.go), and the open
+// ideas wait for you there.
 func Feature() features.Feature {
 	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Writes: []events.Type{events.TaskCreated, events.TaskHeld},
-		Coordinator: coordinatorHook(), Routes: routes, Manifest: manifest}
+		Coordinator: coordinatorHook(), Routes: routes, Manifest: manifest, Tools: tools, Instructions: instructions, Waiting: openIdeas}
 }
 
 // Streams are the ideas' streams, for the state to build and keep: each

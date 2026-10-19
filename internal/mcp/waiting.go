@@ -7,26 +7,25 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// What waits for you, from any task, as one line each (open ideas share
-// one), and the news Claude tells you of between your messages: what newly
-// waits for you, tasks that finished, what a coordinator told you (its reply
-// to you, an epic split into stories that wait for you to start them), and
-// machines that went offline with work on them. The notifications and
-// `agentry wait` are the same.
+// What waits for you, from any task, as one line each (a feature's lines as
+// it says), and the news Claude tells you of between your messages: what
+// newly waits for you, tasks that finished, what a coordinator told you (its
+// reply to you, an epic split into stories that wait for you to start
+// them), and machines that went offline with work on them. The
+// notifications and `agentry wait` are the same.
 
-// Waiting is one thing waiting for you, or a task that finished.
-type Waiting struct {
-	Key  string // the same while it lasts: a new one has a new key
-	Task string
-	Line string // for a person: "task-4: Waiting for you to approve the push to dev"
-	Kind string // "needs you", "ideas" (open ones), "done" (a task finished), "said" (a coordinator told you) or "offline" (a machine)
-}
+// Waiting is one thing waiting for you, or a task that finished: Kind is
+// "needs you", "done" (a task finished), "said" (a coordinator told you),
+// "offline" (a machine), or a feature's own.
+type Waiting = features.Waiting
 
-// WaitingFor is everything waiting for you now, oldest first.
-func WaitingFor(agentry client.Client) ([]Waiting, error) {
+// WaitingFor is everything waiting for you now, oldest first, then what
+// waits of each feature in list.
+func WaitingFor(agentry client.Client, list []features.Feature) ([]Waiting, error) {
 	var questions []question
 	if err := agentry.Call("GET", "/api/questions", nil, &questions); err != nil {
 		return nil, err
@@ -35,17 +34,14 @@ func WaitingFor(agentry client.Client) ([]Waiting, error) {
 	for _, q := range questions {
 		all = append(all, Waiting{Key: q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text, Task: q.Task, Line: describe(q), Kind: "needs you"})
 	}
-	if ideas, ok := openIdeas(agentry, ""); ok { // ideas the server can't list are left out, not an error
-		all = append(all, ideas)
-	}
-	return all, nil
+	return append(all, featuresWaiting(agentry, list, "")...), nil
 }
 
 // News is everything a waiter compares with what it saw before: what waits
 // for you, every task that has finished, each task's coordinator's latest
 // word to you, and the machines offline.
-func News(agentry client.Client) ([]Waiting, error) {
-	all, err := WaitingFor(agentry)
+func News(agentry client.Client, list []features.Feature) ([]Waiting, error) {
+	all, err := WaitingFor(agentry, list)
 	if err != nil {
 		return nil, err
 	}
@@ -83,11 +79,11 @@ func News(agentry client.Client) ([]Waiting, error) {
 // WaitForNew returns once there is news that isn't in seen, with all that
 // is new; a finished task comes with its summary. It follows the log, so
 // it hears at once.
-func WaitForNew(ctx context.Context, agentry client.Client, seen map[string]bool) ([]Waiting, error) {
+func WaitForNew(ctx context.Context, agentry client.Client, list []features.Feature, seen map[string]bool) ([]Waiting, error) {
 	agentry.Timeout = 40 * time.Second // the server answers a wait within 25 seconds
 	var position int64
 	for {
-		all, err := News(agentry)
+		all, err := News(agentry, list)
 		if err != nil {
 			return nil, err
 		}
@@ -109,6 +105,18 @@ func WaitForNew(ctx context.Context, agentry client.Client, seen map[string]bool
 			return nil, ctx.Err()
 		}
 	}
+}
+
+// featuresWaiting is what waits of each feature in list, about repo ("" when
+// not known). What a feature can't read is left out, not an error.
+func featuresWaiting(agentry client.Client, list []features.Feature, repo string) []Waiting {
+	var all []Waiting
+	for _, f := range list {
+		if f.Waiting != nil {
+			all = append(all, f.Waiting(agentry, repo)...)
+		}
+	}
+	return all
 }
 
 // withSummary adds a finished task's summary to its line.

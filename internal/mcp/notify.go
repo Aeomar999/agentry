@@ -18,14 +18,14 @@ const notifyEvery = 15 * time.Second
 // Watch notifies of what starts waiting for you after it starts, and of
 // tasks that finish, until ctx ends. What waits already is on the status line.
 func (s *Server) Watch(ctx context.Context) {
-	waiting, err := News(s.agentry)
+	waiting, err := News(s.agentry, s.features)
 	for err != nil && ctx.Err() == nil { // the server may be starting
 		time.Sleep(notifyEvery)
-		waiting, err = News(s.agentry)
+		waiting, err = News(s.agentry, s.features)
 	}
 	seen := Seen(waiting)
 	for ctx.Err() == nil {
-		fresh, err := WaitForNew(ctx, s.agentry, seen)
+		fresh, err := WaitForNew(ctx, s.agentry, s.features, seen)
 		if err != nil {
 			time.Sleep(notifyEvery)
 			continue

@@ -1,4 +1,4 @@
-package mcp
+package ideas
 
 import (
 	"context"
@@ -8,23 +8,49 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// Ideas are features the Visionaries suggest. Claude only relays them: you
-// accept an idea, which makes it a task in your Backlog, or dismiss it.
+// Ideas' MCP tools, run in agentry mcp over the HTTP API (routes.go). Claude
+// only relays ideas: you accept an idea, which makes it a task in your
+// Backlog, or dismiss it.
 
-// The parts of the API's ideas the tools read.
-type idea struct {
+// instructions are ideas' line in agentry mcp's instructions to Claude.
+const instructions = `- Ideas: the Visionaries suggest features as ideas (list_ideas). Relay them to the user; the user accepts or dismisses each (accept_idea, dismiss_idea). Never accept or dismiss an idea on your own.`
+
+// session is the Agentry server and the repo a Claude Code session is in
+// ("" outside one), which the tools act on.
+type session struct {
+	agentry features.API
+	repo    string
+}
+
+// tools are ideas' MCP tools for a session in repo.
+func tools(agentry features.API, repo string) []features.Tool {
+	s := session{agentry: agentry, repo: repo}
+	return []features.Tool{
+		{Name: "list_ideas", Description: "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
+			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "state": schema.Enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), Run: s.listIdeas},
+		{Name: "accept_idea", Description: "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
+			Input: schema.Object(schema.Props{"id": schema.Text("the idea's id, such as idea-3"), "kind": schema.Enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
+				"note":  schema.Text("optional: what the user said, for the task's coordinator"),
+				"start": schema.Boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), Run: s.acceptIdea},
+		{Name: "dismiss_idea", Description: "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
+			Input: schema.Object(schema.Props{"id": schema.Text("the idea's id"), "note": schema.Text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), Run: s.dismissIdea},
+	}
+}
+
+// listed is an idea as GET /api/ideas answers it: the parts the tools read.
+type listed struct {
 	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
 	About, AboutTitle                                                         string // the epic whose close started its session
 	BackedBy, DoubtedBy                                                       []string
 	AutoAccepted                                                              bool // Agentry accepted it for you
 }
 
-func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
+func (s session) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct {
 		All   bool
 		State string
@@ -41,7 +67,7 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 	if a.All {
 		repo = ""
 	}
-	list, err := ideasOf(s.agentry, repo)
+	list, err := fetchIdeas(s.agentry, repo)
 	if err != nil {
 		return "", err
 	}
@@ -81,21 +107,21 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 // acceptIdea makes an idea a task in your Backlog, or started with start.
 // With elicitation Claude Code asks you first, and you can change the kind,
 // the note and whether it starts.
-func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct {
 		ID, Kind, Note string
 		Start          bool
 	}
 	json.Unmarshal(arguments, &a)
-	i, err := s.idea(a.ID)
+	i, err := s.find(a.ID)
 	if err != nil {
 		return "", err
 	}
 	if a.Kind == "" {
-		a.Kind = kindOf(i)
+		a.Kind = suggestedKind(i)
 	}
-	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), schema.Object(schema.Props{
+	if ask := features.AskOf(ctx); ask != nil {
+		answer, ok, err := ask(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), schema.Object(schema.Props{
 			"decision": schema.Enum("Make it a task, or leave the idea open", "accept", "leave open"),
 			"kind":     withDefault(schema.Enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
 			"note":     withDefault(schema.Text("Optional: what to tell its coordinator"), a.Note),
@@ -132,15 +158,15 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 
 // dismissIdea dismisses an idea. With elicitation Claude Code asks you
 // first, and you can change the note.
-func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
+func (s session) dismissIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ ID, Note string }
 	json.Unmarshal(arguments, &a)
-	i, err := s.idea(a.ID)
+	i, err := s.find(a.ID)
 	if err != nil {
 		return "", err
 	}
-	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), schema.Object(schema.Props{
+	if ask := features.AskOf(ctx); ask != nil {
+		answer, ok, err := ask(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), schema.Object(schema.Props{
 			"decision": schema.Enum("Dismiss it, or leave it open", "dismiss", "leave open"),
 			"note":     withDefault(schema.Text("Optional: why, so the Visionaries don't suggest it again"), a.Note),
 		}, "decision"))
@@ -183,27 +209,27 @@ func startOf(start bool) string {
 	return "backlog"
 }
 
-// idea is one idea, of any repo.
-func (s *Server) idea(id string) (idea, error) {
-	list, err := ideasOf(s.agentry, "")
+// find is one idea, of any repo.
+func (s session) find(id string) (listed, error) {
+	list, err := fetchIdeas(s.agentry, "")
 	if err != nil {
-		return idea{}, err
+		return listed{}, err
 	}
 	for _, i := range list {
 		if i.ID == id {
 			return i, nil
 		}
 	}
-	return idea{}, fmt.Errorf("no idea %s", id)
+	return listed{}, fmt.Errorf("no idea %s", id)
 }
 
-// ideasOf are the ideas about a repo, or every repo's for "", newest first.
-func ideasOf(agentry client.Client, repo string) ([]idea, error) {
+// fetchIdeas are the ideas about a repo, or every repo's for "", newest first.
+func fetchIdeas(agentry features.API, repo string) ([]listed, error) {
 	path := "/api/ideas"
 	if repo != "" {
 		path += "?repo=" + url.QueryEscape(repo)
 	}
-	var list []idea
+	var list []listed
 	err := agentry.Call("GET", path, nil, &list)
 	return list, err
 }
@@ -213,13 +239,14 @@ func ideasOf(agentry client.Client, repo string) ([]idea, error) {
 // another repo than repo, or when repo is "" (not known). Its key is the
 // number of ideas ever suggested, so a new idea is news and one you accept or
 // dismiss isn't; one Agentry accepted for you was never yours to decide, so
-// it isn't counted. ok is false with none open.
-func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
-	all, err := ideasOf(agentry, "")
+// it isn't counted. There is none with no idea open, or when the ideas
+// can't be listed.
+func openIdeas(agentry features.API, repo string) []features.Waiting {
+	all, err := fetchIdeas(agentry, "")
 	if err != nil {
-		return Waiting{}, false
+		return nil
 	}
-	var open []idea
+	var open []listed
 	yours := 0
 	pointer := "list_ideas"
 	if repo == "" {
@@ -238,7 +265,7 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 		}
 	}
 	if len(open) == 0 {
-		return Waiting{}, false
+		return nil
 	}
 	var titles []string
 	for _, i := range open[:min(3, len(open))] {
@@ -251,12 +278,12 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	if len(open) == 1 {
 		what = "open idea"
 	}
-	return Waiting{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
-		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}, true
+	return []features.Waiting{{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
+		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}}
 }
 
 // aboutIdea is what you read before deciding on an idea.
-func aboutIdea(i idea) string {
+func aboutIdea(i listed) string {
 	header := headerOf(i)
 	// header[:1] is a whole letter: headerOf always has the kind, and the parts are ASCII.
 	return fmt.Sprintf("Problem: %s\n\nFeature: %s\n\n%s%s.", i.Problem, i.Proposal, strings.ToUpper(header[:1]), header[1:])
@@ -264,12 +291,12 @@ func aboutIdea(i idea) string {
 
 // headerOf is the idea's size, kind and source task, leaving out what it
 // doesn't have.
-func headerOf(i idea) string {
+func headerOf(i listed) string {
 	var parts []string
 	if i.Size != "" {
 		parts = append(parts, "size "+i.Size)
 	}
-	parts = append(parts, kindOf(i))
+	parts = append(parts, suggestedKind(i))
 	if i.Task != "" {
 		parts = append(parts, "suggested in "+i.Task)
 	}
@@ -279,8 +306,8 @@ func headerOf(i idea) string {
 	return strings.Join(parts, ", ")
 }
 
-// kindOf is what the idea suggests making of it: a task or an epic.
-func kindOf(i idea) string {
+// suggestedKind is what the idea suggests making of it: a task or an epic.
+func suggestedKind(i listed) string {
 	if i.Kind == "epic" {
 		return "epic"
 	}
@@ -299,4 +326,12 @@ func withDefault(schema map[string]any, value string) map[string]any {
 		schema["default"] = value
 	}
 	return schema
+}
+
+// scope is what the session's lists are of: its repo, or every repo.
+func (s session) scope(everywhere bool) string {
+	if everywhere || s.repo == "" {
+		return "every repo"
+	}
+	return s.repo
 }

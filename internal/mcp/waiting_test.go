@@ -36,13 +36,13 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	defer server.Close()
 	agentry := client.Client{Where: client.Where{URL: server.URL}, Token: "x"}
 
-	now, err := News(agentry)
+	now, err := News(agentry, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := make(chan []Waiting, 1)
 	go func() {
-		fresh, _ := WaitForNew(context.Background(), agentry, Seen(now))
+		fresh, _ := WaitForNew(context.Background(), agentry, nil, Seen(now))
 		result <- fresh
 	}()
 	time.Sleep(150 * time.Millisecond)

@@ -73,7 +73,7 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	dir, _ := os.Getwd()
-	s := mcp.New(agentry, dir, machines.AgentryVersion())
+	s := mcp.New(agentry, dir, machines.AgentryVersion(), installedFeatures())
 	if !*quiet {
 		go s.Watch(ctx)
 	}
