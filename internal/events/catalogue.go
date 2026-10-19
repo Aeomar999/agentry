@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -226,6 +227,10 @@ const (
 
 // TaskPrefix starts every task's stream name: Store.Create("task-", ...).
 const TaskPrefix = "task-"
+
+// Numbered is the stream Store.Create names when made streams of its kind
+// are in the log: prefix and the next number, so task-1 is the first task.
+func Numbered(prefix string, made int) string { return prefix + strconv.Itoa(made+1) }
 
 // KindOf says what a stream is. It needs no state, so CheckShape can ask
 // it; whether a task stream's task exists is for the rules to say.

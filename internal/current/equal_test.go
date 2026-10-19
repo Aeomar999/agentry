@@ -145,6 +145,17 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	}
 }
 
+func TestEqualCatchesTheWrongNextTask(t *testing.T) {
+	s := openStore(t, someProposals()...)
+	state := New(withIdeas)
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	state.tasksMade++
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "next task:") {
+		t.Errorf("Equal with one task.created too many counted: %v", err)
+	}
+}
+
 func TestEqualCatchesTheWrongIdeaOrder(t *testing.T) {
 	s := openStore(t, append(someProposals(), proposal("idea-2", system, ideas.IdeaSuggested,
 		map[string]any{"title": "Later", "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"}))...)

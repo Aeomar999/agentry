@@ -20,10 +20,10 @@ import (
 
 // Equal checks the state against a replay of the store's log, which stays
 // the definition of state: every task, idea and roster, the task and idea
-// orders, each stream's last position and the log's, and what was skipped:
-// foreign streams are compared by that count alone. It returns the first
-// difference, named by stream, or nil. A stream the state holds as broken
-// must fail to replay too.
+// orders, the next task's stream, each stream's last position and the
+// log's, and what was skipped: foreign streams are compared by that count
+// alone. It returns the first difference, named by stream, or nil. A stream
+// the state holds as broken must fail to replay too.
 //
 // The store may go on taking events while Equal runs, so it compares at one
 // cut: a copy of the state, and the log read only up to the copy's position.
@@ -78,6 +78,9 @@ func Equal(s *store.Store, state *State) error {
 	}
 	if order := held.TaskIDs(); !slices.Equal(order, index.tasks) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, index.tasks)
+	}
+	if next, inLog := held.NextTask(), events.Numbered(events.TaskPrefix, index.made); next != inLog {
+		return fmt.Errorf("next task: the state names %s, the log %s", next, inLog)
 	}
 	if order := held.ideaIDs(); !slices.Equal(order, index.ideas) {
 		return fmt.Errorf("idea order: the state has %v, the log %v", order, index.ideas)
@@ -181,6 +184,7 @@ func differingField(got, want any) string {
 // index is the log up to a cut, as Equal compares it.
 type index struct {
 	tasks   []string         // the stream of every accepted task.created, oldest first, in any stream but a foreign one
+	made    int              // every accepted task.created, a foreign stream's too
 	ideas   []string         // the stream of every accepted idea.suggested, oldest first, the same
 	streams map[string]int64 // each stream's last accepted position
 	skipped tally            // foreign streams and unknown types
@@ -206,6 +210,9 @@ func indexOf(s *store.Store, cut int64) (index, error) {
 			kind := catalogue.KindOf(e.Stream)
 			found.skipped.count(catalogue, kind, e, found.streams[e.Stream] == 0)
 			found.streams[e.Stream] = e.Position
+			if e.Type == events.TaskCreated {
+				found.made++
+			}
 			if kind == events.ForeignStream {
 				continue
 			}

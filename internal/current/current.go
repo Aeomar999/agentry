@@ -41,6 +41,7 @@ type State struct {
 	streams     map[string]int64       // each stream's last accepted event applied, by stream
 	tasks       map[string]*tasks.Task // by stream
 	created     []created              // every task.created applied, in the order of their positions, as the log lists them
+	tasksMade   int                    // every task.created applied, a foreign stream's too, as Store.Create counts them
 	ideas       map[string]*ideas.Idea // by stream
 	suggested   []created              // every idea.suggested applied, in the order of their positions, as the log lists them
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
@@ -84,6 +85,7 @@ func (s *State) Load(stream string, accepted []events.Event) {
 	kind := s.catalogue.KindOf(stream)
 	for i, e := range accepted {
 		s.skipped.count(s.catalogue, kind, e, i == 0)
+		s.countMade(e)
 	}
 	if kind == events.ForeignStream {
 		return
@@ -141,6 +143,7 @@ func (s *State) Refold(stream string, before []events.Event, e events.Event) {
 	kind := s.catalogue.KindOf(stream)
 	s.skipped.count(s.catalogue, kind, e, s.streams[stream] == 0)
 	s.streams[stream] = e.Position
+	s.countMade(e)
 	if kind == events.ForeignStream {
 		return
 	}
@@ -181,6 +184,7 @@ func (s *State) Apply(e events.Event) {
 	kind := s.catalogue.KindOf(e.Stream)
 	s.skipped.count(s.catalogue, kind, e, s.streams[e.Stream] == 0)
 	s.streams[e.Stream] = e.Position
+	s.countMade(e)
 	if kind == events.ForeignStream {
 		return
 	}
@@ -229,6 +233,14 @@ func (s *State) made(e events.Event) {
 	}
 }
 
+// countMade counts a task.created in any stream, so NextTask names the
+// stream Store.Create would.
+func (s *State) countMade(e events.Event) {
+	if e.Type == events.TaskCreated {
+		s.tasksMade++
+	}
+}
+
 // guard runs change, and marks the stream broken if it panics, so one bad
 // stream fails its own reads and leaves every other stream working. doing
 // says what change was doing, for the error.
@@ -259,6 +271,7 @@ func (s *State) copy() *State {
 		streams:     maps.Clone(s.streams),
 		tasks:       maps.Clone(s.tasks),
 		created:     slices.Clone(s.created),
+		tasksMade:   s.tasksMade,
 		ideas:       maps.Clone(s.ideas),
 		suggested:   slices.Clone(s.suggested),
 		broken:      maps.Clone(s.broken),
@@ -337,6 +350,15 @@ func (s *State) TaskIDs() []string {
 		ids[i] = c.id
 	}
 	return ids
+}
+
+// NextTask is the stream the next task.created goes into: the one
+// Store.Create("task-", ...) names, as both count every task.created. An
+// archiver that deletes rows must keep both counts (see Store.made).
+func (s *State) NextTask() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return events.Numbered(events.TaskPrefix, s.tasksMade)
 }
 
 // Ideas is every idea, oldest first, in a new slice the caller may sort.

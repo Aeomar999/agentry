@@ -99,6 +99,24 @@ func TestEqualCountsForeignStreams(t *testing.T) {
 	}
 }
 
+// NextTask counts every accepted task.created, as Store.Create does: one in
+// a foreign stream too, though it makes no task, and never a rejected one.
+func TestNextTaskCountsEveryTaskCreatedAsStoreCreateDoes(t *testing.T) {
+	var proposals []events.Proposal
+	for _, e := range everyStream() {
+		proposals = append(proposals, e.Proposal)
+	}
+	log := logOf(append(proposals, proposal("pr-1", you, events.TaskCreated, map[string]any{"title": "Foreign", "repo": "/r", "coordinator": "tech-lead"}))...)
+	for name, s := range map[string]*State{"loaded": loadedWith(events.Core(), log), "applied": appliedWith(events.Core(), log)} {
+		if got := s.NextTask(); got != "task-4" {
+			t.Errorf("%s: next task %s, want task-4 after task-1, task-2 and pr-1's", name, got)
+		}
+		if ids := s.TaskIDs(); !slices.Equal(ids, []string{"task-1", "task-2"}) {
+			t.Errorf("%s: tasks %v, want pr-1's left out", name, ids)
+		}
+	}
+}
+
 // A type the catalogue doesn't know, inside a task's stream, is counted and
 // changes nothing but the task's LastActiveAt.
 func TestAnUnknownTypeInATaskChangesOnlyLastActiveAt(t *testing.T) {
