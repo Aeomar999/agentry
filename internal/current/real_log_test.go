@@ -109,12 +109,14 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
 }
 
-// Snapshots of a real log: on a copy named by AGENTRY_BENCH_DB, the state
-// at a few cuts, the last among them, goes through a snapshot and equals a
-// replay. At the last cut it logs the snapshot's size and how long a write
-// and a load take, a load being Restore and Open with no tail.
+// Equivalence test 2, snapshots of a real log: on a copy named by
+// AGENTRY_BENCH_DB, the state at every 500th position and at the first
+// event of each type goes through a snapshot and equals a replay (about 300
+// cuts on a log of 150,000 events, so expect minutes). At the last cut it
+// logs the snapshot's size and how long a write and a load take, a load
+// being Restore and Open with no tail.
 //
-//	AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestARealLogThroughASnapshot -v -count=1
+//	AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestARealLogThroughASnapshot -v -count=1 -timeout 60m
 func TestARealLogThroughASnapshotEqualsAReplay(t *testing.T) {
 	source := os.Getenv("AGENTRY_BENCH_DB")
 	if source == "" {
@@ -128,13 +130,30 @@ func TestARealLogThroughASnapshotEqualsAReplay(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	throughSnapshots(t, path, 500)
+}
+
+// The same on a fixture log, cut every 5 positions, so a change that
+// breaks the test shows without AGENTRY_BENCH_DB.
+func TestAFixtureLogThroughASnapshotEqualsAReplay(t *testing.T) {
+	path, _ := seededLog(t, someProposals()...)
+	throughSnapshots(t, path, 5)
+}
+
+// throughSnapshots is equivalence test 2 on the log at path, cut every
+// `every` positions.
+func throughSnapshots(t *testing.T, path string, every int64) {
 	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	last := s.LastPosition()
+	all, err := everyEvent(s)
 	s.Close()
-	cuts := []int64{last / 4, last / 2, last - 10_000, last}
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := all[len(all)-1].Position
+	cuts := cutsOf(all, every)
 	if err := EqualThroughSnapshots(path, withIdeas, t.TempDir(), cuts, ideas.Streams()); err != nil {
 		t.Fatal(err)
 	}
@@ -172,6 +191,20 @@ func TestARealLogThroughASnapshotEqualsAReplay(t *testing.T) {
 			t.Errorf("%s is broken: %v", stream, err)
 		}
 	}
-	t.Logf("%d events, cuts %v equal a replay; the snapshot at %d: %.1f MB, written in %s, read in %s, opened (read, checked, rebuilt) in %s",
-		last, cuts, last, float64(info.Size())/1e6, wrote.Round(time.Millisecond), read.Round(time.Millisecond), loaded.Round(time.Millisecond))
+	t.Logf("%d events, %d cuts equal a replay; the snapshot at %d: %.1f MB, written in %s, read in %s, opened (read, checked, rebuilt) in %s",
+		last, len(cuts), last, float64(info.Size())/1e6, wrote.Round(time.Millisecond), read.Round(time.Millisecond), loaded.Round(time.Millisecond))
+}
+
+// cutsOf is every `every`th position of log, the first event of each type
+// in it and its last event, in order.
+func cutsOf(log []events.Event, every int64) []int64 {
+	var cuts []int64
+	seen := map[events.Type]bool{}
+	for i, e := range log {
+		if e.Position%every == 0 || !seen[e.Type] || i == len(log)-1 {
+			cuts = append(cuts, e.Position)
+		}
+		seen[e.Type] = true
+	}
+	return cuts
 }

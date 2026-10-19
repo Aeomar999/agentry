@@ -33,8 +33,9 @@ import (
 //
 //	AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestStartupBench -v -count=1 -timeout 30m
 //
-// Nothing is built yet, so it prints case (a), the read model alone: no
-// target is expected to pass.
+// Targets 1, 3 and 6 are measured with snapshots (build step 4); 2, 4 and 5
+// are still case (a), the read model alone with nothing archived, and are
+// not expected to pass until the archiver (step 7).
 func TestStartupBench(t *testing.T) {
 	source := os.Getenv("AGENTRY_BENCH_DB")
 	if source == "" {
@@ -56,8 +57,7 @@ func TestStartupBench(t *testing.T) {
 	t.Logf("working set: %d open tasks, %d done in the last %d days, %d events in the state once the other %d done tasks are archived",
 		w.open, len(w.kept)-w.open, storetest.WorkingDays, w.events, len(w.archivable))
 
-	t.Logf("Targets, case (a) (GOMAXPROCS %d):", runtime.GOMAXPROCS(0))
-	t.Logf("  1 startup with a snapshot <= 0.5 s: there is no snapshot yet, so it is the full replay, %s", seconds(startup))
+	t.Logf("Targets (GOMAXPROCS %d):", runtime.GOMAXPROCS(0))
 	if limit := fullReplayLimit(gb); limit > 0 {
 		t.Logf("  2 full replay <= %s: %s", seconds(limit), seconds(startup))
 	}
@@ -69,6 +69,7 @@ func TestStartupBench(t *testing.T) {
 		heapLimit/1e6, w.events, len(w.archivable), float64(held)/1e6)
 
 	benchBodyDecode(t, state, w, working)
+	benchSnapshots(t, path, state, w.archivable, tailEvents)
 }
 
 func benchSetting(t *testing.T, name string, otherwise float64) float64 {
