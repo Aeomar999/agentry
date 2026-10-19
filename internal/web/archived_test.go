@@ -55,6 +55,9 @@ func TestAnArchivedTaskIsCountedButNotShown(t *testing.T) {
 	if code, body := call(t, server, "GET", "/api/tasks/task-2", ""); code != http.StatusGone || !strings.Contains(body, "task-2 is archived") {
 		t.Errorf("an archived task's detail: %d %s", code, body)
 	}
+	if code, body := call(t, server, "GET", "/api/tasks/task-2/events", ""); code != http.StatusGone || !strings.Contains(body, "task-2 is archived") {
+		t.Errorf("an archived task's events: %d %s", code, body)
+	}
 	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-2") {
 		t.Errorf("an archived task asks nothing: %s", body)
 	}

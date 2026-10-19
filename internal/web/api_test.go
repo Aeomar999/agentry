@@ -181,7 +181,7 @@ func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
 		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
 	}
 	at := itoa(s.LastPosition())
-	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
 		if got := positionOf(t, server, "GET", path); got != at {
 			t.Errorf("GET %s: position %q, want %s", path, got, at)
 		}

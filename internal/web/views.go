@@ -150,15 +150,19 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 		detail.Approvals = append(detail.Approvals, actionView(a))
 	}
 	for _, e := range log {
-		data := e.Data
-		if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
-			data = maps.Clone(data)
-			data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
-		}
-		detail.Events = append(detail.Events, eventEntry{Position: e.Position, At: e.At, Type: e.Type,
-			Actor: e.Actor.String(), Correlation: e.Correlation, Data: data})
+		detail.Events = append(detail.Events, entryOf(e))
 	}
 	return detail
+}
+
+// entryOf is an event as the page reads it.
+func entryOf(e events.Event) eventEntry {
+	data := e.Data
+	if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
+		data = maps.Clone(data)
+		data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
+	}
+	return eventEntry{Position: e.Position, At: e.At, Type: e.Type, Actor: e.Actor.String(), Correlation: e.Correlation, Data: data}
 }
 
 // tokensUnknownOf says on how many turns the tokens couldn't be counted,
