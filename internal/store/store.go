@@ -140,7 +140,7 @@ func (s *Store) Propose(p events.Proposal) (events.Event, *events.Rejection, err
 // Create is Propose for the event that starts a new stream, such as
 // task.created or idea.suggested. The stream is named prefix and the next
 // number, counted under the same lock, so two made at once never take the
-// same name.
+// same name. See made for what an archiver must change.
 func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -154,7 +154,10 @@ func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.
 
 // made counts the events of a type in the log, rejections left out, so the
 // next stream of its kind follows every one made, even one whose stream
-// can't be read.
+// can't be read. For tasks it counts task.created rows: once the archiver
+// deletes rows, it must count archive markers too, or it hands out ids
+// already taken (docs/design/log-growth.md, "What task-21 should leave
+// room for", item 6).
 func (s *Store) made(kind events.Type) (int, error) {
 	var made int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ? AND position <= ?`, kind, s.applied.Load()).Scan(&made)

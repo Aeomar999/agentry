@@ -111,8 +111,12 @@ func (s *State) fold(stream string, accepted []events.Event) {
 
 // Refold builds a stream's state again from its accepted events before e
 // and e, as Load does, for an event that changes what came before it
-// (events.Catalogue.Refolds). What the state held for the stream goes, even a broken
-// or archived task, and the position moves as Apply moves it.
+// (events.Catalogue.Refolds). What the state held for the stream goes, even
+// a broken or archived task, and the position moves as Apply moves it.
+// Clearing the archived summary suits task.unarchived, which brings the task
+// back from its events. A future event.redacted on an archived stream can't
+// clear it by mistake: rules.Check refuses every event on an archived task
+// today.
 func (s *State) Refold(stream string, before []events.Event, e events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

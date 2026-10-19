@@ -44,7 +44,10 @@ func Equal(s *store.Store, state *State) error {
 		if held.archived[id] {
 			// No event archives a task yet, so only a test's Archive makes
 			// one, and the log has nothing to compare it with. Its place in
-			// the order and its stream's position are still compared.
+			// the order and its stream's position are still compared. The
+			// archiver story replaces this skip: it compares the summary
+			// here against tasks.Archived of a replay (log-growth.md, "What
+			// task-21 should leave room for", item 6).
 			continue
 		}
 		if err := equalStream(s, cut, id, tasks.Replay, func() (any, error) { return held.Task(id) }); err != nil {
