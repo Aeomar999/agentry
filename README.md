@@ -160,9 +160,9 @@ Each machine connected gets its own credential (the log keeps only its hash); th
 
 Browsers install the app, and run the service worker it needs, only on a secure page: https with a certificate the device trusts, or `http://localhost`. So without https the app installs only on the computer Agentry runs on. A plain self-signed certificate doesn't help: the browser warns that the page isn't secure and still won't install it. Instead, Agentry has its own certificate authority (CA), as mkcert does: you trust it once on each device, and every certificate it signs for this server is trusted from then on.
 
-- **Turn it on:** `agentry serve -https`, or `agentry open -https` (from the zip: Stop Agentry, then run `./agentry open -https` in the Agentry folder, or `.\agentry.exe open -https` on Windows). The first start makes the CA. The printed links become https, followed by the CA's fingerprint and the trust page's address.
+- **Turn it on:** `agentry serve -https`, or `agentry open -https` (from the zip: Stop Agentry, then run `./agentry open -https` in the Agentry folder, or `.\agentry.exe open -https` on Windows). `-https` isn't remembered: Start Agentry starts it without https, so start it with `./agentry open -https` (`.\agentry.exe open -https` on Windows) every time. The first start makes the CA. The printed links become https, followed by the CA's fingerprint and the trust page's address.
 - **One port:** https and plain http share the port. Plain http from another device is sent on to https (a 308 redirect), except the trust page, which a device must reach before it trusts the CA. An address the certificate doesn't cover, such as a name you set up yourself, gets the trust page with the addresses that work. On the computer Agentry runs on, `http://localhost:<port>` keeps working as it is.
-- **The certificate:** it names localhost, `127.0.0.1`, `::1`, this machine's hostname and `hostname.local`, and each of its network addresses (LAN, Hawser, Tailscale). It lasts about 13 months and is kept only in memory: Agentry issues a new one by itself, with no restart, when the machine's addresses change or it is within 30 days of its end.
+- **The certificate:** it names localhost, `127.0.0.1`, `::1`, this machine's hostname and `hostname.local`, and each of its private network addresses (LAN, Hawser, Tailscale). It lasts about 13 months and is kept only in memory: Agentry issues a new one by itself, with no restart, when the machine's addresses change or it is within 30 days of its end.
 
 ### Trust a device once
 
@@ -192,14 +192,14 @@ The CA's name constraints let it sign only for localhost, this machine's hostnam
 `agentry ca -regenerate` replaces the CA. Do it if the key may have leaked, or after renaming the machine. Stop Agentry first; the command refuses while it runs. Then:
 
 - **Devices:** each one that trusted the old CA no longer trusts this server. Remove the old "Agentry local CA" from it (on iOS, delete the profile), and trust the new one from `/trust/`.
-- **Workers:** each loses its link, and `agentry worker logs` says the server's certificate isn't from the CA it kept. Join again with the new fingerprint: run a new command from the Workers page, or `agentry worker join -ca-fingerprint <F> <server> <code>`, with `F` from `agentry ca`.
+- **Workers:** each loses its link, and `agentry worker logs` says the server's certificate isn't from the CA it kept. Join again with the new fingerprint: run a new command from the Workers page, or `agentry worker join -ca-fingerprint <F> <server> <code>`, with `F` from `agentry ca`, then `agentry worker restart`, since a running worker reads its settings only when it starts.
 - **Claude Code:** run a new command from the Integrations page on each machine connected, then restart its Claude Code sessions.
 
 ### Alternatives
 
 `-https` is the simple way on a home network. Others, not built in:
 
-- **Behind a reverse proxy that does TLS,** as in [Deploy it](#deploy-it): run Agentry without `-https` and give it `-public-url https://…`. The proxy's certificate is the one devices see.
+- **Behind a reverse proxy that does TLS:** run Agentry without `-https` and give it `-public-url https://…`. The proxy's certificate is the one devices see.
 - **With Tailscale,** `tailscale cert` gives a real certificate for the machine's `*.ts.net` name. Put a proxy in front of Agentry with it, as above.
 - **With a public domain,** a proxy that gets its certificate by ACME, such as Let's Encrypt, does the same.
 
