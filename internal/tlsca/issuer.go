@@ -13,6 +13,10 @@ import (
 // replaced.
 const renewBefore = 30 * 24 * time.Hour
 
+// hostsFresh is how long a list of hosts is used before they are asked for
+// again: Hosts lists the network interfaces, too slow for every handshake.
+const hostsFresh = 30 * time.Second
+
 // Issuer hands TLS the server certificate, issuing a new one when the
 // addresses change or the one it has nears its end, so the server never
 // restarts for it.
@@ -25,14 +29,16 @@ type Issuer struct {
 	hosts func() []string
 	now   func() time.Time
 
-	mu      sync.Mutex
-	cert    *tls.Certificate
-	issued  []string // the normal hosts cert names
-	leftOut []string // the hosts last reported as outside the CA's constraints
+	mu       sync.Mutex
+	listed   []string  // the normal hosts the CA permits, as last asked
+	listedAt time.Time // when they were asked
+	leftOut  []string  // the hosts last reported as outside the CA's constraints
+	cert     *tls.Certificate
+	issued   []string // the normal hosts cert names
 }
 
-// NewIssuer issues for the hosts hosts returns, asked on each handshake, at
-// the time now gives.
+// NewIssuer issues for the hosts hosts returns, asked at most every
+// hostsFresh, at the time now gives.
 func NewIssuer(ca *CA, hosts func() []string, now func() time.Time) *Issuer {
 	return &Issuer{ca: ca, hosts: hosts, now: now}
 }
@@ -46,10 +52,34 @@ func (i *Issuer) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) 
 // name the hosts there are now or expires within renewBefore. Hosts the CA
 // may not vouch for are left out, and reported once each time they change.
 func (i *Issuer) Certificate() (*tls.Certificate, error) {
-	all, now := normalHosts(i.hosts()), i.now() // outside the lock: hosts may be slow
-	hosts, leftOut := i.split(all)
+	now := i.now()
+	i.listHosts(now)
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	if i.cert != nil && slices.Equal(i.issued, i.listed) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore)) {
+		return i.cert, nil
+	}
+	cert, err := i.ca.Issue(i.listed, now)
+	if err != nil {
+		return nil, err
+	}
+	i.cert, i.issued = cert, i.listed
+	return cert, nil
+}
+
+// listHosts asks for the hosts again once the list is hostsFresh old, or
+// from a time after now, as after the clock went back.
+func (i *Issuer) listHosts(now time.Time) {
+	i.mu.Lock()
+	fresh := !i.listedAt.IsZero() && !now.Before(i.listedAt) && now.Sub(i.listedAt) < hostsFresh
+	i.mu.Unlock()
+	if fresh {
+		return
+	}
+	hosts, leftOut := i.split(normalHosts(i.hosts())) // outside the lock: hosts may be slow
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.listed, i.listedAt = hosts, now
 	if !slices.Equal(i.leftOut, leftOut) {
 		i.leftOut = leftOut
 		if len(leftOut) > 0 {
@@ -57,15 +87,6 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 				"hosts", strings.Join(leftOut, ", "))
 		}
 	}
-	if i.cert != nil && slices.Equal(i.issued, hosts) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore)) {
-		return i.cert, nil
-	}
-	cert, err := i.ca.Issue(hosts, now)
-	if err != nil {
-		return nil, err
-	}
-	i.cert, i.issued = cert, hosts
-	return cert, nil
 }
 
 // split parts normal hosts into those the CA permits and those it doesn't.

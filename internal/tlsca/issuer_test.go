@@ -15,6 +15,7 @@ type world struct {
 	mu    sync.Mutex
 	now   time.Time
 	hosts []string
+	asked int // times Hosts was called
 }
 
 func (w *world) Now() time.Time {
@@ -26,7 +27,14 @@ func (w *world) Now() time.Time {
 func (w *world) Hosts() []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.asked++
 	return slices.Clone(w.hosts)
+}
+
+func (w *world) timesAsked() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.asked
 }
 
 func (w *world) set(now time.Time, hosts ...string) {
@@ -65,7 +73,7 @@ func TestTheSameCertificateWhileNothingChanges(t *testing.T) {
 func TestANewCertificateWhenTheAddressesChange(t *testing.T) {
 	i, w := newIssuer(t)
 	first := certificate(t, i)
-	w.set(w.Now(), "box", "192.168.1.20", "100.64.0.7") // joined a private network
+	w.set(w.Now().Add(hostsFresh), "box", "192.168.1.20", "100.64.0.7") // joined a private network
 	second := certificate(t, i)
 	if second == first || second.Leaf.SerialNumber.Cmp(first.Leaf.SerialNumber) == 0 {
 		t.Fatal("no new certificate for a new address")
@@ -73,9 +81,23 @@ func TestANewCertificateWhenTheAddressesChange(t *testing.T) {
 	if _, err := second.Leaf.Verify(x509.VerifyOptions{DNSName: "100.64.0.7", Roots: i.ca.Pool()}); err != nil {
 		t.Errorf("the new address: %v", err)
 	}
-	w.set(w.Now(), "box") // left the LAN
+	w.set(w.Now().Add(hostsFresh), "box") // left the LAN
 	if third := certificate(t, i); third == second || slices.ContainsFunc(third.Leaf.IPAddresses, func(ip net.IP) bool { return ip.String() == "192.168.1.20" }) {
 		t.Errorf("still names an address that is gone: %v", third.Leaf.IPAddresses)
+	}
+}
+
+func TestTheHostsAreAskedForAtMostEvery30Seconds(t *testing.T) {
+	i, w := newIssuer(t)
+	certificate(t, i)
+	start := w.Now()
+	w.set(start.Add(hostsFresh-time.Second), "box", "192.168.1.20", "100.64.0.7")
+	if cert := certificate(t, i); w.timesAsked() != 1 || cert.Leaf.VerifyHostname("100.64.0.7") == nil {
+		t.Errorf("asked %d times within %v", w.timesAsked(), hostsFresh)
+	}
+	w.set(start.Add(hostsFresh), w.Hosts()...)
+	if cert := certificate(t, i); cert.Leaf.VerifyHostname("100.64.0.7") != nil {
+		t.Errorf("a new address isn't named %v after it came: %v", hostsFresh, cert.Leaf.IPAddresses)
 	}
 }
 
@@ -103,7 +125,7 @@ func TestConcurrentHandshakes(t *testing.T) {
 		wg.Go(func() {
 			for k := range 20 {
 				if n == 0 && k%5 == 0 {
-					w.set(w.Now(), "box", "10.0.0."+string(rune('1'+k/5)))
+					w.set(w.Now().Add(hostsFresh), "box", "10.0.0."+string(rune('1'+k/5)))
 				}
 				if cert, err := i.GetCertificate(&tls.ClientHelloInfo{}); err != nil || cert.Leaf == nil {
 					t.Error(err)
