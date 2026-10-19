@@ -21,13 +21,14 @@ import (
 // A Feature is one capability a team or a setting turns on. Every field but
 // Name may be left out.
 type Feature struct {
-	Name        string             // "ideas": its manifest entry, routes and UI folder use it
-	Version     int                // raised when its events or state change
-	Streams     *Streams           // the streams it owns, if any
-	Writes      []events.Type      // the core types it proposes, beside its own: ideas makes a task.created (Checked)
-	Coordinator *Coordinator       // its part in coordinators' briefs and decisions
-	Routes      func(Core) []Route // its HTTP API, which web mounts behind each Route's Auth
-	Manifest    func(Reader) Entry // whether the page shows it, and why
+	Name        string               // "ideas": its manifest entry, routes and UI folder use it
+	Version     int                  // raised when its events or state change
+	Streams     *Streams             // the streams it owns, if any
+	Writes      []events.Type        // the core types it proposes, beside its own: ideas makes a task.created (Checked)
+	Guards      map[events.Type]Rule // more checks on the core's types, run after the core's rules pass
+	Coordinator *Coordinator         // its part in coordinators' briefs and decisions
+	Routes      func(Core) []Route   // its HTTP API, which web mounts behind each Route's Auth
+	Manifest    func(Reader) Entry   // whether the page shows it, and why
 
 	// Waiting is what of it waits for you, about repo ("" when not known),
 	// worked out in the server, which lists it in GET /api/waiting after the
@@ -49,18 +50,27 @@ type Feature struct {
 }
 
 // Streams are a feature's own streams, each named Prefix and an ID and
-// holding only Types: how the state builds and keeps each one. Types are
-// their fields and writers, checked as the core's are (Registration).
-// FromEvents builds a stream's state from its accepted events, as at Open;
-// Next is the state after one more event, built on a copy, so prev stays as
-// it was for whoever holds it. Both as tasks.FromEvents and tasks.Next, and a
-// nil state means the stream holds nothing yet.
+// holding only Types: how the state builds and keeps each one. Types are the
+// events its streams hold, with their fields and writers; Registration adds
+// them to the catalogue. FromEvents builds a stream's state from its accepted
+// events, as at Open; Next is the state after one more event, built on a
+// copy, so prev stays as it was for whoever holds it. Both as
+// tasks.FromEvents and tasks.Next, and a nil state means the stream holds
+// nothing yet. Check is check 3 for a proposal on one of its streams, once
+// the core's rules let it through.
 type Streams struct {
 	Prefix     string // "idea-"
 	Types      map[events.Type]events.Spec
 	FromEvents func(accepted []events.Event) any
 	Next       func(prev any, e events.Event) any
+	Check      Rule
 }
+
+// Rule is a feature's check 3 for one proposal, given the state it would be
+// appended to. It can only refuse: the core's rules run first, and a nil
+// Rejection lets through only what they let through. One that panics
+// refuses the proposal.
+type Rule func(p events.Proposal, state Reader) *events.Rejection
 
 // Registration is what f adds to the event catalogue: its streams' prefix
 // and types. A feature with no Streams adds nothing.
