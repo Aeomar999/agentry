@@ -177,19 +177,19 @@ func (l *Live) storeLocked(loaded *Policy, backup string) *Change {
 
 // refusedAtStart says how to recover from a policy file that doesn't load
 // when Agentry starts: there is no page yet to show what's wrong.
-// A hint after an error that quotes the file goes on its own line, so it
-// doesn't read as part of the file.
+// An error that quotes the file and the hint after it each go on lines of
+// their own, so neither reads as part of the file or of Agentry's message.
 func refusedAtStart(path string, err error) error {
-	noBackup, goBack := "; there is no backup of it", "; to go back to its newest backup, cp %s %s"
+	refused, noBackup, goBack := "policy %s is refused: %w", "; there is no backup of it", "; to go back to its newest backup, cp %s %s"
 	if strings.Contains(err.Error(), "\n") {
-		noBackup, goBack = "\nThere is no backup of it.", "\nTo go back to its newest backup: cp %s %s"
+		refused, noBackup, goBack = "policy %s is refused:\n%w", "\nThere is no backup of it.", "\nTo go back to its newest backup: cp %s %s"
 	}
 	backups := listBackups(path)
 	if len(backups) == 0 {
-		return fmt.Errorf("policy %s is refused: %w"+noBackup, path, err)
+		return fmt.Errorf(refused+noBackup, path, err)
 	}
 	newest := backups[len(backups)-1]
-	return fmt.Errorf("policy %s is refused: %w"+goBack, path, err, shellQuote(newest), shellQuote(path))
+	return fmt.Errorf(refused+goBack, path, err, shellQuote(newest), shellQuote(path))
 }
 
 // shellQuote quotes s as one word for the shell.

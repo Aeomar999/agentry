@@ -132,7 +132,8 @@ func TestABrokenFileAtStartNamesTheLineAndTheNewestBackup(t *testing.T) {
 	}
 }
 
-// An error that quotes the file gets its hint on a line of its own.
+// An error that quotes the file starts on a line of its own, and so does
+// its hint.
 func TestAnUnknownKeyAtStartPutsTheHintOnItsOwnLine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.toml")
 	os.WriteFile(path, []byte(strings.Replace(minimal, "[profiles.p]", "bogus_key = true\n[profiles.p]", 1)), 0o600)
@@ -144,6 +145,9 @@ func TestAnUnknownKeyAtStartPutsTheHintOnItsOwnLine(t *testing.T) {
 		t.Fatal("Agentry must not run without a policy")
 	}
 	lines := strings.Split(err.Error(), "\n")
+	if !strings.HasSuffix(lines[0], " is refused:") || len(lines) < 2 || !strings.HasPrefix(lines[1], "2| ") {
+		t.Errorf("the file's first quoted line starts a line of its own:\n%v", err)
+	}
 	hint := "To go back to its newest backup: cp '" + backup + "' '" + path + "'"
 	if len(lines) < 2 || lines[len(lines)-1] != hint || lines[len(lines)-2] != `7| otherwise = "ask"` {
 		t.Errorf("the hint is the last line and the file's last quoted line is before it:\n%v", err)
