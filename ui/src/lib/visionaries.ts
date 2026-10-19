@@ -30,6 +30,7 @@ export function useAskVisionaries(): AskVisionaries {
       setAdding(true);
       setError("");
       try {
+        // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
         await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
         setMissingProfiles([]);
         reload();
