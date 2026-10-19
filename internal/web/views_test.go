@@ -57,7 +57,7 @@ func TestATurnSaysItWaitsForAUsageLimit(t *testing.T) {
 		{ID: "turn-2", Limited: "limit reached"},
 		{ID: "turn-3"},
 	}}
-	body, _ := json.Marshal(detailOf(task, agents.Roster{}, nil).Turns)
+	body, _ := json.Marshal(detailOf(task, agents.Roster{}).Turns)
 	want := `"limited":"limit reached","resetsAt":"2026-10-20T03:00:00Z"`
 	if !strings.Contains(string(body), want) || strings.Count(string(body), "resetsAt") != 1 || strings.Count(string(body), "limited") != 2 {
 		t.Errorf("turns %s, want turn-1 with %s, turn-2 limited with no reset and turn-3 neither", body, want)

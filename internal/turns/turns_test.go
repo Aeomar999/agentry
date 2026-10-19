@@ -134,7 +134,7 @@ func TestTypeLineSendsALineToTheSession(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	task := taskWithWorktree(t, s, "task-turns-3")
+	task := taskWithWorktree(t, s, "task-1")
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 	runner := NewRunner(s, state, here(), Config{})
@@ -158,7 +158,7 @@ func TestTypeLineSendsALineToTheSession(t *testing.T) {
 func TestTypeLineIntoNoSessionIsAnError(t *testing.T) {
 	sessionstest.Isolate(t)
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	task := taskWithWorktree(t, s, "task-turns-4")
+	task := taskWithWorktree(t, s, "task-1")
 	if err := NewRunner(s, state, here(), Config{}).TypeLine(task.ID, "Carry on."); err == nil {
 		t.Error("typing into a session that isn't running should fail")
 	}

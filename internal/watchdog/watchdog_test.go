@@ -374,7 +374,8 @@ func TestARefusedResumeTypesNothingAndStallsAfterTheReset(t *testing.T) {
 		}
 		return rules.Check(p, state, catalogue)
 	}
-	state, catalogue := current.New(), events.Core()
+	catalogue := events.Core()
+	state := current.New(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return refuseResumes(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
