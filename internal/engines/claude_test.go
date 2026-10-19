@@ -55,3 +55,17 @@ func TestARateLimitIsAUsageLimitOnlyWithAFutureReset(t *testing.T) {
 		}
 	}
 }
+
+// The limit and its reset may be in error_details while the last message
+// is ordinary model text.
+func TestAUsageLimitIsReadFromTheDetailsBesideAMessage(t *testing.T) {
+	now := time.Date(2026, 10, 19, 23, 40, 0, 0, time.UTC)
+	s := claudeFailure(hookPayload{
+		Error:                "rate_limit",
+		LastAssistantMessage: "Running the tests now.",
+		ErrorDetails:         "You've hit your session limit · resets 3am (UTC)",
+	}, now)
+	if s.Kind != UsageLimited || !s.ResetsAt.Equal(time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)) || s.Details != "Running the tests now." {
+		t.Errorf("got %+v", s)
+	}
+}

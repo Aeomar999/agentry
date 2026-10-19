@@ -100,13 +100,15 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 
 // claudeFailure is what a StopFailure means: Claude Code sends it instead
 // of Stop when the turn ends at an API error. rate_limit is a usage limit
-// only when the message says so or names a reset still to come; it is also used
-// for plain 429s and capacity errors, which fail the turn like any other.
+// only when the message or the error details say so or name a reset still
+// to come; it is also used for plain 429s and capacity errors, which fail
+// the turn like any other.
 func claudeFailure(p hookPayload, now time.Time) Signal {
 	details := cmp.Or(p.LastAssistantMessage, p.ErrorDetails)
 	failure := Signal{Kind: TurnFailed, Error: cmp.Or(p.Error, "unknown"), Details: details}
-	resetsAt := ResetTime(details, now)
-	if p.Error == "rate_limit" && (hitYourLimit(details) || !resetsAt.IsZero()) {
+	both := p.LastAssistantMessage + "\n" + p.ErrorDetails
+	resetsAt := ResetTime(both, now)
+	if p.Error == "rate_limit" && (hitYourLimit(both) || !resetsAt.IsZero()) {
 		failure.Kind, failure.ResetsAt = UsageLimited, resetsAt
 	}
 	return failure
