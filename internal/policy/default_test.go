@@ -711,6 +711,11 @@ func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 			{"vitest --execArgv", bash("npx vitest run --execArgv --import=data:text/javascript,globalThis.x=1"), Deny},
 			{"vitest --execArgv=", bash("npx vitest run --execArgv=--import=data:text/javascript,globalThis.x=1"), Deny},
 			{"vitest --poolOptions execArgv", bash("npx vitest run --poolOptions.forks.execArgv=--import=data:text/javascript,1"), Deny},
+			// vitest's parser camel-cases option names, so the kebab spelling sets execArgv too
+			{"vitest --exec-argv=", bash("npx vitest run --exec-argv=--import=data:text/javascript,process.stderr.write%28%22PWNED%22%29"), Deny},
+			{"vitest --exec-argv", bash("npx vitest run --exec-argv --import=data:text/javascript,1"), Deny},
+			{"vitest --pool-options exec-argv", bash("npx vitest run --pool-options.threads.exec-argv=--import=data:text/javascript,1"), Deny},
+			{"vitest --poolOptions exec-argv", bash("npx vitest run --poolOptions.forks.exec-argv=--import=data:text/javascript,1"), Deny},
 
 			// eslint
 			{"eslint -c", bash("npx eslint -c " + scratch + "/e.js ."), Ask},
@@ -815,6 +820,7 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"a cd in a subshell in a loop", bash("for m in api web; do (cd $m && npm test); done"), Allow},
 		{"a cd in a subshell in a loop, go test", bash("for m in api web; do (cd $m && go test ./...); done"), Allow},
 		{"vitest --execArgv", bash("npx vitest run --execArgv=--import=data:text/javascript,1"), Allow},
+		{"vitest --exec-argv", bash("npx vitest run --exec-argv=--import=data:text/javascript,1"), Allow},
 		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {
