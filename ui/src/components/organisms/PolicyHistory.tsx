@@ -76,7 +76,10 @@ function VersionRow({ version, inForce, canRevert, busy, onRevert }: VersionRowP
   );
 }
 
-// whoOf is you, or Agentry for what it loaded by itself: at start, or a change it noticed on disk.
+// whoOf is you for a change from the page, and Agentry for what it loaded at
+// start. A change noticed on disk, or a file refused there, names no one:
+// whoever edited the file, Agentry only read it.
 function whoOf(version: PolicyVersion): string {
-  return version.actor.kind === "human" ? version.actor.id : "Agentry";
+  if (version.actor.kind === "human") return version.actor.id;
+  return version.refused || version.change.endsWith("on disk") ? "" : "Agentry";
 }

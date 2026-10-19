@@ -6,11 +6,13 @@ import { Mono } from "@/components/molecules/Mono";
 import { Panel } from "@/components/molecules/Panel";
 import { addDefaultProfile, takeDefaultProfile, updateDefaultProfile } from "@/api/client";
 import type { DefaultProfile } from "@/api/types";
+import { MissingProfileUsers } from "@/components/organisms/MissingProfiles";
 import { usePolicyChange } from "@/lib/policy-change";
 
 // The profiles this Agentry ships, against your file. A missing one can be
-// added, an outdated one you never touched updated, and one you changed is
-// never overwritten: you see yours against the default and choose.
+// added, and shows the agents that need it; an outdated one you never
+// touched updated; and one you changed is never overwritten: you see yours
+// against the default and choose.
 
 const STATES: Record<DefaultProfile["state"], { badge: BadgeVariant; label: string }> = {
   missing: { badge: "warning", label: "missing" },
@@ -21,11 +23,15 @@ const STATES: Record<DefaultProfile["state"], { badge: BadgeVariant; label: stri
 
 export function DefaultProfiles({
   defaults,
+  missing,
+  useForEveryone,
   version,
   hash,
   onChanged,
 }: {
   defaults: DefaultProfile[];
+  missing: Record<string, string[]>; // missing profiles agents have, with those agents
+  useForEveryone: string;
   version: string;
   hash: string;
   onChanged: () => void;
@@ -34,7 +40,15 @@ export function DefaultProfiles({
     <Panel flush title="Default profiles" aside={<>as Agentry {version} ships them</>}>
       <ul>
         {defaults.map((profile) => (
-          <DefaultProfileRow key={profile.name} profile={profile} version={version} hash={hash} onChanged={onChanged} />
+          <DefaultProfileRow
+            key={profile.name}
+            profile={profile}
+            users={profile.state === "missing" ? (missing[profile.name] ?? []) : []}
+            useForEveryone={useForEveryone}
+            version={version}
+            hash={hash}
+            onChanged={onChanged}
+          />
         ))}
       </ul>
     </Panel>
@@ -43,11 +57,15 @@ export function DefaultProfiles({
 
 function DefaultProfileRow({
   profile,
+  users,
+  useForEveryone,
   version,
   hash,
   onChanged,
 }: {
   profile: DefaultProfile;
+  users: string[]; // agents that have it, while it's missing
+  useForEveryone: string;
   version: string;
   hash: string;
   onChanged: () => void;
@@ -94,6 +112,7 @@ function DefaultProfileRow({
           </>
         )}
       </div>
+      {users.length > 0 && <MissingProfileUsers agents={users} policy={{ useForEveryone }} />}
       {profile.diff && !kept && <Diff text={profile.diff} className="border-t border-divider" />}
     </li>
   );

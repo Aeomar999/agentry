@@ -145,6 +145,7 @@ export interface Policy {
   defaults: DefaultProfile[];
   users: Record<string, ProfileUser[]>; // by each agent's own profile
   effective: Record<string, EffectiveProfile>; // by agent
+  missing: Record<string, string[]>; // profiles agents have that the file lacks, with those agents
 }
 
 // A profile Agentry ships, as your file has it: missing, the default of
@@ -168,7 +169,8 @@ export interface EffectiveProfile {
   profile: string;
   own: string;
   overridden: boolean;
-  text: string; // "read-mostly, overridden by allow-everything"
+  missing: boolean; // the file has no profile own, so the agent's calls are denied unless overridden
+  text: string; // "read-mostly, overridden by allow-everything", "read-mostly (missing from policy.toml)"
 }
 
 // One entry of the policy's history, newest first.
@@ -209,6 +211,7 @@ export interface ServerConfig {
   workers: string[]; // the machines agents can be given: "local" first, then every worker
   canAddWorkers: boolean;
   policyProblem: boolean; // policy.toml has a mistake; the Policy page says what
+  missingProfiles: Record<string, string[]>; // profiles agents have that policy.toml lacks, with those agents
 }
 
 // A machine, besides the one Agentry runs on, that agents can run on.

@@ -9,6 +9,7 @@ import { Mono } from "@/components/molecules/Mono";
 import { AgentName } from "@/components/molecules/AgentName";
 import { DefaultProfiles } from "@/components/organisms/DefaultProfiles";
 import { PolicyHistory } from "@/components/organisms/PolicyHistory";
+import { UnshippedMissingProfiles } from "@/components/organisms/MissingProfiles";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
 import type { Policy, PolicyProfile } from "@/api/types";
 import { useResource } from "@/live/use-resource";
@@ -68,7 +69,17 @@ export function PolicyPage() {
             Rules are read top to bottom and the first that matches decides. Save the file and it takes effect within two seconds.
           </Banner>
         )}
-        {policy && <DefaultProfiles defaults={policy.defaults} version={policy.version} hash={policy.hash} onChanged={reload} />}
+        {policy && <UnshippedMissingProfiles policy={policy} />}
+        {policy && (
+          <DefaultProfiles
+            defaults={policy.defaults}
+            missing={policy.missing ?? {}}
+            useForEveryone={policy.useForEveryone}
+            version={policy.version}
+            hash={policy.hash}
+            onChanged={reload}
+          />
+        )}
         {policy?.profiles.map((profile) => (
           <ProfilePanel key={profile.name} profile={profile} policy={policy} />
         ))}
