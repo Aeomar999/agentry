@@ -101,10 +101,10 @@ generic point. "Core" means a generic change that stays.
 | Task field | `internal/tasks/task.go` (`Task.Idea`), `internal/tasks/apply.go` (`task.created` reads `"idea"`) | A task remembers the idea it was made from | Hook: a feature-neutral "made from" stream |
 | Idea state | `internal/ideas/idea.go` (`Idea`, `State`, `FromEvents`, `Next`, `apply`) | An idea's state from its events, same shape as `tasks` | Own |
 | Accept | `internal/ideas/accept.go` (`Accept`, `madeFrom`, `ideaOf`, `makeTask`, `kindOf`, `description`, `Board`) | Makes one Backlog task per idea, however often accepted, then marks it accepted | Own |
-| Lists | `internal/ideas/list.go` (`Load`, `List`, `Dismissals`) | Reads ideas from the log (`store.IdeaIDs`, `Store.Stream`), not from `current.State` | Own (and should read the state: section 11, story 1) |
-| Read model | `internal/current/current.go` (`State.ideas`, `Load` and `Apply` branches on `IsIdeaStream`, `State.Idea`) | Keeps each idea in memory | Hook: a state slice per stream prefix |
-| Read model check | `internal/current/equal.go` (`IdeaIDs` loop) | The equivalence test covers ideas | Hook: loop over every slice |
-| Log reads | `internal/store/read.go` (`IdeaIDs`), `internal/store/store.go` (`Create`, `made`) | `idea-N` named under the store lock by counting `idea.suggested` | Core: `Create(prefix, p)` is generic already; `IdeaIDs` becomes `StartedBy(type)` |
+| Lists | `internal/ideas/list.go` (`Source`, `List(source, repo)`, `Dismissals`) | Reads ideas from `current.State` through `ideas.Source` (`Ideas()`, `Idea`); `Load` is gone (story 1, task-78) | Own |
+| Read model | `internal/current/current.go` (`State.ideas`, `Load` and `Apply` branches on `IsIdeaStream`, `State.Idea`, `State.Ideas()` in log order without broken ones) | Keeps each idea in memory | Hook: a state slice per stream prefix |
+| Read model check | `internal/current/equal.go` (loop over the ideas its own log index finds, and their order) | The equivalence test covers ideas | Hook: loop over every slice |
+| Log reads | `internal/store/store.go` (`Create`, `made`) | `idea-N` named under the store lock by counting `idea.suggested`; `store.IdeaIDs` is deleted (story 1, task-78) | Core: `Create(prefix, p)` is generic already |
 | Rules | `internal/rules/idea_rules.go` (`checkIdea`, `aGoodSuggestion`, `madeFromIt`), `internal/rules/rules.go` (`State.Idea`, the `IsIdeaStream` branch in `Check`) | Suggested once from a real task, accepted or dismissed once while open | Own the rules; hook in `Check` |
 | Coordinator hook | `internal/coordinator/ideas.go` (`VisionariesTeam`, `isVisionaries`, `Idea`, `IdeasFormat`, `suggest`, `dismissedFor`, `dismissedText`) | On done, writes each idea with `Store.Create(events.IdeaPrefix, ...)` as the loop | Own |
 | Decision | `internal/coordinator/decision.go` (`Decision.Ideas`) | The done decision's `ideas` field | Hook: a field a feature claims |
@@ -508,9 +508,9 @@ How each core package changes, with the real types:
 - `tasks`: `Task.Idea` becomes `Task.MadeFrom` (any feature's stream that
   made the task), read from `"from"` on new events and `"idea"` on old ones,
   so old logs replay unchanged (section 7).
-- `store`: `Open` takes the catalogue; `IdeaIDs` goes, and the
-  `streamsStartedBy` it wraps is exported as `StartedBy(events.Type)`;
-  `Create` is already generic. No feature sees the `*store.Store`.
+- `store`: `Open` takes the catalogue; `IdeaIDs` and the
+  `streamsStartedBy` it wrapped are already gone (story 1), since lists
+  read the state; `Create` is already generic. No feature sees the `*store.Store`.
 - `coordinator`: `Decision.Ideas` goes; `Decision` keeps the raw reply so a
   feature's `Field` can be read from it. `coordinatorBrief` appends the
   sections and decision text of each feature whose `For` matches;
