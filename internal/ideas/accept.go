@@ -164,11 +164,15 @@ func madeFrom(log features.EventLog, board Board, id string) (Acceptance, error)
 }
 
 // ideaOf is the stream a task was made from, read from its task.created in
-// the log, "" for none.
+// the log, "" for none. An archived task's task.created went with its
+// rows, so its marker's summary says.
 func ideaOf(log features.EventLog, taskID string) (string, error) {
 	stream, err := log.Stream(taskID)
 	if err != nil {
 		return "", err
+	}
+	if summary, archived := tasks.Archived(stream); archived {
+		return summary.MadeFrom, nil
 	}
 	for _, e := range stream {
 		if e.Type == events.TaskCreated {

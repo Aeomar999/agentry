@@ -434,6 +434,24 @@ func TestAcceptRefusesAnUnknownKind(t *testing.T) {
 	}
 }
 
+// A task made from the idea and archived before the idea was marked is
+// still found, by its marker's summary: no second task is made.
+func TestAcceptFindsAnArchivedTaskMadeFromTheIdea(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	id := suggest(t, s, repo, nil)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}})
+	storetest.Archive(t, s, state, "task-2")
+
+	got, err := ideas.Accept(s, state, id, ideas.Choice{})
+	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "archived") {
+		t.Errorf("accept: %+v %v; want task-2 found, archived", got, err)
+	}
+	if n := len(state.TaskIDs()); n != 2 {
+		t.Errorf("%d tasks, want task-1 and task-2 alone", n)
+	}
+}
+
 // You dismiss the idea after its task is made but before it is marked: the
 // task stays, and Acceptance says so.
 func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
