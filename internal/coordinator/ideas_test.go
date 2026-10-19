@@ -52,7 +52,12 @@ func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, st
 // runLoop runs a loop on the store until the test ends.
 func runLoop(t *testing.T, s *store.Store, state *current.State) {
 	t.Helper()
-	loop := newLoop(s, state, t.TempDir())
+	run(t, newLoop(s, state, t.TempDir()), state)
+}
+
+// run runs the loop until the test ends.
+func run(t *testing.T, loop *Loop, state *current.State) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {

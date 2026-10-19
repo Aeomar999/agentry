@@ -67,6 +67,7 @@ func followUpsOf(t *testing.T, s *store.Store, loop *Loop) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	loop.startedAt = 0
 	loop.followUps(log)
 }
 
@@ -173,15 +174,17 @@ func TestWithoutVisionariesTheEpicSaysHowToAddThem(t *testing.T) {
 	}
 }
 
-// The running loop starts a session for a close it reads after it
-// started, and none for one before: every start reads the whole log again.
+// The running loop starts a session for a close written after it was made,
+// even one written before Run reads the log (the server takes requests by
+// then), and none for one before: every start reads the whole log again.
 func TestTheLoopFollowsUpOnlyCloseAfterItStarted(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	newEpic(t, s, "task-old", repo)
 	closeEpic(t, s, "task-old")
-	runLoop(t, s, state)
+	loop := newLoop(s, state, t.TempDir())
 	newEpic(t, s, "task-new", repo)
 	closeEpic(t, s, "task-new")
+	run(t, loop, state)
 
 	var found []*tasks.Task
 	for deadline := time.Now().Add(10 * time.Second); len(found) == 0 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {

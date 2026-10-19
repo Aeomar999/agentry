@@ -32,15 +32,17 @@ type Loop struct {
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
 
-	startedAt int64 // the log's last position when Run started: what came before is history (followups.go)
+	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
 	Clones string // where repos the user names by a git address are cloned, for a "move"
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 
+// NewLoop makes the loop before the server takes requests, so a close
+// written once it does is never mistaken for history.
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, state: state, runner: runner, fleet: fleet}
+	return &Loop{store: s, state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:
@@ -48,7 +50,6 @@ func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *
 const gitTimeout = 10 * time.Minute
 
 func (l *Loop) Run(ctx context.Context) error {
-	l.startedAt = l.store.LastPosition()
 	reader := l.store.NewReader(0)
 	defer reader.Close()
 	for {
