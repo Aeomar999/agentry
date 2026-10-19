@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -206,8 +207,33 @@ func (h *Handler) recordWhatWasLearned(name, learned string) {
 	}
 	agent, ok := h.state.Roster().Get(name)
 	if ok && learned != strings.TrimSpace(agent.Knowledge) {
-		h.store.Propose(agent.Learned(events.Actor{Kind: events.Agent, ID: agent.Name}, learned))
+		h.keepLearned(agent, learned)
 	}
+}
+
+// keepLearned proposes learned as the agent's knowledge, with agent as the
+// hook read it. The rules refuse a patch made from a version replaced since,
+// as when you edit the knowledge on the page meanwhile, and then a full copy
+// goes instead.
+func (h *Handler) keepLearned(agent agents.Agent, learned string) {
+	p := learning(agent, learned)
+	if _, rejection, err := h.store.Propose(p); err == nil && rejection != nil && agents.IsPatch(p) {
+		h.store.Propose(agent.Learned(p.Actor, learned))
+	}
+}
+
+// learning is the event that sets the agent's knowledge to learned: a patch
+// on what it knows, or a full copy for its first version and whenever the
+// patches since its last full copy would add up to more than the text.
+// Rebuilding any version then reads at most its last full copy and its own
+// length again (Target 9 in docs/design/log-growth.md).
+func learning(agent agents.Agent, learned string) events.Proposal {
+	by := events.Actor{Kind: events.Agent, ID: agent.Name}
+	patch := agents.Diff(agent.Knowledge, learned)
+	if agent.Knowledge == "" || agent.Patched()+len(patch.Middle) > len(learned) {
+		return agent.Learned(by, learned)
+	}
+	return agent.Patching(by, patch)
 }
 
 func (h *Handler) refuse(engine engines.Engine, call hookcall.Call, reason string) hookcall.Reply {

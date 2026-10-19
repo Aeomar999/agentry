@@ -436,6 +436,62 @@ func TestWhatTheAgentLearnedIsKept(t *testing.T) {
 	}
 }
 
+// After the first version, the agent's knowledge is kept as patches, until
+// they would add up to more than the text: then a full copy goes again.
+func TestLaterVersionsOfWhatTheAgentLearnedArePatches(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	for _, c := range []struct {
+		learned string
+		patch   bool
+	}{
+		{"Use gofmt.", false}, // the first version
+		{"Use gofmt.\nRun go vet.", true},
+		{"Use gofmt -s.\nRun go vet.", true},      // patched 13 + 3, of 26
+		{"Use gofmt -s.\nRun go vet ./...", true}, // and 5, of 30
+		{"Run the race detector.", false},         // 22 more would pass the text's own length
+		{"Run the race detector on CI.", true},
+	} {
+		h.recordWhatWasLearned("engineer", c.learned)
+		stream, _ := s.Stream(events.AgentsStream)
+		last := stream[len(stream)-1]
+		if last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) != c.patch {
+			t.Errorf("%q: kept as %s %v, want a patch: %v", c.learned, last.Type, last.Data, c.patch)
+		}
+		if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != c.learned {
+			t.Errorf("%q: the engineer knows %q", c.learned, engineer.Knowledge)
+		}
+		if engineer, _ := agents.FromEvents(stream).Get("engineer"); engineer.Knowledge != c.learned {
+			t.Errorf("%q: a replay knows %q", c.learned, engineer.Knowledge)
+		}
+	}
+}
+
+// You edit the knowledge on the page between the hook reading it and
+// proposing what the agent learned: the patch made from what the hook read
+// is refused, and a full copy of the agent's text lands instead.
+func TestAStalePatchIsSentAgainAsAFullCopy(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Use gofmt.")
+	read, _ := state.Roster().Get("engineer")
+	if _, rejection, err := s.Propose(read.Learned(events.Actor{Kind: events.Human, ID: "you"}, "Use tabs.")); err != nil || rejection != nil {
+		t.Fatal(err, rejection)
+	}
+	h.keepLearned(read, "Use gofmt.\nRun go vet.")
+
+	stream, _ := s.Log(events.AgentsStream)
+	if rejected := stream[len(stream)-2]; rejected.Type != events.ProposalRejected {
+		t.Errorf("before the full copy: %s %v, want the patch refused", rejected.Type, rejected.Data)
+	}
+	if last := stream[len(stream)-1]; last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) || last.Actor.ID != "engineer" {
+		t.Errorf("last: %s %v by %s, want the engineer's full copy", last.Type, last.Data, last.Actor)
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt.\nRun go vet." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
 func TestThePlanFollowsTheFile(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)

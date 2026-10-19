@@ -1462,6 +1462,46 @@ func TestYouEditWhatAnAgentKnows(t *testing.T) {
 	}
 }
 
+// The history lists the same versions with the same texts whether the log
+// keeps each as a full copy or as a patch on the one before, across a rename.
+func TestTheKnowledgeHistoryIsTheSameFromPatches(t *testing.T) {
+	versions := []string{"Use gofmt.", "Use gofmt.\nRun go vet.", "Use gofmt -s.\nRun go vet.", "Use gofmt -s.\nRun go vet ./..."}
+	history := func(patches bool) string {
+		server, s := newTestServer(t)
+		engineer := agents.Agent{Name: "engineer"}
+		by, before := events.Actor{Kind: events.Agent, ID: "engineer"}, ""
+		for i, text := range versions {
+			if i == 2 {
+				s.Propose(engineer.Renaming(you, "builder"))
+				engineer.Name, by.ID = "builder", "builder"
+			}
+			p := engineer.Learned(by, text)
+			if patches && i > 0 {
+				p = engineer.Patching(by, agents.Diff(before, text))
+			}
+			if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+				t.Fatal(err, rejection)
+			}
+			before = text
+		}
+		_, body := call(t, server, "GET", "/api/agents/builder/knowledge", "")
+		var changes []map[string]any
+		json.Unmarshal([]byte(body), &changes)
+		for _, change := range changes {
+			delete(change, "at") // each log was written at its own time
+		}
+		listed, _ := json.Marshal(changes)
+		return string(listed)
+	}
+	copies, patches := history(false), history(true)
+	if want := `[{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet ./..."},{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet."}]`; copies != want {
+		t.Errorf("from full copies: %s\nwant %s", copies, want)
+	}
+	if patches != copies {
+		t.Errorf("from patches: %s\nfrom full copies: %s", patches, copies)
+	}
+}
+
 func TestATaskCanStartANewRepo(t *testing.T) {
 	t.Setenv("GIT_AUTHOR_NAME", "Test")
 	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
