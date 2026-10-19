@@ -119,6 +119,13 @@ func TestAWorkerWorksOverHTTPSPinnedToTheCA(t *testing.T) {
 		t.Fatal(err)
 	}
 	prepare := machines.WorktreeRequest{Task: "task-1", Repo: hub, Base: w.Base, RepoKey: worktrees.RepoKey(hub)}
+	// git with no CA file trusts the system's store, so it can't fetch.
+	noCAFile := *worker.Machine
+	noCAFile.WorktreeRoot = t.TempDir()
+	noCAFile.Hub = &machines.Hub{URL: workerlink.HubURL(url), Credential: credential.Credential, MirrorRoot: t.TempDir(), HTTP: worker.HTTP}
+	if _, err := noCAFile.Prepare(ctx, prepare); err == nil || !strings.Contains(err.Error(), "certificate") {
+		t.Errorf("git without the CA file: %v, want a certificate error", err)
+	}
 	there, err := laptop.Prepare(ctx, prepare)
 	if err != nil {
 		t.Fatalf("git on the worker, over https: %v", err)
