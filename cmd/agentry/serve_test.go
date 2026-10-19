@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -255,6 +258,75 @@ func TestServeArchivesOnlyWithArchiveAfter(t *testing.T) {
 			t.Errorf("with -archive-after=%v, logged that archiving is off: %v; log:\n%s", after, off, logged)
 		}
 	}
+}
+
+// A second serve on a data folder already served, at the same busy address,
+// fails to bind before it touches the folder: it archives nothing, seeds
+// nothing and neither writes nor removes a snapshot, so the first server's
+// state stays true.
+func TestServeOnABusyAddressLeavesTheDataFolderAlone(t *testing.T) {
+	dataDir := t.TempDir()
+	withADoneTask(t, dataDir, "task-1")
+	servedOnce(t, dataDir) // writes a snapshot
+	leftover := filepath.Join(dataDir, snapshotFile+".tmp-123")
+	if err := os.WriteFile(leftover, []byte("the first server's write under way"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "files", "task-1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before := filesIn(t, dataDir)
+	if _, ok := before[snapshotFile]; !ok {
+		t.Fatal("no snapshot to keep, so this test shows nothing")
+	}
+
+	busy, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer busy.Close()
+	o := serveOptions{address: busy.Addr().String(), repo: t.TempDir(), dataDir: dataDir, archiveAfter: time.Nanosecond}
+	var bind *net.OpError
+	if err := serve(context.Background(), o, io.Discard); !errors.As(err, &bind) || bind.Op != "listen" {
+		t.Fatalf("serve on a busy address returned %v, want its listen error", err)
+	}
+	after := filesIn(t, dataDir)
+	for name := range maps.Keys(before) {
+		if contents, ok := after[name]; !ok || contents != before[name] {
+			t.Errorf("serve changed or removed %s before failing to bind", name)
+		}
+	}
+	for name := range maps.Keys(after) {
+		if _, ok := before[name]; !ok {
+			t.Errorf("serve made %s before failing to bind", name)
+		}
+	}
+	if isArchived(t, dataDir, "task-1") {
+		t.Error("serve archived task-1 before failing to bind")
+	}
+}
+
+// filesIn is every file and folder under dir, by path, with its contents.
+func filesIn(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name, _ := filepath.Rel(dir, path)
+		if entry.IsDir() {
+			files[name+"/"] = ""
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		files[name] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }
 
 // withADoneTask starts the log in dataDir with the default agents and a
