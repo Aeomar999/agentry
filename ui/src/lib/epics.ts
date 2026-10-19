@@ -41,6 +41,6 @@ export function grouped(tasks: TaskSummary[], folded: (epic: string) => boolean)
 export function waitingLine(task: TaskSummary): string {
   if (task.blockedBy.length) return `Starts when ${task.blockedBy.join(" and ")} ${task.blockedBy.length > 1 ? "are" : "is"} done`;
   if (task.kind === "epic" && task.stories && !task.currentAgent && task.status === "working")
-    return `${task.storiesDone} of ${task.stories} stories done`;
+    return task.closing ? `All ${task.stories} stories done, open` : `${task.storiesDone} of ${task.stories} stories done`;
   return "";
 }

@@ -34,7 +34,10 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 		case "GET /api/tasks":
 			io.WriteString(w, `[{"id":"task-2","title":"Ship it","repo":"/repo","status":"needs you","kind":"epic","stories":2,"storiesDone":2,"rank":-2},
 				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1},
+				{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","rank":-3},
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
+		case "GET /api/tasks/task-3":
+			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished."}`)
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
 				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
@@ -179,6 +182,37 @@ func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 	if !strings.Contains(all, `POST /api/tasks/task-1/actions/push-1/deny {"reason":"not on a Friday"}`) ||
 		!strings.Contains(all, `POST /api/tasks/task-2/answer {"answer":"Close the epic"}`) {
 		t.Errorf("calls: %s", all)
+	}
+}
+
+// An epic you left open with every story done isn't waiting for you, and
+// you can still close it; one with stories going can't be.
+func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
+	var asked []string
+	c, calls := start(t, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = append(asked, p.Message)
+		return map[string]any{"action": "accept", "content": map[string]any{"decision": "close"}}
+	})
+	board := c.tool("status", map[string]any{})
+	if !strings.Contains(board, "task-3 Polish: all 3 stories done, open until the user closes it (close_epic)") {
+		t.Errorf("the open epic should be on the board:\n%s", board)
+	}
+	if needs := board[:strings.Index(board, "Epics")]; strings.Contains(needs, "task-3") {
+		t.Errorf("an epic left open isn't waiting for you:\n%s", board)
+	}
+	if text := c.tool("close_epic", map[string]any{"epic": "task-3"}); !strings.Contains(text, "The user closed task-3") {
+		t.Errorf("close: %s", text)
+	}
+	if len(asked) != 1 || !strings.Contains(asked[0], "Close the epic task-3, Polish?") || !strings.Contains(asked[0], "All polished.") {
+		t.Errorf("asked: %v", asked)
+	}
+	if !strings.Contains(strings.Join(*calls, "\n"), `POST /api/tasks/task-3/answer {"answer":"Close the epic"}`) {
+		t.Errorf("calls: %v", *calls)
+	}
+	if text := c.tool("close_epic", map[string]any{"epic": "task-9"}); !strings.Contains(text, "task-9 isn't ready to close") {
+		t.Errorf("a task not ready closed: %s", text)
 	}
 }
 

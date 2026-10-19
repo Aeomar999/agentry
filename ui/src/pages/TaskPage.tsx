@@ -22,6 +22,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { TokenMeter } from "@/components/molecules/TokenMeter";
 import { ActivityFeed, Now } from "@/components/organisms/ActivityFeed";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
+import { OpenEpic } from "@/components/organisms/OpenEpic";
 import { LabelEditor } from "@/components/organisms/LabelEditor";
 import { TerminalView } from "@/components/organisms/TerminalView";
 import { PlanRail } from "@/components/organisms/PlanRail";
@@ -187,7 +188,8 @@ export function TaskPage() {
   const turnOfEvent = (e: LogEvent) =>
     e.correlation && turns.some((t) => t.id === e.correlation) ? e.correlation : actions.find((a) => a.id === e.correlation)?.turn;
 
-  const top = error || (task.status === "needs you" && !task.hasQuestion) || approvals > 0 || task.status === "done";
+  const openEpic = Boolean(task.closing) && !task.hasQuestion && task.status === "working" && !working;
+  const top = error || (task.status === "needs you" && !task.hasQuestion) || approvals > 0 || task.status === "done" || openEpic;
   return (
     <div className="flex flex-col md:h-full md:min-h-0">
       <PageHeader
@@ -289,6 +291,7 @@ export function TaskPage() {
             </Banner>
           )}
           <NeedsYouPanel task={task} onChanged={reload} onOpenTerminal={watch} />
+          {openEpic && <OpenEpic task={task} onChanged={reload} />}
           {task.status === "done" && (
             <div className="flex gap-3 rounded-lg border border-success/40 px-4 py-3">
               <span className="flex shrink-0 items-center gap-1.5 self-start text-[13px] font-semibold text-success">

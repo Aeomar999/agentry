@@ -87,7 +87,8 @@ func epicText(task *tasks.Task, f family) string {
 		"epic: if more is needed, add stories with another \"split\" (\"after\" may name the stories above by id); if " +
 		"something must be decided, ask the user. Stories in the user's Backlog or To do wait for them to start; don't press " +
 		"them to, unless the epic can't go on without it. Otherwise, while stories are still going, \"wait\". Once every story is done, finish the epic with a summary of what each one delivered: the user approves closing " +
-		"it, or tells you what else it needs. Agentry refuses \"done\" while any story isn't.")
+		"it, or tells you what else it needs. Agentry refuses \"done\" while any story isn't. If the user says to leave it " +
+		"open, \"wait\" and don't ask again: it stays open, with every story done, until they close it or add a story.")
 	return text.String()
 }
 

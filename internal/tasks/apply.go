@@ -124,10 +124,15 @@ func (t *Task) apply(e events.Event) {
 		t.step(e, t.Coordinator, You, "Split into stories: "+e.Text("titles"))
 		t.Told = Step{At: e.At, From: t.Coordinator, To: You,
 			Text: "Split into stories: " + e.Text("titles") + ". They wait in your Backlog until you start them."}
+		t.Closing = "" // more to do first
 		t.hearStoryNews(e)
 	case events.EpicWaits:
+		waits := "Waiting for its stories."
+		if t.Closing != "" {
+			waits = "Every story is done. It stays open until you close it or add a story."
+		}
 		t.reply(e)
-		t.step(e, t.Coordinator, You, cmp.Or(e.Text("note"), "Waiting for its stories."))
+		t.step(e, t.Coordinator, You, cmp.Or(e.Text("note"), waits))
 		t.hearStoryNews(e)
 	case events.StoryDone:
 		t.StoriesDone = append(t.StoriesDone, e.Text("story"))
@@ -152,6 +157,8 @@ func (t *Task) apply(e events.Event) {
 		if e.Flag("done") {
 			t.StoriesDone = append(t.StoriesDone, story)
 			text += ". It is done already: " + e.Text("summary")
+		} else {
+			t.Closing = "" // more to do first
 		}
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
 	case events.StoryRemoved:
@@ -260,11 +267,12 @@ func (t *Task) apply(e events.Event) {
 			t.Asked.Fetch = &Fetch{Machine: e.Text("fetchMachine"), Path: e.Text("fetchPath"), As: e.Text("fetchAs")}
 			t.Fetching = nil // it waits for you now
 		}
-		t.Closing = e.Text("closing")
+		t.Closing = cmp.Or(e.Text("closing"), t.Closing)
 		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Question)
 	case events.TaskAnswered:
-		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow, t.Closing = "", Asked{}, 0, 0, ""
+		// Closing stays: an epic you leave open can still be closed later.
+		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.FinishAsIs = t.FinishAsIs || e.Flag("asIs")
 		t.step(e, You, t.Coordinator, e.Text("answer"))
 

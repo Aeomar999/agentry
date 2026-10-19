@@ -21,11 +21,11 @@ type tool struct {
 
 // The parts of the API's tasks and questions the tools read.
 type task struct {
-	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked string
-	Labels, BlockedBy                                                   []string
-	Stories, StoriesDone                                                int
-	Rank                                                                float64
-	Told                                                                *struct{ At, From, Text string }
+	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing string
+	Labels, BlockedBy                                                            []string
+	Stories, StoriesDone                                                         int
+	Rank                                                                         float64
+	Told                                                                         *struct{ At, From, Text string }
 }
 
 type detail struct {
@@ -66,7 +66,7 @@ func (s *Server) tools() []tool {
 			object(props{"task": text("its id"), "text": text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
 		{"answer_question", "Send the user's answer to a coordinator's question. Only ever their own answer.",
 			object(props{"task": text("its id"), "answer": text("the user's answer")}, "task", "answer"), s.answer},
-		{"close_epic", "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done. Only they can.",
+		{"close_epic", "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done, whether it is asking or they left it open. Only they can.",
 			object(props{"epic": text("the epic's id")}, "epic"), s.closeEpic},
 		{"review_approvals", "Ask the user, directly in Claude Code, to approve or deny each action an agent is waiting to take (of one task, or all). Only they can.",
 			object(props{"task": text("only this task's")}), s.reviewApprovals},
@@ -120,6 +120,9 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 		return t.ID + " " + t.Title + ": " + what, true
 	}))
 	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
+		if t.Closing != "" && t.Status == "working" {
+			return fmt.Sprintf("%s %s: all %d stories done, open until the user closes it (close_epic) or adds a story", t.ID, t.Title, t.Stories), t.Kind == "epic"
+		}
 		return fmt.Sprintf("%s %s: %d of %d stories done", t.ID, t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
 	}))
 	section(&b, "Not started (in the Backlog or To do)", lines(shown, func(t task) (string, bool) {
@@ -323,18 +326,19 @@ func (s *Server) start(_ context.Context, arguments json.RawMessage) (string, er
 
 // ---- what only the user decides -----------------------------------------------
 
-// closeEpic asks you, in Claude Code, whether to close the epic.
+// closeEpic asks you, in Claude Code, whether to close the epic: one that
+// asks to be closed, or one you left open with every story done.
 func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Epic string }
 	json.Unmarshal(arguments, &a)
-	q, ok := s.questionOf(a.Epic)
-	if !ok || !slices.Contains(q.Options, closeEpic) {
-		return "", fmt.Errorf("%s isn't asking to be closed", a.Epic)
+	title, text, ok := s.closable(a.Epic)
+	if !ok {
+		return "", fmt.Errorf("%s isn't ready to close: not every story of it is done", a.Epic)
 	}
 	if !s.canElicit {
 		return "Closing an epic is the user's to approve. Give them this link: " + s.agentry.PageURL("/tasks/"+a.Epic), nil
 	}
-	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+q.TaskTitle+"?\n\n"+q.Text, object(props{
+	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+title+"?\n\n"+text, object(props{
 		"decision": enum("Close it, or keep it open to tell its coordinator what else it needs", "close", "keep open"),
 	}, "decision"))
 	if err != nil {
@@ -347,6 +351,19 @@ func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (stri
 		return "", err
 	}
 	return "The user closed " + a.Epic + ".", nil
+}
+
+// closable gives the epic's title and what to show you before closing it,
+// if it can close: it asks to, or every story is done and you left it open.
+func (s *Server) closable(id string) (title, text string, ok bool) {
+	if q, asking := s.questionOf(id); asking && slices.Contains(q.Options, closeEpic) {
+		return q.TaskTitle, q.Text, true
+	}
+	var epic task
+	if err := s.agentry.Call("GET", "/api/tasks/"+id, nil, &epic); err != nil || epic.Closing == "" {
+		return "", "", false
+	}
+	return epic.Title, "Every story of it is done. Its summary:\n\n" + epic.Closing, true
 }
 
 // reviewApprovals asks you, in Claude Code, about each waiting action.

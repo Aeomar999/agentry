@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,7 +28,8 @@ func defaultRoster() agents.Roster {
 type history []events.Event
 
 func (h history) add(actor events.Actor, kind events.Type, correlation string, data map[string]any) history {
-	return append(h, events.Event{Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}})
+	// Clipped: histories that share a start don't write over each other.
+	return append(slices.Clip(h), events.Event{Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}})
 }
 
 func (h history) turn(id, agent, report string) history {
@@ -82,6 +84,53 @@ func TestNext(t *testing.T) {
 		if move.Kind != c.want || !strings.Contains(said, c.says) {
 			t.Errorf("%s: got %s (%q), want %s with %q", c.name, move.Kind, said, c.want, c.says)
 		}
+	}
+}
+
+// An epic waits while its stories are going, and, once they are all done,
+// after it has asked you to close it: you may leave it open.
+func TestWhenAnEpicMayWait(t *testing.T) {
+	const wait = `{"action": "wait"}`
+	epic := history{}.
+		add(you, events.TaskCreated, "", map[string]any{"title": "Ship it", "repo": "/r", "coordinator": "tech-lead", "kind": "epic"}).
+		add(worker, events.WorktreeReady, "", map[string]any{"path": "/w", "branch": "agentry/task-1", "port": 7901})
+	split := epic.turn("turn-1", "tech-lead", `{"action": "split"}`).
+		add(coordinator, events.TaskSplit, "", map[string]any{"stories": []string{"task-2"}, "titles": "The store"})
+	allDone := split.add(watchdog, events.StoryDone, "", map[string]any{"story": "task-2", "summary": "In.", "coordinator": "tech-lead"})
+	asked := allDone.turn("turn-2", "tech-lead", `{"action": "done", "summary": "Shipped."}`).
+		add(coordinator, events.TaskNeedsYou, "", map[string]any{"question": "Close it?", "options": []string{CloseEpic}, "closing": "Shipped."})
+	leftOpen := asked.add(you, events.TaskAnswered, "", map[string]any{"answer": "Leave it open"})
+	cases := []struct {
+		name string
+		task *tasks.Task
+		want MoveKind
+		says string
+	}{
+		{"not a story", started().turn("turn-1", "tech-lead", wait).task(), RaiseIssue, "only an epic with stories can wait"},
+		{"not an epic with no stories", epic.turn("turn-1", "tech-lead", wait).task(), RaiseIssue, "only an epic with stories can wait"},
+		{"an epic with stories going", split.turn("turn-2", "tech-lead", wait).task(), ApplyDecision, ""},
+		{"not before asking you to close it", allDone.turn("turn-2", "tech-lead", wait).task(), RaiseIssue, "finish it with a summary"},
+		{"an epic you left open", leftOpen.turn("turn-3", "tech-lead", wait).task(), ApplyDecision, ""},
+		{"not once a new story is going: it is asked again when that is done", leftOpen.turn("turn-3", "tech-lead", wait).
+			add(coordinator, events.EpicWaits, "", nil).
+			add(you, events.StoryAdded, "", map[string]any{"story": "task-3", "title": "The command"}).
+			add(watchdog, events.StoryDone, "", map[string]any{"story": "task-3", "summary": "In.", "coordinator": "tech-lead"}).
+			turn("turn-4", "tech-lead", wait).task(), RaiseIssue, "finish it with a summary"},
+	}
+	for _, c := range cases {
+		move := Next(c.task, defaultRoster())
+		if move.Kind != c.want || !strings.Contains(move.Reason, c.says) {
+			t.Errorf("%s: got %s (%q), want %s with %q", c.name, move.Kind, move.Reason, c.want, c.says)
+		}
+	}
+
+	// Waiting with every story done, it is open and quiet, and still closes.
+	idle := leftOpen.turn("turn-3", "tech-lead", wait).add(coordinator, events.EpicWaits, "", nil).task()
+	if move := Next(idle, defaultRoster()); move.Kind != Wait || idle.Status() != tasks.Working || idle.Closing != "Shipped." {
+		t.Errorf("left open: move %s, status %s, closing %q", move.Kind, idle.Status(), idle.Closing)
+	}
+	if last := idle.Trail[len(idle.Trail)-1]; !strings.Contains(last.Text, "stays open until you close it or add a story") {
+		t.Errorf("the trail should say it stays open: %+v", last)
 	}
 }
 

@@ -115,8 +115,14 @@ func epicOrStory(task *tasks.Task, roster agents.Roster, d Decision) string {
 			}
 		}
 	}
-	if d.Action == AwaitStories && (task.Kind != tasks.Epic || len(openStories(task)) == 0) {
-		return "only an epic with stories still going can wait; decide what happens next"
+	if d.Action == AwaitStories {
+		switch {
+		case task.Kind != tasks.Epic || len(task.Stories) == 0:
+			return "only an epic with stories can wait; decide what happens next"
+		case len(openStories(task)) == 0 && task.Closing == "":
+			// Asked once: after that it stays open, quietly, until the user closes it.
+			return "every story of this epic is done: finish it with a summary, and the user decides whether to close it"
+		}
 	}
 	if d.Action != Split {
 		return ""

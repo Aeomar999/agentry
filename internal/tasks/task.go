@@ -50,7 +50,7 @@ type Task struct {
 	After       []string // for a story: the epic's stories it builds on, which must be done before it starts
 	Stories     []string // for an epic: its stories, in the order they were planned
 	StoriesDone []string // for an epic: the stories whose summary came back
-	Closing     string   // for an epic: the summary its coordinator closes it with, while it asks you to approve
+	Closing     string   // for an epic whose stories are all done: the summary it closes with, once you approve; kept while you leave it open
 
 	// Shared files (files.go).
 	Files        map[string]SharedFile

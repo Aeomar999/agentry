@@ -793,6 +793,41 @@ func TestYouCloseAnEpic(t *testing.T) {
 	}
 }
 
+// An epic you leave open, with every story done, isn't waiting for you, and
+// you can still close it from the page.
+func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
+	s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskNeedsYou,
+		Data: map[string]any{"question": "Close it?", "options": []string{"Close the epic"}, "closing": "All shipped."}})
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/answer", `{"answer":"Leave it open"}`); code != 200 {
+		t.Fatalf("answer: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	if !strings.Contains(body, `"status":"working"`) || !strings.Contains(body, `"closing":"All shipped."`) {
+		t.Errorf("the epic should be open, ready to close: %s", body)
+	}
+	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-1") {
+		t.Errorf("an epic left open isn't waiting for you: %s", body)
+	}
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/answer", `{"answer":"Close the epic"}`); code != 200 {
+		t.Fatalf("close: %d %s", code, body)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
+	if !strings.Contains(body, `"status":"done"`) || !strings.Contains(body, `"summary":"All shipped."`) || !strings.Contains(body, `"closing":""`) {
+		t.Errorf("the epic should be closed: %s", body)
+	}
+}
+
 // Claude Code on another machine connects with an install command from the
 // Integrations page: its code works once, the credential it gets opens the
 // API, and revoking the connection closes it again.

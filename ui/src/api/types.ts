@@ -27,6 +27,7 @@ export interface TaskSummary {
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
   stories: number; // an epic's
   storiesDone: number;
+  closing: string; // an epic with every story done: the summary you can close it with, "" otherwise
   createdAt: string;
   lastActiveAt: string;
 }
