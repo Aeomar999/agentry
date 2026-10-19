@@ -894,7 +894,7 @@ def handoffs():
         (7, ["Phone: from → to and the time always on one line;", "names truncate at 96px each, full names in the", "card's accessible name. The footer keeps the agent:", "‘Led to turn-5 · engineer · Activity ›’."]),
         (8, ["Stuck: the header is position: sticky; top: 0 inside", "its own article, same push rule as Activity's bands.", "The text under it always has an author on screen.", "The scroller's scroll-padding-top is 40px."]),
         (9, ["The card's end pushes its header out; the next", "card's header takes the top. They never overlap.", "You: a neutral slate dot and chip, never a colour."]),
-        (10, ["Phone, running: the badge stays,", "‘Led to turn-6 · reviewer · running · Activity ›’;", "the agent truncates at 72px to make room.", "Facts joined by ‘ · ’ at every width, no dot."]),
+        (10, ["Phone, running: the badge stays,", "‘Led to turn-6 · reviewer · running · Activity ›’;", "the agent shrinks to fit, at most 72px; the badge", "and ‘Activity ›’ never shrink.", "Facts joined by ‘ · ’ at every width, no dot."]),
     ]
     s.notes(40, NY, left)
     s.notes(660, NY, right, "")

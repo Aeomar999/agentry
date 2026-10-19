@@ -209,7 +209,7 @@ The user wants the chain of who asked whom to do what.
 5. **Opens the turn.** The card's footer ("Led to turn-4 · engineer · 48m · 14 actions · Activity ›", the facts joined by ` · ` as in copy.md, no coloured dot; while the turn runs, a `running` badge and the action count, no duration, as copy.md says) is the button that opens that turn's Activity. The card itself is **no longer a button**: a button can't contain links or another button, so the footer takes over. Footer text is `ink-muted`.
 6. **A step with no turn** (said to you, or the turn is gone): no footer, nothing to open.
 
-Phone (390): cards go full width less the 24px timeline gutter. **The header never wraps**: from → to and the time always share one line, so the sticky header keeps one height. To fit, names truncate with an ellipsis at 96px each on a phone (120px from `md`); the full names are in the card's accessible name (copy.md). The footer keeps the agent, `Led to turn-5 · engineer · Activity ›`, and drops the duration and counts; a running turn keeps its `running` badge too, `Led to turn-6 · reviewer · running · Activity ›`, with the agent truncating at 72px (was 96) to make room; the "Activity ›" button stays at the end and is 44px tall.
+Phone (390): cards go full width less the 24px timeline gutter. **The header never wraps**: from → to and the time always share one line, so the sticky header keeps one height. To fit, names truncate with an ellipsis at 96px each on a phone (120px from `md`); the full names are in the card's accessible name (copy.md). The footer keeps the agent, `Led to turn-5 · engineer · Activity ›`, and drops the duration and counts; a running turn keeps its `running` badge too, `Led to turn-6 · reviewer · running · Activity ›`, with the agent shrinking to make room (spec decision 11). The footer is one flex row that never wraps: the agent name is the only item that shrinks (`flex: 0 1 auto; min-width: 0; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`), so it takes its own width up to 72px and gives way first; `Led to`, the turn id, the badge and `Activity ›` are `flex-shrink: 0` and never shrink. `Led to turn-100 · product-designer · running · Activity ›` then still fits the 334px card (310px inside its padding), with the name cut to about 67px; a short name such as `reviewer` shows whole. The "Activity ›" button stays at the end and is 44px tall.
 
 `HandoffPath` (the path of agents above the tabs) is unchanged, except that its chevrons are decorative and its `×2` counts move from faint to muted.
 
@@ -292,6 +292,10 @@ From the re-check (turn 14):
 12. **R2, Newest** (Activity toolbar, Notes, with item 6): on a phone the scroller keeps 48px clear at the bottom so Newest never covers focus. No string change.
 13. **N6, tab heading** (new rows): a sr-only `h2` per tab panel, `Activity` and `Handoffs`, the tab's own label.
 
+From the copy deck (turn 18):
+
+14. **Questions for the designer, 1: answered** (spec decision 11). On a phone the footer's agent name shrinks to fit, at most 72px (`min-width: 0`, ellipsis), instead of always taking 72px; the badge and `Activity ›` never shrink. `turn-100` and above fit. No words change. Close the question, and in the Card footer table (Agent row) and the 390px table (Handoffs footer, running) say "shrinks to fit, at most 72px" for "truncates at 72px", and drop the "about 5px over" sentence.
+
 ## Build checklist
 
 For the Software team's tests and manual checks, on top of the spec's measures.
@@ -307,6 +311,7 @@ For the Software team's tests and manual checks, on top of the spec's measures.
 - [ ] Contrast, light: `success-ink` text on `surface-0`/`surface-1` (5.19 / 4.97), `link` on the row's surface, linked inline code with no `surface-3` behind it.
 - [ ] Monaco light numbers (#098658, 4.41:1 on `surface-1`): leave, or one `defineTheme` rule if touched (flow 4).
 - [ ] Handoffs: headers stick and push at 1280 and 390; the phone header stays one line with `product-designer → coordinator`.
+- [ ] Handoffs phone footer (spec decision 11): at 390, `Led to turn-100 · product-designer · running · Activity ›` stays on one line inside the card; the agent name is the only item that shrinks (`min-width: 0; max-width: 72px; text-overflow: ellipsis`), the badge and `Activity ›` keep their full width, and `Led to turn-6 · reviewer · running · Activity ›` shows `reviewer` whole.
 
 ## Critique fixes
 
@@ -352,3 +357,9 @@ Not done here: 6 and 15 (writer), 13 (light Badge contrast, a follow-up with the
 | N6 | sr-only `h2` per tab | Flow 1 component map; Accessibility |
 | N7 | Phone footer keeps `running`; agent truncates at 72px | Flow 5; handoffs.svg; For the writer 11 |
 | N3 | copy.md's stale note: writer | For the writer 9 |
+
+### Copy deck fixes (turn 18)
+
+| # | Fix | Where |
+|---|---|---|
+| Q1 | Phone footer: the agent shrinks to fit, at most 72px; badge and `Activity ›` never shrink; `turn-100` fits (spec decision 11) | Flow 5, Phone; Build checklist; handoffs.svg note 10; For the writer 14 |
