@@ -4,6 +4,7 @@ import { EventList, EventsWanted, keyOf, noEvents } from "./event-pages";
 
 export interface Events extends EventList {
   loadEarlier: () => void;
+  retry: () => void; // reads again what failed to read
 }
 
 const unwatched = () => () => {};
@@ -17,6 +18,7 @@ export function useEvents(wanted: EventsWanted | null): Events {
   // says where the first read starts, so a later one changes nothing.
   const watch = useCallback((changed: () => void) => pages.watch(wanted!, changed), [pages, key]);
   const loadEarlier = useCallback(() => wanted && pages.loadEarlier(wanted), [pages, key]);
+  const retry = useCallback(() => wanted && pages.retry(wanted), [pages, key]);
   const list = useSyncExternalStore(wanted ? watch : unwatched, () => (wanted ? pages.snapshot(wanted) : noEvents));
-  return { ...list, loadEarlier };
+  return { ...list, loadEarlier, retry };
 }

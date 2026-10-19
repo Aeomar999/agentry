@@ -46,6 +46,7 @@ interface List {
   ahead: boolean; // the last page read forwards said more lie after it
   earlierAsked: boolean;
   reading: boolean;
+  failed: Due | null; // the last read, if it failed: retry reads it again
   watchers: Set<() => void>;
 }
 
@@ -75,6 +76,7 @@ export class EventPages {
         ahead: false,
         earlierAsked: false,
         reading: false,
+        failed: null,
         watchers: new Set(),
       };
       this.lists.set(key, list);
@@ -108,6 +110,20 @@ export class EventPages {
     this.readIfDue(key, list);
   }
 
+  // retry reads again, now, the page whose read failed, without waiting for
+  // the log to move. One retry serves every view of the list; it does
+  // nothing while a read is in flight, so two quick asks read once.
+  retry(wanted: EventsWanted) {
+    const list = this.lists.get(keyOf(wanted));
+    if (!list?.failed || list.reading || list.watchers.size === 0) return;
+    const due = list.failed;
+    if (due.side === "before") list.earlierAsked = true;
+    // A first page not read yet shows as loading again; one before the
+    // oldest held, as loading earlier.
+    this.show(list, { loadingEarlier: list.earlierAsked, error: "" });
+    this.read(keyOf(wanted), list, due);
+  }
+
   // due is the page a list needs read now, and from which side, or null.
   private due(list: List): Due | null {
     const { task, types, newestBefore } = list.wanted;
@@ -133,8 +149,10 @@ export class EventPages {
     if (due) this.read(key, list, due);
   }
 
-  private async read(key: string, list: List, { side, path }: Due) {
+  private async read(key: string, list: List, due: Due) {
+    const { side, path } = due;
     list.reading = true;
+    list.failed = null;
     const asked = this.live;
     try {
       const read = await this.fetch(path);
@@ -145,6 +163,7 @@ export class EventPages {
       else if (side === "after") this.append(list, page, readAt);
       else this.prepend(list, page);
     } catch (failure) {
+      list.failed = due;
       if (side === "before") list.earlierAsked = false;
       else {
         list.position = Math.max(list.position, asked); // tried again when the log moves
