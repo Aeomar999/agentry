@@ -396,6 +396,11 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
 		{"an empty loop before a push to main", bash("for c in; do :; done; git push origin $c main"), Deny},
 		{"one empty value", bash("c=''; git $c status"), Allow},
+		// set again in a way that can't be read (review round 4)
+		{"printf -v hides a push to main", bash("c=status; printf -v c 'push -f origin main'; git $c"), Ask},
+		{"unset hides a push to main", bash("c=status; unset c; git $c push -f origin main"), Ask},
+		{"a plain variable still runs", bash("c=status; git $c"), Allow},
+		{"an empty assignment", bash("c=; git $c status"), Allow},
 	})
 	check(t, p, "autonomous", []decisionCase{
 		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
@@ -423,6 +428,27 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 			{"a default value", bash("git ${c:-commit}"), Ask},
 			{"a replaced value", bash("c=x; git ${c/x/commit}"), Ask},
 			{"a value from a command", bash("c=$(echo commit); git $c"), Ask},
+			{"an answer select doesn't list", bash("select c in log; do git $c commit -m x; done"), Deny},
+
+			// a variable set again in a way that can't be read isn't known (review round 4)
+			{"printf -v", bash("c=status; printf -v c commit; git $c -m x"), Ask},
+			{"printf -v through a variable", bash("c=status; p=printf; $p -v c commit; git $c -m x"), Ask},
+			{"an array assignment", bash("c=status; c=(commit); git $c -m x"), Ask},
+			{"an element assignment", bash("c=status; c[1]=commit; git $c"), Ask},
+			{"printf -v a push to main", bash("c=status; printf -v c 'push -f origin main'; git $c"), Ask},
+			{"unset", bash("c=status; unset c; git $c push -f origin main"), Ask},
+			{"a loop item that can't be read", bash("c=status; for c in a $x; do git $c -m x; done"), Ask},
+			{"an append", bash("c=status; c+=' commit'; git $c"), Ask},
+			{"read", bash("c=status; read c < f; git $c -m x"), Ask},
+			{"mapfile", bash("c=status; mapfile c < f; git $c"), Ask},
+			{"declare -n", bash("c=status; declare -n c=d; git $c"), Ask},
+			{"a value that can't be read", bash("c=status; c=$x; git $c"), Ask},
+			{"an assigned default", bash("git ${c:=commit} -m x"), Ask},
+			{"an arithmetic assignment", bash("c=status; ((c=1)); git $c"), Ask},
+			{"a plain variable", bash("c=status; git $c"), Allow},
+			{"a plain variable with options", bash("c=log; git $c --grep commit"), Allow},
+			{"the go test command", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"a loop over a glob", bash("for f in *.go; do gofmt -l $f; done"), Allow},
 
 			// npm reads npm_config_* in any case, and make takes every variable it is given
 			{"npm_config_node_options", bash("npm_config_node_options='--import=data:text/javascript,x' npm test"), Ask},

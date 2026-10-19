@@ -45,32 +45,133 @@ type shellInspector struct {
 // the command: NAME=literal, and the items of `for NAME in literal ...`. So
 // `S=out; ls $S` and `for f in a b; do cat $f; done` can still be judged. A
 // loop with no items leaves its variable unset, so it isn't recorded.
+//
+// A variable set any other way (read, printf -v, unset, c+=x, c=(a b),
+// ${c:=x}, c=$x) would run with a value this can't see, and many of those
+// ways name their variable in arguments only the builtin can read. So when
+// any of them appears, no variable is known, Agentry's own included, and
+// every command that uses one asks.
 func (s *shellInspector) learnVariables(file *syntax.File) {
+	unsure := false
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.Assign:
-			if n.Name != nil && n.Value != nil && !n.Append && n.Index == nil { // no name: an option, declare -x
-				if values, ok := s.values(n.Value); ok {
-					s.variables[n.Name.Value] = append(s.variables[n.Name.Value], values...)
-				}
+			if n.Name == nil { // an option: declare -x
+				return true
 			}
+			if values, ok := s.assignedValues(n); ok {
+				s.variables[n.Name.Value] = append(s.variables[n.Name.Value], values...)
+			} else {
+				unsure = true
+			}
+		case *syntax.DeclClause:
+			unsure = unsure || slices.ContainsFunc(n.Args, func(a *syntax.Assign) bool { return a.Name == nil }) // declare -n, -a, -i
 		case *syntax.ForClause:
 			if iteration, ok := n.Loop.(*syntax.WordIter); ok {
-				var items []string
-				for _, word := range iteration.Items {
-					values, ok := s.values(word)
-					if !ok {
-						return true
-					}
-					items = append(items, values...)
+				items, ok := s.loopItems(iteration)
+				if n.Select { // an answer not in the list leaves it empty
+					items = append(items, "")
 				}
-				if len(items) > 0 {
+				if !ok {
+					unsure = true
+				} else if len(items) > 0 {
 					s.variables[iteration.Name.Value] = append(s.variables[iteration.Name.Value], items...)
 				}
 			}
+		case *syntax.ParamExp:
+			unsure = unsure || n.Exp != nil && (n.Exp.Op == syntax.AssignUnset || n.Exp.Op == syntax.AssignUnsetOrNull)
+		case *syntax.BinaryArithm:
+			unsure = unsure || slices.Contains(arithmeticAssignments, n.Op)
+		case *syntax.UnaryArithm:
+			unsure = unsure || n.Op == syntax.Inc || n.Op == syntax.Dec
+		case *syntax.CallExpr:
+			unsure = unsure || s.setsVariables(n.Args)
 		}
 		return true
 	})
+	if unsure {
+		s.variables = map[string][]string{}
+	}
+}
+
+// arithmeticAssignments set the variable on their left: ((c=1)), let c+=1.
+var arithmeticAssignments = []syntax.BinAritOperator{
+	syntax.Assgn, syntax.AddAssgn, syntax.SubAssgn, syntax.MulAssgn, syntax.QuoAssgn, syntax.RemAssgn,
+	syntax.AndAssgn, syntax.OrAssgn, syntax.XorAssgn, syntax.ShlAssgn, syntax.ShrAssgn,
+}
+
+// assignedValues is every value NAME=value can give its variable; an append,
+// an array, an element or a bare `export NAME` can't be read here.
+func (s *shellInspector) assignedValues(n *syntax.Assign) ([]string, bool) {
+	switch {
+	case n.Append, n.Array != nil, n.Index != nil, n.Naked:
+		return nil, false
+	case n.Value == nil: // c=
+		return []string{""}, true
+	}
+	return s.values(n.Value)
+}
+
+// loopItems is every value a for loop gives its variable. Without "in" it
+// loops over the script's arguments, which can't be read here.
+func (s *shellInspector) loopItems(iteration *syntax.WordIter) ([]string, bool) {
+	if !iteration.InPos.IsValid() {
+		return nil, false
+	}
+	var items []string
+	for _, word := range iteration.Items {
+		values, ok := s.values(word)
+		if !ok {
+			return nil, false
+		}
+		items = append(items, values...)
+	}
+	return items, true
+}
+
+// variableSetters are the builtins that set or unset a variable named in
+// their arguments.
+var variableSetters = map[string]bool{
+	"read": true, "mapfile": true, "readarray": true, "getopts": true, "unset": true, "let": true,
+	"declare": true, "typeset": true, "local": true, "export": true, "readonly": true,
+	"eval": true, "source": true, ".": true,
+}
+
+// setsVariables: the command may set a variable, or its name can't be read.
+func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
+	if len(args) == 0 {
+		return false
+	}
+	names, ok := s.values(args[0])
+	if !ok {
+		return true
+	}
+	for _, name := range names {
+		if variableSetters[name] {
+			return true
+		}
+		if (name == "builtin" || name == "command") && s.setsVariables(withoutOption(args[1:], "-p")) {
+			return true // they run the builtin after them; command -v only looks it up
+		}
+		if name == "printf" && slices.ContainsFunc(args[1:], s.mayBeVariableOption) {
+			return true
+		}
+	}
+	return false
+}
+
+// withoutOption is the words after any leading copies of option.
+func withoutOption(words []*syntax.Word, option string) []*syntax.Word {
+	for len(words) > 0 && words[0].Lit() == option {
+		words = words[1:]
+	}
+	return words
+}
+
+// mayBeVariableOption: the word may be printf's -v NAME or -vNAME.
+func (s *shellInspector) mayBeVariableOption(word *syntax.Word) bool {
+	values, ok := s.values(word)
+	return !ok || slices.ContainsFunc(values, func(value string) bool { return strings.HasPrefix(value, "-v") })
 }
 
 func (s *shellInspector) visit(node syntax.Node) bool {
@@ -274,7 +375,7 @@ func (s *shellInspector) commandTexts(args []*syntax.Word) []string {
 	choices := make([][][]string, len(args))
 	for i, arg := range args {
 		fields, ok := s.fields(arg)
-		if !ok || len(fields) == 0 { // no value at all would hide the whole command
+		if !ok {
 			s.call.opaque = true
 			fields = [][]string{{"$?"}}
 		}
