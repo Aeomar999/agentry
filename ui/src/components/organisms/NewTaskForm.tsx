@@ -158,7 +158,8 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   return (
     <form onSubmit={submit} className="flex max-w-3xl flex-col gap-5">
       {error && <Banner title="The task wasn't created">{error}</Banner>}
-      {visionariesMissing && (
+      {/* Once the team is refused for its profiles, the offer replaces this banner: adding it again would be refused again. */}
+      {visionariesMissing && missingProfiles.length === 0 && (
         <Banner tone="info" title="You have no Visionaries team yet">
           <div className="flex flex-col items-start gap-2">
             <span>Add it from its template: a lead and four viewpoints that argue out what to build next, and change no code.</span>
