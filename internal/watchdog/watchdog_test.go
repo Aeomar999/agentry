@@ -28,7 +28,7 @@ var (
 // process table: alive says whether the agent's process is running, except
 // for the task named exited, whose never is. What is typed into the session
 // goes to typed, after the events recorded by then; while held is open,
-// typing waits for it to close.
+// typing waits for it to close, after closing entered if there is one.
 type world struct {
 	t         *testing.T
 	store     *store.Store
@@ -39,6 +39,7 @@ type world struct {
 	typedFrom []events.Type // the last event recorded when each line was typed
 	typeErr   error
 	held      chan struct{}
+	entered   chan struct{}
 	dog       *Watchdog
 }
 
@@ -51,6 +52,9 @@ func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
 	w := &world{t: t, store: s, alive: true}
 	typeLine := func(task, line string) error {
 		if w.held != nil {
+			if w.entered != nil {
+				close(w.entered)
+			}
 			<-w.held
 		}
 		if w.typeErr != nil {
@@ -252,6 +256,40 @@ func TestAPromptThatCannotBeTypedIsAnIssue(t *testing.T) {
 	issue := w.after(UnknownReset + time.Second)
 	if issue != "could not type the carry-on prompt after the usage limit: no session is running" || !w.stopped {
 		t.Errorf("issue %q, stopped %v", issue, w.stopped)
+	}
+}
+
+// moveOn ends turn-1 and starts turn-2, as when a resumed turn finishes
+// while its carry-on prompt is still being typed.
+func (w *world) moveOn() {
+	w.t.Helper()
+	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
+	w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "tech-lead", "hash": "h"})
+}
+
+func TestAPromptThatFailsAfterTheTurnMovedOnLeavesTheNewTurnAlone(t *testing.T) {
+	w := newWorld(t)
+	w.limit("")
+	w.typeErr = errors.New("worker unreachable")
+	w.held, w.entered = make(chan struct{}), make(chan struct{})
+	w.dog.Check(time.Now().Add(UnknownReset + time.Second))
+	<-w.entered
+	w.moveOn()
+	close(w.held)
+	w.dog.Wait()
+	if turn := w.task().OpenTurn(); turn == nil || turn.ID != "turn-2" || w.stopped {
+		t.Errorf("turn-2 should still be open and its session running: open turn %+v, stopped %v", turn, w.stopped)
+	}
+}
+
+func TestAPromptIsNotTypedIntoANewerTurn(t *testing.T) {
+	w := newWorld(t)
+	w.limit("")
+	w.resume()
+	w.moveOn()
+	w.dog.carryOn("task-1", "turn-1")
+	if len(w.typed) != 0 || w.stopped || w.task().OpenTurn() == nil {
+		t.Errorf("typed %q, stopped %v, open turn %+v", w.typed, w.stopped, w.task().OpenTurn())
 	}
 }
 

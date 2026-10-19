@@ -150,11 +150,32 @@ func (w *Watchdog) checkLimited(now time.Time, task *tasks.Task, turn *tasks.Tur
 		}
 		return
 	}
-	w.typing.Go(func() {
-		if err := w.typeLine(task.ID, CarryOn); err != nil {
-			w.raise(task.ID, "could not type the carry-on prompt after the usage limit: "+err.Error())
-		}
-	})
+	w.typing.Go(func() { w.carryOn(task.ID, turn.ID) })
+}
+
+// carryOn types the carry-on prompt into a resumed turn's session. By the
+// time it runs, or once typing has failed, the turn may have ended and a
+// newer one started, which the prompt and its issue must leave alone.
+func (w *Watchdog) carryOn(task, turn string) {
+	if !w.isOpen(task, turn) {
+		slog.Info("watchdog: not typing the carry-on prompt, the turn has ended", "task", task, "turn", turn)
+		return
+	}
+	err := w.typeLine(task, CarryOn)
+	if err == nil {
+		return
+	}
+	if !w.isOpen(task, turn) {
+		slog.Info("watchdog: could not type the carry-on prompt, but the turn has ended", "task", task, "turn", turn, "err", err)
+		return
+	}
+	w.raise(task, "could not type the carry-on prompt after the usage limit: "+err.Error())
+}
+
+// isOpen says whether turn is still the task's open turn.
+func (w *Watchdog) isOpen(task, turn string) bool {
+	t, err := w.state.Task(task)
+	return err == nil && t != nil && t.OpenTurn() != nil && t.OpenTurn().ID == turn
 }
 
 // Wait returns once every carry-on prompt being typed is typed.
