@@ -42,11 +42,13 @@ type Config struct {
 	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
 }
 
-// PolicySource is the policy in force and any problem with the file on disk.
+// PolicySource is the policy in force and any problem with the file on
+// disk, and the one way to change it.
 type PolicySource interface {
 	Current() *policy.Policy
 	Problem() string
 	Path() string
+	Change(e policy.Edit, now time.Time) (*policy.Change, error)
 }
 
 type Server struct {
@@ -111,6 +113,12 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/settings", s.showSettings)
 	api("PUT /api/settings", s.changeSettings)
 	api("GET /api/policy", s.showPolicy)
+	api("GET /api/policy/history", s.policyHistory)
+	api("POST /api/policy/profiles/{name}/add", s.addDefaultProfile)
+	api("POST /api/policy/profiles/{name}/update", s.updateDefaultProfile)
+	api("POST /api/policy/profiles/{name}/use-default", s.useDefaultProfile)
+	api("POST /api/policy/use-for-everyone/off", s.turnOffUseForEveryone)
+	api("POST /api/policy/revert", s.revertPolicy)
 	api("GET /api/workers", s.listWorkers)
 	api("POST /api/workers/invite", s.invite)
 	api("GET /api/workers/{name}", s.showWorker)

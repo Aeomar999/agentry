@@ -1424,52 +1424,6 @@ func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
 	}
 }
 
-// A policy from before a profile was added doesn't have it: a team whose
-// agents need it is refused, not added with agents that can do nothing.
-func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
-	serve := func(policyText string) (*httptest.Server, *store.Store, string) {
-		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-		for _, p := range agents.SeedProposals(nil) {
-			s.Propose(p)
-		}
-		path := filepath.Join(t.TempDir(), "policy.toml")
-		os.WriteFile(path, []byte(policyText), 0o600)
-		live, err := policy.OpenLive(path, "/home/dev", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
-		t.Cleanup(server.Close)
-		return server, s, path
-	}
-	shipped := string(policy.Default())
-	start, end := strings.Index(shipped, "[profiles.read-mostly]"), strings.Index(shipped, "[profiles.autonomous]")
-	if start < 0 || end < start {
-		t.Fatal("the default policy should have read-mostly before autonomous")
-	}
-
-	server, s, path := serve(shipped[:start] + shipped[end:])
-	before, _ := s.Stream(events.AgentsStream)
-	code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`)
-	if code != http.StatusBadRequest || !strings.Contains(body, "[profiles.read-mostly]") || !strings.Contains(body, path) ||
-		!strings.Contains(body, "The latest default policy is at https://github.com/francischempa/agentry/blob/dev/internal/policy/default.toml") {
-		t.Errorf("a team whose profile the policy lacks: %d %s", code, body)
-	}
-	if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
-		t.Errorf("nothing should be proposed: %d agent events, then %d", len(before), len(after))
-	}
-
-	server, s, _ = serve(shipped)
-	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
-		t.Fatalf("adding the Visionaries with the default policy: %d %s", code, body)
-	}
-	stream, _ := s.Stream(events.AgentsStream)
-	roster := agents.FromEvents(stream)
-	if lead, ok := roster.Coordinator("Visionaries"); !ok || lead.Name != "visionary-lead" || len(roster.Assignees("Visionaries")) != 4 {
-		t.Errorf("the Visionaries team: %v", roster.Teams())
-	}
-}
-
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)

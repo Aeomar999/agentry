@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 )
 
 // Adding, changing and removing agents from the page. Each is an event, so
@@ -162,9 +164,17 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 }
 
 // addTeam adds a team made from a template: its coordinator first, so the
-// team always has one, then its agents, each with its own prompt.
+// team always has one, then its agents, each with its own prompt. When the
+// policy lacks a profile the team needs, it refuses with the profiles
+// missing, unless asked to add them first (addMissingProfiles), which it
+// does in one change of the policy. hash is the version of the policy
+// the page saw, if it saw one.
 func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Template string }
+	var request struct {
+		Template           string
+		AddMissingProfiles bool
+		Hash               string
+	}
 	if !decode(w, r, &request) {
 		return
 	}
@@ -173,13 +183,14 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no team template called "+request.Template, http.StatusNotFound)
 		return
 	}
-	for _, a := range template.Agents {
-		if problem := s.unknownProfile(a.Profile); problem != "" {
-			http.Error(w, problem+". Copy the [profiles."+a.Profile+"] section of the default policy into that file and save it, "+
-				"then add the team again. The latest default policy is at "+defaultPolicyURL+
-				" (internal/policy/default.toml in a source checkout); it may be newer than your Agentry.", http.StatusBadRequest)
-			return
-		}
+	if missing := s.missingProfiles(template); len(missing) > 0 && !request.AddMissingProfiles {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]any{"missingProfiles": missing,
+			"error": "the " + template.Team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page, or add the team with addMissingProfiles"})
+		return
+	} else if len(missing) > 0 && !s.addProfilesFor(w, template.Team, missing, request.Hash) {
+		return
 	}
 	roster, err := s.roster()
 	if err != nil {
@@ -212,9 +223,50 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	return agent, true
 }
 
-// defaultPolicyURL is the latest default policy, for someone who has only the
-// binary. It may be newer than theirs; the binary carries no version to link.
-const defaultPolicyURL = "https://github.com/francischempa/agentry/blob/dev/internal/policy/default.toml"
+// missingProfiles are the profiles the team's agents need that the policy
+// lacks, in the template's order.
+func (s *Server) missingProfiles(template agents.Template) []string {
+	var missing []string
+	for _, a := range template.Agents {
+		if s.unknownProfile(a.Profile) != "" && !slices.Contains(missing, a.Profile) {
+			missing = append(missing, a.Profile)
+		}
+	}
+	return missing
+}
+
+// addProfilesFor adds the default profiles a team needs in one change of
+// the policy, or replies why it can't: a profile Agentry doesn't ship is
+// yours to write.
+func (s *Server) addProfilesFor(w http.ResponseWriter, team string, missing []string, seen string) bool {
+	for _, name := range missing {
+		if _, shipped := policy.ShippedProfile(name); !shipped {
+			http.Error(w, "the "+team+" team needs profile "+name+", which Agentry doesn't ship: write it in policy.toml yourself, then add the team", http.StatusConflict)
+			return false
+		}
+	}
+	if seen == "" {
+		seen = s.config.Policy.Current().Hash()
+	}
+	_, ok := s.applyPolicy(w, seen, "added "+profilesNamed(missing)+" for team "+team, func(text []byte) ([]byte, error) {
+		var err error
+		for _, name := range missing {
+			if text, err = policy.AddProfile(text, name, s.version()); err != nil {
+				return nil, err
+			}
+		}
+		return text, nil
+	})
+	return ok
+}
+
+// profilesNamed is "profile read-mostly", or "profiles a, b".
+func profilesNamed(names []string) string {
+	if len(names) == 1 {
+		return "profile " + names[0]
+	}
+	return "profiles " + strings.Join(names, ", ")
+}
 
 // unknownProfile says why an agent can't have profile, or "" when the policy
 // has it. A policy written before a profile was added doesn't have it.
@@ -222,7 +274,10 @@ func (s *Server) unknownProfile(profile string) string {
 	if profile == "" || s.config.Policy == nil || slices.Contains(s.config.Policy.Current().ProfileNames(), profile) {
 		return ""
 	}
-	return "no profile called " + profile + " in " + s.config.Policy.Path()
+	if _, shipped := policy.ShippedProfile(profile); shipped {
+		return "policy.toml has no profile called " + profile + ": Agentry ships one, so add it on the Policy page, then try again"
+	}
+	return "policy.toml has no profile called " + profile + ": write it in policy.toml, or pick another profile"
 }
 
 // setKnowledge replaces the agent's knowledge with yours.

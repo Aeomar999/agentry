@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -454,7 +455,11 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	reply(w, agentsOf(roster))
+	var inForce *policy.Policy
+	if s.config.Policy != nil {
+		inForce = s.config.Policy.Current()
+	}
+	reply(w, agentsOf(roster, inForce))
 }
 
 // showConfig is what the page needs to know about the server.
@@ -485,18 +490,6 @@ func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workerChoices() []string {
 	roster, _ := s.workers()
 	return append([]string{workers.Local}, roster.Names()...)
-}
-
-// showPolicy is the policy in force, and why the file on disk isn't, if it isn't.
-func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
-	if s.config.Policy == nil {
-		http.Error(w, "no policy", http.StatusNotFound)
-		return
-	}
-	current := s.config.Policy.Current()
-	reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
-		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
-		"profiles": current.Summary(), "text": current.Text()})
 }
 
 // waitForChanges answers when the log has moved past ?after=, or after 25 s,
