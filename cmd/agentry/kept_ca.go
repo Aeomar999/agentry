@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,10 @@ func keepCA(kept keptCA) error {
 	return os.Rename(temp.Name(), path)
 }
 
-// forgetKeptCA drops the kept CA, so the next run checks the server again.
-func forgetKeptCA() {
+// forgetKeptCA drops the kept CA, so the next run checks the server again,
+// and says so before err.
+func forgetKeptCA(err error) error {
 	os.Remove(keptCAFile())
+	return fmt.Errorf("the CA kept for this server no longer vouches for it, as after `agentry ca -regenerate`; "+
+		"it is checked again by AGENTRY_CA_FINGERPRINT next time: %w", err)
 }

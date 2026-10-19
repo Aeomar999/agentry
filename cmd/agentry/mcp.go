@@ -98,9 +98,22 @@ func connect(server, token, fingerprint, dataDir string) (client.Client, error) 
 		return client.Client{Where: client.Where{URL: trusted.server, CA: string(trusted.ca)}, Token: token}, nil
 	}
 	if connected, ok := client.Connected(); ok {
+		if connected.CA != "" {
+			connected.Untrusted = connectionCAChanged(connected.URL)
+		}
 		return connected, nil
 	}
 	return client.Local(dataDir)
+}
+
+// connectionCAChanged says, before err, that the server this machine was
+// connected to no longer has the CA kept then, and how to connect again.
+func connectionCAChanged(server string) func(error) error {
+	return func(err error) error {
+		return fmt.Errorf("%s's CA isn't the one kept when this machine was connected: it was regenerated, or this is another server. "+
+			"Connect again with `agentry mcp connect -ca-fingerprint <fingerprint from `agentry ca` on the server> %s <code from the Integrations page>`: %w",
+			server, server, err)
+	}
 }
 
 // connectFromEnv is connect for the hooks and the status line, which Claude
