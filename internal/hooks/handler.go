@@ -161,14 +161,14 @@ func (h *Handler) gate(ctx context.Context, call hookcall.Call, signal engines.S
 	if err != nil {
 		return h.decide(call.Task, action, refusal("Agentry couldn't read the task: "+err.Error()))
 	}
-	if pass := task.PassFor(signal.Tool, signal.Command); pass != nil {
-		if answer, reason, ok := h.usePass(call.Task, action, pass.ID); ok {
-			return answer, reason
-		}
-	}
 	verdict := h.judge(h.profileOf(call.Agent), policy.Call{Tool: signal.Tool, Input: signal.Command, Workspace: task.Worktree.Path})
 	if verdict.Decision != policy.Ask {
 		return h.decide(call.Task, action, verdict)
+	}
+	if pass := task.PassFor(task.Action(action)); pass != nil {
+		if answer, reason, ok := h.usePass(call.Task, action, pass.ID); ok {
+			return answer, reason
+		}
 	}
 	return h.askTheUser(ctx, call.Task, action, verdict)
 }
@@ -203,10 +203,11 @@ func (h *Handler) decide(task, action string, verdict policy.Verdict) (engines.D
 }
 
 // usePass approves the action with the pass of a held action you approved
-// late: the agent asks for the very command again, as its coordinator handed
-// it back. It reports false if the pass was refused, and the policy decides.
+// late, in place of asking you again: the agent asks for the very command
+// again, as its coordinator handed it back. It reports false if the pass
+// was refused, and you are asked as usual.
 func (h *Handler) usePass(task, action, pass string) (engines.Decision, string, bool) {
-	const reason = "you approved this earlier, after it timed out"
+	const reason = "the user approved this earlier, after it timed out"
 	_, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionApproved,
 		Correlation: action, Data: map[string]any{"reason": reason, "pass": pass}})
 	if err != nil || rejection != nil {

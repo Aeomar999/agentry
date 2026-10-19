@@ -289,6 +289,7 @@ func (t *Task) Apply(e events.Event) {
 			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
+		t.startPasses(e.Correlation, e.Text("agent"))
 		if e.Text("agent") == t.Coordinator {
 			t.storyNews, t.approvalNews = false, false // its brief has every story's news so far, and your approvals
 			if t.WrapUp != nil {
@@ -485,9 +486,19 @@ func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
 	return fmt.Sprintf("The user approved a command %s asked for in %s at %s (%s), which Agentry held for them when no answer "+
 		"came in time. They approved it at %s, %s, so %s was told no and hasn't run it. The full command:\n\n%s\n\n"+
 		"%s, after checking the branch hasn't changed in a way that makes it wrong. Agentry lets this exact command "+
-		"through once without asking.",
+		"through once without asking, in %s's next turn only.",
 		action.Agent, action.Turn, clock(action.RequestedAt), action.Tool, clock(approvedAt), when, action.Agent,
-		action.Command, again)
+		action.Command, again, action.Agent)
+}
+
+// startPasses gives the agent's held actions you approved, and whose pass
+// has no turn yet, this turn to work in: the only one their pass works in.
+func (t *Task) startPasses(turn, agent string) {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved && action.PassTurn == "" && action.Agent == agent {
+			action.PassTurn = turn
+		}
+	}
 }
 
 func clock(at time.Time) string { return at.UTC().Format("2006-01-02 15:04 UTC") }

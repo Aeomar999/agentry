@@ -102,10 +102,10 @@ func TestReportsBecomeEvents(t *testing.T) {
 func TestTheGateFollowsThePolicy(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)
-	if reply := h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_1", "ls -la"))); decisionOf(reply) != "allow" {
+	if reply := timedOut(t, h, "toolu_1", "ls -la"); decisionOf(reply) != "allow" {
 		t.Errorf("ls: %+v", reply)
 	}
-	if reply := h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_2", "sudo rm x"))); decisionOf(reply) != "deny" || !strings.Contains(reply.Stdout, "never sudo") {
+	if reply := timedOut(t, h, "toolu_2", "sudo rm x"); decisionOf(reply) != "deny" || !strings.Contains(reply.Stdout, "never sudo") {
 		t.Errorf("sudo: %+v", reply)
 	}
 	task := taskIn(t, s)
@@ -161,25 +161,86 @@ func TestALateApprovalLetsTheSameCommandThroughOnce(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)
 	timedOut(t, h, "toolu_4", "git push origin HEAD:dev")
-	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Human, ID: "you"},
-		Type: events.ActionApproved, Correlation: "toolu_4", Data: map[string]any{"reason": "fine"}}); rejection != nil || err != nil {
-		t.Fatal(rejection, err)
-	}
+	approveLate(t, s, "toolu_4")
 	last := taskIn(t, s).Trail[len(taskIn(t, s).Trail)-1]
 	if last.To != "tech-lead" || !strings.Contains(last.Text, "git push origin HEAD:dev") {
 		t.Errorf("the coordinator should be handed the full command back: %+v", last)
 	}
+	if reply := timedOut(t, h, "toolu_5", "git push origin HEAD:dev"); decisionOf(reply) == "allow" {
+		t.Errorf("the pass waits for the engineer's next turn: %+v", reply)
+	}
 
-	if reply := timedOut(t, h, "toolu_5", "git push origin HEAD:main"); decisionOf(reply) == "allow" {
+	handBackTo(t, s, "engineer", "turn-3", "turn-4")
+	if reply := timedOut(t, h, "toolu_6", "git push origin HEAD:main"); decisionOf(reply) == "allow" {
 		t.Errorf("another command must not use the pass: %+v", reply)
 	}
-	if reply := h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_6", "git push origin HEAD:dev"))); decisionOf(reply) != "allow" ||
-		!strings.Contains(reply.Stdout, "after it timed out") {
+	if reply := timedOut(t, h, "toolu_7", "git push origin HEAD:dev"); decisionOf(reply) != "allow" ||
+		!strings.Contains(reply.Stdout, "the user approved this earlier") {
 		t.Errorf("the same command should pass once: %+v", reply)
 	}
-	timedOut(t, h, "toolu_7", "git push origin HEAD:dev")
-	if task := taskIn(t, s); !task.Action("toolu_4").PassUsed || !task.Action("toolu_7").Asked {
-		t.Errorf("the pass is used once, then the command is asked about again: %+v %+v", task.Action("toolu_4"), task.Action("toolu_7"))
+	timedOut(t, h, "toolu_8", "git push origin HEAD:dev")
+	if task := taskIn(t, s); !task.Action("toolu_4").PassUsed || !task.Action("toolu_8").Asked {
+		t.Errorf("the pass is used once, then the command is asked about again: %+v %+v", task.Action("toolu_4"), task.Action("toolu_8"))
+	}
+}
+
+// A pass skips only the question to the user: a policy that denies the
+// command now still denies it, and leaves the pass for a later ask.
+func TestAPassDoesntOverrideADenial(t *testing.T) {
+	s, state := engineerAtWork(t)
+	verdict := policy.Ask
+	h := NewHandler(s, state, func(string, policy.Call) policy.Verdict {
+		return policy.Verdict{Decision: verdict, Rule: "pushes are judged"}
+	})
+	timedOut(t, h, "toolu_4", "git push")
+	approveLate(t, s, "toolu_4")
+	handBackTo(t, s, "engineer", "turn-3", "turn-4")
+
+	verdict = policy.Deny
+	if reply := timedOut(t, h, "toolu_5", "git push"); decisionOf(reply) != "deny" {
+		t.Errorf("a denial stays a denial: %+v", reply)
+	}
+	if taskIn(t, s).Action("toolu_4").PassUsed {
+		t.Error("a denied request must leave the pass unused")
+	}
+	verdict = policy.Ask
+	if reply := timedOut(t, h, "toolu_6", "git push"); decisionOf(reply) != "allow" {
+		t.Errorf("a later ask can still use the pass: %+v", reply)
+	}
+}
+
+func TestAPassIsOnlyForTheAgentThatAsked(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	timedOut(t, h, "toolu_4", "git push")
+	approveLate(t, s, "toolu_4")
+	handBackTo(t, s, "reviewer", "turn-3", "turn-4")
+
+	call := hookCall("PreToolUse", bash("toolu_5", "git push"))
+	call.Turn, call.Agent = "turn-4", "reviewer"
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if reply := h.Handle(ctx, call); decisionOf(reply) == "allow" {
+		t.Errorf("another agent's identical request must not use the pass: %+v", reply)
+	}
+	if task := taskIn(t, s); !task.Action("toolu_5").Asked || task.Action("toolu_4").PassUsed {
+		t.Errorf("the reviewer is asked as usual: %+v %+v", task.Action("toolu_5"), task.Action("toolu_4"))
+	}
+}
+
+func TestAPassEndsWithTheAgentsNextTurn(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	timedOut(t, h, "toolu_4", "git push")
+	approveLate(t, s, "toolu_4")
+	handBackTo(t, s, "engineer", "turn-3", "turn-4") // the engineer doesn't push in turn-4
+	handBackTo(t, s, "engineer", "turn-5", "turn-6")
+
+	if reply := timedOut(t, h, "toolu_5", "git push"); decisionOf(reply) == "allow" {
+		t.Errorf("the pass ended with turn-4: %+v", reply)
+	}
+	if task := taskIn(t, s); !task.Action("toolu_5").Asked || task.Action("toolu_4").PassUsed {
+		t.Errorf("the request is asked about again: %+v %+v", task.Action("toolu_5"), task.Action("toolu_4"))
 	}
 }
 
@@ -191,12 +252,41 @@ func TestALateDenialGivesNoPass(t *testing.T) {
 		Type: events.ActionDenied, Correlation: "toolu_4", Data: map[string]any{"reason": "no"}}); rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
-	if task := taskIn(t, s); task.PassFor("Bash", "git push") != nil || task.Status() != tasks.Working {
-		t.Errorf("pass %+v, status %s", task.PassFor("Bash", "git push"), task.Status())
+	if task := taskIn(t, s); task.Status() != tasks.Working {
+		t.Errorf("status %s", task.Status())
 	}
+	handBackTo(t, s, "engineer", "turn-3", "turn-4")
 	timedOut(t, h, "toolu_5", "git push")
 	if !taskIn(t, s).Action("toolu_5").Asked {
 		t.Error("after a denial the same command is asked about again")
+	}
+}
+
+// approveLate is you approving a held action.
+func approveLate(t *testing.T, s *store.Store, action string) {
+	t.Helper()
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Human, ID: "you"},
+		Type: events.ActionApproved, Correlation: action, Data: map[string]any{"reason": "fine"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+}
+
+// handBackTo ends the open turn, runs a coordinator turn (decide), and
+// starts agent's turn (next).
+func handBackTo(t *testing.T, s *store.Store, agent, decide, next string) {
+	t.Helper()
+	open := taskIn(t, s).OpenTurn()
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: open.ID, Data: map[string]any{"agent": open.Agent, "report": "r"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: decide, Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: decide, Data: map[string]any{"agent": "tech-lead", "report": "r"}},
+		{Stream: "task-1", Actor: coordinator, Type: events.TaskAssigned, Data: map[string]any{"agent": agent, "instructions": "go"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: next, Data: map[string]any{"agent": agent, "hash": "h"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
 	}
 }
 

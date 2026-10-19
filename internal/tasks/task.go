@@ -72,7 +72,7 @@ type Task struct {
 	Fetching     *Fetch          // a fetch the coordinator asked for, on its way
 	collected    map[string]bool // the turns whose folder was read back
 	storyNews    bool            // a story finished while the coordinator was busy deciding: it hears it next
-	approvalNews bool            // you approved a held action while the coordinator was busy deciding: it hears it next
+	approvalNews bool            // you approved a held action while an agent's turn was open: the coordinator hears it next
 	CreatedAt    time.Time
 
 	Worktree *Worktree // nil until the worktree is ready
@@ -218,7 +218,8 @@ type Action struct {
 	Decision    Decision
 	Reason      string // the rule that asked, then the reason for the decision
 	HasResult   bool
-	PassUsed    bool // held and approved, its one pass was used: the same command asked for again went through
+	PassUsed    bool   // held and approved, its one pass was used: the same command asked for again went through
+	PassTurn    string // held and approved, the first turn its agent started after: the only one its pass works in
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
@@ -340,11 +341,13 @@ func (t *Task) AtWork() bool { return !t.IsDone && t.Parked == "" }
 // deciding, and it hasn't heard yet.
 func (t *Task) ApprovalUnheard() bool { return t.approvalNews }
 
-// PassFor is the held action you approved whose pass lets this exact tool
-// and command through once without asking, or nil.
-func (t *Task) PassFor(tool, command string) *Action {
+// PassFor is the held action you approved whose pass lets this request
+// through once without asking, or nil: the same agent asks for the same
+// tool and command in its first turn after your approval.
+func (t *Task) PassFor(request *Action) *Action {
 	for _, action := range t.Actions {
-		if action.Held && action.Decision == Approved && !action.PassUsed && action.Tool == tool && action.Command == command {
+		if action.Held && action.Decision == Approved && !action.PassUsed && action.PassTurn == request.Turn &&
+			action.Agent == request.Agent && action.Tool == request.Tool && action.Command == request.Command {
 			return action
 		}
 	}

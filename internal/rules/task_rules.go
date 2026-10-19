@@ -471,7 +471,8 @@ func heldForYouAtWork(t *tasks.Task, p events.Proposal) string {
 }
 
 // aFittingPass: an approval that uses a held action's pass names one you
-// approved, not used yet, for the same tool and command.
+// approved, not used yet, for the same agent, tool and command, asked for
+// in that agent's first turn after your approval.
 func aFittingPass(t *tasks.Task, p events.Proposal) string {
 	id := p.Text("pass")
 	if id == "" {
@@ -483,6 +484,10 @@ func aFittingPass(t *tasks.Task, p events.Proposal) string {
 		return "action " + id + " is not a held action the user approved"
 	case pass.PassUsed:
 		return "action " + id + "'s pass was used already"
+	case pass.Agent != action.Agent:
+		return "action " + id + " was asked for by another agent"
+	case pass.PassTurn != action.Turn:
+		return "action " + id + "'s pass works only in " + pass.Agent + "'s first turn after the approval"
 	case pass.Tool != action.Tool || pass.Command != action.Command:
 		return "action " + id + " was for another command"
 	}
