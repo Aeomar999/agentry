@@ -37,15 +37,30 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 			t.Fatal(rejection, err)
 		}
 	}
+	loop := newLoop(s, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go newLoop(s, t.TempDir()).Run(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		loop.Run(ctx)
+	}()
+	// Registered after the temp dirs and the store, so it runs before them.
+	// The loop stops first: it may still be removing a done task's worktree
+	// in the repo, or starting a session that stopping would leave it
+	// waiting on.
+	t.Cleanup(func() {
+		cancel()
+		<-stopped
+		ids, _ := s.TaskIDs()
+		for _, id := range ids {
+			sessions.Stop(sessions.SocketFor(id))
+		}
+	})
 	return s, repo
 }
 
 func startTask(t *testing.T, s *store.Store, id, repo, coordinator string) *tasks.Task {
 	t.Helper()
-	t.Cleanup(func() { sessions.Stop(sessions.SocketFor(id)) })
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": coordinator, "teamChosen": true}})
 	return waitForTurn(t, s, id, "turn-1", coordinator)
