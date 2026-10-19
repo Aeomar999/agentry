@@ -66,6 +66,11 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if action == "accept" {
+				var choice struct{ Kind string }
+				if json.Unmarshal(body, &choice); choice.Kind == "bug" {
+					http.Error(w, "an idea becomes a task or an epic, not bug", http.StatusConflict)
+					return
+				}
 				io.WriteString(w, `{"task":"task-31","accepted":true,"refused":""}`)
 				return
 			}
@@ -323,5 +328,24 @@ func TestAnIdeaWithoutSizeOrTask(t *testing.T) {
 	c.tool("accept_idea", map[string]any{"id": "idea-5"})
 	if !strings.HasSuffix(asked, "Feature: Tags.\n\nTask.") {
 		t.Errorf("asked: %q", asked)
+	}
+}
+
+// What the user says is sent as it is: a kind of task, no note, and a kind
+// the server refuses, which comes back as its reason. A state no idea has
+// lists none.
+func TestTheArgumentsAreSentAsGiven(t *testing.T) {
+	c, fake := startOnIdeas(t, false, nil)
+	c.tool("accept_idea", map[string]any{"id": "idea-1", "kind": "task"})
+	c.tool("dismiss_idea", map[string]any{"id": "idea-1"})
+	want := []string{`POST /api/ideas/idea-1/accept {"kind":"task","note":""}`, `POST /api/ideas/idea-1/dismiss {"note":""}`}
+	if posts := fake.posts(); strings.Join(posts, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent %v, want %v", posts, want)
+	}
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "kind": "bug"}); text != "error: idea-1 wasn't accepted: an idea becomes a task or an epic, not bug" {
+		t.Errorf("bad kind: %s", text)
+	}
+	if text := c.tool("list_ideas", map[string]any{"state": "bogus"}); !strings.HasPrefix(text, "No bogus ideas for /repo.") {
+		t.Errorf("unknown state:\n%s", text)
 	}
 }
