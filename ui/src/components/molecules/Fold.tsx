@@ -8,6 +8,9 @@ import { cn } from "@/lib/cn";
 // the visible links too. Folds nest (a code box in a report), so a link is
 // out of the Tab order while any fold around it cuts it off. A cut through
 // a framed fold inside (a code box) gets a hairline, so the box still ends.
+// The clipping box is positioned: text placed absolutely inside it (the
+// screen-reader-only "opens in a new tab") is otherwise placed by the
+// scroller, escapes the clip and stretches the scroller far past the end.
 
 export interface FoldProps {
   children: ReactNode;
@@ -40,12 +43,18 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
     setSize((size) => (size && size.full === next.full && size.cut === next.cut && size.edge === next.edge ? size : next));
   }, [limit]);
   // Measuring forces a layout, so only once, then when the width changes and
-  // when the text does, never on a render that changed neither.
+  // when the text does, never on a render that changed neither. Either can
+  // move what the cut hides without a render here (lines wrapping anew at
+  // another width, a link put further down), so the Tab order is redone too.
   useLayoutEffect(() => {
     measure();
-    const edits = new MutationObserver(() => measure());
+    const remeasure = () => {
+      measure();
+      takeHiddenOutOfTabOrder(box.current!);
+    };
+    const edits = new MutationObserver(remeasure);
     edits.observe(text.current!, { childList: true, subtree: true, characterData: true });
-    const resizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure());
+    const resizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(remeasure);
     resizes?.observe(text.current!);
     return () => {
       edits.disconnect();
@@ -79,7 +88,10 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
           data-fold-cut={folded ? (size?.cut ?? limit) : undefined}
           style={folded ? { maxHeight: (size?.cut ?? limit) + (size?.edge ? 1 : 0) } : undefined}
           // clip can't be scrolled, so focusing a link can't shift the lines; hidden where clip isn't known.
-          className={cn("overflow-hidden supports-[overflow:clip]:overflow-clip", folded && size?.edge && "border-b border-divider")}
+          className={cn(
+            "relative overflow-hidden supports-[overflow:clip]:overflow-clip",
+            folded && size?.edge && "border-b border-divider",
+          )}
           onScroll={(event) => {
             event.currentTarget.scrollTop = 0;
           }}
@@ -131,7 +143,7 @@ function sizeOf(text: HTMLElement, limit: number): Size {
 // line is cut off tabindex -1, keeping its own in data-fold-tabindex, and
 // gives the rest theirs back.
 function takeHiddenOutOfTabOrder(box: HTMLElement) {
-  for (const element of box.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+  for (const element of focusables(box)) {
     const saved = element.dataset.foldTabindex;
     if (cutOff(element)) {
       if (saved !== undefined) continue;
@@ -143,6 +155,18 @@ function takeHiddenOutOfTabOrder(box: HTMLElement) {
       delete element.dataset.foldTabindex;
     }
   }
+}
+
+// focusables are what Tab can reach in a box: links, buttons, what has a
+// tabindex, and, in Chromium and Firefox, any box that scrolls, such as a
+// code block too wide for a phone.
+function focusables(box: HTMLElement): HTMLElement[] {
+  return [...box.querySelectorAll<HTMLElement>("*")].filter((element) => element.matches(FOCUSABLE) || scrolls(element));
+}
+
+function scrolls(element: HTMLElement): boolean {
+  const style = getComputedStyle(element);
+  return /(auto|scroll)/.test(style.overflowX + style.overflowY);
 }
 
 // cutOff says whether an element's first line box isn't wholly above the cut

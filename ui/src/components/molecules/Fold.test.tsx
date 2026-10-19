@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { Fold } from "./Fold";
 import { layout, layOut } from "@/test-layout";
 
@@ -89,6 +90,49 @@ describe("Fold", () => {
     expect(skipped.getAttribute("tabindex")).toBe("-1");
     expect(sixth.hasAttribute("tabindex")).toBe(false);
     expect(container.querySelector("[data-fold-tabindex]")).toBeNull();
+  });
+
+  test("positions the clipping box, so text placed absolutely in it is clipped with it", () => {
+    const { container } = report();
+    expect(container.querySelector("[data-fold-cut]")!.className.split(" ")).toContain("relative");
+  });
+
+  test("takes a cut-off box that scrolls out of the Tab order, and gives it back", () => {
+    render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <p data-lines="0-20 20-40 40-60 60-80 80-100">A long report.</p>
+        <pre style={{ overflowX: "auto" }} data-lines="100-120">
+          wide code
+        </pre>
+      </Fold>,
+    );
+    const code = screen.getByText("wide code");
+    expect(code.getAttribute("tabindex")).toBe("-1");
+    fireEvent.click(screen.getByRole("button"));
+    expect(code.hasAttribute("tabindex")).toBe(false);
+  });
+
+  test("redoes the Tab order when the text moves a link below the cut without changing its size", async () => {
+    let moveDown = () => {};
+    function Moving() {
+      const [lines, setLines] = useState("0-20");
+      moveDown = () => setLines("100-120");
+      return (
+        <a key={lines} href="#moving" data-lines={lines}>
+          moving
+        </a>
+      );
+    }
+    render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <p data-lines={TEN_LINES}>
+          A long report. <Moving />
+        </p>
+      </Fold>,
+    );
+    expect(tabOrder()).toEqual(["moving", "Show all 10 lines of this report"]);
+    act(() => moveDown());
+    await waitFor(() => expect(tabOrder()).toEqual(["Show all 10 lines of this report"]));
   });
 
   test("never uses inert", () => {
