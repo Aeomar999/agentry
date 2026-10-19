@@ -24,6 +24,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/desk"
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
@@ -69,6 +70,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	dropParentSession(stderr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := serve(ctx, options, stdout); err != nil {
@@ -76,6 +78,15 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// dropParentSession removes what ties this process to an engine session it
+// was started from, such as an assistant running `agentry open` from its
+// Bash tool, so the sessions it starts aren't taken for that one's children.
+func dropParentSession(log io.Writer) {
+	if removed := engines.DropParentSession(); len(removed) > 0 {
+		fmt.Fprintln(log, "agentry: removed variables inherited from a Claude Code or Codex session:", strings.Join(removed, ", "))
+	}
 }
 
 func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {

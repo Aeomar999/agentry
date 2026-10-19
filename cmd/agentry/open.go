@@ -36,6 +36,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	if flags.Parse(args) != nil {
 		return 2
 	}
+	dropParentSession(stderr) // before the server starts, so it doesn't inherit them
 	for _, tool := range []string{"git", "claude"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			fmt.Fprintf(stdout, "Note: %s isn't installed here, and agents need it. %s\n", tool, installHint(tool))

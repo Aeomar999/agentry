@@ -58,6 +58,41 @@ func TestASessionRunsWithItsEnvironmentAndShowsACrash(t *testing.T) {
 	}
 }
 
+// Agentry started from inside a Claude Code session must not hand that
+// session's markers on: with them, Claude saves no transcript. What the user
+// set up, and what Agentry sets, still reaches the program.
+func TestASessionDoesNotInheritAParentEngineSession(t *testing.T) {
+	markers := []string{"CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_MESSAGING_SOCKET", "CODEX_THREAD_ID"}
+	for _, name := range markers {
+		t.Setenv(name, "1")
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", "/claude-config")
+	t.Setenv("AGENTRY_INHERITED", "kept")
+	socket, dir := testSocket(t), t.TempDir()
+	err := Start(Spec{Socket: socket, Dir: dir, Env: map[string]string{"AGENTRY_TASK": "task-1"},
+		Command: []string{"sh", "-c", "env > env.txt; echo done; sleep 30"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the program", func() bool { return strings.Contains(Screen(socket), "done") })
+	saved, err := os.ReadFile(filepath.Join(dir, "env.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := strings.Split(string(saved), "\n")
+	for _, want := range []string{"CLAUDE_CONFIG_DIR=/claude-config", "AGENTRY_INHERITED=kept", "AGENTRY_TASK=task-1"} {
+		if !slices.Contains(env, want) {
+			t.Errorf("the session should have %s", want)
+		}
+	}
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if slices.Contains(markers, name) {
+			t.Errorf("the session inherited %s", name)
+		}
+	}
+}
+
 func TestStartReplacesTheTurnBefore(t *testing.T) {
 	socket, dir := testSocket(t), t.TempDir()
 	Start(Spec{Socket: socket, Dir: dir, Command: []string{"sh", "-c", "echo first; sleep 30"}})

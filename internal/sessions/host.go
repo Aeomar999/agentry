@@ -15,6 +15,8 @@ import (
 
 	"github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/x/vt"
+
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 )
 
 // The host is the process that keeps one session: Start runs this same
@@ -301,8 +303,9 @@ func encodeFrame(kind byte, payload []byte) []byte {
 	return []byte(b.String())
 }
 
-// childEnv is this environment, without what made this process a host,
-// with the session's own, and a terminal the program knows how to draw on.
+// childEnv is this environment, without what made this process a host or
+// tied it to an engine session of its own, with the session's own, and a
+// terminal the program knows how to draw on.
 func childEnv(extra map[string]string) []string {
 	set := map[string]string{"TERM": "xterm-256color", "COLORTERM": "truecolor"}
 	for name, value := range extra {
@@ -312,7 +315,7 @@ func childEnv(extra map[string]string) []string {
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		_, replaced := set[envKey(name)]
-		if !replaced && name != hostEnv && name != specEnv && !strings.HasPrefix(name, "TMUX") {
+		if !replaced && name != hostEnv && name != specEnv && !strings.HasPrefix(name, "TMUX") && !engines.IsParentSessionVar(name) {
 			env = append(env, kv)
 		}
 	}

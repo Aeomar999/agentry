@@ -2,9 +2,40 @@ package main
 
 import (
 	"net"
+	"os"
 	"strings"
 	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 )
+
+// Started from inside a Claude Code session, serve, open and the worker
+// drop that session's markers and say which, by name.
+func TestStartingDropsAParentSessionAndSaysWhat(t *testing.T) {
+	for _, kv := range os.Environ() { // whoever runs the tests may be in a session
+		if name, _, _ := strings.Cut(kv, "="); engines.IsParentSessionVar(name) {
+			t.Setenv(name, "") // restored after the test
+			os.Unsetenv(name)
+		}
+	}
+	var quiet strings.Builder
+	if dropParentSession(&quiet); quiet.Len() != 0 {
+		t.Errorf("nothing to remove, but it said %q", quiet.String())
+	}
+
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CODE_CHILD_SESSION", "secret-value")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/claude-config")
+	var said strings.Builder
+	dropParentSession(&said)
+	want := "agentry: removed variables inherited from a Claude Code or Codex session: CLAUDECODE, CLAUDE_CODE_CHILD_SESSION\n"
+	if said.String() != want {
+		t.Errorf("said %q, want %q", said.String(), want)
+	}
+	if _, set := os.LookupEnv("CLAUDE_CODE_CHILD_SESSION"); set || os.Getenv("CLAUDE_CONFIG_DIR") == "" {
+		t.Error("it should remove the markers and keep the user's configuration")
+	}
+}
 
 // Hooks and the desk call the server on loopback when it listens on every
 // address, as it does in a container.

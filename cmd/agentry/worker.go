@@ -200,6 +200,7 @@ func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
 	}
 	logger := log.New(out, "", log.LstdFlags)
 	logger.Printf("%s, working for %s", config.Name, config.Server)
+	dropParentSession(logger.Writer())
 	worker := &workerlink.Worker{
 		Server: config.Server, Credential: config.Credential, About: machines.Describe(), Log: logger.Printf, SelfUpdate: true,
 		OnLink: func(up bool, err error) { saveLinkState(dir, up, err) },
