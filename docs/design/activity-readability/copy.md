@@ -39,6 +39,15 @@ The words the board already uses, kept the same here. Use these, and only these,
 
 Words the team uses that never show: *band*, *section*, *author*, *fold*, *rail*, *sticky*, *read model*, *event*.
 
+## Tab headings
+
+| Where | Text | Accessible name / aria | Max | Notes |
+|---|---|---|---|---|
+| Top of the Activity panel | `Activity` | sr-only `h2` | | *Added*. The tab's own label, word for word, so the outline reads Activity › bands (`h3`) without skipping a level. Not visible |
+| Top of the Handoffs panel | `Handoffs` | sr-only `h2` | | *Added*. As above; the cards' titles are `h3` |
+
+No extra words such as "Activity of task-40": the page already names the task, and the heading only has to match the tab a person just chose.
+
 ## Activity toolbar
 
 | Where | Text | Accessible name / aria | Plural | Max | Notes |
@@ -49,7 +58,7 @@ Words the team uses that never show: *band*, *section*, *author*, *fold*, *rail*
 | Row count, right | `{n} rows` | | `1 row`, `0 rows` | 10 | Today. Only `ink-faint` → `ink-muted` changes |
 | Narrowed chip | `{turn}` `{agent}` | | | 30 | Today: the turn id and the agent's name |
 | Narrowed chip × | (icon) | `Show every turn` | | | Today |
-| Back to top button, floating | `Newest` | `Back to the newest rows` | | 6 | Visible text today. The name says what it does and contains the visible word, so "click Newest" still works by voice. It now sits at the bottom right of the scroller, clear of every band (flows, flow 1 step 7); text and name unchanged |
+| Back to top button, floating | `Newest` | `Back to the newest rows` | | 6 | Visible text today. The name says what it does and contains the visible word, so "click Newest" still works by voice. It now sits at the bottom right of the scroller, clear of every band (flows, flow 1 step 7); text and name unchanged. On a phone the scroller keeps 48px clear at the bottom (`scroll-padding-bottom: 48px`), so a link or Copy button that Tab brings into view stops above Newest, never under it |
 
 ## Author bands (turns)
 
@@ -120,7 +129,7 @@ No team, role or turn facts on either: there is nothing true to say there.
 |---|---|---|---|---|
 | Row time | `{hh:mm}`: `06:15` | | 5 | Today, from `clockTime()` |
 | Duration, done | `{duration}`: `48m`, `40s`, `1h 12m` | | 7 | Today. `ink-faint` → `ink-muted` |
-| Duration, live | `{duration}…`: `18m…` | | 7 | Today. `success` colour; the ellipsis means "still going" |
+| Duration, live | `{duration}…`: `18m…` | | 7 | Today. `success-ink` colour (light #197d40, 5.19:1 on `surface-0`; dark keeps `success`); the ellipsis means "still going" |
 | Now row time | `now` | | 3 | Today |
 
 The rail stays plain text for screen readers; the time and duration are read after each row's content, which is the order they're in. No extra wording.
@@ -165,7 +174,7 @@ The rail stays plain text for screen readers; the time and duration are read aft
 
 Kept exactly as `lib/activity.ts` writes them today (`Read its brief`, `Worktree ready on {worker}: {branch}`, `Held in {place}`, `Moved on`, `Copied {from} into the shared files`, …). They're UI strings, but the scope says no change to what is logged, and they already read well. One line, truncated with an ellipsis; a note with a body folds at 4 lines.
 
-flows.md's `Fetched {n} shared files` doesn't exist in the code: today it's `Fetching {machine}:{path} into the shared files` and `Copied {from} into the shared files`, one row per file. Use those; the wireframes' `Fetched 2 shared files` is just a sketch.
+flows.md's `Fetched {n} shared files` doesn't exist in the code: today it's `Fetching {machine}:{path} into the shared files` and `Copied {from} into the shared files`, one row per file. Use those.
 
 ## Fold buttons
 
@@ -207,6 +216,7 @@ Commands have no Copy button, by design.
 | Task id the board knows, no title yet | `task-21`, mono, no ↗, no tooltip | `task-21` | |
 | Commit of the task | `3f2a9c1`, mono, ↗ | `commit 3f2a9c1 (opens in a new tab)` | *Added* `commit`: a bare hash says nothing out of context, and screen readers read it letter by letter |
 | Any other SHA, unknown task id | plain code | | Not a link |
+| In-page anchor (`#strings`) | its label, link colour, underlined, no ↗ | `{label}` | Same page, as today |
 | `javascript:`, `data:` and other unsafe links | the label as plain text | | No hint, no warning: it reads as a sentence |
 
 **Linked inline code.** A task id or commit written in backticks (`` `task-21` ``, `` `3f2a9c1` ``) becomes the same link as the bare one and reads exactly like it: mono, link colour, underline, no code background (spec decision 9), the same tooltip and accessible name. No copy change.
@@ -252,8 +262,8 @@ The footer is the button that opens the turn.
 | A step that led to a turn | `Led to` | Today |
 | A step said from a turn | `From` | Today |
 | Turn | `{turn}` | Today |
-| Agent | `{agent}` | Today, after the turn id, at every width. Truncates at 96px on a phone |
-| Status | badge: `running`, `issue` | Today (no badge once ended) |
+| Agent | `{agent}` | Today, after the turn id, at every width. Truncates at 72px on a phone (with an ellipsis), to leave room for the badge; the full name is in the footer's accessible name |
+| Status | badge: `running`, `issue` | Today (no badge once ended). Kept on a phone too |
 | Duration | `{duration}`, only once ended (a running turn shows the badge and the action count instead) | Today |
 | Actions | `{n} actions` | `1 action`, `0 actions`. Today |
 | Tokens | `{n} tokens` | Today, only when above 0 |
@@ -261,7 +271,9 @@ The footer is the button that opens the turn.
 
 Desktop: `Led to turn-4 · engineer · 48m · 14 actions · 210k tokens · Activity ›`; running: `Led to turn-6 · reviewer · running · 6 actions · Activity ›`.
 
-Phone: `Led to {turn} · {agent} · Activity ›` and `From {turn} · {agent} · Activity ›`. The agent stays, since it says whose turn opens; the duration, counts and tokens go (the design's cut). The facts are joined by ` · `.
+Phone, ended: `Led to {turn} · {agent} · Activity ›` and `From {turn} · {agent} · Activity ›` → `Led to turn-5 · engineer · Activity ›`. Phone, running or issue: `Led to {turn} · {agent} · {status} · Activity ›` → `Led to turn-6 · reviewer · running · Activity ›`. The agent stays, since it says whose turn opens, and so does the badge, since it says the turn is still going; the duration, counts and tokens go (the design's cut).
+
+**How the footer is joined.** At every width the facts are joined by ` · ` (middle dot, a space each side), and the footer has **no agent dot**: the agent is a word, not a coloured mark (critique N5). `Activity ›` sits at the right end of the footer, so on screen the last ` · ` is space; the strings above write it out so they read in one line.
 
 **Footer accessible name**: it starts with the visible words, so a voice user can say "click Led to turn 6" (WCAG 2.5.3 Label in Name), then the badge's word, then what the button does.
 
@@ -323,16 +335,19 @@ Checked against [activity-mobile.svg](activity-mobile.svg) and the phone half of
 | Code language label | yes, 10 characters max | truncate past 10 |
 | Handoffs top line | wraps to two lines for long names | none: wrapping is fine here; the whole line is the button |
 | Handoffs card header | yes: `product-designer → engineer  06:15`, one line, never wraps: 18 + 96 + 16 + 18 + 96 + 8 + 33 ≈ 285px of 334 | names truncate at 96px each; full names in the card's `aria-label` |
-| Handoffs footer | yes: `Led to turn-12 · product-designer · Activity ›` ≈ 98 + 20 + 18 (chip) + 96 (truncated) + 85 ≈ 317px of 334 (card width at 390, less the 24px timeline gutter) | **Shortened**: `Led to {turn} · {agent} · Activity ›`; duration, counts and tokens go |
+| Handoffs footer, ended | yes: `Led to turn-12 · product-designer · Activity ›` ≈ 42 (`Led to `) + 46 (`turn-12`) + 13 + 72 (agent, truncated) + gap + 56 (`Activity ›`) ≈ 241px of the card's 310 inside its padding (334 card at 390, less the 24px timeline gutter, less 12px padding each side) | **Shortened**: `Led to {turn} · {agent} · Activity ›`; duration, counts and tokens go |
+| Handoffs footer, running | yes, just: `Led to turn-12 · product-designer · running · Activity ›` ≈ 42 + 46 + 13 + 72 (agent, truncated) + 13 + 58 (`RUNNING` badge) + 8 gap + 56 ≈ 308px of 310. With `turn-6` ≈ 301px, as drawn in handoffs.svg. Sizes from the wireframe: footer text 11.5px, mono 11px ≈ 6.6px a character | **Shortened**: `Led to {turn} · {agent} · {status} · Activity ›`; the badge stays, the agent truncates at 72px (was 96). `issue` is narrower than `running`. A three-digit turn id (`turn-100`) is about 5px over: see [Questions](#questions-for-the-designer) |
 | Error next step | wraps to two lines in the centred message | none |
 | Error, empty and loading texts | yes, they wrap in the centred `EmptyState` | none |
 | Note rows | one line, truncated | none (as today) |
 
-Shortened for the phone: only the Handoffs footer (and the band, by the design's hiding of team, role, turn id, `continued`, tokens and `on {worker}`). No string has a separate phone wording, and every accessible name is the same at every width.
+Shortened for the phone: only the Handoffs footer, which keeps the turn, the agent and the badge (and the band, by the design's hiding of team, role, turn id, `continued`, tokens and `on {worker}`). No string has a separate phone wording, and every accessible name is the same at every width.
 
 ## Questions for the designer
 
-None open. The four from turn 6 were answered in spec decision 8 and are now in the tables above:
+1. **The running phone footer at turn-100 and up.** `Led to turn-100 · {agent} · running · Activity ›` is about 5px wider than the 310px inside a 390 card when the agent fills its 72px. Suggest the agent shrinks to fit (`min-width: 0`, ellipsis, at most 72px) rather than a fixed 72px, so the line never wraps; the words stay the same. Your call; until then the build can use the fixed 72px, which fits up to `turn-99`.
+
+Answered (turn 6, in spec decision 8, now in the tables above):
 
 1. ~~Role repeating the name~~: drop it; the team still shows. See [Roles](#roles).
 2. ~~Task-id links' titles~~: yes, tooltip and accessible name when the board has the title. See [Links](#links).
