@@ -174,7 +174,7 @@ func autoAccepted(t *testing.T, s *store.Store, task, repo, title, as string) st
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
 	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
 		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
 		{Stream: as, Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": title, "repo": repo,
