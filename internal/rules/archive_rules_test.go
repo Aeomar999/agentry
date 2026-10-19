@@ -53,6 +53,7 @@ func TestAnArchivedTaskTakesOnlyItsUnarchiving(t *testing.T) {
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: archiver, Type: events.TaskArchived, Data: archivedData(nil)},
 		{Stream: "task-1", Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "More."}},
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
 	} {
 		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != "task-1 is archived: an archived task takes no events" {
 			t.Errorf("%s on an archived task: %v, %v", p.Type, rejection, err)
