@@ -276,7 +276,11 @@ func (s *Server) addFromYourTemplate(w http.ResponseWriter, id string, addMissin
 		return
 	}
 	template := saved.Template()
-	made := template.MadeFor(roster) // never none: the rules refuse a template without agents
+	made := template.MadeFor(roster)
+	if len(made) == 0 { // the rules refuse a template without agents, so only a broken log has one
+		http.Error(w, "your template "+id+" has no agents", http.StatusInternalServerError)
+		return
+	}
 	if !s.mayAddTeam(w, made[0].TeamName(), made, roster, addMissing, hash) {
 		return
 	}
