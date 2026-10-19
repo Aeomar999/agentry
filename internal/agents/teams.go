@@ -164,6 +164,16 @@ func isNumber(text string) bool {
 // taken already, by an agent or a team, gets a number, so nothing you have
 // is changed.
 func AddTeam(t Template, current Roster, by events.Actor) []events.Proposal {
+	var proposals []events.Proposal
+	for _, agent := range t.MadeFor(current) {
+		proposals = append(proposals, agent.Proposal(by, false))
+	}
+	return proposals
+}
+
+// MadeFor is the agents AddTeam makes from t, named as it names them, so
+// they can be checked before they are proposed.
+func (t Template) MadeFor(current Roster) []Agent {
 	team := t.Team
 	for n := 2; contains(current.Teams(), team); n++ {
 		team = fmt.Sprintf("%s %d", t.Team, n)
@@ -172,7 +182,7 @@ func AddTeam(t Template, current Roster, by events.Actor) []events.Proposal {
 	for _, agent := range current {
 		taken[agent.Name] = true
 	}
-	var proposals []events.Proposal
+	var made []Agent
 	for _, agent := range t.prompted() {
 		name := agent.Name
 		for n := 2; taken[name]; n++ {
@@ -183,9 +193,9 @@ func AddTeam(t Template, current Roster, by events.Actor) []events.Proposal {
 		if team == DefaultTeam {
 			agent.Team = ""
 		}
-		proposals = append(proposals, agent.Proposal(by, false))
+		made = append(made, agent)
 	}
-	return proposals
+	return made
 }
 
 func contains(list []string, item string) bool {

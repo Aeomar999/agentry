@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -337,6 +338,163 @@ func TestAnImportThatIsntATemplateIsABadRequest(t *testing.T) {
 		if code, reply := call(t, server, "POST", "/api/teams/templates/import", body); code != http.StatusBadRequest || !strings.HasPrefix(reply, "bad request: ") {
 			t.Errorf("%s: %d %s", body, code, reply)
 		}
+	}
+}
+
+// planningTeam makes a team of your own, Planning, whose agents differ in
+// everything a template keeps, and returns it as the roster has it.
+func planningTeam(t *testing.T, server *httptest.Server, s *store.Store) agents.Roster {
+	t.Helper()
+	team := `{"team":"Planning","agents":[` +
+		`{"name":"planner","engine":"claude","model":"opus","profile":"developer","coordinates":true,"prompt":"Plan it.","color":"teal","description":"Plans"},` +
+		`{"name":"checker","engine":"codex","profile":"read-only","prompt":"Check it.","color":"violet","column":"review","description":"Checks"}]}`
+	if code, body := call(t, server, "POST", "/api/teams", team); code != 200 {
+		t.Fatalf("make Planning: %d %s", code, body)
+	}
+	return teamIn(t, s, "Planning")
+}
+
+func rosterOf(t *testing.T, s *store.Store) agents.Roster {
+	t.Helper()
+	stream, err := s.Stream(events.AgentsStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agents.FromEvents(stream)
+}
+
+// teamIn is every agent of team in the log, its coordinator too.
+func teamIn(t *testing.T, s *store.Store, team string) agents.Roster {
+	t.Helper()
+	var members agents.Roster
+	for _, agent := range rosterOf(t, s) {
+		if agent.TeamName() == team {
+			members = append(members, agent)
+		}
+	}
+	return members
+}
+
+// The story: a team saved as a template, then removed, comes back from the
+// template as it was, every agent with its prompt, engine, profile, colour,
+// column and coordination, now made from the template.
+func TestATeamSavedRemovedAndAddedAgainIsAsItWas(t *testing.T) {
+	server, s := newTestServer(t)
+	team := planningTeam(t, server, s)
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning"}`); code != 200 {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/teams/Planning", ""); code != 200 {
+		t.Fatalf("remove: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"my-planning"}`); code != 200 {
+		t.Fatalf("add from the template: %d %s", code, body)
+	}
+	again := teamIn(t, s, "Planning")
+	if len(team) != 2 || len(again) != len(team) {
+		t.Fatalf("Planning has %d agents again, not %d", len(again), len(team))
+	}
+	for i, want := range team {
+		want.Template = "my-planning"
+		if !reflect.DeepEqual(again[i], want) {
+			t.Errorf("agent %d:\n%+v\nwant:\n%+v", i, again[i], want)
+		}
+	}
+}
+
+// A template added while its team is still there makes a second team, named
+// as a built-in template's second team is.
+func TestATemplateAddedBesideItsTeamIsNumbered(t *testing.T) {
+	server, s := newTestServer(t)
+	planningTeam(t, server, s)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning"}`)
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"my-planning"}`); code != 200 {
+		t.Fatalf("add from the template: %d %s", code, body)
+	}
+	second := teamIn(t, s, "Planning 2")
+	if len(second) != 2 || second[0].Name != "planner-2" || !second[0].Coordinates || second[1].Name != "checker-2" || second[1].Prompt != "Check it." {
+		t.Errorf("Planning 2: %+v", second)
+	}
+	if lead, _ := rosterOf(t, s).Coordinator("Planning"); lead.Name != "planner" {
+		t.Errorf("Planning keeps its own coordinator, not %q", lead.Name)
+	}
+}
+
+// importOf is the body of an import of a one-agent template, its
+// coordinator's profile and the team named.
+func importOf(id, team, profile string) string {
+	body, _ := json.Marshal(map[string]any{"id": id, "team": team, "agents": []any{
+		map[string]any{"name": "lead", "engine": "claude", "prompt": "Lead.", "coordinates": true, "profile": profile}}})
+	return string(body)
+}
+
+// A template of yours whose profile the policy lacks gets the offer a
+// built-in one gets, and is added once you take it.
+func TestYourTemplateNeedsItsProfilesInThePolicy(t *testing.T) {
+	server := servePolicy(t, withoutReadMostly(t))
+	if code, body := call(t, server.Server, "POST", "/api/teams/templates/import", importOf("careful", "Careful", "read-mostly")); code != 200 {
+		t.Fatalf("import: %d %s", code, body)
+	}
+	agentsBefore, _ := server.log.Stream(events.AgentsStream)
+	code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"careful"}`)
+	var refusal struct {
+		Error           string
+		MissingProfiles []string
+	}
+	json.Unmarshal([]byte(body), &refusal)
+	if code != http.StatusConflict || !reflect.DeepEqual(refusal.MissingProfiles, []string{"read-mostly"}) || !strings.Contains(refusal.Error, "the Careful team needs profile read-mostly") {
+		t.Errorf("a profile the policy lacks: %d %s", code, body)
+	}
+	if after, _ := server.log.Stream(events.AgentsStream); len(after) != len(agentsBefore) {
+		t.Errorf("nothing should be proposed: %d agent events, then %d", len(agentsBefore), len(after))
+	}
+	if code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"careful","addMissingProfiles":true}`); code != 200 {
+		t.Fatalf("adding Careful with its profile: %d %s", code, body)
+	}
+	if stream := server.policyEvents(t); len(stream) != 1 || stream[0].Text("change") != "added profile read-mostly for team Careful" {
+		t.Errorf("one logged change of the policy: %d events", len(stream))
+	}
+	if lead, ok := rosterOf(t, server.log).Get("lead"); !ok || lead.Team != "Careful" || lead.Template != "careful" {
+		t.Errorf("the lead: %+v", lead)
+	}
+}
+
+// A template saved under the template rules can still fail the rules of a
+// team you define, as the policy or the templates changed since: it is
+// refused before anything is proposed.
+func TestYourTemplateIsAddedOnlyAsACustomTeamWouldBe(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	for _, refused := range []struct {
+		name, template, reason string
+	}{
+		{"a profile nobody ships", importOf("dreamers", "Dreamers", "dreaming"),
+			"lead's profile dreaming isn't in policy.toml, and Agentry doesn't ship it: write it in policy.toml, or pick another profile"},
+		{"a built-in template's team", importOf("my-writing", "Writing", ""),
+			"Writing is the name of the Writing template's team; choose another"},
+	} {
+		if code, body := call(t, server.Server, "POST", "/api/teams/templates/import", refused.template); code != 200 {
+			t.Fatalf("%s: import: %d %s", refused.name, code, body)
+		}
+		var template agents.UserTemplate
+		json.Unmarshal([]byte(refused.template), &template)
+		agentsBefore, _ := server.log.Stream(events.AgentsStream)
+		code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"`+template.ID+`","addMissingProfiles":true}`)
+		var refusal struct{ Error string }
+		json.Unmarshal([]byte(body), &refusal)
+		if code != http.StatusBadRequest || refusal.Error != refused.reason {
+			t.Errorf("%s: %d %s", refused.name, code, body)
+		}
+		if after, _ := server.log.Stream(events.AgentsStream); len(after) != len(agentsBefore) || len(server.policyEvents(t)) != 0 {
+			t.Errorf("%s: nothing should be proposed", refused.name)
+		}
+	}
+}
+
+func TestAddingATemplateThereIsntIsNotFound(t *testing.T) {
+	server, _ := newTestServer(t)
+	code, body := call(t, server, "POST", "/api/teams", `{"template":"nobody"}`)
+	if code != http.StatusNotFound || !strings.Contains(body, "no team template called nobody") {
+		t.Errorf("an unknown template: %d %s", code, body)
 	}
 }
 

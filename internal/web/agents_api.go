@@ -212,8 +212,9 @@ func viewOf(t agents.Template, userMade bool) templateView {
 	return view
 }
 
-// addTeam adds a team, made from a template ({template}) or from agents you
-// define ({team, agents}): its coordinator first, so the team always has
+// addTeam adds a team, made from a template ({template}: a built-in one's
+// team, or the id of one you saved) or from agents you define ({team,
+// agents}): its coordinator first, so the team always has
 // one, then its agents, each with its own prompt. When the policy lacks a
 // profile the team needs, it refuses with the profiles missing, unless asked
 // to add them first (addMissingProfiles), which it does in one change of the
@@ -245,7 +246,7 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 	}
 	template, ok := agents.TemplateNamed(request.Template)
 	if !ok {
-		http.Error(w, "no team template called "+request.Template, http.StatusNotFound)
+		s.addFromYourTemplate(w, request.Template, request.AddMissingProfiles, request.Hash)
 		return
 	}
 	if !s.hasProfiles(w, template.Team, s.missingProfiles(template.Agents), request.AddMissingProfiles, request.Hash) {
@@ -259,6 +260,29 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 	s.proposeTeam(w, agents.AddTeam(template, roster, httpapi.You))
 }
 
+// addFromYourTemplate adds the team of the template you saved as id, under
+// the rules a custom team has: a saved template was checked as it was then,
+// and the roster and the policy may have changed since. The agents checked
+// are those AddTeam makes, with the team name and numbers it picks.
+func (s *Server) addFromYourTemplate(w http.ResponseWriter, id string, addMissing bool, hash string) {
+	saved, ok := s.state.Templates().WithID(id)
+	if !ok {
+		http.Error(w, "no team template called "+id, http.StatusNotFound)
+		return
+	}
+	roster, err := s.roster()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	template := saved.Template()
+	made := template.MadeFor(roster) // never none: the rules refuse a template without agents
+	if !s.mayAddTeam(w, made[0].TeamName(), made, roster, addMissing, hash) {
+		return
+	}
+	s.proposeTeam(w, agents.AddTeam(template, roster, httpapi.You))
+}
+
 // addCustomTeam adds the team of the agents you define, once every agent
 // passes: nothing is proposed before then, so a team is never half made.
 func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []agents.Agent, addMissing bool, hash string) {
@@ -267,10 +291,20 @@ func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []age
 		httpapi.Failed(w, err)
 		return
 	}
+	if !s.mayAddTeam(w, team, members, roster, addMissing, hash) {
+		return
+	}
+	s.proposeTeam(w, agents.CustomTeam(team, members, httpapi.You))
+}
+
+// mayAddTeam says whether the team of these members passes every check a
+// team you define has, adding the profiles it lacks when asked; when it
+// says no, it has replied.
+func (s *Server) mayAddTeam(w http.ResponseWriter, team string, members []agents.Agent, roster agents.Roster, addMissing bool, hash string) bool {
 	machines, err := s.workers()
 	if err != nil {
 		httpapi.Failed(w, err)
-		return
+		return false
 	}
 	problem := agents.CheckCustomTeam(team, members, roster)
 	if problem == "" {
@@ -285,12 +319,9 @@ func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []age
 	}
 	if problem != "" {
 		http.Error(w, problem, http.StatusBadRequest)
-		return
+		return false
 	}
-	if !s.hasProfiles(w, team, missing, addMissing, hash) {
-		return
-	}
-	s.proposeTeam(w, agents.CustomTeam(team, members, httpapi.You))
+	return s.hasProfiles(w, team, missing, addMissing, hash)
 }
 
 // unknownEngine says which agent names an engine Agentry can't run, or "".
