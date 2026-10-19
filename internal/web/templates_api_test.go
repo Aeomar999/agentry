@@ -294,6 +294,8 @@ func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
 	agent := func(name string, coordinates bool) map[string]any {
 		return map[string]any{"name": name, "engine": "claude", "prompt": "Work.", "coordinates": coordinates}
 	}
+	withWorkers := agent("lead", true)
+	withWorkers["workers"] = []any{"box"}
 	for _, refused := range []struct {
 		name     string
 		template map[string]any
@@ -302,6 +304,7 @@ func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
 		{"a built-in id", map[string]any{"id": "software", "team": "Ours", "agents": []any{agent("lead", true)}}, "the built-in software template has that id"},
 		{"two coordinators", map[string]any{"id": "ours", "team": "Ours", "agents": []any{agent("lead", true), agent("other-lead", true)}}, "a template has exactly one coordinator"},
 		{"no agents", map[string]any{"id": "ours", "team": "Ours"}, "a template needs at least one agent"},
+		{"workers", map[string]any{"id": "ours", "team": "Ours", "agents": []any{withWorkers}}, "agent lead: a template's agents name no workers, as the machines may not be there when it is added"},
 		{"nothing", map[string]any{}, "a template needs an id"},
 	} {
 		body, _ := json.Marshal(refused.template)
