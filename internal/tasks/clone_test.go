@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 	"time"
-	"unsafe"
 
+	"gitlab.com/dev.chempa/agentry/internal/deeptest"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
@@ -14,93 +14,12 @@ import (
 // field added to Task later is checked without anyone adding it here.
 func TestACloneSharesNothing(t *testing.T) {
 	var task Task
-	fill(t, reflect.ValueOf(&task).Elem())
+	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
 	clone := task.Clone()
 	if !reflect.DeepEqual(&task, clone) {
 		t.Fatalf("the clone differs from the task:\n%+v\n%+v", task, *clone)
 	}
-	shared(t, "Task", reflect.ValueOf(task), reflect.ValueOf(*clone))
-}
-
-// fill gives every field, exported or not, a value: every pointer, map and
-// slice is non-empty, and slices have spare capacity.
-func fill(t *testing.T, v reflect.Value) {
-	if v.Type() == reflect.TypeFor[time.Time]() {
-		v.Set(reflect.ValueOf(time.Unix(1, 0)))
-		return
-	}
-	switch v.Kind() {
-	case reflect.String:
-		v.SetString("x")
-	case reflect.Bool:
-		v.SetBool(true)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v.SetInt(1)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v.SetUint(1)
-	case reflect.Float32, reflect.Float64:
-		v.SetFloat(1)
-	case reflect.Struct:
-		for _, field := range v.Fields() {
-			fill(t, reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()) // unexported ones too
-		}
-	case reflect.Pointer:
-		p := reflect.New(v.Type().Elem())
-		fill(t, p.Elem())
-		v.Set(p)
-	case reflect.Slice:
-		s := reflect.MakeSlice(v.Type(), 2, 4)
-		for i := range s.Len() {
-			fill(t, s.Index(i))
-		}
-		v.Set(s)
-	case reflect.Map:
-		key, value := reflect.New(v.Type().Key()).Elem(), reflect.New(v.Type().Elem()).Elem()
-		fill(t, key)
-		fill(t, value)
-		m := reflect.MakeMap(v.Type())
-		m.SetMapIndex(key, value)
-		v.Set(m)
-	default:
-		t.Fatalf("fill doesn't know a %s", v.Type())
-	}
-}
-
-// shared fails for every pointer, map or slice array a and b both hold.
-// Strings never change and time.Time's location is shared by design, so
-// they are not checked.
-func shared(t *testing.T, path string, a, b reflect.Value) {
-	if a.Type() == reflect.TypeFor[time.Time]() {
-		return
-	}
-	switch a.Kind() {
-	case reflect.Pointer, reflect.Map, reflect.Slice:
-		if a.IsNil() || a.Kind() != reflect.Pointer && a.Len() == 0 {
-			t.Errorf("%s is empty in the original, so nothing is checked", path)
-			return
-		}
-		if a.Pointer() == b.Pointer() {
-			t.Errorf("%s is shared with the clone", path)
-		}
-	}
-	switch a.Kind() {
-	case reflect.Pointer:
-		shared(t, path, a.Elem(), b.Elem())
-	case reflect.Map:
-		for _, key := range a.MapKeys() {
-			shared(t, path+"[key]", a.MapIndex(key), b.MapIndex(key))
-		}
-	case reflect.Slice:
-		for i := range a.Len() {
-			shared(t, path+"[i]", a.Index(i), b.Index(i))
-		}
-	case reflect.Struct:
-		for field, value := range a.Fields() {
-			shared(t, path+"."+field.Name, value, b.FieldByIndex(field.Index))
-		}
-	case reflect.Interface, reflect.Chan, reflect.Func, reflect.UnsafePointer, reflect.Array:
-		t.Errorf("%s is a %s, which shared doesn't check", path, a.Kind())
-	}
+	deeptest.Shared(t, "Task", reflect.ValueOf(task), reflect.ValueOf(*clone))
 }
 
 // Next must leave the task it is given as it was, and folding it over a
