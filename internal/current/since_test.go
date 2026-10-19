@@ -87,3 +87,28 @@ func TestTheTaskOrderIsByPositionWhateverTheLoadOrder(t *testing.T) {
 		}
 	}
 }
+
+// A state that started part way goes on like one that loaded the whole log:
+// tasks created after Open come last in the order, and the state still
+// equals a replay.
+func TestAStateThatStartsPartWayTakesWhatComesAfterOpen(t *testing.T) {
+	path, log := seededLog(t, someProposals()...)
+	state := applied(log[:len(log)/2])
+	s, err := store.Open(path, state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	before := state.TaskIDs()
+	propose(t, s, proposal("task-9", you, events.TaskCreated, map[string]any{"title": "Later", "repo": "/r", "coordinator": "tech-lead"}))
+	propose(t, s, proposal("task-9", you, events.TaskHeld, map[string]any{"place": "backlog"}))
+	if order := state.TaskIDs(); !slices.Equal(order, append(before, "task-9")) {
+		t.Errorf("task order %v, want %v then task-9", order, before)
+	}
+	if position := state.StreamPosition("task-9"); position != s.LastPosition() {
+		t.Errorf("task-9 at %d, want the log's last, %d", position, s.LastPosition())
+	}
+	if err := Equal(s, state); err != nil {
+		t.Error(err)
+	}
+}
