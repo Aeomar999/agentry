@@ -521,7 +521,11 @@ func (l *Loop) blocked(story *tasks.Task) bool {
 }
 
 // answer gives a finished task's summary to the task that asked for it, if
-// that one still waits for it.
+// that one still waits for it. An archived asker never does, so it is not
+// unarchived for the answer: only a done task is archived, and a done task
+// waits on none. Moved to Done, it stops waiting; its coordinator finishes
+// it only from a turn, which a waiting task doesn't get (Next); and the
+// rules refuse task.request_answered to a done task.
 func (l *Loop) answer(child *tasks.Task) {
 	parent, _, err := l.load(child.Parent)
 	if err != nil || parent == nil || parent.WaitingOn != child.ID {
