@@ -174,30 +174,38 @@ func (s *Server) needing(names ...string) ([]string, error) {
 
 // teamTemplates are the ready-made teams you can add, without their prompts.
 func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
-	type member struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		Coordinates bool   `json:"coordinates"`
-	}
-	type template struct {
-		ID          string   `json:"id"` // what GET /api/agents says an agent was made from
-		Team        string   `json:"team"`
-		Description string   `json:"description"`
-		Features    []string `json:"features"` // what a team made from it turns on, so the page can find that team
-		Agents      []member `json:"agents"`
-	}
-	list := []template{}
+	list := []templateView{}
 	for _, t := range agents.Templates {
-		view := template{ID: t.ID, Team: t.Team, Description: t.Description, Features: t.Features}
-		if view.Features == nil {
-			view.Features = []string{}
-		}
-		for _, a := range t.Agents {
-			view.Agents = append(view.Agents, member{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
-		}
-		list = append(list, view)
+		list = append(list, viewOf(t, false))
 	}
 	httpapi.Reply(w, list)
+}
+
+// templateView is a team template as the page lists it, without its prompts.
+type templateView struct {
+	ID          string       `json:"id"` // what GET /api/agents says an agent was made from
+	Team        string       `json:"team"`
+	Description string       `json:"description"`
+	Features    []string     `json:"features"` // what a team made from it turns on, so the page can find that team
+	Agents      []memberView `json:"agents"`
+	UserMade    bool         `json:"userMade"` // one you saved, not one Agentry ships
+}
+
+type memberView struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Coordinates bool   `json:"coordinates"`
+}
+
+func viewOf(t agents.Template, userMade bool) templateView {
+	view := templateView{ID: t.ID, Team: t.Team, Description: t.Description, Features: t.Features, UserMade: userMade}
+	if view.Features == nil {
+		view.Features = []string{}
+	}
+	for _, a := range t.Agents {
+		view.Agents = append(view.Agents, memberView{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
+	}
+	return view
 }
 
 // addTeam adds a team, made from a template ({template}) or from agents you

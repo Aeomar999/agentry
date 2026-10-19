@@ -47,6 +47,12 @@ func SaveTemplate(roster Roster, team, id, description string, by events.Actor) 
 	}}, nil
 }
 
+// RemoveTemplate is the event that removes the template id. The teams made
+// from it stay.
+func RemoveTemplate(id string, by events.Actor) events.Proposal {
+	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateRemoved, Data: map[string]any{"id": id}}
+}
+
 // UserTemplates are the templates you saved and haven't removed, in the
 // order you first saved them. Saving one again keeps its place.
 type UserTemplates []UserTemplate
