@@ -77,8 +77,8 @@ func (c *Catalogue) addPrefix(r Registration) error {
 		return fmt.Errorf("stream types %v need a stream prefix", slices.Sorted(maps.Keys(r.Types)))
 	case r.Prefix == "":
 		return nil
-	case strings.HasPrefix(r.Prefix, "task-"):
-		return fmt.Errorf("stream prefix %q starts with task-, which names tasks", r.Prefix)
+	case strings.HasPrefix(r.Prefix, "task-") || strings.HasPrefix("task-", r.Prefix):
+		return fmt.Errorf("stream prefix %q overlaps task-, which names tasks", r.Prefix)
 	}
 	for _, stream := range coreStreams {
 		if strings.HasPrefix(stream, r.Prefix) {

@@ -4,10 +4,10 @@
 // as each event commits, so it can't disagree with what happened.
 //
 // A stream is an idea's when ideas.IsStream says so, and every other
-// stream that isn't one of the core's below is a task's: an idea is never a
-// task. The agents, workers and connections
-// streams each make a roster, and the settings stream your settings. The
-// policy stream keeps no state here: its events only move the position.
+// stream that isn't one of the core's below is a task's: an idea is never
+// a task. The agents, workers and connections streams each make a roster,
+// and the settings stream your settings. The policy stream keeps no state
+// here: its events only move the position.
 package current
 
 import (
