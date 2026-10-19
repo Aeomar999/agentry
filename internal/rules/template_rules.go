@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"encoding/json"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -31,7 +30,7 @@ func aSavedTemplate(p events.Proposal) string {
 	if _, builtIn := agents.TemplateWithID(id); builtIn {
 		return "the built-in " + id + " template has that id"
 	}
-	members, err := templateAgents(p)
+	members, err := agents.TemplateAgents(p.Data)
 	if err != nil {
 		return "a template's agents are a list of agents: " + err.Error()
 	}
@@ -55,17 +54,6 @@ func aSavedTemplate(p events.Proposal) string {
 		return "a template has exactly one coordinator"
 	}
 	return ""
-}
-
-// templateAgents reads a template's agents, whether a proposal not yet
-// written holds them as agents or the log gave them back as JSON.
-func templateAgents(p events.Proposal) ([]agents.Agent, error) {
-	encoded, err := json.Marshal(p.Data["agents"])
-	if err != nil {
-		return nil, err
-	}
-	var members []agents.Agent
-	return members, json.Unmarshal(encoded, &members)
 }
 
 // aRemovedTemplate can't yet check that the id was saved and not removed:

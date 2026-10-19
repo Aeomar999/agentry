@@ -153,6 +153,9 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	if want := connections.FromEvents(accepted(log, events.ConnectionsStream)); !reflect.DeepEqual(s.Connections(), want) {
 		t.Errorf("connections: %+v\nreplay: %+v", s.Connections(), want)
 	}
+	if want := agents.UserTemplatesFromEvents(accepted(log, events.TemplatesStream)); !reflect.DeepEqual(s.Templates(), want) {
+		t.Errorf("templates: %+v\nreplay: %+v", s.Templates(), want)
+	}
 	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose ||
 		want.AutoAcceptRule != settings.NobodyDoubted {
 		t.Errorf("settings: %+v\nreplay: %+v", s.Settings(), want)

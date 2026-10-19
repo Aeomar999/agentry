@@ -9,11 +9,12 @@
 // The catalogue the state is made with says what each stream is. A task's
 // stream makes a task, and a feature's own stream whatever that feature's
 // Streams build from it: an idea, never a task. The agents, workers and
-// connections streams each make a roster, and the settings stream your
-// settings. The policy stream keeps no state here: its
-// events only move the position. A foreign stream, which a feature this
-// build doesn't have wrote, is skipped and only counted, as is an event of
-// a type the catalogue doesn't know in any other stream.
+// connections streams each make a roster, the settings stream your
+// settings, and the templates stream the team templates you saved. The
+// policy stream keeps no state here: its events only move the position.
+// A foreign stream, which a feature this build doesn't have wrote, is
+// skipped and only counted, as is an event of a type the catalogue doesn't
+// know in any other stream.
 package current
 
 import (
@@ -57,6 +58,7 @@ type State struct {
 	workers     workers.Roster
 	connections connections.Roster
 	settings    settings.Settings
+	templates   agents.UserTemplates
 	skipped     tally // foreign streams and unknown types
 
 	snapshot *snapshotAt   // read from a snapshot, still to be checked against the log by Resume
@@ -116,6 +118,7 @@ func (s *State) empty() {
 	s.owned, s.ownedOrder = map[string]any{}, map[string][]created{}
 	s.broken, s.archived, s.erased = map[string]error{}, map[string]tasks.Summary{}, map[string]tasks.Erasure{}
 	s.roster, s.workers, s.connections, s.settings = nil, workers.Roster{}, connections.Roster{}, settings.Default()
+	s.templates = nil
 	s.skipped = newTally()
 	s.snapshot, s.tail, s.resumed = nil, nil, 0
 }
@@ -172,6 +175,8 @@ func (s *State) fold(stream string, accepted []events.Event) {
 			s.connections = connections.FromEvents(accepted)
 		case events.SettingsStream:
 			s.settings = settings.FromEvents(accepted)
+		case events.TemplatesStream:
+			s.templates = agents.UserTemplatesFromEvents(accepted)
 		case events.PolicyStream:
 		default:
 			if owner != nil {
@@ -290,6 +295,8 @@ func (s *State) Apply(e events.Event) {
 			s.connections = s.connections.Next(e)
 		case events.SettingsStream:
 			s.settings = s.settings.Next(e)
+		case events.TemplatesStream:
+			s.templates = s.templates.Next(e)
 		case events.PolicyStream:
 		default:
 			if owner != nil {
@@ -426,6 +433,7 @@ func (s *State) copy() *State {
 		workers:     s.workers,
 		connections: s.connections,
 		settings:    s.settings,
+		templates:   s.templates,
 		skipped:     s.skipped.clone(),
 	}
 }
@@ -606,6 +614,15 @@ func (s *State) Settings() settings.Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.settings
+}
+
+// Templates are the team templates you saved, in the order first saved;
+// a broken stream is kept as Roster's is. They share nothing with the
+// state's own.
+func (s *State) Templates() agents.UserTemplates {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.templates.Clone()
 }
 
 // Unknown is what the state skipped or didn't understand: each foreign
