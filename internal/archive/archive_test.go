@@ -192,6 +192,32 @@ func TestATaskIsArchivedOnceDoneForTheAge(t *testing.T) {
 	}
 }
 
+// A task unarchived and not reopened is still done, as long ago as
+// before, so its age counts again from its task.unarchived: a round less
+// than the age after it leaves the task whole, though it is done for more
+// than the age, and a round the age after it archives the task again.
+func TestAnUnarchivedTaskWaitsTheAgeAgain(t *testing.T) {
+	f := newFixture(t)
+	f.task(t, "task-1", tasks.Story)
+	f.clock = f.done(t, "task-1").Add(age)
+	if archived := f.archiver.round(); archived != 1 || !f.isArchived("task-1") {
+		t.Fatalf("archived %d, task-1 %v; want task-1", archived, f.isArchived("task-1"))
+	}
+	unarchived, rejection, err := f.log.Unarchive("task-1", f.blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	f.clock = unarchived.At.Add(age - time.Minute)
+	if archived := f.archiver.round(); archived != 0 || f.isArchived("task-1") {
+		t.Errorf("just unarchived: archived %d, task-1 %v; want it left whole", archived, f.isArchived("task-1"))
+	}
+	f.clock = unarchived.At.Add(age)
+	if archived := f.archiver.round(); archived != 1 || !f.isArchived("task-1") {
+		t.Errorf("the age after the unarchiving: archived %d, task-1 %v; want it archived again", archived, f.isArchived("task-1"))
+	}
+}
+
 // Stories go first: an epic with a story still in the state waits, and
 // the round after its last story is archived archives it. A broken story
 // is still in the state, so its epic waits too.

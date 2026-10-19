@@ -79,6 +79,8 @@ func (t *Task) Apply(e events.Event) {
 		return
 	}
 	switch e.Type {
+	case events.TaskUnarchived:
+		t.UnarchivedAt = e.At
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
 		t.Labels = e.List("labels")

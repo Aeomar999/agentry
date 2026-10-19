@@ -84,7 +84,8 @@ func neverArchived(t testing.TB, s *store.Store) *current.State {
 }
 
 // asNeverArchived fails the test unless the state's task id is the one a
-// log never archived folds to, but for the time it was last active, which
+// log never archived folds to, but for the time of its last
+// task.unarchived, which it keeps, and the time it was last active, which
 // task.unarchived moves when it is the task's last event: active, when it
 // isn't zero. The other tasks and the list must be the same too.
 func asNeverArchived(t testing.TB, s *store.Store, state *current.State, id string, active time.Time) {
@@ -99,6 +100,7 @@ func asNeverArchived(t testing.TB, s *store.Store, state *current.State, id stri
 		t.Fatal(err)
 	}
 	want := unarchived.Clone()
+	want.UnarchivedAt = lastUnarchived(t, s, id)
 	if !active.IsZero() {
 		want.LastActiveAt = active
 	}
@@ -114,6 +116,22 @@ func asNeverArchived(t testing.TB, s *store.Store, state *current.State, id stri
 	if active.IsZero() && !reflect.DeepEqual(state.Summaries(), never.Summaries()) {
 		t.Errorf("the list is %+v, want %+v", state.Summaries(), never.Summaries())
 	}
+}
+
+// lastUnarchived is when the stream was last unarchived, from its log.
+func lastUnarchived(t testing.TB, s *store.Store, id string) time.Time {
+	t.Helper()
+	log, err := s.Log(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var at time.Time
+	for _, e := range log {
+		if e.Type == events.TaskUnarchived {
+			at = e.At
+		}
+	}
+	return at
 }
 
 func mustTask(t testing.TB, state *current.State, id string) *tasks.Task {

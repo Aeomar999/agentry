@@ -61,3 +61,30 @@ func TestDoneAtTakesWhatAnOldLogHolds(t *testing.T) {
 		t.Errorf("an open task reopened: done %v at %v", reopenedOpen.IsDone, reopenedOpen.DoneAt)
 	}
 }
+
+// UnarchivedAt is when the task was last unarchived. It leaves DoneAt as
+// it was, and a label after it moves neither.
+func TestUnarchivedAtIsWhenTheTaskWasLastUnarchived(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	archiver := events.Actor{Kind: events.System, ID: "archiver"}
+	start := time.Date(2026, 10, 19, 9, 0, 0, 0, time.UTC)
+	var log []events.Event
+	add := func(actor events.Actor, kind events.Type, data map[string]any) time.Time {
+		at := start.Add(time.Duration(len(log)) * time.Minute)
+		log = append(log, events.Event{Position: int64(len(log) + 1), At: at,
+			Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Data: data}})
+		return at
+	}
+	add(you, events.TaskCreated, map[string]any{"title": "Ship it", "coordinator": "tech-lead"})
+	done := add(you, events.TaskDone, map[string]any{"summary": "Moved.", "moved": true})
+	if task := FromEvents(log); !task.UnarchivedAt.IsZero() {
+		t.Errorf("never archived: unarchived at %v", task.UnarchivedAt)
+	}
+	add(archiver, events.TaskArchived, map[string]any{})
+	unarchived := add(archiver, events.TaskUnarchived, map[string]any{"marker": 3})
+	add(you, events.TaskLabeled, map[string]any{"labels": []any{"web"}})
+	task := FromEvents(log)
+	if !task.UnarchivedAt.Equal(unarchived) || !task.DoneAt.Equal(done) {
+		t.Errorf("unarchived at %v and done at %v, want %v and %v", task.UnarchivedAt, task.DoneAt, unarchived, done)
+	}
+}
