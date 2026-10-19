@@ -2,6 +2,7 @@ package engines
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // claude is Claude Code, measured in proofs 01 to 03 (Claude Code 2.1.301).
@@ -27,7 +29,7 @@ const (
 
 var (
 	claudeGates   = []string{"PreToolUse"}
-	claudeReports = []string{"PostToolUse", "UserPromptSubmit", "Notification", "Stop", "SessionStart", "SessionEnd"}
+	claudeReports = []string{"PostToolUse", "UserPromptSubmit", "Notification", "Stop", "StopFailure", "SessionStart", "SessionEnd"}
 )
 
 // Prepare writes a settings file for `claude --settings`: the hooks, and
@@ -82,6 +84,9 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 		}
 		return nil, nil
 	}
+	if p.HookEventName == "StopFailure" {
+		return []Signal{claudeFailure(p, time.Now())}, nil
+	}
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
 		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath)
@@ -91,6 +96,26 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 		}
 	}
 	return signals, nil
+}
+
+// claudeFailure is what a StopFailure means: Claude Code sends it instead
+// of Stop when the turn ends at an API error. rate_limit is a usage limit
+// only when the message says so or says when it resets; it is also used
+// for plain 429s and capacity errors, which fail the turn like any other.
+func claudeFailure(p hookPayload, now time.Time) Signal {
+	details := cmp.Or(p.LastAssistantMessage, p.ErrorDetails)
+	failure := Signal{Kind: TurnFailed, Error: cmp.Or(p.Error, "unknown"), Details: details}
+	resetsAt := ResetTime(details, now)
+	if p.Error == "rate_limit" && (hitYourLimit(details) || !resetsAt.IsZero()) {
+		failure.Kind, failure.ResetsAt = UsageLimited, resetsAt
+	}
+	return failure
+}
+
+// hitYourLimit is Claude Code's "You've hit your session limit", with
+// either apostrophe.
+func hitYourLimit(text string) bool {
+	return strings.Contains(strings.ReplaceAll(text, "’", "'"), "You've hit your")
 }
 
 // claudeLastMessage is the text of the last thing the model said in a

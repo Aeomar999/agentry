@@ -200,6 +200,47 @@ func TestClaudeSaysWhyATurnsTokensAreUnknown(t *testing.T) {
 	}
 }
 
+// Claude Code sends StopFailure instead of Stop when a turn ends at an API
+// error. A usage limit says so, with when it resets; a rate_limit that
+// isn't one, and every other error, fails the turn with what it said.
+func TestClaudesStopFailureIsAUsageLimitOrAFailedTurn(t *testing.T) {
+	claude, _ := engines.Get("claude")
+	worktree := t.TempDir()
+	claude.Prepare(engines.Session{Worktree: worktree, StateDir: filepath.Join(worktree, ".agentry"), HookCommand: "/bin/agentry hook"})
+	if settings, _ := os.ReadFile(filepath.Join(worktree, ".agentry/claude-settings.json")); !strings.Contains(string(settings), `/bin/agentry hook StopFailure || true`) {
+		t.Errorf("Claude's settings don't report StopFailure:\n%s", settings)
+	}
+	cases := []struct {
+		payload string
+		kind    engines.SignalKind
+		error   string
+		resets  bool
+		details string
+	}{
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You've hit your session limit · resets 3am (Europe/London)"}`,
+			engines.UsageLimited, "rate_limit", true, "You've hit your session limit · resets 3am (Europe/London)"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You’ve hit your weekly limit"}`,
+			engines.UsageLimited, "rate_limit", false, "You’ve hit your weekly limit"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"limit resets 2:30pm (UTC)"}`,
+			engines.UsageLimited, "rate_limit", true, "limit resets 2:30pm (UTC)"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 Too Many Requests"}`,
+			engines.TurnFailed, "rate_limit", false, "429 Too Many Requests"},
+		{`{"hook_event_name":"StopFailure","error":"overloaded","last_assistant_message":"API Error: Overloaded"}`,
+			engines.TurnFailed, "overloaded", false, "API Error: Overloaded"},
+		{`{"hook_event_name":"StopFailure"}`, engines.TurnFailed, "unknown", false, ""},
+	}
+	for _, c := range cases {
+		signals, err := claude.ParseHook("StopFailure", []byte(c.payload))
+		if err != nil || len(signals) != 1 {
+			t.Fatalf("%s: signals %+v, err %v", c.payload, signals, err)
+		}
+		s := signals[0]
+		if s.Kind != c.kind || s.Error != c.error || s.ResetsAt.IsZero() == c.resets || s.Details != c.details {
+			t.Errorf("%s: got %+v", c.payload, s)
+		}
+	}
+}
+
 // Claude Code before 2.1 sends no last_assistant_message with Stop: the
 // report is the last thing the model said, from the transcript.
 func TestOlderClaudesReportComesFromTheTranscript(t *testing.T) {
