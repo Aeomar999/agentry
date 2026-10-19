@@ -60,10 +60,15 @@ func (s *Server) addresses(r *http.Request) ([]address, string) {
 // requestURL is the address this request came to.
 func requestURL(r *http.Request) string {
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	if overHTTPS(r) {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host
+}
+
+// overHTTPS is a request that came over https, here or to a proxy in front.
+func overHTTPS(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 // isLoopback is a host, with or without its port, only this computer reaches.

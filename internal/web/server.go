@@ -5,8 +5,10 @@ package web
 import (
 	"crypto/subtle"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
@@ -53,10 +55,11 @@ type Server struct {
 	terminal http.Handler // the live terminal websocket, T-018
 
 	creating sync.Mutex // one task created at a time, so IDs never collide
+	signins  *signins   // the one-time codes that sign in another device
 }
 
 func NewServer(s *store.Store, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, config: config, hooks: hooks, terminal: terminal}
+	return &Server{store: s, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -115,6 +118,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
 	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
+	// Signing in: a device without the token swaps a one-time code, or the
+	// token pasted in, for the cookie and the token.
+	mux.Handle("POST /api/signin/codes", s.requireRealUIToken(s.issueSigninCode))
+	mux.HandleFunc("POST /api/signin", s.signIn)
+	mux.HandleFunc("POST /api/signout", s.signOut)
 	if s.terminal != nil {
 		mux.Handle("GET /api/tasks/{task}/terminal", s.requireUI(s.terminal.ServeHTTP))
 	}
@@ -178,15 +186,45 @@ func (s *Server) requireUIOrDesk(next http.HandlerFunc) http.Handler {
 	})
 }
 
+// requireRealUIToken lets in only the UI token, not a connection's
+// credential: for what hands the token out, so it gives nobody more.
+func (s *Server) requireRealUIToken(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.hasUIToken(r) {
+			http.Error(w, "only a page signed in with the UI token can do this", http.StatusUnauthorized)
+			return
+		}
+		next(w, r)
+	})
+}
+
 func (s *Server) carriesUIToken(r *http.Request) bool {
+	return s.hasUIToken(r) || s.carriesConnection(r)
+}
+
+// hasUIToken is the UI token itself, in any of the places the page puts it;
+// a connection's credential is not it.
+func (s *Server) hasUIToken(r *http.Request) bool {
 	given := []string{strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), r.URL.Query().Get("token")}
 	if cookie, err := r.Cookie(uiCookie); err == nil {
 		given = append(given, cookie.Value)
 	}
-	for _, token := range given {
-		if subtle.ConstantTimeCompare([]byte(token), []byte(s.config.UIToken)) == 1 {
-			return true
-		}
-	}
-	return s.carriesConnection(r)
+	return slices.ContainsFunc(given, s.isUIToken)
+}
+
+func (s *Server) isUIToken(token string) bool {
+	return subtle.ConstantTimeCompare([]byte(token), []byte(s.config.UIToken)) == 1
+}
+
+// setUICookie keeps the token in the browser for the page and the API. It
+// lasts a year, so an installed app that kept it stays signed in; it goes
+// over https only when the page came that way, else plain http would lose it.
+func setUICookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{Name: uiCookie, Value: token, Path: "/", MaxAge: 365 * 24 * 60 * 60,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: overHTTPS(r)})
+}
+
+func clearUICookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{Name: uiCookie, Path: "/", MaxAge: -1,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: overHTTPS(r)})
 }

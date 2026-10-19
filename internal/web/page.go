@@ -60,7 +60,7 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "wrong token: open the link `agentry serve` printed", http.StatusUnauthorized)
 			return
 		}
-		http.SetCookie(w, &http.Cookie{Name: uiCookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		setUICookie(w, r, token)
 	}
 	index, err := fs.ReadFile(ui, "index.html")
 	if err != nil {
