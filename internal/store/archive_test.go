@@ -135,6 +135,20 @@ func TestAMarkerAllowsDeletingOnlyTheRowsItCovers(t *testing.T) {
 	}
 }
 
+// A marker allows only its own stream's rows: another task's row that
+// sits between the marked task's rows, inside "through", stays.
+func TestAMarkerAllowsNoOtherStreamsRows(t *testing.T) {
+	s := openTestStore(t)
+	acceptAll(t, s, newTask("task-1"), newTask("task-2"), renamed("task-1"))
+	// task-1 is at 1 and 3, task-2 at 2; the marker covers 1 to 3.
+	inTransaction(t, s, func(tx *sql.Tx) {
+		appendIn(t, tx, marker("task-1", 1, 3, 2))
+		if _, err := deleteIn(tx, "task-2", 2, 2); !refusedAsAppendOnly(err) {
+			t.Errorf("task-2's row inside task-1's marker: %v, want refused", err)
+		}
+	})
+}
+
 // Once task.unarchived follows the marker, its rows are the task's again:
 // the delete the marker allowed is refused. A second marker after that
 // allows it again.
