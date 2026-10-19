@@ -21,8 +21,10 @@ import (
 // State is what the rules read: the state the proposal would be appended to.
 // *current.State is one. Broken is why a roster's stream could not be built,
 // or nil: the rules refuse what would be checked against a broken roster.
+// NextTask is the stream Store.Create names for the next task.
 type State interface {
 	Task(id string) (*tasks.Task, error)
+	NextTask() string
 	Idea(id string) (*ideas.Idea, error)
 	Ideas() []*ideas.Idea
 	Roster() agents.Roster
@@ -82,6 +84,9 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	case p.Type == events.TaskCreated && task != nil:
 		return refuse("task " + p.Stream + " already exists")
 	case p.Type == events.TaskCreated:
+		if next := state.NextTask(); p.Stream != next {
+			return refuse("a new task goes into " + next + ", the next task stream, not " + p.Stream)
+		}
 		if reason := CheckLabels(p.List("labels")); reason != "" {
 			return refuse(reason)
 		}

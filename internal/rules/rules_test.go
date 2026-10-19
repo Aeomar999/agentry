@@ -343,9 +343,9 @@ func TestAgentRules(t *testing.T) {
 		{"or go while the team has agents", agents.Agent{Name: "editor"}.Removal(you), false},
 		{"a coordinator hands work only to its own team", events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
 			Type: events.TaskAssigned, Data: map[string]any{"agent": "writer", "instructions": "x"}}, false},
-		{"an agent makes a task only for another, as a request", events.Proposal{Stream: "task-9", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
+		{"an agent makes a task only for another, as a request", events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
 			Type: events.TaskCreated, Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead"}}, false},
-		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-9", Actor: you, Type: events.TaskCreated,
+		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "engineer"}}, false},
 	}
 	for _, c := range cases {
@@ -677,6 +677,42 @@ func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
 		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != "task-1 is archived: an archived task takes no events" {
 			t.Errorf("%s on an archived task: %v, %v", p.Type, rejection, err)
 		}
+	}
+}
+
+// A new task goes only into the stream Store.Create names: the next task
+// stream, never one further on or one a task has already. A refused one
+// leaves nothing in its stream.
+func TestATaskIsCreatedOnlyInTheNextTaskStream(t *testing.T) {
+	s := openSeeded(t)
+	create := func(stream string) *events.Rejection {
+		t.Helper()
+		_, rejection, err := s.Propose(events.Proposal{Stream: stream, Actor: you, Type: events.TaskCreated, Data: created.data})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	if rejection := create("task-1"); rejection != nil {
+		t.Fatalf("task-1, the next: %v", rejection)
+	}
+	for stream, want := range map[string]string{
+		"task-6": "a new task goes into task-2, the next task stream, not task-6",
+		"task-1": "task task-1 already exists",
+	} {
+		if rejection := create(stream); rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: %v, want %q", stream, rejection, want)
+		}
+	}
+	if stream, _ := s.Stream("task-6"); len(stream) != 0 {
+		t.Errorf("a refused task.created is stored in task-6: %v", stream)
+	}
+	if stream, _ := s.Stream("task-1"); len(stream) != 1 {
+		t.Errorf("task-1 has %d events, want its one task.created", len(stream))
+	}
+	made, rejection, err := s.Create(events.TaskPrefix, events.Proposal{Actor: you, Type: events.TaskCreated, Data: created.data})
+	if err != nil || rejection != nil || made.Stream != "task-2" {
+		t.Errorf("Store.Create after the refusals: %s %v %v, want task-2", made.Stream, rejection, err)
 	}
 }
 

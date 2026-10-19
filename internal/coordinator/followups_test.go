@@ -22,18 +22,29 @@ func mustPropose(t *testing.T, s *store.Store, p events.Proposal) events.Event {
 }
 
 // newEpic makes an epic, parked so no loop takes it up, with one story
-// that is done already.
-func newEpic(t *testing.T, s *store.Store, id, repo string) {
+// that is done already. It returns the epic's id and the story's.
+func newEpic(t *testing.T, s *store.Store, repo string) (id, story string) {
 	t.Helper()
-	story := id + "-story"
-	mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list",
+	id = mustCreateTask(t, s, events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list",
 		"description": "Keep the Visionaries' ideas in a list.", "repo": repo, "coordinator": "tech-lead", "kind": "epic", "parked": "backlog"}})
-	mustPropose(t, s, events.Proposal{Stream: story, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas page",
+	story = mustCreateTask(t, s, events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas page",
 		"repo": repo, "coordinator": "tech-lead", "parked": "backlog"}})
 	mustPropose(t, s, events.Proposal{Stream: story, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Built the Ideas page.", "moved": true}})
 	mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.StoryAdded, Data: map[string]any{"story": story, "title": "Ideas page",
 		"done": true, "summary": "Built the Ideas page."}})
 	mustPropose(t, s, events.Proposal{Stream: story, Actor: you, Type: events.EpicJoined, Data: map[string]any{"epic": id}})
+	return id, story
+}
+
+// mustCreateTask makes a task as web and the loop do, in the next task
+// stream, and returns its id.
+func mustCreateTask(t *testing.T, s *store.Store, p events.Proposal) string {
+	t.Helper()
+	created, rejection, err := s.Create(events.TaskPrefix, p)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	return created.Stream
 }
 
 // closeEpic asks to close the epic, as its coordinator's finish does (here
@@ -73,14 +84,14 @@ func followUpsOf(t *testing.T, s *store.Store, loop *Loop) {
 
 func TestClosingAnEpicStartsOneVisionariesSessionAboutIt(t *testing.T) {
 	s, state, repo := withTeams(t, true)
-	newEpic(t, s, "task-epic", repo)
-	closed := closeEpic(t, s, "task-epic")
+	epic, story := newEpic(t, s, repo)
+	closed := closeEpic(t, s, epic)
 	loop := newLoop(s, state, t.TempDir())
 	loop.Defaults = tasks.Limits{Budget: 5_000_000, MaxTurns: 24}
 	followUpsOf(t, s, loop)
 	followUpsOf(t, s, loop) // a second pass over the same close, as a re-run would
 
-	found := sessionsAbout(state, "task-epic")
+	found := sessionsAbout(state, epic)
 	if len(found) != 1 {
 		t.Fatalf("one close, one session: %d", len(found))
 	}
@@ -92,29 +103,29 @@ func TestClosingAnEpicStartsOneVisionariesSessionAboutIt(t *testing.T) {
 	if session.Title != "Follow-ups after Ideas list" {
 		t.Errorf("title %q", session.Title)
 	}
-	for _, want := range []string{"task-epic", "Ideas list", "Keep the Visionaries' ideas in a list.", "Ideas are kept and shown.",
-		"task-epic-story: Ideas page", "Its summary: Built the Ideas page.", `"epic" is "task-epic"`} {
+	for _, want := range []string{epic, "Ideas list", "Keep the Visionaries' ideas in a list.", "Ideas are kept and shown.",
+		story + ": Ideas page", "Its summary: Built the Ideas page.", `"epic" is "` + epic + `"`} {
 		if !strings.Contains(session.Description, want) {
 			t.Errorf("the brief should name %q:\n%s", want, session.Description)
 		}
 	}
 	// The close itself stands as task-16 made it: done, with its summary.
-	if epic := load(t, s, "task-epic"); !epic.IsDone || epic.Summary != "Ideas are kept and shown." || epic.Closing != "" {
-		t.Errorf("the closed epic: done %v, summary %q, closing %q", epic.IsDone, epic.Summary, epic.Closing)
+	if task := load(t, s, epic); !task.IsDone || task.Summary != "Ideas are kept and shown." || task.Closing != "" {
+		t.Errorf("the closed epic: done %v, summary %q, closing %q", task.IsDone, task.Summary, task.Closing)
 	}
 }
 
 func TestAReopenedEpicClosedAgainGetsASecondSession(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
-	newEpic(t, s, "task-epic", repo)
-	first := closeEpic(t, s, "task-epic")
+	epic, _ := newEpic(t, s, repo)
+	first := closeEpic(t, s, epic)
 	followUpsOf(t, s, loop)
-	mustPropose(t, s, events.Proposal{Stream: "task-epic", Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "One more story."}})
-	second := closeEpic(t, s, "task-epic")
+	mustPropose(t, s, events.Proposal{Stream: epic, Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "One more story."}})
+	second := closeEpic(t, s, epic)
 	followUpsOf(t, s, loop)
 
-	found := sessionsAbout(state, "task-epic")
+	found := sessionsAbout(state, epic)
 	if len(found) != 2 || found[0].AboutClose != first.Position || found[1].AboutClose != second.Position {
 		t.Fatalf("two closes, two sessions: %+v", found)
 	}
@@ -127,25 +138,25 @@ func TestNoSessionWhenTheSettingIsOff(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
 		Data: map[string]any{settings.VisionariesOnEpicClose: false}})
-	newEpic(t, s, "task-epic", repo)
-	closeEpic(t, s, "task-epic")
+	epic, _ := newEpic(t, s, repo)
+	closeEpic(t, s, epic)
 	followUpsOf(t, s, newLoop(s, state, t.TempDir()))
 
-	if found := sessionsAbout(state, "task-epic"); len(found) != 0 {
+	if found := sessionsAbout(state, epic); len(found) != 0 {
 		t.Errorf("the setting is off: %+v", found)
 	}
-	if epic := load(t, s, "task-epic"); epic.Skipped != 0 {
-		t.Errorf("turned off, nothing is said either: skipped %d", epic.Skipped)
+	if task := load(t, s, epic); task.Skipped != 0 {
+		t.Errorf("turned off, nothing is said either: skipped %d", task.Skipped)
 	}
 }
 
 func TestAnEpicMovedToDoneGetsNoSession(t *testing.T) {
 	s, state, repo := withTeams(t, true)
-	newEpic(t, s, "task-epic", repo)
-	mustPropose(t, s, events.Proposal{Stream: "task-epic", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "", "moved": true}})
+	epic, _ := newEpic(t, s, repo)
+	mustPropose(t, s, events.Proposal{Stream: epic, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "", "moved": true}})
 	followUpsOf(t, s, newLoop(s, state, t.TempDir()))
 
-	if found := sessionsAbout(state, "task-epic"); len(found) != 0 {
+	if found := sessionsAbout(state, epic); len(found) != 0 {
 		t.Errorf("a move to Done isn't a close: %+v", found)
 	}
 }
@@ -153,22 +164,22 @@ func TestAnEpicMovedToDoneGetsNoSession(t *testing.T) {
 // Without a Visionaries team the epic says how to add one, once per close.
 func TestWithoutVisionariesTheEpicSaysHowToAddThem(t *testing.T) {
 	s, state, repo := withTeams(t, false)
-	newEpic(t, s, "task-epic", repo)
-	closed := closeEpic(t, s, "task-epic")
+	epic, _ := newEpic(t, s, repo)
+	closed := closeEpic(t, s, epic)
 	loop := newLoop(s, state, t.TempDir())
 	followUpsOf(t, s, loop)
 	followUpsOf(t, s, loop)
 
-	if found := sessionsAbout(state, "task-epic"); len(found) != 0 {
+	if found := sessionsAbout(state, epic); len(found) != 0 {
 		t.Errorf("no Visionaries team, no session: %+v", found)
 	}
-	epic := load(t, s, "task-epic")
-	if last := epic.Trail[len(epic.Trail)-1]; epic.Skipped != closed.Position || last.From != tasks.Agentry || last.To != tasks.You ||
+	task := load(t, s, epic)
+	if last := task.Trail[len(task.Trail)-1]; task.Skipped != closed.Position || last.From != tasks.Agentry || last.To != tasks.You ||
 		!strings.Contains(last.Text, "on the Agents page, Add a team, Visionaries") || !strings.Contains(last.Text, "turn these sessions off") {
-		t.Errorf("the epic should say how to add the team: skipped %d, last step %+v", epic.Skipped, last)
+		t.Errorf("the epic should say how to add the team: skipped %d, last step %+v", task.Skipped, last)
 	}
 	notes := 0
-	for _, e := range mustStream(t, s, "task-epic") {
+	for _, e := range mustStream(t, s, epic) {
 		if e.Type == events.FollowUpsSkipped {
 			notes++
 		}
@@ -183,26 +194,26 @@ func TestWithoutVisionariesTheEpicSaysHowToAddThem(t *testing.T) {
 // then), and none for one before: every start reads the whole log again.
 func TestTheLoopFollowsUpOnlyCloseAfterItStarted(t *testing.T) {
 	s, state, repo := withTeams(t, true)
-	newEpic(t, s, "task-old", repo)
-	closeEpic(t, s, "task-old")
+	older, _ := newEpic(t, s, repo)
+	closeEpic(t, s, older)
 	loop := newLoop(s, state, t.TempDir())
-	newEpic(t, s, "task-new", repo)
-	closeEpic(t, s, "task-new")
+	newer, _ := newEpic(t, s, repo)
+	closeEpic(t, s, newer)
 	run(t, loop, state)
 
 	var found []*tasks.Task
 	for deadline := time.Now().Add(10 * time.Second); len(found) == 0 && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		found = sessionsAbout(state, "task-new")
+		found = sessionsAbout(state, newer)
 	}
 	if len(found) == 0 {
-		t.Fatal("timed out waiting for the session after task-new closed")
+		t.Fatal("timed out waiting for the session after the newer epic closed")
 	}
 	session := found[0]
 	waitForTurn(t, s, session.ID, "turn-1", "editor") // started, not parked
-	if found := sessionsAbout(state, "task-old"); len(found) != 0 {
+	if found := sessionsAbout(state, older); len(found) != 0 {
 		t.Errorf("closed before the loop started: %+v", found)
 	}
-	if found := sessionsAbout(state, "task-new"); len(found) != 1 {
+	if found := sessionsAbout(state, newer); len(found) != 1 {
 		t.Errorf("one close, one session: %+v", found)
 	}
 }

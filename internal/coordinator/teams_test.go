@@ -33,7 +33,7 @@ func twoTeams(t *testing.T) (*store.Store, string) {
 
 func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 	s, repo := twoTeams(t)
-	const id = "task-ask-1"
+	const id = "task-1"
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "budget": 900_000, "maxTurns": 9}})
 
@@ -73,7 +73,7 @@ func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 
 func TestATaskWithNoTeamChosenGoesToTheRightOne(t *testing.T) {
 	s, repo := twoTeams(t)
-	const id = "task-route-1"
+	const id = "task-1"
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Write a launch blog post", "repo": repo, "coordinator": "tech-lead"}})
 

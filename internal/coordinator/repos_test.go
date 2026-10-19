@@ -22,7 +22,7 @@ func TestTheCoordinatorMovesATaskToTheRepoYouNamed(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	const id = "task-repos-1"
+	const id = "task-1"
 	loop := newLoop(s, state, root)
 	loop.Clones = filepath.Join(root, ".repos")
 	remote := gitRepo(t)

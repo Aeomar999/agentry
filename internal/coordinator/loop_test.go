@@ -32,7 +32,7 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	const id = "task-loop-1"
+	const id = "task-1"
 
 	loop := newLoop(s, state, t.TempDir())
 	run(t, loop, state)
@@ -130,7 +130,7 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 		t.Fatal(rejection)
 	}
 	repo := gitRepo(t)
-	const id = "task-loop-2"
+	const id = "task-1"
 	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
