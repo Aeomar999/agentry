@@ -7,6 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src",
+    "test": "vitest run",
     "lint": "tsc --noEmit && prettier --check src"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "prettier-plugin-tailwindcss": "0.8.1",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
   }
 }
