@@ -150,3 +150,40 @@ func keyLine(file []byte, name string) (int, error) {
 	}
 	return -1, p.Error()
 }
+
+// blockComments is, for each profile block in a policy file, its comments
+// in order, trimmed: whole lines, ends of lines and those inside arrays. A
+// profile without a block has none. They tell a note the user wrote in a
+// profile, which updating it would lose, from Agentry's own.
+func blockComments(file []byte) map[string][]string {
+	blocks, _ := profileBlocks(file) // a profile without a block has no comments to keep
+	all := map[string][]string{}
+	for _, b := range blocks {
+		all[b.name] = comments(b.text(file))
+	}
+	return all
+}
+
+// comments lists the comments in a piece of TOML, in order. A comment-like
+// line inside a multi-line string is part of the string, not a comment.
+func comments(text []byte) []string {
+	var p unstable.Parser
+	p.KeepComments = true
+	p.Reset(text)
+	var found []string
+	var walk func(n *unstable.Node)
+	walk = func(n *unstable.Node) {
+		if n.Kind == unstable.Comment {
+			found = append(found, string(bytes.TrimSpace(n.Data)))
+		}
+		for children := n.Children(); children.Next(); {
+			walk(children.Node())
+		}
+	}
+	for p.NextExpression() {
+		for n := p.Expression(); n != nil && n.Valid(); n = n.Next() { // a comment ending a line is chained after it
+			walk(n)
+		}
+	}
+	return found
+}

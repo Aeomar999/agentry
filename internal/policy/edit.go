@@ -30,28 +30,29 @@ func AddProfile(text []byte, name, version string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("Agentry ships no profile called %q", name)
 	}
+	eol := lineEnding(text)
 	var added bytes.Buffer
 	added.Write(text)
 	if len(text) > 0 && !bytes.HasSuffix(text, []byte("\n")) {
-		added.WriteByte('\n')
+		added.WriteString(eol)
 	}
-	fmt.Fprintf(&added, "\n\n# Added by Agentry %s, the default profile of that version.\n%s", version, withNewline(block))
+	added.WriteString(withEnding("\n\n"+addedBy(version)+withNewline(block), eol))
 	return checkEdit(text, added.Bytes(), name)
 }
 
-// UpdateProfile replaces an outdated profile with this version's default.
-// It refuses with ErrProfileEdited for a profile the user changed: compare
-// them with ProfileDiff and edit the file yourself.
-func UpdateProfile(text []byte, name string) ([]byte, error) {
-	statuses, err := DefaultProfiles(text)
+// addedBy is the comment above a default profile Agentry wrote.
+func addedBy(version string) string {
+	return fmt.Sprintf("# Added by Agentry %s, the default profile of that version.\n", version)
+}
+
+// UpdateProfile replaces an outdated profile with version's default. It
+// refuses with ErrProfileEdited for a profile the user changed: compare
+// them with ProfileDiff, then edit the file yourself or take the default
+// with UseDefaultProfile.
+func UpdateProfile(text []byte, name, version string) ([]byte, error) {
+	state, err := profileState(text, name)
 	if err != nil {
 		return nil, err
-	}
-	state := ProfileMissing
-	for _, s := range statuses {
-		if s.Name == name {
-			state = s.State
-		}
 	}
 	switch state {
 	case ProfileMissing:
@@ -61,6 +62,36 @@ func UpdateProfile(text []byte, name string) ([]byte, error) {
 	case ProfileEdited:
 		return nil, fmt.Errorf("profile %q: %w", name, ErrProfileEdited)
 	}
+	return replaceWithDefault(text, name, version)
+}
+
+// UseDefaultProfile replaces a profile the user changed with version's
+// default, notes and all: their choice, once they have seen both.
+func UseDefaultProfile(text []byte, name, version string) ([]byte, error) {
+	if state, err := profileState(text, name); err != nil {
+		return nil, err
+	} else if state != ProfileEdited {
+		return nil, fmt.Errorf("profile %q is %s, not one you changed", name, state)
+	}
+	return replaceWithDefault(text, name, version)
+}
+
+func profileState(text []byte, name string) (ProfileState, error) {
+	statuses, err := DefaultProfiles(text)
+	if err != nil {
+		return "", err
+	}
+	for _, s := range statuses {
+		if s.Name == name {
+			return s.State, nil
+		}
+	}
+	return "", fmt.Errorf("Agentry ships no profile called %q", name)
+}
+
+// replaceWithDefault puts the default profile name in place of the file's,
+// and moves an "Added by Agentry" comment right above it to version.
+func replaceWithDefault(text []byte, name, version string) ([]byte, error) {
 	old, ok, err := findBlock(text, name)
 	if err != nil {
 		return nil, err
@@ -68,8 +99,13 @@ func UpdateProfile(text []byte, name string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("profile %q isn't written as a [profiles.%s] table, so Agentry can't replace it", name, name)
 	}
+	eol := lineEnding(text)
 	block, _ := ShippedProfile(name)
-	updated := slices.Concat(text[:old.start], []byte(withNewline(block)), text[old.end:])
+	start := old.start
+	if above := lineStart(text, max(start-1, 0)); start > 0 && bytes.HasPrefix(text[above:start], []byte("# Added by Agentry ")) {
+		start, block = above, addedBy(version)+block
+	}
+	updated := slices.Concat(text[:start], []byte(withEnding(withNewline(block), eol)), text[old.end:])
 	return checkEdit(text, updated, name)
 }
 
@@ -102,14 +138,10 @@ func TurnOffUseForEveryone(text []byte) ([]byte, error) {
 		return nil, errors.New("use_for_everyone isn't set")
 	}
 	off := slices.Concat(text[:line], []byte("# "), text[line:])
-	result, err := checkEdit(text, off, "")
-	if err != nil {
-		return nil, err
-	}
-	if f, _ := decode(result); f.UseForEveryone != "" {
-		return nil, errors.New("use_for_everyone is written over more than one line; comment it out yourself")
-	}
-	return result, nil
+	// A value written over more than one line can't be left set: the rest
+	// of it, its first line commented out, doesn't load, and checkEdit
+	// refuses it.
+	return checkEdit(text, off, "")
 }
 
 // checkEdit is the edited text if it loads and every profile but changed
@@ -128,6 +160,17 @@ func checkEdit(before, after []byte, changed string) ([]byte, error) {
 	}
 	return after, nil
 }
+
+// lineEnding is the file's own: "\r\n" in a file that uses it, else "\n".
+func lineEnding(text []byte) string {
+	if bytes.Contains(text, []byte("\r\n")) {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+// withEnding writes Agentry's "\n"-ended lines with eol instead.
+func withEnding(lines, eol string) string { return strings.ReplaceAll(lines, "\n", eol) }
 
 // withNewline ends a block with a newline even when it was the last line
 // of a file that had none.

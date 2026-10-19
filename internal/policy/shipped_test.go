@@ -68,6 +68,12 @@ func TestDefaultProfilesSaysWhatEachFileHas(t *testing.T) {
 		"a why changed": {replaceOnce(t, beforeIt, `why = "For agents that judge work`, `why = "Mine: for agents that judge work`),
 			map[string]string{"developer": "current ", "read-only": "edited ",
 				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+		"a note inside an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only]\n# MY NOTE: keep this\n"),
+			map[string]string{"developer": "current ", "read-only": "edited ",
+				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+		"a note ending a line of an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only] # mine\n"),
+			map[string]string{"developer": "current ", "read-only": "edited ",
+				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"only comments and spacing changed": {replaceOnce(t, Default(), "[profiles.read-only]\n", "[profiles.read-only]   # mine\n\n# my notes\n"),
 			map[string]string{"developer": "current ", "read-only": "current ",
 				"read-mostly": "current ", "autonomous": "current ", "allow-everything": "current "}},
@@ -137,7 +143,7 @@ func TestUpdateProfileReplacesOnlyAnUntouchedProfile(t *testing.T) {
 	text = replaceOnce(t, text, "\n[profiles.autonomous]\n", "\n# about autonomous\n[profiles.autonomous]\n# inside it\n")
 	text = append(text, "\n[profiles.mine]\notherwise = \"deny\" # strict\n"...)
 
-	updated, err := UpdateProfile(text, "read-only")
+	updated, err := UpdateProfile(text, "read-only", "v0.9.0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,14 +163,75 @@ func TestUpdateProfileReplacesOnlyAnUntouchedProfile(t *testing.T) {
 	}
 
 	edited := replaceOnce(t, text, `why = "For agents that judge work`, `why = "Mine: for agents that judge work`)
-	if _, err := UpdateProfile(edited, "read-only"); !errors.Is(err, ErrProfileEdited) {
+	if _, err := UpdateProfile(edited, "read-only", "v0.9.0"); !errors.Is(err, ErrProfileEdited) {
 		t.Errorf("updating an edited profile: got %v, want ErrProfileEdited", err)
 	}
-	if _, err := UpdateProfile(updated, "read-only"); err == nil || !strings.Contains(err.Error(), "already") {
+	noted := replaceOnce(t, text, "[profiles.read-only]\n", "[profiles.read-only]\n# MY NOTE: keep this\n")
+	if _, err := UpdateProfile(noted, "read-only", "v0.9.0"); !errors.Is(err, ErrProfileEdited) {
+		t.Errorf("updating a profile with a note of yours in it: got %v, want ErrProfileEdited", err)
+	}
+	if _, err := UpdateProfile(updated, "read-only", "v0.9.0"); err == nil || !strings.Contains(err.Error(), "already") {
 		t.Errorf("updating a current profile: %v", err)
 	}
-	if _, err := UpdateProfile(text, "read-mostly"); err == nil || !strings.Contains(err.Error(), "no default profile") {
+	if _, err := UpdateProfile(text, "read-mostly", "v0.9.0"); err == nil || !strings.Contains(err.Error(), "no default profile") {
 		t.Errorf("updating a missing profile: %v", err)
+	}
+}
+
+func TestAnUpdateMovesTheAddedByCommentToItsVersion(t *testing.T) {
+	added, err := AddProfile(shippedFile(t, "01-v0.1.0-dev.toml"), "read-mostly", "v0.8.2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// As if read-mostly had been added by an older version: its block is
+	// read-only's of v0.1.0-dev, renamed, which isn't one Agentry shipped,
+	// so take the default explicitly.
+	edited := replaceOnce(t, added, `why = "For agents that only think and suggest`, `why = "Mine: for agents that only think and suggest`)
+	updated, err := UseDefaultProfile(edited, "read-mostly", "v0.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(updated, []byte("v0.8.2")) || !bytes.Contains(updated, []byte("\n# Added by Agentry v0.9.0, the default profile of that version.\n[profiles.read-mostly]\n")) {
+		t.Errorf("the comment above the profile should name v0.9.0 now:\n%s", LineDiff("before", "after", string(edited), string(updated)))
+	}
+	if state := stateOf(t, updated, "read-mostly"); state != ProfileCurrent {
+		t.Errorf("read-mostly is %s after taking the default", state)
+	}
+}
+
+func TestUseDefaultProfileTakesOnlyAnEditedOne(t *testing.T) {
+	text := shippedFile(t, "01-v0.1.0-dev.toml")
+	edited := replaceOnce(t, text, "[profiles.read-only]\n", "[profiles.read-only]\n# MY NOTE: keep this\n")
+	taken, err := UseDefaultProfile(edited, "read-only", "v0.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(taken, []byte("MY NOTE")) || stateOf(t, taken, "read-only") != ProfileCurrent {
+		t.Errorf("taking the default should replace the whole profile, your note too:\n%s", taken)
+	}
+	if _, err := UseDefaultProfile(text, "read-only", "v0.9.0"); err == nil || !strings.Contains(err.Error(), "is outdated, not one you changed") {
+		t.Errorf("an outdated profile goes through UpdateProfile: %v", err)
+	}
+	if _, err := UseDefaultProfile(text, "read-mostly", "v0.9.0"); err == nil || !strings.Contains(err.Error(), "is missing") {
+		t.Errorf("a missing profile goes through AddProfile: %v", err)
+	}
+}
+
+func TestEditsKeepAFilesWindowsLineEndings(t *testing.T) {
+	crlf := bytes.ReplaceAll(shippedFile(t, "01-v0.1.0-dev.toml"), []byte("\n"), []byte("\r\n"))
+	added, err := AddProfile(crlf, "read-mostly", "v0.8.2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := UpdateProfile(added, "read-only", "v0.9.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := bytes.Count(updated, []byte("\n")); n != bytes.Count(updated, []byte("\r\n")) {
+		t.Errorf("%d of %d lines end in a bare \\n", n-bytes.Count(updated, []byte("\r\n")), n)
+	}
+	if stateOf(t, updated, "read-only") != ProfileCurrent || stateOf(t, updated, "read-mostly") != ProfileCurrent {
+		t.Error("both profiles should be this version's")
 	}
 }
 

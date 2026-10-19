@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ var shippedFiles embed.FS
 type snapshot struct {
 	version  string
 	profiles map[string]profileFile
+	comments map[string][]string // each profile's comments, as blockComments finds them
 }
 
 // snapshots reads shipped/, oldest first.
@@ -49,7 +51,7 @@ func snapshots() ([]snapshot, error) {
 		if err != nil {
 			return nil, fmt.Errorf("shipped/%s: %w", entry.Name(), err)
 		}
-		all = append(all, snapshot{version: version, profiles: f.Profiles})
+		all = append(all, snapshot{version: version, profiles: f.Profiles, comments: blockComments(text)})
 	}
 	return all, nil
 }
@@ -76,7 +78,11 @@ type DefaultProfileStatus struct {
 
 // DefaultProfiles says, for each profile this version ships, in
 // default.toml's order, how the policy file text has it. Profiles are
-// compared by what they say, not how: comments and layout don't count.
+// compared by what they say, not how: layout doesn't count. Comments count
+// only against an older version: a profile that says what this version's
+// does is current whatever notes it has, but one that says what an older
+// version's did is outdated only if its comments are that version's too,
+// since updating it would drop a note of the user's.
 func DefaultProfiles(text []byte) ([]DefaultProfileStatus, error) {
 	f, err := decode(text)
 	if err != nil {
@@ -90,16 +96,17 @@ func DefaultProfiles(text []byte) ([]DefaultProfileStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+	yours := snapshot{profiles: f.Profiles, comments: blockComments(text)}
 	var statuses []DefaultProfileStatus
 	for _, name := range shipped.names {
-		statuses = append(statuses, profileStatus(name, f.Profiles, shipped.profiles[name], past))
+		statuses = append(statuses, profileStatus(name, yours, shipped.profiles[name], past))
 	}
 	return statuses, nil
 }
 
-func profileStatus(name string, file map[string]profileFile, current profileFile, past []snapshot) DefaultProfileStatus {
+func profileStatus(name string, file snapshot, current profileFile, past []snapshot) DefaultProfileStatus {
 	status := DefaultProfileStatus{Name: name, State: ProfileEdited}
-	theirs, ok := file[name]
+	theirs, ok := file.profiles[name]
 	switch {
 	case !ok:
 		status.State = ProfileMissing
@@ -107,7 +114,8 @@ func profileStatus(name string, file map[string]profileFile, current profileFile
 		status.State = ProfileCurrent
 	default:
 		for _, s := range past {
-			if old, ok := s.profiles[name]; ok && reflect.DeepEqual(theirs, old) {
+			old, ok := s.profiles[name]
+			if ok && reflect.DeepEqual(theirs, old) && slices.Equal(file.comments[name], s.comments[name]) {
 				status.State, status.ShippedIn = ProfileOutdated, s.version
 			}
 		}
