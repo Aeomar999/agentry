@@ -60,7 +60,7 @@ and a type whose shape must change gets a new name (extensions section 8).
 |---|---|---|---|
 | `git.pr_opened` | System, the job (`{System, "git"}`) | `host` (`github` or `gitlab`), `number`, `url`, `branch`, `base`, `sha` | `found`: true when the job found the request already open and recorded it, rather than opening it; `at`: the host's update time in its reply |
 | `git.pr_changed` | System: the job, when it polls (section 3) or checks a request on a push (step 4); later a webhook (`httpapi.System`, section 8) | `number`, `state` (`open`, `closed` or `merged`), `at` (the host's update time of the request) | `sha` (a new head), `delivery` (a webhook's), `push`: when the job wrote it on a push, the log position of that push (section 3) |
-| `git.pipeline` | System: the job when it polls; later a webhook | `id`, `status` (`pending`, `running`, `success`, `failed`, `canceled`, `skipped`, `manual`), `url`, `sha`, `at` (the host's update time of the pipeline) | `ref`, `attempt`, `jobs` (each `{name, status, url}`), `delivery` |
+| `git.pipeline` | System: the job when it polls; later a webhook | `id`, `status` (`pending`, `running`, `success`, `failed`, `canceled`, `skipped`, `manual`), `url`, `sha`, `at` (the host's time: the latest of the pipeline's `updated_at` and its jobs' `started_at` and `finished_at`, below) | `ref`, `attempt`, `jobs` (each `{name, status, url}`), `delivery` |
 | `git.refused` | System, the job | `action` (`open` or `reopen`), `status` (the host's HTTP status), `reason` | `sha` |
 | `git.retry` | Human, the tab's "Try again", while a refusal is outstanding | none | none |
 
@@ -116,7 +116,12 @@ the job; once it is merged or closed, polling has stopped, so a manual job
 played after that shows on GitLab, not in Agentry. `canceling` is on its way to `canceled`, so it stays `running` until
 GitLab says `canceled`. A status the table doesn't name (one a later
 GitLab adds) writes nothing for that pipeline and logs one line naming
-it; the slice keeps what it had. GitHub's statuses get their own table in
+it; the slice keeps what it had. The same goes for a job: one job with a
+status the table doesn't name drops its whole pipeline from that pass,
+not only the job, because a pipeline written without one of its jobs
+would show a partial list, and the waiting line could name the wrong
+failed jobs. The unknown status is logged once per pipeline (the job
+remembers which it logged, until a restart), not on every pass. GitHub's statuses get their own table in
 story 13, onto the same seven.
 
 The job and the webhook store only these fields, never the host's reply
@@ -182,7 +187,8 @@ delivery, a host answer older than the slice) would be written and
 ignored, and written again on every pass. So equal writes nothing, and
 neither does different but not later. A polled pipeline's `at` is the
 latest of its `updated_at` and its jobs' `started_at` and `finished_at`,
-so a job that finishes inside a running pipeline is a later change.
+so a job that finishes inside a running pipeline is a later change
+(the poll asks for a running pipeline's jobs on every pass, section 3).
 The slice is built from the log, so a poll after a restart, or a poll and
 a webhook seeing the same change, writes it once; two writes that race
 both carry the host's same `at`, and the second changes nothing.
@@ -539,10 +545,15 @@ event is missed or read twice.
   (`GET /projects/{id}/merge_requests/{iid}`: state, head `sha`,
   `updated_at`), its pipelines
   (`GET /projects/{id}/merge_requests/{iid}/pipelines`, the newest 20),
-  and the jobs of each pipeline whose status changed
+  and the jobs of each pipeline that is new to the slice, whose status
+  differs from the slice's, or that is `pending` or `running` on the host
   (`GET /projects/{id}/pipelines/{pipeline_id}/jobs`, the latest try of
-  each). That is two calls per request per pass, and one more per changed
-  pipeline: 20 open requests make 40 calls every two minutes.
+  each). Asking for a running pipeline's jobs on every pass is what lets a
+  job that finishes inside it show as a later `at` (section 1); a finished
+  pipeline whose status hasn't changed isn't asked again. That is two
+  calls per request per pass, and one more per such pipeline: 20 open
+  requests, each with one running pipeline, make 60 calls every two
+  minutes, and 40 once their pipelines finish.
 - What it writes: by the comparison in section 1, against the slice. A
   state or head that differs from the request's record, with a later
   `updated_at`, is a `git.pr_changed` with that `updated_at` as `at`; a
@@ -570,7 +581,8 @@ event is missed or read twice.
   the one already there (its key is the same), with the new jobs if they
   differ. A webhook, later, would see the run and count it.
 - What it keeps: nothing outside the log and the slice but its backoff
-  timers and step 4's memory of the pushes it checked. A restart forgets
+  timers, step 4's memory of the pushes it checked, and the pipelines
+  whose unknown status it logged (section 1). A restart forgets
   them and asks at once, which is safe: an answer that changed nothing
   writes nothing.
 
@@ -685,7 +697,9 @@ not "Shipping", which is the name of a board column:
   base, and `found` as "found open on GitLab" when the job recorded one it
   didn't open.
 - The latest pipeline on its head: status, link, short sha, when, and its
-  jobs with their status, failed first.
+  jobs with their status, failed first. A `manual` pipeline shows as
+  "waiting on a manual job", naming the manual jobs, not as passed or
+  skipped (section 1).
 - A refusal, with the host's message and "Try again" (`POST
   /api/git/tasks/{task}/retry`, a UI route that writes `git.retry` as you).
 
@@ -755,14 +769,16 @@ What a verified delivery writes, always as System (`httpapi.System`):
   "not a request of task-121". One for an older request is written and
   changes only that request's record (section 1).
 - `workflow_run` and `Pipeline Hook`: `git.pipeline`, with GitLab's
-  `builds` as `jobs`. `workflow_job`: a `git.pipeline` for its run with one
+  `builds` as `jobs`. A Pipeline Hook's builds carry no `web_url`, so each
+  job's `url` is the hook's `project.web_url` + `/-/jobs/<id>`, the form
+  of the `web_url` the polled jobs carry: a poll after a delivery finds
+  the same values and writes nothing. `workflow_job`: a `git.pipeline` for its run with one
   job, merged by name.
 - Its `at`. A Merge Request Hook has `object_attributes.updated_at`, as
   the polled request has, and GitHub's events carry `updated_at`. GitLab's
   Pipeline Hook has none, so its `at` is `object_attributes.finished_at`,
-  else `started_at`, else `created_at`, else the time the delivery
-  arrived (Agentry's clock, used only when the payload holds no time). The
-  first three are GitLab's clock, as polling's `updated_at` is, and a
+  else `started_at`, else `created_at`, which every Pipeline Hook carries,
+  so Agentry's clock never enters the slice. All three are GitLab's clock, as polling's `updated_at` is, and a
   pipeline's `updated_at` is never earlier than them. So a delivery of a
   status the poll already wrote is not later and writes nothing, and a
   poll of a status a delivery wrote is equal and writes nothing. A
@@ -996,7 +1012,8 @@ file lists come from grepping the real callers.
    outstanding is refused, and one in a fixture log leaves a closed request
    closed and its old push not due; a `git.retry` after a refusal makes the
    push before it due again, falling back to `marked`; a GitLab pipeline
-   that goes from failed back to running is attempt 2; `changes` finds
+   that goes from failed back to running is attempt 2, and one that goes
+   from `manual` to `running` keeps the same attempt; `changes` finds
    nothing for an answer equal to the slice, nor for one that differs with
    an `at` that isn't later; a pipeline on an old
    request's head doesn't show on the current one; a build without the
@@ -1014,7 +1031,8 @@ file lists come from grepping the real callers.
    latest try of each), the project and branch escaped in the path
    (`group%2Fname`, `agentry%2Ftask-1`), 401, 404, 429 with `Retry-After`,
    and 5xx; every GitLab pipeline and job status maps as section 1's table
-   says, and a status it doesn't name gives no pipeline; each call ends at
+   says, and a status it doesn't name, for the pipeline or any of its
+   jobs, gives no pipeline; each call ends at
    its timeout against a fake that never answers. After: none.
 7. **The job (GitLab).** `readPush`, with `plainPush` as its wrapper, and
    `Task.PushTo` over it, skipping dry runs; the push's position and
@@ -1045,20 +1063,28 @@ file lists come from grepping the real callers.
    `GET /api/git/tasks/{task}`, `GET /api/git/waiting`, the retry route,
    the tool and `Waiting`. Files: `internal/githost/routes.go`, `tools.go`.
    Done: tool tests on a fixture (request and failed pipeline, refusal, no
-   request, feature off); a failed pipeline makes one entry, a retry that
-   fails again makes a new one, and a later success clears it; the retry
+   request, feature off, a `manual` pipeline printed as waiting on a
+   manual job); a failed pipeline makes one entry, a retry that fails
+   again makes a new one, a later success clears it, and so does a later
+   `manual` pipeline; the retry
    route with no refusal outstanding writes nothing. After: 5.
 9. **Polling GitLab.** The job's timer: every `poll` (two minutes when
    unset), for each task whose current request is open, or merged or
    closed with an unfinished last pipeline, it asks for the request, its
-   pipelines and the changed pipelines' jobs, and writes by `changes`;
+   pipelines and the jobs of new, changed, pending and running
+   pipelines, and writes by `changes`;
    backoff per request, and the 30-minute backoff on 401 and 403 (section
    3). Files: `internal/githost/poll.go`, `poll_test.go`, and
    `internal/githost/job.go` (the timer in its loop). Done: tests with a
    fake GitLab: a merged request found by polling writes one
    `git.pr_changed`, which is not a mark (a push after it still opens a
    request); a failed pipeline found by polling writes `git.pipeline`, and
-   the waiting entry appears; a second poll with nothing changed writes
+   the waiting entry appears; a job that finishes while its pipeline
+   stays `running` writes one `git.pipeline` with a later `at`, and the
+   next pass with nothing new writes nothing; a finished pipeline whose
+   status hasn't changed gets no jobs call; a job with a status the table
+   doesn't name writes nothing for its pipeline and logs one line over two
+   passes; a second poll with nothing changed writes
    nothing; a restart writes no duplicates; a merge step 4 already
    recorded isn't written again; polling stops for a merged or closed
    request whose pipelines finished (no call for it on the next pass); no
@@ -1084,8 +1110,8 @@ file lists come from grepping the real callers.
     `ui/src/features/index.ts`, `ui/src/pages/TaskPage.tsx` (`TABS`,
     `TabId`), `ui/src/features/git/`, and `internal/web/dist` rebuilt.
     Done: `npm run lint` and `npm run build` clean; render tests for a
-    merged request with a passed pipeline, a failed one, a refusal with
-    "Try again", and a task with no git slice (no tab); the feature's tab
+    merged request with a passed pipeline, a failed one, a `manual` one
+    shown as "waiting on a manual job", a refusal with "Try again", and a task with no git slice (no tab); the feature's tab
     comes after Details; a feature tab id equal to a core one fails a
     test. After: 1, 8.
 12. **The GitLab webhook (later, optional).** Only once Agentry has a
