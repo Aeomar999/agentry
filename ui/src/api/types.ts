@@ -14,6 +14,8 @@ export interface TaskSummary {
   stage: string; // the agent the coordinator last handed it to
   column: BoardColumn; // its column on the board
   canShip: boolean; // its team has an agent that ships work, so it may be moved to Shipping
+  pushed: boolean; // an agent pushed its work, in any turn: a done one says Shipped
+  doneByYou: boolean; // you moved it to Done, rather than its coordinator finishing it
   turns: number;
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer
