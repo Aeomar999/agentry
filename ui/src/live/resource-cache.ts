@@ -7,7 +7,7 @@
 
 export interface Read {
   data: unknown;
-  position: number; // of the log, when the server read it
+  position?: number; // of the log, when the server read it; missing when the reply didn't say
 }
 
 export type Fetch = (path: string) => Promise<Read>;
@@ -17,7 +17,7 @@ export interface Snapshot {
   error: string;
 }
 
-const nothing: Snapshot = { data: undefined, error: "" };
+export const nothing: Snapshot = { data: undefined, error: "" };
 
 interface Entry {
   snapshot: Snapshot;
@@ -78,7 +78,11 @@ export class ResourceCache {
     const asked = this.live;
     try {
       const read = await this.fetch(path);
-      entry.position = read.position;
+      // Never below the position it was asked at: the server read it later
+      // than that, so a reply with no position, or one from a server whose
+      // log went backwards (restored from a backup), isn't read again until
+      // the log moves, instead of in a loop.
+      entry.position = Math.max(read.position ?? asked, asked);
       this.show(entry, { data: read.data, error: "" });
     } catch (failure) {
       // Tried as of the position it was asked at: the next move tries again.

@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { useResourceCache } from "./LiveProvider";
+import { nothing } from "./resource-cache";
 
 export interface Resource<T> {
   data: T | undefined;
@@ -8,7 +9,6 @@ export interface Resource<T> {
 }
 
 const unwatched = () => () => {};
-const nothing = { data: undefined, error: "" };
 
 // useResource reads one API path and reads it again whenever the log moves
 // past what it was read at, so what's on screen is never older than the

@@ -4,11 +4,14 @@ import { ResourceCache } from "./resource-cache";
 // A fake server: each read waits until the test answers it, at the log
 // position the test says, so the test decides what lands mid-read.
 function fakeServer() {
-  const pending: { path: string; answer: (position: number, data?: unknown) => Promise<void>; fail: (message: string) => Promise<void> }[] =
-    [];
+  const pending: {
+    path: string;
+    answer: (position: number | undefined, data?: unknown) => Promise<void>;
+    fail: (message: string) => Promise<void>;
+  }[] = [];
   const reads: string[] = [];
   const fetch = (path: string) =>
-    new Promise<{ data: unknown; position: number }>((resolve, reject) => {
+    new Promise<{ data: unknown; position?: number }>((resolve, reject) => {
       reads.push(path);
       pending.push({
         path,
@@ -22,8 +25,9 @@ function fakeServer() {
         },
       });
     });
-  // answer answers every read in flight, at one position.
-  const answer = async (position: number) => {
+  // answer answers every read in flight, at one position (none: the reply
+  // didn't say).
+  const answer = async (position: number | undefined) => {
     for (const read of pending.splice(0)) await read.answer(position);
   };
   const readsOf = (path: string) => reads.filter((read) => read === path).length;
@@ -185,5 +189,52 @@ describe("the cache", () => {
     await server.answer(40);
     expect(cache.snapshot("/api/tasks/task-2").data).toBe("/api/tasks/task-2@40");
     expect(cache.snapshot("/api/tasks/task-1").data).toBe("/api/tasks/task-1@40");
+  });
+});
+
+describe("a reply below the log's position", () => {
+  // Each starts with the page live at 40 and one path shown, so the cache
+  // asks for it as of 40.
+  async function shownAt40() {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    cache.moved(40);
+    cache.watch("/api/tasks", ignore);
+    return { server, cache };
+  }
+
+  test("a reply at position 0 is read once, not in a loop", async () => {
+    const { server, cache } = await shownAt40();
+    await server.answer(0);
+    await settle();
+    expect(server.readsOf("/api/tasks")).toBe(1);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@0");
+  });
+
+  test("a reply with no position is read once, not in a loop, and again when the log moves", async () => {
+    const { server, cache } = await shownAt40();
+    await server.answer(undefined);
+    await settle();
+    expect(server.readsOf("/api/tasks")).toBe(1);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@undefined");
+
+    cache.moved(41);
+    expect(server.readsOf("/api/tasks")).toBe(2);
+  });
+
+  test("a server whose log went backwards is read once, and again once the log moves past where it was", async () => {
+    const { server, cache } = await shownAt40();
+    await server.answer(10); // restarted on a restored, shorter log
+    await settle();
+    expect(server.readsOf("/api/tasks")).toBe(1);
+
+    cache.moved(40); // the poll still reports the old position
+    await settle();
+    expect(server.readsOf("/api/tasks")).toBe(1);
+
+    cache.moved(41);
+    expect(server.readsOf("/api/tasks")).toBe(2);
+    await server.answer(41);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@41");
   });
 });

@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
-import { api, send } from "@/api/client";
-import { Read, ResourceCache } from "./resource-cache";
+import { api } from "@/api/client";
+import { readPath } from "./read-path";
+import { ResourceCache } from "./resource-cache";
 
 // The page stays live by long-polling the log: the server answers when the
 // log moves past our position (or after 25 s), and the resources on screen
@@ -57,10 +58,4 @@ export function useLive(): Live {
 
 export function useResourceCache(): ResourceCache {
   return useContext(CacheContext);
-}
-
-// readPath reads one API path, with the log position the server read it at.
-async function readPath(path: string): Promise<Read> {
-  const response = await send(path, { method: "GET" });
-  return { data: await response.json(), position: Number(response.headers.get("X-Agentry-Position")) || 0 };
 }
