@@ -1,14 +1,21 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render as renderIn, screen } from "@testing-library/react";
+import { fireEvent, render as renderIn, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { Manifest } from "@/features";
+import type { Features, Manifest } from "@/features";
 import type { AskVisionaries } from "@/features/ideas/visionaries";
 import { SettingsPage } from "./SettingsPage";
 
 // The page reads only the manifest; the test answers it, and asking the
-// visionaries is a fresh install's: a template, no team yet.
+// visionaries is a fresh install's: a template, no team yet. Beside Ideas,
+// the page knows Quiet, a feature with no button that turns it on.
 let manifest: Manifest | undefined;
+const { QUIET } = vi.hoisted(() => ({ QUIET: { name: "quiet", label: "Quiet" } }));
+vi.mock("@/features", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/features")>();
+  const list = [...real.FEATURES, QUIET];
+  return { ...real, FEATURES: list, hiddenFeatures: (features: Features) => real.hiddenFeatures(features, list) };
+});
 vi.mock("@/live/use-resource", () => ({ useResource: () => ({ data: manifest, error: "", position: 1, reload: async () => {} }) }));
 
 const FRESH: AskVisionaries = {
@@ -23,7 +30,8 @@ const FRESH: AskVisionaries = {
   ask: () => {},
   askAddingProfiles: () => {},
 };
-vi.mock("@/features/ideas/visionaries", () => ({ useAskVisionaries: () => FRESH }));
+let useAskVisionaries = (): AskVisionaries => FRESH;
+vi.mock("@/features/ideas/visionaries", () => ({ useAskVisionaries: () => useAskVisionaries() }));
 
 const IDEAS_OFF = { name: "ideas", enabled: false, visible: false, why: "add the Visionaries team to get ideas" };
 const IDEAS_ON = { name: "ideas", enabled: true, visible: true, why: "the Visionaries team suggests ideas", badge: 3 };
@@ -32,6 +40,7 @@ const render = (page: ReactElement) => renderIn(<MemoryRouter>{page}</MemoryRout
 
 beforeEach(() => {
   manifest = undefined;
+  useAskVisionaries = () => FRESH;
 });
 
 describe("SettingsPage", () => {
@@ -75,5 +84,46 @@ describe("SettingsPage", () => {
     render(<SettingsPage />);
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByText("not in this page")).toBeNull();
+  });
+
+  test("shows a feature with no button by its label and why alone", () => {
+    manifest = { features: [IDEAS_ON, { name: "quiet", enabled: false, visible: false, why: "nothing turns it on here" }], unknown: [] };
+    render(<SettingsPage />);
+    expect(screen.getByText("Quiet")).toBeTruthy();
+    expect(screen.getByText("nothing turns it on here")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  test("keeps Ideas' button mounted when Ideas turns on before its team shows, so New task opens", () => {
+    // Like the real hook: asking waits in the button's own state for the
+    // team to show, then opens New task.
+    const newTask = vi.fn();
+    let teamShows = false;
+    useAskVisionaries = () => {
+      const [opening, setOpening] = useState(false);
+      useEffect(() => {
+        if (opening && teamShows) newTask();
+      });
+      return { ...FRESH, adding: opening, ask: () => setOpening(true) };
+    };
+    manifest = { features: [IDEAS_OFF], unknown: [] };
+    const page = render(<SettingsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask the visionaries" }));
+
+    manifest = { features: [IDEAS_ON], unknown: [] };
+    page.rerender(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Ideas")).toBeTruthy();
+
+    teamShows = true;
+    page.rerender(
+      <MemoryRouter>
+        <SettingsPage />
+      </MemoryRouter>,
+    );
+    expect(newTask).toHaveBeenCalledTimes(1);
   });
 });
