@@ -49,12 +49,12 @@ rows = [("events catalogue", "types, writers, a stream prefix", "teal",
          "FromEvents, Next", "the ideas slice, built and applied"),
         ("Coordinator loop", "briefs and done decisions", "clay",
          "Coordinator hook", "on done, a Visionaries lead's ideas"),
-        ("web: routes behind requireUI", "every write made as you", "blue",
+        ("web: routes mounted by Route.Auth", "UI, desk or signed, never unwrapped", "blue",
          "Routes", "/api/ideas, accept, dismiss"),
-        ("GET /api/features", "the manifest the page follows", "blue",
-         "Manifest", "on while the team or any idea exists"),
-        ("mcp: tools and waiting", "for Claude Code sessions", "blue",
-         "Tools, Waiting", "list_ideas, accept_idea, dismiss_idea"),
+        ("GET /api/features, /api/waiting", "what shows, and what waits for you", "blue",
+         "Manifest, Waiting", "on while the team or any idea exists"),
+        ("mcp: tools", "for Claude Code sessions", "blue",
+         "Tools", "list_ideas, accept_idea, dismiss_idea"),
         ("UI shell: router, sidebar, Ctrl K", "shows what the manifest says", "green",
          "FeatureUI, ui/src/features/ideas", "the /ideas page, nav item, command")]
 for i, (core, core_sub, color, mine, mine_sub) in enumerate(rows):
@@ -67,6 +67,6 @@ f.note(130, 400, "Propose commits;", anchor="middle")
 f.note(130, 418, "State replays it", anchor="middle")
 f.arrow("M266,282 H214", "teal", width=1.5)
 f.arrow("M214,352 H266", "teal", width=1.5)
-f.note(48, 784, "Without the feature's code, its events stay in the log, are skipped and counted on replay, and new ones are refused.", size=12.5)
+f.note(48, 784, "It writes only through Core.Log, which checks its types. Without its code, its events stay, are skipped and counted, and new ones are refused.", size=12.5)
 with open(f"{OUT}/extensions.svg", "w") as out:
     out.write(f.svg())
