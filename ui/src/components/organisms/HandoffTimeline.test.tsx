@@ -34,12 +34,12 @@ const STEPS: Step[] = [
   { at: at(51), from: "coordinator", to: "reviewer", text: "", turn: "turn-6" },
 ];
 
-function timeline(onOpen = vi.fn(), steps = STEPS) {
+function timeline(onOpen = vi.fn(), steps = STEPS, turns = TURNS) {
   entries.length = 0;
   render(
     <HandoffTimeline
       steps={steps}
-      turns={TURNS}
+      turns={turns}
       coordinator="coordinator"
       links={{}}
       actionsIn={(id) => (id === "turn-4" ? 14 : 1)}
@@ -89,6 +89,15 @@ describe("HandoffTimeline", () => {
     });
     expect(footer.textContent).toContain("reviewer·running·1 action");
     expect(footer.textContent).not.toContain("48m");
+  });
+
+  test("says a turn waiting for the usage limit is waiting, not running", () => {
+    timeline(vi.fn(), STEPS, [...TURNS.slice(0, 2), turn("turn-6", "reviewer", { ended: false, limited: "You've hit your limit" })]);
+    const footer = within(card("coordinator to reviewer")).getByRole("button", {
+      name: "Led to turn-6, reviewer, usage limit. Open its activity",
+    });
+    expect(footer.textContent).toContain("reviewer·usage limit·1 action");
+    expect(footer.textContent).not.toContain("running");
   });
 
   test("folds a brief at 8 lines, and reports and your messages at 10", () => {

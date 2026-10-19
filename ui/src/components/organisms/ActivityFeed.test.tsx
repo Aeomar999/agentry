@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import type { ReactNode } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Show } from "@/lib/activity";
 import { layOut } from "@/test-layout";
@@ -22,6 +23,7 @@ interface Options {
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
+  foot?: ReactNode;
 }
 
 function feed({ turn = "", show = "all", now = null, items = ITEMS, ...rest }: Options = {}) {
@@ -202,6 +204,27 @@ describe("ActivityFeed", () => {
       expect(alert.textContent).toContain("If it keeps failing, check that Agentry is still running.");
       fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
       expect(retry).toHaveBeenCalledOnce();
+    });
+
+    test("a turn waiting for the usage limit: its band says so, and the row says until when", () => {
+      const band = ITEMS[10];
+      const items = [
+        ...ITEMS.slice(0, 10),
+        { ...band, live: false, tone: "warning" as const, turnInfo: { ...band.turnInfo!, limited: "You've hit your limit" } },
+        { ...ITEMS[11], key: "12", kind: "waiting" as const, title: "Waiting for the usage limit", body: "Resets at 07:00" },
+      ];
+      feed({ items });
+      expect(bands()[0]).toBe("reviewer, Software team, turn-3, usage limit. Show only this turn");
+      expect(screen.getByText("Waiting for the usage limit")).toBeTruthy();
+      expect(screen.queryByText("running")).toBeNull();
+    });
+
+    test("puts the way to read earlier events under the oldest row, in the scroller", () => {
+      const { container } = feed({ foot: <button type="button">Load earlier</button> });
+      const list = container.querySelector("ol")!;
+      const button = screen.getByRole("button", { name: "Load earlier" });
+      expect(list.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(button.parentElement).toBe(list.parentElement);
     });
 
     test("a turn just started, with no rows: its band, then who is starting", () => {

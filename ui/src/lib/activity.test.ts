@@ -115,6 +115,12 @@ describe("sections", () => {
     });
   });
 
+  test("puts a page that starts in the middle of a turn under its author, until the turn's start is read", () => {
+    const page = [row("5", "action", "engineer", "turn-2"), row("6", "note", "Agentry", "turn-2"), band("7", "turn-3", "reviewer")];
+    expect(outline(page)).toEqual(["reviewer turn-3: ", "Agentry: 6", "engineer: 5"]);
+    expect(outline([band("4", "turn-2", "engineer"), ...page])).toEqual(["reviewer turn-3: ", "engineer turn-2: 6 5"]);
+  });
+
   test("gives nothing for no rows", () => {
     expect(sections([])).toEqual([]);
   });
