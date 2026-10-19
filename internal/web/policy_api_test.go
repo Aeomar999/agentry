@@ -101,7 +101,7 @@ func TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce(t *testing.T) {
 			t.Errorf("a missing profile comes with the text it would add: %q", d.Text)
 		}
 	}
-	if states["read-mostly"] != "missing" || states["read-only"] != "current" || len(states) != 5 {
+	if states["read-mostly"] != "missing" || states["read-only"] != "current" || len(states) != 6 {
 		t.Errorf("defaults: %v", states)
 	}
 	if got := shown.Users["read-only"]; len(got) != 2 || got[0] != (profileUser{Agent: "reviewer"}) || got[1].Agent != "tech-lead" {

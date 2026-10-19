@@ -51,7 +51,7 @@ func TestTheShippedBlocksHoldTheirProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"developer", "read-only", "read-mostly", "autonomous", "allow-everything"}; !reflect.DeepEqual(d.names, want) {
+	if want := []string{"developer", "read-only", "read-mostly", "network-diagnosis", "autonomous", "allow-everything"}; !reflect.DeepEqual(d.names, want) {
 		t.Errorf("profiles %v, want %v", d.names, want)
 	}
 	for _, name := range d.names {

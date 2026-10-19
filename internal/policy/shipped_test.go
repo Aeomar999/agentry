@@ -60,23 +60,23 @@ func TestDefaultProfilesSaysWhatEachFileHas(t *testing.T) {
 		want map[string]string
 	}{
 		"this version's": {Default(), map[string]string{"developer": "current ", "read-only": "current ",
-			"read-mostly": "current ", "autonomous": "current ", "allow-everything": "current "}},
+			"read-mostly": "current ", "network-diagnosis": "current ", "autonomous": "current ", "allow-everything": "current "}},
 		"v0.1.0, before read-mostly": {firstRelease, map[string]string{"developer": "outdated v0.9.2", "read-only": "outdated v0.7.0",
-			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+			"read-mostly": "missing ", "network-diagnosis": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"before v0.1.0": {beforeIt, map[string]string{"developer": "outdated v0.9.2", "read-only": "outdated v0.1.0-dev",
-			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+			"read-mostly": "missing ", "network-diagnosis": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a why changed": {replaceOnce(t, beforeIt, `why = "For agents that judge work`, `why = "Mine: for agents that judge work`),
 			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
-				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+				"read-mostly": "missing ", "network-diagnosis": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a note inside an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only]\n# MY NOTE: keep this\n"),
 			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
-				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+				"read-mostly": "missing ", "network-diagnosis": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a note ending a line of an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only] # mine\n"),
 			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
-				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
+				"read-mostly": "missing ", "network-diagnosis": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"only comments and spacing changed": {replaceOnce(t, Default(), "[profiles.read-only]\n", "[profiles.read-only]   # mine\n\n# my notes\n"),
 			map[string]string{"developer": "current ", "read-only": "current ",
-				"read-mostly": "current ", "autonomous": "current ", "allow-everything": "current "}},
+				"read-mostly": "current ", "network-diagnosis": "current ", "autonomous": "current ", "allow-everything": "current "}},
 	}
 	for name, c := range cases {
 		if got := statesOf(c.text); !reflect.DeepEqual(got, c.want) {
@@ -337,7 +337,7 @@ func TestTurnOffUseForEveryoneCommentsOutItsLine(t *testing.T) {
 
 // The last guard of every edit: whatever it does, no other profile changes.
 func TestAnEditMayChangeOnlyItsOwnProfile(t *testing.T) {
-	after := replaceOnce(t, Default(), `why = "Its job is to judge the work, not to change it."`, `why = "Changed."`)
+	after := replaceOnce(t, Default(), `why = "For agents that judge work`, `why = "Changed: for agents that judge work`)
 	if _, err := checkEdit(Default(), after, "developer"); err == nil || !strings.Contains(err.Error(), `also change profile "read-only"`) {
 		t.Errorf("an edit of developer that changes read-only: %v", err)
 	}
