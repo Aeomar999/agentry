@@ -100,15 +100,17 @@ func (l *Loop) wakeHeld() {
 	if len(l.held) == 0 {
 		return
 	}
-	slots, all := l.slots(), l.state.Tasks()
+	slots := l.slots()
+	listed := map[string]bool{}
 	var ready []*tasks.Task
-	for _, task := range all {
+	for _, task := range l.state.Tasks() {
+		listed[task.ID] = true
 		if l.held[task.ID] && !slots.Queued(task.ID) {
 			ready = append(ready, task)
 		}
 	}
-	for id := range l.held { // archived or broken: it takes no turn
-		if !slices.ContainsFunc(all, func(task *tasks.Task) bool { return task.ID == id }) {
+	for id := range l.held {
+		if !listed[id] { // archived or broken: it takes no turn
 			delete(l.held, id)
 		}
 	}
