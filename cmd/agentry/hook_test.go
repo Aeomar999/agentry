@@ -49,6 +49,9 @@ func TestTheHookPassesTheServersReplyThrough(t *testing.T) {
 	if got.Task != "task-1" || got.Turn != "turn-2" || got.Agent != "engineer" || got.Event != "PreToolUse" || string(got.Payload) != `{"tool_name":"Bash"}` {
 		t.Errorf("the server got %+v", got)
 	}
+	if got.Deadline != 300*time.Millisecond {
+		t.Errorf("the call should carry the hook's deadline, 300ms; it has %s", got.Deadline)
+	}
 }
 
 // Proof 01: every way the call can fail exits 2, so the gate fails closed.

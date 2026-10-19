@@ -150,6 +150,36 @@ func TestAnAskThatTimesOutIsHeldForTheUser(t *testing.T) {
 	}
 }
 
+// The server stops waiting a margin before the hook's deadline, so its
+// reply gets there first; a short deadline spares a quarter of itself.
+func TestTheServerAnswersBeforeTheHooksDeadline(t *testing.T) {
+	for deadline, want := range map[time.Duration]time.Duration{
+		0:                               0,
+		-time.Second:                    0,
+		time.Second:                     750 * time.Millisecond,
+		20 * time.Second:                15 * time.Second,
+		29*time.Minute + 50*time.Second: 29*time.Minute + 45*time.Second,
+	} {
+		if got := answerWithin(deadline); got != want {
+			t.Errorf("answerWithin(%s) = %s, want %s", deadline, got, want)
+		}
+	}
+}
+
+func TestAnAskIsHeldBeforeTheDeadlineTheHookSent(t *testing.T) {
+	s, state := engineerAtWork(t)
+	call := hookCall("PreToolUse", bash("toolu_4", "curl example.com"))
+	call.Deadline = 400 * time.Millisecond
+	started := time.Now()
+	reply := NewHandler(s, state, judgeByCommand).Handle(context.Background(), call)
+	if elapsed := time.Since(started); elapsed >= call.Deadline {
+		t.Errorf("answered after %s, past the hook's deadline of %s", elapsed, call.Deadline)
+	}
+	if decisionOf(reply) != "deny" || !strings.Contains(reply.Stdout, "Don't retry") || !taskIn(t, s).Action("toolu_4").Held {
+		t.Errorf("reply %+v, want the action held", reply)
+	}
+}
+
 // timedOut is the reply to a gate call whose ask gets no answer in time.
 func timedOut(t *testing.T, h *Handler, id, command string) hookcall.Reply {
 	t.Helper()

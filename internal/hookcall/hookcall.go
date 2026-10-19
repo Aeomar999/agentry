@@ -3,7 +3,10 @@
 // request and reply it sends. Both sides import it, so they can't disagree.
 package hookcall
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // The environment every agent session has, read by `agentry hook`.
 const (
@@ -42,6 +45,10 @@ type Call struct {
 	// The turn's plan file as it is at this call, read on the machine
 	// running the session; nil when the agent hasn't written one.
 	Plan *string `json:"plan,omitempty"`
+
+	// How long the hook waits for the reply, so the server can answer
+	// before it gives up; 0 when the hook sent none.
+	Deadline time.Duration `json:"deadline,omitempty"`
 }
 
 type Ending struct {

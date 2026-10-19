@@ -84,8 +84,12 @@ func plan(call hookcall.Call) *string {
 
 // post sends the call. If the engine's hook timeout killed us, the engine
 // would fail open, so with a deadline set (shorter than that timeout) we
-// give up first, and fail closed (proof 01).
+// give up first, and fail closed (proof 01). The call carries the deadline,
+// so the server can answer before it.
 func post(call hookcall.Call) (hookcall.Reply, error) {
+	if deadline, err := time.ParseDuration(os.Getenv(hookcall.EnvDeadline)); err == nil {
+		call.Deadline = deadline
+	}
 	body, _ := json.Marshal(call)
 	request, err := http.NewRequest(http.MethodPost, os.Getenv(hookcall.EnvServer)+hookcall.Path, bytes.NewReader(body))
 	if err != nil {
@@ -94,11 +98,7 @@ func post(call hookcall.Call) (hookcall.Reply, error) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(hookcall.TokenHeader, os.Getenv(hookcall.EnvToken))
 
-	var timeout time.Duration
-	if deadline, err := time.ParseDuration(os.Getenv(hookcall.EnvDeadline)); err == nil {
-		timeout = deadline
-	}
-	response, err := pinned.Client([]byte(os.Getenv(hookcall.EnvCA)), timeout).Do(request)
+	response, err := pinned.Client([]byte(os.Getenv(hookcall.EnvCA)), call.Deadline).Do(request)
 	if err != nil {
 		return hookcall.Reply{}, fmt.Errorf("no answer from the Agentry server: %w", err)
 	}

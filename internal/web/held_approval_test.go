@@ -34,6 +34,38 @@ func TestATimedOutApprovalStaysOpenUntilYouAnswer(t *testing.T) {
 	if err := giveUpOn(server, "toolu_1", push); err == nil {
 		t.Fatal("the hook should have given up waiting")
 	}
+	stillOpenUntilYouApprove(t, server, s, push)
+}
+
+// A hook that sends its deadline hears that the action is held before it
+// gives up, so the agent is told not to retry it; it stays open for you all the same.
+func TestTheHookHearsItsRequestIsHeldBeforeItsDeadline(t *testing.T) {
+	server, s := serverWithEngineerAtWork(t)
+	const push = "git push origin HEAD:dev"
+	const deadline = time.Second
+
+	response, err := postGateCall(server, "toolu_1", push, deadline, deadline)
+	if err != nil {
+		t.Fatalf("the hook should hear back before its deadline: %v", err)
+	}
+	defer response.Body.Close()
+	var reply hookcall.Reply
+	if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&reply) != nil {
+		t.Fatalf("HTTP %d, reply %+v", response.StatusCode, reply)
+	}
+	if reply.ExitCode != 0 || !strings.Contains(reply.Stdout, `"permissionDecision":"deny"`) ||
+		!strings.Contains(reply.Stdout, "Don't retry it now") {
+		t.Errorf("the agent should be told no, and not to retry: %+v", reply)
+	}
+	stillOpenUntilYouApprove(t, server, s, push)
+}
+
+// stillOpenUntilYouApprove checks that the action asking for command, which
+// the hook stopped waiting on, is held: Questions lists it, the task needs
+// you, and approving it late on the page's route records it and hands the
+// command back to the coordinator.
+func stillOpenUntilYouApprove(t *testing.T, server *httptest.Server, s *store.Store, push string) {
+	t.Helper()
 	waitFor(t, "the action to be held", func() (bool, bool) {
 		stream, _ := s.Stream("task-1")
 		held := tasks.FromEvents(stream).Action("toolu_1").Held
@@ -104,16 +136,23 @@ func serverWithEngineerAtWork(t *testing.T) (*httptest.Server, *store.Store) {
 }
 
 // giveUpOn posts the engineer's request for command to the hook endpoint
-// as `agentry hook` does, with a short deadline in place of the real one.
+// as a hook that sends no deadline does, giving up after a short wait.
 func giveUpOn(server *httptest.Server, id, command string) error {
-	payload := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"` + id + `","tool_input":{"command":"` + command + `"}}`
-	body, _ := json.Marshal(hookcall.Call{Task: "task-1", Turn: "turn-2", Agent: "engineer", Engine: "claude", Event: "PreToolUse",
-		Payload: json.RawMessage(payload)})
-	request, _ := http.NewRequest(http.MethodPost, server.URL+hookcall.Path, bytes.NewReader(body))
-	request.Header.Set(hookcall.TokenHeader, hookToken)
-	response, err := (&http.Client{Timeout: 200 * time.Millisecond}).Do(request)
+	response, err := postGateCall(server, id, command, 0, 200*time.Millisecond)
 	if err == nil {
 		response.Body.Close()
 	}
 	return err
+}
+
+// postGateCall posts the engineer's request for command to the hook endpoint
+// as `agentry hook` does: the call carries deadline (0 for none), and the
+// client gives up after wait.
+func postGateCall(server *httptest.Server, id, command string, deadline, wait time.Duration) (*http.Response, error) {
+	payload := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_use_id":"` + id + `","tool_input":{"command":"` + command + `"}}`
+	body, _ := json.Marshal(hookcall.Call{Task: "task-1", Turn: "turn-2", Agent: "engineer", Engine: "claude", Event: "PreToolUse",
+		Payload: json.RawMessage(payload), Deadline: deadline})
+	request, _ := http.NewRequest(http.MethodPost, server.URL+hookcall.Path, bytes.NewReader(body))
+	request.Header.Set(hookcall.TokenHeader, hookToken)
+	return (&http.Client{Timeout: wait}).Do(request)
 }

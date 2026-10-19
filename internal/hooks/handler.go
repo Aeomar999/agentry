@@ -40,6 +40,11 @@ var ruleset = events.Actor{Kind: events.Policy, ID: "rules"}
 // Handle answers one hook call. A gate call that can't be decided is denied:
 // the gate fails closed.
 func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply {
+	if wait := answerWithin(call.Deadline); wait > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, wait)
+		defer cancel()
+	}
 	engine, ok := engines.Get(call.Engine)
 	if !ok {
 		return hookcall.Reply{ExitCode: 2} // a gate blocks; a report's `|| true` ignores it
@@ -62,6 +67,20 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 		return h.refuse(engine, call, "Agentry got a gate call with no action in it")
 	}
 	return hookcall.Reply{}
+}
+
+// replyMargin is how long before the hook's deadline the server stops
+// waiting, to record the hold and get the reply to the hook in time.
+const replyMargin = 5 * time.Second
+
+// answerWithin is how long the server may wait on a call whose hook gives
+// up after deadline: replyMargin less, or a quarter less when the deadline
+// is too short to spare it. 0 means no limit, as when the hook sent none.
+func answerWithin(deadline time.Duration) time.Duration {
+	if deadline <= 0 {
+		return 0
+	}
+	return deadline - min(replyMargin, deadline/4)
 }
 
 // NoTokensReported is why a turn's tokens are unknown when the machine
@@ -325,9 +344,9 @@ const Held = "Agentry: no answer yet; the command is held for the user's approva
 	"other work or report back. If the user approves it, your coordinator will hand it back."
 
 // askTheUser records action.asked, which puts the task in Needs you, then waits
-// for the user's decision. If the hook gives up first (its deadline, or the
-// engine killed it), the agent is told no and the action is held for the
-// user, so the task doesn't wait on it.
+// for the user's decision. If the wait runs out (just before the deadline
+// the hook sent, or the hook gave up or was killed), the agent is told no
+// and the action is held for the user, so the task doesn't wait on it.
 func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict policy.Verdict) (engines.Decision, string) {
 	asked, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionAsked,
 		Correlation: action, Data: verdictData(verdict)})
