@@ -320,6 +320,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
 		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
+	startPush(ctx, log, push, o.publicURL, func() []features.Waiting { return server.Waiting("") })
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
 		CA: serverCA}); err != nil {
