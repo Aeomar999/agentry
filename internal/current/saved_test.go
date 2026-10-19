@@ -8,6 +8,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -19,7 +20,7 @@ func TestTheStoredStateComesBackFromItsSavedForms(t *testing.T) {
 	s := openStore(t, append(someProposals(),
 		proposal("task-4", you, events.TaskCreated, map[string]any{"title": "Done", "repo": "/r", "coordinator": "tech-lead"}),
 		proposal("task-4", you, events.TaskDone, map[string]any{"summary": "Moved.", "moved": true}))...)
-	state := New()
+	state := New(withIdeas, ideas.Streams())
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	if done := state.tasks["task-4"]; done == nil || done.DoneAt.IsZero() {

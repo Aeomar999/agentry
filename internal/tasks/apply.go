@@ -78,7 +78,7 @@ func (t *Task) Apply(e events.Event) {
 		t.TeamChosen, t.Parent, t.Depth = e.Flag("teamChosen"), e.Text("parent"), e.Number("depth")
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
 		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
-		t.Idea, t.ByAgentry = e.Text("idea"), e.Actor.Kind == events.System
+		t.MadeFrom, t.ByAgentry = MadeFromOf(e.Proposal), e.Actor.Kind == events.System
 		t.About, t.AboutClose = e.Text("about"), int64(e.Number("close"))
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -309,7 +309,7 @@ func (t *Task) Apply(e events.Event) {
 
 	case events.ActionRequested:
 		turn := t.OpenTurn()
-		turn.Waiting = ""
+		turn.Waiting, turn.RetriedAt = "", time.Time{} // working again after a retry
 		t.Actions = append(t.Actions, &Action{ID: e.Correlation, Turn: turn.ID, Agent: e.Actor.ID,
 			Tool: e.Text("tool"), Command: e.Text("command"), RequestedAt: e.At})
 	case events.ActionAsked:
@@ -343,6 +343,36 @@ func (t *Task) Apply(e events.Event) {
 			t.PendingDecision = cmp.Or(turn.Report, "(the coordinator's turn ended with no reply)")
 		} else {
 			t.step(e, turn.Agent, t.Coordinator, turn.Report)
+		}
+
+	case events.TurnLimited:
+		// Not an issue: nothing is wrong with the work, so it doesn't count
+		// towards asking you, and the turn stays open to go on after the
+		// reset. An old log's odd one (an ended turn, a time it can't read)
+		// changes what it can and nothing else.
+		if turn := t.Turn(e.Correlation); !turn.Ended {
+			again := turn.Limited != "" // the engine said so twice: the new reset time stands, noted once
+			turn.Limited = cmp.Or(e.Text("details"), e.Text("error"), "usage limit")
+			turn.ResetsAt, _ = time.Parse(time.RFC3339, e.Text("resetsAt"))
+			if again {
+				break
+			}
+			// Only noted in the trail: the turn goes on after the reset.
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " hit a " + LimitText(turn.ResetsAt, e.At)})
+		}
+
+	case events.TurnResumed:
+		// An old log's odd one (an ended turn, one not limited, another
+		// agent's) changes nothing.
+		if turn := t.Turn(e.Correlation); !turn.Ended && turn.Limited != "" && e.Text("agent") == turn.Agent {
+			turn.Limited, turn.ResetsAt = "", time.Time{}
+			turn.Resumes, turn.ResumedAt = turn.Resumes+1, e.At
+			if e.Text("reason") == "reset" {
+				turn.RetriedAt = e.At
+			}
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " resumed after its usage limit"})
 		}
 
 	case events.IssueRaised:
@@ -402,7 +432,7 @@ func (t *Task) orphaned(e events.Event) bool {
 		return t.OpenTurn() == nil
 	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult:
 		return t.Action(e.Correlation) == nil
-	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnStopped:
+	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
 	}
 	return false
@@ -590,6 +620,21 @@ func stoppedText(turn *Turn, coordinator string) string {
 		"instructions brought up to date for what they said."
 }
 
+// LimitText says when a usage limit hit at at resets, in the server's local
+// time: "usage limit, resets ~03:00", with the date when that isn't the day
+// it was hit, or "usage limit, reset time unknown".
+func LimitText(resetsAt, at time.Time) string {
+	if resetsAt.IsZero() {
+		return "usage limit, reset time unknown"
+	}
+	resets, hit := resetsAt.Local(), at.Local()
+	layout := "15:04"
+	if resets.Format(time.DateOnly) != hit.Format(time.DateOnly) {
+		layout = "Jan 2 15:04"
+	}
+	return "usage limit, resets ~" + resets.Format(layout)
+}
+
 // moveRepo makes the move you asked for: the next turn works in a new
 // worktree, of the new repo.
 func (t *Task) moveRepo() {
@@ -599,6 +644,12 @@ func (t *Task) moveRepo() {
 }
 
 func turnID(number int) string { return fmt.Sprintf("turn-%d", number) }
+
+// MadeFromOf is the stream a task.created says made the task, "" for none.
+// Older logs and binaries name it only as "idea", so that stays the fallback.
+func MadeFromOf(p events.Proposal) string {
+	return cmp.Or(p.Text("from"), p.Text("idea"))
+}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {

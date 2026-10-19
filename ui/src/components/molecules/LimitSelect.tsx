@@ -2,22 +2,35 @@ import { useState } from "react";
 import { Input } from "@/components/atoms/Input";
 import { Select } from "@/components/atoms/Select";
 import { cn } from "@/lib/cn";
-import { CUSTOM, LimitChoice, LimitScale, UNLIMITED, limitOf } from "@/lib/limits";
+import { CUSTOM, LimitChoice, LimitScale, UNLIMITED, limitOf, optionsOf } from "@/lib/limits";
 
 interface LimitSelectProps {
   id?: string;
   scale: LimitScale;
   choice: LimitChoice;
   onChange: (choice: LimitChoice) => void;
-  defaultLimit?: number; // the server's, marked in the list
+  defaultLimit?: number; // the server's, marked in the list, and listed when it isn't a preset
   autoFocus?: boolean; // the list takes the focus, as when an editor opens on it
+  noLimit?: string; // what no limit is called in the list
+  disabled?: boolean;
   className?: string;
 }
 
-// A limit's presets, Unlimited and Custom, which opens a field for your own
-// number; a custom value that isn't one says so under it. The field takes
-// the focus only when you pick Custom, not when a form opens on it.
-export function LimitSelect({ id, scale, choice, onChange, defaultLimit, autoFocus, className }: LimitSelectProps) {
+// A limit's presets (and a default that isn't one), Unlimited and Custom,
+// which opens a field for your own number; a custom value that isn't one
+// says so under it. The field takes the focus only when you pick Custom,
+// not when a form opens on it.
+export function LimitSelect({
+  id,
+  scale,
+  choice,
+  onChange,
+  defaultLimit,
+  autoFocus,
+  noLimit = "Unlimited",
+  disabled,
+  className,
+}: LimitSelectProps) {
   const custom = choice.option === CUSTOM;
   const [picked, setPicked] = useState(false);
   const invalid = custom && choice.custom.trim() !== "" && Number.isNaN(limitOf(scale, choice));
@@ -29,6 +42,7 @@ export function LimitSelect({ id, scale, choice, onChange, defaultLimit, autoFoc
           id={id}
           aria-label={scale.name}
           autoFocus={autoFocus}
+          disabled={disabled}
           value={choice.option}
           onChange={(e) => {
             setPicked(e.target.value === CUSTOM);
@@ -36,18 +50,22 @@ export function LimitSelect({ id, scale, choice, onChange, defaultLimit, autoFoc
           }}
           className="w-32"
         >
-          {scale.presets.map((limit) => (
+          {optionsOf(scale, defaultLimit).map((limit) => (
             <option key={limit} value={String(limit)}>
               {label(limit)}
             </option>
           ))}
-          <option value={UNLIMITED}>Unlimited{defaultLimit === 0 ? " (default)" : ""}</option>
+          <option value={UNLIMITED}>
+            {noLimit}
+            {defaultLimit === 0 ? " (default)" : ""}
+          </option>
           <option value={CUSTOM}>Custom</option>
         </Select>
         {custom && (
           <Input
             mono
             autoFocus={picked}
+            disabled={disabled}
             aria-label={`${scale.name}, custom`}
             aria-invalid={invalid}
             value={choice.custom}

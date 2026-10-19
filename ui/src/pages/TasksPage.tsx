@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/molecules/PageHeader";
 import { FilterChip } from "@/components/molecules/FilterChip";
 import { SearchField } from "@/components/molecules/SearchField";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
-import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
+import { QueuedBadge, TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
@@ -22,6 +22,7 @@ import { api } from "@/api/client";
 import { useToast } from "@/components/organisms/Toasts";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
+import { RunningLimit } from "@/components/organisms/RunningLimit";
 import { useNewTask } from "@/lib/new-task";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
@@ -91,6 +92,7 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
           <p className="flex items-center gap-2">
             {task.kind === "epic" && <EpicBadge />}
             <span className="truncate font-medium text-ink-primary">{task.title}</span>
+            {task.queued && <QueuedBadge />}
             {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} className="shrink-0" />}
             <LabelList labels={task.labels} onPick={pickLabel} />
           </p>
@@ -236,6 +238,7 @@ export function TasksPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Tasks"
+        badges={<RunningLimit queued={tasks.filter((task) => task.queued).length} />}
         meta="The work under way: each task goes to its coordinator, which hands it from agent to agent until it is done. Shape epics and their stories in Plan. Drag tasks to put them in your order."
         actions={[{ label: "New task", icon: <Plus />, onClick: () => newTask(), primary: true }]}
       />

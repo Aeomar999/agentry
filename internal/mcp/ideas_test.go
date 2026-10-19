@@ -14,12 +14,14 @@ import (
 
 // A fake Agentry with ideas in every state and nothing else waiting. It
 // records what the tools ask of it, and refuses as the server does: an idea
-// that isn't open can't be accepted or dismissed.
+// that isn't open can't be accepted or dismissed. An accepted idea's task
+// is in the column asked for, In progress with start, unless column is set.
 type ideasAgentry struct {
-	mu    sync.Mutex
-	ideas []map[string]any
-	calls []string
-	fail  bool // GET /api/ideas fails
+	mu     sync.Mutex
+	ideas  []map[string]any
+	calls  []string
+	fail   bool    // GET /api/ideas fails
+	column *string // the column an accept answers, when set
 }
 
 func newIdeasAgentry(t *testing.T) (*ideasAgentry, client.Client) {
@@ -67,12 +69,19 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if action == "accept" {
-				var choice struct{ Kind string }
+				var choice struct {
+					Kind  string
+					Start bool
+				}
 				if json.Unmarshal(body, &choice); choice.Kind == "bug" {
 					http.Error(w, "an idea becomes a task or an epic, not bug", http.StatusConflict)
 					return
 				}
-				io.WriteString(w, `{"task":"task-31","accepted":true,"refused":""}`)
+				column := map[bool]string{false: "backlog", true: "in-progress"}[choice.Start]
+				if f.column != nil {
+					column = *f.column
+				}
+				json.NewEncoder(w).Encode(map[string]any{"task": "task-31", "column": column, "accepted": true, "refused": ""})
 				return
 			}
 			io.WriteString(w, `{}`)
@@ -356,5 +365,79 @@ func TestTheArgumentsAreSentAsGiven(t *testing.T) {
 	}
 	if text := c.tool("list_ideas", map[string]any{"state": "opne"}); text != `error: no state "opne": use open, accepted, dismissed or all` {
 		t.Errorf("unknown state:\n%s", text)
+	}
+}
+
+// start makes the accepted idea's task start. Without elicitation the
+// argument decides; with it the user's backlog/start answer does, offered
+// with the argument as its default. The reply says where the task went, and
+// an accept that doesn't start sends what it always did.
+func TestAcceptingAnIdeaCanStartItsTask(t *testing.T) {
+	c, fake := startOnIdeas(t, false, nil)
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": true}); !strings.Contains(text, "idea-1 became task-31, started (In progress)") {
+		t.Errorf("started: %s", text)
+	}
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": false}); !strings.Contains(text, "idea-1 became task-31, in the user's Backlog") {
+		t.Errorf("not started: %s", text)
+	}
+	want := []string{`POST /api/ideas/idea-1/accept {"kind":"epic","note":"","start":true}`, `POST /api/ideas/idea-1/accept {"kind":"epic","note":""}`}
+	if posts := fake.posts(); strings.Join(posts, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent %v, want %v", posts, want)
+	}
+
+	var offered []any
+	var answer map[string]any
+	c, fake = startOnIdeas(t, true, func(method string, params json.RawMessage) any {
+		var p struct {
+			RequestedSchema struct {
+				Properties struct{ Start struct{ Default any } }
+			}
+		}
+		json.Unmarshal(params, &p)
+		offered = append(offered, p.RequestedSchema.Properties.Start.Default)
+		return answer
+	})
+	for _, step := range []struct {
+		start  bool
+		answer string
+		reply  string
+		body   string
+	}{
+		{true, "backlog", "in the user's Backlog", `{"kind":"task","note":""}`},
+		{false, "start", "started (In progress)", `{"kind":"task","note":"","start":true}`},
+	} {
+		answer = map[string]any{"action": "accept", "content": map[string]any{"decision": "accept", "kind": "task", "note": "", "start": step.answer}}
+		if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": step.start}); !strings.Contains(text, step.reply) {
+			t.Errorf("start %v, answered %s: %s", step.start, step.answer, text)
+		}
+		if posts := fake.posts(); len(posts) != 1 || posts[0] != "POST /api/ideas/idea-1/accept "+step.body {
+			t.Errorf("start %v, answered %s: sent %v, want %s", step.start, step.answer, posts, step.body)
+		}
+	}
+	if len(offered) != 2 || offered[0] != "start" || offered[1] != "backlog" {
+		t.Errorf("the start argument should be the default offered: %v", offered)
+	}
+}
+
+// The reply says where Agentry says the task is, not what was asked: a
+// retry after a crashed accept reuses the task where it was made.
+func TestAnAcceptedIdeaSaysWhereItsTaskReallyIs(t *testing.T) {
+	c, fake := startOnIdeas(t, false, nil)
+	for _, step := range []struct {
+		start  bool
+		column string
+		reply  string
+	}{
+		{true, "backlog", "idea-1 became task-31, in the user's Backlog"},
+		{false, "in-progress", "idea-1 became task-31, started (In progress)"},
+		{false, "review", "idea-1 became task-31, started (Review)"},
+		{true, "todo", "idea-1 became task-31, in To do:"},
+		{true, "done", "idea-1 became task-31, Done:"},
+		{true, "", "idea-1 became task-31: https://agentry.example/tasks/task-31"},
+	} {
+		fake.column = &step.column
+		if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": step.start}); !strings.Contains(text, step.reply) {
+			t.Errorf("start %v, in %q: %s", step.start, step.column, text)
+		}
 	}
 }

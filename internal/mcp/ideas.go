@@ -76,10 +76,14 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 	return b.String(), nil
 }
 
-// acceptIdea makes an idea a task in your Backlog. With elicitation Claude
-// Code asks you first, and you can change the kind and the note.
+// acceptIdea makes an idea a task in your Backlog, or started with start.
+// With elicitation Claude Code asks you first, and you can change the kind,
+// the note and whether it starts.
 func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
-	var a struct{ ID, Kind, Note string }
+	var a struct {
+		ID, Kind, Note string
+		Start          bool
+	}
 	json.Unmarshal(arguments, &a)
 	i, err := s.idea(a.ID)
 	if err != nil {
@@ -89,10 +93,11 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		a.Kind = kindOf(i)
 	}
 	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog.\n\n"+aboutIdea(i), object(props{
+		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), object(props{
 			"decision": enum("Make it a task, or leave the idea open", "accept", "leave open"),
 			"kind":     withDefault(enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
 			"note":     withDefault(text("Optional: what to tell its coordinator"), a.Note),
+			"start":    withDefault(enum("Leave it in the Backlog, or start it now (it spends tokens straight away)", "backlog", "start"), startOf(a.Start)),
 		}, "decision"))
 		if err != nil {
 			return "", err
@@ -102,16 +107,21 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		}
 		a.Kind, _ = answer["kind"].(string)
 		a.Note, _ = answer["note"].(string)
+		a.Start = answer["start"] == "start"
 	}
 	var got struct {
-		Task     string
-		Accepted bool
-		Refused  string
+		Task, Column string
+		Accepted     bool
+		Refused      string
 	}
-	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", map[string]string{"kind": a.Kind, "note": a.Note}, &got); err != nil {
+	body := map[string]any{"kind": a.Kind, "note": a.Note}
+	if a.Start {
+		body["start"] = true // left out otherwise, so an accept that doesn't start sends what it always did
+	}
+	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got); err != nil {
 		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
 	}
-	text := fmt.Sprintf("%s became %s, in the user's Backlog until they start it: %s", i.ID, got.Task, s.agentry.PageURL("/tasks/"+got.Task))
+	text := fmt.Sprintf("%s became %s%s: %s", i.ID, got.Task, placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
 	if !got.Accepted {
 		text += "\nThe idea isn't marked accepted: " + got.Refused
 	}
@@ -144,6 +154,31 @@ func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (st
 		return "", fmt.Errorf("%s wasn't dismissed: %w", i.ID, err)
 	}
 	return "The user dismissed " + i.ID + ", " + i.Title + ".", nil
+}
+
+// placeOf says where an accepted idea's task is, from the column Agentry
+// answers, not from start: a retry reuses a task made before, started or
+// not. "" when the column can't be read.
+func placeOf(column string) string {
+	switch column {
+	case "":
+		return ""
+	case "backlog":
+		return ", in the user's Backlog until they start it"
+	case "in-progress", "review", "shipping":
+		return ", started (" + boardName(column) + ")"
+	case "done":
+		return ", " + boardName(column)
+	}
+	return ", in " + boardName(column)
+}
+
+// startOf is the elicitation's answer for start.
+func startOf(start bool) string {
+	if start {
+		return "start"
+	}
+	return "backlog"
 }
 
 // idea is one idea, of any repo.

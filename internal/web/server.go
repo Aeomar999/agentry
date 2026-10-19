@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	deskToo("GET /api/tasks", s.listTasks)
 	deskToo("POST /api/tasks", s.createTask)
 	deskToo("GET /api/tasks/{task}", s.showTask)
+	deskToo("GET /api/tasks/{task}/events", s.listEvents)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)

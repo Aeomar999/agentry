@@ -125,11 +125,15 @@ func (g *generator) agentOf(task *tasks.Task) events.Actor {
 	return events.Actor{Kind: events.Agent, ID: g.agent(task)}
 }
 
+// createTask aims at the next task stream, the one the rules take, as often
+// as at any.
 func (g *generator) createTask() events.Proposal {
-	return g.onTask(func(*tasks.Task) events.Proposal {
+	p := g.onTask(func(*tasks.Task) events.Proposal {
 		return events.Proposal{Actor: pick(g, you, you, g.agentActor()), Type: events.TaskCreated,
 			Data: map[string]any{"title": "Random task", "repo": "/src/app", "coordinator": g.coordinator()}}
 	})
+	p.Stream = pick(g, g.state.NextTask(), p.Stream)
+	return p
 }
 
 func (g *generator) worktreeReady() events.Proposal {
@@ -202,8 +206,21 @@ func (g *generator) finishTask() events.Proposal {
 	})
 }
 
+// learn sets an agent's knowledge: as a full copy, as a patch on what the
+// roster holds for it, or as a patch on a version it never held.
 func (g *generator) learn() events.Proposal {
-	return agents.Agent{Name: pick(g, agentNames...)}.Learned(pick(g, you, g.agentActor()), "note "+strconv.Itoa(g.rand.IntN(5)))
+	name := pick(g, agentNames...)
+	agent, _ := g.state.Roster().Get(name)
+	agent.Name = name
+	by, note := pick(g, you, g.agentActor()), "note "+strconv.Itoa(g.rand.IntN(5))
+	switch g.rand.IntN(3) {
+	case 0:
+		return agent.Learned(by, note)
+	case 1:
+		return agent.Patching(by, agents.Diff(agent.Knowledge, agent.Knowledge+"; "+note))
+	default:
+		return agent.Patching(by, agents.Diff("a version it never held", note))
+	}
 }
 
 func (g *generator) changeAgent() events.Proposal {

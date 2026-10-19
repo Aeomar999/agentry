@@ -61,6 +61,7 @@ func everyStream() []events.Event {
 		proposal(events.ConnectionsStream, you, events.ConnectionInvited, map[string]any{"code": "c2", "expires": "2026-10-18T10:00:00Z"}),
 		proposal("task-1", lead, events.TaskAssigned, map[string]any{"agent": "engineer", "instructions": "Profile it."}),
 		proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Measure first."}),
+		agents.Agent{Name: "engineer"}.Patching(you, agents.Diff("Measure first.", "Measure first, then cut.")),
 		proposal(events.ConnectionsStream, system, events.ConnectionMade, map[string]any{"id": "m1", "code": "c2", "credential": "k2"}),
 		proposal(events.WorkersStream, system, events.WorkerConnected, map[string]any{"name": "laptop", "engines": []any{"claude 2"}}),
 		proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Second, renamed"}),
@@ -96,8 +97,15 @@ func streamsOf(log []events.Event) []string {
 }
 
 // loaded is a state loaded from the log, as the store does at Open.
-func loaded(log []events.Event) *State {
-	s := New()
+func loaded(log []events.Event) *State { return loadedWith(withIdeas, log) }
+
+// loadedWith is loaded, reading the streams as catalogue says.
+func loadedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	return loadInto(New(catalogue, ideas.Streams()), log)
+}
+
+// loadInto loads the log into s, as the store does at Open.
+func loadInto(s *State, log []events.Event) *State {
 	for _, stream := range streamsOf(log) {
 		s.Load(stream, accepted(log, stream))
 	}
@@ -115,7 +123,7 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
 		if ideas.IsStream(stream) {
-			idea, err := s.Idea(stream)
+			idea, err := ideas.Get(s, stream)
 			if want := ideas.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(idea, want) {
 				t.Errorf("%s: %+v, %v\nreplay: %+v", stream, idea, err, want)
 			}
@@ -281,7 +289,7 @@ func TestAnArchivedTaskIsCountedButNotHandedOut(t *testing.T) {
 func TestAnIdeaIsNoTask(t *testing.T) {
 	log := everyStream()
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
-		if idea, err := s.Idea("idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
+		if idea, err := ideas.Get(s, "idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
 			t.Errorf("%s: idea-1 is %+v, %v; want it accepted", name, idea, err)
 		}
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
@@ -367,7 +375,7 @@ func TestTasksAreOldestFirstInANewSlice(t *testing.T) {
 // Readers call every getter while events are applied (run with -race).
 func TestReadersRaceApply(t *testing.T) {
 	log := everyStream()
-	s := New()
+	s := New(withIdeas, ideas.Streams())
 	s.Loaded(0)
 	var readers sync.WaitGroup
 	done := make(chan struct{})
@@ -400,8 +408,15 @@ func TestReadersRaceApply(t *testing.T) {
 }
 
 // applied is a state built by applying every event, from nothing.
-func applied(log []events.Event) *State {
-	s := New()
+func applied(log []events.Event) *State { return appliedWith(withIdeas, log) }
+
+// appliedWith is applied, reading the streams as catalogue says.
+func appliedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	return applyInto(New(catalogue, ideas.Streams()), log)
+}
+
+// applyInto applies every event of the log to s, a new state.
+func applyInto(s *State, log []events.Event) *State {
 	s.Loaded(0)
 	for _, e := range log {
 		s.Apply(e)
@@ -447,7 +462,7 @@ func TestAnIdeaAgentryAcceptedEqualsAReplay(t *testing.T) {
 		}
 	}
 	s := loaded(log)
-	idea, _ := s.Idea("idea-2")
+	idea, _ := ideas.Get(s, "idea-2")
 	task, _ := s.Task("task-3")
 	if !idea.AutoAccepted || task.Parked != "" || !s.Settings().AutoAcceptIdeas || !s.Settings().AutoStartIdeas {
 		t.Errorf("idea %+v, task parked %q, settings %+v", idea, task.Parked, s.Settings())

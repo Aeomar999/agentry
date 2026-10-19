@@ -1,15 +1,19 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -106,12 +110,15 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{"kind":"epic","note":"Soon"}`)
 	var got acceptance
 	json.Unmarshal([]byte(body), &got)
-	if code != 200 || got != (acceptance{Task: "task-2", Accepted: true}) {
+	if code != 200 || got != (acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
-		!strings.Contains(body, `"idea":"`+id+`"`) {
+		!strings.Contains(body, `"madeFrom":"`+id+`"`) {
 		t.Errorf("the task made from it: %s", body)
+	}
+	if _, body := call(t, server, "GET", "/api/tasks", ""); !strings.Contains(body, `"id":"task-2"`) || !strings.Contains(body, `"madeFrom":"`+id+`"`) {
+		t.Errorf("the task list: %s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != http.StatusConflict || !strings.Contains(body, "accepted already") {
 		t.Errorf("a second accept: %d %s", code, body)
@@ -120,7 +127,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 		t.Errorf("dismissing an accepted idea: %d", code)
 	}
 	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) ||
-		!strings.Contains(body, `"autoAccepted":false`) {
+		!strings.Contains(body, `"becameColumn":"backlog"`) || !strings.Contains(body, `"autoAccepted":false`) {
 		t.Errorf("the accepted idea: %s", body)
 	}
 }
@@ -138,6 +145,66 @@ func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
 		if d := detailOfTask(t, server, "task-2"); d.Budget != limits.Budget || d.MaxTurns != limits.MaxTurns {
 			t.Errorf("budget %d, max turns %d, want %+v", d.Budget, d.MaxTurns, limits)
 		}
+	}
+}
+
+// Accept and start makes the task out of the Backlog, with the budget you
+// gave or the server's, and always the server's turns; a bad start or
+// budget is a 400 that makes nothing.
+func TestYouAcceptAndStartAnIdea(t *testing.T) {
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 12,
+		Features: []features.Feature{ideas.Feature()}}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+
+	for _, bad := range []string{`{"start":"yes"}`, `{"start":1}`, `{"budget":-2}`, `{"budget":"lots"}`} {
+		id := suggestIdea(t, s, "task-1", repo, "Bad "+bad)
+		if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", bad); code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", bad, code, body)
+		}
+	}
+	if ids := state.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) {
+		t.Fatalf("a bad accept made a task: %v", ids)
+	}
+
+	for _, c := range []struct {
+		body   string
+		task   string
+		parked string
+		budget int
+	}{
+		{`{"start":true,"budget":700}`, "task-2", "", 700},
+		{`{"start":true}`, "task-3", "", 5_000_000},
+		{`{"start":true,"budget":-1}`, "task-4", "", 0},
+		{`{"start":false,"budget":0}`, "task-5", "backlog", 5_000_000},
+	} {
+		id := suggestIdea(t, s, "task-1", repo, "Idea for "+c.task)
+		code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", c.body)
+		var got acceptance
+		json.Unmarshal([]byte(body), &got)
+		if code != 200 || got != (acceptance{Task: c.task, Column: cmp.Or(c.parked, "in-progress"), Accepted: true}) {
+			t.Fatalf("%s: %d %s", c.body, code, body)
+		}
+		task, err := state.Task(c.task)
+		if err != nil || task.Parked != c.parked || task.Budget != c.budget || task.MaxTurns != 12 {
+			t.Errorf("%s: parked %q budget %d turns %d, want %q %d 12 (%v)", c.body, task.Parked, task.Budget, task.MaxTurns, c.parked, c.budget, err)
+		}
+	}
+
+	_, body := call(t, server, "GET", "/api/ideas", "")
+	var list []ideaView
+	json.Unmarshal([]byte(body), &list)
+	columns := map[string]string{}
+	for _, idea := range list {
+		columns[idea.Became] = idea.BecameColumn
+	}
+	if want := map[string]string{"": "", "task-2": "in-progress", "task-3": "in-progress", "task-4": "in-progress", "task-5": "backlog"}; !maps.Equal(columns, want) {
+		t.Errorf("the columns the ideas' tasks are in: %v, want %v", columns, want)
 	}
 }
 
@@ -285,5 +352,26 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 		again: "duplicate of " + original + " (task-2)"}
 	if got := reasons(); !maps.Equal(got, loose) {
 		t.Errorf("nobodyDoubted:\ngot  %v\nwant %v", got, loose)
+	}
+}
+
+// A task an old log made from an idea names it only as "idea"; its page
+// says it was made from the idea all the same. A task made from nothing says
+// nothing.
+func TestATaskFromAnOldLogShowsTheIdeaItWasMadeFrom(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	id := suggestIdea(t, s, "task-1", repo, "Search the board")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-2", Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}}); err != nil || rejection != nil {
+		t.Fatalf("old task.created: %v %v", rejection, err)
+	}
+	for task, want := range map[string]string{"task-2": id, "task-1": ""} {
+		_, body := call(t, server, "GET", "/api/tasks/"+task, "")
+		var detail taskDetail
+		if err := json.Unmarshal([]byte(body), &detail); err != nil || detail.MadeFrom != want {
+			t.Errorf("%s made from %q, want %q: %v", task, detail.MadeFrom, want, err)
+		}
 	}
 }

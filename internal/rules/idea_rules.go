@@ -16,7 +16,7 @@ import (
 // Visionaries agreed on, by your rule, when you turned that on; the
 // catalogue checks that no agent does.
 func checkIdea(p events.Proposal, state State) *events.Rejection {
-	idea, err := state.Idea(p.Stream)
+	idea, err := ideas.Get(state, p.Stream)
 	if err != nil {
 		return refuse("could not read the idea: " + err.Error())
 	}
@@ -71,7 +71,7 @@ func repeatsAnIdea(p events.Proposal, state State) string {
 	if repeats == "" {
 		return ""
 	}
-	original, err := state.Idea(repeats)
+	original, err := ideas.Get(state, repeats)
 	switch {
 	case err != nil:
 		return "could not read the idea it repeats: " + err.Error()
@@ -91,7 +91,7 @@ func madeFromIt(idea *ideas.Idea, p events.Proposal, state State) string {
 	switch {
 	case task == nil:
 		return "task " + p.Text("task") + " doesn't exist"
-	case task.Idea != idea.ID:
+	case task.MadeFrom != idea.ID:
 		return "task " + task.ID + " wasn't made from " + idea.ID
 	}
 	return ""
@@ -117,20 +117,24 @@ func agentryMayAccept(idea *ideas.Idea, p events.Proposal, state State) string {
 
 // forAnOpenIdea: besides a task about an epic you closed, Agentry makes one
 // only from an idea that is still open, to accept it for you, so one it may
-// accept.
+// accept, and only in your Backlog: it starts one only by moving it, while
+// you have that turned on (startingAnAcceptedIdea).
 func forAnOpenIdea(p events.Proposal, state State) string {
 	const only = "Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on"
-	if p.Text("idea") == "" {
+	from := tasks.MadeFromOf(p)
+	if from == "" {
 		return only
 	}
-	idea, err := state.Idea(p.Text("idea"))
+	idea, err := ideas.Get(state, from)
 	switch {
 	case err != nil:
 		return "could not read the idea: " + err.Error()
 	case idea == nil:
-		return "idea " + p.Text("idea") + " doesn't exist"
+		return "idea " + from + " doesn't exist"
 	case idea.State != ideas.Open:
 		return "idea " + idea.ID + " was " + string(idea.State) + " already"
+	case p.Text("parked") != "backlog":
+		return "Agentry makes a task from an idea only in your Backlog"
 	}
 	return agentryMayAccept(idea, p, state)
 }
@@ -145,10 +149,10 @@ func startingAnAcceptedIdea(task *tasks.Task, p events.Proposal, state State) st
 		return "Agentry starts a task from an idea it accepted only when you turn that on"
 	}
 	if p.Text("place") != "" || p.Text("column") != "in-progress" || p.Flag("sentBack") ||
-		task.Parked == "" || len(task.Turns) > 0 || task.AutoStarted || !task.ByAgentry || task.Idea == "" {
+		task.Parked == "" || len(task.Turns) > 0 || task.AutoStarted || !task.ByAgentry || task.MadeFrom == "" {
 		return only
 	}
-	idea, err := state.Idea(task.Idea)
+	idea, err := ideas.Get(state, task.MadeFrom)
 	switch {
 	case err != nil:
 		return "could not read the idea: " + err.Error()

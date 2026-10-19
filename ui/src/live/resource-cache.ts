@@ -15,15 +15,17 @@ export type Fetch = (path: string) => Promise<Read>;
 export interface Snapshot {
   data: unknown;
   error: string;
+  position: number; // of the log, that the data is as fresh as; -1 before the first read
 }
 
-export const nothing: Snapshot = { data: undefined, error: "" };
+export const nothing: Snapshot = { data: undefined, error: "", position: -1 };
 
 interface Entry {
   snapshot: Snapshot;
   position: number; // the log position the snapshot is as fresh as; -1 before the first read
   reading: boolean;
   reloadAsked: boolean; // reload() while reading: read again when it returns
+  reloaded: (() => void)[]; // reloads waiting for the next read to start, and return
   watchers: Set<() => void>;
 }
 
@@ -38,7 +40,7 @@ export class ResourceCache {
   watch(path: string, changed: () => void): () => void {
     let entry = this.entries.get(path);
     if (!entry) {
-      entry = { snapshot: nothing, position: -1, reading: false, reloadAsked: false, watchers: new Set() };
+      entry = { snapshot: nothing, position: -1, reading: false, reloadAsked: false, reloaded: [], watchers: new Set() };
       this.entries.set(path, entry);
     }
     entry.watchers.add(changed);
@@ -60,12 +62,16 @@ export class ResourceCache {
   }
 
   // reload reads a path again whatever its position, as after an action
-  // whose result the page wants to see at once.
-  reload(path: string) {
+  // whose result the page wants to see at once. It returns once a read
+  // that started after it is shown, so the page can tell what the action
+  // left from what was read before it.
+  reload(path: string): Promise<void> {
     const entry = this.entries.get(path);
-    if (!entry) return;
+    if (!entry) return Promise.resolve();
+    const shown = new Promise<void>((resolve) => entry.reloaded.push(resolve));
     if (entry.reading) entry.reloadAsked = true;
     else this.read(path, entry);
+    return shown;
   }
 
   private readIfOld(path: string, entry: Entry) {
@@ -75,6 +81,7 @@ export class ResourceCache {
   private async read(path: string, entry: Entry) {
     entry.reading = true;
     entry.reloadAsked = false;
+    const reloads = entry.reloaded.splice(0);
     const asked = this.live;
     try {
       const read = await this.fetch(path);
@@ -83,13 +90,14 @@ export class ResourceCache {
       // log went backwards (restored from a backup), isn't read again until
       // the log moves, instead of in a loop.
       entry.position = Math.max(read.position ?? asked, asked);
-      this.show(entry, { data: read.data, error: "" });
+      this.show(entry, { data: read.data, error: "", position: entry.position });
     } catch (failure) {
       // Tried as of the position it was asked at: the next move tries again.
       entry.position = Math.max(entry.position, asked);
-      this.show(entry, { data: entry.snapshot.data, error: (failure as Error).message });
+      this.show(entry, { ...entry.snapshot, error: (failure as Error).message });
     }
     entry.reading = false;
+    reloads.forEach((shown) => shown());
     if (entry.reloadAsked && entry.watchers.size > 0) this.read(path, entry);
     else this.readIfOld(path, entry);
     this.forgetIfUnwatched(path, entry);
@@ -103,6 +111,9 @@ export class ResourceCache {
   // A path nobody shows is dropped once its read is over, so the cache
   // holds only what is on screen; showing it again reads it again.
   private forgetIfUnwatched(path: string, entry: Entry) {
-    if (entry.watchers.size === 0 && !entry.reading) this.entries.delete(path);
+    if (entry.watchers.size === 0 && !entry.reading) {
+      entry.reloaded.splice(0).forEach((shown) => shown()); // nobody will read it again
+      this.entries.delete(path);
+    }
   }
 }

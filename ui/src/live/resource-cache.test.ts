@@ -111,7 +111,7 @@ describe("the page's reads (test 9)", () => {
     cache.watch("/api/tasks", () => told.push("page"));
     await server.answer(40);
     expect(told).toEqual(["shell", "page"]);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
   });
 });
 
@@ -164,6 +164,33 @@ describe("the cache", () => {
     expect(server.readsOf("/api/questions")).toBe(3);
   });
 
+  test("reload returns once a read started after it is shown, not the read in flight", async () => {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    cache.watch("/api/agents", ignore);
+    let shown = false;
+    void cache.reload("/api/agents").then(() => (shown = true));
+    await server.answer(40); // the first read, out before the reload
+    expect(shown).toBe(false);
+    expect(cache.snapshot("/api/agents").data).toBe("/api/agents@40");
+    await server.pending[0].answer(41, "with the team");
+    expect(shown).toBe(true);
+    expect(cache.snapshot("/api/agents").data).toBe("with the team");
+  });
+
+  test("reload returns when the path is given up before it is read again", async () => {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    const stop = cache.watch("/api/agents", ignore);
+    let shown = false;
+    void cache.reload("/api/agents").then(() => (shown = true));
+    stop();
+    await server.answer(40);
+    expect(shown).toBe(true);
+    expect(server.readsOf("/api/agents")).toBe(1);
+    await expect(cache.reload("/api/agents")).resolves.toBeUndefined(); // a path nobody shows
+  });
+
   test("a failed read shows its error, keeps the last data, and is tried again when the log moves", async () => {
     const server = fakeServer();
     const cache = new ResourceCache(server.fetch);
@@ -171,12 +198,12 @@ describe("the cache", () => {
     await server.answer(40);
     cache.moved(41);
     await server.pending.splice(0)[0].fail("database is locked");
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked", position: 40 });
     expect(server.readsOf("/api/tasks")).toBe(2); // not retried in a loop
 
     cache.moved(42);
     await server.answer(42);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "", position: 42 });
   });
 
   test("each path has its own data: a new path shows nothing until it is read", async () => {

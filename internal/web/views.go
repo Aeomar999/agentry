@@ -38,8 +38,7 @@ type taskDetail struct {
 	Turns         []turn        `json:"turnList"`
 	TokensUnknown string        `json:"tokensUnknown"` // on how many turns the tokens couldn't be counted, and why; "" when every turn was
 	Approvals     []action      `json:"approvals"`     // waiting for you
-	Actions       []action      `json:"actions"`
-	Events        []eventEntry  `json:"events"`
+	Actions       []action      `json:"actions"`       // its events are read a page at a time, at /api/tasks/{task}/events
 }
 
 type worktree struct {
@@ -59,19 +58,21 @@ type step struct {
 }
 
 type turn struct {
-	ID            string    `json:"id"`
-	Agent         string    `json:"agent"`
-	Worker        string    `json:"worker"` // the machine it ran on
-	StartedAt     time.Time `json:"startedAt"`
-	LastEventAt   time.Time `json:"lastEventAt"` // when it ended, once it has
-	Acknowledged  bool      `json:"acknowledged"`
-	Ended         bool      `json:"ended"`
-	Issue         string    `json:"issue"`
-	Tokens        int       `json:"tokens"`
-	TokensUnknown string    `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
-	Plan          string    `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
-	PlanFrom      string    `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
-	Stopped       bool      `json:"stopped"`                 // you ended it, to tell the coordinator something
+	ID            string     `json:"id"`
+	Agent         string     `json:"agent"`
+	Worker        string     `json:"worker"` // the machine it ran on
+	StartedAt     time.Time  `json:"startedAt"`
+	LastEventAt   time.Time  `json:"lastEventAt"` // when it ended, once it has
+	Acknowledged  bool       `json:"acknowledged"`
+	Ended         bool       `json:"ended"`
+	Issue         string     `json:"issue"`
+	Tokens        int        `json:"tokens"`
+	TokensUnknown string     `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
+	Plan          string     `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
+	PlanFrom      string     `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
+	Stopped       bool       `json:"stopped"`                 // you ended it, to tell the coordinator something
+	Limited       string     `json:"limited,omitempty"`       // what the engine said when it stopped at a usage limit
+	ResetsAt      *time.Time `json:"resetsAt,omitempty"`      // when that limit resets, when the engine said
 }
 
 type action struct {
@@ -126,7 +127,7 @@ func listOf(items []string) []string {
 	return items
 }
 
-func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
+func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
 	detail.Shared = []sharedFile{}
@@ -141,7 +142,10 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
-			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
+			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
+		if resets := tu.ResetsAt; !resets.IsZero() {
+			detail.Turns[len(detail.Turns)-1].ResetsAt = &resets
+		}
 	}
 	for _, a := range t.Actions {
 		detail.Actions = append(detail.Actions, actionView(a))
@@ -149,16 +153,17 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 	for _, a := range t.WaitingForYou() {
 		detail.Approvals = append(detail.Approvals, actionView(a))
 	}
-	for _, e := range log {
-		data := e.Data
-		if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
-			data = maps.Clone(data)
-			data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
-		}
-		detail.Events = append(detail.Events, eventEntry{Position: e.Position, At: e.At, Type: e.Type,
-			Actor: e.Actor.String(), Correlation: e.Correlation, Data: data})
-	}
 	return detail
+}
+
+// entryOf is an event as the page reads it.
+func entryOf(e events.Event) eventEntry {
+	data := e.Data
+	if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
+		data = maps.Clone(data)
+		data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
+	}
+	return eventEntry{Position: e.Position, At: e.At, Type: e.Type, Actor: e.Actor.String(), Correlation: e.Correlation, Data: data}
 }
 
 // tokensUnknownOf says on how many turns the tokens couldn't be counted,
@@ -236,28 +241,29 @@ func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
 }
 
 type ideaView struct {
-	ID         string      `json:"id"`
-	Title      string      `json:"title"`
-	Problem    string      `json:"problem"`
-	Proposal   string      `json:"proposal"`
-	WhyNow     string      `json:"whyNow"`
-	Size       string      `json:"size"` // S, M or L
-	Risks      string      `json:"risks"`
-	BackedBy   []string    `json:"backedBy"`
-	DoubtedBy  []string    `json:"doubtedBy"`
-	Task       string      `json:"task"` // the session it came from
-	Repo       string      `json:"repo"`
-	Epic       string      `json:"epic"`       // the epic it follows up, "" for none
-	About      string      `json:"about"`      // the epic whose close started the session it came from, "" for none
-	AboutTitle string      `json:"aboutTitle"` // that epic's title
-	Kind       tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
-	State      ideas.State `json:"state"`
-	Note       string      `json:"note"`               // what you said when you accepted or dismissed it
-	DecidedAt  time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
-	Became     string      `json:"became"`             // the task an accepted idea became
-	Auto       bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
-	Repeats    string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
-	CreatedAt  time.Time   `json:"createdAt"`
+	ID           string      `json:"id"`
+	Title        string      `json:"title"`
+	Problem      string      `json:"problem"`
+	Proposal     string      `json:"proposal"`
+	WhyNow       string      `json:"whyNow"`
+	Size         string      `json:"size"` // S, M or L
+	Risks        string      `json:"risks"`
+	BackedBy     []string    `json:"backedBy"`
+	DoubtedBy    []string    `json:"doubtedBy"`
+	Task         string      `json:"task"` // the session it came from
+	Repo         string      `json:"repo"`
+	Epic         string      `json:"epic"`       // the epic it follows up, "" for none
+	About        string      `json:"about"`      // the epic whose close started the session it came from, "" for none
+	AboutTitle   string      `json:"aboutTitle"` // that epic's title
+	Kind         tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
+	State        ideas.State `json:"state"`
+	Note         string      `json:"note"`               // what you said when you accepted or dismissed it
+	DecidedAt    time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
+	Became       string      `json:"became"`             // the task an accepted idea became
+	BecameColumn string      `json:"becameColumn"`       // that task's column on the board now, as a task summary's column; "" when it can't be read
+	Auto         bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
+	Repeats      string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
+	CreatedAt    time.Time   `json:"createdAt"`
 	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
 	// under your rule (ideas.NotAutoAccepted), even with that turned off;
 	// "" when it would, and for an idea that isn't open.
@@ -265,9 +271,9 @@ type ideaView struct {
 }
 
 // viewOf is the idea as the page shows it; about is the epic whose close
-// started its session, nil for none, and notAutoAccepted why Agentry
-// wouldn't accept it for you.
-func viewOf(idea *ideas.Idea, about *tasks.Task, notAutoAccepted string) ideaView {
+// started its session, nil for none, became the task it became, nil for
+// none, and notAutoAccepted why Agentry wouldn't accept it for you.
+func viewOf(idea *ideas.Idea, about, became *tasks.Task, roster agents.Roster, notAutoAccepted string) ideaView {
 	view := ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
 		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
 		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
@@ -276,12 +282,16 @@ func viewOf(idea *ideas.Idea, about *tasks.Task, notAutoAccepted string) ideaVie
 	if about != nil {
 		view.About, view.AboutTitle = about.ID, about.Title
 	}
+	if became != nil {
+		view.BecameColumn = became.BoardColumn(roster)
+	}
 	return view
 }
 
 // acceptance is what accepting an idea did (ideas.Acceptance).
 type acceptance struct {
 	Task     string `json:"task"`     // the task made from the idea
+	Column   string `json:"column"`   // its column on the board now, as a task summary's column; "" when it can't be read
 	Accepted bool   `json:"accepted"` // the idea is marked accepted
 	Refused  string `json:"refused"`  // why it isn't, "" once accepted
 }

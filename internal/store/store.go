@@ -148,7 +148,7 @@ func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.
 	if err != nil {
 		return events.Event{}, nil, err
 	}
-	p.Stream = fmt.Sprintf("%s%d", prefix, made+1)
+	p.Stream = events.Numbered(prefix, made)
 	return s.propose(p)
 }
 

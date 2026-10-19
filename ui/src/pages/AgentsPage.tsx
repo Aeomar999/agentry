@@ -19,7 +19,7 @@ import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
 import { addTeam, missingProfilesOf, teamOf, teamsOf } from "@/lib/teams";
 import { profileInForce } from "@/lib/profiles";
-import type { Agent, Policy } from "@/api/types";
+import type { Agent, Policy, TeamTemplate } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
 import { cn } from "@/lib/cn";
@@ -34,12 +34,6 @@ import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 // removed once no unfinished task needs it.
 
 type View = "teams" | "org" | "list";
-
-interface Template {
-  team: string;
-  description: string;
-  agents: { name: string; description: string; coordinates: boolean }[];
-}
 
 const COLUMNS: Column<Agent>[] = [
   { header: "Name", className: "w-40", render: (agent) => <AgentName name={agent.name} className="font-semibold text-ink-primary" /> },
@@ -76,7 +70,7 @@ export function AgentsPage() {
   const { data, error, reload } = useResource<Agent[]>("/api/agents");
   const agents = data ?? [];
   const teams = teamsOf(agents);
-  const templates = useResource<Template[]>("/api/teams/templates").data ?? [];
+  const templates = useResource<TeamTemplate[]>("/api/teams/templates").data ?? [];
   const policy = useResource<Policy>("/api/policy");
   // A change to the policy changes the profiles in force, so both are read again.
   const reloadAll = () => {
@@ -322,7 +316,7 @@ function Node({ agent }: { agent: Agent }) {
 // with the names of those profiles; it can then be added with them, in one
 // change of the policy made against the version the page saw (policyHash).
 interface AddTeamProps {
-  templates: Template[];
+  templates: TeamTemplate[];
   existing: string[];
   policyHash: string;
   onAdded: (team: string) => void;

@@ -7,8 +7,11 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -46,6 +49,7 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 		return h.refuse(engine, call, "Agentry couldn't read the hook payload: "+err.Error())
 	}
 
+	h.resumeIfLimited(call, signals)
 	h.recordPlan(call)
 	for _, signal := range signals {
 		if signal.Kind == engines.ActionRequested && engine.IsGate(call.Event) {
@@ -86,6 +90,22 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 		if tokens == 0 { // a turn always uses some, so 0 is never a count
 			p.Data["tokensUnknown"] = cmp.Or(unknown, NoTokensReported)
 		}
+	case engines.UsageLimited:
+		resetsAt := ""
+		if !signal.ResetsAt.IsZero() {
+			resetsAt = signal.ResetsAt.UTC().Format(time.RFC3339)
+		}
+		p.Type, p.Data = events.TurnLimited, map[string]any{"agent": call.Agent, "error": signal.Error, "details": signal.Details, "resetsAt": resetsAt}
+		if reason := h.stillLimited(call); reason != "" {
+			p.Type, p.Correlation, p.Data = events.IssueRaised, "", map[string]any{"reason": reason}
+		}
+	case engines.TurnFailed:
+		// An issue ends whichever turn is open, so a late call from a turn
+		// that already ended must not end the next one.
+		if task, err := h.task(call.Task); err != nil || task.OpenTurn() == nil || task.OpenTurn().ID != call.Turn {
+			return
+		}
+		p.Type, p.Correlation, p.Data = events.IssueRaised, "", map[string]any{"reason": failedTurnReason(signal)}
 	default:
 		return
 	}
@@ -93,6 +113,61 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
 		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
 	}
+}
+
+// stillLimited says why a turn that hits the usage limit again, straight
+// after Agentry retried it at the reset, is an issue: it is retried once,
+// never waited for again and again. A turn that called a tool since the
+// retry did work, so its new limit is waited out as any other. "" when
+// the limit is one to wait for.
+func (h *Handler) stillLimited(call hookcall.Call) string {
+	task, err := h.task(call.Task)
+	if err != nil {
+		return ""
+	}
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != call.Turn || turn.RetriedAt.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%s's %s is still at the usage limit after the retry at ~%s", turn.Agent, turn.ID, turn.RetriedAt.Local().Format("15:04"))
+}
+
+// failedTurnReason says what stopped the turn, in the engine's own words
+// when it gave some.
+func failedTurnReason(signal engines.Signal) string {
+	reason := "the turn stopped at an API error (" + signal.Error + ")"
+	if details := strings.TrimSpace(signal.Details); details != "" {
+		reason += ": " + details
+	}
+	return reason
+}
+
+// resumeIfLimited records that a turn waiting for a usage limit goes on when
+// its engine works again: the session carried on by itself, so the turn is
+// watched as a working one again. A session starting or ending, or the turn
+// stopping at the limit or an error, isn't work.
+func (h *Handler) resumeIfLimited(call hookcall.Call, signals []engines.Signal) {
+	if !slices.ContainsFunc(signals, isWork) {
+		return
+	}
+	task, err := h.task(call.Task)
+	if err != nil {
+		return
+	}
+	if turn := task.OpenTurn(); turn == nil || turn.ID != call.Turn || turn.Limited == "" {
+		return
+	}
+	h.store.Propose(events.Proposal{Stream: call.Task, Actor: h.machineOf(call.Task), Type: events.TurnResumed,
+		Correlation: call.Turn, Data: map[string]any{"agent": call.Agent, "reason": "engine"}})
+}
+
+// isWork says the signal comes from an engine that is working.
+func isWork(signal engines.Signal) bool {
+	switch signal.Kind {
+	case engines.PromptReceived, engines.ActionRequested, engines.ActionFinished, engines.TurnEnded, engines.Waiting:
+		return true
+	}
+	return false
 }
 
 // recordPlan keeps the turn's plan when the agent has changed it. It goes
@@ -130,10 +205,39 @@ func (h *Handler) recordWhatWasLearned(name, learned string) {
 	if h.state.Broken(events.AgentsStream) != nil {
 		return
 	}
+	// The stored knowledge went through JSON, which makes it valid UTF-8, so
+	// text with a bad byte would never equal it and every turn would write
+	// another full copy.
+	learned = strings.ToValidUTF8(learned, "\uFFFD")
 	agent, ok := h.state.Roster().Get(name)
 	if ok && learned != strings.TrimSpace(agent.Knowledge) {
-		h.store.Propose(agent.Learned(events.Actor{Kind: events.Agent, ID: agent.Name}, learned))
+		h.keepLearned(agent, learned)
 	}
+}
+
+// keepLearned proposes learned as the agent's knowledge, with agent as the
+// hook read it. The rules refuse a patch made from a version replaced since,
+// as when you edit the knowledge on the page meanwhile, and then a full copy
+// goes instead.
+func (h *Handler) keepLearned(agent agents.Agent, learned string) {
+	p := learning(agent, learned)
+	if _, rejection, err := h.store.Propose(p); err == nil && rejection != nil && agents.IsPatch(p) {
+		h.store.Propose(agent.Learned(p.Actor, learned))
+	}
+}
+
+// learning is the event that sets the agent's knowledge to learned: a patch
+// on what it knows, or a full copy for its first version and whenever the
+// patches since its last full copy would add up to more than the text.
+// Rebuilding any version then reads at most its last full copy and its own
+// length again (Target 9 in docs/design/log-growth.md).
+func learning(agent agents.Agent, learned string) events.Proposal {
+	by := events.Actor{Kind: events.Agent, ID: agent.Name}
+	patch := agents.Diff(agent.Knowledge, learned)
+	if agent.Knowledge == "" || agent.Patched()+len(patch.Middle) > len(learned) {
+		return agent.Learned(by, learned)
+	}
+	return agent.Patching(by, patch)
 }
 
 func (h *Handler) refuse(engine engines.Engine, call hookcall.Call, reason string) hookcall.Reply {

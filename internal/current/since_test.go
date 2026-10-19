@@ -73,7 +73,7 @@ func TestTheTaskOrderIsByPositionWhateverTheLoadOrder(t *testing.T) {
 	}
 	want := []string{"task-1", "task-2", "task-3", "task-4"}
 	for cut := range len(log) + 1 {
-		s := New()
+		s := New(withIdeas, ideas.Streams())
 		streams := streamsOf(log[:cut])
 		slices.Reverse(streams)
 		for _, stream := range streams {
@@ -101,7 +101,7 @@ func TestTheIdeasAreInLogOrderWithoutBrokenOnes(t *testing.T) {
 		log[i].Position = int64(i + 1)
 	}
 	for cut := range len(log) + 1 {
-		s := New()
+		s := New(withIdeas, ideas.Streams())
 		streams := streamsOf(log[:cut])
 		slices.Reverse(streams)
 		for _, stream := range streams {
@@ -111,14 +111,14 @@ func TestTheIdeasAreInLogOrderWithoutBrokenOnes(t *testing.T) {
 		for _, e := range log[cut:] {
 			s.Apply(e)
 		}
-		if got := ideaIDsOf(s.Ideas()); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
+		if got := ideaIDsOf(ideas.All(s)); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
 			t.Errorf("loaded the first %d events backwards: ideas %v", cut, got)
 		}
 		s.guard("idea-2", func() string { return "applying idea.exploded to idea-2" }, func() { panic("boom") })
-		if got := ideaIDsOf(s.Ideas()); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-4"}) {
+		if got := ideaIDsOf(ideas.All(s)); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-4"}) {
 			t.Errorf("loaded the first %d events backwards: with idea-2 broken, ideas %v", cut, got)
 		}
-		if order := s.ideaIDs(); !slices.Equal(order, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
+		if order := s.OwnedIDs(ideas.Prefix); !slices.Equal(order, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
 			t.Errorf("loaded the first %d events backwards: the idea order should still list idea-2, as the log does: %v", cut, order)
 		}
 	}

@@ -4,6 +4,7 @@
 package agents
 
 import (
+	"fmt"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -40,7 +41,14 @@ type Agent struct {
 	Knowledge string `json:"knowledge"`
 
 	untouched bool // still as Agentry wrote it: you have never changed it
+	// patched is the bytes of patch middles since its knowledge's last full
+	// copy: what rebuilding its knowledge reads beyond that copy.
+	patched int
 }
+
+// Patched is the bytes of patch middles since the agent's knowledge was last
+// written as a full copy.
+func (a Agent) Patched() int { return a.patched }
 
 // Learned is the event that sets the agent's knowledge to knowledge.
 func (a Agent) Learned(by events.Actor, knowledge string) events.Proposal {
@@ -141,7 +149,7 @@ func (r *Roster) Apply(e events.Event) {
 			if !e.Has("template") {
 				agent.Template = templateBefore(agent, &roster[i])
 			}
-			agent.Knowledge = roster[i].Knowledge
+			agent.Knowledge, agent.patched = roster[i].Knowledge, roster[i].patched
 			roster[i] = agent
 		}
 	case events.AgentRenamed:
@@ -150,7 +158,7 @@ func (r *Roster) Apply(e events.Event) {
 		}
 	case events.AgentLearned:
 		if i := roster.index(e.Text("name")); i >= 0 {
-			roster[i].Knowledge = e.Text("knowledge")
+			roster[i].learn(e)
 		}
 	case events.AgentRemoved:
 		if i := roster.index(e.Text("name")); i >= 0 {
@@ -158,6 +166,26 @@ func (r *Roster) Apply(e events.Event) {
 		}
 	}
 	*r = roster
+}
+
+// learn sets the agent's knowledge by an agent.learned: a full copy of it,
+// or a patch on what it knows. The rules verified the patch against this
+// same knowledge, so only its bounds are checked here; one that doesn't fit
+// them is a bug, and panics.
+func (a *Agent) learn(e events.Event) {
+	if !IsPatch(e.Proposal) {
+		a.Knowledge, a.patched = e.Text("knowledge"), 0
+		return
+	}
+	patch, err := PatchOf(e.Proposal)
+	knowledge := ""
+	if err == nil {
+		knowledge, err = patch.Apply(a.Knowledge)
+	}
+	if err != nil {
+		panic(fmt.Sprintf("%s's knowledge at position %d: %v", a.Name, e.Position, err))
+	}
+	a.Knowledge, a.patched = knowledge, a.patched+len(patch.Middle)
 }
 
 func (r Roster) Get(name string) (Agent, bool) {

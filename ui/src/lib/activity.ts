@@ -1,11 +1,13 @@
 import { onMachine } from "./machines";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { readPlan } from "./plan";
+import { limitText } from "./time";
 import { tokens } from "./tokens";
 
-// A task's activity: its whole event log read as rows a person follows,
-// oldest first (newestFirst turns it round for the page). An action's request, decision and result are one row, and
-// each turn opens with a row of its own. The Events tab keeps the raw log.
+// A task's activity: its event log, or the newest part of it, read as rows
+// a person follows, oldest first (newestFirst turns it round for the page).
+// An action's request, decision and result are one row, and each turn opens
+// with a row of its own. The Events tab keeps the raw log.
 
 export type ActivityKind = "turn" | "action" | "message" | "waiting" | "issue" | "ended" | "note";
 export type ActivityTone = "default" | "success" | "warning" | "danger" | "info";
@@ -31,10 +33,9 @@ export interface ActivityItem {
 export const SHOWS = ["all", "actions", "messages"] as const;
 export type Show = (typeof SHOWS)[number];
 
-export function activityOf(task: TaskDetail): ActivityItem[] {
+export function activityOf(task: TaskDetail, log: LogEvent[]): ActivityItem[] {
   const actions = new Map((task.actions ?? []).map((a) => [a.id, a]));
   const turns = new Map((task.turnList ?? []).map((t) => [t.id, t]));
-  const log = task.events ?? [];
 
   // When each action was settled: its result, or its denial.
   const settledAt = new Map<string, string>();
@@ -153,8 +154,8 @@ function rowOf(
         title: info.agent,
         turnInfo: info,
         until: ended,
-        live: !info.ended,
-        tone: info.issue ? "danger" : "info",
+        live: !info.ended && !info.limited,
+        tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
       };
     }
     case "turn.ended": {
@@ -181,6 +182,20 @@ function rowOf(
         ...base,
         kind: "note",
         title: text(e, "action") ? `You chose "${text(e, "action")}" on ${e.correlation}` : `You sent your comments on ${e.correlation}`,
+      };
+    case "turn.limited":
+      return {
+        ...base,
+        kind: "waiting",
+        title: "Waiting for the usage limit",
+        body: limitText(text(e, "resetsAt"), e.at),
+        tone: "warning",
+      };
+    case "turn.resumed":
+      return {
+        ...base,
+        kind: "note",
+        title: text(e, "reason") === "reset" ? "Went on after the usage limit reset" : "Went on after the usage limit",
       };
     case "turn.stopped":
       return { ...base, kind: "note", title: "You stopped this turn, so the coordinator reads what you said" };

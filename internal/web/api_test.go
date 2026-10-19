@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -40,14 +41,20 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 // newTestServerWith is newTestServer with the new tasks' limits in limits.
 func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	return newTestServerOn(t, filepath.Join(t.TempDir(), "agentry.db"), limits)
+}
+
+// newTestServerOn is newTestServerWith on the log at path.
+func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
-		Features: []features.Feature{ideas.Feature(state)}}, hooks, nil).Handler())
+		Features: []features.Feature{ideas.Feature()}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }
@@ -89,7 +96,7 @@ func TestCreateListAndShowATask(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" || len(detail.Events) != 1 {
+	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" {
 		t.Errorf("detail: %+v", detail)
 	}
 	if code, _ := call(t, server, "GET", "/api/tasks/task-9", ""); code != http.StatusNotFound {
@@ -174,7 +181,7 @@ func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
 		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
 	}
 	at := itoa(s.LastPosition())
-	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
 		if got := positionOf(t, server, "GET", path); got != at {
 			t.Errorf("GET %s: position %q, want %s", path, got, at)
 		}
@@ -484,7 +491,8 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 // real rules would refuse only in a race.
 func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state, catalogue := current.New(), events.Core()
+	catalogue := events.Core()
+	state := current.New(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
@@ -1454,6 +1462,46 @@ func TestYouEditWhatAnAgentKnows(t *testing.T) {
 	}
 }
 
+// The history lists the same versions with the same texts whether the log
+// keeps each as a full copy or as a patch on the one before, across a rename.
+func TestTheKnowledgeHistoryIsTheSameFromPatches(t *testing.T) {
+	versions := []string{"Use gofmt.", "Use gofmt.\nRun go vet.", "Use gofmt -s.\nRun go vet.", "Use gofmt -s.\nRun go vet ./..."}
+	history := func(patches bool) string {
+		server, s := newTestServer(t)
+		engineer := agents.Agent{Name: "engineer"}
+		by, before := events.Actor{Kind: events.Agent, ID: "engineer"}, ""
+		for i, text := range versions {
+			if i == 2 {
+				s.Propose(engineer.Renaming(you, "builder"))
+				engineer.Name, by.ID = "builder", "builder"
+			}
+			p := engineer.Learned(by, text)
+			if patches && i > 0 {
+				p = engineer.Patching(by, agents.Diff(before, text))
+			}
+			if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+				t.Fatal(err, rejection)
+			}
+			before = text
+		}
+		_, body := call(t, server, "GET", "/api/agents/builder/knowledge", "")
+		var changes []map[string]any
+		json.Unmarshal([]byte(body), &changes)
+		for _, change := range changes {
+			delete(change, "at") // each log was written at its own time
+		}
+		listed, _ := json.Marshal(changes)
+		return string(listed)
+	}
+	copies, patches := history(false), history(true)
+	if want := `[{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet ./..."},{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet."}]`; copies != want {
+		t.Errorf("from full copies: %s\nwant %s", copies, want)
+	}
+	if patches != copies {
+		t.Errorf("from patches: %s\nfrom full copies: %s", patches, copies)
+	}
+}
+
 func TestATaskCanStartANewRepo(t *testing.T) {
 	t.Setenv("GIT_AUTHOR_NAME", "Test")
 	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.com")
@@ -1577,6 +1625,30 @@ func TestATeamIsRemovedWithItsAgents(t *testing.T) {
 	_, body := call(t, server, "GET", "/api/agents", "")
 	if strings.Contains(body, `"Research"`) || strings.Contains(body, "research-lead") {
 		t.Errorf("Research should be gone: %s", body)
+	}
+}
+
+// The templates say their ID and the features they turn on, so the page can
+// find the team made from one by template, whatever it is called.
+func TestTeamTemplatesSayTheirIDAndFeatures(t *testing.T) {
+	server, _ := newTestServer(t)
+	_, body := call(t, server, "GET", "/api/teams/templates", "")
+	var templates []struct {
+		ID       string
+		Team     string
+		Features []string
+	}
+	if err := json.Unmarshal([]byte(body), &templates); err != nil || len(templates) != len(agents.Templates) {
+		t.Fatalf("templates: %v %s", err, body)
+	}
+	for i, template := range templates {
+		want := agents.Templates[i]
+		if template.ID != want.ID || template.Team != want.Team || !slices.Equal(template.Features, want.Features) {
+			t.Errorf("template %d is %+v, not %s (%s) with %v", i, template, want.ID, want.Team, want.Features)
+		}
+	}
+	if !strings.Contains(body, `"id":"visionaries"`) || !strings.Contains(body, `"features":["ideas"]`) || !strings.Contains(body, `"features":[]`) {
+		t.Errorf("Visionaries should list ideas, and a template with none an empty list:\n%s", body)
 	}
 }
 

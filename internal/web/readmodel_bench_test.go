@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -205,7 +206,8 @@ func watchdogLoad(state *current.State, stop chan struct{}) {
 // it, and returns the state.
 func openAndClose(t *testing.T, path string) *current.State {
 	t.Helper()
-	state, catalogue := current.New(), storetest.WithIdeas()
+	catalogue := storetest.WithIdeas()
+	state := current.New(catalogue, ideas.Streams())
 	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)

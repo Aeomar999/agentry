@@ -14,7 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -32,11 +32,13 @@ type Loop struct {
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
+	held   held     // tasks waiting for a slot (slots.go)
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
-	Clones   string       // where repos the user names by a git address are cloned, for a "move"
-	Defaults tasks.Limits // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Clones   string             // where repos the user names by a git address are cloned, for a "move"
+	Defaults tasks.Limits       // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Features []features.Feature // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
@@ -59,14 +61,24 @@ func (l *Loop) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for _, id := range touchedTasks(l.store.Catalogue(), batch) {
-			l.act(id)
-		}
-		l.followUps(batch)
+		l.take(batch)
 	}
 }
 
-// touchedTasks are the tasks a batch changed, each once, in order.
+// take acts on each task a batch of the log touched, then on those waiting
+// for a slot, as the batch may have freed one, then follows up the closes
+// in it.
+func (l *Loop) take(batch []events.Event) {
+	for _, id := range touchedTasks(l.store.Catalogue(), batch) {
+		l.act(id)
+	}
+	l.wakeHeld()
+	l.followUps(batch)
+}
+
+// touchedTasks are the tasks a batch changed, each once, in order. A
+// foreign stream is no task's, so the loop never reads one as a task. When
+// tasks can be archived, an archived task is skipped here too.
 func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 	seen := map[string]bool{}
 	var ids []string
@@ -81,6 +93,7 @@ func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 }
 
 func (l *Loop) act(id string) {
+	delete(l.held, id) // held again below if its move is still a turn with no slot
 	task, roster, err := l.load(id)
 	if errors.Is(err, current.ErrArchived) {
 		return // done, and it takes nothing more
@@ -126,8 +139,15 @@ func (l *Loop) act(id string) {
 	case PrepareWorktree:
 		l.prepareWorktree(task)
 	case StartTurn:
+		if l.holdBack(task) {
+			return
+		}
 		l.startTurn(task, roster, move)
 	case ApplyDecision:
+		if why := l.unreadable(task, roster, move.Decision); why != "" {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": why})
+			return
+		}
 		l.apply(task, roster, move.Decision)
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
@@ -214,7 +234,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	shared, _ := l.filesFor(task)
 	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.chosenFor(task, move.Agent))
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -318,14 +338,8 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		summary := decision.Summary
-		if len(decision.Ideas) > 0 {
-			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
-			if own, _ := roster.Get(task.Coordinator); ideas.Suggests(own) {
-				note = l.suggest(task, decision.Ideas)
-			}
-			if note != "" {
-				summary += "\n\n" + note
-			}
+		if note := l.onDone(task, roster, decision); note != "" {
+			summary += "\n\n" + note
 		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)

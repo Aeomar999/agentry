@@ -57,3 +57,23 @@ func TestTheAutoAcceptRuleIsStrictUntilYouLoosenIt(t *testing.T) {
 		t.Errorf("turning accepting off keeps the rule: %+v", s)
 	}
 }
+
+func TestTasksRunWithNoLimitUntilYouSetOne(t *testing.T) {
+	s := FromEvents([]events.Event{changed(map[string]any{AutoAcceptIdeas: true})})
+	if s.MaxRunningTasks != 0 {
+		t.Errorf("a log that never named the limit should read as no limit: %d", s.MaxRunningTasks)
+	}
+	// As read back from the log, a number is a float64.
+	if s = s.Next(changed(map[string]any{MaxRunningTasks: float64(2)})); s.MaxRunningTasks != 2 || !s.AutoAcceptIdeas {
+		t.Errorf("set to 2: %+v", s)
+	}
+	if got := s.Next(changed(map[string]any{AutoStartIdeas: true})); got.MaxRunningTasks != 2 {
+		t.Errorf("another setting changed: the limit should stay 2: %+v", got)
+	}
+	if got := s.Next(changed(map[string]any{MaxRunningTasks: -1})); got.MaxRunningTasks != 2 {
+		t.Errorf("a negative limit should leave the one before: %+v", got)
+	}
+	if s = s.Next(changed(map[string]any{MaxRunningTasks: 0})); s.MaxRunningTasks != 0 {
+		t.Errorf("cleared: it should be no limit again: %+v", s)
+	}
+}

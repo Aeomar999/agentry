@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -79,7 +80,7 @@ func (c *Catalogue) addPrefix(r Registration) error {
 		return fmt.Errorf("stream types %v need a stream prefix", slices.Sorted(maps.Keys(r.Types)))
 	case r.Prefix == "":
 		return nil
-	case strings.HasPrefix(r.Prefix, "task-") || strings.HasPrefix("task-", r.Prefix):
+	case strings.HasPrefix(r.Prefix, TaskPrefix) || strings.HasPrefix(TaskPrefix, r.Prefix):
 		return fmt.Errorf("stream prefix %q overlaps task-, which names tasks", r.Prefix)
 	}
 	for _, stream := range coreStreams {
@@ -127,10 +128,10 @@ var coreTypes = map[Type]Spec{
 	AgentCreated: {Fields: []string{"name", "prompt", "engine"}, Writers: []ActorKind{Human, System}},
 	AgentChanged: {Fields: []string{"name", "prompt", "engine"}, Writers: []ActorKind{Human, System}},
 	AgentRemoved: {Fields: []string{"name"}, Writers: []ActorKind{Human}},
-	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
+	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty; a patch has "middle" instead, which the rules check
 	AgentRenamed: {Fields: []string{"name", "to"}, Writers: []ActorKind{Human}},
 
-	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule
+	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)
 	TaskRenamed:        {Fields: []string{"title"}, Writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {Fields: []string{"text"}, Writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {Writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
@@ -177,6 +178,8 @@ var coreTypes = map[Type]Spec{
 	PlanUpdated:  {Correlation: true, Writers: []ActorKind{Worker}}, // "plan" may be empty: the agent cleared it
 	AgentWaiting: {Fields: []string{"question"}, Correlation: true, Writers: []ActorKind{Worker, System}},
 	TurnEnded:    {Fields: []string{"agent", "report"}, Correlation: true, Writers: []ActorKind{Worker}},
+	TurnLimited:  {Fields: []string{"agent", "error", "details", "resetsAt"}, Correlation: true, Writers: []ActorKind{Worker}}, // "resetsAt" "" when the engine didn't say
+	TurnResumed:  {Fields: []string{"agent", "reason"}, Correlation: true, Writers: []ActorKind{Worker, System}},               // "reason" "reset" or "engine"
 	IssueRaised:  {Fields: []string{"reason"}, Writers: []ActorKind{Worker, System}},
 	TurnStopped:  {Correlation: true, Writers: []ActorKind{Human}},
 
@@ -196,7 +199,7 @@ var coreTypes = map[Type]Spec{
 	PolicyLoaded:  {Fields: []string{"hash", "path"}, Writers: []ActorKind{System, Human}}, // "text", "change", "diff", "backup", "onDisk"; Human: a change made on the Policy page
 	PolicyRefused: {Fields: []string{"reason", "path"}, Writers: []ActorKind{System}},
 
-	SettingsChanged: {Writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule"
+	SettingsChanged: {Writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule", "maxRunningTasks" (0 is no limit)
 
 	ProposalRejected: {Writers: nil},
 }
@@ -214,17 +217,66 @@ var streamOf = map[Type]string{
 // coreStreams are the streams that aren't tasks, each holding the types streamOf puts there.
 var coreStreams = []string{AgentsStream, PolicyStream, WorkersStream, ConnectionsStream, SettingsStream}
 
-// IsTaskStream is false for the core's streams that aren't tasks, and for
-// every stream a feature registered a prefix for.
-func (c *Catalogue) IsTaskStream(stream string) bool {
-	if slices.Contains(coreStreams, stream) {
-		return false
+// StreamKind is what a stream is, by its name alone.
+type StreamKind int
+
+const (
+	CoreStream    StreamKind = iota // one of the core's fixed streams: agents, settings and the rest
+	OwnedStream                     // starts with a prefix a feature in this catalogue registered
+	TaskStream                      // a task's: not core, not owned, and starts with task-
+	ForeignStream                   // anything else: a feature this build doesn't have wrote it
+)
+
+// TaskPrefix starts every task's stream name: Store.Create("task-", ...).
+const TaskPrefix = "task-"
+
+// Numbered is the stream Store.Create names when made streams of its kind
+// are in the log: prefix and the next number, so task-1 is the first task.
+func Numbered(prefix string, made int) string { return prefix + strconv.Itoa(made+1) }
+
+// KindOf says what a stream is. It needs no state, so CheckShape can ask
+// it; whether a task stream's task exists is for the rules to say.
+func (c *Catalogue) KindOf(stream string) StreamKind {
+	switch {
+	case slices.Contains(coreStreams, stream):
+		return CoreStream
+	case slices.ContainsFunc(c.prefixes, func(prefix string) bool { return strings.HasPrefix(stream, prefix) }):
+		return OwnedStream
+	case strings.HasPrefix(stream, TaskPrefix):
+		return TaskStream
 	}
-	return !slices.ContainsFunc(c.prefixes, func(prefix string) bool { return strings.HasPrefix(stream, prefix) })
+	return ForeignStream
 }
 
-// CheckShape is check 1: the type is known and the proposal carries what it must.
+// IsTaskStream says whether a stream is a task's.
+func (c *Catalogue) IsTaskStream(stream string) bool { return c.KindOf(stream) == TaskStream }
+
+// Knows says whether a type is one of the catalogue's.
+func (c *Catalogue) Knows(kind Type) bool {
+	_, known := c.specs[kind]
+	return known
+}
+
+// ForeignPrefix is a stream's name up to and with its last '-': "idea-"
+// for idea-3. A name with no '-' is its own prefix.
+func ForeignPrefix(stream string) string {
+	if i := strings.LastIndex(stream, "-"); i >= 0 {
+		return stream[:i+1]
+	}
+	return stream
+}
+
+// ForeignReason is why a proposal into a foreign stream is refused.
+func ForeignReason(stream string) string {
+	return "stream " + stream + " belongs to a feature this build doesn't have"
+}
+
+// CheckShape is check 1: the stream is one this build has, the type is
+// known and the proposal carries what it must.
 func (c *Catalogue) CheckShape(p Proposal) *Rejection {
+	if p.Stream != "" && c.KindOf(p.Stream) == ForeignStream {
+		return &Rejection{"shape", ForeignReason(p.Stream)}
+	}
 	kind, known := c.specs[p.Type]
 	if !known {
 		return &Rejection{"shape", fmt.Sprintf("unknown event type %q", p.Type)}

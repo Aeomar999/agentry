@@ -14,7 +14,7 @@ export const SIZES: Record<Idea["size"], string> = { S: "small", M: "medium", L:
 // IdeaCard is one open idea, the way its session wrote it up: the problem,
 // the feature, why now, its risks, and which viewpoints backed or doubted
 // it, and why Agentry didn't accept it for you. Accept makes it a task in
-// your Backlog; Dismiss puts it away.
+// your Backlog or starts it; Dismiss puts it away.
 export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: () => void; onDismiss: () => void }) {
   return (
     <Panel

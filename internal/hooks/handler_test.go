@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -435,6 +436,101 @@ func TestWhatTheAgentLearnedIsKept(t *testing.T) {
 	}
 }
 
+// After the first version, the agent's knowledge is kept as patches, until
+// they would add up to more than the text: then a full copy goes again.
+func TestLaterVersionsOfWhatTheAgentLearnedArePatches(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	for _, c := range []struct {
+		learned string
+		patch   bool
+	}{
+		{"Use gofmt.", false}, // the first version
+		{"Use gofmt.\nRun go vet.", true},
+		{"Use gofmt -s.\nRun go vet.", true},      // patched 13 + 3, of 26
+		{"Use gofmt -s.\nRun go vet ./...", true}, // and 5, of 30
+		{"Run the race detector.", false},         // 22 more would pass the text's own length
+		{"Run the race detector on CI.", true},
+	} {
+		h.recordWhatWasLearned("engineer", c.learned)
+		stream, _ := s.Stream(events.AgentsStream)
+		last := stream[len(stream)-1]
+		if last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) != c.patch {
+			t.Errorf("%q: kept as %s %v, want a patch: %v", c.learned, last.Type, last.Data, c.patch)
+		}
+		if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != c.learned {
+			t.Errorf("%q: the engineer knows %q", c.learned, engineer.Knowledge)
+		}
+		if engineer, _ := agents.FromEvents(stream).Get("engineer"); engineer.Knowledge != c.learned {
+			t.Errorf("%q: a replay knows %q", c.learned, engineer.Knowledge)
+		}
+	}
+}
+
+// You edit the knowledge on the page between the hook reading it and
+// proposing what the agent learned: the patch made from what the hook read
+// is refused, and a full copy of the agent's text lands instead.
+func TestAStalePatchIsSentAgainAsAFullCopy(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Use gofmt.")
+	read, _ := state.Roster().Get("engineer")
+	if _, rejection, err := s.Propose(read.Learned(events.Actor{Kind: events.Human, ID: "you"}, "Use tabs.")); err != nil || rejection != nil {
+		t.Fatal(err, rejection)
+	}
+	h.keepLearned(read, "Use gofmt.\nRun go vet.")
+
+	stream, _ := s.Log(events.AgentsStream)
+	if rejected := stream[len(stream)-2]; rejected.Type != events.ProposalRejected {
+		t.Errorf("before the full copy: %s %v, want the patch refused", rejected.Type, rejected.Data)
+	}
+	if last := stream[len(stream)-1]; last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) || last.Actor.ID != "engineer" {
+		t.Errorf("last: %s %v by %s, want the engineer's full copy", last.Type, last.Data, last.Actor)
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt.\nRun go vet." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
+// A patch with a byte that isn't UTF-8 reaches the rules: they refuse it,
+// and a full copy of the text lands instead.
+func TestAPatchThatIsNotUTF8IsSentAgainAsAFullCopy(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Use gofmt.")
+	read, _ := state.Roster().Get("engineer")
+	h.keepLearned(read, "Use gofmt.\nRun go vet \xff.")
+
+	stream, _ := s.Log(events.AgentsStream)
+	if rejected := stream[len(stream)-2]; rejected.Type != events.ProposalRejected || !strings.Contains(rejected.Text("reason"), "UTF-8") {
+		t.Errorf("before the full copy: %s %v, want the patch refused for its UTF-8", rejected.Type, rejected.Data)
+	}
+	if last := stream[len(stream)-1]; last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) || last.Actor.ID != "engineer" {
+		t.Errorf("last: %s %v by %s, want the engineer's full copy", last.Type, last.Data, last.Actor)
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt.\nRun go vet \uFFFD." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
+// The agent writes a byte that isn't UTF-8 in its knowledge file and leaves
+// it there: the knowledge keeps U+FFFD in its place, and the next turn, with
+// the same text, writes nothing.
+func TestTextThatIsNotUTF8IsKeptOnce(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Run go vet \xff.")
+	before, _ := s.Log(events.AgentsStream)
+	h.recordWhatWasLearned("engineer", "Run go vet \xff.")
+
+	if after, _ := s.Log(events.AgentsStream); len(after) != len(before) {
+		t.Errorf("the same text again added %v, want nothing", after[len(before):])
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Run go vet \uFFFD." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
 func TestThePlanFollowsTheFile(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)
@@ -464,5 +560,157 @@ func TestThePlanFollowsTheFile(t *testing.T) {
 	}
 	if updates != 2 {
 		t.Errorf("%d plan.updated events, want 2: an unchanged plan isn't recorded again", updates)
+	}
+}
+
+// Claude Code's StopFailure at a usage limit keeps the turn open with when
+// the limit resets; it raises no issue.
+func TestAUsageLimitIsRecordedWithItsResetTime(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure",
+		`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You've hit your session limit · resets 3am (UTC)"}`))
+
+	task := taskIn(t, s)
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-2" || turn.ResetsAt.IsZero() || turn.ResetsAt.Hour() != 3 || turn.ResetsAt.Location() != time.UTC {
+		t.Fatalf("the turn should stay open, limited until 3am UTC: %+v", turn)
+	}
+	stream, _ := s.Stream("task-1")
+	last := stream[len(stream)-1]
+	if last.Type != events.TurnLimited || last.Text("resetsAt") != turn.ResetsAt.Format(time.RFC3339) || last.Text("error") != "rate_limit" {
+		t.Errorf("last event: %+v", last)
+	}
+	if task.IssuesInARow != 0 {
+		t.Errorf("issues in a row: %d", task.IssuesInARow)
+	}
+}
+
+// A limited turn whose engine carries on by itself, with a tool call, a
+// prompt or its end, resumes first, so it is watched as working again. A
+// call that says nothing, or the limit again, leaves it limited.
+func TestEngineActivityResumesALimitedTurn(t *testing.T) {
+	limit := hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`)
+	cases := map[string]struct {
+		call    hookcall.Call
+		resumes bool
+		then    events.Type // the call's own event, after the resume
+	}{
+		"a tool call":     {hookCall("PreToolUse", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"t1"}`), true, events.ActionRequested},
+		"a prompt":        {hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Carry on."}`), true, ""},
+		"the end":         {hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`), true, events.TurnEnded},
+		"idle":            {hookCall("Notification", `{"hook_event_name":"Notification","notification_type":"idle_prompt"}`), false, ""},
+		"the limit":       {limit, false, ""},
+		"a session start": {hookCall("SessionStart", `{"hook_event_name":"SessionStart","session_id":"s2","source":"resume"}`), false, ""},
+		"a session end":   {hookCall("SessionEnd", `{"hook_event_name":"SessionEnd","reason":"clear"}`), false, ""},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			s, state := engineerAtWork(t)
+			h := NewHandler(s, state, judgeByCommand)
+			h.Handle(context.Background(), limit)
+			h.Handle(context.Background(), c.call)
+
+			stream, _ := s.Stream("task-1")
+			resumed := slices.IndexFunc(stream, func(e events.Event) bool { return e.Type == events.TurnResumed })
+			if (resumed >= 0) != c.resumes {
+				t.Fatalf("resumed at %d, want a resume: %v", resumed, c.resumes)
+			}
+			if !c.resumes {
+				if taskIn(t, s).OpenTurn().Limited == "" {
+					t.Errorf("the turn should still be limited")
+				}
+				return
+			}
+			if e := stream[resumed]; e.Text("reason") != "engine" || e.Text("agent") != "engineer" || e.Correlation != "turn-2" || e.Actor.Kind != events.Worker {
+				t.Errorf("resumed: %+v", e)
+			}
+			if c.then != "" && !slices.ContainsFunc(stream[resumed+1:], func(e events.Event) bool { return e.Type == c.then }) {
+				t.Errorf("the resume should come before the call's own %s: %+v", c.then, stream[resumed-1:])
+			}
+			if turn := taskIn(t, s).Turn("turn-2"); turn.Limited != "" || turn.Resumes != 1 {
+				t.Errorf("turn %+v", turn)
+			}
+		})
+	}
+}
+
+// An API error on a limited turn is its issue, not a sign the engine goes on.
+func TestAnErrorOnALimitedTurnIsAnIssueNotAResume(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"server_error"}`))
+
+	stream, _ := s.Stream("task-1")
+	if slices.ContainsFunc(stream, func(e events.Event) bool { return e.Type == events.TurnResumed }) {
+		t.Errorf("an error resumed the limited turn: %+v", stream)
+	}
+	if !slices.ContainsFunc(stream, func(e events.Event) bool { return e.Type == events.IssueRaised }) {
+		t.Errorf("the error raised no issue: %+v", stream)
+	}
+}
+
+// Any other StopFailure ends the turn at once as an issue with what Claude
+// Code said, so nobody waits for the watchdog. A late one from a turn that
+// already ended doesn't end the next.
+func TestAnotherStopFailureIsAnIssue(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	stale := hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"overloaded"}`)
+	stale.Turn = "turn-1"
+	h.Handle(context.Background(), stale)
+	if task := taskIn(t, s); task.OpenTurn() == nil || task.IssuesInARow != 0 {
+		t.Fatalf("a call from an ended turn changed the open one: %+v", task.Turns)
+	}
+
+	h.Handle(context.Background(), hookCall("StopFailure",
+		`{"hook_event_name":"StopFailure","error":"overloaded","last_assistant_message":"API Error: Overloaded"}`))
+	task := taskIn(t, s)
+	turn := task.Turn("turn-2")
+	if !turn.Ended || turn.Issue != "the turn stopped at an API error (overloaded): API Error: Overloaded" || task.IssuesInARow != 1 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
+	}
+}
+
+// retriedAtTheReset is the engineer's turn-2 stopped at a usage limit and
+// retried by Agentry when it reset.
+func retriedAtTheReset(t *testing.T) (*store.Store, *Handler) {
+	t.Helper()
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`))
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.System, ID: "watchdog"},
+		Type: events.TurnResumed, Correlation: "turn-2", Data: map[string]any{"agent": "engineer", "reason": "reset"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	return s, h
+}
+
+// A turn retried at the reset that hits the limit again before doing any
+// work is retried once only: it ends as an issue, not another wait.
+func TestALimitStraightAfterTheRetryIsAnIssue(t *testing.T) {
+	s, h := retriedAtTheReset(t)
+	retried := taskIn(t, s).Turn("turn-2").RetriedAt
+	h.Handle(context.Background(), hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Your Claude usage limit has reset."}`))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 8am (UTC)"}`))
+
+	task := taskIn(t, s)
+	want := "engineer's turn-2 is still at the usage limit after the retry at ~" + retried.Local().Format("15:04")
+	if turn := task.Turn("turn-2"); retried.IsZero() || !turn.Ended || turn.Issue != want || task.IssuesInARow != 1 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
+	}
+}
+
+// A turn that called a tool after the retry did work, so a later limit is a
+// new one, waited out as the first was.
+func TestALimitAfterWorkSinceTheRetryIsWaitedOut(t *testing.T) {
+	s, h := retriedAtTheReset(t)
+	h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_9", "ls")))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 8am (UTC)"}`))
+
+	task := taskIn(t, s)
+	if turn := task.OpenTurn(); turn == nil || turn.Limited == "" || !turn.RetriedAt.IsZero() || task.IssuesInARow != 0 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
 	}
 }

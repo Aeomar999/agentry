@@ -33,7 +33,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	all := s.state.Tasks()
-	slices.Reverse(all) // newest first, which a tie keeps
+	slices.SortStableFunc(all, tasks.InPriorityOrder)
 	done := map[string]bool{}
 	for _, task := range all {
 		done[task.ID] = task.IsDone
@@ -44,14 +44,14 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.isDone(id)
 	}
+	slots := s.slots()
 	summaries := []taskSummary{}
 	for _, task := range all {
 		summary := tasks.SummaryOf(task, roster)
 		summary.BlockedBy = blockedBy(task, isDone)
+		summary.Queued = slots.Queued(task.ID)
 		summaries = append(summaries, summary)
 	}
-	// In your priority order; a new task starts first.
-	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
@@ -365,21 +365,10 @@ func titleFrom(description string) string {
 	return strings.TrimRight(line[:cut], ",.;:") + "..."
 }
 
-// showTask is a task's detail. An archived task's isn't kept: it answers
-// 410 Gone, so you can tell it from a task that never was.
+// showTask is a task's detail.
 func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
-	task, err := s.task(r.PathValue("task"))
-	if errors.Is(err, current.ErrArchived) {
-		http.Error(w, r.PathValue("task")+" is archived", http.StatusGone)
-		return
-	}
-	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
-		return
-	}
-	log, err := s.store.Log(task.ID)
-	if err != nil {
-		failed(w, err)
+	task := s.shownTask(w, r)
+	if task == nil {
 		return
 	}
 	roster, err := s.roster()
@@ -387,8 +376,10 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	detail := detailOf(task, roster, log)
+	slots := s.slots()
+	detail := detailOf(task, roster)
 	detail.BlockedBy = blockedBy(task, s.isDone)
+	detail.Queued = slots.Queued(task.ID)
 	if epic, _ := s.task(task.Epic); epic != nil {
 		detail.EpicTitle = epic.Title
 	}
@@ -397,6 +388,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		if story, _ := s.task(id); story != nil {
 			summary := tasks.SummaryOf(story, roster)
 			summary.BlockedBy = blockedBy(story, s.isDone)
+			summary.Queued = slots.Queued(story.ID)
 			detail.StoryList = append(detail.StoryList, summary)
 		}
 	}
@@ -556,6 +548,22 @@ func (s *Server) propose(w http.ResponseWriter, p events.Proposal) {
 }
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
+
+// shownTask is the task a read of its own is about, or nil once it has
+// answered that there is none. An archived task's detail isn't kept: it
+// answers 410 Gone, so you can tell it from a task that never was.
+func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) *tasks.Task {
+	task, err := s.task(r.PathValue("task"))
+	if errors.Is(err, current.ErrArchived) {
+		http.Error(w, r.PathValue("task")+" is archived", http.StatusGone)
+		return nil
+	}
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return nil
+	}
+	return task
+}
 
 // isDone says whether a task is done. An archived task is: only a done task
 // is archived. A broken or unknown one isn't.

@@ -42,7 +42,7 @@ func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
 	}
 	defer s.Close()
 
-	state := New()
+	state := New(withIdeas, ideas.Streams())
 	accepted := map[string][]events.Event{} // each stream's accepted events so far
 	touched := map[string]bool{}
 	applied := 0
@@ -103,7 +103,7 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 		return nil
 	}
 	if ideas.IsStream(stream) {
-		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(stream) })
+		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return ideas.Get(state, stream) })
 	}
 	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
 }

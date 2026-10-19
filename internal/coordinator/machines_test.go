@@ -32,7 +32,7 @@ func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 		t.Fatal(rejection)
 	}
 	repo := gitRepo(t)
-	const id = "task-machine-1"
+	const id = "task-1"
 	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,

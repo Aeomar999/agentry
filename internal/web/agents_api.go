@@ -151,13 +151,18 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 		Coordinates bool   `json:"coordinates"`
 	}
 	type template struct {
+		ID          string   `json:"id"` // what GET /api/agents says an agent was made from
 		Team        string   `json:"team"`
 		Description string   `json:"description"`
+		Features    []string `json:"features"` // what a team made from it turns on, so the page can find that team
 		Agents      []member `json:"agents"`
 	}
 	list := []template{}
 	for _, t := range agents.Templates {
-		view := template{Team: t.Team, Description: t.Description}
+		view := template{ID: t.ID, Team: t.Team, Description: t.Description, Features: t.Features}
+		if view.Features == nil {
+			view.Features = []string{}
+		}
 		for _, a := range t.Agents {
 			view.Agents = append(view.Agents, member{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
 		}
@@ -319,8 +324,13 @@ func (s *Server) setKnowledge(w http.ResponseWriter, r *http.Request) {
 }
 
 // knowledgeHistory is every change to the agent's knowledge, newest first:
-// by the agent as it worked, or by you.
+// by the agent as it worked, or by you. A change may be a patch on the
+// version before, so each version is rebuilt walking forward from the start.
 func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.roster(); err != nil { // the walk would fail as the state's did
+		failed(w, err)
+		return
+	}
 	stream, err := s.store.Stream(events.AgentsStream)
 	if err != nil {
 		failed(w, err)
@@ -332,10 +342,15 @@ func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
 		Knowledge string    `json:"knowledge"`
 	}
 	history := []change{}
-	for i := len(stream) - 1; i >= 0; i-- {
-		if e := stream[i]; e.Type == events.AgentLearned && e.Text("name") == r.PathValue("name") {
-			history = append(history, change{By: e.Actor.ID, At: e.At, Knowledge: e.Text("knowledge")})
+	var roster agents.Roster
+	name := r.PathValue("name")
+	for _, e := range stream {
+		roster.Apply(e)
+		if e.Type == events.AgentLearned && e.Text("name") == name {
+			agent, _ := roster.Get(name)
+			history = append(history, change{By: e.Actor.ID, At: e.At, Knowledge: agent.Knowledge})
 		}
 	}
+	slices.Reverse(history)
 	reply(w, history)
 }

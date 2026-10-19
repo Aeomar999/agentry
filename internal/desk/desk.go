@@ -55,10 +55,12 @@ var (
 )
 
 // Start starts the desk unless it is running. A desk whose Claude exited
-// (you typed /exit) is started again. A desk running in another theme is
-// restarted in this one, resuming its own conversation by id: Claude reads
-// its theme only when it starts. A desk left running by an earlier server
-// is started again too, so it has this build's prompt and commands. (Not --continue, which resumes whichever
+// (you typed /exit, or it crashed) is started again. A desk running in
+// another theme is restarted in this one: Claude reads its theme only when
+// it starts. A desk left running by an earlier server is started again
+// too, so it has this build's prompt and commands. Each start resumes the
+// desk's own conversation by id once Claude has saved it, and otherwise
+// starts fresh with that id. (Not --continue, which resumes whichever
 // conversation in the folder is newest, and that may not be the desk's.)
 func Start(c Config) error {
 	starting.Lock()
@@ -80,7 +82,7 @@ func Start(c Config) error {
 	if conversation == "" {
 		conversation = newSessionID()
 	}
-	if running && hasTranscript(conversation) {
+	if hasTranscript(conversation) {
 		command = append(command, "--resume", conversation)
 	} else {
 		command = append(command, "--session-id", conversation)

@@ -11,7 +11,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -19,10 +18,11 @@ import (
 )
 
 // Equal checks the state against a replay of the store's log, which stays
-// the definition of state: every task, idea and roster, the task and idea
-// orders, each stream's last position and the log's. It returns the first
-// difference, named by stream, or nil. A stream the state holds as broken
-// must fail to replay too.
+// the definition of state: every task, owned stream and roster, the task
+// and owned stream orders, the next task's stream, each stream's last position and the
+// log's, and what was skipped: foreign streams are compared by that count
+// alone. It returns the first difference, named by stream, or nil. A stream
+// the state holds as broken must fail to replay too.
 //
 // The store may go on taking events while Equal runs, so it compares at one
 // cut: a copy of the state, and the log read only up to the copy's position.
@@ -36,7 +36,7 @@ func Equal(s *store.Store, state *State) error {
 	if err := awaitApplied(s, cut); err != nil {
 		return err
 	}
-	index, err := indexOf(s, cut)
+	index, err := indexOf(s, held, cut)
 	if err != nil {
 		return err
 	}
@@ -54,10 +54,8 @@ func Equal(s *store.Store, state *State) error {
 			return err
 		}
 	}
-	for _, id := range index.ideas {
-		if err := equalStream(s, cut, id, infallible(ideas.FromEvents), func() (any, error) { return held.Idea(id) }); err != nil {
-			return err
-		}
+	if err := equalOwned(s, cut, held, index.owned); err != nil {
+		return err
 	}
 	rosters := []struct {
 		stream string
@@ -78,11 +76,14 @@ func Equal(s *store.Store, state *State) error {
 	if order := held.TaskIDs(); !slices.Equal(order, index.tasks) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, index.tasks)
 	}
-	if order := held.ideaIDs(); !slices.Equal(order, index.ideas) {
-		return fmt.Errorf("idea order: the state has %v, the log %v", order, index.ideas)
+	if next, inLog := held.NextTask(), events.Numbered(events.TaskPrefix, index.made); next != inLog {
+		return fmt.Errorf("next task: the state names %s, the log %s", next, inLog)
 	}
 	if err := equalStreamPositions(held, index.streams); err != nil {
 		return err
+	}
+	if unknown, inLog := held.skipped.list(), index.skipped.list(); !reflect.DeepEqual(unknown, inLog) {
+		return fmt.Errorf("unknown: the state counts %+v, the log %+v", unknown, inLog)
 	}
 	if held.position != index.last {
 		return fmt.Errorf("position: the state is at %d, the log at %d", held.position, index.last)
@@ -152,6 +153,24 @@ func replayed[T any](replay func([]events.Event) (T, error), accepted []events.E
 	return replay(accepted)
 }
 
+// equalOwned compares every stream each feature's Streams keep, and their
+// order, with a replay through that feature's FromEvents. inLog is each
+// prefix's streams in the order of their first events in the log.
+func equalOwned(s *store.Store, cut int64, held *State, inLog map[string][]string) error {
+	for _, prefix := range slices.Sorted(maps.Keys(held.owners)) {
+		ids := inLog[prefix]
+		for _, id := range ids {
+			if err := equalStream(s, cut, id, infallible(held.owners[prefix].FromEvents), func() (any, error) { return held.Owned(id) }); err != nil {
+				return err
+			}
+		}
+		if order := held.OwnedIDs(prefix); !slices.Equal(order, ids) {
+			return fmt.Errorf("%s order: the state has %v, the log %v", prefix, order, ids)
+		}
+	}
+	return nil
+}
+
 // infallible is a FromEvents in the shape of tasks.Replay: its failure is
 // a panic, which replayed recovers.
 func infallible[T any](fromEvents func([]events.Event) T) func([]events.Event) (T, error) {
@@ -176,16 +195,19 @@ func differingField(got, want any) string {
 
 // index is the log up to a cut, as Equal compares it.
 type index struct {
-	tasks   []string         // the stream of every accepted task.created, oldest first, whatever the stream
-	ideas   []string         // the stream of every accepted idea.suggested, oldest first
-	streams map[string]int64 // each stream's last accepted position
-	last    int64            // the last position, rejections included
+	tasks   []string            // the stream of every accepted task.created, oldest first, in any stream but a foreign one
+	made    int                 // every accepted task.created, a foreign stream's too
+	owned   map[string][]string // by prefix: each owned stream with a Streams, in the order of its first accepted event
+	streams map[string]int64    // each stream's last accepted position
+	skipped tally               // foreign streams and unknown types
+	last    int64               // the last position, rejections included
 }
 
-// indexOf reads the whole log up to cut.
-func indexOf(s *store.Store, cut int64) (index, error) {
+// indexOf reads the whole log up to cut, finding owned streams as held does.
+func indexOf(s *store.Store, held *State, cut int64) (index, error) {
 	const page = 1000
-	found := index{streams: map[string]int64{}}
+	found := index{streams: map[string]int64{}, owned: map[string][]string{}, skipped: newTally()}
+	catalogue := s.Catalogue()
 	for position := int64(0); ; {
 		batch, err := s.After(position, page)
 		if err != nil {
@@ -194,15 +216,25 @@ func indexOf(s *store.Store, cut int64) (index, error) {
 		batch = upTo(batch, cut)
 		for _, e := range batch {
 			found.last = e.Position
-			switch e.Type {
-			case events.ProposalRejected:
+			if e.Type == events.ProposalRejected {
 				continue
-			case events.TaskCreated:
-				found.tasks = append(found.tasks, e.Stream)
-			case ideas.IdeaSuggested:
-				found.ideas = append(found.ideas, e.Stream)
 			}
+			kind := catalogue.KindOf(e.Stream)
+			first := found.streams[e.Stream] == 0
+			found.skipped.count(catalogue, kind, e, first)
 			found.streams[e.Stream] = e.Position
+			if e.Type == events.TaskCreated {
+				found.made++
+			}
+			if kind == events.ForeignStream {
+				continue
+			}
+			if e.Type == events.TaskCreated {
+				found.tasks = append(found.tasks, e.Stream)
+			}
+			if owner := held.ownerOf(e.Stream, kind); owner != nil && first {
+				found.owned[owner.Prefix] = append(found.owned[owner.Prefix], e.Stream)
+			}
 		}
 		if len(batch) < page {
 			return found, nil

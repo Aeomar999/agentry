@@ -3,6 +3,7 @@
 package tasks
 
 import (
+	"cmp"
 	"strings"
 	"time"
 )
@@ -50,7 +51,7 @@ type Task struct {
 	WaitingOn   string  // another team's task this one asked for and waits for, "" for none
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
-	Idea        string  // the idea you accepted as this task, "" for none
+	MadeFrom    string  // the stream of whatever made the task, such as the idea you accepted, "" for none
 	ByAgentry   bool    // Agentry made it, as for an idea it accepted for you, rather than you or an agent
 	AutoStarted bool    // Agentry moved it out of the Backlog once already, to start it
 	About       string  // for a Visionaries session Agentry started after you closed an epic: the epic, "" for any other task
@@ -103,6 +104,13 @@ type Task struct {
 // DefaultMaxTurns is the limit of turns of a task made before each task had
 // its own: about 12 handoffs there and back, then you decide.
 const DefaultMaxTurns = 24
+
+// InPriorityOrder compares two tasks in your priority order: the lower rank
+// first, and on a tie the newer first, as a new task starts above the rest.
+// The board lists tasks and the loop gives them slots in this one order.
+func InPriorityOrder(a, b *Task) int {
+	return cmp.Or(cmp.Compare(a.Rank, b.Rank), b.CreatedAt.Compare(a.CreatedAt))
+}
 
 // AtBudget says whether the task has used all the tokens it may.
 func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget }
@@ -188,12 +196,17 @@ type Turn struct {
 	Plan          string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
 	PlanFrom      string // the turn whose unfinished plan this turn started with, "" for a fresh one
 	Ended         bool
-	Report        string // the agent's final message
-	Issue         string // why the turn was cut short, if it was
-	Stopped       bool   // you ended it, to tell the coordinator something
-	Shipped       bool   // it ships the work because you moved the task to Shipping: you took the work as it was
-	Tokens        int    // what it used, when the engine said
-	TokensUnknown string // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
+	Report        string    // the agent's final message
+	Issue         string    // why the turn was cut short, if it was
+	Limited       string    // what the engine said when it stopped at a usage limit, if it did
+	ResetsAt      time.Time // when that limit resets, zero when the engine didn't say
+	Resumes       int       // how many times it went on after a usage limit
+	ResumedAt     time.Time // when it last went on after a usage limit
+	RetriedAt     time.Time // when Agentry retried it at its limit's reset, until it next calls a tool
+	Stopped       bool      // you ended it, to tell the coordinator something
+	Shipped       bool      // it ships the work because you moved the task to Shipping: you took the work as it was
+	Tokens        int       // what it used, when the engine said
+	TokensUnknown string    // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
 }
 
 type Decision string

@@ -98,6 +98,16 @@ func dropParentSession(log io.Writer) {
 	}
 }
 
+// reportSkipped says once per prefix that the log holds streams of a
+// feature this build doesn't have: skipped, not lost.
+func reportSkipped(w io.Writer, unknown []current.Unknown) {
+	for _, u := range unknown {
+		if u.Prefix != "" {
+			fmt.Fprintf(w, "agentry: skipped %d events in %d %s streams, from a feature this build doesn't have; the log keeps them\n", u.Events, u.Streams, u.Prefix)
+		}
+	}
+}
+
 func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
@@ -106,12 +116,13 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("the event catalogue: %w", err)
 	}
-	state := current.New()
+	state := current.New(catalogue, ideas.Streams())
 	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		return err
 	}
 	defer log.Close()
+	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {
 		return err
 	}
@@ -184,12 +195,19 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	links := workerlink.NewServer(log, fleet)
 
+	// Every feature in this binary, written out here: no feature registers
+	// itself. The loop and the server are given the same list.
+	installed := []features.Feature{
+		ideas.Feature(),
+	}
+
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
+	loop.Features = installed
 	go loop.Run(ctx)
-	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
+	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
 
 	// The desk starts when you first open it on the page, and stops with the server.
@@ -234,10 +252,6 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
-	// Every feature in this binary, written out here: no feature registers itself.
-	installed := []features.Feature{
-		ideas.Feature(state),
-	}
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,

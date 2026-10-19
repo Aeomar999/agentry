@@ -8,33 +8,26 @@ import (
 	"errors"
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// State is what the rules read: the state the proposal would be appended to.
-// *current.State is one. Broken is why a roster's stream could not be built,
-// or nil: the rules refuse what would be checked against a broken roster.
-type State interface {
-	Task(id string) (*tasks.Task, error)
-	Idea(id string) (*ideas.Idea, error)
-	Ideas() []*ideas.Idea
-	Roster() agents.Roster
-	Settings() settings.Settings
-	Workers() workers.Roster
-	Connections() connections.Roster
-	Broken(stream string) error
-}
+// State is what the rules read: the state the proposal would be appended to,
+// as a feature reads it. *current.State is one. The rules refuse what would
+// be checked against a broken roster, and read a feature's stream through
+// its typed helper, such as ideas.Get.
+type State = features.Reader
 
 // Check is the store's OrderCheck, made with the state it reads and the
-// catalogue the store has, which says which streams are tasks.
+// catalogue the store has, which says which streams are tasks. Nothing goes
+// into a foreign stream: its feature isn't in this build.
 func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.Rejection {
+	if catalogue.KindOf(p.Stream) == events.ForeignStream {
+		return refuse(events.ForeignReason(p.Stream))
+	}
 	if err := state.Broken(events.AgentsStream); err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
@@ -78,8 +71,14 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	case p.Type == events.TaskCreated && task != nil:
 		return refuse("task " + p.Stream + " already exists")
 	case p.Type == events.TaskCreated:
+		if next := state.NextTask(); p.Stream != next {
+			return refuse("a new task goes into " + next + ", the next task stream, not " + p.Stream)
+		}
 		if reason := CheckLabels(p.List("labels")); reason != "" {
 			return refuse(reason)
+		}
+		if from, idea := p.Text("from"), p.Text("idea"); from != "" && idea != "" && from != idea {
+			return refuse("a task is made from one stream: its \"from\" and \"idea\" differ")
 		}
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
@@ -100,6 +99,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		}
 		return nil
 	case task == nil:
+		// When tasks can be archived (docs/design/log-growth.md section 4),
+		// an archived task's unarchiving goes through here too.
 		return refuse("task " + p.Stream + " doesn't exist")
 	case task.IsDone && task.WrapUp != nil && slices.Contains(duringWrapUp, p.Type):
 	case task.IsDone && !slices.Contains(afterDone, p.Type):
@@ -137,7 +138,7 @@ var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.Task
 // Agentry asking you for what the turn needs to start (a machine online).
 var duringWrapUp = []events.Type{events.TaskNeedsYou, events.TaskAnswered, events.TurnStarted, events.PromptAcknowledged, events.SessionStarted,
 	events.ActionRequested, events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult,
-	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
+	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
 	events.WorktreeMoved, events.FileAdded, events.FileRemoved, events.FilesCollected, events.FilesDelivered}
 
 func refuse(reason string) *events.Rejection {

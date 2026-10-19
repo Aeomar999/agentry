@@ -8,7 +8,8 @@ import (
 
 // Summary is a task as the list on the page shows it. It is all an
 // archived task will keep, so it is made from the task and the roster
-// alone; BlockedBy, which needs the other tasks, is the caller's to fill.
+// alone; BlockedBy and Queued, which need the other tasks, are the caller's
+// to fill.
 type Summary struct {
 	ID               string    `json:"id"`
 	Title            string    `json:"title"`
@@ -37,9 +38,10 @@ type Summary struct {
 	WaitingOn        string    `json:"waitingOn"`        // another team's task this one waits for
 	Kind             Kind      `json:"kind"`             // "" for a story, "epic"
 	Epic             string    `json:"epic"`             // a story's epic
-	Idea             string    `json:"idea"`             // the idea it was accepted as, "" for none
+	MadeFrom         string    `json:"madeFrom"`         // the stream that made it, such as the idea you accepted, "" for none
 	After            []string  `json:"after"`            // the stories it builds on
 	BlockedBy        []string  `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
+	Queued           bool      `json:"queued"`           // it wants a turn and waits for a slot, as the most tasks running at once are (coordinator.Slots)
 	Stories          int       `json:"stories"`          // an epic's
 	StoriesDone      int       `json:"storiesDone"`
 	Closing          string    `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
@@ -73,10 +75,10 @@ func SummaryOf(t *Task, roster agents.Roster) Summary {
 	if t.Told.Text != "" {
 		said = &Said{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
-	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), Pushed: t.pushedSinceReopen(), DoneByYou: t.DoneByYou, HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.BoardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), Pushed: t.pushedSinceReopen(), DoneByYou: t.DoneByYou, HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: t.StoppedAt(), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
-		Kind: t.Kind, Epic: t.Epic, Idea: t.Idea, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
+		Kind: t.Kind, Epic: t.Epic, MadeFrom: t.MadeFrom, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 
@@ -99,9 +101,9 @@ func listOf(items []string) []string {
 	return items
 }
 
-// boardColumn is the task's column on the board: Done, where you parked it,
+// BoardColumn is the task's column on the board: Done, where you parked it,
 // or its work's column.
-func (t *Task) boardColumn(roster agents.Roster) string {
+func (t *Task) BoardColumn(roster agents.Roster) string {
 	switch {
 	case t.IsDone:
 		return "done"

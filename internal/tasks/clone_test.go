@@ -95,6 +95,9 @@ func everyEvent() []events.Event {
 	log = add(log, policy, events.ActionApproved, "tool-4", map[string]any{"reason": "you approved this earlier", "pass": "tool-3"})
 	log = add(log, agentry, events.FileAdded, "", map[string]any{"name": "profile.txt", "hash": "h1", "size": float64(10), "by": "builder"})
 	log = add(log, agentry, events.FilesCollected, "", map[string]any{"turn": "turn-1"})
+	log = add(log, worker, events.TurnLimited, "turn-1", map[string]any{"agent": "builder", "error": "rate_limit",
+		"details": "You've hit your session limit", "resetsAt": "2026-10-20T03:00:00Z"})
+	log = add(log, worker, events.TurnResumed, "turn-1", map[string]any{"agent": "builder", "reason": "engine"})
 	log = add(log, worker, events.TurnEnded, "turn-1", map[string]any{"agent": "builder", "report": "Profiled.", "tokens": float64(300)})
 	log = add(log, agentry, events.FilesDelivered, "", map[string]any{"worker": "laptop", "version": "1"})
 	log = add(log, lead, events.FileFetching, "", map[string]any{"machine": "laptop", "path": "/db", "as": "db"})

@@ -1,13 +1,14 @@
-import { useState } from "react";
-import type { Agent } from "@/api/types";
-import { useResource } from "@/live/use-resource";
-import { VISIONARIES, addTeam, missingProfilesOf, teamOf } from "@/lib/teams";
+import { useEffect, useState } from "react";
+import { IDEAS, addTeam, missingProfilesOf, useTeamWith } from "@/lib/teams";
 import { useNewTask } from "@/lib/new-task";
 
 export interface AskVisionaries {
-  ready: boolean; // the agents are read, so has says what you have
-  has: boolean; // you have a Visionaries team
-  adding: boolean;
+  read: boolean; // the templates and the agents are read
+  ready: boolean; // read, and a template turns Ideas on, so has says what you have
+  loadError: string; // why the templates or the agents couldn't be read
+  has: boolean; // you have a team made from the Visionaries template
+  team: string; // its name: yours, or the template's while you have none
+  adding: boolean; // adding the team, or waiting for it to show before opening New task
   error: string; // why adding the team failed
   missingProfiles: string[]; // the profiles policy.toml lacks, when adding the team was refused for them
   ask: () => void; // opens New task with the team picked, adding it first if you don't have it
@@ -15,48 +16,76 @@ export interface AskVisionaries {
 }
 
 // useAskVisionaries starts a Visionaries session: New task with the team
-// picked, its description the theme or question. With no Visionaries team
-// yet, it adds the team from its template first, then carries on.
+// picked, its description the theme or question. The team is the one made
+// from the template that turns Ideas on, whatever you called it. With none
+// yet, it adds one from the template first, then opens New task once the
+// agents show it, by the name the server gave it, or says it didn't show
+// if the agents read after adding it lack it (it was removed at once), or
+// that they couldn't be read.
 export function useAskVisionaries(): AskVisionaries {
-  const { data, reload } = useResource<Agent[]>("/api/agents");
+  const { ready, error: loadError, agentsError, template, team, reload } = useTeamWith(IDEAS);
   const newTask = useNewTask();
   const [adding, setAdding] = useState(false);
+  const [opening, setOpening] = useState(false); // added: New task opens when the team shows
+  const [reloaded, setReloaded] = useState(false); // the agents were read after adding it
   const [error, setError] = useState("");
   const [missingProfiles, setMissingProfiles] = useState<string[]>([]);
-  const has = (data ?? []).some((agent) => teamOf(agent) === VISIONARIES);
+
+  useEffect(() => {
+    if (!opening) return;
+    if (team) {
+      setOpening(false);
+      newTask("task", "", team);
+    } else if (reloaded) {
+      setOpening(false);
+      setError(
+        agentsError
+          ? "The team was added, but the agents couldn't be read; try again."
+          : "The team was added but didn't show up; try again.",
+      );
+    }
+  }, [opening, reloaded, team, agentsError, newTask]);
 
   async function ask(addingProfiles = false) {
-    if (!has) {
-      setAdding(true);
-      setError("");
-      try {
-        // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
-        await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
-        setMissingProfiles([]);
-        reload();
-      } catch (failure) {
-        const profiles = missingProfilesOf(failure);
-        if (profiles && !addingProfiles) setMissingProfiles(profiles);
-        else {
-          setMissingProfiles([]);
-          setError((failure as Error).message);
-        }
-        return;
-      } finally {
-        setAdding(false);
-      }
+    if (team) {
+      newTask("task", "", team);
+      return;
     }
-    newTask("task", "", VISIONARIES);
+    if (!template || adding || opening) return;
+    setAdding(true);
+    setError("");
+    try {
+      // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
+      await addTeam(template.team, addingProfiles ? "" : undefined);
+      setMissingProfiles([]);
+      setReloaded(false);
+      setOpening(true);
+      await reload();
+      setReloaded(true);
+    } catch (failure) {
+      const profiles = missingProfilesOf(failure);
+      if (profiles && !addingProfiles) setMissingProfiles(profiles);
+      else {
+        setMissingProfiles([]);
+        setError((failure as Error).message);
+      }
+    } finally {
+      setAdding(false);
+    }
   }
 
+  const has = team !== undefined;
   return {
-    ready: data !== undefined,
+    read: ready,
+    ready: ready && template !== undefined,
+    loadError,
     has,
-    adding,
+    team: team ?? template?.team ?? "Visionaries",
+    adding: adding || opening,
     // the team may have been added elsewhere, so drop what adding it left
     error: has ? "" : error,
     missingProfiles: has ? [] : missingProfiles,
-    ask: () => ask(),
-    askAddingProfiles: () => ask(true),
+    ask: () => void ask(),
+    askAddingProfiles: () => void ask(true),
   };
 }

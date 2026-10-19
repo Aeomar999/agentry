@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -31,8 +32,9 @@ func TestARealLogReplays(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	state := current.New() // only for the task order: every stream is replayed below
-	s, err := store.Open(path, storetest.WithIdeas(), state, nil)
+	catalogue := storetest.WithIdeas()
+	state := current.New(catalogue, ideas.Streams()) // only for the task order: every stream is replayed below
+	s, err := store.Open(path, catalogue, state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

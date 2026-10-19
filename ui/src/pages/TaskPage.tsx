@@ -43,6 +43,8 @@ import { tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { useResource } from "@/live/use-resource";
+import { useEvents } from "@/live/use-events";
+import { LoadEarlier } from "@/components/molecules/LoadEarlier";
 import { useNow } from "@/live/use-now";
 import { COLUMN_TITLES, stageOf } from "@/lib/columns";
 
@@ -144,9 +146,13 @@ export function TaskPage() {
   const { taskId = "" } = useParams();
   useBreadcrumb({ label: "Tasks", to: "/tasks" }, { label: taskId });
   const [params, setParams] = useSearchParams();
-  const { data: task, error, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
+  const { data: task, error, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
+  // The Activity and Events tabs share the task's events, newest first from
+  // where the detail was read, and the rest of the page never waits on them.
+  const showsLog = ["activity", "events"].includes(params.get("tab") ?? "");
+  const log = useEvents(task && showsLog ? { task: taskId, newestBefore: position + 1 } : null);
 
   if (error && !task) {
     return (
@@ -173,16 +179,24 @@ export function TaskPage() {
   };
   const openTurn = (id: string) => go({ tab: "activity", turn: id }, true);
   // An action or event opens its turn's activity with its own row picked
-  // out, and every kind of row shown, so the row is there to see.
+  // out, and every kind of row shown, so the row is there to see. An
+  // action's row is found once the activity has read its events.
   const openRow = (target: { action?: string; event?: LogEvent }, turn = "") =>
-    go({ tab: "activity", turn, row: rowFor(items, target) }, true);
+    go({ tab: "activity", turn, row: target.action ? `action:${target.action}` : rowFor(items, target) }, true);
   const watch = () => go({ tab: "terminal" });
 
   const working = task.status !== "done" && task.currentAgent ? task.currentAgent : "";
   const actions = task.actions ?? [];
   const turns = task.turnList ?? [];
   const approvals = task.approvals?.length ?? 0;
-  const items = activityOf(task);
+  const items = activityOf(task, log.events);
+  const picked = row.startsWith("action:") ? rowFor(items, { action: row.slice("action:".length) }) : row;
+  const logFoot = (
+    <>
+      {log.error && <p className="px-6 py-3 text-center text-[12px] text-warning">Couldn't read the events: {log.error}</p>}
+      <LoadEarlier earlier={log.earlier} loadingEarlier={log.loadingEarlier} onLoad={log.loadEarlier} />
+    </>
+  );
   const now: Now | null =
     task.status === "needs you"
       ? { label: "Waiting for you", tone: "warning" }
@@ -234,14 +248,11 @@ export function TaskPage() {
                 </span>
               </>
             )}
-            {task.idea && (
+            {task.madeFrom && (
               <>
                 <span>·</span>
                 <span>
-                  from idea{" "}
-                  <Link to={`/ideas#${task.idea}`} className="font-mono text-info hover:underline">
-                    {task.idea}
-                  </Link>
+                  made from <MadeFromLink stream={task.madeFrom} />
                 </span>
               </>
             )}
@@ -355,12 +366,12 @@ export function TaskPage() {
                   label: task.hasQuestion ? "Coordinator · asks you" : "Coordinator",
                   live: turns.some((t) => !t.ended && t.agent === task.coordinator),
                 },
-                { id: "activity", label: "Activity", count: items.length, live: Boolean(now) },
+                { id: "activity", label: "Activity", live: Boolean(now) },
                 { id: "terminal", label: "Terminal", live: Boolean(working) },
                 { id: "files", label: "Files", count: task.shared?.length ?? 0 },
                 { id: "handoffs", label: "Handoffs", count: task.trail?.length ?? 0 },
                 { id: "actions", label: "Actions", count: actions.length },
-                { id: "events", label: "Events", count: task.events?.length ?? 0 },
+                { id: "events", label: "Events" },
                 { id: "details", label: "Details" },
               ]}
             />
@@ -393,8 +404,10 @@ export function TaskPage() {
                 items={items}
                 turn={turn}
                 show={show}
-                row={row}
+                row={picked}
                 now={now}
+                loading={log.loading && !log.error}
+                foot={logFoot}
                 onTurn={(id) => go({ tab: "activity", turn: id, show }, Boolean(id))}
                 onShow={(next) => go({ tab: "activity", turn, show: next })}
               />
@@ -423,12 +436,17 @@ export function TaskPage() {
             )}
             {tab === "events" && (
               <Scroll>
-                <ResourceTable
-                  columns={EVENT_COLUMNS}
-                  rows={[...(task.events ?? [])].reverse()}
-                  rowKey={(e) => String(e.position)}
-                  onOpen={(e) => openRow({ event: e }, turnOfEvent(e))}
-                />
+                {log.loading && !log.error ? (
+                  <p className="px-6 py-6 text-center text-[12px] text-ink-faint">Loading the events…</p>
+                ) : (
+                  <ResourceTable
+                    columns={EVENT_COLUMNS}
+                    rows={[...log.events].reverse()}
+                    rowKey={(e) => String(e.position)}
+                    onOpen={(e) => openRow({ event: e }, turnOfEvent(e))}
+                  />
+                )}
+                {logFoot}
               </Scroll>
             )}
             {tab === "details" && (
@@ -549,6 +567,19 @@ function Fact({ label, className, children }: { label: string; className?: strin
 
 function Scroll({ children }: { children: ReactNode }) {
   return <div className="h-full scrollbar-thin overflow-y-auto">{children}</div>;
+}
+
+// MadeFromLink goes to the page of the stream a task was made from: an idea
+// links to it on the Ideas page; a stream no page here shows is its name alone.
+function MadeFromLink({ stream }: { stream: string }) {
+  if (!stream.startsWith("idea-")) {
+    return <Mono>{stream}</Mono>;
+  }
+  return (
+    <Link to={`/ideas#${stream}`} className="font-mono text-info hover:underline">
+      {stream}
+    </Link>
+  );
 }
 
 // TaskLink goes to another task, such as the one another team does for this.

@@ -97,7 +97,7 @@ export function WorkspaceDock({ task, height, onResize, onClose, onChanged }: Wo
                     <span className="font-mono text-ink-faint">{clockTime(turn.startedAt)}</span>
                     {turn.tokens > 0 && <span className="font-mono text-ink-faint">{tokens(turn.tokens)} tokens</span>}
                     <span className="ml-auto text-[11px] text-ink-muted">
-                      {turn.ended ? (turn.issue ? "issue" : "ended") : "working now"}
+                      {turn.ended ? (turn.issue ? "issue" : "ended") : turn.limited ? "waiting for the usage limit" : "working now"}
                     </span>
                   </span>
                   {turn.issue && <span className="text-[12px] text-danger">{turn.issue}</span>}

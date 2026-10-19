@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 )
@@ -89,5 +90,25 @@ func TestNetworkURLs(t *testing.T) {
 	}
 	if got := networkURLs(every, "http"); !slices.Equal(got, want) {
 		t.Errorf("networkURLs = %v, want one for each network address: %v", got, want)
+	}
+}
+
+// A log with streams of a feature this build doesn't have says so once per
+// prefix at start, not once per event; an unknown type alone says nothing.
+func TestStartingSaysOncePerSkippedPrefix(t *testing.T) {
+	var said strings.Builder
+	reportSkipped(&said, []current.Unknown{
+		{Prefix: "idea-", Streams: 12, Events: 31, Last: 48211},
+		{Prefix: "note-", Streams: 1, Events: 2, Last: 48100},
+		{Type: "git.pr_opened", Events: 4, Last: 48190},
+	})
+	want := "agentry: skipped 31 events in 12 idea- streams, from a feature this build doesn't have; the log keeps them\n" +
+		"agentry: skipped 2 events in 1 note- streams, from a feature this build doesn't have; the log keeps them\n"
+	if said.String() != want {
+		t.Errorf("said %q, want %q", said.String(), want)
+	}
+	said.Reset()
+	if reportSkipped(&said, []current.Unknown{}); said.Len() != 0 {
+		t.Errorf("nothing skipped, but it said %q", said.String())
 	}
 }

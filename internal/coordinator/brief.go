@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -19,7 +19,8 @@ import (
 const longestStep = 4000
 
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
-	chosen []*ideas.Idea) string {
+	state features.Reader, list []features.Feature) string {
+	hooks := hooksFor(list, coordinator)
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
@@ -38,11 +39,8 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	otherTeams(&b, task, coordinator, roster)
 	epicSection(&b, task, f)
-	if accepted := ideas.InState(chosen, ideas.Accepted); len(accepted) > 0 {
-		section(&b, "Ideas already accepted", acceptedText(accepted))
-	}
-	if dismissed := ideas.InState(chosen, ideas.Dismissed); len(dismissed) > 0 {
-		section(&b, "Ideas the user dismissed", dismissedText(dismissed))
+	for _, more := range briefSections(hooks, state, task) {
+		section(&b, more.Heading, more.Text)
 	}
 
 	var trail strings.Builder
@@ -61,8 +59,10 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	checks(&b, task, roster)
 	decision := DecisionFormat
-	if ideas.Suggests(coordinator) {
-		decision += "\n" + IdeasFormat
+	for _, hook := range hooks {
+		if hook.Coordinator.Decision != "" {
+			decision += "\n" + hook.Coordinator.Decision
+		}
 	}
 	section(&b, "Your decision", decision)
 	return b.String()

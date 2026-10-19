@@ -33,9 +33,10 @@ export interface TaskSummary {
   waitingOn: string; // another team's task this one waits for
   kind: "" | "epic"; // "" is a story
   epic: string; // a story's epic
-  idea: string; // the idea it was accepted as, "" for none
+  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
+  queued: boolean; // it wants a turn and waits for a slot, as the most tasks running at once are
   stories: number; // an epic's
   storiesDone: number;
   closing: string; // an epic with every story done: the summary you can close it with, "" otherwise
@@ -61,7 +62,6 @@ export interface TaskDetail extends TaskSummary {
   tokensUnknown: string; // on how many turns the tokens couldn't be counted, and why; "" when every turn was
   approvals: Action[] | null;
   actions: Action[] | null;
-  events: LogEvent[] | null;
 }
 
 export interface Worktree {
@@ -94,6 +94,8 @@ export interface Turn {
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something
+  limited?: string; // what the engine said when it stopped at a usage limit
+  resetsAt?: string; // when that limit resets, when the engine said
 }
 
 export interface Action {
@@ -129,6 +131,7 @@ export interface Agent {
   profile: string;
   coordinates: boolean;
   team: string; // the team it works in; "" for Software, the team agents had before there were teams
+  template: string; // the ID of the team template it was made from; "" for an agent you made
   workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
@@ -344,6 +347,15 @@ export interface Invite extends InstallCommands {
   code: string;
 }
 
+// A team Agentry offers to add (GET /api/teams/templates).
+export interface TeamTemplate {
+  id: string; // what Agent.template says
+  team: string; // the name a team made from it gets, with a number if it is taken
+  description: string;
+  features: string[]; // what a team made from it turns on, such as "ideas"
+  agents: { name: string; description: string; coordinates: boolean }[];
+}
+
 export interface CreatedEvent {
   stream: string;
 }
@@ -387,6 +399,8 @@ export interface Settings {
   autoAcceptIdeas: boolean; // Agentry accepts an idea the Visionaries agreed on, by autoAcceptRule, as you would
   autoStartIdeas: boolean; // and starts the task it made; only with autoAcceptIdeas
   autoAcceptRule: AutoAcceptRule; // which ideas the Visionaries agreed on
+  maxRunningTasks: number; // the most tasks with a turn at once, across every repo; 0 is no limit
+  runningTasks: number; // how many have one now: read only
 }
 
 // everyoneBacked: every viewpoint backed the idea and none doubted it.

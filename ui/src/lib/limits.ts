@@ -47,9 +47,16 @@ export interface LimitChoice {
   custom: string;
 }
 
-export function choiceOf(scale: LimitScale, limit: number): LimitChoice {
+// The limits the select lists: the presets, and a default that isn't one
+// in its place among them, so it can be marked and picked like a preset.
+export function optionsOf(scale: LimitScale, defaultLimit?: number): number[] {
+  if (!defaultLimit || defaultLimit < 0 || scale.presets.includes(defaultLimit)) return scale.presets;
+  return [...scale.presets, defaultLimit].sort((a, b) => a - b);
+}
+
+export function choiceOf(scale: LimitScale, limit: number, defaultLimit?: number): LimitChoice {
   if (limit <= 0) return { option: UNLIMITED, custom: "" };
-  if (scale.presets.includes(limit)) return { option: String(limit), custom: "" };
+  if (optionsOf(scale, defaultLimit).includes(limit)) return { option: String(limit), custom: "" };
   // tokens() rounds, so 1,250,000 shows as 1.3M: write it out when it would.
   const shown = scale.parse(scale.show(limit)) === limit ? scale.show(limit) : String(limit);
   return { option: CUSTOM, custom: shown };
@@ -68,6 +75,26 @@ export function sent(limit: number): number {
 // "5M" or "unlimited", for messages.
 export function described(scale: LimitScale, limit: number): string {
   return limit > 0 ? scale.show(limit) : "unlimited";
+}
+
+// The most tasks Agentry gives a turn at once, across every repo: a board
+// setting, not a task's, but picked the same way. 0 is no limit, on the wire
+// too. The most matches the server's (settings.MostRunningTasks).
+const MOST_RUNNING = 100;
+
+export const RUNNING: LimitScale = {
+  name: "Most running at once",
+  presets: [1, 2, 3, 4, 5, 8, 10],
+  show: String,
+  parse: (text) => upTo(MOST_RUNNING, /^\s*\d+\s*$/.test(text) ? Number(text) : NaN),
+  example: "A whole number of tasks from 1 to 100.",
+};
+
+// "2 of 2 running", and how many wait for a slot first: "Queued: 3 · 2 of
+// 2 running". "" with no limit, when nothing waits.
+export function runningLine(limit: number, running: number, queued: number): string {
+  if (limit <= 0) return "";
+  return (queued > 0 ? `Queued: ${queued} · ` : "") + `${running} of ${limit} running`;
 }
 
 // n when it is a whole number from 1 to max, or NaN.

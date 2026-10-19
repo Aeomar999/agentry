@@ -96,6 +96,25 @@ func (r *Runner) Stop(task string) { r.MachineOf(task).Stop(task) }
 // IsRunning says whether the task's agent process is alive, wherever it runs.
 func (r *Runner) IsRunning(task string) bool { return r.MachineOf(task).IsRunning(task) }
 
+// enterPause keeps a typed line and its Enter apart, so the engine reads
+// the Enter as sending the line, not as a newline pasted into it.
+const enterPause = 300 * time.Millisecond
+
+// TypeLine types a line into the task's session and presses Enter, wherever
+// it runs, as you would in its terminal. Pane.Type drops write errors, so
+// TypeLine checks only that it reached the session, not that the line arrived.
+func (r *Runner) TypeLine(task, line string) error {
+	pane, err := r.MachineOf(task).Attach(task, func([]byte) {})
+	if err != nil {
+		return err
+	}
+	defer pane.Detach()
+	pane.Type([]byte(line))
+	time.Sleep(enterPause)
+	pane.Type([]byte("\r")) // what a terminal sends for Enter
+	return nil
+}
+
 // MachineOf is the machine the task's work is on.
 func (r *Runner) MachineOf(id string) machines.Machine {
 	if task, err := r.state.Task(id); err == nil && task != nil && task.Worktree != nil {

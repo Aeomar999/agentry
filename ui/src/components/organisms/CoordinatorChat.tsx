@@ -15,10 +15,11 @@ import { Markdown } from "@/components/molecules/Markdown";
 import { Mono } from "@/components/molecules/Mono";
 import { api } from "@/api/client";
 import type { TaskDetail } from "@/api/types";
-import { ChatEntry, ChatItem, chatOf, threadOf } from "@/lib/chat";
+import { CHAT_TYPES, ChatEntry, ChatItem, chatOf, threadOf } from "@/lib/chat";
 import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { useAgentColor } from "@/live/agent-colors";
+import { useEvents } from "@/live/use-events";
 import { useToast } from "./Toasts";
 import { useOpenQuestion } from "@/components/templates/AdminShell";
 
@@ -43,7 +44,10 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
   const notify = useToast();
   const shellQuestion = useOpenQuestion();
   const openQuestion = onOpenQuestion ?? shellQuestion;
-  const entries = threadOf(chatOf(task));
+  // Only the events the chat reads, every one of them: a long task's tool
+  // calls and plans stay on the server.
+  const chat = useEvents({ task: task.id, types: CHAT_TYPES });
+  const entries = chat.loading ? [] : threadOf(chatOf(task, chat.events));
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
@@ -134,6 +138,8 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="h-full scrollbar-thin overflow-y-auto">
           <ol className="mx-auto flex max-w-3xl flex-col px-6 pt-4 pb-6">
+            {chat.loading && !chat.error && <li className="py-6 text-center text-[12px] text-ink-faint">Loading the conversation…</li>}
+            {chat.error && <li className="py-6 text-center text-[12px] text-warning">Couldn't read the conversation: {chat.error}</li>}
             {entries.map((entry) => (
               <Entry
                 key={entry.key}

@@ -30,7 +30,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	}
 	repo := gitRepo(t)
 	outsideDir := t.TempDir()
-	const id = "task-files-1"
+	const id = "task-1"
 	run(t, newLoop(s, state, root), state)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
 
@@ -154,7 +154,7 @@ func TestThePassWorksLastEventWakesFindsTheTaskFree(t *testing.T) {
 	waitUntil(t, s, besideTask, "b.txt", func(task *tasks.Task) bool { return task.Files["b.txt"].Hash != "" })
 }
 
-const besideTask = "task-beside-1"
+const besideTask = "task-1"
 
 // besideLoop is a loop that isn't running, and a task for its work beside.
 func besideLoop(t *testing.T) (*store.Store, *current.State, *Loop) {

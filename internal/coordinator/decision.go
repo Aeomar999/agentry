@@ -4,6 +4,7 @@
 package coordinator
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +31,8 @@ type Decision struct {
 	Path         string   `json:"path,omitempty"`    // for fetch: the file or folder on Machine
 	As           string   `json:"as,omitempty"`      // for fetch: the name to share it by; "" for its own
 	Repo         string   `json:"repo,omitempty"`    // for move: the repo the user named: a folder, a git address or an archive link
-	Ideas        []Idea   `json:"ideas,omitempty"`   // for done, from a Visionaries session: the features it suggests (ideas.go)
+
+	raw json.RawMessage // the decision as the coordinator wrote it, for the fields a feature reads (features.go)
 }
 
 // Story is one story a split adds to the epic.
@@ -136,9 +138,20 @@ func ParseDecision(reply string) (Decision, error) {
 		if decoder.Decode(&decision) != nil || strings.TrimSpace(text[i+int(decoder.InputOffset()):]) != "" {
 			continue
 		}
+		decision.raw = json.RawMessage(text[i : i+int(decoder.InputOffset())])
 		return decision, decision.check()
 	}
 	return Decision{}, errors.New("the reply did not end with a decision in JSON")
+}
+
+// field is the decision's field called name as the coordinator wrote it,
+// nil when it has none or it is null.
+func (d Decision) field(name string) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(d.raw, &fields) != nil || bytes.Equal(fields[name], []byte("null")) {
+		return nil
+	}
+	return fields[name]
 }
 
 func (d Decision) check() error {

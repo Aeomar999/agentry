@@ -59,7 +59,7 @@ func taskWithWorktree(t *testing.T, s *store.Store, id string) *tasks.Task {
 func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	record := fakeClaude(t)
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	task := taskWithWorktree(t, s, "task-turns-1")
+	task := taskWithWorktree(t, s, "task-1")
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 
@@ -92,7 +92,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 		launched = string(content)
 	}
 	for _, want := range []string{"--permission-mode\nbypassPermissions\n", prompt + "\n",
-		"AGENTRY_AGENT=tech-lead", "AGENTRY_TASK=task-turns-1", "AGENTRY_TURN=turn-1", "AGENTRY_HOOK_TOKEN=secret",
+		"AGENTRY_AGENT=tech-lead", "AGENTRY_TASK=task-1", "AGENTRY_TURN=turn-1", "AGENTRY_HOOK_TOKEN=secret",
 		"AGENTRY_HOOK_DEADLINE=29m50s", "AGENTRY_SERVER=http://127.0.0.1:7800", "AGENTRY_WORKTREE=" + task.Worktree.Path, "PORT=7901"} {
 		if !strings.Contains(launched, want) {
 			t.Errorf("launch is missing %q:\n%s", want, launched)
@@ -102,7 +102,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 
 func TestAnEngineWithNoAdapterIsRefused(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	task := taskWithWorktree(t, s, "task-turns-2")
+	task := taskWithWorktree(t, s, "task-1")
 	err := NewRunner(s, state, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {
 		t.Errorf("got %v", err)
@@ -121,4 +121,45 @@ func mustStream(t *testing.T, s *store.Store, name string) []events.Event {
 		t.Fatal(err)
 	}
 	return stream
+}
+
+func TestTypeLineSendsALineToTheSession(t *testing.T) {
+	sessionstest.Isolate(t)
+	bin := t.TempDir()
+	typed := filepath.Join(bin, "typed.txt")
+	// Reads one line from its terminal, as an engine waiting at its prompt.
+	script := "#!/bin/sh\nread line; printf '%s' \"$line\" > " + typed + ".part && mv " + typed + ".part " + typed + "\n" + sessionstest.Wait() + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	task := taskWithWorktree(t, s, "task-1")
+	defer sessions.Stop(sessions.SocketFor(task.ID))
+	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
+	runner := NewRunner(s, state, here(), Config{})
+	if err := runner.Start(task, coordinator, "brief"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runner.TypeLine(task.ID, "Carry on."); err != nil {
+		t.Fatal(err)
+	}
+	var line string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && line == ""; time.Sleep(50 * time.Millisecond) {
+		content, _ := os.ReadFile(typed)
+		line = string(content)
+	}
+	if line != "Carry on." {
+		t.Errorf("the session read %q", line)
+	}
+}
+
+func TestTypeLineIntoNoSessionIsAnError(t *testing.T) {
+	sessionstest.Isolate(t)
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	task := taskWithWorktree(t, s, "task-1")
+	if err := NewRunner(s, state, here(), Config{}).TypeLine(task.ID, "Carry on."); err == nil {
+		t.Error("typing into a session that isn't running should fail")
+	}
 }
