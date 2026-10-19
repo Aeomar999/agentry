@@ -18,12 +18,13 @@ func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	quoted := regexp.MustCompile("`(git [^`]+)`")
-	pushes := 0
+	quoted := regexp.MustCompile("`((?:git|gh|glab) [^`]+)`")
+	pushes, pipelines := 0, 0
 	for _, template := range Templates {
 		for _, agent := range template.prompted() {
 			for _, match := range quoted.FindAllStringSubmatch(agent.Prompt, -1) {
 				for _, command := range strings.Split(match[1], " then ") {
+					command = strings.ReplaceAll(command, "<hash>", "60c4a34dc947614f669110a4621eafe214f1527a")
 					verdict := shipped.Decide(agent.Profile, policy.Call{Tool: "Bash", Input: command, Workspace: "/w"})
 					if verdict.Decision == policy.Deny {
 						t.Errorf("%s's prompt (%s) says to run %q, which is denied: %s", agent.Name, agent.Profile, command, verdict.Rule)
@@ -34,12 +35,21 @@ func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
 							t.Errorf("%s's push %q must ask you, got %s", agent.Name, command, verdict.Decision)
 						}
 					}
+					if strings.HasPrefix(command, "gh ") || strings.HasPrefix(command, "glab ") {
+						pipelines++
+						if verdict.Decision != policy.Allow {
+							t.Errorf("%s's pipeline report %q must not wait for you, got %s (%s)", agent.Name, command, verdict.Decision, verdict.Reason())
+						}
+					}
 				}
 			}
 		}
 	}
 	if pushes == 0 {
 		t.Error("the deployer's prompt should say how it pushes")
+	}
+	if pipelines == 0 {
+		t.Error("the deployer's prompt should say how it reports the pipeline")
 	}
 }
 

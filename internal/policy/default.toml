@@ -46,9 +46,9 @@
 #              CGO_ENABLED, GOOS, GOARCH, NO_COLOR, LC_ALL, LANG and TZ. A
 #              variable that may hold several values (for c in a b) is matched
 #              with each of them.
-#   clusters   the short options of sort, tree, file, git grep, pytest and
-#              npx jest, vitest and eslint are matched one by one, so 'sort *-o*'
-#              also matches `sort -uo out`.
+#   clusters   the short options of sort, tree, file, git grep, gh run view,
+#              pytest and npx jest, vitest and eslint are matched one by one, so
+#              'sort *-o*' also matches `sort -uo out`.
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
 # Allow everything, as shipped
@@ -153,6 +153,12 @@ scratch = ['/tmp/claude-*/**']
   why = "Every change shows in the task's diff."
 
   [[profiles.developer.rules]]
+  name = "pipeline commands that open a browser or show CI variables"
+  decision = "ask"
+  runs_any = ['gh run view *-w*', 'glab ci get *--with-variables*']
+  why = "gh run view -w opens a browser, and glab ci get --with-variables prints the pipeline's variables, which can hold secrets."
+
+  [[profiles.developer.rules]]
   name = "stays inside the workspace"
   decision = "allow"
   where = "workspace"
@@ -174,6 +180,8 @@ scratch = ['/tmp/claude-*/**']
     'npm test *', 'npm run *', 'npx tsc *', 'npx vitest *', 'npx jest *', 'npx eslint *', 'npx prettier *',
     'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make', 'make test *', 'make build *', 'make lint *',
     'cargo test *', 'cargo build *', 'cargo check *', 'cargo fmt *', 'cargo clippy *',
+    # read a commit's pipeline from the forge; reruns, cancels and the rest still ask
+    'glab ci list *', 'glab ci get *', 'gh run list *', 'gh run view *',
   ]
   why = "These read, or change only files in the workspace, which you review as a diff."
 
