@@ -4,13 +4,13 @@ import { Button } from "@/components/atoms/Button";
 import { IconButton } from "@/components/atoms/IconButton";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { Mono } from "@/components/molecules/Mono";
-import { api, RequestError } from "@/api/client";
+import { api } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { LimitChoice, LimitKind, SCALES, choiceOf, described, limitOf, sent } from "@/lib/limits";
 import { cn } from "@/lib/cn";
 import { useToast } from "./Toasts";
 
-type LimitTask = Pick<TaskSummary, "id" | "budget" | "tokensUsed" | "maxTurns" | "turnsSinceAnswer">;
+type LimitTask = Pick<TaskSummary, "id" | "status" | "budget" | "tokensUsed" | "maxTurns" | "turnsSinceAnswer">;
 
 interface LimitEditorProps {
   task: LimitTask;
@@ -21,7 +21,8 @@ interface LimitEditorProps {
 }
 
 // A task's budget or max turns, and changing it. Raising the limit a task is
-// stopped at answers its stop, and it carries on.
+// stopped at answers its stop, and it carries on. A done task's limits only
+// show: the rules keep them as they were.
 export function LimitEditor({ task, kind, compact, children, onChanged }: LimitEditorProps) {
   const scale = SCALES[kind];
   const current = kind === "budget" ? task.budget : task.maxTurns;
@@ -34,6 +35,8 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
 
   if (editing === null) {
     const edit = () => setEditing(choiceOf(scale, current));
+    const done = task.status === "done";
+    if (compact && done) return <>{children}</>;
     if (compact) {
       return (
         <span className="flex w-full items-center gap-1">
@@ -50,9 +53,11 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
     return (
       <span className="flex flex-wrap items-center gap-2">
         <Mono>{kind === "budget" ? budgetLine(task.budget) : turnsLine(task.turnsSinceAnswer, task.maxTurns)}</Mono>
-        <Button size="sm" variant="ghost" onClick={edit}>
-          Change
-        </Button>
+        {!done && (
+          <Button size="sm" variant="ghost" onClick={edit}>
+            Change
+          </Button>
+        )}
       </span>
     );
   }
@@ -63,7 +68,7 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
   return (
     <span className={cn("flex flex-col", compact ? "gap-1 py-1" : "gap-2")}>
       <span className={cn("flex items-start", compact ? "gap-1" : "flex-wrap gap-2")}>
-        <LimitSelect scale={scale} choice={editing} onChange={setEditing} />
+        <LimitSelect scale={scale} choice={editing} onChange={setEditing} autoFocus />
         {compact && (
           <>
             <IconButton icon={<Check />} label="Save" disabled={!valid || save.busy} onClick={() => save.run(limit)} />
@@ -100,9 +105,16 @@ export function turnsLine(since: number, maxTurns: number): string {
   return maxTurns > 0 ? `${since} of ${maxTurns} turns` : `${since} turns (no limit)`;
 }
 
-// Sends a new limit, and calls onSaved once it is kept. A 409 kept it too:
-// only its answer to the task's stop was refused, as when you answered the
-// stop elsewhere first. Any other error kept nothing, so what you chose stays.
+// What a saved limit replies: whether it answered the task's stop, and why
+// not if the rules refused that answer.
+interface LimitReply {
+  answered: boolean;
+  refused?: string;
+}
+
+// Sends a new limit, and calls onSaved once it is kept. It is kept though its
+// answer to the task's stop was refused, as when you answered the stop
+// elsewhere first. An error kept nothing, so what you chose stays.
 export function useSaveLimit(taskId: string, kind: LimitKind, onSaved: () => void) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
@@ -113,16 +125,12 @@ export function useSaveLimit(taskId: string, kind: LimitKind, onSaved: () => voi
     const saved = `${scale.name} set to ${described(scale, limit)}`;
     try {
       const body = kind === "budget" ? { budget: sent(limit) } : { maxTurns: sent(limit) };
-      const reply = await api<{ answered: boolean }>("PUT", `/api/tasks/${encodeURIComponent(taskId)}/${kind}`, body);
-      notify("success", saved, reply.answered ? "The task carries on." : undefined);
+      const reply = await api<LimitReply>("PUT", `/api/tasks/${encodeURIComponent(taskId)}/${kind}`, body);
+      if (reply.refused) notify("info", saved, `Its stop wasn't answered: ${reply.refused}`);
+      else notify("success", saved, reply.answered ? "The task carries on." : undefined);
       onSaved();
     } catch (error) {
-      if (error instanceof RequestError && error.status === 409) {
-        notify("info", saved, `Its stop wasn't answered: ${error.message}`);
-        onSaved();
-      } else {
-        notify("danger", "That didn't go through", (error as Error).message);
-      }
+      notify("danger", "That didn't go through", (error as Error).message);
     } finally {
       setBusy(false);
     }

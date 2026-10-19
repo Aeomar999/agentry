@@ -10,13 +10,14 @@ interface LimitSelectProps {
   choice: LimitChoice;
   onChange: (choice: LimitChoice) => void;
   defaultLimit?: number; // the server's, marked in the list
+  autoFocus?: boolean; // the list takes the focus, as when an editor opens on it
   className?: string;
 }
 
 // A limit's presets, Unlimited and Custom, which opens a field for your own
 // number; a custom value that isn't one says so under it. The field takes
 // the focus only when you pick Custom, not when a form opens on it.
-export function LimitSelect({ id, scale, choice, onChange, defaultLimit, className }: LimitSelectProps) {
+export function LimitSelect({ id, scale, choice, onChange, defaultLimit, autoFocus, className }: LimitSelectProps) {
   const custom = choice.option === CUSTOM;
   const [picked, setPicked] = useState(false);
   const invalid = custom && choice.custom.trim() !== "" && Number.isNaN(limitOf(scale, choice));
@@ -27,6 +28,7 @@ export function LimitSelect({ id, scale, choice, onChange, defaultLimit, classNa
         <Select
           id={id}
           aria-label={scale.name}
+          autoFocus={autoFocus}
           value={choice.option}
           onChange={(e) => {
             setPicked(e.target.value === CUSTOM);
