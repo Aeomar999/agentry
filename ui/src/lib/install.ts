@@ -2,10 +2,11 @@
 // only on a secure page, http://localhost or https, that has the manifest
 // and a service worker (public/sw.js). The page keeps the offer for its
 // Install app button. Opened over plain http at a network address it can't
-// be installed, and the button says where it can. Opened over https with a
-// certificate the device doesn't trust (the warning clicked through), the
-// page is secure but the browser refuses the service worker, so no offer
-// comes: that is untrusted.
+// be installed, and the button says where it can. A secure page whose
+// service worker the browser refuses gets no offer either: that is refused.
+// Most often the certificate isn't trusted on this device (the warning was
+// clicked through), but some browsers refuse service workers on any page,
+// such as Firefox in a private window, or Brave.
 
 import { useSyncExternalStore } from "react";
 
@@ -13,7 +14,7 @@ interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
-export type InstallState = "installed" | "ready" | "insecure" | "untrusted" | "unavailable";
+export type InstallState = "installed" | "ready" | "insecure" | "refused" | "unavailable";
 
 const standalone = matchMedia("(display-mode: standalone)");
 let offer: InstallPromptEvent | null = null;
@@ -52,7 +53,7 @@ export function installState(): InstallState {
   if (installed) return "installed";
   if (!window.isSecureContext) return "insecure";
   if (offer) return "ready";
-  return workerRefused ? "untrusted" : "unavailable";
+  return workerRefused ? "refused" : "unavailable";
 }
 
 export function useInstall(): InstallState {

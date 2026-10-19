@@ -18,9 +18,9 @@ afterEach(() => {
 });
 
 describe("installState", () => {
-  test("is untrusted on a secure page whose service worker the browser refused", async () => {
+  test("is refused on a secure page whose service worker the browser refused", async () => {
     const { installState } = await loadInstall({ secure: true, register: () => Promise.reject(new Error("SSL certificate error")) });
-    expect(installState()).toBe("untrusted");
+    expect(installState()).toBe("refused");
   });
 
   test("is unavailable on a secure page with a service worker and no offer yet", async () => {
