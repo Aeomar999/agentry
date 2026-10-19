@@ -147,6 +147,11 @@ describe("ActivityFeed", () => {
     expect(said.parentElement!.closest(".relative")!.className).toContain("overflow-y-auto");
   });
 
+  test("sticks bands above everything in the rows (z-10), under the top bar (z-20)", () => {
+    const { container } = feed();
+    for (const band of container.querySelectorAll("h3")) expect(band.parentElement!.className).toContain("sticky top-0 z-10");
+  });
+
   test("loads no Monaco while no command is near the screen", async () => {
     feed();
     await new Promise((resolve) => setTimeout(resolve, 20));

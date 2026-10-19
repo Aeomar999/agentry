@@ -91,4 +91,13 @@ describe("CodeBox", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByText("bash")).toBeNull();
   });
+
+  // Stuck headers and bands are z-10: with no z-index of its own, the corner is drawn under them.
+  test("draws a fence's corner with no z-index, so a stuck header covers it", async () => {
+    const CodeBox = await codeBox();
+    render(<CodeBox code="SELECT 1;" language="sql" />);
+    const corner = screen.getByRole("button", { name: "Copy code" }).parentElement!;
+    expect(corner.className).toContain("absolute");
+    expect(corner.className).not.toMatch(/(^|\s)z-/);
+  });
 });
