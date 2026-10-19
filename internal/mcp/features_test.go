@@ -126,7 +126,7 @@ func TestRepliesEndWithWhatTheServerSaysWaits(t *testing.T) {
 	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 1 vote to count in [/repo] (cast_vote)") {
 		t.Errorf("reply: %s", text)
 	}
-	waiting, err := WaitingFor(agentry)
+	waiting, err := WaitingFor(agentry, "")
 	if err != nil || len(waiting) != 1 || waiting[0].Kind != "votes" || waiting[0].Line != "1 vote to count in [] (cast_vote)" {
 		t.Errorf("waiting: %+v, %v", waiting, err)
 	}

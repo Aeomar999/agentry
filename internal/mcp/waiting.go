@@ -24,15 +24,9 @@ import (
 // "offline" (a machine), or a feature's own.
 type Waiting = features.Waiting
 
-// WaitingFor is everything waiting for you now, as GET /api/waiting lists
-// it for a session outside any repo.
-func WaitingFor(agentry client.Client) ([]Waiting, error) {
-	return WaitingIn(agentry, "")
-}
-
-// WaitingIn is what GET /api/waiting lists for a session in repo ("" when
+// WaitingFor is what GET /api/waiting lists for a session in repo ("" when
 // not known): the core's entries oldest first, then each feature's.
-func WaitingIn(agentry client.Client, repo string) ([]Waiting, error) {
+func WaitingFor(agentry client.Client, repo string) ([]Waiting, error) {
 	var all []Waiting
 	if err := agentry.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all); err != nil {
 		return nil, err
@@ -44,7 +38,7 @@ func WaitingIn(agentry client.Client, repo string) ([]Waiting, error) {
 // for you, every task that has finished, each task's coordinator's latest
 // word to you, and the machines offline.
 func News(agentry client.Client) ([]Waiting, error) {
-	all, err := WaitingFor(agentry)
+	all, err := WaitingFor(agentry, "")
 	if err != nil {
 		return nil, err
 	}

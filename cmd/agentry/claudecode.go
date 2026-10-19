@@ -60,7 +60,7 @@ func runClaudeHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 // sayWhatWaits adds what waits for you to what Claude reads.
 func sayWhatWaits(agentry client.Client, event string, stdout io.Writer) int {
 	agentry.Timeout = 3 * time.Second
-	waiting, err := mcp.WaitingFor(agentry)
+	waiting, err := mcp.WaitingFor(agentry, "")
 	if err != nil || len(waiting) == 0 {
 		return 0
 	}

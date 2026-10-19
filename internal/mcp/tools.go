@@ -575,7 +575,7 @@ func (s *Server) scope(everywhere bool) string {
 
 // waitingNote is what waits for you anywhere, for the end of every reply.
 func (s *Server) waitingNote() string {
-	waiting, err := WaitingIn(s.agentry, s.repo)
+	waiting, err := WaitingFor(s.agentry, s.repo)
 	if err != nil {
 		return ""
 	}

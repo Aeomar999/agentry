@@ -83,14 +83,9 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	}
 	open := features.Waiting{Key: "ideas/3", Task: "task-8", Kind: "ideas",
 		Line: "3 open ideas from the Visionaries: Tag the repos, Sort the columns, Search the board (list_ideas all)"}
-	all, err := mcp.WaitingFor(api)
-	if err != nil {
-		t.Fatal(err)
-	}
-	checkWaiting(t, "agentry mcp, outside a repo", all, append(core, open))
 	both := func(where, repo string, want []features.Waiting) {
 		t.Helper()
-		checkWaiting(t, where, waitingIn(t, api, repo), want)
+		checkWaiting(t, where, waitingFor(t, api, repo), want)
 		checkWaiting(t, where+", from GET /api/waiting", served(t, api, repo), want)
 	}
 	for _, repo := range []string{"", "/src/app", other} {
@@ -108,12 +103,14 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	here.Line = strings.Replace(here.Line, "(list_ideas)", "(list_ideas all)", 1)
 	both("in "+other+", with none of its own", other, append(core, here))
 	both("outside a repo, after the dismiss", "", append(core, here))
+	checkNote(t, "a reply outside a repo, after the dismiss", api, t.TempDir(), append(core, here))
+	checkNote(t, "a reply in "+other+", after the dismiss", api, other, append(core, here))
 }
 
-// waitingIn is what agentry mcp says waits for a session in repo ("" outside one).
-func waitingIn(t *testing.T, api client.Client, repo string) []features.Waiting {
+// waitingFor is what agentry mcp says waits for a session in repo ("" outside one).
+func waitingFor(t *testing.T, api client.Client, repo string) []features.Waiting {
 	t.Helper()
-	all, err := mcp.WaitingIn(api, repo)
+	all, err := mcp.WaitingFor(api, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
