@@ -2,16 +2,18 @@
 //
 // Triggers make UPDATE and DELETE fail in the database itself, so
 // "append-only" does not depend on the code remembering. Propose is the only
-// way in: it reads the history, runs the checks and appends the event (or a
-// proposal.rejected) in one transaction. The single connection makes
-// proposals strictly one at a time, so two can never both pass the order
-// check against the same state (proof 05).
+// way in: it runs the checks against the model, appends the event (or a
+// proposal.rejected) and applies it to the model. A mutex makes proposals
+// strictly one at a time, from the check to the apply, so two can never both
+// pass the order check against the same state (proof 05).
 package store
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -36,32 +38,49 @@ CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 	BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 `
 
-// History is what the order check may read: the accepted events of any stream.
-type History interface {
-	Stream(name string) ([]events.Event, error)
+// A Model is state kept from the log. The store fills it at Open and
+// applies each event after it commits, before any reader of the log can
+// read that event.
+type Model interface {
+	Load(stream string, accepted []events.Event) // at Open, once per stream
+	Loaded(position int64)                       // at Open, the log's last position, rejections included
+	Apply(e events.Event)                        // after each commit
 }
 
 // OrderCheck is check 3, order and per-agent who rules: given what happened so
-// far, may this proposal happen now? It lives outside the store (package rules).
-type OrderCheck func(p events.Proposal, history History) *events.Rejection
+// far, may this proposal happen now? It lives outside the store (package
+// rules) and reads the model it was made with.
+type OrderCheck func(p events.Proposal) *events.Rejection
 
 type Store struct {
 	db      *sql.DB
+	model   Model // nil when nothing keeps state from the log
 	check   OrderCheck
 	changes *changes
+
+	mu      sync.Mutex   // one proposal at a time, from its check to its apply
+	applied atomic.Int64 // the last position in the model; no read of the log goes past it
 }
 
-func Open(path string, check OrderCheck) (*Store, error) {
+// Open opens the log at path and loads it into model, if there is one.
+func Open(path string, model Model, check OrderCheck) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1) // one writer: proposals are decided strictly in order
+	db.SetMaxOpenConns(1) // one connection, which writes; Store.mu orders the proposals
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
 	}
-	return &Store{db: db, check: check, changes: newChanges()}, nil
+	last, err := load(db, model)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("loading the log: %w", err)
+	}
+	s := &Store{db: db, model: model, check: check, changes: newChanges()}
+	s.applied.Store(last)
+	return s, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -69,62 +88,83 @@ func (s *Store) Close() error { return s.db.Close() }
 // Propose validates a proposal and appends the result. It returns the stored
 // event and, when the proposal was refused, the rejection (the stored event is
 // then the proposal.rejected). The error is for the database failing, not for a refusal.
+//
+// The order matters: the model takes the event only once it is committed,
+// and readers of the log see it only once the model has it.
 func (s *Store) Propose(p events.Proposal) (events.Event, *events.Rejection, error) {
-	return s.propose(p, "")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.propose(p)
 }
 
 // Create is Propose for the event that starts a new stream, such as
 // task.created or idea.suggested. The stream is named prefix and the next
-// number, counted in the same transaction, so two made at once never take
-// the same name.
+// number, counted under the same lock, so two made at once never take the
+// same name.
 func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error) {
-	return s.propose(p, prefix)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	made, err := s.made(p.Type)
+	if err != nil {
+		return events.Event{}, nil, err
+	}
+	p.Stream = fmt.Sprintf("%s%d", prefix, made+1)
+	return s.propose(p)
 }
 
-func (s *Store) propose(p events.Proposal, prefix string) (events.Event, *events.Rejection, error) {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return events.Event{}, nil, err
-	}
-	defer tx.Rollback()
+// made counts the events of a type in the log, rejections left out, so the
+// next stream of its kind follows every one made, even one whose stream
+// can't be read.
+func (s *Store) made(kind events.Type) (int, error) {
+	var made int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ? AND position <= ?`, kind, s.applied.Load()).Scan(&made)
+	return made, err
+}
 
-	if prefix != "" {
-		var made int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ?`, p.Type).Scan(&made); err != nil {
-			return events.Event{}, nil, err
-		}
-		p.Stream = fmt.Sprintf("%s%d", prefix, made+1)
-	}
-	rejection, err := s.validate(p, txHistory{tx})
-	if err != nil {
-		return events.Event{}, nil, err
-	}
+// propose is Propose, under Store.mu.
+func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, error) {
+	rejection := s.validate(p)
 	stored := p
 	if rejection != nil {
 		stored = rejectionOf(p, rejection)
 	}
-	event, err := appendEvent(tx, stored)
+	event, err := s.commit(stored)
 	if err != nil {
 		return events.Event{}, nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return events.Event{}, nil, err
+	if s.model != nil {
+		s.model.Apply(event)
 	}
+	s.applied.Store(event.Position)
 	s.changes.notify()
 	return event, rejection, nil
 }
 
-func (s *Store) validate(p events.Proposal, history History) (*events.Rejection, error) {
+func (s *Store) validate(p events.Proposal) *events.Rejection {
 	if rejection := events.CheckShape(p); rejection != nil {
-		return rejection, nil
+		return rejection
 	}
 	if rejection := events.CheckWriter(p); rejection != nil {
-		return rejection, nil
+		return rejection
 	}
 	if s.check == nil {
-		return nil, nil
+		return nil
 	}
-	return s.check(p, history), nil
+	return s.check(p)
+}
+
+// commit appends one event in its own transaction.
+func (s *Store) commit(p events.Proposal) (events.Event, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return events.Event{}, err
+	}
+	defer tx.Rollback()
+	event, err := appendEvent(tx, p)
+	if err != nil {
+		return events.Event{}, err
+	}
+	return event, tx.Commit()
 }
 
 func rejectionOf(p events.Proposal, rejection *events.Rejection) events.Proposal {
@@ -135,18 +175,25 @@ func rejectionOf(p events.Proposal, rejection *events.Rejection) events.Proposal
 	}
 }
 
+// appendEvent returns the event as a reader reads it back, not as proposed:
+// Data decoded from the JSON written (an []string{} or an int64 comes back as
+// replay sees it) and At parsed from the text written (without the monotonic
+// reading). So the model, applying this, equals a replay of the log.
 func appendEvent(tx *sql.Tx, p events.Proposal) (events.Event, error) {
 	data, err := json.Marshal(p.Data)
 	if err != nil {
 		return events.Event{}, fmt.Errorf("encoding the data of %s: %w", p.Type, err)
 	}
-	event := events.Event{At: time.Now().UTC(), Proposal: p}
+	at := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := tx.Exec(`INSERT INTO events (at, stream, actor_kind, actor_id, type, correlation, data)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		event.At.Format(time.RFC3339Nano), p.Stream, p.Actor.Kind, p.Actor.ID, p.Type, p.Correlation, string(data))
+		at, p.Stream, p.Actor.Kind, p.Actor.ID, p.Type, p.Correlation, string(data))
 	if err != nil {
 		return events.Event{}, err
 	}
-	event.Position, err = result.LastInsertId()
-	return event, err
+	event := events.Event{Proposal: p}
+	if event.Position, err = result.LastInsertId(); err != nil {
+		return events.Event{}, err
+	}
+	return event, decode(&event, at, string(data))
 }

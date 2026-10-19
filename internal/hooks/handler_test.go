@@ -15,8 +15,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -39,11 +39,7 @@ func engineerAtWork(t *testing.T) *store.Store {
 
 func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

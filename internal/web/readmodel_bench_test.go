@@ -19,6 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -36,11 +37,7 @@ func TestReadModelBench(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	copyFile(t, source, path)
-	s, err := store.Open(path, rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, state := storetest.Open(t, path)
 	raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
@@ -101,10 +98,10 @@ func TestReadModelBench(t *testing.T) {
 	t.Logf("  store.Stream:                %8s  %d events", median(func() { s.Stream(events.AgentsStream) }), len(agentEvents))
 	t.Logf("  agents.FromEvents:           %8s", median(func() { agents.FromEvents(agentEvents) }))
 
-	t.Log("rules.Check, which every Propose runs inside its transaction:")
+	t.Log("rules.Check, which every Propose runs under its lock:")
 	proposal := events.Proposal{Stream: biggest, Actor: events.Actor{Kind: events.Agent, ID: "bench"}, Type: events.ActionResult,
 		Correlation: "no-such-action", Data: map[string]any{}}
-	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, s) }))
+	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state) }))
 
 	t.Log("what an in-memory projection would cost at startup:")
 	var logged int

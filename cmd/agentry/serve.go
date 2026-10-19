@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
@@ -82,7 +83,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
 	}
-	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), rules.Check)
+	state := current.New()
+	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state) })
 	if err != nil {
 		return err
 	}

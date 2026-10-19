@@ -1,5 +1,6 @@
 // Package rules is check 3 of every proposal: given what happened so far, may
-// this happen now? The store runs it inside the proposal's transaction.
+// this happen now? The store runs it inside Propose, under its lock, so the
+// state it reads can't change while it does.
 package rules
 
 import (
@@ -9,53 +10,61 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// Check is the store's OrderCheck.
-func Check(p events.Proposal, history store.History) *events.Rejection {
-	agentEvents, err := history.Stream(events.AgentsStream)
-	if err != nil {
+// State is what the rules read: the state the proposal would be appended to.
+// *current.State is one. Broken is why a roster's stream could not be built,
+// or nil: the rules refuse what would be checked against a broken roster.
+type State interface {
+	Task(id string) (*tasks.Task, error)
+	Idea(id string) (*ideas.Idea, error)
+	Roster() agents.Roster
+	Workers() workers.Roster
+	Connections() connections.Roster
+	Broken(stream string) error
+}
+
+// Check is the store's OrderCheck, made with the state it reads.
+func Check(p events.Proposal, state State) *events.Rejection {
+	if err := state.Broken(events.AgentsStream); err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
-	roster := agents.FromEvents(agentEvents)
+	roster := state.Roster()
 	if rule := rosterRules[p.Type]; rule != nil {
 		if reason := rule(roster, p); reason != "" {
 			return refuse(reason)
 		}
 	}
 	if rule := workerRules[p.Type]; rule != nil {
-		workerEvents, err := history.Stream(events.WorkersStream)
-		if err != nil {
+		if err := state.Broken(events.WorkersStream); err != nil {
 			return refuse("could not read the workers: " + err.Error())
 		}
-		if reason := rule(roster, workers.FromEvents(workerEvents), p); reason != "" {
+		if reason := rule(roster, state.Workers(), p); reason != "" {
 			return refuse(reason)
 		}
 	}
 	if rule := connectionRules[p.Type]; rule != nil {
-		connectionEvents, err := history.Stream(events.ConnectionsStream)
-		if err != nil {
+		if err := state.Broken(events.ConnectionsStream); err != nil {
 			return refuse("could not read the connections: " + err.Error())
 		}
-		if reason := rule(connections.FromEvents(connectionEvents), p); reason != "" {
+		if reason := rule(state.Connections(), p); reason != "" {
 			return refuse(reason)
 		}
 	}
 	if events.IsIdeaStream(p.Stream) {
-		return checkIdea(p, history)
+		return checkIdea(p, state)
 	}
 	if !events.IsTaskStream(p.Stream) {
 		return nil
 	}
 
-	stream, err := history.Stream(p.Stream)
+	task, err := state.Task(p.Stream)
 	if err != nil {
 		return refuse("could not read the task: " + err.Error())
 	}
-	task := tasks.FromEvents(stream)
 	switch {
 	case p.Type == events.TaskCreated && task != nil:
 		return refuse("task " + p.Stream + " already exists")

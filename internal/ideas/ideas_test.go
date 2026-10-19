@@ -10,8 +10,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -25,11 +25,7 @@ var (
 // Visionaries session the ideas come from, in repo.
 func openSeeded(t *testing.T) (s *store.Store, repo string) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ = storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	repo = gitRepo(t)
 	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {

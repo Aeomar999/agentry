@@ -18,11 +18,13 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -30,11 +32,7 @@ const token = "ui-secret"
 
 func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -148,7 +146,7 @@ func TestTheAPINeedsTheUIToken(t *testing.T) {
 
 func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	server, s := newTestServer(t)
-	start, _ := s.LastPosition()
+	start := s.LastPosition()
 	go func() {
 		time.Sleep(100 * time.Millisecond)
 		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
@@ -176,11 +174,7 @@ func TestHookCallsGoToTheHookHandler(t *testing.T) {
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 func TestThePolicyShowsWithItsProblem(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	path := filepath.Join(t.TempDir(), "policy.toml")
 	live, err := policy.OpenLive(path, "/home/dev", nil)
 	if err != nil {
@@ -296,11 +290,7 @@ func TestServesTheAppFilesWithoutTheToken(t *testing.T) {
 // The desk hands work to the coordinator and reads it back, and nothing
 // more: approving an agent's action takes the UI token.
 func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -427,9 +417,10 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 
 // limitsServerChecked is limitsServer with its own rules, to refuse what the
 // real rules would refuse only in a race.
-func limitsServerChecked(t *testing.T, check store.OrderCheck) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
+func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), check)
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,11 +582,11 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 // A limit is kept though its answer to the task's stop is refused, as when
 // the stop was answered as you saved: the reply says why, with a 200.
 func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
-	answeredFirst := func(p events.Proposal, history store.History) *events.Rejection {
+	answeredFirst := func(p events.Proposal, state rules.State) *events.Rejection {
 		if p.Type == events.TaskAnswered {
 			return &events.Rejection{Check: "order", Reason: "there's no open question"}
 		}
-		return rules.Check(p, history)
+		return rules.Check(p, state)
 	}
 	server, work, ask := limitsServerChecked(t, answeredFirst)
 	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)
@@ -1269,11 +1260,7 @@ func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
 // agents need it is refused, not added with agents that can do nothing.
 func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	serve := func(policyText string) (*httptest.Server, *store.Store, string) {
-		s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { s.Close() })
+		s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 		for _, p := range agents.SeedProposals(nil) {
 			s.Propose(p)
 		}
@@ -1410,11 +1397,7 @@ func TestTasksAreFiledUnderEpics(t *testing.T) {
 // You approve closing an epic, on the page; the desk can't for you, and
 // any other answer goes to its coordinator.
 func TestYouCloseAnEpic(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -1442,11 +1425,7 @@ func TestYouCloseAnEpic(t *testing.T) {
 // An epic you leave open, with every story done, isn't waiting for you, and
 // you can still close it from the page.
 func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

@@ -4,7 +4,8 @@
 // as each event commits, so it can't disagree with what happened.
 //
 // A stream is a task's when events.IsTaskStream says so, as the rules and
-// the coordinator tell them apart. The agents, workers and connections
+// the coordinator tell them apart, and an idea's when events.IsIdeaStream
+// does: an idea is never a task. The agents, workers and connections
 // streams each make a roster. The policy stream keeps no state here: its
 // events only move the position.
 package current
@@ -18,6 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -31,6 +33,7 @@ type State struct {
 	position    int64                  // of the last event applied, rejections included
 	tasks       map[string]*tasks.Task // by stream
 	taskIDs     []string               // oldest first, as Store.TaskIDs
+	ideas       map[string]*ideas.Idea // by stream
 	created     []created              // the task.created events Load found, until Loaded puts them in order
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
 	roster      agents.Roster
@@ -45,7 +48,7 @@ type created struct {
 }
 
 func New() *State {
-	return &State{tasks: map[string]*tasks.Task{}, broken: map[string]error{}}
+	return &State{tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{}, broken: map[string]error{}}
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -68,7 +71,11 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			s.connections = connections.FromEvents(accepted)
 		case events.PolicyStream:
 		default:
-			if task := tasks.FromEvents(accepted); task != nil {
+			if events.IsIdeaStream(stream) {
+				if idea := ideas.FromEvents(accepted); idea != nil {
+					s.ideas[stream] = idea
+				}
+			} else if task := tasks.FromEvents(accepted); task != nil {
 				s.tasks[stream] = task
 			}
 		}
@@ -113,7 +120,11 @@ func (s *State) Apply(e events.Event) {
 			s.connections = s.connections.Next(e)
 		case events.PolicyStream:
 		default:
-			if task := tasks.Next(s.tasks[e.Stream], e); task != nil {
+			if events.IsIdeaStream(e.Stream) {
+				if idea := ideas.Next(s.ideas[e.Stream], e); idea != nil {
+					s.ideas[e.Stream] = idea
+				}
+			} else if task := tasks.Next(s.tasks[e.Stream], e); task != nil {
 				s.tasks[e.Stream] = task
 			}
 		}
@@ -147,6 +158,17 @@ func (s *State) Task(id string) (*tasks.Task, error) {
 		return nil, err
 	}
 	return s.tasks[id], nil
+}
+
+// Idea is an idea's state: nil, nil when there is no such idea, and the
+// error when its stream is broken.
+func (s *State) Idea(id string) (*ideas.Idea, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if err := s.broken[id]; err != nil {
+		return nil, err
+	}
+	return s.ideas[id], nil
 }
 
 // Tasks is every task, oldest first, in a new slice the caller may sort.

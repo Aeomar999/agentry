@@ -20,9 +20,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -34,11 +33,7 @@ import (
 // moves to it over git, its agent's terminal shows on the server, the page
 // peeks at its files, and the work comes back with what it did.
 func TestAWorkerJoinsAndTakesWork(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

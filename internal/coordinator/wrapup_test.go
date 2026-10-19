@@ -10,9 +10,9 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	watch "gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -181,11 +181,7 @@ func TestClosingAnEpicParksItsStories(t *testing.T) {
 // turn (turn-2) is open.
 func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, string) {
 	fakeClaudeOnPath(t)
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -222,11 +218,7 @@ func propose(t *testing.T, s *store.Store, p events.Proposal) {
 // A task you moved to Done keeps its port while its coordinator wraps up,
 // since reopening it then works in the same worktree; after that it is free.
 func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

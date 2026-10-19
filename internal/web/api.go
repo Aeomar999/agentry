@@ -515,12 +515,7 @@ func (s *Server) waitForChanges(w http.ResponseWriter, r *http.Request) {
 	reader := s.store.NewReader(after)
 	defer reader.Close()
 	reader.Next(ctx) // returns early with events, or when ctx ends
-	position, err := s.store.LastPosition()
-	if err != nil {
-		failed(w, err)
-		return
-	}
-	reply(w, map[string]int64{"position": position})
+	reply(w, map[string]int64{"position": s.store.LastPosition()})
 }
 
 // propose writes a proposal and replies with the event, or with the

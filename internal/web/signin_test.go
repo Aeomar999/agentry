@@ -12,8 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
 // signinServer is a server whose clock the test moves, called in process so
@@ -26,11 +25,7 @@ type signinServer struct {
 
 func newSigninServer(t *testing.T) *signinServer {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

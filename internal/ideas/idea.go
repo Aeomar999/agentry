@@ -58,6 +58,24 @@ func FromEvents(stream []events.Event) *Idea {
 	return idea
 }
 
+// Next is the idea after e, built on a copy: idea itself is left as it was,
+// so whoever still holds it keeps reading what it said. FromEvents applies in
+// place instead, and stays the reference Next must agree with. apply only
+// replaces fields, never changes a slice, so a shallow copy is enough.
+func Next(idea *Idea, e events.Event) *Idea {
+	switch {
+	case e.Type == events.IdeaSuggested:
+		idea = &Idea{ID: e.Stream, CreatedAt: e.At}
+	case idea == nil:
+		return nil
+	default:
+		copied := *idea
+		idea = &copied
+	}
+	idea.apply(e)
+	return idea
+}
+
 func (idea *Idea) apply(e events.Event) {
 	switch e.Type {
 	case events.IdeaSuggested:

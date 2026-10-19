@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -62,6 +63,8 @@ func everyStream() []events.Event {
 		proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Second, renamed"}),
 		proposal(events.AgentsStream, you, events.AgentRemoved, map[string]any{"name": "tech-lead"}),
 		proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "engineer", "hash": "h"}),
+		proposal("idea-1", system, events.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
+		proposal("idea-1", you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
 	)
 }
 
@@ -105,6 +108,13 @@ func loaded(log []events.Event) *State {
 func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
+		if events.IsIdeaStream(stream) {
+			idea, err := s.Idea(stream)
+			if want := ideas.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(idea, want) {
+				t.Errorf("%s: %+v, %v\nreplay: %+v", stream, idea, err, want)
+			}
+			continue
+		}
 		if !events.IsTaskStream(stream) {
 			continue
 		}
@@ -216,6 +226,26 @@ func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
 		if order := taskIDsOf(s); !slices.Equal(order, want) {
 			t.Errorf("%s: task order %v, want %v", name, order, want)
+		}
+	}
+}
+
+// An idea's stream is an idea, never a task: it stays out of the tasks, the
+// list and the task order, so the next task's number doesn't move.
+func TestAnIdeaIsNoTask(t *testing.T) {
+	log := everyStream()
+	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
+		if idea, err := s.Idea("idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
+			t.Errorf("%s: idea-1 is %+v, %v; want it accepted", name, idea, err)
+		}
+		if task, err := s.Task("idea-1"); task != nil || err != nil {
+			t.Errorf("%s: idea-1 is a task: %+v, %v", name, task, err)
+		}
+		if order := taskIDsOf(s); !slices.Equal(order, []string{"task-1", "task-2"}) {
+			t.Errorf("%s: task order %v, want task-1 and task-2 only", name, order)
+		}
+		if list := idsOf(s.Tasks()); !slices.Equal(list, []string{"task-1", "task-2"}) {
+			t.Errorf("%s: tasks %v, want task-1 and task-2 only", name, list)
 		}
 	}
 }

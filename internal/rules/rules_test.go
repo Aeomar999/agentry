@@ -1,13 +1,17 @@
 package rules
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/connections"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 var (
@@ -31,7 +35,8 @@ type step struct {
 // openSeeded is a store with the rules and the five default agents.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), Check)
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return Check(p, state) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,4 +408,40 @@ func refusedWith(t *testing.T, s *store.Store, actor events.Actor, kind events.T
 func taskIn(s *store.Store) *tasks.Task {
 	stream, _ := s.Stream("task-1")
 	return tasks.FromEvents(stream)
+}
+
+// brokenStream is a state whose one stream could not be built.
+type brokenStream struct {
+	*current.State
+	stream string
+}
+
+func (b brokenStream) Broken(stream string) error {
+	if stream == b.stream {
+		return errors.New("applying it panicked")
+	}
+	return b.State.Broken(stream)
+}
+
+// A roster whose stream broke refuses what would be checked against it,
+// as an unreadable stream did when the rules replayed the log.
+func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
+	_, joined := workers.Join("laptop", "a-code", workers.Machine{})
+	_, connected := connections.Connect("a-code", connections.Machine{})
+	cases := []struct {
+		stream string
+		p      events.Proposal
+		want   string
+	}{
+		{events.AgentsStream, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data}, "could not read the agents: applying it panicked"},
+		{events.WorkersStream, joined, "could not read the workers: applying it panicked"},
+		{events.ConnectionsStream, connected, "could not read the connections: applying it panicked"},
+	}
+	for _, c := range cases {
+		state := current.New()
+		state.Loaded(0)
+		if rejection := Check(c.p, brokenStream{state, c.stream}); rejection == nil || rejection.Reason != c.want {
+			t.Errorf("%s broken, %s: %v, want %q", c.stream, c.p.Type, rejection, c.want)
+		}
+	}
 }

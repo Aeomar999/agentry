@@ -23,7 +23,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -75,7 +74,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	var read, fold time.Duration
 	whole := minOf3(func() {
 		start := time.Now()
-		s, err := store.Open(path, rules.Check)
+		s, err := store.Open(path, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +121,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	// The state built from events that are then dropped, so the texts it
 	// keeps count too (readmodel_bench_test.go kept the events alive).
 	held := heldBy(func() any {
-		s, err := store.Open(path, rules.Check)
+		s, err := store.Open(path, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

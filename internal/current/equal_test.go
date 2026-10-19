@@ -13,7 +13,7 @@ import (
 // the rules would refuse, such as one that breaks a task's apply.
 func openStore(t *testing.T, proposals ...events.Proposal) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), nil)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,15 +69,14 @@ func TestEqualPassesOnAStateThatFollowedTheLog(t *testing.T) {
 	}
 
 	loadedState := New()
-	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream} {
+	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1"} {
 		accepted, err := s.Stream(stream)
 		if err != nil {
 			t.Fatal(err)
 		}
 		loadedState.Load(stream, accepted)
 	}
-	last, _ := s.LastPosition()
-	loadedState.Loaded(last)
+	loadedState.Loaded(s.LastPosition())
 	if err := Equal(s, loadedState); err != nil {
 		t.Errorf("loaded: %v", err)
 	}

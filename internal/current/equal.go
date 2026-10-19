@@ -8,14 +8,15 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Equal checks the state against a replay of the store's log, which stays
-// the definition of state: every task and roster, the task order and the
-// position. It returns the first difference, named by stream, or nil. A
+// the definition of state: every task, idea and roster, the task order and
+// the position. It returns the first difference, named by stream, or nil. A
 // stream the state holds as broken must fail to replay too.
 func Equal(s *store.Store, state *State) error {
 	ids, err := s.TaskIDs()
@@ -24,6 +25,15 @@ func Equal(s *store.Store, state *State) error {
 	}
 	for _, id := range ids {
 		if err := equalStream(s, id, tasks.FromEvents, func() (any, error) { return state.Task(id) }); err != nil {
+			return err
+		}
+	}
+	ideaIDs, err := s.IdeaIDs()
+	if err != nil {
+		return err
+	}
+	for _, id := range ideaIDs {
+		if err := equalStream(s, id, ideas.FromEvents, func() (any, error) { return state.Idea(id) }); err != nil {
 			return err
 		}
 	}
@@ -45,11 +55,7 @@ func Equal(s *store.Store, state *State) error {
 	if order := taskIDsOf(state); !slices.Equal(order, ids) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, ids)
 	}
-	last, err := s.LastPosition()
-	if err != nil {
-		return err
-	}
-	if position := state.Position(); position != last {
+	if position, last := state.Position(), s.LastPosition(); position != last {
 		return fmt.Errorf("position: the state is at %d, the log at %d", position, last)
 	}
 	return nil

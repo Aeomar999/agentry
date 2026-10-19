@@ -12,10 +12,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -27,11 +27,7 @@ import (
 func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -122,11 +118,7 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 // task asks you, saying why, instead of waiting where nobody sees it.
 func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	fakeClaudeOnPath(t)
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -252,11 +244,7 @@ func TestALateHandoffLeavesTheWrapUpOwed(t *testing.T) {
 		{Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}},
 		{Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}},
 	} {
-		s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer s.Close()
+		s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 		for _, p := range agents.SeedProposals(nil) {
 			s.Propose(p)
 		}

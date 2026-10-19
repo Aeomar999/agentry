@@ -16,23 +16,63 @@ func newTask(id string) events.Proposal {
 		Data: map[string]any{"title": "Remove the TODOs", "repo": "/src/app", "coordinator": "tech-lead"}}
 }
 
-// onlyOnce is a stand-in order check: a task can be created once.
-func onlyOnce(p events.Proposal, history History) *events.Rejection {
-	existing, _ := history.Stream(p.Stream)
-	if p.Type == events.TaskCreated && len(existing) > 0 {
-		return &events.Rejection{Check: "order", Reason: "task already exists"}
+// created is a stand-in model: the streams that have a task.created.
+type created struct {
+	mu      sync.Mutex
+	streams map[string]bool
+	loaded  int64 // the position Loaded was given
+}
+
+func newCreated() *created { return &created{streams: map[string]bool{}} }
+
+func (c *created) Load(stream string, accepted []events.Event) {
+	for _, e := range accepted {
+		c.Apply(e)
 	}
-	return nil
+}
+
+func (c *created) Loaded(position int64) { c.loaded = position }
+
+func (c *created) Apply(e events.Event) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e.Type == events.TaskCreated {
+		c.streams[e.Stream] = true
+	}
+}
+
+func (c *created) has(stream string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.streams[stream]
+}
+
+// onlyOnce is a stand-in order check: a task can be created once.
+func onlyOnce(model *created) OrderCheck {
+	return func(p events.Proposal) *events.Rejection {
+		if p.Type == events.TaskCreated && model.has(p.Stream) {
+			return &events.Rejection{Check: "order", Reason: "task already exists"}
+		}
+		return nil
+	}
 }
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "agentry.db"), onlyOnce)
+	s, _ := openAt(t, filepath.Join(t.TempDir(), "agentry.db"))
+	return s
+}
+
+// openAt opens the log at path with the stand-in model and check.
+func openAt(t *testing.T, path string) (*Store, *created) {
+	t.Helper()
+	model := newCreated()
+	s, err := Open(path, model, onlyOnce(model))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	return s
+	return s, model
 }
 
 func TestProposeAppendsOrRecordsTheRejection(t *testing.T) {
@@ -99,19 +139,21 @@ func TestRacingProposalsAcceptExactlyOne(t *testing.T) {
 
 func TestReopenKeepsTheLog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	first, _ := Open(path, onlyOnce)
+	first, _ := openAt(t, path)
 	first.Propose(newTask("task-1"))
 	first.Propose(newTask("task-2"))
 	first.Close()
 
-	second, err := Open(path, onlyOnce)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer second.Close()
+	second, model := openAt(t, path)
 	ids, _ := second.TaskIDs()
 	if len(ids) != 2 || ids[0] != "task-1" || ids[1] != "task-2" {
 		t.Errorf("task ids after reopening: %v", ids)
+	}
+	if !model.has("task-1") || !model.has("task-2") || model.loaded != 2 {
+		t.Errorf("the model wasn't loaded from the log: %v, loaded at %d", model.streams, model.loaded)
+	}
+	if _, rejection, _ := second.Propose(newTask("task-1")); rejection == nil {
+		t.Error("the check didn't read the loaded model")
 	}
 }
 

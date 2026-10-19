@@ -10,9 +10,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -55,8 +55,7 @@ func taskWithWorktree(t *testing.T, s *store.Store, id string) *tasks.Task {
 
 func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	record := fakeClaude(t)
-	s, _ := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	task := taskWithWorktree(t, s, "task-turns-1")
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
@@ -94,8 +93,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 }
 
 func TestAnEngineWithNoAdapterIsRefused(t *testing.T) {
-	s, _ := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	defer s.Close()
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	task := taskWithWorktree(t, s, "task-turns-2")
 	err := NewRunner(s, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {

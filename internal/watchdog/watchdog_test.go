@@ -9,8 +9,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -32,11 +32,7 @@ type world struct {
 }
 
 func newWorld(t *testing.T) *world {
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
+	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	w := &world{t: t, store: s, alive: true}
 	w.dog = New(s, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true })
 	for _, p := range agents.SeedProposals(nil) {
