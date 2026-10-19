@@ -45,7 +45,7 @@ func TestReadsDoNotQueueBehindAWrite(t *testing.T) {
 		_, _, err := s.Propose(newTask("task-2"))
 		proposed <- err
 	}()
-	<-started
+	within(t, started, "the write to start")
 
 	reads := map[string]func() ([]events.Event, error){
 		"Log":    func() ([]events.Event, error) { return s.Log("task-2") },
@@ -72,10 +72,24 @@ func TestReadsDoNotQueueBehindAWrite(t *testing.T) {
 	}
 
 	released.Do(func() { close(release) })
-	if err := <-proposed; err != nil {
+	if err := within(t, proposed, "the write to commit"); err != nil {
 		t.Fatal(err)
 	}
 	if log, err := s.Log("task-2"); err != nil || len(log) != 1 {
 		t.Errorf("once committed, Log should return the event: %+v, %v", log, err)
+	}
+}
+
+// within is what c gives, failing the test if that takes over two seconds,
+// so a write that never starts or ends fails instead of hanging the run.
+func within[T any](t *testing.T, c <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-c:
+		return v
+	case <-time.After(2 * time.Second):
+		t.Fatalf("waited over two seconds for %s", what)
+		var zero T
+		return zero
 	}
 }

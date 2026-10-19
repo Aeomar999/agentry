@@ -55,7 +55,7 @@ var taskRules = map[events.Type]rule{
 	events.SessionStarted:     all(isTheOpenTurn),
 
 	events.ActionRequested: all(byTheWorkingAgent, isNewAction),
-	events.ActionAsked:     all(actionUndecided, notYetAsked),
+	events.ActionAsked:     all(actionUndecided, notYetAsked, inTheOpenTurn),
 	events.ActionApproved:  all(actionUndecided),
 	events.ActionDenied:    all(actionUndecided),
 	events.ActionResult:    all(actionApproved, noResultYet),
@@ -410,6 +410,17 @@ func actionUndecided(t *tasks.Task, p events.Proposal) string {
 func notYetAsked(t *tasks.Task, p events.Proposal) string {
 	if t.Action(p.Correlation).Asked {
 		return "action " + p.Correlation + " was already asked about"
+	}
+	return ""
+}
+
+// inTheOpenTurn: an action asked for in a turn that has stopped since, as
+// your move to To do or Done stops it, waits for no one. Refused, the hook
+// denies it. Its approval and denial stay open, so the hook still records
+// what it told the agent.
+func inTheOpenTurn(t *tasks.Task, p events.Proposal) string {
+	if turn := t.OpenTurn(); turn == nil || turn.ID != t.Action(p.Correlation).Turn {
+		return "action " + p.Correlation + "'s turn is over"
 	}
 	return ""
 }

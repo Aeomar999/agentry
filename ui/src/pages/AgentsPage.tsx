@@ -15,7 +15,7 @@ import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
 import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
-import { teamOf, teamsOf } from "@/lib/teams";
+import { addTeam, teamOf, teamsOf } from "@/lib/teams";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
@@ -302,7 +302,7 @@ function AddTeam({ templates, existing, onAdded }: { templates: Template[]; exis
   async function add(template: Template) {
     setBusy(template.team);
     try {
-      await api("POST", "/api/teams", { template: template.team });
+      await addTeam(template.team);
       notify("success", `Added the ${template.team} team`, "Pick it on New task; its coordinator takes the task.");
       onAdded(template.team);
     } catch (failure) {

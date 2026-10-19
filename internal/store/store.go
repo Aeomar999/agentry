@@ -93,6 +93,12 @@ func Open(path string, model Model, check OrderCheck) (*Store, error) {
 		return nil, err
 	}
 	reads.SetMaxOpenConns(readConnections)
+	// sql.Open connects lazily: a bad path or pragma fails here, not at the first read.
+	if err := reads.Ping(); err != nil {
+		reads.Close()
+		db.Close()
+		return nil, fmt.Errorf("opening the read pool: %w", err)
+	}
 	s := &Store{db: db, reads: reads, model: model, check: check, changes: newChanges()}
 	s.applied.Store(last)
 	return s, nil

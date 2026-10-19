@@ -13,20 +13,23 @@ export function NewTaskDialog() {
   if (!asked) return null;
   const kind: NewKind = asked === "epic" || asked === "story" ? asked : "task";
   const epic = kind === "story" ? (params.get("newIn") ?? "") : "";
+  const team = params.get("newTeam") ?? "";
   const close = () =>
     setParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("new");
       next.delete("newIn");
+      next.delete("newTeam");
       return next;
     });
 
   return (
     <Dialog title={epic ? `New story of ${epic}` : kind === "epic" ? "New epic" : "New task"} onClose={close} large>
       <NewTaskForm
-        key={`${kind}-${epic}`}
+        key={`${kind}-${epic}-${team}`}
         start={kind}
         epic={epic}
+        team={team}
         onCancel={close}
         onCreated={(id) => (epic ? close() : navigate(`/tasks/${id}`))}
       />

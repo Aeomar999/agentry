@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
-	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -88,7 +87,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 		state = replayed{tasks: map[string]*tasks.Task{}}
 		broken = map[string]error{}
 		for _, id := range ids {
-			task, err := foldTask(streams[id])
+			task, err := tasks.Replay(streams[id])
 			if err != nil {
 				broken[id] = err
 				continue
@@ -125,7 +124,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 		defer s.Close()
 		kept := map[string]*tasks.Task{}
 		for _, id := range state.order {
-			kept[id] = must(foldTask(must(s.Stream(id))))
+			kept[id] = must(tasks.Replay(must(s.Stream(id))))
 		}
 		return []any{kept, agents.FromEvents(must(s.Stream(events.AgentsStream)))}
 	})
@@ -158,17 +157,6 @@ func createdTasks(t *testing.T, path string) []string {
 		t.Fatal(err)
 	}
 	return ids
-}
-
-// foldTask replays one task's stream, turning a panic in the apply code into
-// an error so a stream it can't replay doesn't stop the benchmark.
-func foldTask(stream []events.Event) (task *tasks.Task, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("replay panicked: %v", r)
-		}
-	}()
-	return tasks.FromEvents(stream), nil
 }
 
 // snapshotTask mirrors tasks.Task with its two unexported fields, which an
@@ -349,7 +337,7 @@ func benchArchive(t *testing.T, rows []row, state replayed) map[string]bool {
 	}
 	var summaries []int
 	for id := range doneAtAll {
-		summaries = append(summaries, len(must(json.Marshal(summaryOf(state.tasks[id], state.roster)))))
+		summaries = append(summaries, len(must(json.Marshal(tasks.SummaryOf(state.tasks[id], state.roster)))))
 	}
 	t.Logf("  a summary per archived task (the list's JSON): mean %d bytes, largest %d", mean(summaries), slices.Max(summaries))
 	return doneAtAll
@@ -660,7 +648,7 @@ func benchDesign(t *testing.T, rows []row, state replayed, archived map[string]b
 	thin := thinSnapshot{Roster: state.roster, Workers: state.workers.Workers}
 	for _, id := range state.order {
 		if archived[id] {
-			thin.Summaries = append(thin.Summaries, summaryOf(state.tasks[id], state.roster))
+			thin.Summaries = append(thin.Summaries, tasks.SummaryOf(state.tasks[id], state.roster))
 		} else {
 			thin.Tasks = append(thin.Tasks, mirror(state.tasks[id]))
 		}

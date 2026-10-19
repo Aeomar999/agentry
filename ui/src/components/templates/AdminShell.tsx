@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { NewTaskDialog } from "@/components/organisms/NewTaskDialog";
 import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Bot, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import { Bot, Lightbulb, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
 import { CommandPalette, PaletteItem } from "@/components/organisms/CommandPalette";
 import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
@@ -134,6 +134,7 @@ export function AdminShell() {
       { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => newTask() },
       { id: "new-epic", group: "Commands", label: "New epic", icon: <Plus />, run: () => newTask("epic") },
       { id: "go-plan", group: "Go to", label: "Plan", icon: <MapIcon />, run: () => navigate("/plan") },
+      { id: "go-ideas", group: "Go to", label: "Ideas", icon: <Lightbulb />, run: () => navigate("/ideas") },
       { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
       { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
       ...tasks

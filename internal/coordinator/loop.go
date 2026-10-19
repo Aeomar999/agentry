@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -34,46 +35,7 @@ type Loop struct {
 	Clones string // where repos the user names by a git address are cloned, for a "move"
 }
 
-var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
-
-// AsksForItself says whether the task's open question is the loop's own, one
-// of its stops, rather than one a coordinator asked.
-func AsksForItself(task *tasks.Task) bool { return task.Question != "" && task.Asked.By == agentry.ID }
-
-// The limits that stop a task, as its question says.
-const (
-	LimitBudget = "budget"
-	LimitTurns  = "turns"
-)
-
-// StoppedAt is the limit the task's open question is the loop's stop for,
-// LimitBudget or LimitTurns, or "" for any other question: raising that
-// limit answers it, and nothing else does.
-func StoppedAt(task *tasks.Task) string {
-	switch {
-	case !AsksForItself(task):
-		return ""
-	case task.Asked.Limit != "":
-		return task.Asked.Limit
-	case task.Asked.Fetch != nil:
-		return "" // the copy question
-	}
-	// Asked before the question said which: the stops' fixed words tell, and
-	// the loop's other questions, which carry no limit, never match them.
-	switch {
-	case strings.HasPrefix(task.Question, oldTurnStop):
-		return LimitTurns
-	case strings.HasPrefix(task.Question, oldBudgetStop):
-		return LimitBudget
-	}
-	return ""
-}
-
-// How the loop's stops at the limits began before they said their limit.
-const (
-	oldTurnStop   = "This task has had "
-	oldBudgetStop = "This task has used "
-)
+var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
 	return &Loop{store: s, state: state, runner: runner, fleet: fleet}
@@ -301,6 +263,7 @@ func sentence(err error) string { return strings.TrimRight(err.Error(), ". ") + 
 
 // apply turns the coordinator's decision into its event, written as the coordinator.
 func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) {
+	defer l.recoverDecision(task, decision)
 	coordinator := events.Actor{Kind: events.Agent, ID: task.Coordinator}
 	if title := strings.TrimSpace(decision.Title); title != "" && title != task.Title {
 		l.propose(task.ID, coordinator, events.TaskRenamed, map[string]any{"title": title})
@@ -358,6 +321,20 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			l.removeWorktree(task)
 		}
 	}
+}
+
+// recoverDecision turns a panic while acting on a decision into an issue on
+// its task: the coordinator hears why and decides again, and the loop, and
+// the server with it, goes on serving the other tasks. Deferred by apply.
+func (l *Loop) recoverDecision(task *tasks.Task, decision Decision) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	slog.Error("coordinator loop: acting on a decision panicked", "task", task.ID, "action", decision.Action, "panic", r,
+		"stack", string(debug.Stack()))
+	l.propose(task.ID, agentry, events.IssueRaised, map[string]any{
+		"reason": fmt.Sprintf("Agentry failed acting on the %q decision: %v", decision.Action, r)})
 }
 
 // moveRepo moves the task to the repo the user named for it: a folder here,
@@ -425,7 +402,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 		}
 		after := []string{}
 		for _, ref := range story.After {
-			after = append(after, cmp.Or(ref.ID, ids[ref.Number-1]))
+			after = append(after, storyID(ref, ids))
 		}
 		description := strings.TrimSpace(story.Brief) + "\n\n(A story of " + task.ID + ", the epic \"" + task.Title +
 			"\". When it is done, your summary goes back to the epic's coordinator, " + task.Coordinator + ".)"
@@ -446,6 +423,17 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 	if refused != "" {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": refused})
 	}
+}
+
+// storyID is the task a story builds on: the existing story ref names, or
+// the one made for its number in this split. ParseDecision has already
+// refused a number that isn't an earlier story's, and ids holds every story
+// made before this one, so the index is in range.
+func storyID(ref StoryRef, ids []string) string {
+	if ref.ID != "" {
+		return ref.ID
+	}
+	return ids[ref.Number-1]
 }
 
 // newTask makes a task with the next free id, and returns the id, or why it

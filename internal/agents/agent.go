@@ -99,21 +99,21 @@ type Roster []Agent
 func FromEvents(stream []events.Event) Roster {
 	var roster Roster
 	for _, e := range stream {
-		apply(&roster, e)
+		roster.Apply(e)
 	}
 	return roster
 }
 
 // Next is the roster after e, built on a copy: r itself is left as it was.
-// Copying the slice is enough, as apply replaces an agent's Workers whole.
+// Copying the slice is enough, as Apply replaces an agent's Workers whole.
 func (r Roster) Next(e events.Event) Roster {
 	r = slices.Clone(r)
-	apply(&r, e)
+	r.Apply(e)
 	return r
 }
 
-// apply changes the roster in place.
-func apply(r *Roster, e events.Event) {
+// Apply changes the roster in place by one accepted event of its stream.
+func (r *Roster) Apply(e events.Event) {
 	roster := *r
 	switch e.Type {
 	case events.AgentCreated:

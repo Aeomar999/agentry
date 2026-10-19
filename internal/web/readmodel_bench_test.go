@@ -93,7 +93,7 @@ func TestReadModelBench(t *testing.T) {
 	roster := agents.FromEvents(rosterEvents)
 	var summaries []taskSummary
 	for _, task := range built {
-		summaries = append(summaries, summaryOf(task, roster))
+		summaries = append(summaries, tasks.SummaryOf(task, roster))
 	}
 	var encodedSize int
 	encode := median(func() { encodedSize = encodedLen(t, summaries) })

@@ -37,7 +37,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	summaries := []taskSummary{}
 	for _, task := range all {
-		summary := summaryOf(task, roster)
+		summary := tasks.SummaryOf(task, roster)
 		summary.BlockedBy = blockedBy(task, func(id string) bool { return done[id] })
 		summaries = append(summaries, summary)
 	}
@@ -236,7 +236,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	answered, refused := false, ""
-	if coordinator.StoppedAt(task) == coordinator.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
+	if task.StoppedAt() == tasks.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
 		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
 		if budget == 0 {
 			answer = "I made the budget unlimited. Carry on."
@@ -267,7 +267,7 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	answered, refused := false, ""
-	if coordinator.StoppedAt(task) == coordinator.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
+	if task.StoppedAt() == tasks.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
 		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
 		if maxTurns == 0 {
 			answer = "I made the turns unlimited. Carry on."
@@ -377,7 +377,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	detail.StoryList = []taskSummary{}
 	for _, id := range task.Stories {
 		if story, _ := s.task(id); story != nil {
-			summary := summaryOf(story, roster)
+			summary := tasks.SummaryOf(story, roster)
 			summary.BlockedBy = blockedBy(story, isDone)
 			detail.StoryList = append(detail.StoryList, summary)
 		}

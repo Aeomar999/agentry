@@ -93,7 +93,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 
 	// Done work goes back for more, as does work a checker or a shipper had,
 	// parked or not.
-	from := workColumn(task, roster)
+	from := task.WorkColumn(roster)
 	sentBack := request.To == "in-progress" && (task.IsDone || from == "review" || from == "shipping")
 	text := ""
 	switch {

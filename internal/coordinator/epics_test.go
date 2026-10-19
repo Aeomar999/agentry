@@ -1,13 +1,19 @@
 package coordinator
 
 import (
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -241,4 +247,121 @@ func start(t *testing.T, s *store.Store, id string) {
 func load(t *testing.T, s *store.Store, id string) *tasks.Task {
 	t.Helper()
 	return tasks.FromEvents(mustStream(t, s, id))
+}
+
+// A story can build on one of the epic's stories already there, by its id,
+// and on an earlier story of the same split, by its number: each made
+// story's after names the right task. An id has no number, which once
+// indexed the split's stories at -1 and stopped the server.
+func TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne(t *testing.T) {
+	s, state, epic := splitting(t, `{"action": "split", "stories": [
+		{"title": "Add the command", "brief": "On the store.", "after": ["task-1"]},
+		{"title": "Document it", "brief": "One page.", "after": [1, "task-1"]}]}`)
+	task, roster, _ := (&Loop{store: s, state: state}).load(epic)
+	move := Next(task, roster)
+	if move.Kind != ApplyDecision {
+		t.Fatalf("the split should be applied: %s %s", move.Kind, move.Reason)
+	}
+	(&Loop{store: s, state: state}).apply(task, roster, move.Decision)
+
+	if stories := load(t, s, epic).Stories; !slices.Equal(stories, []string{"task-1", "task-3", "task-4"}) {
+		t.Fatalf("stories %v", stories)
+	}
+	if after := load(t, s, "task-3").After; !slices.Equal(after, []string{"task-1"}) {
+		t.Errorf("the command builds on task-1: after %v", after)
+	}
+	if after := load(t, s, "task-4").After; !slices.Equal(after, []string{"task-3", "task-1"}) {
+		t.Errorf("the docs build on the command and task-1: after %v", after)
+	}
+}
+
+// A number that isn't an earlier story of the split (none, one not made
+// yet, the story itself) makes no story: the coordinator hears why, and
+// decides again.
+func TestASplitStoryAfterAStoryNotBeforeItIsRefused(t *testing.T) {
+	for _, after := range []string{`[0]`, `["0"]`, `[-1]`, `[2]`, `[3]`} {
+		s, state, epic := splitting(t, `{"action": "split", "stories": [
+			{"title": "Add the store", "brief": "A store."},
+			{"title": "Add the command", "brief": "On the store.", "after": `+after+`}]}`)
+		newLoop(s, state, t.TempDir()).act(epic)
+
+		task := load(t, s, epic)
+		if task.IssuesInARow != 1 || task.PendingDecision != "" || len(task.Stories) != 1 {
+			t.Errorf("after %s: %d issues, pending %q, stories %v", after, task.IssuesInARow, task.PendingDecision, task.Stories)
+		}
+		if reason := lastIssue(t, s, epic); !strings.Contains(reason, "story 2 builds on story") {
+			t.Errorf("after %s: the issue should say which story is wrong: %q", after, reason)
+		}
+		if ids := state.TaskIDs(); len(ids) != 2 {
+			t.Errorf("after %s: no story should be made: tasks %v", after, ids)
+		}
+	}
+}
+
+// A decision that panics while the loop acts on it raises an issue on its
+// task instead of stopping the server, and the loop goes on to the next
+// task. Here the store's check breaks on the story it is asked to make.
+func TestADecisionThatPanicsRaisesAnIssueAndTheLoopGoesOn(t *testing.T) {
+	broken := func(p events.Proposal, state rules.State) *events.Rejection {
+		if p.Type == events.TaskCreated && p.Text("title") == "Break the check" {
+			panic("the check broke")
+		}
+		return rules.Check(p, state)
+	}
+	s, state, epic := splittingWith(t, broken, `{"action": "split", "stories": [{"title": "Break the check", "brief": "Boom."}]}`)
+	loop := newLoop(s, state, t.TempDir())
+	loop.act(epic)
+	loop.act("task-1")
+
+	if reason := lastIssue(t, s, epic); !strings.Contains(reason, `"split" decision: the check broke`) {
+		t.Errorf("the issue should name the decision and the panic: %q", reason)
+	}
+	if task := load(t, s, epic); task.IssuesInARow != 1 || len(task.Stories) != 1 {
+		t.Errorf("%d issues, stories %v", task.IssuesInARow, task.Stories)
+	}
+	if question := load(t, s, "task-1").Question; !strings.Contains(question, "worktree") {
+		t.Errorf("the loop should go on to task-1, whose repo isn't there: question %q", question)
+	}
+}
+
+// splitting is a store with task-2, an epic with one story, task-1, whose
+// coordinator's turn ended with report.
+func splitting(t *testing.T, report string) (*store.Store, *current.State, string) {
+	return splittingWith(t, rules.Check, report)
+}
+
+// splittingWith is splitting with the rules the store checks proposals by.
+func splittingWith(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection, report string) (*store.Store, *current.State, string) {
+	t.Helper()
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { storetest.CheckEqual(t, s, state) }) // cleanups run last first: before the close
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	const epic = "task-2"
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Add the store", "repo": "/r", "coordinator": "tech-lead"}})
+	propose(t, s, events.Proposal{Stream: epic, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ship the tool", "repo": "/r", "coordinator": "tech-lead",
+		"kind": "epic", "kindChosen": true}})
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.EpicJoined, Data: map[string]any{"epic": epic}})
+	propose(t, s, events.Proposal{Stream: epic, Actor: you, Type: events.StoryAdded, Data: map[string]any{"story": "task-1", "title": "Add the store"}})
+	propose(t, s, events.Proposal{Stream: epic, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	propose(t, s, events.Proposal{Stream: epic, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+	propose(t, s, events.Proposal{Stream: epic, Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": report}})
+	return s, state, epic
+}
+
+// lastIssue is the reason of the last issue raised on the task.
+func lastIssue(t *testing.T, s *store.Store, id string) string {
+	reason := ""
+	for _, e := range mustStream(t, s, id) {
+		if e.Type == events.IssueRaised {
+			reason = e.Text("reason")
+		}
+	}
+	return reason
 }

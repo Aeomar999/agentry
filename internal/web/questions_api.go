@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -60,10 +59,10 @@ func questionsOf(t *tasks.Task) []question {
 	if t.Question != "" {
 		q := base("question", "open")
 		q.Agent, q.At, q.Text, q.Options, q.Page = t.Asked.By, t.Asked.At, t.Question, t.Asked.Options, t.Asked.Page
-		switch coordinator.StoppedAt(t) {
-		case coordinator.LimitBudget:
+		switch t.StoppedAt() {
+		case tasks.LimitBudget:
 			q.Kind, q.TokensUsed, q.Budget = "budget", t.TokensUsed, t.Budget
-		case coordinator.LimitTurns:
+		case tasks.LimitTurns:
 			q.Kind, q.TurnsSinceAnswer, q.MaxTurns = "turns", t.TurnsSinceAnswer, t.MaxTurns
 		}
 		questions = append(questions, q)

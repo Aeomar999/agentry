@@ -18,11 +18,11 @@ func Next(t *Task, e events.Event) *Task {
 	} else {
 		t = t.Clone()
 	}
-	t.apply(e)
+	t.Apply(e)
 	return t
 }
 
-// Clone is a deep copy: everything apply may write through, every slice it
+// Clone is a deep copy: everything Apply may write through, every slice it
 // may append to and every turn and action it changes in place, is the
 // copy's own. Turn, Action, Step, SharedFile, Fetch, Worktree and WrapUp
 // hold only values, so copying the struct copies them whole.
