@@ -83,8 +83,28 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	if code, _ := call(t, server, "POST", "/api/ideas/"+id+"/dismiss", `{"note":"No"}`); code != http.StatusConflict {
 		t.Errorf("dismissing an accepted idea: %d", code)
 	}
-	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) {
+	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) ||
+		!strings.Contains(body, `"autoAccepted":false`) {
 		t.Errorf("the accepted idea: %s", body)
+	}
+}
+
+func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	id := suggestIdea(t, s, "task-1", repo, "Search the board")
+	for _, p := range []events.Proposal{
+		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Search the board", "repo": repo,
+			"coordinator": "tech-lead", "parked": "backlog", "idea": id}},
+		{Stream: id, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"autoAccepted":true`) {
+		t.Errorf("the idea Agentry accepted: %s", body)
 	}
 }
 

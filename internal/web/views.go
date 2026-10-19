@@ -247,8 +247,9 @@ type ideaView struct {
 	AboutTitle string      `json:"aboutTitle"` // that epic's title
 	Kind       tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
 	State      ideas.State `json:"state"`
-	Note       string      `json:"note"`   // what you said when you accepted or dismissed it
-	Became     string      `json:"became"` // the task an accepted idea became
+	Note       string      `json:"note"`         // what you said when you accepted or dismissed it
+	Became     string      `json:"became"`       // the task an accepted idea became
+	Auto       bool        `json:"autoAccepted"` // Agentry accepted it, as every Visionary agreed, not you
 	CreatedAt  time.Time   `json:"createdAt"`
 }
 
@@ -258,7 +259,7 @@ func viewOf(idea *ideas.Idea, about *tasks.Task) ideaView {
 	view := ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
 		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
 		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
-		CreatedAt: idea.CreatedAt}
+		Auto: idea.AutoAccepted, CreatedAt: idea.CreatedAt}
 	if about != nil {
 		view.About, view.AboutTitle = about.ID, about.Title
 	}

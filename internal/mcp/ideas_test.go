@@ -244,6 +244,14 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 	}
 
 	fake.mu.Lock()
+	fake.ideas = append([]map[string]any{{"id": "idea-8", "title": "Search", "task": "task-40", "state": "accepted", "autoAccepted": true}}, fake.ideas...)
+	fake.mu.Unlock()
+	agreed, _ := WaitingFor(agentry)
+	if got := ideasIn(agreed); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !Seen(before)[got[0].Key] {
+		t.Errorf("an idea Agentry accepted for you isn't news: %+v, before %+v", agreed, before)
+	}
+
+	fake.mu.Lock()
 	fake.ideas = append([]map[string]any{{"id": "idea-5", "title": "Undo a move", "task": "task-40", "state": "open"},
 		{"id": "idea-6", "title": "Bulk start", "task": "task-40", "state": "open"},
 		{"id": "idea-7", "title": "Tags", "task": "task-40", "state": "open"}}, fake.ideas...)
