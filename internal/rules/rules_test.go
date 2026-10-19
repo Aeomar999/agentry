@@ -304,6 +304,68 @@ func TestYourMoveToToDoStands(t *testing.T) {
 	}
 }
 
+// Your move to Review or back to In progress stands until the coordinator
+// hands the task on, and it hands it to an agent that fits the move.
+func TestYourMoveToReviewStands(t *testing.T) {
+	s := openSeeded(t)
+	assign := func(agent string, checks bool) map[string]any {
+		return map[string]any{"agent": agent, "instructions": "go", "checks": checks}
+	}
+	proposeAll(t, s, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", assign("engineer", false), true},
+		turnStarted("turn-2", "engineer"), turnEnded("turn-2", "engineer", "Built."),
+		{you, events.TaskDirected, "", map[string]any{"text": "Have this task reviewed next.", "column": "review"}, true},
+		turnStarted("turn-3", "tech-lead"), turnEnded("turn-3", "tech-lead", "assign"),
+	})
+	refusedWith(t, s, coordinator, events.TaskAssigned, assign("engineer", false),
+		"the user moved this task to Review; hand it to an agent that checks work")
+	proposeAll(t, s, []step{
+		{coordinator, events.TaskAssigned, "", assign("reviewer", true), true},
+		turnStarted("turn-4", "reviewer"), turnEnded("turn-4", "reviewer", "Looks fine."),
+	})
+	if task := taskIn(s); task.Column != "" {
+		t.Errorf("the reviewer has it: column %q, want the stage's", task.Column)
+	}
+
+	proposeAll(t, s, []step{
+		{you, events.TaskDirected, "", map[string]any{"text": "This needs more work.", "column": "in-progress", "sentBack": true}, true},
+		turnStarted("turn-5", "tech-lead"), turnEnded("turn-5", "tech-lead", "assign"),
+	})
+	refusedWith(t, s, coordinator, events.TaskAssigned, assign("tester", true),
+		"the user moved this task back to In progress; hand it to an agent that builds it")
+	proposeAll(t, s, []step{{coordinator, events.TaskAssigned, "", assign("engineer", false), true}})
+
+	// Started from To do rather than sent back from Review: anyone may take it.
+	proposeAll(t, s, []step{
+		turnStarted("turn-6", "engineer"), turnEnded("turn-6", "engineer", "Fixed."),
+		{you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},
+		{you, events.TaskHeld, "", map[string]any{"place": "", "column": "in-progress"}, true},
+		turnStarted("turn-7", "tech-lead"), turnEnded("turn-7", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", assign("reviewer", true), true},
+	})
+}
+
+// A team with no agent that checks work can't have a task checked: its
+// coordinator hands it to a builder, and the task stays in Review.
+func TestReviewWithNoChecker(t *testing.T) {
+	s := openSeeded(t)
+	for _, name := range []string{"reviewer", "tester"} {
+		if _, rejection, err := s.Propose(events.Proposal{Stream: events.AgentsStream, Actor: you, Type: events.AgentRemoved,
+			Data: map[string]any{"name": name}}); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	proposeAll(t, s, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{you, events.TaskDirected, "", map[string]any{"text": "Have this task reviewed next.", "column": "review"}, true},
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "check it", "checks": false}, true},
+	})
+	if task := taskIn(s); task.Column != "review" {
+		t.Errorf("column %q, want it kept in review", task.Column)
+	}
+}
+
 // Only your move gives a wrap-up, and only the board's Done finishes a
 // story for you.
 func TestNoWrapUpWithoutYourMove(t *testing.T) {

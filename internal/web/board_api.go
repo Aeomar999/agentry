@@ -8,21 +8,24 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// direct is what moving a card on the board does. The columns are the
-// work's stages, not agents: the coordinator still decides who works next,
-// so the board never disagrees with the log.
+// direct is what moving a card on the board does. Your move stands at once,
+// in the same request; the columns are the work's stages, not agents, so
+// the coordinator still decides who works next, within your move.
 //
 //   - Backlog, To do: park it there at once; a turn in progress stops, and
 //     the coordinator only wraps up
 //   - In progress: start it (let it go); from Review, send it back for more
-//     work
-//   - Review: have it checked next
+//     work, which an agent that checks work doesn't take
+//   - Review: have it checked next, by an agent that checks work if its
+//     team has one
 //   - Done: it is done at once, as it is; a turn in progress stops, and the
 //     coordinator only wraps up (an epic closes, and its open stories are
 //     parked in the Backlog)
 //
-// A finished task moved anywhere but Done is reopened first. A task
-// waiting for your answer takes the words as the answer.
+// In progress and Review stand until the coordinator next hands the task
+// on: the first event the move writes carries the column. A finished task
+// moved anywhere but Done is reopened first. A task waiting for your answer
+// takes the words as the answer.
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To, Note string }
 	if !decode(w, r, &request) {
@@ -71,34 +74,40 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inReview := false
-	if agent, ok := roster.Get(stageOf(task)); ok {
-		inReview = agent.Column == "review"
-	}
+	sentBack := request.To == "in-progress" && columnOf(task, roster) == "review"
 	text := ""
 	switch {
 	case request.To == "review":
 		text = "Have this task reviewed next."
-	case inReview:
+	case sentBack:
 		text = "This needs more work: hand it back to an agent that builds it."
 	case note != "":
 		text = "Carry on."
 	}
-	if task.IsDone {
+	moved := func(p events.Proposal) events.Proposal {
+		p.Data["column"], p.Data["sentBack"] = request.To, sentBack
+		return p
+	}
+	switch {
+	case task.IsDone:
 		if text == "" {
 			text = "It needs more work."
 		}
-		s.propose(w, s.reopen(task, "Reopen this task. "+text, note))
-		return
-	}
-	if task.Parked != "" && !s.proposeOrRefuse(w, park("")) {
-		return
-	}
-	if text == "" { // started from To do or the Backlog: nothing more to say
+		s.propose(w, moved(s.reopen(task, "Reopen this task. "+text, note)))
+	case task.Parked != "":
+		if !s.proposeOrRefuse(w, moved(park(""))) {
+			return
+		}
+		if text == "" { // started from To do or the Backlog: nothing more to say
+			reply(w, map[string]string{"task": task.ID})
+			return
+		}
+		s.propose(w, s.direction(task, text, note))
+	case text == "": // already there
 		reply(w, map[string]string{"task": task.ID})
-		return
+	default:
+		s.propose(w, moved(s.direction(task, text, note)))
 	}
-	s.tell(w, task, text, note)
 }
 
 // parkStories parks the stories of an epic you closed that aren't done, in
@@ -122,9 +131,9 @@ func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note strin
 	return true
 }
 
-// tell gives the coordinator your words: as the answer, if it asked you
-// something, or as a direction it reads at its next turn.
-func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string) {
+// direction gives the coordinator your words: as the answer, if it asked
+// you something, or as a direction it reads at its next turn.
+func (s *Server) direction(task *tasks.Task, text, note string) events.Proposal {
 	if note != "" {
 		text += " " + note
 	}
@@ -132,7 +141,7 @@ func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string
 	if task.Question != "" {
 		kind, field = events.TaskAnswered, "answer"
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}})
+	return events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}}
 }
 
 func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {

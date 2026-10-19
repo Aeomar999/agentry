@@ -29,6 +29,11 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
+	roster, err := s.roster()
+	if err != nil {
+		failed(w, err)
+		return
+	}
 	var all []*tasks.Task
 	done := map[string]bool{}
 	for i := len(ids) - 1; i >= 0; i-- { // newest first, which a tie keeps
@@ -38,7 +43,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	summaries := []taskSummary{}
 	for _, task := range all {
-		summary := summaryOf(task)
+		summary := summaryOf(task, roster)
 		summary.BlockedBy = blockedBy(task, func(id string) bool { return done[id] })
 		summaries = append(summaries, summary)
 	}
@@ -371,7 +376,12 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	detail := detailOf(task, log)
+	roster, err := s.roster()
+	if err != nil {
+		failed(w, err)
+		return
+	}
+	detail := detailOf(task, roster, log)
 	isDone := func(id string) bool { other, _ := s.task(id); return other != nil && other.IsDone }
 	detail.BlockedBy = blockedBy(task, isDone)
 	if epic, _ := s.task(task.Epic); epic != nil {
@@ -380,7 +390,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	detail.StoryList = []taskSummary{}
 	for _, id := range task.Stories {
 		if story, _ := s.task(id); story != nil {
-			summary := summaryOf(story)
+			summary := summaryOf(story, roster)
 			summary.BlockedBy = blockedBy(story, isDone)
 			detail.StoryList = append(detail.StoryList, summary)
 		}

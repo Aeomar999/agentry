@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -194,6 +195,32 @@ func notUndoingYourMove(t *tasks.Task, p events.Proposal) string {
 		return "the user moved this task to " + tasks.PlaceName(t.Parked) + "; it waits there until they move it on"
 	}
 	return ""
+}
+
+// taskRosterRules check a task's event against its team's agents too.
+var taskRosterRules = map[events.Type]func(t *tasks.Task, roster agents.Roster, p events.Proposal) string{
+	events.TaskAssigned: toTheColumnYouMovedItTo,
+}
+
+// toTheColumnYouMovedItTo: when you move a task to Review yourself, its
+// coordinator hands it to an agent that checks work, if its team has one;
+// moved from Review back to In progress, to one that doesn't.
+func toTheColumnYouMovedItTo(t *tasks.Task, roster agents.Roster, p events.Proposal) string {
+	agent, _ := roster.Get(p.Text("agent"))
+	checks := agent.Column == agents.Reviews
+	switch {
+	case t.Column == "review" && !checks && hasAChecker(roster, t.Coordinator):
+		return "the user moved this task to Review; hand it to an agent that checks work"
+	case t.Column == "in-progress" && t.SentBack && checks:
+		return "the user moved this task back to In progress; hand it to an agent that builds it"
+	}
+	return ""
+}
+
+// hasAChecker says whether the coordinator's team has an agent that checks work.
+func hasAChecker(roster agents.Roster, coordinator string) bool {
+	lead, _ := roster.Get(coordinator)
+	return slices.ContainsFunc(roster.Assignees(lead.TeamName()), func(a agents.Agent) bool { return a.Column == agents.Reviews })
 }
 
 func wrappingUp(t *tasks.Task, _ events.Proposal) string {

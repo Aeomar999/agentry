@@ -85,6 +85,11 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 	if reason := taskRules[p.Type](task, p); reason != "" {
 		return refuse(reason)
 	}
+	if rule := taskRosterRules[p.Type]; rule != nil {
+		if reason := rule(task, roster, p); reason != "" {
+			return refuse(reason)
+		}
+	}
 	return nil
 }
 

@@ -23,14 +23,14 @@ var catalogue = map[Type]spec{
 
 	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent}}, // an agent's: with "parent", for another team, or "epic", a story
 	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
-	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}},
-	TaskLabeled:        {writers: []ActorKind{Human}}, // "labels" may be empty: that removes them all
+	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
+	TaskLabeled:        {writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
 	TaskBudgeted:       {fields: []string{"budget"}, writers: []ActorKind{Human}},
 	TaskTurnsLimited:   {fields: []string{"maxTurns"}, writers: []ActorKind{Human}},
 	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
-	TaskHeld:           {writers: []ActorKind{Human}},         // "place" "" lets it go
-	TaskWrappedUp:      {writers: []ActorKind{Agent, System}}, // "summary" from the coordinator; Agentry's "reason" when it had none
-	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},
+	TaskHeld:           {writers: []ActorKind{Human}},                                  // "place" "" lets it go, with a board move's "column", "sentBack"
+	TaskWrappedUp:      {writers: []ActorKind{Agent, System}},                          // "summary" from the coordinator; Agentry's "reason" when it had none
+	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},        // with a board move's "column", "sentBack"
 	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human, Agent}}, // an agent: the coordinator, to a repo you named
 	AgentRenamedInTask: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 	TaskTransferred:    {fields: []string{"coordinator", "reason"}, writers: []ActorKind{Agent}},
@@ -52,7 +52,7 @@ var catalogue = map[Type]spec{
 	WorktreeReady:      {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
 	WorktreeMoved:      {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
 
-	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}},
+	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}}, // "checks": the agent checks work
 	TurnStarted:        {fields: []string{"agent", "hash"}, correlation: true, writers: []ActorKind{Worker}},
 	PromptAcknowledged: {fields: []string{"hash"}, correlation: true, writers: []ActorKind{Worker}},
 	SessionStarted:     {fields: []string{"engineSession"}, correlation: true, writers: []ActorKind{Worker}},
@@ -70,8 +70,8 @@ var catalogue = map[Type]spec{
 	TurnStopped:  {correlation: true, writers: []ActorKind{Human}},
 
 	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}}, // Agentry's: "limit" says which stopped the task
-	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},
-	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}}, // yours: an epic you approved closing, or a card you moved to Done ("moved")
+	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},           // with a board move's "column", "sentBack"
+	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}},   // yours: an epic you approved closing, or a card you moved to Done ("moved")
 
 	WorkerInvited:      {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},
 	ConnectionInvited:  {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},

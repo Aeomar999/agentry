@@ -20,7 +20,7 @@ const (
 
 	TaskCreated        Type = "task.created"
 	TaskRenamed        Type = "task.renamed"       // a title that says what the task is, from the coordinator once it has read it
-	TaskDirected       Type = "task.directed"      // you tell the coordinator what you want next, as when you move a card on the board
+	TaskDirected       Type = "task.directed"      // you tell the coordinator what you want next, as when you move a card on the board ("column": where it stands at once)
 	TaskLabeled        Type = "task.labeled"       // the task's labels, all of them, replacing the ones before
 	TaskBudgeted       Type = "task.budgeted"      // a new token budget for the task, as when you raise it
 	TaskTurnsLimited   Type = "task.turns_limited" // a new limit of turns without your answer, as when you raise it

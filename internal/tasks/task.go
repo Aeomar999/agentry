@@ -34,6 +34,8 @@ type Task struct {
 	MaxTurns    int     // turns the task may have without your answer before it asks you; 0 is no limit
 	Rank        float64 // your priority order, lower first; a new task starts above every older one
 	Parked      string  // "todo" or "backlog" while you hold it there; the coordinator leaves it alone
+	Column      string  // "in-progress" or "review": the board column you moved it to, until its coordinator next hands it on
+	SentBack    bool    // that move took it from Review back to In progress: it needs more work, not checking
 	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string

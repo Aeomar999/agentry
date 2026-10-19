@@ -79,9 +79,11 @@ func TestReadModelBench(t *testing.T) {
 	for id, stream := range decoded {
 		built[id] = tasks.FromEvents(stream)
 	}
+	rosterEvents, _ := s.Stream(events.AgentsStream)
+	roster := agents.FromEvents(rosterEvents)
 	var summaries []taskSummary
 	for _, task := range built {
-		summaries = append(summaries, summaryOf(task))
+		summaries = append(summaries, summaryOf(task, roster))
 	}
 	var encodedSize int
 	encode := median(func() { encodedSize = encodedLen(t, summaries) })

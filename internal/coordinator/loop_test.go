@@ -243,3 +243,27 @@ func newLoop(s *store.Store, root string) *Loop {
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
 	return NewLoop(s, turns.NewRunner(s, fleet, turns.Config{}), fleet)
 }
+
+// A handoff that undoes your move to Review is refused, and the coordinator
+// hears why, as an issue, to decide again rather than stall.
+func TestTheCoordinatorHearsAHandoffWasRefused(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	const id = "task-1"
+	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDirected, Data: map[string]any{"text": "Have this task reviewed next.", "column": "review"}})
+	task, roster, _ := (&Loop{store: s}).load(id)
+	(&Loop{store: s}).apply(task, roster, Decision{Action: Assign, Agent: "engineer", Instructions: "Build it."})
+
+	task = load(t, s, id)
+	if last := task.Trail[len(task.Trail)-1]; last.From != tasks.Agentry || last.To != "tech-lead" ||
+		last.Text != "the user moved this task to Review; hand it to an agent that checks work" {
+		t.Errorf("the coordinator should hear the refusal: %+v", last)
+	}
+}

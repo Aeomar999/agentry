@@ -966,6 +966,110 @@ func TestYourMovesOnTheBoardStand(t *testing.T) {
 	}
 }
 
+// Your moves to In progress and Review stand in the same request, from
+// any column, until the coordinator hands the task on: then its column
+// follows the agent that has it.
+func TestYourMovesToInProgressAndReviewStand(t *testing.T) {
+	server, s := newTestServer(t)
+	worker, lead := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	propose := func(p events.Proposal) *events.Rejection {
+		_, rejection, err := s.Propose(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	handOn := func(id, turn, agent string) *events.Rejection {
+		for _, p := range []events.Proposal{
+			{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+			{Stream: id, Actor: worker, Type: events.TurnEnded, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "report": "r"}},
+		} {
+			if rejection := propose(p); rejection != nil {
+				t.Fatalf("%s: %v", p.Type, rejection)
+			}
+		}
+		return propose(events.Proposal{Stream: id, Actor: lead, Type: events.TaskAssigned,
+			Data: map[string]any{"agent": agent, "instructions": "go", "checks": agent == "reviewer"}})
+	}
+	move := func(id, to string) {
+		if code, body := call(t, server, "POST", "/api/tasks/"+id+"/direct", `{"to":"`+to+`"}`); code != 200 {
+			t.Fatalf("%s onto %s: %d %s", id, to, code, body)
+		}
+	}
+	column := func(id string) string {
+		_, body := call(t, server, "GET", "/api/tasks", "")
+		var list []taskSummary
+		json.Unmarshal([]byte(body), &list)
+		for _, summary := range list {
+			if summary.ID == id {
+				return summary.Column
+			}
+		}
+		return "missing"
+	}
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	if rejection := handOn("task-1", "turn-1", "engineer"); rejection != nil || column("task-1") != "in-progress" {
+		t.Fatalf("with the engineer: %v, column %s", rejection, column("task-1"))
+	}
+	move("task-1", "review")
+	if c := column("task-1"); c != "review" {
+		t.Errorf("onto Review: column %s", c)
+	}
+	if rejection := handOn("task-1", "turn-2", "engineer"); rejection == nil ||
+		rejection.Reason != "the user moved this task to Review; hand it to an agent that checks work" {
+		t.Errorf("handed back to the engineer: %v", rejection)
+	}
+	if rejection := propose(events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskAssigned,
+		Data: map[string]any{"agent": "reviewer", "instructions": "check it", "checks": true}}); rejection != nil || column("task-1") != "review" {
+		t.Errorf("to the reviewer: %v, column %s", rejection, column("task-1"))
+	}
+	if rejection := handOn("task-1", "turn-3", "engineer"); rejection != nil || column("task-1") != "in-progress" {
+		t.Errorf("your move is over: the next handoff is the coordinator's: %v, column %s", rejection, column("task-1"))
+	}
+	handOn("task-1", "turn-4", "reviewer")
+	move("task-1", "in-progress")
+	if c := column("task-1"); c != "in-progress" {
+		t.Errorf("sent back from Review: column %s", c)
+	}
+	if rejection := handOn("task-1", "turn-5", "tester"); rejection == nil ||
+		rejection.Reason != "the user moved this task back to In progress; hand it to an agent that builds it" {
+		t.Errorf("handed to the tester: %v", rejection)
+	}
+	if rejection := propose(events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskAssigned,
+		Data: map[string]any{"agent": "engineer", "instructions": "fix it"}}); rejection != nil || column("task-1") != "in-progress" {
+		t.Errorf("to the engineer: %v, column %s", rejection, column("task-1"))
+	}
+
+	// From Done: reopened, in the column you chose.
+	call(t, server, "POST", "/api/tasks", `{"description":"Tidy the README"}`)
+	propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w2", "branch": "b", "port": 7902}})
+	handOn("task-2", "turn-1", "reviewer")
+	propose(events.Proposal{Stream: "task-2", Actor: lead, Type: events.TaskDone, Data: map[string]any{"summary": "Tidied."}})
+	move("task-2", "in-progress")
+	if c := column("task-2"); c != "in-progress" {
+		t.Errorf("from Done onto In progress: column %s", c)
+	}
+	move("task-2", "done")
+	move("task-2", "review")
+	if c := column("task-2"); c != "review" {
+		t.Errorf("from Done onto Review: column %s", c)
+	}
+
+	// From To do: started, in the column you chose.
+	call(t, server, "POST", "/api/tasks", `{"description":"Add a logo"}`)
+	move("task-3", "todo")
+	move("task-3", "review")
+	if c := column("task-3"); c != "review" {
+		t.Errorf("from To do onto Review: column %s", c)
+	}
+	move("task-3", "backlog")
+	if c := column("task-3"); c != "backlog" {
+		t.Errorf("parked again: column %s", c)
+	}
+}
+
 // An epic you move to Done, whether it is asking you to close it or you
 // left it open, is closed by the move: nothing is left to ask again.
 func TestAnEpicOntoDoneLeavesNothingToClose(t *testing.T) {

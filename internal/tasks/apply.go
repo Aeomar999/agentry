@@ -64,6 +64,7 @@ func (t *Task) apply(e events.Event) {
 		} else {
 			t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
 		}
+		t.moveColumn(e)
 
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
@@ -77,13 +78,14 @@ func (t *Task) apply(e events.Event) {
 		place := e.Text("place")
 		switch {
 		case place != "" && t.Parked == "":
-			t.Parked = place
+			t.Parked, t.Column = place, ""
 			t.wrapUp(e, place, "I moved this task to "+PlaceName(place)+": it waits there until I move it on.")
 		case place != "":
 			t.Parked = place
 		default: // a wrap-up still going is over: you want more work
 			wrapping := t.WrapUp != nil
 			t.Parked, t.WrapUp = "", nil
+			t.moveColumn(e)
 			if t.stopTurn() || wrapping || t.idle() {
 				t.step(e, You, t.Coordinator, "I moved this task back to work. Carry on from where it was.")
 			}
@@ -115,6 +117,7 @@ func (t *Task) apply(e events.Event) {
 		t.IsDone, t.DoneByYou, t.Summary, t.WrapUp = false, false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("text"))
+		t.moveColumn(e)
 
 	case events.RepoChanged:
 		// Its worktree is made again, of the new repo, before the next turn:
@@ -233,6 +236,12 @@ func (t *Task) apply(e events.Event) {
 		t.Worktree.Worker, t.Worktree.Path, t.Worktree.Port = e.Text("worker"), e.Text("path"), e.Number("port")
 
 	case events.TaskAssigned:
+		// Its coordinator's handoff takes over the column you moved it to,
+		// except a builder taking a task you put in Review, which a team
+		// with no checker can do: it stays there.
+		if t.Column != "review" || e.Flag("checks") {
+			t.Column, t.SentBack = "", false
+		}
 		t.reply(e)
 		t.step(e, e.Actor.ID, e.Text("agent"), e.Text("instructions"))
 		t.Handoff.Machine = e.Text("machine")
@@ -319,10 +328,12 @@ func (t *Task) apply(e events.Event) {
 		// Closing stays: an epic you leave open can still be closed later.
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("answer"))
+		t.moveColumn(e)
 
 	case events.TaskDone:
 		t.IsDone, t.Summary = true, e.Text("summary")
 		t.Question, t.Asked, t.Closing = "", Asked{}, "" // an epic you closed: that was your answer
+		t.Column, t.SentBack = "", false
 		// You moved it to Done on the board: it is done, whatever was in hand.
 		if e.Flag("moved") {
 			t.DoneByYou, t.Parked, t.WaitingOn = true, "", ""
@@ -357,6 +368,14 @@ func (t *Task) wrapUp(e events.Event, to, text string) {
 		t.stopTurn()
 		t.WrapUp = &WrapUp{To: to}
 		t.step(e, You, t.Coordinator, text)
+	}
+}
+
+// moveColumn records your move of the card to In progress or Review, which
+// the first event the move writes carries: the column stands at once.
+func (t *Task) moveColumn(e events.Event) {
+	if column := e.Text("column"); column != "" {
+		t.Column, t.SentBack = column, e.Flag("sentBack")
 	}
 }
 

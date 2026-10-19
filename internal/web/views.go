@@ -20,7 +20,8 @@ type taskSummary struct {
 	Repo             string       `json:"repo"`
 	Status           tasks.Status `json:"status"`
 	CurrentAgent     string       `json:"currentAgent"`
-	Stage            string       `json:"stage"` // the agent the coordinator last handed it to: its column on the board
+	Stage            string       `json:"stage"`  // the agent the coordinator last handed it to
+	Column           string       `json:"column"` // its column on the board: backlog, todo, in-progress, review or done
 	Turns            int          `json:"turns"`
 	NeedsYou         string       `json:"needsYou"`    // what you are asked, "" when nothing
 	HasQuestion      bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
@@ -128,7 +129,7 @@ type eventEntry struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
-func summaryOf(t *tasks.Task) taskSummary {
+func summaryOf(t *tasks.Task, roster agents.Roster) taskSummary {
 	needsYou := t.Question
 	if waiting := t.WaitingForYou(); needsYou == "" && len(waiting) > 0 {
 		needsYou = waiting[0].Agent + " asks to run: " + waiting[0].Command
@@ -144,7 +145,7 @@ func summaryOf(t *tasks.Task) taskSummary {
 	if t.Told.Text != "" {
 		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
-	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), Column: columnOf(t, roster), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: coordinator.StoppedAt(t), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
@@ -174,6 +175,24 @@ func listOf(items []string) []string {
 	return items
 }
 
+// columnOf is the task's column on the board: Done, where you parked it, or
+// the column you moved it to while that stands; otherwise its stage's, Review
+// while an agent that checks work has it.
+func columnOf(t *tasks.Task, roster agents.Roster) string {
+	switch {
+	case t.IsDone:
+		return "done"
+	case t.Parked != "":
+		return t.Parked
+	case t.Column != "":
+		return t.Column
+	}
+	if agent, ok := roster.Get(stageOf(t)); ok && agent.Column == agents.Reviews {
+		return "review"
+	}
+	return "in-progress"
+}
+
 // stageOf is the agent the coordinator last handed the task to, or "" before
 // the first handoff.
 func stageOf(t *tasks.Task) string {
@@ -185,8 +204,8 @@ func stageOf(t *tasks.Task) string {
 	return ""
 }
 
-func detailOf(t *tasks.Task, log []events.Event) taskDetail {
-	detail := taskDetail{taskSummary: summaryOf(t), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
+func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
+	detail := taskDetail{taskSummary: summaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {
