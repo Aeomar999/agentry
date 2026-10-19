@@ -42,6 +42,7 @@ type Config struct {
 	Local       workers.Machine    // what this machine is, as a worker would say it, for the Workers page
 	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
 	Features    []features.Feature // what teams and settings can turn on, for GET /api/features
+	Worktrees   string             // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
 }
 
 // PolicySource is the policy in force and any problem with the file on
@@ -123,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/policy/profiles/{name}/use-default", s.useDefaultProfile)
 	api("POST /api/policy/use-for-everyone/off", s.turnOffUseForEveryone)
 	api("POST /api/policy/revert", s.revertPolicy)
+	api("POST /api/policy/try", s.tryPolicy)
 	api("GET /api/workers", s.listWorkers)
 	api("POST /api/workers/invite", s.invite)
 	api("GET /api/workers/{name}", s.showWorker)
