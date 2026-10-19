@@ -46,11 +46,19 @@ export function activityOf(task: TaskDetail, log: LogEvent[]): ActivityItem[] {
   }
 
   const items: ActivityItem[] = [];
+  const opened = new Set<string>(); // the turns with their own row so far
   let handoff: ActivityItem | undefined; // the last handoff to an agent, until its turn starts
   for (const e of log) {
     const turn = turnOfEvent(e, turns, actions);
     const item = rowOf(e, turn, turns, actions, settledAt, task.coordinator);
     if (!item) continue;
+    // A page that starts in the middle of a turn opens it with the row its
+    // start would give, made from the turn, so its rows are under its band.
+    const info = turns.get(item.turn);
+    if (item.kind !== "turn" && info && !opened.has(item.turn)) {
+      items.push(turnRow({ key: `turn:${info.id}`, at: info.startedAt, turn: item.turn }, info));
+    }
+    opened.add(item.turn);
     if (item.kind === "message" && item.to && item.to !== "you") handoff = item;
     if (item.kind === "turn" && handoff && handoff.to === item.turnInfo?.agent) {
       handoff.leadsTo = item.turn;
@@ -153,6 +161,20 @@ function text(e: LogEvent, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
+// turnRow is a turn's own row, its band, from what the turn says of itself.
+function turnRow(base: Pick<ActivityItem, "key" | "at" | "turn">, info: Turn): ActivityItem {
+  return {
+    ...base,
+    kind: "turn",
+    by: info.agent,
+    title: info.agent,
+    turnInfo: info,
+    until: info.ended ? info.lastEventAt : undefined,
+    live: !info.ended && !info.limited,
+    tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
+  };
+}
+
 function rowOf(
   e: LogEvent,
   turn: string,
@@ -189,18 +211,7 @@ function rowOf(
 
     case "turn.started": {
       const info = turns.get(turn);
-      if (!info) return null;
-      const ended = info.ended ? info.lastEventAt : undefined;
-      return {
-        ...base,
-        kind: "turn",
-        by: info.agent,
-        title: info.agent,
-        turnInfo: info,
-        until: ended,
-        live: !info.ended && !info.limited,
-        tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
-      };
+      return info ? turnRow(base, info) : null;
     }
     case "turn.ended": {
       const used = Number(e.data?.tokens ?? 0);

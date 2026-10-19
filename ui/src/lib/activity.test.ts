@@ -115,12 +115,6 @@ describe("sections", () => {
     });
   });
 
-  test("puts a page that starts in the middle of a turn under its author, until the turn's start is read", () => {
-    const page = [row("5", "action", "engineer", "turn-2"), row("6", "note", "Agentry", "turn-2"), band("7", "turn-3", "reviewer")];
-    expect(outline(page)).toEqual(["reviewer turn-3: ", "Agentry: 6", "engineer: 5"]);
-    expect(outline([band("4", "turn-2", "engineer"), ...page])).toEqual(["reviewer turn-3: ", "engineer turn-2: 6 5"]);
-  });
-
   test("gives nothing for no rows", () => {
     expect(sections([])).toEqual([]);
   });
@@ -156,5 +150,93 @@ describe("activityOf's authors", () => {
 
   test("says a message from the loop is from Agentry", () => {
     expect(activityOf(task, log).at(-1)!.from).toBe("Agentry");
+  });
+});
+
+describe("activityOf, on a page that starts in the middle of a turn", () => {
+  const turn = (id: string, agent: string, more: Partial<Turn> = {}) =>
+    ({
+      id,
+      agent,
+      worker: "local",
+      startedAt: "2026-10-19T06:00:00Z",
+      lastEventAt: "2026-10-19T06:40:00Z",
+      ended: true,
+      issue: "",
+      tokens: 0,
+      ...more,
+    }) as Turn;
+  const event = (position: number, type: string, actor: string, correlation?: string, data: Record<string, unknown> = {}): LogEvent => ({
+    position,
+    at: `2026-10-19T06:${String(position).padStart(2, "0")}:00Z`,
+    type,
+    actor,
+    data,
+    correlation,
+  });
+  const taskOf = (...turnList: Turn[]) => ({ coordinator: "coordinator", turnList, actions: [] }) as unknown as TaskDetail;
+
+  // turn-2 is the engineer's, from 4 to 9; the page holds 6 on.
+  const log = [
+    event(1, "task.created", "human:you", undefined, { title: "Make it readable" }),
+    event(2, "turn.started", "worker:local", "turn-1"),
+    event(3, "turn.ended", "worker:local", "turn-1"),
+    event(4, "turn.started", "worker:local", "turn-2"),
+    event(5, "prompt.acknowledged", "worker:local", "turn-2"),
+    event(6, "plan.updated", "agent:engineer", "turn-2", { plan: "- [x] one" }),
+    event(7, "session.started", "worker:local", "turn-2", { engineSession: "abcdef123456" }),
+    event(8, "plan.updated", "agent:engineer", "turn-2", { plan: "- [x] one\n- [x] two" }),
+    event(9, "turn.ended", "worker:local", "turn-2", { tokens: 1200 }),
+  ];
+  const page = log.slice(5);
+  const ended = taskOf(turn("turn-1", "coordinator"), turn("turn-2", "engineer", { issue: "the tests failed", tokens: 1200 }));
+
+  test("opens it with its band, made from the turn: its agent, status, duration and tokens", () => {
+    const items = activityOf(ended, page);
+    expect(items.map((item) => `${item.kind} ${item.by}`)).toEqual([
+      "turn engineer",
+      "note engineer",
+      "note Agentry",
+      "note engineer",
+      "ended Agentry",
+    ]);
+    const [opening] = items;
+    expect(opening).toMatchObject({
+      turn: "turn-2",
+      at: "2026-10-19T06:00:00Z",
+      until: "2026-10-19T06:40:00Z",
+      live: false,
+      tone: "danger",
+    });
+    expect(opening.turnInfo).toMatchObject({ agent: "engineer", issue: "the tests failed", tokens: 1200 });
+    const [section] = sections(items);
+    expect(section.turn).toBe(opening);
+    expect(section.rows.map((r) => r.key)).toEqual(["9", "8", "7", "6"]);
+    expect(sections(items)).toHaveLength(1);
+  });
+
+  test("opens a running turn, and one waiting for the usage limit, as their start would", () => {
+    const running = activityOf(taskOf(turn("turn-2", "engineer", { ended: false, lastEventAt: "" })), page.slice(0, 2))[0];
+    expect(running).toMatchObject({ kind: "turn", by: "engineer", live: true, until: undefined, tone: "info" });
+    const limited = taskOf(
+      turn("turn-2", "engineer", { ended: false, limited: "You've hit your limit", resetsAt: "2026-10-19T09:00:00Z" }),
+    );
+    const waiting = activityOf(limited, [
+      ...page.slice(0, 2),
+      event(10, "turn.limited", "worker:local", "turn-2", { resetsAt: "2026-10-19T09:00:00Z" }),
+    ]);
+    expect(waiting[0]).toMatchObject({ kind: "turn", by: "engineer", live: false, until: undefined, tone: "warning" });
+    expect(sections(waiting).map((s) => [s.turn?.turn, s.rows.length])).toEqual([["turn-2", 3]]);
+  });
+
+  test("once the older page is read, it is the same one band, from the turn's start, with each row once", () => {
+    const items = activityOf(ended, log);
+    expect(items.filter((item) => item.kind === "turn" && item.turn === "turn-2").map((item) => item.key)).toEqual(["4"]);
+    expect(new Set(items.map((item) => item.key)).size).toBe(items.length);
+    expect(sections(items).map((s) => `${s.turn?.turn} ${s.rows.map((r) => r.key).join(" ")}`)).toEqual([
+      "turn-2 9 8 7 6 5",
+      "turn-1 3",
+      "undefined 1",
+    ]);
   });
 });
