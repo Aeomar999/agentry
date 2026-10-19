@@ -4,23 +4,29 @@ import { afterEach, beforeEach, vi } from "vitest";
 // an element with data-lines="0-20 20-40" has those line boxes (top-bottom,
 // in px), as does the text in it; any other element's box is the span of
 // the line boxes inside it. `layout.shift` moves everything up, as a scroll
-// would. ResizeObserver and IntersectionObserver are stand-ins that never
-// fire on their own: intersect() makes a watched element come near.
+// would, and `layout.lines` can give lines to elements a test can't mark,
+// such as the ones Markdown draws. ResizeObserver and IntersectionObserver
+// are stand-ins that never fire on their own: intersect() makes a watched
+// element come near.
 
-export const layout = { shift: 0 };
+export const layout: { shift: number; lines?: (element: Element) => string | null } = { shift: 0 };
+
+function ownLines(element: Element): string | null {
+  return element.getAttribute("data-lines") ?? layout.lines?.(element) ?? null;
+}
 
 function rect(top: number, bottom: number): DOMRect {
   return new DOMRect(0, top - layout.shift, 100, bottom - top);
 }
 
 function linesOf(element: Element): DOMRect[] {
-  const own = element.getAttribute("data-lines");
+  const own = ownLines(element);
   if (own)
     return own.split(" ").map((line) => {
       const [top, bottom] = line.split("-").map(Number);
       return rect(top, bottom);
     });
-  const inside = [...element.querySelectorAll("[data-lines]")].flatMap(linesOf);
+  const inside = [...element.querySelectorAll("*")].filter(ownLines).flatMap(linesOf);
   if (!inside.length) return [];
   return [rect(Math.min(...inside.map((r) => r.top + layout.shift)), Math.max(...inside.map((r) => r.bottom + layout.shift)))];
 }
@@ -77,7 +83,8 @@ export function layOut() {
       return lines.length ? rect(lines[0].top + layout.shift, lines[lines.length - 1].bottom + layout.shift) : rect(0, 0);
     };
     Range.prototype.getClientRects = function (this: Range) {
-      const parent = this.startContainer.parentElement?.closest("[data-lines]");
+      let parent = this.startContainer.parentElement;
+      while (parent && !ownLines(parent)) parent = parent.parentElement;
       return (parent ? linesOf(parent) : []) as unknown as DOMRectList;
     };
     Element.prototype.scrollIntoView = vi.fn();
@@ -88,5 +95,6 @@ export function layOut() {
     Range.prototype.getClientRects = saved.range;
     Element.prototype.scrollIntoView = saved.scroll;
     layout.shift = 0;
+    layout.lines = undefined;
   });
 }

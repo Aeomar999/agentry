@@ -1,9 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { TaskSummary } from "@/api/types";
 import { TaskTitlesProvider, useTaskLinks } from "@/live/refs";
-import { layOut } from "@/test-layout";
+import { layout, layOut } from "@/test-layout";
 import { EntryText } from "./EntryText";
 
 layOut();
@@ -91,6 +91,37 @@ describe("EntryText", () => {
     const { container } = entries("[click me](javascript:alert(1)) or javascript:alert(2)");
     expect(container.querySelector("a")).toBeNull();
     expect(container.textContent).toContain("click me");
+  });
+
+  test("keeps a code box's Copy and Show all out of the Tab order while the report's fold cuts it off", () => {
+    // Twelve 20px paragraphs, a link on the second, then a 15-line fence at
+    // 260px: the report folds at 10 lines (a cut at 200px), the fence at 12.
+    const paragraphs = Array.from({ length: 12 }, (_, n) => (n === 1 ? "para 1, see https://example.com" : `para ${n}`));
+    layout.lines = (element) => {
+      const para = element.tagName === "P" && element.textContent!.match(/^para (\d+)/);
+      if (para) return `${Number(para[1]) * 20}-${Number(para[1]) * 20 + 20}`;
+      if (element.tagName === "PRE") return Array.from({ length: 15 }, (_, n) => `${260 + n * 20}-${280 + n * 20}`).join(" ");
+      if (element.getAttribute("aria-label") === "Copy code") return "260-288";
+      if (element.getAttribute("aria-label")?.endsWith("of this code")) return "560-580";
+      return null;
+    };
+    const code = Array.from({ length: 15 }, (_, n) => `line ${n}`).join("\n");
+    entries(`${paragraphs.join("\n\n")}\n\n\`\`\`go\n${code}\n\`\`\``);
+    const tabOrder = () =>
+      [...document.querySelectorAll<HTMLElement>("a[href], button")]
+        .filter((element) => element.tabIndex >= 0)
+        .map((element) => element.getAttribute("aria-label") ?? element.textContent);
+    const report = screen.getByRole("button", { name: /of this report$/ });
+    expect(tabOrder()).toEqual(["https://example.com (opens in a new tab)", report.getAttribute("aria-label")]);
+    fireEvent.click(report);
+    expect(tabOrder()).toEqual([
+      "https://example.com (opens in a new tab)",
+      "Copy code",
+      "Show all 15 lines of this code",
+      "Show less of this report",
+    ]);
+    fireEvent.click(report);
+    expect(tabOrder()).toEqual(["https://example.com (opens in a new tab)", report.getAttribute("aria-label")]);
   });
 
   test("loads no Monaco for many entries with code while none is near the screen", async () => {
