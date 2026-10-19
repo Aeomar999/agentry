@@ -144,10 +144,10 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 	given := strings.TrimSuffix(args[0], "/")
 	config, err := loadWorker(w.dir)
 	joined := err == nil
-	var target joining
+	var target trustedServer
 	if joined && config.Server == given && config.CA != "" && w.caFingerprint == "" {
-		target = joining{server: given, ca: []byte(config.CA)}
-	} else if target, err = toJoin(given, w.caFingerprint); err != nil {
+		target = trustedServer{server: given, ca: []byte(config.CA)}
+	} else if target, err = trustServer(given, w.caFingerprint); err != nil {
 		return err
 	}
 	if joined && (config.Server == given || config.Server == target.server) {
@@ -197,7 +197,7 @@ func loadWorker(dir string) (workerConfig, error) {
 	return config, nil
 }
 
-func joinServer(dir string, target joining, code, name string, stdout io.Writer) error {
+func joinServer(dir string, target trustedServer, code, name string, stdout io.Writer) error {
 	server := target.server
 	body, _ := json.Marshal(map[string]any{"code": code, "name": name, "machine": machines.Describe()})
 	response, err := pinned.Client(target.ca, 0).Post(server+"/api/worker/join", "application/json", bytes.NewReader(body))

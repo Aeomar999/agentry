@@ -2,9 +2,7 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,45 +13,63 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
-// A worker joining a server served over https with Agentry's own CA must
-// trust that CA before it sends the code. It can't check the CA by the
-// connection, which the CA itself vouches for, so it checks it by the
-// fingerprint `agentry ca` shows on the server, given as -ca-fingerprint.
+// A machine joining a server served over https with Agentry's own CA, as a
+// worker or as Claude Code's connection, must trust that CA before it sends
+// the code. It can't check the CA by the connection, which the CA itself
+// vouches for, so it checks it by the fingerprint `agentry ca` shows on the
+// server, given as -ca-fingerprint.
 
 // caPath is where a server served with -https hands out its CA, to anyone.
 const caPath = trustPrefix + "ca.pem"
 
-// joining is the server a worker joins: its address, https when it is
-// served so, and the CA it is pinned to, nil when it needs none.
-type joining struct {
+// trustedServer is a server a code may be sent to: its address, https when
+// it is served so, and the CA it is pinned to, nil when it needs none.
+type trustedServer struct {
 	server string
 	ca     []byte
 }
 
-// toJoin works out how to reach server, checking its CA by fingerprint.
-// With a fingerprint, the server's CA is fetched (over plain HTTP from an
-// http address, as /trust/ is served so) and must match it; an http
-// address then becomes https, as the server would redirect it. Without
-// one, an https address must be trusted by this machine, as one behind a
-// reverse proxy with a public certificate is; if it isn't, the join is
+// trustServer works out how to reach server, checking its CA by
+// fingerprint. With a fingerprint, the server's CA is fetched (over plain
+// HTTP from an http address, as /trust/ is served so) and must match it;
+// an http address then becomes https, as the server would redirect it.
+// Without one, an https address must be trusted by this machine, as one
+// behind a reverse proxy with a public certificate is; if it isn't, it is
 // refused with the fingerprint of the CA the server offered.
-func toJoin(server, fingerprint string) (joining, error) {
+func trustServer(server, fingerprint string) (trustedServer, error) {
 	server = strings.TrimSuffix(server, "/")
 	if fingerprint == "" {
 		if !strings.HasPrefix(server, "https://") {
-			return joining{server: server}, nil
+			return trustedServer{server: server}, nil
 		}
-		return joining{server: server}, trustedWithoutCA(server)
+		return trustedServer{server: server}, trustedWithoutCA(server)
 	}
 	ca, err := fetchCA(server)
 	if err != nil {
-		return joining{}, err
+		return trustedServer{}, err
 	}
 	if got := tlsca.FingerprintOf(derOf(ca)); normalFingerprint(got) != normalFingerprint(fingerprint) {
-		return joining{}, fmt.Errorf("the server's CA has fingerprint %s, not the %s given: not joining. "+
+		return trustedServer{}, fmt.Errorf("the server's CA has fingerprint %s, not the %s given, so it isn't trusted. "+
 			"Check it with `agentry ca` on the server", got, fingerprint)
 	}
-	return joining{server: "https://" + strings.TrimPrefix(strings.TrimPrefix(server, "https://"), "http://"), ca: ca}, nil
+	trusted := trustedServer{server: "https://" + strings.TrimPrefix(strings.TrimPrefix(server, "https://"), "http://"), ca: ca}
+	return trusted, servedWithCA(trusted)
+}
+
+// servedWithCA checks that the server answers with a certificate its CA
+// issued. One behind a reverse proxy with a public certificate may hand
+// out the right CA and still not be served with it.
+func servedWithCA(trusted trustedServer) error {
+	response, err := pinned.Client(trusted.ca, 15*time.Second).Get(trusted.server + caPath)
+	if pinned.Untrusted(err) {
+		return fmt.Errorf("%s hands out Agentry's CA but answers with another certificate, as a reverse proxy with its own does: "+
+			"run this again without -ca-fingerprint", trusted.server)
+	}
+	if err != nil {
+		return err
+	}
+	response.Body.Close()
+	return nil
 }
 
 // trustedWithoutCA checks that this machine trusts server's certificate as
@@ -64,16 +80,15 @@ func trustedWithoutCA(server string) error {
 		response.Body.Close()
 		return nil
 	}
-	var unknown x509.UnknownAuthorityError
-	if !errors.As(err, &unknown) {
+	if !pinned.Untrusted(err) {
 		return err
 	}
 	if ca, fetchErr := fetchCA(server); fetchErr == nil {
 		offered := tlsca.FingerprintOf(derOf(ca))
 		return fmt.Errorf("%s is served with its own CA, SHA-256 %s. Check that against `agentry ca` on the server, "+
-			"then join with -ca-fingerprint %s", server, offered, offered)
+			"then run this again with -ca-fingerprint %s", server, offered, offered)
 	}
-	return fmt.Errorf("%s: %w (to pin Agentry's own CA, join with -ca-fingerprint from `agentry ca` on the server)", server, err)
+	return fmt.Errorf("%s: %w (to pin Agentry's own CA, run this again with -ca-fingerprint from `agentry ca` on the server)", server, err)
 }
 
 // fetchCA gets the CA server offers, without trusting the connection: the

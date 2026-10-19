@@ -73,7 +73,7 @@ func TestAWrongFingerprintIsRefusedBeforeTheCodeIsSent(t *testing.T) {
 	other, _ := testCA(t)
 	dir := t.TempDir()
 	code, out := join(dir, "-ca-fingerprint", other.Fingerprint(), "https://"+address, "code")
-	if code == 0 || !strings.Contains(out, "not joining") {
+	if code == 0 || !strings.Contains(out, "isn't trusted") {
 		t.Errorf("exit %d: %s", code, out)
 	}
 	if joins.Load() != 0 {
@@ -81,6 +81,29 @@ func TestAWrongFingerprintIsRefusedBeforeTheCodeIsSent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "worker.json")); err == nil {
 		t.Error("it saved a worker.json")
+	}
+}
+
+// A reverse proxy with its own certificate that passes /trust/ca.pem on
+// hands out the right CA, but isn't served with it: the join says to drop
+// the fingerprint rather than fail on the certificate.
+func TestAFingerprintBehindAProxyWithItsOwnCertificateSaysToDropIt(t *testing.T) {
+	ca, _ := testCA(t)
+	var joins atomic.Int32
+	proxy := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == caPath {
+			w.Write(ca.PEM())
+			return
+		}
+		joins.Add(1)
+	}))
+	defer proxy.Close()
+	code, out := join(t.TempDir(), "-ca-fingerprint", ca.Fingerprint(), proxy.URL, "code")
+	if code == 0 || !strings.Contains(out, "reverse proxy") || !strings.Contains(out, "without -ca-fingerprint") {
+		t.Errorf("exit %d: %s", code, out)
+	}
+	if joins.Load() != 0 {
+		t.Error("the code was sent")
 	}
 }
 
