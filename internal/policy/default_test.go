@@ -639,6 +639,10 @@ func TestAVerdictNamesItsRule(t *testing.T) {
 // files through a redirect.
 const scratch = "/tmp/claude-1000/x/s"
 
+// escaped is scratch with each / written as a JSON escape, which JSON.parse
+// reads back as /.
+var escaped = strings.ReplaceAll(scratch, "/", `\`+"u002f")
+
 // A test runner started outside the workspace, or pointed at a file outside
 // it, runs code nobody reviews, even from the scratch folder: a Go test, a
 // package.json, a conftest.py or a jest reporter written there (task-89).
@@ -684,6 +688,12 @@ func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 			{"jest --setupFiles", bash("npx jest --setupFiles " + scratch + "/s.js"), Ask},
 			{"jest --testRunner=", bash("npx jest --testRunner=" + scratch + "/r.js"), Ask},
 			{"jest --transform JSON", bash(`npx jest --transform='{"^.+\\.js$":"` + scratch + `/t.js"}'`), Ask},
+			// jest decodes these values as JSON itself, escapes included
+			{"jest --transform escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Ask},
+			{"jest --moduleNameMapper escaped JSON", bash(`npx jest --moduleNameMapper='{"^x$":"` + escaped + `/m.js"}'`), Ask},
+			{"jest JSON with a nested path", bash(`npx jest --testEnvironmentOptions='{"a":[{"b":"\/tmp\/claude-1000\/x\/s\/e.js"}]}'`), Ask},
+			{"jest JSON with a path as a key", bash(`npx jest --haste='{"` + escaped + `":1}'`), Ask},
+			{"jest JSON that doesn't parse", bash(`npx jest --transform='{"x":"t.js"'`), Ask},
 			{"jest a path", bash("npx jest " + scratch), Ask},
 			{"jest from scratch", bash("cd " + scratch + " && npx jest --ci"), Ask},
 
@@ -695,6 +705,7 @@ func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 			{"vitest --dir", bash("npx vitest run --dir " + scratch), Ask},
 			{"vitest --reporter=", bash("npx vitest run --reporter=" + scratch + "/r.js"), Ask},
 			{"vitest a path", bash("npx vitest run " + scratch), Ask},
+			{"jest a nested =", bash("npx jest --testEnvironmentOptions=--require=" + scratch + "/x.js"), Ask},
 
 			// eslint
 			{"eslint -c", bash("npx eslint -c " + scratch + "/e.js ."), Ask},
@@ -776,6 +787,8 @@ func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 			{"pytest", bash("pytest"), Allow},
 			{"pytest with a filter", bash("python3 -m pytest -q -k 'not slow' tests"), Allow},
 			{"cargo test", bash("cargo test"), Allow},
+			{"jest JSON in the workspace", bash(`npx jest --moduleNameMapper='{"^@/(.*)$":"<rootDir>\u002fsrc\u002f$1"}'`), Allow},
+			{"jest JSON with a regex key", bash(`npx jest --transform='{"^.+\\.tsx?$":"ts-jest"}'`), Allow},
 			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
 			{"output to scratch", bash("go test ./... > " + scratch + "/out.txt"), Allow},
 		})
@@ -790,6 +803,7 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"go test a scratch package", bash("go test " + scratch + "/..."), Allow},
 		{"jest with a scratch reporter", bash("npx jest --reporters " + scratch + "/r.js"), Allow},
 		{"go test elsewhere", bash("go test /elsewhere/..."), Ask},
+		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {
 		check(t, p, profile, []decisionCase{

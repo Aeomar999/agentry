@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -324,12 +325,55 @@ func (s *shellInspector) namedFiles(args []*syntax.Word) []string {
 	for _, arg := range args {
 		fields, _ := s.fields(arg) // a word that can't be known makes the call opaque elsewhere
 		for _, value := range slices.Concat(fields...) {
-			for _, item := range strings.FieldsFunc(optionValue(value), isListSeparator) {
-				files = append(files, s.resolve(item)...)
+			texts, ok := decoded(optionValue(value))
+			if !ok {
+				files = append(files, value) // not a path in the workspace, so it counts as outside
+				continue
+			}
+			for _, text := range texts {
+				for _, item := range strings.FieldsFunc(text, isListSeparator) {
+					files = append(files, s.resolve(item)...)
+				}
 			}
 		}
 	}
 	return files
+}
+
+// decoded is the strings a value holds, read as JSON when it starts like JSON,
+// since jest decodes such values itself ("\/tmp" and "/tmp" are /tmp). A
+// value that starts like JSON but doesn't decode can't be read: not ok.
+func decoded(value string) ([]string, bool) {
+	if !strings.HasPrefix(value, "{") && !strings.HasPrefix(value, "[") {
+		return []string{value}, true
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+		return nil, false
+	}
+	return jsonStrings(parsed), true
+}
+
+// jsonStrings is every string in a decoded JSON value, keys included.
+func jsonStrings(value any) []string {
+	switch v := value.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var texts []string
+		for _, item := range v {
+			texts = append(texts, jsonStrings(item)...)
+		}
+		return texts
+	case map[string]any:
+		var texts []string
+		for key, item := range v {
+			texts = append(texts, key)
+			texts = append(texts, jsonStrings(item)...)
+		}
+		return texts
+	}
+	return nil
 }
 
 // optionValue is what an option gives as its value: --x=v and -xv give v. A
@@ -347,7 +391,9 @@ func optionValue(word string) string {
 	return ""
 }
 
-func isListSeparator(r rune) bool { return strings.ContainsRune(`,:;"'{}[] `, r) }
+// isListSeparator splits a value into what it may name. = splits a nested
+// option, as in --execArgv=--require=f.
+func isListSeparator(r rune) bool { return strings.ContainsRune(`,:;"'{}[]= `, r) }
 
 // dirBuiltins are the builtins that change the shell's folder.
 var dirBuiltins = map[string]bool{"cd": true, "pushd": true, "popd": true}

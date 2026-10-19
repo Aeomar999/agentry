@@ -32,8 +32,10 @@
 #              folder outside the task's worktree (after cd elsewhere, or a cd
 #              Agentry can't follow, such as cd - or popd), or names a file
 #              outside it in an argument or an option's value (--config=f,
-#              -cf, a list or JSON in a value). The scratch places count as
-#              outside here
+#              -cf, a list, a nested option (--execArgv=--require=f) or JSON
+#              in a value, decoded as jest decodes it; JSON that doesn't
+#              decode counts as outside). The scratch places count as outside
+#              here
 #
 # Patterns
 #   commands   * matches anything, spaces included: 'git push *'. A trailing
