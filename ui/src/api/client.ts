@@ -75,6 +75,15 @@ export class SignedOutError extends Error {
   }
 }
 
+// A reply the server refused, with its status: a 409 is a rule saying no.
+export class RequestError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 // authorization is the bearer header, when the page has the token; without
 // it, the cookie signs the call in, if the browser kept it.
 function authorization(): Record<string, string> {
@@ -82,7 +91,7 @@ function authorization(): Record<string, string> {
 }
 
 // send makes a call signed in, and throws what the server refused: a 401 as
-// SignedOutError, anything else with the server's reason.
+// SignedOutError, anything else as a RequestError with the server's reason.
 export async function send(path: string, init: RequestInit & { headers?: Record<string, string> }): Promise<Response> {
   const sentIn = session;
   const response = await fetch(path, { ...init, headers: { ...init.headers, ...authorization() } });
@@ -90,7 +99,7 @@ export async function send(path: string, init: RequestInit & { headers?: Record<
     if (sentIn === session) setSignedOut(true);
     throw new SignedOutError();
   }
-  if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  if (!response.ok) throw new RequestError((await response.text()).trim() || response.statusText, response.status);
   return response;
 }
 

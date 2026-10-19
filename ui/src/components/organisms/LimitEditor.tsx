@@ -4,7 +4,7 @@ import { Button } from "@/components/atoms/Button";
 import { IconButton } from "@/components/atoms/IconButton";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { Mono } from "@/components/molecules/Mono";
-import { api } from "@/api/client";
+import { api, RequestError } from "@/api/client";
 import type { TaskSummary } from "@/api/types";
 import { LimitChoice, LimitKind, SCALES, choiceOf, described, limitOf, sent } from "@/lib/limits";
 import { cn } from "@/lib/cn";
@@ -100,8 +100,9 @@ export function turnsLine(since: number, maxTurns: number): string {
   return maxTurns > 0 ? `${since} of ${maxTurns} turns` : `${since} turns (no limit)`;
 }
 
-// Sends a new limit. A refused answer still saved the limit, so the page
-// refetches after any outcome.
+// Sends a new limit, and calls onSaved once it is kept. A 409 kept it too:
+// only its answer to the task's stop was refused, as when you answered the
+// stop elsewhere first. Any other error kept nothing, so what you chose stays.
 export function useSaveLimit(taskId: string, kind: LimitKind, onSaved: () => void) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
@@ -109,14 +110,19 @@ export function useSaveLimit(taskId: string, kind: LimitKind, onSaved: () => voi
 
   async function run(limit: number) {
     setBusy(true);
+    const saved = `${scale.name} set to ${described(scale, limit)}`;
     try {
       const body = kind === "budget" ? { budget: sent(limit) } : { maxTurns: sent(limit) };
       const reply = await api<{ answered: boolean }>("PUT", `/api/tasks/${encodeURIComponent(taskId)}/${kind}`, body);
-      notify("success", `${scale.name} set to ${described(scale, limit)}`, reply.answered ? "The task carries on." : undefined);
+      notify("success", saved, reply.answered ? "The task carries on." : undefined);
       onSaved();
     } catch (error) {
-      notify("danger", "That didn't go through", (error as Error).message);
-      onSaved();
+      if (error instanceof RequestError && error.status === 409) {
+        notify("info", saved, `Its stop wasn't answered: ${error.message}`);
+        onSaved();
+      } else {
+        notify("danger", "That didn't go through", (error as Error).message);
+      }
     } finally {
       setBusy(false);
     }
