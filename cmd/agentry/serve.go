@@ -133,7 +133,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
 	}
-	catalogue, err := events.NewCatalogue(ideas.Registration())
+	installed := installedFeatures()
+	catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
 	if err != nil {
 		return fmt.Errorf("the event catalogue: %w", err)
 	}
@@ -238,10 +239,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	// The loop and the server are given the same features. Each writes
 	// through its own checked proposer, made here once, never the store.
-	installed := installedFeatures()
 	settings := openSettings(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second)
 	logs := map[string]features.Proposer{
-		ideas.Name: features.Checked(ideas.Feature(), ideas.Registration(), log),
+		ideas.Name: features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), log),
 	}
 
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})

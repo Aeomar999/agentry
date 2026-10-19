@@ -49,7 +49,7 @@ func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *st
 func newServer(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store, *current.State) {
 	t.Helper()
 	return newServerLogging(t, limits, func(s *store.Store) features.Proposer {
-		return features.Checked(ideas.Feature(), ideas.Registration(), s)
+		return features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), s)
 	})
 }
 
@@ -550,7 +550,7 @@ func TestIdeasBadgeCountsOpenIdeas(t *testing.T) {
 // type, still goes through.
 func TestAcceptWritesOnlyThroughTheCheckedLog(t *testing.T) {
 	server, s, state := newServerLogging(t, tasks.Limits{}, func(s *store.Store) features.Proposer {
-		return features.Checked(features.Feature{Name: ideas.Name}, ideas.Registration(), s)
+		return features.Checked(features.Feature{Name: ideas.Name}, features.Registration(ideas.Feature()), s)
 	})
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)

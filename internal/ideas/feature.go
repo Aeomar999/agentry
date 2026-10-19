@@ -21,10 +21,15 @@ func Feature() features.Feature {
 		Coordinator: coordinatorHook(), Routes: routes, Manifest: manifest, Tools: tools, Instructions: instructions, Waiting: openIdeas}
 }
 
-// Streams are the ideas' streams, for the state to build and keep: each
-// stream's state is its *Idea, nil until it is suggested.
+// Streams are the ideas' streams, for the catalogue to check and the state
+// to build and keep: each holds the three idea types, and its state is its
+// *Idea, nil until it is suggested.
 func Streams() *features.Streams {
-	return &features.Streams{Prefix: Prefix, FromEvents: fromEvents, Next: next}
+	return &features.Streams{Prefix: Prefix, Types: map[events.Type]events.Spec{
+		IdeaSuggested: {Fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, Writers: []events.ActorKind{events.Agent, events.System}},
+		IdeaAccepted:  {Fields: []string{"task"}, Writers: []events.ActorKind{events.Human, events.System}}, // "note" may be empty; Agentry's: an idea the Visionaries agreed on by your rule
+		IdeaDismissed: {Fields: []string{"note"}, Writers: []events.ActorKind{events.Human}},
+	}, FromEvents: fromEvents, Next: next}
 }
 
 // fromEvents is FromEvents with no idea as a plain nil, which the state

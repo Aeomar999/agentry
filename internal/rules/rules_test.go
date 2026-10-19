@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -39,7 +40,7 @@ type step struct {
 
 // withIdeas is the catalogue serve opens the log with.
 var withIdeas = func() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(ideas.Registration())
+	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
 	if err != nil {
 		panic(err)
 	}

@@ -47,16 +47,36 @@ type Feature struct {
 	Jobs func(ctx context.Context, c Core)
 }
 
-// Streams are a feature's own streams, each named Prefix and an ID: how the
-// state builds and keeps each one. Its types are in its events.Registration.
+// Streams are a feature's own streams, each named Prefix and an ID and
+// holding only Types: how the state builds and keeps each one. Types are
+// their fields and writers, checked as the core's are (Registration).
 // FromEvents builds a stream's state from its accepted events, as at Open;
 // Next is the state after one more event, built on a copy, so prev stays as
 // it was for whoever holds it. Both as tasks.FromEvents and tasks.Next, and a
 // nil state means the stream holds nothing yet.
 type Streams struct {
 	Prefix     string // "idea-"
+	Types      map[events.Type]events.Spec
 	FromEvents func(accepted []events.Event) any
 	Next       func(prev any, e events.Event) any
+}
+
+// Registration is what f adds to the event catalogue: its streams' prefix
+// and types. A feature with no Streams adds nothing.
+func Registration(f Feature) events.Registration {
+	if f.Streams == nil {
+		return events.Registration{}
+	}
+	return events.Registration{Prefix: f.Streams.Prefix, Types: f.Streams.Types}
+}
+
+// Registrations are list's, in its order, for events.NewCatalogue.
+func Registrations(list ...Feature) []events.Registration {
+	registrations := make([]events.Registration, 0, len(list))
+	for _, f := range list {
+		registrations = append(registrations, Registration(f))
+	}
+	return registrations
 }
 
 // Reader is the read side of the state, for features and for the rules:

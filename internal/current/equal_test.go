@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -18,7 +19,7 @@ import (
 // the rules would refuse, such as one that breaks a task's apply.
 // withIdeas is the catalogue serve opens the log with.
 var withIdeas = func() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(ideas.Registration())
+	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
 	if err != nil {
 		panic(err)
 	}

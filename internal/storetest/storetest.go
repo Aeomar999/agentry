@@ -10,6 +10,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -49,7 +50,7 @@ func NewState(catalogue *events.Catalogue) *current.State {
 // WithIdeas is the catalogue serve opens the log with: the core's event
 // types and ideas'.
 func WithIdeas() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(ideas.Registration())
+	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
 	if err != nil {
 		panic(err)
 	}

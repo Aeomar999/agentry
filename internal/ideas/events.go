@@ -19,13 +19,3 @@ const Prefix = "idea-"
 
 // IsStream says whether a stream is an idea's.
 func IsStream(stream string) bool { return strings.HasPrefix(stream, Prefix) }
-
-// Registration is what ideas adds to the event catalogue: its streams and
-// the three types they hold.
-func Registration() events.Registration {
-	return events.Registration{Prefix: Prefix, Types: map[events.Type]events.Spec{
-		IdeaSuggested: {Fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, Writers: []events.ActorKind{events.Agent, events.System}},
-		IdeaAccepted:  {Fields: []string{"task"}, Writers: []events.ActorKind{events.Human, events.System}}, // "note" may be empty; Agentry's: an idea the Visionaries agreed on by your rule
-		IdeaDismissed: {Fields: []string{"note"}, Writers: []events.ActorKind{events.Human}},
-	}}
-}

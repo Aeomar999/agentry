@@ -51,7 +51,7 @@ var notes = &features.Streams{
 
 var withNotes = func() *events.Catalogue {
 	writers := []events.ActorKind{events.Human}
-	catalogue, err := events.NewCatalogue(ideas.Registration(), events.Registration{Prefix: notes.Prefix, Types: map[events.Type]events.Spec{
+	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()), events.Registration{Prefix: notes.Prefix, Types: map[events.Type]events.Spec{
 		noteWritten: {Fields: []string{"text"}, Writers: writers},
 		noteSpoiled: {Writers: writers},
 	}})
