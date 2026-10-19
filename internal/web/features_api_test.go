@@ -188,3 +188,32 @@ func TestAFeatureRouteWithNoLogWritesNothing(t *testing.T) {
 		t.Errorf("a read with no log: %d %q", code, body)
 	}
 }
+
+// A feature's route whose pattern a core route or another feature's has
+// already fails to mount, naming the feature and the pattern, whether the
+// core route is one of the first or the last the server registers.
+func TestAFeatureRouteThatClashesNamesItsFeature(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	one := func(name, pattern string) features.Feature {
+		return features.Feature{Name: name, Routes: func(features.Core) []features.Route {
+			return []features.Route{{Pattern: pattern, Handler: func(http.ResponseWriter, *http.Request) {}}}
+		}}
+	}
+	for _, step := range []struct {
+		list []features.Feature
+		want string
+	}{
+		{[]features.Feature{one("votes", "GET /api/tasks")}, `the votes feature's route "GET /api/tasks" can't be mounted`},
+		{[]features.Feature{one("votes", "DELETE /api/integrations/connections/{id}")}, `the votes feature's route "DELETE /api/integrations/connections/{id}" can't be mounted`},
+		{[]features.Feature{one("votes", "GET /api/votes"), one("polls", "GET /api/votes")}, `the polls feature's route "GET /api/votes" can't be mounted`},
+	} {
+		got := func() (clash any) {
+			defer func() { clash = recover() }()
+			NewServer(s, state, Config{UIToken: token, Features: step.list}, http.NotFoundHandler(), nil).Handler()
+			return nil
+		}()
+		if message, _ := got.(string); !strings.HasPrefix(message, step.want) {
+			t.Errorf("mounting %s: panicked with %v, want %q", step.list[len(step.list)-1].Name, got, step.want)
+		}
+	}
+}

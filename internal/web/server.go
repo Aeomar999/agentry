@@ -105,9 +105,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/features", s.listFeatures)
-	for _, f := range s.config.Features {
-		s.mount(f, api, deskToo)
-	}
 	api("GET /api/agents", s.listAgents)
 	api("GET /api/teams/templates", s.teamTemplates)
 	api("POST /api/teams", s.addTeam)
@@ -177,6 +174,11 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
+	}
+	// Last, so a feature's route that clashes with any core route is
+	// the one that fails, naming its feature.
+	for _, f := range s.config.Features {
+		s.mount(f, api, deskToo)
 	}
 	return s.atPosition(mux)
 }

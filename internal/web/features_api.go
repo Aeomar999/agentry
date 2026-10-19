@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/features"
@@ -21,13 +22,24 @@ func (s *Server) mount(f features.Feature, api, deskToo func(pattern string, han
 		return
 	}
 	for _, route := range f.Routes(s.coreOf(f)) {
-		switch route.Auth {
-		case features.Desk:
-			deskToo(route.Pattern, route.Handler)
-		default:
-			api(route.Pattern, route.Handler)
+		register := api
+		if route.Auth == features.Desk {
+			register = deskToo
 		}
+		mountRoute(f.Name, route, register)
 	}
+}
+
+// mountRoute registers one of feature's routes. A pattern that clashes with
+// a route there already panics, as ServeMux does, but naming the feature
+// and its pattern, which ServeMux's message doesn't.
+func mountRoute(feature string, route features.Route, register func(pattern string, handler http.HandlerFunc)) {
+	defer func() {
+		if clash := recover(); clash != nil {
+			panic(fmt.Sprintf("the %s feature's route %q can't be mounted: %v", feature, route.Pattern, clash))
+		}
+	}()
+	register(route.Pattern, route.Handler)
 }
 
 // coreOf is what f's routes may use: its checked proposer, never the store,
