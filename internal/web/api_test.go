@@ -1865,6 +1865,35 @@ func TestATeamIsRenamedWithItsTasks(t *testing.T) {
 	}
 }
 
+// An agent sent with no team joins the default team, as agents from before
+// teams do, and once Software is respelled it joins the respelled team, not a
+// coordinator-less twin of it.
+func TestAnAgentWithNoTeamJoinsTheDefaultTeam(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/agents", `{"name":"helper","engine":"claude","prompt":"Help."}`); code != 200 {
+		t.Fatalf("adding helper: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	if helper, _ := agents.FromEvents(stream).Get("helper"); helper.Team != "" {
+		t.Errorf("helper is in team %q, want the default team kept as \"\"", helper.Team)
+	}
+
+	if code, body := call(t, server, "POST", "/api/teams/software/rename", `{"to":"software"}`); code != 200 {
+		t.Fatalf("respelling Software: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/agents", `{"name":"aide","engine":"claude","prompt":"Help."}`); code != 200 {
+		t.Fatalf("adding aide: %d %s", code, body)
+	}
+	stream, _ = s.Stream(events.AgentsStream)
+	roster := agents.FromEvents(stream)
+	if !slices.Equal(roster.Teams(), []string{"software"}) {
+		t.Errorf("teams %v, want only software", roster.Teams())
+	}
+	if aide, _ := roster.Get("aide"); aide.Team != "software" {
+		t.Errorf("aide is in team %q, want software", aide.Team)
+	}
+}
+
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)
