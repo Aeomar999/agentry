@@ -18,7 +18,7 @@ type Summary struct {
 	Stage            string    `json:"stage"`     // the agent the coordinator last handed it to
 	Column           string    `json:"column"`    // its column on the board: backlog, todo, in-progress, review, shipping or done
 	CanShip          bool      `json:"canShip"`   // its team has an agent that ships work, so it may be moved to Shipping
-	Pushed           bool      `json:"pushed"`    // an agent pushed its work, in any turn: a done one says Shipped
+	Pushed           bool      `json:"pushed"`    // an agent pushed its work since it was last reopened: a done one says Shipped
 	DoneByYou        bool      `json:"doneByYou"` // you moved it to Done, rather than its coordinator finishing it
 	Turns            int       `json:"turns"`
 	NeedsYou         string    `json:"needsYou"`    // what you are asked, "" when nothing
@@ -72,16 +72,17 @@ func SummaryOf(t *Task, roster agents.Roster) Summary {
 	if t.Told.Text != "" {
 		said = &Said{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
-	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), Pushed: t.pushedAny(), DoneByYou: t.DoneByYou, HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), Pushed: t.pushedSinceReopen(), DoneByYou: t.DoneByYou, HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: t.StoppedAt(), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 
-// pushedAny says whether any of the task's turns pushed its work.
-func (t *Task) pushedAny() bool {
-	for _, turn := range t.Turns {
+// pushedSinceReopen says whether any of the task's turns since it was last
+// reopened pushed its work: an earlier push didn't take the rework to dev.
+func (t *Task) pushedSinceReopen() bool {
+	for _, turn := range t.Turns[t.TurnsBeforeReopen:] {
 		if t.Pushed(turn.ID) {
 			return true
 		}
