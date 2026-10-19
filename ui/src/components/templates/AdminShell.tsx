@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { NewTaskDialog } from "@/components/organisms/NewTaskDialog";
 import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Bot, Lightbulb, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import { Bot, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
 import { CommandPalette, PaletteItem } from "@/components/organisms/CommandPalette";
 import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
@@ -17,6 +17,7 @@ import { AgentColorsProvider } from "@/live/agent-colors";
 import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
+import { useFeatures, visibleFeatures } from "@/features";
 
 // The one template: top bar, sidebar, status bar, the terminal dock, the
 // palette and shortcuts around every page. It stays mounted while pages
@@ -51,6 +52,7 @@ export function AdminShell() {
   const questions = useResource<Question[]>("/api/questions").data ?? [];
   const agents = useResource<Agent[]>("/api/agents").data ?? [];
   const config = useResource<ServerConfig>("/api/config").data;
+  const features = useFeatures();
 
   const [crumbs, setCrumbs] = useState<Crumb[]>([]);
   const [theme, setTheme] = useState<Theme>(savedTheme);
@@ -134,8 +136,8 @@ export function AdminShell() {
       { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => newTask() },
       { id: "new-epic", group: "Commands", label: "New epic", icon: <Plus />, run: () => newTask("epic") },
       { id: "go-plan", group: "Go to", label: "Plan", icon: <MapIcon />, run: () => navigate("/plan") },
-      { id: "go-ideas", group: "Go to", label: "Ideas", icon: <Lightbulb />, run: () => navigate("/ideas") },
       { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
+      ...visibleFeatures(features).flatMap((feature) => feature.commands?.(navigate) ?? []),
       { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
       ...tasks
         .filter((task) => task.status === "working" && task.currentAgent)
@@ -171,7 +173,7 @@ export function AdminShell() {
         run: () => navigate(`/agents/${encodeURIComponent(agent.name)}`),
       })),
     ],
-    [tasks, agents, theme, navigate, newTask, toggleTheme, openDock, openTaskTerminal],
+    [tasks, agents, features, theme, navigate, newTask, toggleTheme, openDock, openTaskTerminal],
   );
 
   const needsYou = tasks.filter((task) => task.status === "needs you").length;
@@ -189,7 +191,13 @@ export function AdminShell() {
               onOpenPalette={() => setPalette(true)}
             />
             <div className="flex min-h-0 flex-1">
-              <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
+              <Sidebar
+                collapsed={collapsed}
+                drawerOpen={drawerOpen}
+                needsYou={needsYou}
+                features={features}
+                onCloseDrawer={() => setDrawerOpen(false)}
+              />
               <div ref={column} className="flex min-w-0 flex-1 flex-col">
                 <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
                   <Outlet />
