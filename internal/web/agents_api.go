@@ -172,11 +172,15 @@ func (s *Server) needing(names ...string) ([]string, error) {
 	return busy, nil
 }
 
-// teamTemplates are the ready-made teams you can add, without their prompts.
+// teamTemplates are the teams you can add, without their prompts: the
+// ready-made ones, then yours in the order you saved them.
 func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 	list := []templateView{}
 	for _, t := range agents.Templates {
 		list = append(list, viewOf(t, false))
+	}
+	for _, u := range s.state.Templates() {
+		list = append(list, viewOf(u.Template(), true))
 	}
 	httpapi.Reply(w, list)
 }
