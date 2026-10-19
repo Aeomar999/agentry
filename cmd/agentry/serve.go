@@ -173,10 +173,17 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	links := workerlink.NewServer(log, fleet)
 
+	// Every feature in this binary, written out here: no feature registers
+	// itself. The loop and the server are given the same list.
+	installed := []features.Feature{
+		ideas.Feature(),
+	}
+
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
+	loop.Features = installed
 	go loop.Run(ctx)
 	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
@@ -223,10 +230,6 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
-	// Every feature in this binary, written out here: no feature registers itself.
-	installed := []features.Feature{
-		ideas.Feature(),
-	}
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
