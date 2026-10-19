@@ -3,15 +3,17 @@ import { UserRound } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 import { ContextMenu } from "@/components/molecules/ContextMenu";
 import { signOut } from "@/api/client";
+import { NotifyDeviceDialog } from "./NotifyDeviceDialog";
 import { SignInDeviceDialog } from "./SignInDeviceDialog";
 import { useToast } from "./Toasts";
 
 // This device's sign-in, in the top bar: sign in another device with a
-// one-time code, or sign this one out.
+// one-time code, have this one notified, or sign it out.
 export function AccountMenu() {
   const button = useRef<HTMLButtonElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [notifying, setNotifying] = useState(false);
   const notify = useToast();
 
   function open() {
@@ -36,6 +38,7 @@ export function AccountMenu() {
           onClose={() => setMenu(null)}
           items={[
             { label: "Sign in another device", onClick: () => setSigningIn(true) },
+            { label: "Notifications on this device", onClick: () => setNotifying(true) },
             "separator",
             {
               label: "Sign out",
@@ -45,6 +48,7 @@ export function AccountMenu() {
         />
       )}
       {signingIn && <SignInDeviceDialog onClose={() => setSigningIn(false)} />}
+      {notifying && <NotifyDeviceDialog onClose={() => setNotifying(false)} />}
     </>
   );
 }

@@ -393,6 +393,14 @@ export interface SigninCode {
   address: string; // the address this page came from, the one to show first
 }
 
+// Whether this server can push to a device (internal/web/push_api.go).
+export interface PushStatus {
+  available: boolean;
+  reason?: string; // why not, when not
+  publicKey?: string; // the VAPID key to subscribe with, when available
+  subscribed: number; // how many browsers are subscribed
+}
+
 // Your settings for how Agentry works (internal/web/settings_api.go).
 export interface Settings {
   visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
