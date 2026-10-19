@@ -238,10 +238,7 @@ export function TaskPage() {
               <>
                 <span>·</span>
                 <span>
-                  made from{" "}
-                  <Link to="/ideas" className="font-mono text-info hover:underline">
-                    {task.madeFrom}
-                  </Link>
+                  made from <MadeFromLink stream={task.madeFrom} />
                 </span>
               </>
             )}
@@ -549,6 +546,19 @@ function Fact({ label, className, children }: { label: string; className?: strin
 
 function Scroll({ children }: { children: ReactNode }) {
   return <div className="h-full scrollbar-thin overflow-y-auto">{children}</div>;
+}
+
+// MadeFromLink goes to the page of the stream a task was made from: an idea
+// links to the Ideas page; a stream no page here shows is its name alone.
+function MadeFromLink({ stream }: { stream: string }) {
+  if (!stream.startsWith("idea-")) {
+    return <Mono>{stream}</Mono>;
+  }
+  return (
+    <Link to="/ideas" className="font-mono text-info hover:underline">
+      {stream}
+    </Link>
+  );
 }
 
 // TaskLink goes to another task, such as the one another team does for this.
