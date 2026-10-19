@@ -177,7 +177,7 @@ function IdeaSettings() {
             onChange={(on) => change("visionariesOnEpicClose", on)}
             disabled={busy}
             label="Ask the visionaries for follow-ups when you close an epic"
-            hint="A small session about what the epic delivered and what could come next: a 1M-token budget and 12 turns. Its ideas show here, linked to the epic."
+            hint="A small session about what the epic delivered and what could come next, with the server's default budget and turn limit. Its ideas show here, linked to the epic."
           />
           <Checkbox
             checked={value("autoAcceptIdeas")}
