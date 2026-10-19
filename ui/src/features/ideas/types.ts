@@ -17,6 +17,7 @@ export interface Idea {
   kind: "" | "epic"; // what it suggests making of it: "" is a story
   state: "open" | "accepted" | "dismissed";
   note: string; // what you said when you accepted or dismissed it
+  decidedAt?: string; // when it was accepted or dismissed; absent while it is open
   became: string; // the task an accepted idea became
   autoAccepted: boolean; // Agentry accepted it, as the Visionaries agreed by your rule, not you
   repeats: string; // an idea the Visionaries said it raises again, "" for none

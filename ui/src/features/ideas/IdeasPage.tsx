@@ -15,6 +15,7 @@ import { changeSettings } from "@/api/client";
 import type { AutoAcceptRule, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { VISIONARIES } from "@/lib/teams";
+import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
 import type { Idea } from "./types";
@@ -243,7 +244,7 @@ function IdeaSettings() {
 }
 
 // An idea decided on, by you or, when the Visionaries agreed, by Agentry:
-// what became of it, and what was said.
+// what became of it, when, and what was said.
 function HistoryRow({ idea }: { idea: Idea }) {
   return (
     <li id={idea.id} className="flex flex-col gap-1 px-4 py-3">
@@ -264,6 +265,7 @@ function HistoryRow({ idea }: { idea: Idea }) {
           <span>
             from <TaskLink id={idea.task} />
           </span>
+          {idea.decidedAt && <span>{dateTime(idea.decidedAt)}</span>}
         </span>
       </span>
       {idea.note && <p className="text-[12.5px] whitespace-pre-wrap text-ink-secondary">{idea.note}</p>}

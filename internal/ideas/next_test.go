@@ -28,6 +28,20 @@ func TestNextLeavesTheIdeaAsItWas(t *testing.T) {
 	}
 }
 
+// An accepted or dismissed idea carries the time of the event that decided
+// it; an open one has none.
+func TestADecidedIdeaKeepsWhenItWasDecided(t *testing.T) {
+	log := everyEvent()
+	for _, step := range []struct {
+		after int
+		want  time.Time
+	}{{1, time.Time{}}, {2, log[2].At}, {4, log[4].At}} {
+		if idea := FromEvents(log[:step.after+1]); !idea.DecidedAt.Equal(step.want) {
+			t.Errorf("after %s: decided at %v, want %v", log[step.after].Type, idea.DecidedAt, step.want)
+		}
+	}
+}
+
 func TestNextBeforeTheIdeaIsSuggested(t *testing.T) {
 	if idea := Next(nil, everyEvent()[0]); idea != nil {
 		t.Errorf("an idea out of an event before idea.suggested: %+v", idea)

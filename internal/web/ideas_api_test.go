@@ -57,7 +57,8 @@ func TestIdeasListNewestSessionFirst(t *testing.T) {
 	if want := []string{again, newer, older}; code != 200 || !slices.Equal(ideaIDs(t, body), want) {
 		t.Errorf("every idea: %d, want %v: %s", code, want, body)
 	}
-	if !strings.Contains(body, `"state":"open"`) || !strings.Contains(body, `"backedBy":[]`) {
+	if !strings.Contains(body, `"state":"open"`) || !strings.Contains(body, `"backedBy":[]`) ||
+		strings.Contains(body, `"decidedAt"`) {
 		t.Errorf("an idea's view: %s", body)
 	}
 	if _, body := call(t, server, "GET", "/api/ideas?repo="+repo, ""); !slices.Equal(ideaIDs(t, body), []string{older}) {
@@ -176,7 +177,8 @@ func TestYouDismissAnIdea(t *testing.T) {
 	if code, body := call(t, server, "POST", "/api/ideas/"+id+"/dismiss", `{"note":" The OS does it "}`); code != 200 {
 		t.Fatalf("dismiss: %d %s", code, body)
 	}
-	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"dismissed"`) || !strings.Contains(body, `"note":"The OS does it"`) {
+	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"dismissed"`) || !strings.Contains(body, `"note":"The OS does it"`) ||
+		!strings.Contains(body, `"decidedAt":"`) {
 		t.Errorf("the dismissed idea: %s", body)
 	}
 	if code, _ := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != http.StatusConflict {

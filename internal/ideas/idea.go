@@ -40,9 +40,10 @@ type Idea struct {
 	CreatedAt time.Time
 
 	State        State
-	Note         string // what you said when you accepted or dismissed it
-	Became       string // for an accepted idea: the task made from it
-	AutoAccepted bool   // Agentry accepted it, as the Visionaries agreed, not you
+	Note         string    // what you said when you accepted or dismissed it
+	DecidedAt    time.Time // when it was accepted or dismissed, zero while it is open
+	Became       string    // for an accepted idea: the task made from it
+	AutoAccepted bool      // Agentry accepted it, as the Visionaries agreed, not you
 }
 
 // FromEvents builds an idea by applying its accepted events in order.
@@ -88,9 +89,9 @@ func (idea *Idea) apply(e events.Event) {
 		idea.Kind, idea.Repeats = tasks.Kind(e.Text("kind")), e.Text("repeats")
 		idea.State = Open
 	case IdeaAccepted:
-		idea.State, idea.Note, idea.Became = Accepted, e.Text("note"), e.Text("task")
+		idea.State, idea.Note, idea.Became, idea.DecidedAt = Accepted, e.Text("note"), e.Text("task"), e.At
 		idea.AutoAccepted = e.Actor.Kind == events.System
 	case IdeaDismissed:
-		idea.State, idea.Note = Dismissed, e.Text("note")
+		idea.State, idea.Note, idea.DecidedAt = Dismissed, e.Text("note"), e.At
 	}
 }
