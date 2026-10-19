@@ -51,8 +51,17 @@ func TestReadModelBench(t *testing.T) {
 	}
 	defer raw.Close()
 
-	ids := state.TaskIDs()
-	biggest := biggestTask(t, raw)
+	// A broken task fails its replay too, so the replays below leave it out.
+	var ids, broken []string
+	for _, id := range state.TaskIDs() {
+		if err := state.Broken(id); err != nil {
+			broken = append(broken, id)
+			t.Logf("%s is broken, left out: %v", id, err)
+		} else {
+			ids = append(ids, id)
+		}
+	}
+	biggest := biggestTask(t, raw, broken)
 
 	t.Log("whole requests (median of 5):")
 	server := NewServer(s, state, Config{UIToken: token, Blobs: sharedfiles.Disk{Dir: t.TempDir()}}, http.NotFoundHandler(), nil).Handler()
@@ -171,7 +180,7 @@ func TestReadModelBench(t *testing.T) {
 			label = "with loop, hook and watchdog reads"
 		}
 		t.Logf("  %-36s /api/tasks median %s, slowest %s over %d requests", label+":",
-			waits[len(waits)/2].Round(time.Millisecond), waits[len(waits)-1].Round(time.Millisecond), len(waits))
+			waits[len(waits)/2].Round(time.Microsecond), waits[len(waits)-1].Round(time.Microsecond), len(waits))
 	}
 }
 
@@ -215,15 +224,26 @@ func copyFile(t *testing.T, from, to string) {
 	}
 }
 
-func biggestTask(t *testing.T, raw *sql.DB) string {
+// biggestTask is the task with the most events, of those not left out.
+func biggestTask(t *testing.T, raw *sql.DB, leftOut []string) string {
 	t.Helper()
-	var id string
-	err := raw.QueryRow(`SELECT stream FROM events WHERE stream LIKE 'task-%'
-		GROUP BY stream ORDER BY count(*) DESC LIMIT 1`).Scan(&id)
+	rows, err := raw.Query(`SELECT stream FROM events WHERE stream LIKE 'task-%'
+		GROUP BY stream ORDER BY count(*) DESC`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(leftOut, id) {
+			return id
+		}
+	}
+	t.Fatal("no task to measure")
+	return ""
 }
 
 func median(run func()) time.Duration {
@@ -234,7 +254,7 @@ func median(run func()) time.Duration {
 		took = append(took, time.Since(start))
 	}
 	slices.Sort(took)
-	return took[len(took)/2].Round(100 * time.Microsecond)
+	return took[len(took)/2].Round(time.Microsecond)
 }
 
 func request(t *testing.T, server http.Handler, url string) int {
