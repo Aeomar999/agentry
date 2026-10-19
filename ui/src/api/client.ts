@@ -1,41 +1,123 @@
 // Talking to `agentry serve`. The token comes from the link the server
-// printed: the page keeps it in this browser and sends it on every call,
-// and takes it out of the address bar so it isn't shared by accident.
+// printed, or from signing in: the page keeps it in this browser and sends
+// it on every call, and takes it out of the address bar so it isn't shared
+// by accident. The page may have no token of its own and still be signed
+// in: the server sets a cookie too, and an installed app, on iOS
+// especially, may keep only that. So only a 401 means signed out.
+
+import type { SigninCode } from "@/api/types";
 
 const tokenKey = "agentry-token";
 
-export const token: string = (() => {
+// takeFromAddress reads a parameter and takes it out of the address bar;
+// the rest of the address, such as ?view=board, stays.
+function takeFromAddress(name: string): string {
   const query = new URLSearchParams(location.search);
-  const fromLink = query.get("token");
-  if (fromLink) {
-    query.delete("token"); // the rest of the address, such as ?view=board, stays
+  const value = query.get(name) ?? "";
+  if (value) {
+    query.delete(name);
     const rest = query.toString();
     history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
   }
+  return value;
+}
+
+function keep(value: string) {
   try {
-    if (fromLink) localStorage.setItem(tokenKey, fromLink);
-    return fromLink || localStorage.getItem(tokenKey) || "";
+    if (value) localStorage.setItem(tokenKey, value);
+    else localStorage.removeItem(tokenKey);
   } catch {
-    return fromLink || "";
+    // storage is off: the page keeps the token until it closes, the cookie longer
   }
-})();
+}
+
+function kept(): string {
+  try {
+    return localStorage.getItem(tokenKey) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+let token = takeFromAddress("token");
+if (token) keep(token);
+else token = kept();
+
+// The one-time code a QR code's link (/?signin=<code>) brings, for the
+// sign-in page to exchange.
+export const signinCodeFromLink = takeFromAddress("signin");
+
+// Signed out is what the server said last: a 401 sets it, signing in clears it.
+let signedOut = false;
+const listeners = new Set<() => void>();
+function setSignedOut(value: boolean) {
+  if (signedOut === value) return;
+  signedOut = value;
+  listeners.forEach((listener) => listener());
+}
+
+export function isSignedOut(): boolean {
+  return signedOut;
+}
+
+export function watchSignedOut(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 export class SignedOutError extends Error {
   constructor() {
-    super("Not signed in. Open the link `agentry serve` printed.");
+    super("Not signed in.");
   }
+}
+
+// authorization is the bearer header, when the page has the token; without
+// it, the cookie signs the call in, if the browser kept it.
+export function authorization(): Record<string, string> {
+  return token ? { Authorization: "Bearer " + token } : {};
 }
 
 export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method,
     signal,
-    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    headers: { "Content-Type": "application/json", ...authorization() },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (response.status === 401) throw new SignedOutError();
+  if (response.status === 401) {
+    setSignedOut(true);
+    throw new SignedOutError();
+  }
   if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
   return response.json() as Promise<T>;
+}
+
+// signIn swaps a one-time code, or the token pasted in, for the token, and
+// keeps it. When the server refuses, it throws the server's reason: a wrong
+// or used code, or too many tries.
+export async function signIn(given: { code: string } | { token: string }): Promise<void> {
+  const response = await fetch("/api/signin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(given),
+  });
+  if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  token = ((await response.json()) as { token: string }).token;
+  keep(token);
+  setSignedOut(false);
+}
+
+// signOut signs this device out: the server forgets the cookie, the page its token.
+export async function signOut(): Promise<void> {
+  await api("POST", "/api/signout");
+  token = "";
+  keep("");
+  setSignedOut(true);
+}
+
+// newSigninCode is a one-time code that signs in another device.
+export function newSigninCode(): Promise<SigninCode> {
+  return api<SigninCode>("POST", "/api/signin/codes");
 }
 
 // Websockets can't send headers, so the terminal's carries the token in its address.

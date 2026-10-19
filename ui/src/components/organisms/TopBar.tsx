@@ -5,6 +5,7 @@ import { Kbd } from "@/components/atoms/Kbd";
 import { LogoTile } from "@/components/atoms/LogoTile";
 import { Breadcrumbs, Crumb } from "@/components/molecules/Breadcrumbs";
 import { InstallAppButton } from "@/components/molecules/InstallAppButton";
+import { AccountMenu } from "./AccountMenu";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 import { modKey } from "@/lib/shortcuts";
@@ -46,6 +47,7 @@ export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar
       </button>
 
       <InstallAppButton />
+      <AccountMenu />
       <IconButton
         icon={theme === "dark" ? <Sun /> : <Moon />}
         label={theme === "dark" ? "Light theme" : "Dark theme"}

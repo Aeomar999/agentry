@@ -257,3 +257,12 @@ export interface Question {
   tokensUsed?: number;
   budget?: number;
 }
+
+// A one-time code that signs in another device, with the server's addresses
+// for its QR code (internal/web/signin.go).
+export interface SigninCode {
+  code: string; // XXXX-XXXX
+  expiresAt: string;
+  addresses: { url: string; label: string }[];
+  address: string; // the address this page came from, the one to show first
+}

@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, RouterProvider, useSearchParams } from "react-router-dom";
 import { AdminShell } from "@/components/templates/AdminShell";
+import { SignedIn } from "@/components/templates/SignedIn";
 import { ToastProvider } from "@/components/organisms/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/pages/TasksPage";
@@ -57,10 +58,12 @@ function NewTaskLink() {
 
 export function App() {
   return (
-    <LiveProvider>
-      <ToastProvider>
-        <RouterProvider router={router} />
-      </ToastProvider>
-    </LiveProvider>
+    <SignedIn>
+      <LiveProvider>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </LiveProvider>
+    </SignedIn>
   );
 }

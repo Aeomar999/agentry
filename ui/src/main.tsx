@@ -9,7 +9,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "@/styles/globals.css";
 import { applyTheme, savedTheme } from "@/lib/theme";
 import { watchInstall } from "@/lib/install";
-import "@/api/client"; // reads the token from the link before the router sees the address
+import "@/api/client"; // reads the token and any sign-in code from the link before the router sees the address
 import { App } from "./App";
 
 applyTheme(savedTheme());

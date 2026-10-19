@@ -2,14 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { NewTaskDialog } from "@/components/organisms/NewTaskDialog";
 import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
-import { Bot, KeyRound, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
+import { Bot, ListTodo, Map as MapIcon, Moon, Plug, Plus, ShieldCheck, Sparkles, SquareTerminal, Sun } from "lucide-react";
 import { CommandPalette, PaletteItem } from "@/components/organisms/CommandPalette";
 import { ShortcutOverlay } from "@/components/organisms/ShortcutOverlay";
 import { Sidebar } from "@/components/organisms/Sidebar";
 import { StatusBar } from "@/components/organisms/StatusBar";
 import { TopBar } from "@/components/organisms/TopBar";
 import { DESK, DockTab, QUESTIONS, TerminalDock } from "@/components/organisms/TerminalDock";
-import { EmptyState } from "@/components/molecules/EmptyState";
 import type { Crumb } from "@/components/molecules/Breadcrumbs";
 import type { Agent, Question, ServerConfig, TaskSummary } from "@/api/types";
 import { useLive } from "@/live/LiveProvider";
@@ -192,16 +191,8 @@ export function AdminShell() {
               <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
               <div ref={column} className="flex min-w-0 flex-1 flex-col">
                 <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
-                  {connection === "signed out" ? (
-                    <EmptyState icon={<KeyRound />} title="Not signed in">
-                      Open the link <span className="font-mono">agentry serve</span> printed. Its token signs this browser in.
-                    </EmptyState>
-                  ) : (
-                    <>
-                      <Outlet />
-                      <NewTaskDialog />
-                    </>
-                  )}
+                  <Outlet />
+                  <NewTaskDialog />
                 </main>
                 {dockOpen && (
                   <TerminalDock

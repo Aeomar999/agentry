@@ -9,7 +9,6 @@ const CONNECTION: Record<Connection, { tone: DotTone; label: string }> = {
   connecting: { tone: "muted", label: "Connecting" },
   live: { tone: "success", label: "Live" },
   reconnecting: { tone: "warning", label: "Reconnecting" },
-  "signed out": { tone: "danger", label: "Not signed in" },
 };
 
 interface StatusBarProps {

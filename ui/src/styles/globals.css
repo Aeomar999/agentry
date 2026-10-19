@@ -32,6 +32,10 @@
   --color-brand-hover: #ff7e3a;
   --color-brand-soft: #fc6d2614;
 
+  /* QR codes: dark on white in both themes, as phone cameras read best. */
+  --color-qr-dark: #16181d;
+  --color-qr-light: #ffffff;
+
   /* State: status dots, badges, toasts. The soft tones are badge fills. */
   --color-success: #22c55e;
   --color-success-soft: #22c55e1f;
