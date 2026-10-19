@@ -13,8 +13,9 @@ import (
 
 // The loop's safety stops: without them a coordinator that keeps sending work
 // back, or an agent that keeps failing, would loop forever. Each task has its
-// own limit of turns, tasks.Task.MaxTurns; a new one gets DefaultMaxTurns
-// unless the server or you say otherwise.
+// own limit of turns, tasks.Task.MaxTurns, set when it is made
+// (tasks.NewLimits). DefaultMaxTurns is the server's default unless you start
+// it with another, and the limit of a task made before each had its own.
 const (
 	DefaultMaxTurns = tasks.DefaultMaxTurns
 	MaxIssuesRun    = 3 // issues in a row with no turn ending normally

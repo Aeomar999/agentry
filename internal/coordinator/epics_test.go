@@ -23,7 +23,8 @@ func TestAnEpicRunsItsStoriesAndFinishesWithThem(t *testing.T) {
 	s, repo := twoTeams(t)
 	const id = "task-1"
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
-		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true}})
+		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true,
+		"budget": 900_000, "maxTurns": 9}})
 
 	epic := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	if brief := readBrief(t, epic, "turn-1"); !strings.Contains(brief, "it has none yet. Before anything else, split it") {
@@ -39,6 +40,9 @@ func TestAnEpicRunsItsStoriesAndFinishesWithThem(t *testing.T) {
 	for _, story := range epic.Stories {
 		if task := load(t, s, story); task.Parked != "backlog" || len(task.Turns) > 0 {
 			t.Errorf("%s should wait in the Backlog: parked %q, %d turns", story, task.Parked, len(task.Turns))
+		}
+		if limits := load(t, s, story).Limits(); limits != epic.Limits() {
+			t.Errorf("%s takes its epic's limits %+v: %+v", story, epic.Limits(), limits)
 		}
 		start(t, s, story)
 	}

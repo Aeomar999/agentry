@@ -16,10 +16,10 @@ var you = events.Actor{Kind: events.Human, ID: "you"}
 
 // Choice is what you said when you accepted an idea.
 type Choice struct {
-	Kind   string // "task" (or "story") or "epic"; "" takes the one the idea suggests
-	Note   string
-	Budget int          // the new task's token budget; 0 is no limit
-	By     events.Actor // who accepts it: you when unset, or Agentry for an idea every Visionary agreed on
+	Kind     string // "task" (or "story") or "epic"; "" takes the one the idea suggests
+	Note     string
+	Defaults tasks.Limits // the server's: the new task's limits, unless it follows up an epic, which gives its own
+	By       events.Actor // who accepts it: you when unset, or Agentry for an idea every Visionary agreed on
 }
 
 // Acceptance says what Accept did. The task can be made and the idea still
@@ -157,9 +157,10 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 	case idea.Epic != "" && epic == nil && choice.acceptor().Kind == events.System:
 		return Acceptance{Refused: "the epic " + idea.Epic + " it follows up wasn't found, so its limits can't go with the task: it is left for you"}, nil
 	}
+	limits := tasks.NewLimits(choice.Defaults, epic)
 	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: map[string]any{
 		"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo, "coordinator": coordinator.Name,
-		"budget": choice.Budget, "kind": string(kind), "kindChosen": true, "parked": "backlog", "idea": idea.ID}})
+		"budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true, "parked": "backlog", "idea": idea.ID}})
 	switch {
 	case err != nil:
 		return Acceptance{}, err

@@ -110,7 +110,7 @@ func (l *Loop) acceptAgreed(repo string, added []string) {
 			slog.Info("coordinator loop: an agreed idea is left for you", "idea", id, "why", why)
 			continue
 		}
-		got, err := ideas.Accept(l.store, l.state, id, ideas.Choice{Note: AutoAccepted, Budget: l.Budget, By: agentry})
+		got, err := ideas.Accept(l.store, l.state, id, ideas.Choice{Note: AutoAccepted, Defaults: l.Defaults, By: agentry})
 		if err != nil || !got.Accepted {
 			slog.Warn("coordinator loop: accepting an agreed idea", "idea", id, "task", got.Task, "refused", got.Refused, "err", err)
 			continue

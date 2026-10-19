@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 var agentry = events.Actor{Kind: events.System, ID: "agentry"}
@@ -118,6 +120,26 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) ||
 		!strings.Contains(body, `"autoAccepted":false`) {
 		t.Errorf("the accepted idea: %s", body)
+	}
+}
+
+// Your accept gives the task the server's limits, unlimited ones too.
+func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
+	for _, limits := range []tasks.Limits{{}, {Budget: 5_000_000, MaxTurns: 24}} {
+		server, s := newTestServerWith(t, limits)
+		repo := gitRepo(t)
+		call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`","budget":-1,"maxTurns":-1}`)
+		id := suggestIdea(t, s, "task-1", repo, "Search the board")
+		if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != 200 {
+			t.Fatalf("accept: %d %s", code, body)
+		}
+		_, body := call(t, server, "GET", "/api/tasks/task-2", "")
+		if want := fmt.Sprintf(`"budget":%d,`, limits.Budget); !strings.Contains(body, want) {
+			t.Errorf("want %s: %s", want, body)
+		}
+		if want := fmt.Sprintf(`"maxTurns":%d,`, limits.MaxTurns); !strings.Contains(body, want) {
+			t.Errorf("want %s: %s", want, body)
+		}
 	}
 }
 

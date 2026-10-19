@@ -51,7 +51,7 @@ func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	got, err := ideas.Accept(s.store, s.state, id, ideas.Choice{Kind: strings.TrimSpace(request.Kind), Note: strings.TrimSpace(request.Note),
-		Budget: s.config.Budget})
+		Defaults: s.config.defaults()})
 	switch {
 	case err != nil:
 		failed(w, err)
