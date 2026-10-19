@@ -2,9 +2,11 @@ package web
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -213,4 +215,99 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 	if yours := userTemplates(t, list); len(yours) != 1 || yours[0].ID != "my-software" || len(yours[0].Agents) != len(state.Roster()) {
 		t.Errorf("after a restart: %+v", yours)
 	}
+}
+
+// Exporting a template, removing it and importing the file gives back the
+// same template, every agent and prompt in it.
+func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
+	want, _ := savedTemplates(t, s).WithID("my-software")
+
+	request, _ := http.NewRequest("GET", server.URL+"/api/teams/templates/my-software/export", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	exported, _ := io.ReadAll(response.Body)
+	if response.StatusCode != 200 || response.Header.Get("Content-Disposition") != `attachment; filename="my-software.json"` {
+		t.Fatalf("export: %d %q %s", response.StatusCode, response.Header.Get("Content-Disposition"), exported)
+	}
+
+	call(t, server, "DELETE", "/api/teams/templates/my-software", "")
+	if code, body := call(t, server, "POST", "/api/teams/templates/import", string(exported)); code != 200 || !strings.Contains(body, `"userMade":true`) {
+		t.Fatalf("import: %d %s", code, body)
+	}
+	got, found := savedTemplates(t, s).WithID("my-software")
+	if !found || !reflect.DeepEqual(got, want) {
+		t.Errorf("imported:\n%+v\nwant:\n%+v", got, want)
+	}
+}
+
+func TestImportingATemplateYouHaveReplacesIt(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
+	_, exported := call(t, server, "GET", "/api/teams/templates/my-software/export", "")
+	changed := strings.Replace(exported, `"description":"Ours."`, `"description":"Imported."`, 1)
+	if code, body := call(t, server, "POST", "/api/teams/templates/import", changed); code != 200 {
+		t.Fatalf("import: %d %s", code, body)
+	}
+	if saved := savedTemplates(t, s); len(saved) != 1 || saved[0].Description != "Imported." {
+		t.Errorf("one template, replaced: %+v", saved)
+	}
+}
+
+func TestExportingATemplateYouHaventIsRefused(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "GET", "/api/teams/templates/nobody/export", ""); code != http.StatusNotFound {
+		t.Errorf("an unknown template: %d %s", code, body)
+	}
+	code, body := call(t, server, "GET", "/api/teams/templates/software/export", "")
+	if code != http.StatusBadRequest || strings.TrimSpace(body) != "the software template comes with Agentry, so it isn't exported: only your own templates are" {
+		t.Errorf("a built-in template: %d %s", code, body)
+	}
+}
+
+// An imported template meets the rules a saved one does.
+func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
+	server, _ := newTestServer(t)
+	agent := func(name string, coordinates bool) map[string]any {
+		return map[string]any{"name": name, "engine": "claude", "prompt": "Work.", "coordinates": coordinates}
+	}
+	for _, refused := range []struct {
+		name     string
+		template map[string]any
+		reason   string
+	}{
+		{"a built-in id", map[string]any{"id": "software", "team": "Ours", "agents": []any{agent("lead", true)}}, "the built-in software template has that id"},
+		{"two coordinators", map[string]any{"id": "ours", "team": "Ours", "agents": []any{agent("lead", true), agent("other-lead", true)}}, "a template has exactly one coordinator"},
+		{"no agents", map[string]any{"id": "ours", "team": "Ours"}, "a template needs at least one agent"},
+		{"nothing", map[string]any{}, "a template needs an id"},
+	} {
+		body, _ := json.Marshal(refused.template)
+		if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != http.StatusBadRequest || strings.TrimSpace(reply) != refused.reason {
+			t.Errorf("%s: %d %s", refused.name, code, reply)
+		}
+	}
+}
+
+func TestAnImportThatIsntATemplateIsABadRequest(t *testing.T) {
+	server, _ := newTestServer(t)
+	for _, body := range []string{`{"id":"ours","agents":"lead"}`, `{"id":7}`, `[]`, `not json`} {
+		if code, reply := call(t, server, "POST", "/api/teams/templates/import", body); code != http.StatusBadRequest || !strings.HasPrefix(reply, "bad request: ") {
+			t.Errorf("%s: %d %s", body, code, reply)
+		}
+	}
+}
+
+// savedTemplates are the templates the log holds now.
+func savedTemplates(t *testing.T, s *store.Store) agents.UserTemplates {
+	t.Helper()
+	stream, err := s.Stream(events.TemplatesStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agents.UserTemplatesFromEvents(stream)
 }
