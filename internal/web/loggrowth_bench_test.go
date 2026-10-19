@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -69,6 +71,7 @@ type replayed struct {
 // read every stream and fold it. Min of 3, each on a fresh store.
 func benchReplay(t *testing.T, path string, total int) replayed {
 	var state replayed
+	var broken map[string]error
 	var read, fold time.Duration
 	whole := minOf3(func() {
 		start := time.Now()
@@ -84,9 +87,18 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 		streams := readStreams(t, s, append(slices.Clone(ids), events.AgentsStream, events.WorkersStream, events.ConnectionsStream))
 		readTook := time.Since(start)
 		start = time.Now()
-		state = replayed{tasks: map[string]*tasks.Task{}, order: ids}
+		// A broken task fails its replay, so it is left out of the state
+		// and of everything measured from it.
+		state = replayed{tasks: map[string]*tasks.Task{}}
+		broken = map[string]error{}
 		for _, id := range ids {
-			state.tasks[id] = tasks.FromEvents(streams[id])
+			task, err := foldTask(streams[id])
+			if err != nil {
+				broken[id] = err
+				continue
+			}
+			state.tasks[id] = task
+			state.order = append(state.order, id)
 		}
 		state.roster = agents.FromEvents(streams[events.AgentsStream])
 		state.workers = workers.FromEvents(streams[events.WorkersStream])
@@ -99,6 +111,9 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 			fold = foldTook
 		}
 	})
+	for _, id := range slices.Sorted(maps.Keys(broken)) {
+		t.Logf("%s is broken, left out: %v", id, broken[id])
+	}
 	t.Log("startup replay (min of 3):")
 	t.Logf("  open, read and decode every stream: %s", read.Round(time.Millisecond))
 	t.Logf("  fold every stream:                  %s", fold.Round(time.Millisecond))
@@ -114,12 +129,23 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 		defer s.Close()
 		kept := map[string]*tasks.Task{}
 		for _, id := range state.order {
-			kept[id] = tasks.FromEvents(must(s.Stream(id)))
+			kept[id] = must(foldTask(must(s.Stream(id))))
 		}
 		return []any{kept, agents.FromEvents(must(s.Stream(events.AgentsStream)))}
 	})
 	t.Logf("  heap held by the state alone: %d KB", held/1024)
 	return state
+}
+
+// foldTask replays one task's stream, turning a panic in the apply code into
+// an error so a stream it can't replay doesn't stop the benchmark.
+func foldTask(stream []events.Event) (task *tasks.Task, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("replay panicked: %v", r)
+		}
+	}()
+	return tasks.FromEvents(stream), nil
 }
 
 // snapshotTask mirrors tasks.Task with its two unexported fields, which an
