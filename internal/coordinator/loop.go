@@ -311,7 +311,7 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": refused})
 			return
 		}
-		l.proposeOrRaise(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions,
+		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions,
 			"machine": machine, "toYou": decision.ToYou, "checks": agent.Column == agents.Reviews})
 	case Ask:
 		l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": decision.Question,
@@ -553,18 +553,6 @@ func (l *Loop) portsInUse(machine string) []int {
 		}
 	}
 	return ports
-}
-
-// proposeOrRaise writes the coordinator's event, or, if the rules refuse
-// it, raises their reason as an issue: the coordinator hears it and decides again.
-func (l *Loop) proposeOrRaise(task string, actor events.Actor, kind events.Type, data map[string]any) {
-	_, rejection, err := l.store.Propose(events.Proposal{Stream: task, Actor: actor, Type: kind, Data: data})
-	switch {
-	case err != nil:
-		slog.Warn("coordinator loop: proposal refused", "task", task, "type", kind, "err", err)
-	case rejection != nil:
-		l.propose(task, agentry, events.IssueRaised, map[string]any{"reason": rejection.Reason})
-	}
 }
 
 func (l *Loop) load(id string) (*tasks.Task, agents.Roster, error) {

@@ -899,7 +899,7 @@ func TestCardsMoveThroughTheStages(t *testing.T) {
 		t.Errorf("a done task onto Done: %d", code)
 	}
 	move("in-progress", "The fix broke sign-out.")
-	if d := show(); d.Status != "working" || d.Worktree != nil || lastStep(d) != "Reopen this task. Carry on. The fix broke sign-out." {
+	if d := show(); d.Status != "working" || d.Worktree != nil || lastStep(d) != "Reopen this task. This needs more work: hand it back to an agent that builds it. The fix broke sign-out." {
 		t.Errorf("reopened: %s, worktree %v, %q", d.Status, d.Worktree, lastStep(d))
 	}
 }
@@ -1067,6 +1067,65 @@ func TestYourMovesToInProgressAndReviewStand(t *testing.T) {
 	move("task-3", "backlog")
 	if c := column("task-3"); c != "backlog" {
 		t.Errorf("parked again: column %s", c)
+	}
+}
+
+// Moving done work, or work a checker had before you parked it, back to
+// In progress sends it back for more work: not to a checker again.
+func TestBackToInProgressFromDoneOrParkedNeedsMoreWork(t *testing.T) {
+	server, s := newTestServer(t)
+	worker, lead := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	propose := func(p events.Proposal) *events.Rejection {
+		_, rejection, err := s.Propose(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	handOn := func(id, turn, agent string) *events.Rejection {
+		for _, p := range []events.Proposal{
+			{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+			{Stream: id, Actor: worker, Type: events.TurnEnded, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "report": "r"}},
+		} {
+			if rejection := propose(p); rejection != nil {
+				t.Fatalf("%s: %v", p.Type, rejection)
+			}
+		}
+		return propose(events.Proposal{Stream: id, Actor: lead, Type: events.TaskAssigned,
+			Data: map[string]any{"agent": agent, "instructions": "go", "checks": agent == "reviewer"}})
+	}
+	move := func(id, to string) {
+		if code, body := call(t, server, "POST", "/api/tasks/"+id+"/direct", `{"to":"`+to+`"}`); code != 200 {
+			t.Fatalf("%s onto %s: %d %s", id, to, code, body)
+		}
+	}
+	load := func(id string) *tasks.Task {
+		stream, _ := s.Stream(id)
+		return tasks.FromEvents(stream)
+	}
+	const moreWork = "This needs more work: hand it back to an agent that builds it."
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	handOn("task-1", "turn-1", "engineer")
+	propose(events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskDone, Data: map[string]any{"summary": "Fixed."}})
+	move("task-1", "in-progress")
+	if task := load("task-1"); !task.SentBack || !strings.Contains(task.Handoff.Text, moreWork) {
+		t.Errorf("from Done: sent back %v, handoff %+v", task.SentBack, task.Handoff)
+	}
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	if rejection := handOn("task-1", "turn-2", "reviewer"); rejection == nil ||
+		rejection.Reason != "the user moved this task back to In progress; hand it to an agent that builds it" {
+		t.Errorf("reopened, handed to the reviewer: %v", rejection)
+	}
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Tidy the README"}`)
+	propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w2", "branch": "b", "port": 7902}})
+	handOn("task-2", "turn-1", "reviewer")
+	move("task-2", "todo")
+	move("task-2", "in-progress")
+	if task := load("task-2"); !task.SentBack || task.Trail[len(task.Trail)-1].Text != moreWork {
+		t.Errorf("parked after review: sent back %v, last step %+v", task.SentBack, task.Trail[len(task.Trail)-1])
 	}
 }
 

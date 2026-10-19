@@ -226,6 +226,9 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 		if _, exists := roster.Get(decision.Agent); !exists {
 			return Move{Kind: RaiseIssue, Reason: "the coordinator assigned the task to " + decision.Agent + ", and there is no agent by that name"}
 		}
+		if why := task.UndoesYourColumn(decision.Agent, roster); why != "" {
+			return Move{Kind: RaiseIssue, Reason: why}
+		}
 	}
 	if decision.Action == Finish {
 		if why := unchecked(task, roster); why != "" {

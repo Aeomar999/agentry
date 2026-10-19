@@ -27,8 +27,8 @@ func defaultRoster() agents.Roster {
 // history builds a task from events, without the store: Next only reads state.
 type history []events.Event
 
-// add returns a new history, so two can branch from one.
 func (h history) add(actor events.Actor, kind events.Type, correlation string, data map[string]any) history {
+	// Clipped: histories that share a start don't write over each other.
 	return append(slices.Clip(h), events.Event{Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}})
 }
 
@@ -84,6 +84,48 @@ func TestNext(t *testing.T) {
 		if move.Kind != c.want || !strings.Contains(said, c.says) {
 			t.Errorf("%s: got %s (%q), want %s with %q", c.name, move.Kind, said, c.want, c.says)
 		}
+	}
+}
+
+// A handoff that undoes your move of the card is an issue before it is
+// applied: the coordinator hears why and decides again. Sent again and
+// again, it comes to you at the turn limit.
+func TestAHandoffFitsTheColumnYouMovedItTo(t *testing.T) {
+	assign := func(agent string) string {
+		return `{"action": "assign", "agent": "` + agent + `", "instructions": "go"}`
+	}
+	review := started().add(you, events.TaskDirected, "", map[string]any{"text": "Have this task reviewed next.", "column": "review"})
+	sentBack := started().add(you, events.TaskDirected, "", map[string]any{"text": "This needs more work.", "column": "in-progress", "sentBack": true})
+	cases := []struct {
+		name string
+		task *tasks.Task
+		want MoveKind
+		says string
+	}{
+		{"moved to Review, not to a builder", review.turn("turn-1", "tech-lead", assign("engineer")).task(),
+			RaiseIssue, "the user moved this task to Review; hand it to an agent that checks work"},
+		{"but to a checker", review.turn("turn-1", "tech-lead", assign("reviewer")).task(), ApplyDecision, ""},
+		{"sent back, not to a checker", sentBack.turn("turn-1", "tech-lead", assign("reviewer")).task(),
+			RaiseIssue, "the user moved this task back to In progress; hand it to an agent that builds it"},
+		{"but to a builder", sentBack.turn("turn-1", "tech-lead", assign("engineer")).task(), ApplyDecision, ""},
+	}
+	for _, c := range cases {
+		if move := Next(c.task, defaultRoster()); move.Kind != c.want || move.Reason != c.says {
+			t.Errorf("%s: got %s (%q), want %s with %q", c.name, move.Kind, move.Reason, c.want, c.says)
+		}
+	}
+
+	h := review
+	for i := range DefaultMaxTurns {
+		h = h.turn(turnID(len(h)), "tech-lead", assign("engineer"))
+		move := Next(h.task(), defaultRoster())
+		if move.Kind != RaiseIssue {
+			t.Fatalf("refused handoff %d: %+v", i+1, move)
+		}
+		h = h.add(watchdog, events.IssueRaised, "", map[string]any{"reason": move.Reason})
+	}
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "24 turns") {
+		t.Errorf("after %d refused handoffs: %+v", DefaultMaxTurns, move)
 	}
 }
 

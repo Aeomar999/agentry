@@ -176,15 +176,22 @@ func listOf(items []string) []string {
 }
 
 // columnOf is the task's column on the board: Done, where you parked it, or
-// the column you moved it to while that stands; otherwise its stage's, Review
-// while an agent that checks work has it.
+// its work's column.
 func columnOf(t *tasks.Task, roster agents.Roster) string {
 	switch {
 	case t.IsDone:
 		return "done"
 	case t.Parked != "":
 		return t.Parked
-	case t.Column != "":
+	}
+	return workColumn(t, roster)
+}
+
+// workColumn is the column of the task's work, done or parked or not: the
+// column you moved it to while that stands; otherwise its stage's, Review
+// while an agent that checks work has it.
+func workColumn(t *tasks.Task, roster agents.Roster) string {
+	if t.Column != "" {
 		return t.Column
 	}
 	if agent, ok := roster.Get(stageOf(t)); ok && agent.Column == agents.Reviews {

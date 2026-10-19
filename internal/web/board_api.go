@@ -74,7 +74,8 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sentBack := request.To == "in-progress" && columnOf(task, roster) == "review"
+	// Done work goes back for more, as does work a checker had, parked or not.
+	sentBack := request.To == "in-progress" && (task.IsDone || workColumn(task, roster) == "review")
 	text := ""
 	switch {
 	case request.To == "review":

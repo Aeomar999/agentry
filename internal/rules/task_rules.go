@@ -202,25 +202,10 @@ var taskRosterRules = map[events.Type]func(t *tasks.Task, roster agents.Roster, 
 	events.TaskAssigned: toTheColumnYouMovedItTo,
 }
 
-// toTheColumnYouMovedItTo: when you move a task to Review yourself, its
-// coordinator hands it to an agent that checks work, if its team has one;
-// moved from Review back to In progress, to one that doesn't.
+// toTheColumnYouMovedItTo: a handoff doesn't undo your move of the card to
+// In progress or Review.
 func toTheColumnYouMovedItTo(t *tasks.Task, roster agents.Roster, p events.Proposal) string {
-	agent, _ := roster.Get(p.Text("agent"))
-	checks := agent.Column == agents.Reviews
-	switch {
-	case t.Column == "review" && !checks && hasAChecker(roster, t.Coordinator):
-		return "the user moved this task to Review; hand it to an agent that checks work"
-	case t.Column == "in-progress" && t.SentBack && checks:
-		return "the user moved this task back to In progress; hand it to an agent that builds it"
-	}
-	return ""
-}
-
-// hasAChecker says whether the coordinator's team has an agent that checks work.
-func hasAChecker(roster agents.Roster, coordinator string) bool {
-	lead, _ := roster.Get(coordinator)
-	return slices.ContainsFunc(roster.Assignees(lead.TeamName()), func(a agents.Agent) bool { return a.Column == agents.Reviews })
+	return t.UndoesYourColumn(p.Text("agent"), roster)
 }
 
 func wrappingUp(t *tasks.Task, _ events.Proposal) string {
