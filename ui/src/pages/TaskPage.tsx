@@ -107,7 +107,16 @@ const TURN_COLUMNS: Column<Turn>[] = [
   { header: "Machine", className: "w-28", render: (t) => <Mono className="text-ink-muted">{machineName(t.worker || LOCAL)}</Mono> },
   { header: "Started", className: "w-24", render: (t) => <Mono className="text-ink-muted">{clockTime(t.startedAt)}</Mono> },
   { header: "Took", className: "w-24", render: (t) => <Mono>{t.ended ? duration(t.startedAt, t.lastEventAt) : "running"}</Mono> },
-  { header: "Tokens", className: "w-20 text-right", render: (t) => <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono> },
+  {
+    header: "Tokens",
+    className: "w-20 text-right",
+    render: (t) =>
+      t.tokensUnknown ? (
+        <Mono className="whitespace-nowrap text-warning">{t.tokensUnknown}</Mono>
+      ) : (
+        <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
+      ),
+  },
   {
     header: "Outcome",
     className: "w-full max-w-0",
@@ -267,14 +276,15 @@ export function TaskPage() {
         </Fact>
         <Fact label="Tokens" className="min-w-56">
           <LimitEditor task={task} kind="budget" compact onChanged={reload}>
-            <TokenMeter used={task.tokensUsed} budget={task.budget} />
+            <span className="flex flex-col gap-1">
+              <TokenMeter used={task.tokensUsed} budget={task.budget} />
+              {task.tokensUnknown && <span className="text-[11px] leading-4 text-warning">{task.tokensUnknown}</span>}
+            </span>
           </LimitEditor>
         </Fact>
-        <Fact label="Turns since your answer">
+        <Fact label={task.maxTurns > 0 ? "Turns since your answer" : "Turns"}>
           <LimitEditor task={task} kind="turns" compact onChanged={reload}>
-            <Mono className={cn("whitespace-nowrap", task.atTurnLimit && "text-danger")}>
-              {turnsLine(task.turnsSinceAnswer, task.maxTurns)}
-            </Mono>
+            <Mono className={cn("whitespace-nowrap", task.atTurnLimit && "text-danger")}>{turnsLine(task)}</Mono>
           </LimitEditor>
         </Fact>
         <Fact label="Actions">

@@ -71,7 +71,7 @@ export function TaskCard({
       <LabelList labels={task.labels} onPick={onPickLabel} />
       <span className="flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-ink-faint">
         {task.id}
-        <span className={cn("ml-auto", task.overBudget && "text-danger")}>{task.tokensUsed > 0 && tokens(task.tokensUsed)}</span>
+        <span className={cn("ml-auto", task.overBudget && "text-danger")}>{tokens(task.tokensUsed)}</span>
         <span>{task.turns} turns</span>
         <span title={task.lastActiveAt}>{timeAgo(task.lastActiveAt)}</span>
       </span>

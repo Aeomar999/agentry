@@ -55,6 +55,7 @@ export interface TaskDetail extends TaskSummary {
   worktree: Worktree | null;
   trail: Step[] | null;
   turnList: Turn[] | null;
+  tokensUnknown: string; // on how many turns the tokens couldn't be counted, and why; "" when every turn was
   approvals: Action[] | null;
   actions: Action[] | null;
   events: LogEvent[] | null;
@@ -86,6 +87,7 @@ export interface Turn {
   ended: boolean;
   issue: string;
   tokens: number;
+  tokensUnknown?: string; // why tokens is 0, when the engine couldn't say
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something

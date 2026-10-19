@@ -10,7 +10,7 @@ import { LimitChoice, LimitKind, SCALES, choiceOf, described, limitOf, sent } fr
 import { cn } from "@/lib/cn";
 import { useToast } from "./Toasts";
 
-type LimitTask = Pick<TaskSummary, "id" | "status" | "budget" | "tokensUsed" | "maxTurns" | "turnsSinceAnswer">;
+type LimitTask = Pick<TaskSummary, "id" | "status" | "budget" | "tokensUsed" | "maxTurns" | "turns" | "turnsSinceAnswer">;
 
 interface LimitEditorProps {
   task: LimitTask;
@@ -52,7 +52,7 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
     }
     return (
       <span className="flex flex-wrap items-center gap-2">
-        <Mono>{kind === "budget" ? budgetLine(task.budget) : turnsLine(task.turnsSinceAnswer, task.maxTurns)}</Mono>
+        <Mono>{kind === "budget" ? budgetLine(task.budget) : turnsLine(task)}</Mono>
         {!done && (
           <Button size="sm" variant="ghost" onClick={edit}>
             Change
@@ -100,9 +100,10 @@ function budgetLine(budget: number): string {
   return budget > 0 ? `${SCALES.budget.show(budget)} tokens` : "no limit";
 }
 
-// "18 of 24 turns", or "18 turns (no limit)": since your last answer.
-export function turnsLine(since: number, maxTurns: number): string {
-  return maxTurns > 0 ? `${since} of ${maxTurns} turns` : `${since} turns (no limit)`;
+// "18 of 24 turns" since your last answer, or with no limit all its turns:
+// "30 turns (no limit)".
+export function turnsLine(task: LimitTask): string {
+  return task.maxTurns > 0 ? `${task.turnsSinceAnswer} of ${task.maxTurns} turns` : `${task.turns} turns (no limit)`;
 }
 
 // What a saved limit replies: whether it answered the task's stop, and why
