@@ -2,6 +2,7 @@ package ideas_test
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -19,7 +20,8 @@ import (
 
 // What waits for you, pinned on a log of every kind: the core's entries
 // oldest first, then the open ideas, for a session outside any repo and
-// for one in each repo. A dismissed idea leaves the line but not the key.
+// for one in each repo, the same from agentry mcp and from GET
+// /api/waiting. A dismissed idea leaves the line but not the key.
 func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	server, s, state := newServer(t, tasks.Limits{})
 	other := gitRepo(t)
@@ -82,8 +84,13 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkWaiting(t, "agentry mcp, outside a repo", all, append(core, open))
+	both := func(where, repo string, want []features.Waiting) {
+		t.Helper()
+		checkWaiting(t, where, waitingIn(t, api, state, repo), want)
+		checkWaiting(t, where+", from GET /api/waiting", served(t, api, repo), want)
+	}
 	for _, repo := range []string{"", "/src/app", other} {
-		checkWaiting(t, "in "+repo, waitingIn(t, api, state, repo), append(core, open))
+		both("in "+repo, repo, append(core, open))
 	}
 
 	if code, body := call(t, server, "POST", "/api/ideas/"+tagRepos+"/dismiss", `{"note":"not now"}`); code != 200 {
@@ -91,10 +98,10 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	}
 	here := features.Waiting{Key: "ideas/3", Task: "task-7", Kind: "ideas",
 		Line: "2 open ideas from the Visionaries: Sort the columns, Search the board (list_ideas)"}
-	checkWaiting(t, "in /src/app, its ideas all here", waitingIn(t, api, state, "/src/app"), append(core, here))
+	both("in /src/app, its ideas all here", "/src/app", append(core, here))
 	here.Line = strings.Replace(here.Line, "(list_ideas)", "(list_ideas all)", 1)
-	checkWaiting(t, "in "+other+", with none of its own", waitingIn(t, api, state, other), append(core, here))
-	checkWaiting(t, "outside a repo, after the dismiss", waitingIn(t, api, state, ""), append(core, here))
+	both("in "+other+", with none of its own", other, append(core, here))
+	both("outside a repo, after the dismiss", "", append(core, here))
 }
 
 // waitingIn is what waits for a session in repo ("" outside one): the
@@ -107,6 +114,16 @@ func waitingIn(t *testing.T, api client.Client, state features.Reader, repo stri
 	}
 	core := slices.DeleteFunc(all, func(w features.Waiting) bool { return w.Kind != "needs you" })
 	return append(core, ideas.Feature().Waiting(state, repo)...)
+}
+
+// served is what GET /api/waiting lists for a session in repo.
+func served(t *testing.T, api client.Client, repo string) []features.Waiting {
+	t.Helper()
+	var all []features.Waiting
+	if err := api.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all); err != nil {
+		t.Fatal(err)
+	}
+	return all
 }
 
 // autoAccepted is an idea from task about repo that Agentry accepted for
