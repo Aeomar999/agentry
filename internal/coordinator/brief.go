@@ -58,7 +58,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	checks(&b, task, roster)
 	decision := DecisionFormat
-	if isVisionaries(coordinator) {
+	if ideas.Suggests(coordinator) {
 		decision += "\n" + IdeasFormat
 	}
 	section(&b, "Your decision", decision)

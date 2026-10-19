@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -316,7 +317,7 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 		summary := decision.Summary
 		if len(decision.Ideas) > 0 {
 			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
-			if own, _ := roster.Get(task.Coordinator); isVisionaries(own) {
+			if own, _ := roster.Get(task.Coordinator); ideas.Suggests(own) {
 				note = l.suggest(task, decision.Ideas)
 			}
 			if note != "" {
