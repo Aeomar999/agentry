@@ -874,6 +874,11 @@ func TestTheNetworkDiagnosisProfile(t *testing.T) {
 		{"dump it with sudo", bash("sudo wg show wg0 dump"), Deny},
 		{"its config behind timeout", bash("timeout 5 wg showconf wg0"), Deny},
 		{"the tunnel's config", file("Read", "/etc/wireguard/wg0.conf"), Deny},
+		{"the tunnel's private key", bash("wg show wg0 private-key"), Deny},
+		{"every preshared key", bash("wg show all preshared-keys"), Deny},
+		{"a new key", bash("wg genkey"), Deny},
+		{"the ACME store", file("Read", "/srv/traefik/acme.json"), Deny},
+		{"a certificate's key", file("Read", "/etc/letsencrypt/live/example.com/privkey.pem"), Deny},
 	})
 }
 
