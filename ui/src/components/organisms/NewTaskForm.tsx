@@ -9,7 +9,8 @@ import { api } from "@/api/client";
 import type { Agent, CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { teamsOf } from "@/lib/teams";
-import { parseTokens, tokens } from "@/lib/tokens";
+import { LimitSelect } from "@/components/molecules/LimitSelect";
+import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
 import { knownLabels } from "@/lib/labels";
 import { useResource } from "@/live/use-resource";
@@ -35,7 +36,7 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
   const [title, setTitle] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [attached, setAttached] = useState<File[]>([]); // shared with the task once it is made
-  const [budget, setBudget] = useState("");
+  const [limits, setLimits] = useState<Partial<Record<LimitKind, LimitChoice>>>({}); // only those you changed
   const [where, setWhere] = useState<"default" | "existing" | "new">("default");
   const teams = teamsOf(useResource<Agent[]>("/api/agents").data ?? []);
   const [team, setTeam] = useState("");
@@ -51,9 +52,9 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     if (!description.trim() || busy) return;
-    const asked = budget.trim() ? parseTokens(budget) : 0;
-    if (Number.isNaN(asked) || asked < 0) {
-      setError("A budget is a number of tokens, such as 2M or 500k.");
+    const asked = askedLimits(limits);
+    if (Number.isNaN(asked.budget) || Number.isNaN(asked.maxTurns)) {
+      setError("Give the budget and max turns as numbers, or pick a preset.");
       return;
     }
     if (where !== "default" && !repo.trim().startsWith("/")) {
@@ -67,7 +68,7 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
         description,
         title,
         labels,
-        budget: asked,
+        ...asked,
         repo: where === "default" ? "" : repo.trim(),
         team: chosen?.team ?? "",
         kind,
@@ -232,20 +233,32 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
           <LabelInput labels={labels} onChange={setLabels} known={knownLabels(tasks)} />
         </div>
       </Field>
-      <Field
-        label="Token budget"
-        htmlFor="task-budget"
-        hint="Optional. When the task has used this many tokens it stops and asks you to raise it or wrap up."
-      >
-        <Input
-          id="task-budget"
-          mono
-          value={budget}
-          onChange={(e) => setBudget(e.target.value)}
-          placeholder={config ? (config.budget ? `${tokens(config.budget)}, the default` : "no limit") : ""}
-          className="max-w-48"
-        />
-      </Field>
+      {config && (
+        <div className="flex flex-wrap gap-6">
+          <Field
+            label="Token budget"
+            htmlFor="task-budget"
+            hint="When the task has used this many tokens it stops and asks you to raise it or wrap up."
+          >
+            <LimitSelect
+              id="task-budget"
+              scale={SCALES.budget}
+              choice={limits.budget ?? choiceOf(SCALES.budget, config.budget)}
+              onChange={(choice) => setLimits({ ...limits, budget: choice })}
+              defaultLimit={config.budget}
+            />
+          </Field>
+          <Field label="Max turns" htmlFor="task-turns" hint="Turns without your answer before it stops and asks you.">
+            <LimitSelect
+              id="task-turns"
+              scale={SCALES.turns}
+              choice={limits.turns ?? choiceOf(SCALES.turns, config.maxTurns)}
+              onChange={(choice) => setLimits({ ...limits, turns: choice })}
+              defaultLimit={config.maxTurns}
+            />
+          </Field>
+        </div>
+      )}
       <div className="flex items-center gap-3">
         <Button type="submit" variant="primary" icon={<Plus />} disabled={busy || !description.trim()}>
           {epic ? "Add story" : kind === "epic" ? "Add epic" : "Add task"}
@@ -257,4 +270,14 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
       </div>
     </form>
   );
+}
+
+// The limits a new task asks for: left out takes the server's default, -1
+// is no limit, NaN a custom value that isn't a number.
+function askedLimits(limits: Partial<Record<LimitKind, LimitChoice>>): { budget?: number; maxTurns?: number } {
+  const asked = (kind: LimitKind) => {
+    const choice = limits[kind];
+    return choice && sent(limitOf(SCALES[kind], choice));
+  };
+  return { budget: asked("budget"), maxTurns: asked("turns") };
 }
