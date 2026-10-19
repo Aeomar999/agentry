@@ -397,8 +397,9 @@ type Proposer interface {
 }
 
 // Checked is log for one feature: it refuses, with the rule "features", any
-// type the feature neither registered nor listed in Writes.
-func Checked(f Feature, log Proposer) Proposer
+// type the feature neither registered (its Registration from the catalogue)
+// nor listed in Writes.
+func Checked(f Feature, registered events.Registration, log Proposer) Proposer
 
 // Core is all a feature's routes and hooks may use. It has no *store.Store.
 type Core struct {
@@ -541,7 +542,7 @@ Ideas then is `internal/ideas` plus `feature.go`:
 func Feature() features.Feature {
 	return features.Feature{Name: "ideas", Version: 1,
 		Streams:     &features.Streams{Prefix: Prefix, Types: types, FromEvents: fromEvents, Next: next, Check: check},
-		Writes:      []events.Type{events.TaskCreated}, // accepting an idea makes its task
+		Writes:      []events.Type{events.TaskCreated, events.TaskHeld}, // accepting an idea makes its task; Agentry may start it
 		Coordinator: &features.Coordinator{For: isVisionaries, Brief: dismissedSection, Decision: Format, Field: "ideas", OnDone: suggest},
 		Routes:      routes, Tools: tools, Waiting: openIdeas, Manifest: manifest}
 }
@@ -915,7 +916,8 @@ so a reader can see from a `Feature` value what that feature can write.
 - Each type's `writers` (`Human`, `Agent`, `System`, ...) work as now:
   `CheckWriter` refuses an `idea.accepted` from anyone but you.
 - A feature names the core types it writes, in `Writes`: Ideas lists
-  `task.created`, which accepting an idea makes (`ideas.makeTask`). A
+  `task.created`, which accepting an idea makes (`ideas.makeTask`), and
+  `task.held`, which starts a task Agentry accepted (`ideas.startIdea`). A
   feature never holds the `*store.Store`. The only way it can write is
   `Core.Log`, the proposer `features.Checked` made for it in `serve.go`,
   which refuses any type the feature neither registered (in
