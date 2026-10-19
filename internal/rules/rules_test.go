@@ -266,6 +266,27 @@ func TestAPassFitsItsAgentAndTurn(t *testing.T) {
 	}
 }
 
+// When the coordinator itself asked, its next turn hears your approval and
+// its pass works there.
+func TestACoordinatorsPassWorksInItsNextTurn(t *testing.T) {
+	push := func(id string) step {
+		return step{coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push"}, true}
+	}
+	task := run(t, []step{created, worktree, turnStarted("turn-1", "tech-lead"),
+		push("toolu_1"),
+		{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+		{policy, events.ActionHeld, "toolu_1", nil, true},
+		turnEnded("turn-1", "tech-lead", "held"),
+		{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, true},
+		turnStarted("turn-2", "tech-lead"),
+		push("toolu_2"),
+		{policy, events.ActionApproved, "toolu_2", map[string]any{"reason": "approved", "pass": "toolu_1"}, true},
+	})
+	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-2" || !pass.PassUsed {
+		t.Errorf("toolu_1: %+v, want its pass used in turn-2", pass)
+	}
+}
+
 func TestAHeldActionWaitsWhileTheTaskIsParkedOrDone(t *testing.T) {
 	for name, move := range map[string]step{
 		"to do": {you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},

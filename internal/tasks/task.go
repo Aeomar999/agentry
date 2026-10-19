@@ -219,7 +219,8 @@ type Action struct {
 	Reason      string // the rule that asked, then the reason for the decision
 	HasResult   bool
 	PassUsed    bool   // held and approved, its one pass was used: the same command asked for again went through
-	PassTurn    string // held and approved, the first turn its agent started after: the only one its pass works in
+	Heard       bool   // held and approved, its coordinator has started a turn since: only then can its pass start
+	PassTurn    string // held and approved, its agent's first turn once heard: the only one its pass works in
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
@@ -343,7 +344,7 @@ func (t *Task) ApprovalUnheard() bool { return t.approvalNews }
 
 // PassFor is the held action you approved whose pass lets this request
 // through once without asking, or nil: the same agent asks for the same
-// tool and command in its first turn after your approval.
+// tool and command in its first turn after its coordinator heard your approval.
 func (t *Task) PassFor(request *Action) *Action {
 	for _, action := range t.Actions {
 		if action.Held && action.Decision == Approved && !action.PassUsed && action.PassTurn == request.Turn &&

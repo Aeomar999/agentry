@@ -289,6 +289,9 @@ func (t *Task) Apply(e events.Event) {
 			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
+		if e.Text("agent") == t.Coordinator {
+			t.hearApprovals()
+		}
 		t.startPasses(e.Correlation, e.Text("agent"))
 		if e.Text("agent") == t.Coordinator {
 			t.storyNews, t.approvalNews = false, false // its brief has every story's news so far, and your approvals
@@ -491,11 +494,23 @@ func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
 		action.Command, again, action.Agent)
 }
 
-// startPasses gives the agent's held actions you approved, and whose pass
-// has no turn yet, this turn to work in: the only one their pass works in.
+// hearApprovals marks the held actions you approved as heard: a coordinator
+// turn is starting, and its brief has your approvals.
+func (t *Task) hearApprovals() {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved {
+			action.Heard = true
+		}
+	}
+}
+
+// startPasses gives the agent's held actions you approved, which its
+// coordinator has heard and whose pass has no turn yet, this turn to work
+// in: the only one their pass works in. A turn the coordinator gave the
+// agent before it heard is for other work, and doesn't use the pass up.
 func (t *Task) startPasses(turn, agent string) {
 	for _, action := range t.Actions {
-		if action.Held && action.Decision == Approved && action.PassTurn == "" && action.Agent == agent {
+		if action.Held && action.Decision == Approved && action.Heard && action.PassTurn == "" && action.Agent == agent {
 			action.PassTurn = turn
 		}
 	}
