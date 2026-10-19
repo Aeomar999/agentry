@@ -28,7 +28,7 @@ export function PolicyHistory({ hash, onChanged }: { hash: string; onChanged: ()
             key={version.position}
             version={version}
             inForce={version.position === inForce}
-            canRevert={version.canRevert && !version.refused && version.position !== inForce}
+            canRevert={version.canRevert && !version.refused && version.hash !== hash}
             busy={busy}
             onRevert={() => run("Restored an earlier version", () => revertPolicy(version.position, hash))}
           />
@@ -41,7 +41,7 @@ export function PolicyHistory({ hash, onChanged }: { hash: string; onChanged: ()
 interface VersionRowProps {
   version: PolicyVersion;
   inForce: boolean;
-  canRevert: boolean; // its text is in the log, and isn't the one in force
+  canRevert: boolean; // its text is in the log, and isn't the text in force
   busy: boolean;
   onRevert: () => void;
 }
