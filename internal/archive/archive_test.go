@@ -193,13 +193,15 @@ func TestATaskIsArchivedOnceDoneForTheAge(t *testing.T) {
 }
 
 // A task unarchived and not reopened is still done, as long ago as
-// before, so its age counts again from its task.unarchived: a round less
-// than the age after it leaves the task whole, though it is done for more
-// than the age, and a round the age after it archives the task again.
+// before, so its age counts again from its task.unarchived: a round when
+// it is done for more than the age, but less than the age after the
+// unarchiving, leaves the task whole, and a round the age after the
+// unarchiving archives it again.
 func TestAnUnarchivedTaskWaitsTheAgeAgain(t *testing.T) {
 	f := newFixture(t)
 	f.task(t, "task-1", tasks.Story)
-	f.clock = f.done(t, "task-1").Add(age)
+	done := f.done(t, "task-1")
+	f.clock = done.Add(age)
 	if archived := f.archiver.round(); archived != 1 || !f.isArchived("task-1") {
 		t.Fatalf("archived %d, task-1 %v; want task-1", archived, f.isArchived("task-1"))
 	}
@@ -208,7 +210,10 @@ func TestAnUnarchivedTaskWaitsTheAgeAgain(t *testing.T) {
 		t.Fatal(rejection, err)
 	}
 
-	f.clock = unarchived.At.Add(age - time.Minute)
+	if !unarchived.At.After(done) {
+		t.Fatalf("unarchived at %v, not after done at %v", unarchived.At, done)
+	}
+	f.clock = done.Add(age).Add(unarchived.At.Sub(done) / 2)
 	if archived := f.archiver.round(); archived != 0 || f.isArchived("task-1") {
 		t.Errorf("just unarchived: archived %d, task-1 %v; want it left whole", archived, f.isArchived("task-1"))
 	}
