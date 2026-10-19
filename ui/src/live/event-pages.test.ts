@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { LogEvent } from "@/api/types";
-import { EventPages, EventsWanted } from "./event-pages";
+import { EventPages, EventsWanted, noEvents } from "./event-pages";
 
 // A fake server holding one task's events at the positions given: it
 // answers each page read as the real route does, with a page size of 3,
@@ -215,6 +215,69 @@ describe("a task's events, newest first (the Activity and Events tabs)", () => {
     expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?after=5"]);
     expect(pages.snapshot(wanted)).toMatchObject({ error: "" });
     expect(positions(pages, wanted)).toEqual([2, 3, 5, 6, 7]);
+  });
+
+  test("retry reads a failed first page again at once, loading again, and once however often it is asked", async () => {
+    const server = fakeServer([1, 2, 3, 5]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    await server.pending.splice(0)[0].fail("502 Bad Gateway");
+    expect(pages.snapshot(newest)).toMatchObject({ loading: true, error: "502 Bad Gateway" });
+
+    pages.retry(newest);
+    pages.retry(newest); // a second click before the read is back
+    expect(pages.snapshot(newest)).toMatchObject({ loading: true, error: "" });
+    expect(server.reads).toEqual(["/api/tasks/task-8/events?before=11", "/api/tasks/task-8/events?before=11"]);
+    await server.answer(5);
+    expect(positions(pages, newest)).toEqual([2, 3, 5]);
+    expect(pages.snapshot(newest)).toMatchObject({ loading: false, error: "" });
+
+    pages.retry(newest); // nothing failed
+    expect(server.reads).toHaveLength(2);
+  });
+
+  test("a retry that fails again shows the error again, and can be retried", async () => {
+    const server = fakeServer([1, 2, 3, 5]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    await server.pending.splice(0)[0].fail("502 Bad Gateway");
+    pages.retry(newest);
+    await server.pending.splice(0)[0].fail("503 Service Unavailable");
+    expect(pages.snapshot(newest)).toMatchObject({ loading: true, error: "503 Service Unavailable" });
+    pages.retry(newest);
+    await server.answer(5);
+    expect(server.reads).toHaveLength(3);
+    expect(positions(pages, newest)).toEqual([2, 3, 5]);
+  });
+
+  test("retry reads a failed earlier page again, keeping what is held", async () => {
+    const server = fakeServer([1, 2, 3, 5, 8, 9, 10]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    await server.answer(10);
+    pages.loadEarlier(newest);
+    await server.pending.splice(0)[0].fail("database is locked");
+    expect(pages.snapshot(newest)).toMatchObject({ loadingEarlier: false, earlier: true, error: "database is locked" });
+
+    pages.retry(newest);
+    expect(pages.snapshot(newest)).toMatchObject({ loadingEarlier: true, error: "" });
+    await server.answer(10);
+    expect(server.reads.slice(1)).toEqual(["/api/tasks/task-8/events?before=8", "/api/tasks/task-8/events?before=8"]);
+    expect(positions(pages, newest)).toEqual([2, 3, 5, 8, 9, 10]);
+    expect(pages.snapshot(newest)).toMatchObject({ loadingEarlier: false, error: "" });
+  });
+
+  test("a retry of a list nobody shows any more reads nothing, and one dropped mid-read isn't shown", async () => {
+    const server = fakeServer([1, 2, 3]);
+    const pages = new EventPages(server.fetch);
+    const stop = pages.watch(newest, ignore);
+    await server.pending.splice(0)[0].fail("502 Bad Gateway");
+    pages.retry(newest);
+    stop(); // the tab closed while the retry was in flight
+    await server.answer(10);
+    expect(pages.snapshot(newest)).toEqual(noEvents);
+    pages.retry(newest);
+    expect(server.reads).toHaveLength(2);
   });
 
   test("a list nobody shows any more is not read again, and is forgotten", async () => {
