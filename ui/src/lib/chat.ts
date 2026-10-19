@@ -1,5 +1,6 @@
 import type { LogEvent, TaskDetail } from "@/api/types";
 import { onMachine } from "./machines";
+import { limitText } from "./time";
 
 // Your chat with a task's coordinator, read from the task's events, oldest
 // first: what you said, what it said back, its questions and its summary,
@@ -97,6 +98,11 @@ export function chatOf(task: TaskDetail): ChatItem[] {
       case "turn.ended": {
         const agent = agentOf.get(e.correlation ?? "") ?? "";
         if (agent && agent !== task.coordinator) said("report", text(e, "report") || "(no report)", { who: agent });
+        break;
+      }
+      case "turn.limited": {
+        const agent = agentOf.get(e.correlation ?? "") ?? "an agent";
+        said("note", `${agent}'s ${e.correlation} hit a ${limitText(text(e, "resetsAt"), e.at)}`, { who: "agentry", tone: "warning" });
         break;
       }
       case "turn.stopped": {

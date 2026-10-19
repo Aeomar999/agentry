@@ -243,6 +243,8 @@ function TurnRow({ item, picked, clock, onTurn, narrowed }: RowProps) {
     <Badge variant="warning">stopped by you</Badge>
   ) : turn.ended ? (
     <Badge>ended</Badge>
+  ) : turn.limited ? (
+    <Badge variant="warning">usage limit</Badge>
   ) : (
     <Badge variant="info">running</Badge>
   );

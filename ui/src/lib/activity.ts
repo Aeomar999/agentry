@@ -1,6 +1,7 @@
 import { onMachine } from "./machines";
 import type { Action, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { readPlan } from "./plan";
+import { limitText } from "./time";
 import { tokens } from "./tokens";
 
 // A task's activity: its whole event log read as rows a person follows,
@@ -153,8 +154,8 @@ function rowOf(
         title: info.agent,
         turnInfo: info,
         until: ended,
-        live: !info.ended,
-        tone: info.issue ? "danger" : "info",
+        live: !info.ended && !info.limited,
+        tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
       };
     }
     case "turn.ended": {
@@ -181,6 +182,14 @@ function rowOf(
         ...base,
         kind: "note",
         title: text(e, "action") ? `You chose "${text(e, "action")}" on ${e.correlation}` : `You sent your comments on ${e.correlation}`,
+      };
+    case "turn.limited":
+      return {
+        ...base,
+        kind: "waiting",
+        title: "Waiting for the usage limit",
+        body: limitText(text(e, "resetsAt"), e.at),
+        tone: "warning",
       };
     case "turn.stopped":
       return { ...base, kind: "note", title: "You stopped this turn, so the coordinator reads what you said" };

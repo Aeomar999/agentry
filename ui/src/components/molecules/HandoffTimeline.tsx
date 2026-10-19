@@ -83,7 +83,11 @@ function TurnLine({ turn, actions, ledTo }: { turn: Turn; actions: number; ledTo
       <span className="text-ink-faint">{ledTo ? "Led to" : "From"}</span>
       <Mono className="text-[11px]">{turn.id}</Mono>
       <AgentName name={turn.agent} className="text-[11px]" />
-      {turn.issue ? <Badge variant="danger">issue</Badge> : !turn.ended && <Badge variant="info">running</Badge>}
+      {turn.issue ? (
+        <Badge variant="danger">issue</Badge>
+      ) : (
+        !turn.ended && (turn.limited ? <Badge variant="warning">usage limit</Badge> : <Badge variant="info">running</Badge>)
+      )}
       {turn.ended && <Mono className="text-[11px]">{duration(turn.startedAt, turn.lastEventAt)}</Mono>}
       <span>
         {actions} {actions === 1 ? "action" : "actions"}

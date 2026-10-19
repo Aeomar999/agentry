@@ -8,6 +8,17 @@ export function dateTime(iso: string): string {
   return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
+// When a usage limit hit at atIso resets: "usage limit, resets ~03:00",
+// with the date when that isn't the day it was hit, or "usage limit, reset
+// time unknown".
+export function limitText(resetsIso: string | undefined, atIso: string): string {
+  if (!resetsIso) return "usage limit, reset time unknown";
+  const resets = new Date(resetsIso);
+  const sameDay = resets.toDateString() === new Date(atIso).toDateString();
+  const time = resets.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return `usage limit, resets ~${sameDay ? time : `${resets.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`}`;
+}
+
 export function timeAgo(iso: string, now = Date.now()): string {
   const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
   if (seconds < 60) return `${seconds}s ago`;

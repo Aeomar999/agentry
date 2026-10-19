@@ -91,6 +91,8 @@ export interface Turn {
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something
+  limited?: string; // what the engine said when it stopped at a usage limit
+  resetsAt?: string; // when that limit resets, when the engine said
 }
 
 export interface Action {
