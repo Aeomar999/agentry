@@ -35,6 +35,7 @@ type Loop struct {
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
 	Clones string // where repos the user names by a git address are cloned, for a "move"
+	Budget int    // the token budget of a task Agentry makes from an idea it accepts for you, as yours get; 0 is no limit
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}

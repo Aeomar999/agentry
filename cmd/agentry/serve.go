@@ -157,6 +157,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
+	loop.Budget = o.budget
 	go loop.Run(ctx)
 	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
