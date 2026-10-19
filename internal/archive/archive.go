@@ -77,12 +77,17 @@ func (a *Archiver) run() {
 }
 
 // round archives every task chosen, and says how many. A task the store
-// refuses or fails to archive is logged and left for the next round. After
-// a round that archived any, the space their rows held goes back to the
-// disk and a snapshot is asked for.
+// refuses or fails to archive is logged and left for the next round, and
+// so are the tasks after it when Close stops the round. After a round that
+// archived any, the space their rows held goes back to the disk and a
+// snapshot is asked for. Every round then tries the one full VACUUM, so
+// one that failed runs again, but not while stopping: it can take a while.
 func (a *Archiver) round() int {
 	archived := 0
 	for _, id := range a.chosen() {
+		if a.stopping() {
+			break
+		}
 		_, rejection, err := a.log.Archive(id, a.summarise(id), a.blobs)
 		switch {
 		case err != nil:
@@ -96,27 +101,44 @@ func (a *Archiver) round() int {
 	if archived > 0 {
 		a.afterArchiving()
 	}
+	if !a.stopping() {
+		a.vacuumOnce()
+	}
 	return archived
 }
 
-// afterArchiving gives the archived rows' space back, switches an older
-// file to incremental mode, and asks for a snapshot. A VACUUM that fails,
-// as on a full disk, is tried again at the next start: VacuumOnce runs
-// until the file is incremental.
+// stopping says whether Close has been called.
+func (a *Archiver) stopping() bool {
+	select {
+	case <-a.stop:
+		return true
+	default:
+		return false
+	}
+}
+
+// afterArchiving gives the archived rows' space back and asks for a
+// snapshot.
 func (a *Archiver) afterArchiving() {
 	if err := a.log.GiveBackSpace(); err != nil {
 		slog.Warn("archive: the space can't all be given back yet", "err", err)
 	}
-	if ran, err := a.log.VacuumOnce(); err != nil {
-		slog.Warn("archive: the log can't be vacuumed, so it is tried at the next start", "err", err)
-	} else if ran {
-		slog.Info("archive: vacuumed the log, which now gives space back after each round")
-	}
 	a.snapshots.WriteSoon()
 }
 
+// vacuumOnce switches an older file to incremental mode once a task has
+// been archived. A VACUUM that fails, as on a full disk, is tried again at
+// the next round: VacuumOnce runs until the file is incremental.
+func (a *Archiver) vacuumOnce() {
+	if ran, err := a.log.VacuumOnce(); err != nil {
+		slog.Warn("archive: the log can't be vacuumed, so it is tried again at the next round", "err", err)
+	} else if ran {
+		slog.Info("archive: vacuumed the log, which now gives space back after each round")
+	}
+}
+
 // chosen is every task done for at least the age and not archived yet,
-// oldest first, but no epic with a story still in the state: an epic goes
+// in the order they were made, but no epic with a story still in the state: an epic goes
 // in a round after its last story's.
 func (a *Archiver) chosen() []string {
 	now := a.now()

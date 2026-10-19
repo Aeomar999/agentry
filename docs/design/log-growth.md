@@ -1615,11 +1615,14 @@ since the steps cite section 2's equivalence tests and the task-21 items.
    **Built in step 7b.** `internal/archive` is the archiver: `New(log,
    state, blobs, snapshots, age)`, `Start` runs a round at once and then
    hourly, and `Close` waits for a round under way. A round archives the
-   tasks chosen one at a time through `Store.Archive`; after a round that
-   archived any it gives the space back (`GiveBackSpace`), runs the one
-   full `VACUUM` that switches an older file to incremental mode
-   (`VacuumOnce`, tried again at the next start until it has run), and
-   asks the snapshot writer for a snapshot. `serve` takes
+   tasks chosen, in the order they were made, one at a time through
+   `Store.Archive`; after a round that archived any it gives the space
+   back (`GiveBackSpace`) and asks the snapshot writer for a snapshot.
+   Every round then tries the one full `VACUUM` that switches an older
+   file to incremental mode (`VacuumOnce`), so one that failed, as on a
+   full disk, runs again at the next round until it has run. `Close`
+   stops a round after the task under way and skips the `VACUUM`, which
+   the next start tries. `serve` takes
    `-archive-after`, a duration such as `720h`, and starts the archiver
    with the log, the state, the shared files' blob folder and the
    snapshot writer; it closes the archiver before the last snapshot and
