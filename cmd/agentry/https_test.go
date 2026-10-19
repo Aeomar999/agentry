@@ -404,7 +404,7 @@ func TestServeHTTPS(t *testing.T) {
 	// `agentry mcp` and the status line find it so, when this machine wasn't
 	// connected to a server from its Integrations page.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	mcp, err := connect("", "", dataDir)
+	mcp, err := connect("", "", "", dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
