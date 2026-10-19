@@ -284,8 +284,11 @@ func refusedActions(task *tasks.Task) string {
 }
 
 // shorten cuts text to at most limit bytes, backing off to the start of a
-// character so none is split.
+// character so none is split. A negative limit counts as 0.
 func shorten(text string, limit int) string {
+	if limit < 0 {
+		limit = 0
+	}
 	if len(text) <= limit {
 		return text
 	}

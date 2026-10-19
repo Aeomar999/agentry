@@ -10,7 +10,7 @@ import (
 // one backs off to its start.
 func TestShortenCutsBetweenCharacters(t *testing.T) {
 	text := "ab€cd" // € is 3 bytes, at bytes 2 to 4
-	for limit, want := range map[int]string{2: "ab", 3: "ab", 4: "ab", 5: "ab€"} {
+	for limit, want := range map[int]string{-1: "", 0: "", 2: "ab", 3: "ab", 4: "ab", 5: "ab€"} {
 		got := shorten(text, limit)
 		if !utf8.ValidString(got) || got != want+" [...]" {
 			t.Errorf("shorten(%q, %d) = %q, want %q", text, limit, got, want+" [...]")
