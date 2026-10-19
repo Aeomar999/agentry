@@ -51,8 +51,8 @@ func TestReadsDoNotQueueBehindAWrite(t *testing.T) {
 		"Log":       func() ([]events.Event, error) { return s.Log("task-2") },
 		"Stream":    func() ([]events.Event, error) { return s.Stream("task-2") },
 		"After":     func() ([]events.Event, error) { return s.After(1, 10) },
-		"LogAfter":  func() ([]events.Event, error) { return s.LogAfter("task-2", 0, 10, 10) },
-		"LogBefore": func() ([]events.Event, error) { return s.LogBefore("task-2", 0, 10, 10) },
+		"LogAfter":  func() ([]events.Event, error) { return s.LogAfter("task-2", nil, 0, 10, 10) },
+		"LogBefore": func() ([]events.Event, error) { return s.LogBefore("task-2", nil, 0, 10, 10) },
 	}
 	for name, read := range reads {
 		done := make(chan error, 1)

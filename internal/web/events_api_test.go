@@ -96,6 +96,58 @@ func TestTheEventPagesAddUpToTheDetailsEvents(t *testing.T) {
 	}
 }
 
+// Walking the pages of some types, from the start or from the end, gives
+// exactly the detail's events of those types, in its order: the limit and
+// "more" count only those types, and a type no event has matches nothing.
+func TestTheEventPagesOfSomeTypesAreTheDetailsEventsOfThoseTypes(t *testing.T) {
+	server, all := withEvents(t, 600)
+	var want []eventEntry
+	for _, e := range all {
+		if e.Type == events.ProposalRejected || e.Type == events.TaskCreated {
+			want = append(want, e)
+		}
+	}
+	if len(want) != 2 {
+		t.Fatalf("task-1 should have one task.created and one refusal: %v", positionsOf(want))
+	}
+	types := "&type=proposal.rejected&type=no.such_type&type=task.created"
+	for _, limit := range []string{"", "&limit=1"} {
+		var walked []eventEntry
+		for after, more := int64(0), true; more; {
+			page := pageAt(t, server, fmt.Sprintf("?after=%d%s%s", after, types, limit))
+			walked = append(walked, page.Events...)
+			more = page.More
+			if len(page.Events) > 0 {
+				after = page.Events[len(page.Events)-1].Position
+			}
+			if len(walked) > len(all) {
+				t.Fatal("the pages never end")
+			}
+		}
+		if !reflect.DeepEqual(walked, want) {
+			t.Errorf("limit %q, from the start: positions %v, want %v", limit, positionsOf(walked), positionsOf(want))
+		}
+		walked = nil
+		for before, more := all[len(all)-1].Position+1, true; more; {
+			page := pageAt(t, server, fmt.Sprintf("?before=%d%s%s", before, types, limit))
+			walked = append(page.Events, walked...)
+			more = page.More
+			if len(page.Events) > 0 {
+				before = page.Events[0].Position
+			}
+			if len(walked) > len(all) {
+				t.Fatal("the pages never end")
+			}
+		}
+		if !reflect.DeepEqual(walked, want) {
+			t.Errorf("limit %q, from the end: positions %v, want %v", limit, positionsOf(walked), positionsOf(want))
+		}
+	}
+	if page := pageAt(t, server, "?type=no.such_type"); len(page.Events) != 0 || page.More {
+		t.Errorf("a type no event has: %+v", page)
+	}
+}
+
 // A page is the first events after ?after=, or the last before ?before= when
 // that is all it is given, in order either way, and says whether more lie
 // beyond it on the side it was read from.
@@ -118,11 +170,14 @@ func TestAnEventPageIsBoundedAndSaysWhetherThereIsMore(t *testing.T) {
 		{fmt.Sprintf("?after=%d&limit=%d", p[1], n-2), p[2:], false},
 		{fmt.Sprintf("?after=%d", p[n-1]), []int64{}, false},
 		{fmt.Sprintf("?before=%d&limit=3", p[n-1]+1), p[n-3:], true},
+		{fmt.Sprintf("?before=%d&limit=%d", p[n-1]+1, n), p, false},
 		{fmt.Sprintf("?before=%d&limit=3", p[n-1]), p[n-4 : n-1], true},
 		{fmt.Sprintf("?before=%d", p[2]), p[:2], false},
 		{fmt.Sprintf("?before=%d", p[0]), []int64{}, false},
 		{fmt.Sprintf("?after=%d&before=%d", p[0], p[3]), p[1:3], false},
 		{fmt.Sprintf("?after=%d&before=%d&limit=1", p[0], p[3]), p[1:2], true},
+		{fmt.Sprintf("?after=%d&before=%d", p[3], p[3]), []int64{}, false},
+		{fmt.Sprintf("?after=%d&before=%d", p[4], p[2]), []int64{}, false},
 	}
 	for _, c := range cases {
 		page := pageAt(t, server, c.query)
@@ -145,12 +200,15 @@ func TestAnEventPageOfNoTaskOrWithBadBoundsIsRefused(t *testing.T) {
 		t.Errorf("no such task: %d", code)
 	}
 	for _, query := range []string{"after=-1", "after=x", "after=", "before=0", "before=1.5", "limit=0", "limit=-3",
-		fmt.Sprint("limit=", eventPageMax+1), "limit=many"} {
+		fmt.Sprint("limit=", eventPageMax+1), "limit=many", strings.Repeat("type=task.created&", eventTypesMax+1)} {
 		if code, body := call(t, server, "GET", "/api/tasks/task-1/events?"+query, ""); code != http.StatusBadRequest || !strings.Contains(body, "bad request") {
 			t.Errorf("?%s: %d %s", query, code, body)
 		}
 	}
 	if code, _ := call(t, server, "GET", fmt.Sprint("/api/tasks/task-1/events?limit=", eventPageMax), ""); code != http.StatusOK {
 		t.Errorf("the largest limit: %d", code)
+	}
+	if code, _ := call(t, server, "GET", "/api/tasks/task-1/events?"+strings.Repeat("type=task.created&", eventTypesMax), ""); code != http.StatusOK {
+		t.Errorf("the most types: %d", code)
 	}
 }

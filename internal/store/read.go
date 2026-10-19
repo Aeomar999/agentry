@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -73,20 +74,35 @@ func (s *Store) Log(name string) ([]events.Event, error) {
 }
 
 // LogAfter returns a page of a stream's whole record, as Log has it: up to
-// limit events after one position and before another, both left out, in
-// order.
-func (s *Store) LogAfter(name string, after, before int64, limit int) ([]events.Event, error) {
+// limit events of the given types (every type when none is given) after one
+// position and before another, both left out, in order.
+func (s *Store) LogAfter(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error) {
+	only, args := ofTypes(name, types, after, before, s.applied.Load())
 	return queryEvents(s.reads, `SELECT `+columns+` FROM events
-		WHERE stream = ? AND position > ? AND position < ? AND position <= ?
-		ORDER BY position LIMIT ?`, name, after, before, s.applied.Load(), limit)
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?`+only+`
+		ORDER BY position LIMIT ?`, append(args, limit)...)
 }
 
 // LogBefore is LogAfter's page from the other end: the last limit events
 // between the two positions, still in order.
-func (s *Store) LogBefore(name string, after, before int64, limit int) ([]events.Event, error) {
+func (s *Store) LogBefore(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error) {
+	only, args := ofTypes(name, types, after, before, s.applied.Load())
 	return queryEvents(s.reads, `SELECT * FROM (SELECT `+columns+` FROM events
-		WHERE stream = ? AND position > ? AND position < ? AND position <= ?
-		ORDER BY position DESC LIMIT ?) ORDER BY position`, name, after, before, s.applied.Load(), limit)
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?`+only+`
+		ORDER BY position DESC LIMIT ?) ORDER BY position`, append(args, limit)...)
+}
+
+// ofTypes is the condition that keeps a page to some types, nothing when
+// it keeps every type, and the page's arguments with the types after them.
+func ofTypes(name string, types []events.Type, after, before, applied int64) (string, []any) {
+	args := []any{name, after, before, applied}
+	if len(types) == 0 {
+		return "", args
+	}
+	for _, t := range types {
+		args = append(args, t)
+	}
+	return ` AND type IN (?` + strings.Repeat(`, ?`, len(types)-1) + `)`, args
 }
 
 // LastPosition is the position of the newest event in the model, 0 for an
