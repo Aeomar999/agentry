@@ -1,9 +1,12 @@
 package coordinator
 
 import (
+	"bytes"
+	"log/slog"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -16,6 +19,7 @@ import (
 
 // ideasLog writes a log as a build with ideas would: two tasks and two
 // ideas, interleaved. It has no order check, as the log is only read back.
+// The tasks are parked, so a loop taking the log leaves them be.
 func ideasLog(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agentry.db")
@@ -29,9 +33,9 @@ func ideasLog(t *testing.T) string {
 			Data: map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1"}}
 	}
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One", "repo": "/r", "coordinator": "tech-lead", "parked": "backlog"}},
 		suggested("idea-1"),
-		{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Two", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Two", "repo": "/r", "coordinator": "tech-lead", "parked": "backlog"}},
 		{Stream: "idea-1", Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "No"}},
 		suggested("idea-2"),
 		{Stream: "task-1", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "One, renamed"}},
@@ -96,6 +100,31 @@ func TestABuildWithoutIdeasSkipsTheirStreams(t *testing.T) {
 			t.Errorf("%s holds %d events after the refusals", stream, len(accepted))
 		}
 	}
+}
+
+// The loop, taking that log on a build without ideas, never reads an idea
+// stream as a task: it says nothing about reading one.
+func TestALoopWithoutIdeasNeverReadsTheirStreamsAsTasks(t *testing.T) {
+	s, state := storetest.Open(t, ideasLog(t))
+	log, err := s.After(0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	said := logged(t)
+	newLoop(s, state, t.TempDir()).take(log)
+	if strings.Contains(said.String(), "reading the task") {
+		t.Errorf("the loop read a stream as a task:\n%s", said)
+	}
+}
+
+// logged collects what the code logs until the test ends.
+func logged(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var said bytes.Buffer
+	before := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&said, nil)))
+	t.Cleanup(func() { slog.SetDefault(before) })
+	return &said
 }
 
 func idsOf(list []*tasks.Task) []string {
