@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -30,6 +31,7 @@ type taskSummary struct {
 	MaxTurns         int          `json:"maxTurns"`         // turns it may have without your answer; 0 is no limit
 	TurnsSinceAnswer int          `json:"turnsSinceAnswer"` // turns since it started or you last answered
 	AtTurnLimit      bool         `json:"atTurnLimit"`      // stopped, or about to stop, for its limit of turns
+	StoppedAt        string       `json:"stoppedAt"`        // the limit whose stop is the open question, "budget" or "turns": raising it answers; "" for none
 	Rank             float64      `json:"rank"`             // your priority order, lower first
 	Parked           string       `json:"parked"`           // "todo" or "backlog" while you hold it there
 	Parent           string       `json:"parent"`           // the task, of another team, that asked for this one
@@ -143,7 +145,7 @@ func summaryOf(t *tasks.Task) taskSummary {
 		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
 	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
-		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), Rank: t.Rank, Parked: t.Parked,
+		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: coordinator.StoppedAt(t), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}

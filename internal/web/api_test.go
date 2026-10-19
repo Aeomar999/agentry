@@ -516,7 +516,7 @@ func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
 	}
 
 	ask("task-1", theLoop, atLimit("budget"))
-	if code, body := call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`); code != 200 {
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`); code != 200 || body != `{"answered":true,"budget":1000000}`+"\n" {
 		t.Fatalf("raise: %d %s", code, body)
 	}
 	if d := detailOfTask(t, server, "task-1"); d.Budget != 1_000_000 || d.Status != "working" || lastSaid(d) != "I raised the budget to 1M tokens. Carry on." {
@@ -551,7 +551,9 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 	}
 
 	ask("task-1", theLoop, atLimit("turns"))
-	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":2}`)
+	if _, body := call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":2}`); body != `{"answered":false,"maxTurns":2}`+"\n" {
+		t.Errorf("not raised above the turns had, the reply: %s", body)
+	}
 	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" || d.TurnsSinceAnswer != 2 || !d.AtTurnLimit {
 		t.Errorf("not raised above the turns had: status %s, turns %d", d.Status, d.TurnsSinceAnswer)
 	}
@@ -614,28 +616,70 @@ func TestALimitAnswersOnlyItsOwnStop(t *testing.T) {
 	}
 }
 
-// A stop asked before stops said their limit is taken for the one Next
-// checks first: the turn limit, then the budget.
-func TestAnOlderStopIsReadInNextsOrder(t *testing.T) {
+// A stop asked before stops said their limit is known by its words, so it
+// is answered by its own limit's endpoint, though the task is at both.
+func TestAnOlderStopIsKnownByItsWords(t *testing.T) {
 	server, work, ask := limitsServer(t)
 	call(t, server, "POST", "/api/tasks", `{"description":"At both","budget":200000}`)
-	call(t, server, "POST", "/api/tasks", `{"description":"Over budget","budget":200000,"maxTurns":-1}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"At both","budget":200000}`)
 	work("task-1", 2, 210_000)
-	work("task-2", 1, 210_000)
-	ask("task-1", theLoop, nil)
-	ask("task-2", theLoop, nil)
+	work("task-2", 2, 210_000)
+	ask("task-1", theLoop, map[string]any{"question": "This task has had 2 turns without finishing. Answer with any guidance and the coordinator carries on."})
+	ask("task-2", theLoop, map[string]any{"question": "This task has used 210k tokens of its 200k budget. Raise the budget to go on, or tell the coordinator to wrap up."})
 
 	call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`)
-	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" {
-		t.Errorf("the budget, at both: status %s", d.Status)
+	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" || d.StoppedAt != "turns" {
+		t.Errorf("the budget, at the old turn stop: status %s, stopped at %q", d.Status, d.StoppedAt)
 	}
 	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":-1}`)
 	if d := detailOfTask(t, server, "task-1"); d.Status != "working" || lastSaid(d) != "I made the turns unlimited. Carry on." {
-		t.Errorf("the turns, at both: status %s, said %q", d.Status, lastSaid(d))
+		t.Errorf("the turns, at the old turn stop: status %s, said %q", d.Status, lastSaid(d))
+	}
+	call(t, server, "PUT", "/api/tasks/task-2/turns", `{"maxTurns":5}`)
+	if d := detailOfTask(t, server, "task-2"); d.Status != "needs you" || d.StoppedAt != "budget" {
+		t.Errorf("the turns, at the old budget stop: status %s, stopped at %q", d.Status, d.StoppedAt)
 	}
 	call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":1000000}`)
 	if d := detailOfTask(t, server, "task-2"); d.Status != "working" || lastSaid(d) != "I raised the budget to 1M tokens. Carry on." {
-		t.Errorf("the budget, over it: status %s, said %q", d.Status, lastSaid(d))
+		t.Errorf("the budget, at the old budget stop: status %s, said %q", d.Status, lastSaid(d))
+	}
+}
+
+// The loop's other stops carry no limit: lowering a limit below what the
+// task has used doesn't make them a limit's stop, and raising it again
+// doesn't answer them.
+func TestALimitNeverAnswersTheLoopsOtherStops(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"No coordinator","maxTurns":10}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Issues","budget":2000000}`)
+	work("task-1", 2, 1000)
+	work("task-2", 1, 300_000)
+	ask("task-1", theLoop, map[string]any{"question": "The task's coordinator, tech-lead, no longer exists."})
+	ask("task-2", theLoop, map[string]any{"question": "3 issues in a row, the last: no agent. Fix what's wrong and answer, and the coordinator carries on."})
+
+	kindOf := func(id string) string {
+		_, body := call(t, server, "GET", "/api/questions", "")
+		var questions []question
+		json.Unmarshal([]byte(body), &questions)
+		for _, q := range questions {
+			if q.Task == id {
+				return q.Kind
+			}
+		}
+		return ""
+	}
+	for id, change := range map[string][3]string{
+		"task-1": {"turns", `{"maxTurns":1}`, `{"maxTurns":10}`},
+		"task-2": {"budget", `{"budget":200000}`, `{"budget":2000000}`},
+	} {
+		call(t, server, "PUT", "/api/tasks/"+id+"/"+change[0], change[1])
+		if kind, d := kindOf(id), detailOfTask(t, server, id); kind != "question" || d.StoppedAt != "" {
+			t.Errorf("%s, the %s lowered below what's used: kind %q, stopped at %q", id, change[0], kind, d.StoppedAt)
+		}
+		call(t, server, "PUT", "/api/tasks/"+id+"/"+change[0], change[2])
+		if d := detailOfTask(t, server, id); d.Status != "needs you" || lastSaid(d) == "" || strings.HasPrefix(lastSaid(d), "I ") {
+			t.Errorf("%s, the %s raised again: status %s, said %q", id, change[0], d.Status, lastSaid(d))
+		}
 	}
 }
 
@@ -668,6 +712,11 @@ func TestQuestionsShowWhichLimitStopped(t *testing.T) {
 	}
 	if q := kinds["task-3"]; q.Kind != "question" || q.Budget != 0 {
 		t.Errorf("the copy question: %+v", q)
+	}
+	for id, want := range map[string]string{"task-1": "turns", "task-2": "budget", "task-3": ""} {
+		if d := detailOfTask(t, server, id); d.StoppedAt != want {
+			t.Errorf("%s stopped at %q, want %q", id, d.StoppedAt, want)
+		}
 	}
 }
 

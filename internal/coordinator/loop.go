@@ -56,15 +56,22 @@ func StoppedAt(task *tasks.Task) string {
 	case task.Asked.Fetch != nil:
 		return "" // the copy question
 	}
-	// Asked before the question said which: Next checks the turn limit first.
+	// Asked before the question said which: the stops' fixed words tell, and
+	// the loop's other questions, which carry no limit, never match them.
 	switch {
-	case task.AtTurnLimit():
+	case strings.HasPrefix(task.Question, oldTurnStop):
 		return LimitTurns
-	case task.AtBudget() && task.TurnsSinceAnswer > 0:
+	case strings.HasPrefix(task.Question, oldBudgetStop):
 		return LimitBudget
 	}
 	return ""
 }
+
+// How the loop's stops at the limits began before they said their limit.
+const (
+	oldTurnStop   = "This task has had "
+	oldBudgetStop = "This task has used "
+)
 
 func NewLoop(s *store.Store, runner *turns.Runner, fleet *machines.Fleet) *Loop {
 	return &Loop{store: s, runner: runner, fleet: fleet}
