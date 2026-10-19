@@ -47,7 +47,8 @@ type Call struct {
 	Plan *string `json:"plan,omitempty"`
 
 	// How long the hook waits for the reply, so the server can answer
-	// before it gives up; 0 when the hook sent none.
+	// before it gives up; 0 when the hook sent none. On the wire it is a
+	// time.Duration, a number of nanoseconds.
 	Deadline time.Duration `json:"deadline,omitempty"`
 }
 

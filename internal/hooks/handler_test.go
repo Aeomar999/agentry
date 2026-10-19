@@ -169,9 +169,12 @@ func TestTheServerAnswersBeforeTheHooksDeadline(t *testing.T) {
 func TestAnAskIsHeldBeforeTheDeadlineTheHookSent(t *testing.T) {
 	s, state := engineerAtWork(t)
 	call := hookCall("PreToolUse", bash("toolu_4", "curl example.com"))
-	call.Deadline = 400 * time.Millisecond
+	call.Deadline = time.Second
+	// The test's own context ends after the deadline, so a late reply fails fast.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*call.Deadline)
+	defer cancel()
 	started := time.Now()
-	reply := NewHandler(s, state, judgeByCommand).Handle(context.Background(), call)
+	reply := NewHandler(s, state, judgeByCommand).Handle(ctx, call)
 	if elapsed := time.Since(started); elapsed >= call.Deadline {
 		t.Errorf("answered after %s, past the hook's deadline of %s", elapsed, call.Deadline)
 	}

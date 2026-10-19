@@ -375,7 +375,7 @@ func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict p
 	}
 }
 
-// hold keeps the action waiting for you after the hook gave up on it. One
+// hold keeps the action waiting for you after the wait ran out. One
 // that can't be held, as in a task you moved to Done, is denied.
 func (h *Handler) hold(task, action string) (engines.Decision, string) {
 	_, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionHeld, Correlation: action})
