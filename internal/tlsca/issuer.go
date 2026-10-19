@@ -72,6 +72,13 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 	return cert, nil
 }
 
+// Covers is whether the current server certificate names host, a DNS name
+// or an IP address, so a device trusting the CA can open it over https.
+func (i *Issuer) Covers(host string) bool {
+	cert, err := i.Certificate()
+	return err == nil && cert.Leaf.VerifyHostname(host) == nil
+}
+
 // inTime is whether the certificate kept may still be served at now: it has
 // begun, as it hasn't after the clock went back, and isn't within
 // renewBefore of its end.

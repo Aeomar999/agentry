@@ -307,3 +307,20 @@ func TestTheIssuerLeavesOutHostsOutsideTheCA(t *testing.T) {
 		t.Errorf("left out %v", i.leftOut)
 	}
 }
+
+// Covers is what the current certificate names, in any case and with IPv6
+// in brackets or not, as the addresses change.
+func TestTheIssuerSaysWhatItCovers(t *testing.T) {
+	i, w := newIssuer(t)
+	w.set(w.Now(), "box", "fd00::7")
+	for host, want := range map[string]bool{"box": true, "BOX": true, "localhost": true, "127.0.0.1": true, "::1": true,
+		"fd00::7": true, "[fd00::7]": true, "2600::1": false, "192.168.1.20": false, "renamed": false, "": false} {
+		if i.Covers(host) != want {
+			t.Errorf("covers %q: %v", host, !want)
+		}
+	}
+	w.set(w.Now().Add(time.Minute), "box", "192.168.1.20")
+	if !i.Covers("192.168.1.20") || i.Covers("fd00::7") {
+		t.Error("after the addresses changed, the cover didn't follow")
+	}
+}

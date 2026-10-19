@@ -139,6 +139,11 @@ func (ca *CA) PEM() []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw})
 }
 
+// Name is the CA's name, as devices list it: Agentry local CA (<hostname>).
+func (ca *CA) Name() string {
+	return ca.cert.Subject.CommonName
+}
+
 // DER is the CA certificate's DER bytes.
 func (ca *CA) DER() []byte {
 	return ca.cert.Raw
