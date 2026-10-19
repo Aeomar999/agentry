@@ -368,32 +368,6 @@ export interface SigninCode {
   address: string; // the address this page came from, the one to show first
 }
 
-// A feature a Visionaries session suggested (internal/web/views.go ideaView).
-export interface Idea {
-  id: string;
-  title: string;
-  problem: string;
-  proposal: string;
-  whyNow: string;
-  size: "S" | "M" | "L";
-  risks: string;
-  backedBy: string[];
-  doubtedBy: string[];
-  task: string; // the session it came from
-  repo: string;
-  epic: string; // the epic it follows up, "" for none
-  about: string; // the epic whose close started its session, "" for none
-  aboutTitle: string; // that epic's title
-  kind: "" | "epic"; // what it suggests making of it: "" is a story
-  state: "open" | "accepted" | "dismissed";
-  note: string; // what you said when you accepted or dismissed it
-  became: string; // the task an accepted idea became
-  autoAccepted: boolean; // Agentry accepted it, as the Visionaries agreed by your rule, not you
-  repeats: string; // an idea the Visionaries said it raises again, "" for none
-  notAutoAccepted: string; // for an open idea, why Agentry wouldn't accept it for you under your rule; "" when it would
-  createdAt: string;
-}
-
 // Your settings for how Agentry works (internal/web/settings_api.go).
 export interface Settings {
   visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
@@ -405,11 +379,3 @@ export interface Settings {
 // everyoneBacked: every viewpoint backed the idea and none doubted it.
 // nobodyDoubted: none doubted it and at least two viewpoints backed it.
 export type AutoAcceptRule = "everyoneBacked" | "nobodyDoubted";
-
-// What accepting an idea did: a task can be made and the idea still not be
-// marked accepted, and then refused says why.
-export interface IdeaAcceptance {
-  task: string;
-  accepted: boolean;
-  refused: string;
-}

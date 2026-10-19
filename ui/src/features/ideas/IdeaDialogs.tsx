@@ -7,9 +7,9 @@ import { Dialog } from "@/components/molecules/Dialog";
 import { Field } from "@/components/molecules/Field";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
-import type { Idea, IdeaAcceptance } from "@/api/types";
 import { TaskLink } from "./IdeaCard";
-import { useToast } from "./Toasts";
+import type { Idea, IdeaAcceptance } from "./types";
+import { useToast } from "@/components/organisms/Toasts";
 
 const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeURIComponent(idea.id)}/${action}`;
 

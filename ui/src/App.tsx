@@ -5,7 +5,7 @@ import { ToastProvider } from "@/components/organisms/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/pages/TasksPage";
 import { PlanPage } from "@/pages/PlanPage";
-import { IdeasPage } from "@/pages/IdeasPage";
+import { IdeasPage } from "@/features/ideas/IdeasPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { TaskPage } from "@/pages/TaskPage";
 import { AgentsPage } from "@/pages/AgentsPage";
