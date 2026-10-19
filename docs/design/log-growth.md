@@ -22,10 +22,10 @@ server changes with this document.
   text: 4.7% of today's knowledge bytes. Old events replay as they are.
   Plans, commands and reports stay inline.
 - **Snapshots** (section 2): `state.snapshot` beside the database, gob
-  (JSON was measured too slow in build step 2), tagged with the binary's hash and anchored to a row's hash; any doubt
-  means a full replay. Written every 10,000 events or 10 minutes, off the
-  request path, and proven `Equal` to a full replay at every cut of the
-  fixture logs.
+  (JSON was measured too slow in build step 2), tagged with the binary's
+  hash and anchored to a row's hash; any doubt means a full replay.
+  Written every 10,000 events or 10 minutes, off the request path, and
+  proven `Equal` to a full replay at every cut of the fixture logs.
 - **Archiving** (section 4): 30 days after a task is done, a
   `task.archived` marker with its summary, and its rows moved into one
   gzipped blob (22%) in the content store, in one transaction; the delete

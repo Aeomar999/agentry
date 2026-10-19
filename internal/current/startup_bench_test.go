@@ -48,7 +48,7 @@ func TestStartupBench(t *testing.T) {
 	t.Logf("grew %.2f rounds of the copy in %s: %d tasks, %d open, the last event at %s",
 		grown.Rounds, time.Since(start).Round(time.Second), grown.Tasks, grown.Open, grown.End.Format(time.DateOnly))
 	mix := storetest.MixOf(t, path)
-	checkMix(t, storetest.MixOf(t, source), mix)
+	checkMix(t, storetest.MixOf(t, source), grown.Round, mix)
 
 	startup, state, held := benchStartup(t, path)
 	w := workingSetOf(t, path, state, grown.End)
@@ -96,19 +96,20 @@ func fullReplayLimit(gb float64) time.Duration {
 
 func seconds(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f', 2, 64) + " s" }
 
-// checkMix fails unless the synthetic log has the copy's mix: events per GB
-// of file, and each event type's share of the data bytes, within 5%. Types
-// under 1% of the bytes are counted together, as "the rest".
-func checkMix(t *testing.T, copied, synthetic storetest.Mix) {
-	within := func(what string, want, got float64) {
-		t.Logf("  %-28s copy %12.4g, synthetic %12.4g (%+.1f%%)", what, want, got, 100*(got/want-1))
+// checkMix fails unless the synthetic log has the copy's events per GB of
+// file and one round's share of the data bytes for each event type, within
+// 5%. Types under 1% of a round's bytes are counted together, as "the
+// rest".
+func checkMix(t *testing.T, copied, round, synthetic storetest.Mix) {
+	within := func(what, against string, want, got float64) {
+		t.Logf("  %-28s %s %12.4g, synthetic %12.4g (%+.1f%%)", what, against, want, got, 100*(got/want-1))
 		if math.Abs(got/want-1) > 0.05 {
 			t.Errorf("%s differs by more than 5%%", what)
 		}
 	}
-	t.Log("mix, the synthetic log against the copy:")
+	t.Log("mix, the synthetic log against the copy and one round of it:")
 	perGB := func(m storetest.Mix) float64 { return float64(m.Events) / (float64(m.File) / 1e9) }
-	within("events per GB", perGB(copied), perGB(synthetic))
+	within("events per GB", "copy ", perGB(copied), perGB(synthetic))
 	share := func(m storetest.Mix, typ events.Type) float64 {
 		var all int64
 		for _, c := range m.Types {
@@ -118,18 +119,18 @@ func checkMix(t *testing.T, copied, synthetic storetest.Mix) {
 	}
 	var big []events.Type
 	rest := [2]float64{1, 1}
-	for typ := range copied.Types {
-		if share(copied, typ) >= 0.01 {
+	for typ := range round.Types {
+		if share(round, typ) >= 0.01 {
 			big = append(big, typ)
 		}
 	}
 	slices.Sort(big)
 	for _, typ := range big {
-		within(string(typ)+" bytes", share(copied, typ), share(synthetic, typ))
-		rest[0] -= share(copied, typ)
+		within(string(typ)+" bytes", "round", share(round, typ), share(synthetic, typ))
+		rest[0] -= share(round, typ)
 		rest[1] -= share(synthetic, typ)
 	}
-	within("the rest's bytes", rest[0], rest[1])
+	within("the rest's bytes", "round", rest[0], rest[1])
 }
 
 // benchStartup times store.Open on a fresh state, which loads the whole log
@@ -256,9 +257,9 @@ const (
 // history on 1, 2 and 8 cores, as JSON with one entry to a line and as gob,
 // and applies section 2's rule to the JSON time on 2. The tasks are the
 // working set's, as many as fill the projected size, round and round; the
-// summaries are the archivable tasks', the same way. The gob body has no presence flags
-// for nil against empty, which a real one would need: they cost little
-// beside the texts.
+// summaries are the archivable tasks', the same way. The gob body has no
+// presence flags for nil against empty, which a real one would need: they
+// cost little beside the texts.
 func benchBodyDecode(t *testing.T, state *current.State, w workingSet, working int) {
 	if len(w.kept) == 0 || len(w.archivable) == 0 {
 		t.Fatal("the synthetic log has no working set or nothing to archive: grow it larger")
@@ -278,14 +279,8 @@ func benchBodyDecode(t *testing.T, state *current.State, w workingSet, working i
 	}
 	add(entry{Roster: roster.Save()})
 	saved := make([]tasks.Saved, len(w.kept))
-	ownTasks := 0
 	for i, task := range w.kept {
 		saved[i] = task.Save()
-		line, err := json.Marshal(entry{Task: &saved[i]})
-		if err != nil {
-			t.Fatal(err)
-		}
-		ownTasks += len(line) + 1
 	}
 	for i, inTasks := 0, 0; float64(inTasks) < workingSetBody*float64(working); i++ {
 		inTasks += add(entry{Task: &saved[i%len(saved)]})
@@ -299,8 +294,8 @@ func benchBodyDecode(t *testing.T, state *current.State, w workingSet, working i
 	for _, s := range streams {
 		gobSize += len(s)
 	}
-	t.Logf("snapshot body for 100 GB: %d entries, JSON %.1f MB, gob %.1f MB (the working set's own tasks are %.1f MB of JSON; projected %.1f MB)",
-		len(entries), float64(lines.Len())/1e6, float64(gobSize)/1e6, float64(ownTasks)/1e6, workingSetBody*float64(working)/1e6)
+	t.Logf("snapshot body for 100 GB: %d entries, JSON %.1f MB, gob %.1f MB (from the working set's %d tasks; projected %.1f MB)",
+		len(entries), float64(lines.Len())/1e6, float64(gobSize)/1e6, len(w.kept), workingSetBody*float64(working)/1e6)
 
 	jsonOnTwo, gobOnTwo := time.Duration(0), time.Duration(0)
 	for _, cores := range []int{1, 2, 8} {
@@ -337,8 +332,10 @@ func minOf3On(cores int, decode func()) time.Duration {
 
 // decodeLines decodes every line of body on goroutines goroutines, each
 // taking every goroutines-th line, and keeps what each decodes, as a load
-// would: a task restored from its saved form, a summary, the roster.
-func decodeLines(t *testing.T, body []byte, goroutines int) []any {
+// would: a task restored from its saved form, a summary, the roster. It
+// holds them all until every line is done, so the timing pays for keeping
+// them as a load does, not for garbage dropped as it goes.
+func decodeLines(t *testing.T, body []byte, goroutines int) {
 	lines := bytes.Split(bytes.TrimSuffix(body, []byte("\n")), []byte("\n"))
 	decoded := make([]any, len(lines))
 	shareOut(t, len(lines), goroutines, func(i int) error {
@@ -349,7 +346,6 @@ func decodeLines(t *testing.T, body []byte, goroutines int) []any {
 		decoded[i] = e.kept()
 		return nil
 	})
-	return decoded
 }
 
 // gobBody is the entries as gobStreams gob streams, each of a run of them.
@@ -370,8 +366,8 @@ func gobBody(t *testing.T, entries []entry) [][]byte {
 }
 
 // decodeGob decodes every stream on goroutines goroutines, as decodeLines
-// decodes lines.
-func decodeGob(t *testing.T, streams [][]byte, goroutines int) [][]any {
+// decodes lines, holding what it decodes for the same reason.
+func decodeGob(t *testing.T, streams [][]byte, goroutines int) {
 	decoded := make([][]any, len(streams))
 	shareOut(t, len(streams), goroutines, func(i int) error {
 		decoder := gob.NewDecoder(bytes.NewReader(streams[i]))
@@ -385,7 +381,6 @@ func decodeGob(t *testing.T, streams [][]byte, goroutines int) [][]any {
 			decoded[i] = append(decoded[i], e.kept())
 		}
 	})
-	return decoded
 }
 
 // kept is what a load keeps of an entry.

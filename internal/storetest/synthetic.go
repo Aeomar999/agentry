@@ -39,6 +39,7 @@ type Synthetic struct {
 	Tasks  int       // tasks in the log
 	Open   int       // of them, the ones left open
 	End    time.Time // the time of the log's last event
+	Round  Mix       // what one whole round adds, its File left 0
 }
 
 // Grow copies the log at source to path and appends to the copy until its
@@ -54,7 +55,8 @@ type Synthetic struct {
 // left as they are. Time moves on at taskEventsADay task events a day;
 // working scales W, 2 for twice the open tasks at twice the rate. Only the
 // newest open tasks stay open: each of the others gets a task.done at the
-// end of its round.
+// end of its round. The rows it never repeats are why the copy's type
+// shares differ from a round's, and why a large log's come near Round's.
 func Grow(t testing.TB, source, path string, size int64, working int) Synthetic {
 	t.Helper()
 	copyFile(t, source, path)
@@ -62,7 +64,8 @@ func Grow(t testing.TB, source, path string, size int64, working int) Synthetic 
 	if len(rows) == 0 {
 		t.Fatal("the copy has no events to grow from")
 	}
-	rounds := plan(t, source, size, rows, unitsOf(t, rows))
+	units := unitsOf(t, rows)
+	rounds := plan(t, source, size, rows, units)
 	made := numberTasks(t, rows, rounds)
 	wasOpen := openAtEnd(rows)
 	open := keptOpen(rounds, wasOpen, openTasks*working)
@@ -85,7 +88,7 @@ func Grow(t testing.TB, source, path string, size int64, working int) Synthetic 
 		}
 		appendRows(t, db, r.closing(wasOpen, open, end))
 	}
-	grown := Synthetic{Tasks: made, Open: len(open), End: end}
+	grown := Synthetic{Tasks: made, Open: len(open), End: end, Round: mixOfRound(rows, units)}
 	for _, r := range rounds {
 		grown.Rounds += r.part
 	}
@@ -154,6 +157,22 @@ func unitsOf(t testing.TB, rows []row) []*unit {
 		}
 	}
 	return units
+}
+
+// mixOfRound is the mix of the rows a whole round copies.
+func mixOfRound(rows []row, units []*unit) Mix {
+	mix := Mix{Types: map[events.Type]Count{}}
+	for _, u := range units {
+		for _, i := range u.rows {
+			typ := events.Type(rows[i].typ)
+			c := mix.Types[typ]
+			c.Events++
+			c.Bytes += int64(len(rows[i].data))
+			mix.Types[typ] = c
+			mix.Events++
+		}
+	}
+	return mix
 }
 
 // round is the copy itself, the first, or one copy of its work.
@@ -404,6 +423,7 @@ type Mix struct {
 	Types  map[events.Type]Count
 }
 
+// Count is one event type's events and bytes of data.
 type Count struct {
 	Events int
 	Bytes  int64
