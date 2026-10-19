@@ -95,6 +95,19 @@ func TestOpenPassesItsServeFlagsOn(t *testing.T) {
 	}
 }
 
+// With a server already running, open says the serve flags it was given
+// wait for the next start.
+func TestOpenSaysFlagsWaitForTheNextStart(t *testing.T) {
+	for passed, want := range map[string]string{
+		"-https=true -budget=0 -max-turns=5": "Agentry is already running; -https -budget -max-turns apply only when it next starts.",
+		"-budget=2000000":                    "Agentry is already running; -budget applies only when it next starts.",
+	} {
+		if said := waitingForNextStart(strings.Fields(passed)); said != want {
+			t.Errorf("passed %s, said %q, want %q", passed, said, want)
+		}
+	}
+}
+
 // With -https, open's links are https, this computer's at localhost.
 func TestOpenPageOverHTTPS(t *testing.T) {
 	saved := openBrowser

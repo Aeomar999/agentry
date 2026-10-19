@@ -49,6 +49,9 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if running, ok := runningServer(*dataDir); ok {
+		if len(passed) > 0 {
+			fmt.Fprintln(stdout, waitingForNextStart(passed))
+		}
 		return openPage(running, stdout, stderr)
 	}
 	if err := defaultRepo(*repo); err != nil {
@@ -119,6 +122,20 @@ func passedOn(flags *flag.FlagSet, names ...string) []string {
 		}
 	})
 	return args
+}
+
+// waitingForNextStart says that the flags passed, as passedOn gives them,
+// don't change a server that is already running.
+func waitingForNextStart(passed []string) string {
+	names := make([]string, len(passed))
+	for i, arg := range passed {
+		names[i], _, _ = strings.Cut(arg, "=")
+	}
+	verb := "apply"
+	if len(names) == 1 {
+		verb = "applies"
+	}
+	return fmt.Sprintf("Agentry is already running; %s %s only when it next starts.", strings.Join(names, " "), verb)
 }
 
 // startServer runs `agentry serve` in the background, its output in the
