@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -326,6 +327,53 @@ func TestAUsageLimitIsRecordedWithItsResetTime(t *testing.T) {
 	}
 	if task.IssuesInARow != 0 {
 		t.Errorf("issues in a row: %d", task.IssuesInARow)
+	}
+}
+
+// A limited turn whose engine carries on by itself, with a tool call, a
+// prompt or its end, resumes first, so it is watched as working again. A
+// call that says nothing, or the limit again, leaves it limited.
+func TestEngineActivityResumesALimitedTurn(t *testing.T) {
+	limit := hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`)
+	cases := map[string]struct {
+		call    hookcall.Call
+		resumes bool
+		then    events.Type // the call's own event, after the resume
+	}{
+		"a tool call": {hookCall("PreToolUse", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"t1"}`), true, events.ActionRequested},
+		"a prompt":    {hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Carry on."}`), true, ""},
+		"the end":     {hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`), true, events.TurnEnded},
+		"idle":        {hookCall("Notification", `{"hook_event_name":"Notification","notification_type":"idle_prompt"}`), false, ""},
+		"the limit":   {limit, false, ""},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			s, state := engineerAtWork(t)
+			h := NewHandler(s, state, judgeByCommand)
+			h.Handle(context.Background(), limit)
+			h.Handle(context.Background(), c.call)
+
+			stream, _ := s.Stream("task-1")
+			resumed := slices.IndexFunc(stream, func(e events.Event) bool { return e.Type == events.TurnResumed })
+			if (resumed >= 0) != c.resumes {
+				t.Fatalf("resumed at %d, want a resume: %v", resumed, c.resumes)
+			}
+			if !c.resumes {
+				if taskIn(t, s).OpenTurn().Limited == "" {
+					t.Errorf("the turn should still be limited")
+				}
+				return
+			}
+			if e := stream[resumed]; e.Text("reason") != "engine" || e.Text("agent") != "engineer" || e.Correlation != "turn-2" || e.Actor.Kind != events.Worker {
+				t.Errorf("resumed: %+v", e)
+			}
+			if c.then != "" && !slices.ContainsFunc(stream[resumed+1:], func(e events.Event) bool { return e.Type == c.then }) {
+				t.Errorf("the resume should come before the call's own %s: %+v", c.then, stream[resumed-1:])
+			}
+			if turn := taskIn(t, s).Turn("turn-2"); turn.Limited != "" || turn.Resumes != 1 {
+				t.Errorf("turn %+v", turn)
+			}
+		})
 	}
 }
 

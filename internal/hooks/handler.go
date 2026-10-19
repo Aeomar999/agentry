@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -47,6 +48,7 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 		return h.refuse(engine, call, "Agentry couldn't read the hook payload: "+err.Error())
 	}
 
+	h.resumeIfLimited(call, signals)
 	h.recordPlan(call)
 	for _, signal := range signals {
 		if signal.Kind == engines.ActionRequested && engine.IsGate(call.Event) {
@@ -117,6 +119,24 @@ func failedTurnReason(signal engines.Signal) string {
 		reason += ": " + details
 	}
 	return reason
+}
+
+// resumeIfLimited records that a turn waiting for a usage limit goes on when
+// its engine does anything but stop at the limit again: the session carried
+// on by itself, so the turn is watched as a working one again.
+func (h *Handler) resumeIfLimited(call hookcall.Call, signals []engines.Signal) {
+	if len(signals) == 0 || slices.ContainsFunc(signals, func(s engines.Signal) bool { return s.Kind == engines.UsageLimited }) {
+		return
+	}
+	task, err := h.task(call.Task)
+	if err != nil {
+		return
+	}
+	if turn := task.OpenTurn(); turn == nil || turn.ID != call.Turn || turn.Limited == "" {
+		return
+	}
+	h.store.Propose(events.Proposal{Stream: call.Task, Actor: h.machineOf(call.Task), Type: events.TurnResumed,
+		Correlation: call.Turn, Data: map[string]any{"agent": call.Agent, "reason": "engine"}})
 }
 
 // recordPlan keeps the turn's plan when the agent has changed it. It goes
