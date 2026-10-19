@@ -186,15 +186,17 @@ func invite(t *testing.T, ca *tlsca.CA, url, path string) (code string, answer m
 	return code, answer
 }
 
-// runShell runs a command as pasted into a terminal, in a home of its own,
-// and gives back what it printed and what the fake agentry was asked.
-func runShell(t *testing.T, shell []string, command string) (out string, ran []string, err error) {
+// runShell runs a command as pasted into a terminal, in a home of its own
+// and with env on top, and gives back what it printed and what the fake
+// agentry was asked.
+func runShell(t *testing.T, shell []string, command string, env ...string) (out string, ran []string, err error) {
 	t.Helper()
 	home := t.TempDir()
 	log := filepath.Join(home, "agentry.log")
 	run := exec.Command(shell[0], append(shell[1:], command)...)
 	run.Env = append(os.Environ(), "HOME="+home, "SHELL=/bin/sh", "AGENTRY_BIN="+filepath.Join(home, "bin"),
 		"AGENTRY_TEST_LOG="+log, "AGENTRY_WORKER_NAME=")
+	run.Env = append(run.Env, env...)
 	var output bytes.Buffer
 	run.Stdout, run.Stderr = &output, &output
 	err = run.Run()
@@ -259,6 +261,24 @@ func TestThePinnedInstallCommandsRunInSh(t *testing.T) {
 	out, ran, err = runShell(t, []string{"sh", "-c"}, commands(fake, "/worker/install", code, ca.Fingerprint())["command"].(string))
 	if err == nil || !strings.Contains(out, "certificate") || ran[0] != "" || strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
 		t.Errorf("an impostor with the CA: %v\n%s\nits requests: %v", err, out, faked())
+	}
+
+	// With neither sha256sum nor shasum, the CA can't be checked, so the
+	// right fingerprint sends nothing either, and the temp files are gone.
+	bin, temp := t.TempDir(), t.TempDir()
+	for _, tool := range []string{"sh", "curl", "mktemp", "cut", "base64", "tr", "fold", "printf", "rm", "cat"} {
+		if path, err := exec.LookPath(tool); err == nil {
+			os.Symlink(path, filepath.Join(bin, tool))
+		}
+	}
+	before = len(withCode(requests()))
+	right := commands(url, "/worker/install", code, ca.Fingerprint())["command"].(string)
+	out, ran, err = runShell(t, []string{"sh", "-c"}, right, "PATH="+bin, "TMPDIR="+temp)
+	if err == nil || ran[0] != "" || len(withCode(requests())) != before {
+		t.Errorf("no hash tool: %v\n%s\nagentry ran: %q\nthe requests with the code: %v", err, out, ran, withCode(requests())[before:])
+	}
+	if left, _ := os.ReadDir(temp); len(left) != 0 {
+		t.Errorf("no hash tool: left in the temp dir: %v", left)
 	}
 }
 
