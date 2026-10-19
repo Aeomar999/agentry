@@ -1689,6 +1689,31 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      snapshot's tail; archiving twice and reopening; the archiver can't
      delete restored rows.
    - Targets 1, 2 and 10 still hold.
+
+   **Built in step 9a (the store).** `Store.Unarchive(stream, blobs)`
+   takes the stream's marker (`MarkerOf`) and reads its blob's rows with
+   no lock held; `blobs` is an `Opener`, as for `FromBlobs`, since
+   `Blobs` only puts. Under `Store.mu` it checks that the marker is still
+   the stream's last accepted event, so a rejection logged against the
+   archived task since doesn't block it, and that the rules allow
+   `task.unarchived`. Then one transaction inserts the rows, every column
+   as archived and at its own position, checks `count` went in, and
+   appends `task.unarchived`; the model refolds the stream from the
+   events below it, read in the same transaction, and `applied` moves.
+   A stream not archived, or one that took an event since its marker was
+   read, is refused, and the refusal writes nothing, as `Archive`'s
+   does. A missing or unreadable blob, a blob row of another stream, or
+   the wrong count is an error that writes nothing either. The blob
+   stays. Tests: `internal/store/unarchive_test.go` (the rows and the
+   refusals; readers by position see only `task.unarchived`; an
+   `Archive` that read the stream before the unarchive is refused, and
+   the trigger refuses a restored row's delete) and
+   `internal/storetest/unarchive_test.go` (the task as a log never
+   archived has it, before and after `task.reopened`; a restart from a
+   snapshot taken while archived; archiving twice). Left for step 9b:
+   `internal/web` unarchiving before a reopen, an archived epic's story
+   and a `task.request_answered` to an archived asker, and the
+   archiver's default.
 10. **Erasing a task and redacting a secret.** Depends on steps 5 and 9.
     - Files: `internal/store` (`Store.Erase`, `Store.Redact`, the update
       trigger and the delete trigger's second case, `secure_delete`),
