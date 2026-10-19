@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/settings", s.changeSettings)
 	api("GET /api/policy", s.showPolicy)
 	api("GET /api/policy/history", s.policyHistory)
+	api("GET /api/policy/history/{position}", s.policyVersion)
 	api("POST /api/policy/profiles/{name}/add", s.addDefaultProfile)
 	api("POST /api/policy/profiles/{name}/update", s.updateDefaultProfile)
 	api("POST /api/policy/profiles/{name}/use-default", s.useDefaultProfile)

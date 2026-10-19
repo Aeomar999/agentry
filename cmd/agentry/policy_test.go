@@ -19,7 +19,8 @@ func TestEachPolicyVersionIsRecordedWithItsText(t *testing.T) {
 		t.Fatal(err)
 	}
 	stream, _ := log.Stream(events.PolicyStream)
-	if len(stream) != 1 || stream[0].Text("change") != "first loaded" || stream[0].Text("text") != string(policy.Default()) {
+	if len(stream) != 1 || stream[0].Text("change") != "first loaded" || stream[0].Text("text") != string(policy.Default()) ||
+		stream[0].Data["onDisk"] != nil {
 		t.Fatalf("the first start records the whole policy: %+v", stream)
 	}
 
@@ -29,9 +30,9 @@ func TestEachPolicyVersionIsRecordedWithItsText(t *testing.T) {
 	recordOnDisk(log, live, loaded, refused)
 	stream, _ = log.Stream(events.PolicyStream)
 	onDisk := stream[len(stream)-1]
-	if onDisk.Actor != policy.Agentry || onDisk.Text("change") != "noticed on disk" || onDisk.Text("text") != edited ||
+	if onDisk.Actor != policy.Agentry || !onDisk.Flag("onDisk") || onDisk.Text("text") != edited ||
 		!strings.Contains(onDisk.Text("diff"), "\n-use_for_everyone = \"allow-everything\"\n+# use_for_everyone = \"allow-everything\"\n") {
-		t.Errorf("a change on disk is Agentry's, with its diff: %s %q\n%s", onDisk.Actor, onDisk.Text("change"), onDisk.Text("diff"))
+		t.Errorf("a change on disk is Agentry's, flagged, with its diff: %s %v\n%s", onDisk.Actor, onDisk.Data, onDisk.Text("diff"))
 	}
 
 	os.WriteFile(live.Path(), []byte("version = "), 0o600)
@@ -55,8 +56,8 @@ func TestAPolicyChangedWhileStoppedIsRecordedAtStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	stream, _ := log.Stream(events.PolicyStream)
-	if last := stream[len(stream)-1]; len(stream) != 2 || last.Text("change") != "noticed on disk" || !strings.HasSuffix(last.Text("diff"), "+# mine\n") {
-		t.Errorf("%d events, last %q:\n%s", len(stream), last.Text("change"), last.Text("diff"))
+	if last := stream[len(stream)-1]; len(stream) != 2 || !last.Flag("onDisk") || !strings.HasSuffix(last.Text("diff"), "+# mine\n") {
+		t.Errorf("%d events, last %v:\n%s", len(stream), last.Data, last.Text("diff"))
 	}
 	if _, err := openPolicy(dir, log); err != nil {
 		t.Fatal(err)

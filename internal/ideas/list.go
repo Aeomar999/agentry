@@ -1,42 +1,25 @@
 package ideas
 
-import (
-	"log/slog"
-	"slices"
+import "slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/store"
-)
-
-// Load builds one idea from the log; nil, nil when there is no such idea.
-func Load(log *store.Store, id string) (*Idea, error) {
-	stream, err := log.Stream(id)
-	if err != nil {
-		return nil, err
-	}
-	return FromEvents(stream), nil
+// Source is every idea, as kept from the log (current.State).
+type Source interface {
+	Ideas() []*Idea                // oldest first, broken ones left out
+	Idea(id string) (*Idea, error) // nil, nil when there is no such idea
 }
 
 // List returns the ideas about a repo, newest first, so a session's ideas
-// stay together; repo "" lists every repo's.
-func List(log *store.Store, repo string) ([]*Idea, error) {
-	ids, err := log.IdeaIDs()
-	if err != nil {
-		return nil, err
-	}
+// stay together; repo "" lists every repo's. A broken idea is left out, as
+// the task list skips a broken task, so one idea that can't be read doesn't
+// empty the Ideas page.
+func List(source Source, repo string) []*Idea {
 	var list []*Idea
-	for _, id := range slices.Backward(ids) {
-		idea, err := Load(log, id)
-		if err != nil {
-			// As the task list skips a broken task: one idea that can't be
-			// read must not empty the Ideas page.
-			slog.Error("ideas: an idea can't be loaded, so the list leaves it out", "idea", id, "err", err)
-			continue
-		}
-		if idea != nil && (repo == "" || idea.Repo == repo) {
+	for _, idea := range slices.Backward(source.Ideas()) {
+		if repo == "" || idea.Repo == repo {
 			list = append(list, idea)
 		}
 	}
-	return list, nil
+	return list
 }
 
 // Dismissals are the ideas in list you dismissed, in the same order. A

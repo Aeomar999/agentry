@@ -11,7 +11,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -29,15 +28,14 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
+	repo := gitRepo(t)
+	outsideDir := t.TempDir()
 	const id = "task-files-1"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go newLoop(s, state, root).Run(ctx)
+	run(t, newLoop(s, state, root), state)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Crunch the numbers", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Crunch the numbers", "repo": repo, "coordinator": "tech-lead"}})
 	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Make the report."}`)
 	task = waitForTurn(t, s, id, "turn-2", "engineer")
@@ -92,7 +90,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	}
 
 	// From anywhere else, you are asked.
-	outside := filepath.Join(t.TempDir(), "private.txt")
+	outside := filepath.Join(outsideDir, "private.txt")
 	os.WriteFile(outside, []byte("mine"), 0o644)
 	endTurn(t, s, id, "turn-6", "tech-lead", `{"action": "fetch", "machine": "local", "path": "`+filepath.ToSlash(outside)+`", "as": "notes.txt"}`)
 	task = waitUntil(t, s, id, "the question", func(task *tasks.Task) bool { return task.Asked.Fetch != nil })

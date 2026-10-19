@@ -9,15 +9,17 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 )
 
 // The desk is Claude started with its prompt, allowed to run `agentry task`
 // without asking, and able to find this agentry binary and the server.
 func TestTheDeskStartsClaudeWithWhatItNeeds(t *testing.T) {
+	sessionstest.Isolate(t)
 	bin, record := t.TempDir(), filepath.Join(t.TempDir(), "started")
 	// Written whole, then moved into place: the test reads it the moment it exists.
 	fake := "#!/bin/sh\n{ echo \"$AGENTRY_SERVER $AGENTRY_DESK_TOKEN\"; echo \"$PATH\"; printf '%s\\n' \"$@\"; pwd; } > " + record +
-		".part && mv " + record + ".part " + record + "\nsleep 30\n"
+		".part && mv " + record + ".part " + record + "\n" + sessionstest.Wait() + "\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(fake), 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -32,6 +32,15 @@ func Loaded(path string, c *Change, change string, actor events.Actor) events.Pr
 	return events.Proposal{Stream: events.PolicyStream, Actor: actor, Type: events.PolicyLoaded, Data: data}
 }
 
+// NoticedOnDisk is the policy.loaded event for a hand edit of the file at
+// path that Agentry noticed and put in force. It carries "onDisk", so the
+// history doesn't depend on how the change is worded.
+func NoticedOnDisk(path string, c *Change) events.Proposal {
+	p := Loaded(path, c, "noticed on disk", Agentry)
+	p.Data["onDisk"] = true
+	return p
+}
+
 // Refused is the policy.refused event for a file at path that doesn't
 // load, while kept stays in force.
 func Refused(path string, kept *Policy, refused error) events.Proposal {
@@ -46,6 +55,7 @@ type Version struct {
 	Actor    events.Actor `json:"actor"`
 	Change   string       `json:"change"` // what changed; for a refused file, why it was refused
 	Refused  bool         `json:"refused,omitempty"`
+	OnDisk   bool         `json:"onDisk,omitempty"` // a hand edit of the file, or a file refused: Agentry only read it
 	Hash     string       `json:"hash"`             // of the version loaded, or of the one kept over the refused file
 	Diff     string       `json:"diff,omitempty"`   // from the version in force before
 	Backup   string       `json:"backup,omitempty"` // the file before Agentry changed it
@@ -65,8 +75,11 @@ func History(stream []events.Event) []Version {
 			if v.Change == "" {
 				v.Change = "loaded" // recorded before changes were described
 			}
+			// Logs from before the flag say it only in the change's words,
+			// "changed on disk" at first and "noticed on disk" later.
+			v.OnDisk = e.Flag("onDisk") || v.Change == "changed on disk" || v.Change == "noticed on disk"
 		case events.PolicyRefused:
-			v.Refused, v.Change, v.Hash = true, e.Text("reason"), e.Text("kept")
+			v.Refused, v.OnDisk, v.Change, v.Hash = true, true, e.Text("reason"), e.Text("kept")
 		default:
 			continue
 		}

@@ -38,6 +38,7 @@ type State struct {
 	tasks       map[string]*tasks.Task // by stream
 	created     []created              // every task.created applied, in the order of their positions, as the log lists them
 	ideas       map[string]*ideas.Idea // by stream
+	suggested   []created              // every idea.suggested applied, in the order of their positions, as the log lists them
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
 	roster      agents.Roster
 	workers     workers.Roster
@@ -45,9 +46,10 @@ type State struct {
 	settings    settings.Settings
 }
 
-// created is a task.created event's place in the log. The task order is
-// by these positions, not by when the state took each event, so a state
-// that starts part way and takes the rest keeps the log's order.
+// created is a task.created or idea.suggested event's place in the log.
+// The task and idea orders are by these positions, not by when the state
+// took each event, so a state that starts part way and takes the rest keeps
+// the log's order.
 type created struct {
 	position int64
 	id       string
@@ -64,9 +66,7 @@ func (s *State) Load(stream string, accepted []events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, e := range accepted {
-		if e.Type == events.TaskCreated {
-			s.created = append(s.created, created{e.Position, stream})
-		}
+		s.made(e)
 	}
 	if len(accepted) > 0 {
 		s.streams[stream] = accepted[len(accepted)-1].Position
@@ -101,6 +101,7 @@ func (s *State) Loaded(position int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	slices.SortFunc(s.created, byPosition)
+	slices.SortFunc(s.suggested, byPosition)
 	s.position = position
 }
 
@@ -121,11 +122,9 @@ func (s *State) Apply(e events.Event) {
 		return
 	}
 	s.streams[e.Stream] = e.Position
-	if e.Type == events.TaskCreated {
-		// The store applies in the log's order, after everything Load or
-		// an earlier Apply gave, so appending keeps the positions in order.
-		s.created = append(s.created, created{e.Position, e.Stream})
-	}
+	// The store applies in the log's order, after everything Load or an
+	// earlier Apply gave, so appending keeps the positions in order.
+	s.made(e)
 	if s.broken[e.Stream] != nil {
 		return
 	}
@@ -153,6 +152,17 @@ func (s *State) Apply(e events.Event) {
 			}
 		}
 	})
+}
+
+// made notes where a task.created or an idea.suggested is in the log, for
+// the task and idea orders.
+func (s *State) made(e events.Event) {
+	switch e.Type {
+	case events.TaskCreated:
+		s.created = append(s.created, created{e.Position, e.Stream})
+	case events.IdeaSuggested:
+		s.suggested = append(s.suggested, created{e.Position, e.Stream})
+	}
 }
 
 // guard runs change, and marks the stream broken if it panics, so one bad
@@ -186,6 +196,7 @@ func (s *State) copy() *State {
 		tasks:       maps.Clone(s.tasks),
 		created:     slices.Clone(s.created),
 		ideas:       maps.Clone(s.ideas),
+		suggested:   slices.Clone(s.suggested),
 		broken:      maps.Clone(s.broken),
 		roster:      s.roster,
 		workers:     s.workers,
@@ -252,6 +263,32 @@ func (s *State) TaskIDs() []string {
 	defer s.mu.RUnlock()
 	ids := make([]string, len(s.created))
 	for i, c := range s.created {
+		ids[i] = c.id
+	}
+	return ids
+}
+
+// Ideas is every idea, oldest first, in a new slice the caller may sort.
+// A broken idea is left out, as Tasks leaves out a broken task.
+func (s *State) Ideas() []*ideas.Idea {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	all := make([]*ideas.Idea, 0, len(s.suggested))
+	for _, c := range s.suggested {
+		if idea := s.ideas[c.id]; idea != nil && s.broken[c.id] == nil {
+			all = append(all, idea)
+		}
+	}
+	return all
+}
+
+// ideaIDs is the stream of every idea.suggested applied, oldest first: a
+// broken idea's too, for Equal to compare with the log's.
+func (s *State) ideaIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, len(s.suggested))
+	for i, c := range s.suggested {
 		ids[i] = c.id
 	}
 	return ids

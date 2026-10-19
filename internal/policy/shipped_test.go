@@ -61,18 +61,18 @@ func TestDefaultProfilesSaysWhatEachFileHas(t *testing.T) {
 	}{
 		"this version's": {Default(), map[string]string{"developer": "current ", "read-only": "current ",
 			"read-mostly": "current ", "autonomous": "current ", "allow-everything": "current "}},
-		"v0.1.0, before read-mostly": {firstRelease, map[string]string{"developer": "current ", "read-only": "outdated v0.7.0",
+		"v0.1.0, before read-mostly": {firstRelease, map[string]string{"developer": "outdated v0.9.2", "read-only": "outdated v0.7.0",
 			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
-		"before v0.1.0": {beforeIt, map[string]string{"developer": "current ", "read-only": "outdated v0.1.0-dev",
+		"before v0.1.0": {beforeIt, map[string]string{"developer": "outdated v0.9.2", "read-only": "outdated v0.1.0-dev",
 			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a why changed": {replaceOnce(t, beforeIt, `why = "For agents that judge work`, `why = "Mine: for agents that judge work`),
-			map[string]string{"developer": "current ", "read-only": "edited ",
+			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
 				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a note inside an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only]\n# MY NOTE: keep this\n"),
-			map[string]string{"developer": "current ", "read-only": "edited ",
+			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
 				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"a note ending a line of an outdated profile": {replaceOnce(t, beforeIt, "[profiles.read-only]\n", "[profiles.read-only] # mine\n"),
-			map[string]string{"developer": "current ", "read-only": "edited ",
+			map[string]string{"developer": "outdated v0.9.2", "read-only": "edited ",
 				"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"only comments and spacing changed": {replaceOnce(t, Default(), "[profiles.read-only]\n", "[profiles.read-only]   # mine\n\n# my notes\n"),
 			map[string]string{"developer": "current ", "read-only": "current ",
@@ -212,21 +212,21 @@ func TestV070sReadOnlyProfilesAreOfferedV092s(t *testing.T) {
 	}
 }
 
-// v0.9.2's dev builds shipped read-only and read-mostly before the test
-// runner rule: those installs must be offered v0.9.2's.
-func TestV092DevsReadOnlyProfilesAreOfferedV092s(t *testing.T) {
-	text := shippedFile(t, "05-v0.9.2-dev.toml")
+// v0.9.2 shipped read-only and read-mostly before the test runner rule:
+// those installs must be offered v0.10.1's.
+func TestV092sReadOnlyProfilesAreOfferedV0101s(t *testing.T) {
+	text := shippedFile(t, "05-v0.9.2.toml")
 	for _, name := range []string{"read-only", "read-mostly"} {
 		statuses, err := DefaultProfiles(text)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, s := range statuses {
-			if s.Name == name && (s.State != ProfileOutdated || s.ShippedIn != "v0.9.2-dev") {
-				t.Errorf("v0.9.2-dev's %s: %s %s, want outdated v0.9.2-dev", name, s.State, s.ShippedIn)
+			if s.Name == name && (s.State != ProfileOutdated || s.ShippedIn != "v0.9.2") {
+				t.Errorf("v0.9.2's %s: %s %s, want outdated v0.9.2", name, s.State, s.ShippedIn)
 			}
 		}
-		if text, err = UpdateProfile(text, name, "v0.9.2"); err != nil {
+		if text, err = UpdateProfile(text, name, "v0.10.1"); err != nil {
 			t.Fatalf("updating %s: %v", name, err)
 		}
 		if state := stateOf(t, text, name); state != ProfileCurrent {
@@ -237,7 +237,7 @@ func TestV092DevsReadOnlyProfilesAreOfferedV092s(t *testing.T) {
 		t.Fatalf("the updated policy doesn't load: %v", err)
 	}
 	if n := bytes.Count(text, []byte("runs_outside")); n != 2 {
-		t.Errorf("both profiles should have v0.9.2's runner rule, found runs_outside %d times", n)
+		t.Errorf("both profiles should have v0.10.1's runner rule, found runs_outside %d times", n)
 	}
 }
 

@@ -31,9 +31,10 @@ type Acceptance struct {
 	Refused  string // why it stopped short, "" once Accepted
 }
 
-// Board is what Accept reads of every task and of the agents, as kept
-// from the log (current.State).
+// Board is what Accept reads of every idea, every task and the agents, as
+// kept from the log (current.State). Accept writes to the log itself.
 type Board interface {
+	Source
 	TaskIDs() []string
 	Task(id string) (*tasks.Task, error)
 	Roster() agents.Roster
@@ -50,7 +51,7 @@ type Board interface {
 func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
 	accepting.Lock()
 	defer accepting.Unlock()
-	idea, err := Load(log, id)
+	idea, err := board.Idea(id)
 	switch {
 	case err != nil:
 		return Acceptance{}, err

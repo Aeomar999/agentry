@@ -19,8 +19,11 @@ import (
 // Agentry accepts for you each idea every Visionary agreed on, and can
 // start its task too.
 
+// isVisionaries says whether the coordinator's team was made from a
+// template that brings ideas, whatever the team is called.
 func isVisionaries(coordinator agents.Agent) bool {
-	return strings.EqualFold(coordinator.TeamName(), ideas.VisionariesTeam)
+	template, found := agents.TemplateWithID(coordinator.Template)
+	return found && template.Lists(ideas.Feature)
 }
 
 // Idea is one feature a done decision suggests.
@@ -51,12 +54,8 @@ const IdeasFormat = `Your "done" decision carries the ideas the session agreed o
 // one naming an idea twice, suggests each once. The ideas it keeps every
 // Visionary agreed on, Agentry may accept for you (acceptAgreed).
 func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
-	list, err := ideas.List(l.store, task.Repo)
-	if err != nil {
-		return "Agentry couldn't keep these ideas, as it couldn't read the ones it has: " + sentence(err)
-	}
 	kept := map[string]bool{}
-	for _, idea := range list {
+	for _, idea := range ideas.List(l.state, task.Repo) {
 		kept[idea.Title] = kept[idea.Title] || idea.Task == task.ID
 	}
 	var refused, added []string
@@ -100,11 +99,7 @@ func (l *Loop) acceptAgreed(repo string, added []string) {
 	if !now.AutoAcceptIdeas || len(added) == 0 {
 		return
 	}
-	list, err := ideas.List(l.store, repo)
-	if err != nil {
-		slog.Error("coordinator loop: reading the ideas to accept the agreed ones", "repo", repo, "err", err)
-		return
-	}
+	list := ideas.List(l.state, repo)
 	roster := l.state.Roster()
 	for _, id := range added {
 		i := slices.IndexFunc(list, func(idea *ideas.Idea) bool { return idea.ID == id })
@@ -143,11 +138,7 @@ func (l *Loop) dismissedFor(task *tasks.Task, coordinator agents.Agent) []*ideas
 	if !isVisionaries(coordinator) {
 		return nil
 	}
-	list, err := ideas.List(l.store, task.Repo)
-	if err != nil {
-		return nil
-	}
-	return ideas.Dismissals(list)
+	return ideas.Dismissals(ideas.List(l.state, task.Repo))
 }
 
 // dismissedText lists the dismissed ideas, with what you said of each.

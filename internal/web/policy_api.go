@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -166,6 +167,34 @@ func (s *Server) policyHistory(w http.ResponseWriter, r *http.Request) {
 	reply(w, policy.History(stream))
 }
 
+// policyVersion is what reverting to the version at position would change:
+// the diff from the text in force to that version's, and the profile each
+// puts every agent under. A diff of "" is the version in force.
+func (s *Server) policyVersion(w http.ResponseWriter, r *http.Request) {
+	if s.config.Policy == nil {
+		http.Error(w, "no policy", http.StatusNotFound)
+		return
+	}
+	position, err := strconv.ParseInt(r.PathValue("position"), 10, 64)
+	if err != nil {
+		http.Error(w, "the position must be a number", http.StatusBadRequest)
+		return
+	}
+	text, at, ok := s.versionAt(w, position)
+	if !ok {
+		return
+	}
+	useForEveryone, err := policy.UseForEveryoneOf([]byte(text))
+	if err != nil {
+		http.Error(w, "that version doesn't load: "+err.Error(), http.StatusConflict)
+		return
+	}
+	current := s.config.Policy.Current()
+	reply(w, map[string]any{"position": position, "at": at,
+		"diff":           policy.LineDiff("in force", "version of "+versionTime(at), current.Text(), text),
+		"useForEveryone": useForEveryone, "inForceUseForEveryone": current.UseForEveryone()})
+}
+
 // revertPolicy writes an earlier version back, as a new version.
 func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 	var request struct {
@@ -175,21 +204,11 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &request) {
 		return
 	}
-	stream, err := s.store.Stream(events.PolicyStream)
-	if err != nil {
-		failed(w, err)
+	text, at, ok := s.versionAt(w, request.Position)
+	if !ok {
 		return
 	}
-	text, at, err := policy.VersionAt(stream, request.Position)
-	switch {
-	case errors.Is(err, policy.ErrNoVersion):
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	case err != nil: // the version is there, but not its text
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	}
-	change := "reverted to the version of " + at.Local().Format("2 Jan 2006 15:04:05")
+	change := "reverted to the version of " + versionTime(at)
 	s.changePolicy(w, request.Hash, change, func(now []byte) ([]byte, error) {
 		if string(now) == text {
 			return nil, errors.New("that version is the one in force")
@@ -197,6 +216,30 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 		return []byte(text), nil
 	})
 }
+
+// versionAt is the text of the version at position and when it was put in
+// force. A position holding no version is a 404, a version whose text the
+// log lacks a 409.
+func (s *Server) versionAt(w http.ResponseWriter, position int64) (string, time.Time, bool) {
+	stream, err := s.store.Stream(events.PolicyStream)
+	if err != nil {
+		failed(w, err)
+		return "", time.Time{}, false
+	}
+	text, at, err := policy.VersionAt(stream, position)
+	switch {
+	case errors.Is(err, policy.ErrNoVersion):
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return "", time.Time{}, false
+	case err != nil: // the version is there, but not its text
+		http.Error(w, err.Error(), http.StatusConflict)
+		return "", time.Time{}, false
+	}
+	return text, at, true
+}
+
+// versionTime is when a version was put in force, as a change names it.
+func versionTime(at time.Time) string { return at.Local().Format("2 Jan 2006 15:04:05") }
 
 // changePolicy makes edit to the policy file against the version seen,
 // logs it as yours, and replies with the new version.

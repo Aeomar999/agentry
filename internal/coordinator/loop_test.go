@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -33,12 +33,9 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 		s.Propose(p)
 	}
 	const id = "task-loop-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	loop := newLoop(s, state, t.TempDir())
-	go loop.Run(ctx)
+	run(t, loop, state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
@@ -132,14 +129,12 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	if _, rejection, _ := s.Propose(engineer.Proposal(you, true)); rejection != nil {
 		t.Fatal(rejection)
 	}
+	repo := gitRepo(t)
 	const id = "task-loop-2"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go newLoop(s, state, t.TempDir()).Run(ctx)
+	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Go."}`)
 	task := waitUntil(t, s, id, "a question", func(task *tasks.Task) bool { return task.Question != "" })
@@ -157,9 +152,12 @@ func mustStream(t *testing.T, s *store.Store, name string) []events.Event {
 	return stream
 }
 
+// fakeClaudeOnPath puts a `claude` on PATH that just waits, and gives the
+// test sessions of its own, stopped when it ends.
 func fakeClaudeOnPath(t *testing.T) {
+	sessionstest.Isolate(t)
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nsleep 60\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"+sessionstest.Wait()+"\n"), 0o755)
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 }
 

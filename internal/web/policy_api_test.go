@@ -336,6 +336,9 @@ func TestEveryVersionShowsInTheHistoryAndCanBeRestored(t *testing.T) {
 	if !history[0].CanRevert || !history[1].CanRevert || history[2].CanRevert {
 		t.Errorf("only versions with their text can be restored: %+v", history)
 	}
+	if history[0].OnDisk || history[1].OnDisk {
+		t.Errorf("a change on the page, or the first version, isn't a hand edit: %+v", history)
+	}
 
 	code, body := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[1].Position)+`,"hash":"`+server.hash()+`"}`)
 	if code != 200 {
@@ -376,15 +379,79 @@ func TestARevertMayNotTakeAProfileFromItsAgents(t *testing.T) {
 	}
 }
 
+// Before a revert the page shows what it would change: the diff from the
+// version in force, and whether the version puts every agent under one profile.
+func TestAVersionShowsWhatRevertingToItWouldChange(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	first := server.live.Current()
+	server.log.Propose(events.Proposal{Stream: events.PolicyStream, Actor: policy.Agentry, Type: events.PolicyLoaded,
+		Data: map[string]any{"hash": "0ld", "path": server.path}})
+	server.log.Propose(policy.Loaded(server.path, &policy.Change{Policy: first}, "first loaded", policy.Agentry))
+	server.log.Propose(events.Proposal{Stream: events.PolicyStream, Actor: policy.Agentry, Type: events.PolicyLoaded,
+		Data: map[string]any{"hash": "b4d", "path": server.path, "text": "version = "}})
+	call(t, server.Server, "POST", "/api/policy/use-for-everyone/off", `{"hash":"`+server.hash()+`"}`)
+	stream := server.policyEvents(t)
+	noText, firstLoaded, badText, inForce := stream[0].Position, stream[1].Position, stream[2].Position, stream[3].Position
+
+	code, body := call(t, server.Server, "GET", "/api/policy/history/"+itoa(firstLoaded), "")
+	type versionChange struct {
+		Position              int64
+		Diff                  string
+		UseForEveryone        string
+		InForceUseForEveryone string
+	}
+	var version versionChange
+	if err := json.Unmarshal([]byte(body), &version); code != 200 || err != nil {
+		t.Fatalf("the first version: %d %s", code, body)
+	}
+	if version.Position != firstLoaded || version.UseForEveryone != "allow-everything" || version.InForceUseForEveryone != "" {
+		t.Errorf("the first version puts everyone under allow-everything, the one in force doesn't: %+v", version)
+	}
+	newName := "version of " + stream[1].At.Local().Format("2 Jan 2006 15:04:05")
+	if want := policy.LineDiff("in force", newName, server.live.Current().Text(), first.Text()); version.Diff != want {
+		t.Errorf("the diff runs from the version in force to the first:\n%s\nwant\n%s", version.Diff, want)
+	}
+	if !strings.Contains(version.Diff, "\n-# use_for_everyone = \"allow-everything\"\n+use_for_everyone = \"allow-everything\"\n") {
+		t.Errorf("reverting turns use_for_everyone back on:\n%s", version.Diff)
+	}
+
+	code, body = call(t, server.Server, "GET", "/api/policy/history/"+itoa(inForce), "")
+	var inForceVersion versionChange
+	if err := json.Unmarshal([]byte(body), &inForceVersion); code != 200 || err != nil || inForceVersion.Diff != "" || inForceVersion.UseForEveryone != "" {
+		t.Errorf("the version in force changes nothing: %d %s", code, body)
+	}
+	for _, c := range []struct {
+		position string
+		code     int
+		want     string
+	}{
+		{itoa(noText), http.StatusConflict, "can't be restored"},
+		{itoa(badText), http.StatusConflict, "doesn't load"},
+		{"999", http.StatusNotFound, "no such version"},
+		{"first", http.StatusBadRequest, "number"},
+	} {
+		if code, body := call(t, server.Server, "GET", "/api/policy/history/"+c.position, ""); code != c.code || !strings.Contains(body, c.want) {
+			t.Errorf("version %s: %d %s, want %d %q", c.position, code, body, c.code, c.want)
+		}
+	}
+}
+
+func TestThereIsNoVersionToShowWithoutAPolicy(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "GET", "/api/policy/history/1", ""); code != http.StatusNotFound || !strings.Contains(body, "no policy") {
+		t.Errorf("no policy: %d %s", code, body)
+	}
+}
+
 // Only the page changes the policy: no agent's token reaches these.
 func TestOnlyTheUITokenChangesThePolicy(t *testing.T) {
 	server := servePolicy(t, withoutReadMostly(t))
 	body := `{"hash":"` + server.hash() + `"}`
 	for _, path := range []string{"/api/policy/profiles/read-mostly/add", "/api/policy/profiles/read-only/update", "/api/policy/profiles/read-only/use-default",
-		"/api/policy/use-for-everyone/off", "/api/policy/revert", "/api/policy/history"} {
+		"/api/policy/use-for-everyone/off", "/api/policy/revert", "/api/policy/history", "/api/policy/history/1"} {
 		for _, bearer := range []string{"", "desk-secret", "helper-secret", "hook-secret"} {
 			method := "POST"
-			if strings.HasSuffix(path, "/history") {
+			if strings.Contains(path, "/history") {
 				method = "GET"
 			}
 			request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))

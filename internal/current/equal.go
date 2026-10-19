@@ -19,10 +19,10 @@ import (
 )
 
 // Equal checks the state against a replay of the store's log, which stays
-// the definition of state: every task, idea and roster, the task order, each
-// stream's last position and the log's. It returns the first difference,
-// named by stream, or nil. A stream the state holds as broken must fail to
-// replay too.
+// the definition of state: every task, idea and roster, the task and idea
+// orders, each stream's last position and the log's. It returns the first
+// difference, named by stream, or nil. A stream the state holds as broken
+// must fail to replay too.
 //
 // The store may go on taking events while Equal runs, so it compares at one
 // cut: a copy of the state, and the log read only up to the copy's position.
@@ -68,6 +68,9 @@ func Equal(s *store.Store, state *State) error {
 	}
 	if order := held.TaskIDs(); !slices.Equal(order, index.tasks) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, index.tasks)
+	}
+	if order := held.ideaIDs(); !slices.Equal(order, index.ideas) {
+		return fmt.Errorf("idea order: the state has %v, the log %v", order, index.ideas)
 	}
 	if err := equalStreamPositions(held, index.streams); err != nil {
 		return err

@@ -15,11 +15,7 @@ import (
 // first: by when the task they came from was made, then newest idea first.
 // An idea from a session after an epic closed names that epic.
 func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
-	list, err := ideas.List(s.store, r.URL.Query().Get("repo"))
-	if err != nil {
-		failed(w, err)
-		return
-	}
+	list := ideas.List(s.state, r.URL.Query().Get("repo"))
 	started, about := map[string]time.Time{}, map[string]*tasks.Task{}
 	for _, idea := range list {
 		if _, seen := started[idea.Task]; !seen {
@@ -86,7 +82,7 @@ func (s *Server) ideaExists(w http.ResponseWriter, id string) bool {
 		http.Error(w, "no such idea", http.StatusNotFound)
 		return false
 	}
-	idea, err := ideas.Load(s.store, id)
+	idea, err := s.state.Idea(id)
 	switch {
 	case err != nil:
 		failed(w, err)

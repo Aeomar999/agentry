@@ -12,6 +12,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
 var agentry = events.Actor{Kind: events.System, ID: "agentry"}
@@ -62,6 +63,34 @@ func TestIdeasListNewestSessionFirst(t *testing.T) {
 	}
 	if _, body := call(t, server, "GET", "/api/ideas?repo=/no/such/repo", ""); body != "[]\n" {
 		t.Errorf("no ideas is an empty list: %q", body)
+	}
+}
+
+func TestListingIdeasSendsNoQuery(t *testing.T) {
+	queries := storetest.CountQueries(t)
+	server, s := newTestServer(t)
+	repo, other := gitRepo(t), gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up more","repo":"`+other+`"}`)
+	open := suggestIdea(t, s, "task-1", repo, "Search the board")
+	dismissed := suggestIdea(t, s, "task-2", other, "Theme the board")
+	if code, body := call(t, server, "POST", "/api/ideas/"+dismissed+"/dismiss", `{"note":"No"}`); code != 200 {
+		t.Fatalf("dismiss: %d %s", code, body)
+	}
+	if queries.Sent() == 0 {
+		t.Fatal("writing sent no query: the store isn't counting")
+	}
+
+	queries.Reset()
+	if code, body := call(t, server, "GET", "/api/ideas", ""); code != 200 || !slices.Equal(ideaIDs(t, body), []string{dismissed, open}) ||
+		!strings.Contains(body, `"state":"dismissed"`) {
+		t.Errorf("every idea: %d %s", code, body)
+	}
+	if _, body := call(t, server, "GET", "/api/ideas?repo="+repo, ""); !slices.Equal(ideaIDs(t, body), []string{open}) {
+		t.Errorf("one repo's ideas: %s", body)
+	}
+	if sent := queries.Sent(); sent != 0 {
+		t.Errorf("listing ideas sent %d queries, want none", sent)
 	}
 }
 

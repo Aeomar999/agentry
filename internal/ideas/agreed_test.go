@@ -178,7 +178,7 @@ func TestAgentryAcceptsAnIdeaAsItself(t *testing.T) {
 	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
 		t.Fatalf("accept: %+v %v", got, err)
 	}
-	idea := load(t, s, id)
+	idea := load(t, state, id)
 	if idea.State != ideas.Accepted || !idea.AutoAccepted || idea.Note != "auto-accepted: all Visionaries agreed" {
 		t.Errorf("idea: %s, auto %v, note %q", idea.State, idea.AutoAccepted, idea.Note)
 	}
@@ -188,7 +188,7 @@ func TestAgentryAcceptsAnIdeaAsItself(t *testing.T) {
 	}
 
 	mine := suggest(t, s, repo, map[string]any{"title": "Dark mode"})
-	if got, _ := ideas.Accept(s, state, mine, ideas.Choice{}); !got.Accepted || load(t, s, mine).AutoAccepted {
+	if got, _ := ideas.Accept(s, state, mine, ideas.Choice{}); !got.Accepted || load(t, state, mine).AutoAccepted {
 		t.Errorf("an idea you accept isn't Agentry's: %+v", got)
 	}
 }
