@@ -34,9 +34,11 @@ Three things decide how safe an unattended run is:
 - A schedule never piles up. While a task from it is open, a due run is
   skipped and says why (`schedule.skipped`), so a run that stalls on an
   approval overnight blocks only the next runs of its own schedule. A rule
-  refuses the clock's task while one from the schedule is open, so at most
-  one open task is one the clock made, even if two firings race. Run now
-  is yours to ask for and isn't held back (open question 7).
+  refuses the clock's task while one from the schedule is open, so the
+  clock makes a task only when no task from the schedule is open, even if
+  two firings race. Run now is yours to ask for and isn't held back (open
+  question 7), and nor is reopening an old task from the schedule
+  (`internal/rules/task_rules.go:29` checks only that it is done).
 - Missed runs catch up once. A machine that was off or asleep runs the
   latest missed slot when it wakes, however old, and counts the rest; it
   never runs a week of nights back to back.
@@ -281,8 +283,9 @@ refused with today's message. `forADueSchedule` refuses unless:
   and `"backlog"` otherwise;
 - no task made from this schedule is open, whoever made it. "Open" is
   not done, read with `Reader.Task` for each of `Reader.TaskIDs()`; an
-  archived task is done. So the clock makes a task only when none from
-  the schedule is open, and at most one open task is one the clock made.
+  archived task is done. So the clock makes a task only when no task from
+  the schedule is open. That doesn't make it the only open one: you may
+  run it now or reopen an old one beside it.
 
 That last check is what makes a double fire impossible in the log, not
 just unlikely in the job (section 5). It walks the live tasks once per
@@ -437,9 +440,9 @@ Each claim, checked against the store:
 - **What the mutex is for.** Not correctness of the log, which the rules
   give. It keeps the job and Run now from interleaving steps 1 to 5 for
   one schedule, so one of them doesn't, for instance, record a skip for a
-  slot the other is firing. Without it the log would still hold at most
-  one open task the clock made per schedule (Run now's tasks, which you
-  ask for, are not limited).
+  slot the other is firing. Without it the clock would still make a task
+  only when no task from the schedule is open (Run now's tasks and
+  reopened ones, which you ask for, are not limited).
 - **Only one server per log.** Two `agentry serve` processes on one
   database are not supported today, and a second clock would be the
   least of it; the rules would still refuse the second task.
