@@ -105,6 +105,20 @@ func TestATemplatesAgentHasAValidName(t *testing.T) {
 	refusedSaying(t, savingTemplate("papers", "Research", members), "lowercase letters")
 }
 
+func TestATemplatesAgentNameLeavesRoomForANumber(t *testing.T) {
+	members := research()
+	members[1].Name = "reader-" + strings.Repeat("a", 22) // 29 characters
+	refusedSaying(t, savingTemplate("papers", "Research", members), "agent "+members[1].Name+": a template's agent names are at most 28 characters")
+}
+
+func TestATemplatesAgentNameMayBe28Characters(t *testing.T) {
+	members := research()
+	members[1].Name = "reader-" + strings.Repeat("a", 21)
+	if reason := proposeTemplate(t, savingTemplate("papers", "Research", members)); reason != "" {
+		t.Errorf("a 28-character agent name was refused: %s", reason)
+	}
+}
+
 func TestATemplatesAgentHasAKnownEngine(t *testing.T) {
 	members := research()
 	members[1].Engine = "gpt"

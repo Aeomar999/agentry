@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -19,6 +20,10 @@ var templateRules = map[events.Type]func(agents.UserTemplates, events.Proposal) 
 // TODO(task-175): check a template's team with the shared custom-team
 // validation once it is in, instead of this and the checks below.
 var asAnAgent = allOf(nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown)
+
+// templateAgentNameLimit leaves room in an agent's name for the number
+// AddTeam gives it when the name is taken: "-99" still fits the agent rules.
+const templateAgentNameLimit = 28
 
 func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	id := p.Text("id")
@@ -49,6 +54,9 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 		}
 		if reason := asAnAgent(nil, agent.Proposal(p.Actor, false)); reason != "" {
 			return "agent " + agent.Name + ": " + reason
+		}
+		if len(agent.Name) > templateAgentNameLimit {
+			return fmt.Sprintf("agent %s: a template's agent names are at most %d characters, to leave room for a number when the name is taken", agent.Name, templateAgentNameLimit)
 		}
 	}
 	if coordinators != 1 {

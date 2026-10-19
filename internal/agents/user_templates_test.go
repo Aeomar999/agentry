@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -99,5 +100,18 @@ func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
 	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
 	if members, _ := TemplateAgents(saving.Data); err != nil || len(members) != len(defaults) {
 		t.Errorf("the %s team saved %d agents (%v)", DefaultTeam, len(members), err)
+	}
+}
+
+func TestAUserTemplateWithTheLongestNamesIsAddedTwice(t *testing.T) {
+	long := papers()
+	long.Agents[0].Name = "lead-" + strings.Repeat("a", 23) // 28 characters, the most a template's rules allow
+	again := FromEvents(added(long.Template(), added(long.Template(), seeded())))
+	numbered, ok := again.Get(long.Agents[0].Name + "-2")
+	if !ok || len(numbered.Name) > 31 || numbered.Team != "Papers 2" {
+		t.Errorf("the second lead: %+v (%d characters)", numbered, len(numbered.Name))
+	}
+	if made := len(again.Assignees("Papers 2")) + 1; made != len(long.Agents) {
+		t.Errorf("the second Papers team has %d agents, want %d", made, len(long.Agents))
 	}
 }
