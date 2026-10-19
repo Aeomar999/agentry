@@ -105,6 +105,11 @@ export function chatOf(task: TaskDetail): ChatItem[] {
         said("note", `${agent}'s ${e.correlation} hit a ${limitText(text(e, "resetsAt"), e.at)}`, { who: "agentry", tone: "warning" });
         break;
       }
+      case "turn.resumed": {
+        const agent = agentOf.get(e.correlation ?? "") ?? "an agent";
+        said("note", `${agent}'s ${e.correlation} resumed after its usage limit`, { who: "agentry" });
+        break;
+      }
       case "turn.stopped": {
         const agent = agentOf.get(e.correlation ?? "") ?? "an agent";
         said("note", `You stopped ${agent}'s ${e.correlation} so the coordinator reads this now.`, { who: "you" });

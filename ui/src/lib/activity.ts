@@ -191,6 +191,12 @@ function rowOf(
         body: limitText(text(e, "resetsAt"), e.at),
         tone: "warning",
       };
+    case "turn.resumed":
+      return {
+        ...base,
+        kind: "note",
+        title: text(e, "reason") === "reset" ? "Went on after the usage limit reset" : "Went on after the usage limit",
+      };
     case "turn.stopped":
       return { ...base, kind: "note", title: "You stopped this turn, so the coordinator reads what you said" };
     case "issue.raised":
