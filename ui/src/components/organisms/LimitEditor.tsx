@@ -52,7 +52,7 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
     }
     return (
       <span className="flex flex-wrap items-center gap-2">
-        <Mono>{kind === "budget" ? budgetLine(task.budget) : turnsLine(task)}</Mono>
+        <Mono>{kind === "budget" ? budgetLine(task.budget) : maxTurnsLine(task.maxTurns)}</Mono>
         {!done && (
           <Button size="sm" variant="ghost" onClick={edit}>
             Change
@@ -98,6 +98,10 @@ export function LimitEditor({ task, kind, compact, children, onChanged }: LimitE
 
 function budgetLine(budget: number): string {
   return budget > 0 ? `${SCALES.budget.show(budget)} tokens` : "no limit";
+}
+
+function maxTurnsLine(maxTurns: number): string {
+  return maxTurns > 0 ? `${SCALES.turns.show(maxTurns)} turns` : "no limit";
 }
 
 // "18 of 24 turns" since your last answer, or with no limit all its turns:

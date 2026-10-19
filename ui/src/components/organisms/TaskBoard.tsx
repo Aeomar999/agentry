@@ -163,7 +163,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
               }}
               onDrop={(event) => onDrop(event, column, cards)}
               className={cn(
-                "flex min-w-56 flex-1 flex-col rounded-lg border bg-surface-1 transition-colors duration-(--dur-fast)",
+                "flex min-w-76 flex-1 flex-col rounded-lg border bg-surface-1 transition-colors duration-(--dur-fast)",
                 over === column.id ? "border-dashed border-brand" : droppable ? "border-dashed border-divider-2" : "border-divider",
               )}
             >
