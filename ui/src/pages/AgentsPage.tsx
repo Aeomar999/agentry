@@ -107,7 +107,7 @@ export function AgentsPage() {
       )}
       {policy.data?.useForEveryone && (
         <div className="border-b border-divider px-6 py-4">
-          <UseForEveryoneNotice profile={policy.data.useForEveryone} hash={policy.data.hash} onChanged={reloadAll} />
+          <UseForEveryoneNotice policy={policy.data} onChanged={reloadAll} />
         </div>
       )}
       <div className="flex items-center gap-3 border-b border-divider px-6 py-2.5">
