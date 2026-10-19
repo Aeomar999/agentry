@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"encoding/pem"
+	"html/template"
 	"io"
 	"net"
 	"net/http"
@@ -130,7 +131,8 @@ func TestASilentConnectionHoldsUpNoOther(t *testing.T) {
 
 // Over plain HTTP, this machine is served as it is, on loopback or on the
 // address it serves; another is sent to the same address over https, path
-// and query kept. Over TLS everyone is served.
+// and query kept, when the certificate names it. Over TLS everyone is
+// served.
 func TestTheFrontDoor(t *testing.T) {
 	ca, _ := testCA(t)
 	door := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), doorOf(ca, "192.168.1.160"))
@@ -167,6 +169,29 @@ func TestTheFrontDoor(t *testing.T) {
 		}
 		if got != c.want {
 			t.Errorf("%s: %d %q, want %q", c.name, w.Code, got, c.want)
+		}
+	}
+}
+
+// Another machine asking over plain HTTP at an address the certificate
+// doesn't name, such as a global IPv6 address outside the CA's
+// constraints or a name it was never issued for, isn't sent to https
+// there, where the browser would refuse the certificate: it gets the trust
+// page saying so, with the addresses that work.
+func TestTheFrontDoorSendsNoOneWhereTheCertificateDoesNotReach(t *testing.T) {
+	ca, _ := testCA(t)
+	door := doorOf(ca, "192.168.1.160")
+	door.addresses = []string{"https://192.168.1.160:7800", "https://localhost:7800"}
+	handler := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), door)
+	for _, host := range []string{"[2600:1700::5]:7800", "elsewhere.example:7800", "203.0.113.9"} {
+		r := httptest.NewRequest("GET", "/tasks/task-1", nil)
+		r.Host, r.RemoteAddr = host, "192.168.1.20:5000"
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		body := w.Body.String()
+		if w.Code != http.StatusMisdirectedRequest || w.Header().Get("Location") != "" || !strings.Contains(body, "cover <code>"+template.HTMLEscapeString(host)+"</code>") ||
+			!strings.Contains(body, `href="https://192.168.1.160:7800/"`) || strings.Contains(body, "https://"+host) || strings.Contains(body, "localhost") {
+			t.Errorf("at %s: %d, Location %q\n%s", host, w.Code, w.Header().Get("Location"), body)
 		}
 	}
 }

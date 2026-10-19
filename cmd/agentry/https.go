@@ -27,7 +27,8 @@ const trustPrefix = "/trust/"
 // frontDoor is the server with -https on. Over TLS it is next. Over plain
 // HTTP it is next only for this machine, whose hooks, `agentry mcp`, status
 // line and desk call it on loopback or on the address it serves (serve
-// -addr <LAN IP>); anyone else is sent to the same address over https.
+// -addr <LAN IP>); anyone else is sent to the same address over https, if
+// the certificate covers it, or gets the trust page saying where to go.
 // Under trustPrefix, over either, without the token, is what a device needs
 // to trust the CA: the trust page, the CA certificate at /trust/ca.crt (DER,
 // as phones install it) and /trust/ca.pem, and an iOS profile holding it;
@@ -57,6 +58,10 @@ func frontDoor(next http.Handler, door trust) http.Handler {
 		}
 		if r.Host == "" {
 			http.Error(w, "Agentry is served over https here", http.StatusBadRequest)
+			return
+		}
+		if !door.issuer.Covers(hostOf(r.Host)) {
+			door.page(w, r, http.StatusMisdirectedRequest, r.Host)
 			return
 		}
 		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
