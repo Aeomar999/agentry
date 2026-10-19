@@ -5,6 +5,7 @@ import { Mono } from "@/components/molecules/Mono";
 import { addDefaultProfile, turnOffUseForEveryone } from "@/api/client";
 import type { Policy } from "@/api/types";
 import { usePolicyChange } from "@/lib/policy-change";
+import { notShipped, shippedProfiles } from "@/lib/profiles";
 
 // use_for_everyone puts one profile in place of every agent's own. Wherever
 // agents' profiles show, this says so, with the way to turn it off: the
@@ -14,7 +15,7 @@ import { usePolicyChange } from "@/lib/policy-change";
 export function UseForEveryoneNotice({ policy, onChanged }: { policy: Policy; onChanged: () => void }) {
   const { busy, run } = usePolicyChange(onChanged);
   const profile = policy.useForEveryone;
-  const shipped = new Set(policy.defaults.map((shippedProfile) => shippedProfile.name));
+  const shipped = shippedProfiles(policy);
   const missing = Object.entries(policy.missing ?? {}).sort(([a], [b]) => a.localeCompare(b));
   return (
     <Banner tone="info" title={`Every agent uses ${profile}; their own profiles are ignored`}>
@@ -45,7 +46,7 @@ export function UseForEveryoneNotice({ policy, onChanged }: { policy: Policy; on
                   Add it
                 </Button>
               ) : (
-                <span className="text-ink-muted">Agentry doesn't ship it: write it in policy.toml, or give them another profile.</span>
+                <span className="text-ink-muted">{notShipped}</span>
               )}
             </li>
           ))}

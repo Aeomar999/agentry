@@ -218,7 +218,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               htmlFor="agent-profile"
               hint={
                 inForce?.overridden && inForce.missing
-                  ? `In force: ${inForce.text}. Its own profile ${inForce.own} is missing from policy.toml, so once use_for_everyone is off every call it makes is denied until it's back. Add it on the Policy page, or pick another.`
+                  ? `In force: ${inForce.text}. Once use_for_everyone is off, every call it makes is denied until ${inForce.own} is back. Add it on the Policy page, or pick another.`
                   : inForce?.overridden
                     ? `In force: ${inForce.text}. This picks its own profile, for when use_for_everyone is off.`
                     : inForce?.missing
