@@ -76,7 +76,9 @@ func Check(p events.Proposal, state State) *events.Rejection {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
 		}
 		if p.Actor.Kind == events.System && p.Text("about") == "" {
-			return refuse("Agentry makes a task only about an epic you closed")
+			if reason := forAnOpenIdea(p, state); reason != "" {
+				return refuse(reason)
+			}
 		}
 		if reason := cmp.Or(aBudget(nil, p), aTurnLimit(nil, p)); reason != "" {
 			return refuse(reason)
@@ -99,6 +101,11 @@ func Check(p events.Proposal, state State) *events.Rejection {
 	}
 	if reason := taskRules[p.Type](task, p); reason != "" {
 		return refuse(reason)
+	}
+	if p.Type == events.TaskHeld && p.Actor.Kind == events.System {
+		if reason := startingAnAcceptedIdea(task, p, state); reason != "" {
+			return refuse(reason)
+		}
 	}
 	if rule := taskRosterRules[p.Type]; rule != nil {
 		if reason := rule(task, roster, p); reason != "" {

@@ -1,6 +1,7 @@
 package ideas
 
 import (
+	"regexp"
 	"strings"
 	"sync"
 
@@ -17,7 +18,8 @@ var you = events.Actor{Kind: events.Human, ID: "you"}
 type Choice struct {
 	Kind   string // "task" (or "story") or "epic"; "" takes the one the idea suggests
 	Note   string
-	Budget int // the new task's token budget; 0 is no limit
+	Budget int          // the new task's token budget; 0 is no limit
+	By     events.Actor // who accepts it: you when unset, or Agentry for an idea every Visionary agreed on
 }
 
 // Acceptance says what Accept did. The task can be made and the idea still
@@ -71,7 +73,7 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 		}
 	}
 	beforeMarking()
-	_, rejection, err := log.Propose(events.Proposal{Stream: idea.ID, Actor: you, Type: events.IdeaAccepted,
+	_, rejection, err := log.Propose(events.Proposal{Stream: idea.ID, Actor: choice.acceptor(), Type: events.IdeaAccepted,
 		Data: map[string]any{"task": made.Task, "note": choice.Note}})
 	switch {
 	case err != nil:
@@ -82,6 +84,13 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 	}
 	made.Accepted = true
 	return made, nil
+}
+
+func (choice Choice) acceptor() events.Actor {
+	if choice.By.ID == "" {
+		return you
+	}
+	return choice.By
 }
 
 // accepting runs one Accept at a time.
@@ -140,8 +149,12 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 	if !ok {
 		return Acceptance{Refused: "there is no coordinator in the first team"}, nil
 	}
-	created, rejection, err := log.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
-		"title": idea.Title, "description": description(idea, choice.Note), "repo": idea.Repo, "coordinator": coordinator.Name,
+	epic, err := epicOf(board, idea)
+	if err != nil {
+		return Acceptance{Refused: "the epic " + idea.Epic + " can't be read, so its limits can't go with the task: " + err.Error()}, nil
+	}
+	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: map[string]any{
+		"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo, "coordinator": coordinator.Name,
 		"budget": choice.Budget, "kind": string(kind), "kindChosen": true, "parked": "backlog", "idea": idea.ID}})
 	switch {
 	case err != nil:
@@ -165,8 +178,19 @@ func kindOf(chosen string, idea *Idea) (tasks.Kind, bool) {
 	return "", false
 }
 
+// epicOf is the epic the idea follows up, nil when it names none or none
+// is left to read.
+func epicOf(board Board, idea *Idea) (*tasks.Task, error) {
+	if idea.Epic == "" {
+		return nil, nil
+	}
+	return board.Task(idea.Epic)
+}
+
 // description tells the coordinator the idea in full, and links back to it.
-func description(idea *Idea, note string) string {
+// An idea that follows up an epic carries the epic's limits, as its stories
+// would.
+func description(idea *Idea, note string, epic *tasks.Task) string {
 	parts := []string{"From " + idea.ID + ", the idea \"" + idea.Title + "\", suggested in " + idea.Task + "."}
 	for _, part := range [][2]string{{"Problem", idea.Problem}, {"Proposal", idea.Proposal}, {"Why now", idea.WhyNow},
 		{"Risks", idea.Risks}, {"Follows up", idea.Epic}, {"What you said", note}} {
@@ -174,5 +198,52 @@ func description(idea *Idea, note string) string {
 			parts = append(parts, part[0]+": "+text)
 		}
 	}
+	if limits := limitsOf(epic); limits != "" {
+		parts = append(parts, "Limits from "+epic.ID+" (copied from the epic):\n\n"+limits)
+	}
 	return strings.Join(parts, "\n\n")
+}
+
+// longestLimits is how much of an epic with no block of limits is copied.
+const longestLimits = 2000
+
+// limitsOf is the block of the epic's description that sets its limits: a
+// line naming limits, constraints or rules, and the bullets under it. An
+// epic with no such block gives its whole description, cut short.
+func limitsOf(epic *tasks.Task) string {
+	if epic == nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(epic.Description), "\n")
+	for i, line := range lines {
+		if isBullet(line) || !namesLimits.MatchString(line) {
+			continue
+		}
+		if bullets := bulletsAfter(lines[i+1:]); len(bullets) > 0 {
+			return strings.Join(append([]string{strings.TrimSpace(line)}, bullets...), "\n")
+		}
+	}
+	return tasks.Shorten(strings.TrimSpace(epic.Description), longestLimits)
+}
+
+var namesLimits = regexp.MustCompile(`(?i)\b(limits?|constraints?|rules?)\b`)
+
+func isBullet(line string) bool { return strings.HasPrefix(strings.TrimSpace(line), "- ") }
+
+// bulletsAfter are the bullets the lines start with, past blank lines
+// before the first, each with the indented lines that carry it on.
+func bulletsAfter(lines []string) []string {
+	var bullets []string
+	for _, line := range lines {
+		switch {
+		case strings.TrimSpace(line) == "" && len(bullets) == 0:
+		case isBullet(line):
+			bullets = append(bullets, strings.TrimRight(line, " \t"))
+		case len(bullets) > 0 && strings.TrimSpace(line) != "" && strings.TrimLeft(line, " \t") != line:
+			bullets = append(bullets, strings.TrimRight(line, " \t"))
+		default:
+			return bullets
+		}
+	}
+	return bullets
 }

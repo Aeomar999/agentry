@@ -355,6 +355,8 @@ func TestAcceptsAtOnceMakeOneTask(t *testing.T) {
 	}
 }
 
+// Agentry may accept an idea, but only for a task made from it (see
+// TestTheRulesKeepAgentryToIdeasItAccepted).
 func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 	s, _, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
@@ -363,7 +365,11 @@ func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 			{Stream: id, Actor: by, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-1"}},
 			{Stream: id, Actor: by, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}},
 		} {
-			if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Check != "who" {
+			check := "who"
+			if by == agentry && p.Type == events.IdeaAccepted {
+				check = "order"
+			}
+			if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Check != check {
 				t.Errorf("%s by %s: %v %v", p.Type, by, rejection, err)
 			}
 		}
