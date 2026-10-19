@@ -110,6 +110,7 @@ func TestNextLeavesTheTaskAsItWas(t *testing.T) {
 	var task *Task
 	for i, e := range log {
 		next := Next(task, e)
+		// DeepEqual can't see sharing beyond a slice's length; that is TestACloneSharesNothing's job.
 		if before := FromEvents(log[:i]); !reflect.DeepEqual(task, before) {
 			t.Errorf("event %d, %s, changed the task it was applied to", i+1, e.Type)
 		}
