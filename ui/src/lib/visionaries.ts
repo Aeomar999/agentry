@@ -54,7 +54,7 @@ export function useAskVisionaries(): AskVisionaries {
     has,
     adding,
     error,
-    missingProfiles,
+    missingProfiles: has ? [] : missingProfiles, // the team may have been added elsewhere
     ask: () => ask(),
     askAddingProfiles: () => ask(true),
   };
