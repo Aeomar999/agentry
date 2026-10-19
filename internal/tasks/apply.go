@@ -36,6 +36,9 @@ func (t *Task) apply(e events.Event) {
 	}
 
 	t.applyFiles(e)
+	if t.orphaned(e) {
+		return
+	}
 	switch e.Type {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
@@ -344,6 +347,22 @@ func (t *Task) apply(e events.Event) {
 		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Summary)
 	}
+}
+
+// orphaned is an event for a turn that isn't open or an action the task
+// doesn't have. The rules refuse one now, but a log written under earlier
+// rules can hold it (task.held didn't stop the turn then, so its actions
+// went on), and replaying the log must not fail on it: it changes nothing.
+func (t *Task) orphaned(e events.Event) bool {
+	switch e.Type {
+	case events.ActionRequested:
+		return t.OpenTurn() == nil
+	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult:
+		return t.Action(e.Correlation) == nil
+	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnStopped:
+		return t.Turn(e.Correlation) == nil
+	}
+	return false
 }
 
 // wrapUp makes your move to Done or a parking place stand at once: the turn
