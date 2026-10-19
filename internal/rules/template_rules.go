@@ -29,8 +29,11 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	if reason := CheckTemplateID(p.Text("id")); reason != "" {
 		return reason
 	}
-	if strings.TrimSpace(p.Text("team")) == "" {
+	switch team := p.Text("team"); {
+	case strings.TrimSpace(team) == "":
 		return "a template needs a team name"
+	case strings.TrimSpace(team) != team:
+		return `a template's team name has no spaces at its ends: "` + team + `"`
 	}
 	members, err := agents.TemplateAgents(p.Data)
 	if err != nil {

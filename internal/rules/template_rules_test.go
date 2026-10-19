@@ -67,6 +67,12 @@ func TestATemplateNeedsATeam(t *testing.T) {
 	refusedSaying(t, savingTemplate("papers", "", research()), "needs a team name")
 }
 
+// AddTeam gives a template's team name to its agents as it is, so a padded
+// one is refused whichever way the template came.
+func TestATemplatesTeamNameIsTrimmed(t *testing.T) {
+	refusedSaying(t, savingTemplate("papers", " Research ", research()), `a template's team name has no spaces at its ends: " Research "`)
+}
+
 func TestATemplateCantTakeABuiltInID(t *testing.T) {
 	for _, template := range agents.Templates {
 		t.Run(template.ID, func(t *testing.T) {
