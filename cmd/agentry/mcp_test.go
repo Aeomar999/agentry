@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -163,12 +165,44 @@ func TestAnotherFingerprintChecksTheCAAgain(t *testing.T) {
 	}
 }
 
+// A kept CA's address is worked out from the server given, so a "server"
+// planted in the file, as an older one had, is never sent the token.
+func TestAKeptCAIsTrustedOnlyAtTheServerGiven(t *testing.T) {
+	ca, address, caRequests := hookServer(t)
+	planted := &atomic.Int32{}
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { planted.Add(1) }))
+	defer elsewhere.Close()
+	kept, _ := json.Marshal(map[string]string{"given": "https://" + address, "server": elsewhere.URL, "ca": string(ca.PEM())})
+	if err := os.MkdirAll(filepath.Dir(keptCAFile()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keptCAFile(), kept, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	agentry, err := connectFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agentry.URL != "https://"+address {
+		t.Errorf("aimed at %s, want https://%s", agentry.URL, address)
+	}
+	if err := agentry.Call("GET", "/api/config", nil, nil); err != nil {
+		t.Error(err)
+	}
+	if got := planted.Load(); got != 0 {
+		t.Errorf("the planted server got %d requests", got)
+	}
+	if got := caRequests.Load(); got != 0 {
+		t.Errorf("%d requests for the CA, want none: it was kept", got)
+	}
+}
+
 // A kept CA the server no longer answers with, as after `agentry ca
 // -regenerate`, is dropped, so the next run checks again.
 func TestAKeptCAIsDroppedWhenTheServerIsNoLongerItsOwn(t *testing.T) {
 	_, address, _ := hookServer(t)
 	old, _ := testCA(t)
-	if err := keepCA(keptCA{Given: "https://" + address, Server: "https://" + address, CA: string(old.PEM())}); err != nil {
+	if err := keepCA(keptCA{Given: "https://" + address, CA: string(old.PEM())}); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("AGENTRY_CA_FINGERPRINT", old.Fingerprint())

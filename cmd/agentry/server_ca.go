@@ -57,8 +57,14 @@ func trustServer(server, fingerprint string, timeout time.Duration) (trustedServ
 		return trustedServer{}, fmt.Errorf("the server's CA has fingerprint %s, not the %s given, so it isn't trusted. "+
 			"Check it with `agentry ca` on the server", got, fingerprint)
 	}
-	trusted := trustedServer{server: "https://" + strings.TrimPrefix(strings.TrimPrefix(server, "https://"), "http://"), ca: ca}
+	trusted := trustedServer{server: httpsOf(server), ca: ca}
 	return trusted, servedWithCA(trusted, timeout)
+}
+
+// httpsOf is server at https, where one served with Agentry's CA is
+// reached whether it was given as http or https.
+func httpsOf(server string) string {
+	return "https://" + strings.TrimPrefix(strings.TrimPrefix(server, "https://"), "http://")
 }
 
 // servedWithCA checks that the server answers with a certificate its CA

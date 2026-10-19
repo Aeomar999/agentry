@@ -20,12 +20,12 @@ import (
 // trust check: about what they give the server to answer them at all.
 const envTrustTimeout = 3 * time.Second
 
-// keptCA is the CA kept for the server as it was given (AGENTRY_URL), and
-// the address it was trusted at.
+// keptCA is the CA kept for the server as it was given (AGENTRY_URL). The
+// address it is trusted at is worked out from that, never read from the
+// file, so a file someone else wrote can't send the token elsewhere.
 type keptCA struct {
-	Given  string `json:"given"`
-	Server string `json:"server"`
-	CA     string `json:"ca"`
+	Given string `json:"given"`
+	CA    string `json:"ca"`
 }
 
 func keptCAFile() string {
@@ -47,7 +47,7 @@ func trustServerOnce(server, fingerprint string) (trustedServer, error) {
 	if err != nil {
 		return trustedServer{}, err
 	}
-	keepCA(keptCA{Given: given, Server: trusted.server, CA: string(trusted.ca)}) // if it can't be kept, it is checked again next time
+	keepCA(keptCA{Given: given, CA: string(trusted.ca)}) // if it can't be kept, it is checked again next time
 	return trusted, nil
 }
 
@@ -57,14 +57,14 @@ func readKeptCA(given, fingerprint string) (trustedServer, bool) {
 		return trustedServer{}, false
 	}
 	var kept keptCA
-	if json.Unmarshal(data, &kept) != nil || kept.Given != given || kept.Server == "" {
+	if json.Unmarshal(data, &kept) != nil || kept.Given != given {
 		return trustedServer{}, false
 	}
 	ca := []byte(kept.CA)
 	if pinned.Check(ca) != nil || normalFingerprint(tlsca.FingerprintOf(derOf(ca))) != normalFingerprint(fingerprint) {
 		return trustedServer{}, false
 	}
-	return trustedServer{server: kept.Server, ca: ca}, true
+	return trustedServer{server: httpsOf(given), ca: ca}, true
 }
 
 // keepCA writes the CA as the connection is written: readable only by you.
