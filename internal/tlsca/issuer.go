@@ -107,7 +107,7 @@ func (i *Issuer) listHosts(now time.Time) {
 	if !slices.Equal(i.leftOut, leftOut) {
 		i.leftOut = leftOut
 		if len(leftOut) > 0 {
-			slog.Warn("the HTTPS certificate leaves out hosts the CA may not vouch for; `agentry ca regenerate` makes a CA for this machine's current hostname, and a public address needs a reverse proxy that does TLS",
+			slog.Warn("the HTTPS certificate leaves out hosts the CA may not vouch for; `agentry ca -regenerate` makes a CA for this machine's current hostname, and a public address needs a reverse proxy that does TLS",
 				"hosts", strings.Join(leftOut, ", "))
 		}
 	}
