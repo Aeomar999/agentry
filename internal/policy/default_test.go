@@ -671,3 +671,298 @@ func TestAVerdictNamesItsRule(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 }
+
+// scratch is a folder in Claude's scratch place, where an agent may write
+// files through a redirect.
+const scratch = "/tmp/claude-1000/x/s"
+
+// escaped is scratch with each / written as a JSON escape, which JSON.parse
+// reads back as /.
+var escaped = strings.ReplaceAll(scratch, "/", `\`+"u002f")
+
+// A test runner started outside the workspace, or pointed at a file outside
+// it, runs code nobody reviews, even from the scratch folder: a Go test, a
+// package.json, a conftest.py or a jest reporter written there (task-89).
+func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// go
+			{"go test a scratch package", bash("go test " + scratch + "/..."), Ask},
+			{"go test a scratch file", bash("go test " + scratch + "/x_test.go"), Ask},
+			{"go -C", bash("go -C " + scratch + " test ./..."), Ask},
+			{"go test -C", bash("go test -C " + scratch + " ./..."), Ask},
+			{"go test -C=", bash("go test -C=" + scratch + " ./..."), Ask},
+			{"go test up and out", bash("go test ../other/..."), Ask},
+			{"go test from scratch", bash("cd " + scratch + " && go test ./..."), Ask},
+
+			// npm
+			{"npm test from scratch", bash("cd " + scratch + " && npm test"), Ask},
+			{"npm --prefix", bash("npm --prefix " + scratch + " test"), Ask},
+			{"npm test --prefix=", bash("npm test --prefix=" + scratch), Ask},
+
+			// pytest
+			{"pytest from scratch", bash("cd " + scratch + " && pytest"), Ask},
+			{"pytest a scratch folder", bash("pytest " + scratch), Ask},
+			{"python -m pytest a scratch folder", bash("python -m pytest " + scratch), Ask},
+			{"python3 -m pytest a scratch folder", bash("python3 -m pytest " + scratch + "/t.py"), Ask},
+			{"pytest -c", bash("pytest -c " + scratch + "/x.ini"), Ask},
+			{"pytest -c joined", bash("pytest -c" + scratch + "/x.ini"), Ask},
+			{"pytest --rootdir", bash("pytest --rootdir " + scratch), Ask},
+			{"pytest --rootdir=", bash("pytest --rootdir=" + scratch), Ask},
+			{"pytest -p a path", bash("pytest -p " + scratch + "/plugin.py"), Ask},
+			{"pytest --confcutdir=", bash("python3 -m pytest --confcutdir=" + scratch), Ask},
+			{"pytest -c in a cluster", bash("pytest -qc " + scratch + "/x.ini"), Ask},
+
+			// jest
+			{"jest --reporters", bash("npx jest --reporters " + scratch + "/r.js"), Ask},
+			{"jest --reporters=", bash("npx jest --reporters=" + scratch + "/r.js"), Ask},
+			{"jest --reporters= in a list", bash("npx jest --reporters=default," + scratch + "/r.js"), Ask},
+			{"jest --config", bash("npx jest --config " + scratch + "/j.js"), Deny},
+			{"jest -c", bash("npx jest -c " + scratch + "/j.js"), Deny},
+			{"jest --rootDir", bash("npx jest --rootDir " + scratch), Ask},
+			{"jest --rootDir=", bash("npx jest --rootDir=" + scratch), Ask},
+			{"jest --setupFiles", bash("npx jest --setupFiles " + scratch + "/s.js"), Ask},
+			{"jest --testRunner=", bash("npx jest --testRunner=" + scratch + "/r.js"), Ask},
+			{"jest --transform JSON", bash(`npx jest --transform='{"^.+\\.js$":"` + scratch + `/t.js"}'`), Ask},
+			// jest decodes these values as JSON itself, escapes included
+			{"jest --transform escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Ask},
+			{"jest --moduleNameMapper escaped JSON", bash(`npx jest --moduleNameMapper='{"^x$":"` + escaped + `/m.js"}'`), Ask},
+			{"jest JSON with a nested path", bash(`npx jest --testEnvironmentOptions='{"a":[{"b":"\/tmp\/claude-1000\/x\/s\/e.js"}]}'`), Ask},
+			{"jest JSON with a path as a key", bash(`npx jest --haste='{"` + escaped + `":1}'`), Ask},
+			{"jest JSON that doesn't parse", bash(`npx jest --transform='{"x":"t.js"'`), Ask},
+			{"jest a path", bash("npx jest " + scratch), Ask},
+			{"jest from scratch", bash("cd " + scratch + " && npx jest --ci"), Ask},
+
+			// vitest
+			{"vitest --config", bash("npx vitest run --config " + scratch + "/v.ts"), Ask},
+			{"vitest -c", bash("npx vitest run -c " + scratch + "/v.ts"), Ask},
+			{"vitest --root=", bash("npx vitest run --root=" + scratch), Ask},
+			{"vitest -r", bash("npx vitest run -r " + scratch), Ask},
+			{"vitest --dir", bash("npx vitest run --dir " + scratch), Ask},
+			{"vitest --reporter=", bash("npx vitest run --reporter=" + scratch + "/r.js"), Ask},
+			{"vitest a path", bash("npx vitest run " + scratch), Ask},
+			{"vitest a nested =", bash("npx vitest run --execArgv=--require=" + scratch + "/x.js"), Deny},
+			{"jest a nested =", bash("npx jest --testEnvironmentOptions=--require=" + scratch + "/x.js"), Ask},
+			// --execArgv hands vitest's workers node options, which run code with no file
+			{"vitest --execArgv", bash("npx vitest run --execArgv --import=data:text/javascript,globalThis.x=1"), Deny},
+			{"vitest --execArgv=", bash("npx vitest run --execArgv=--import=data:text/javascript,globalThis.x=1"), Deny},
+			{"vitest --poolOptions execArgv", bash("npx vitest run --poolOptions.forks.execArgv=--import=data:text/javascript,1"), Deny},
+			// vitest's parser camel-cases option names, so the kebab spelling sets execArgv too
+			{"vitest --exec-argv=", bash("npx vitest run --exec-argv=--import=data:text/javascript,process.stderr.write%28%22PWNED%22%29"), Deny},
+			{"vitest --exec-argv", bash("npx vitest run --exec-argv --import=data:text/javascript,1"), Deny},
+			{"vitest --pool-options exec-argv", bash("npx vitest run --pool-options.threads.exec-argv=--import=data:text/javascript,1"), Deny},
+			{"vitest --poolOptions exec-argv", bash("npx vitest run --poolOptions.forks.exec-argv=--import=data:text/javascript,1"), Deny},
+
+			// eslint
+			{"eslint -c", bash("npx eslint -c " + scratch + "/e.js ."), Ask},
+			{"eslint --config=", bash("npx eslint --config=" + scratch + "/e.js ."), Ask},
+			{"eslint --rulesdir", bash("npx eslint --rulesdir " + scratch + " ."), Ask},
+			{"eslint --resolve-plugins-relative-to", bash("npx eslint --resolve-plugins-relative-to " + scratch + " ."), Ask},
+			{"eslint --plugin", bash("npx eslint --plugin " + scratch + "/p.js ."), Ask},
+			{"eslint a path", bash("npx eslint " + scratch), Ask},
+
+			// cargo and make
+			{"cargo --manifest-path", bash("cargo test --manifest-path " + scratch + "/Cargo.toml"), Ask},
+			{"cargo --manifest-path=", bash("cargo test --manifest-path=" + scratch + "/Cargo.toml"), Ask},
+			{"cargo test from scratch", bash("cd " + scratch + " && cargo test"), Ask},
+			{"make test from scratch", bash("cd " + scratch + " && make test"), Ask},
+
+			// a tilde, a variable and a folder they name
+			{"a home path", bash("pytest ~/t"), Ask},
+			{"a variable that names scratch", bash("d=" + scratch + "; go test $d/..."), Ask},
+			{"cd through a variable", bash("d=" + scratch + "; cd $d && go test ./..."), Ask},
+		})
+	}
+}
+
+// The inspector follows cd and pushd. A folder it can't know makes the
+// runners and relative paths after it ask (task-89).
+func TestTheJudgingProfilesFollowCd(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"cd in a subshell", bash("(cd " + scratch + " && npm test)"), Ask},
+			{"pushd", bash("pushd " + scratch + " && go test ./..."), Ask},
+			{"pushd then popd", bash("pushd " + scratch + "; popd; go test ./..."), Ask},
+			{"popd", bash("popd; go test ./..."), Ask},
+			{"cd -", bash("cd internal && cd - && go test ./..."), Ask},
+			{"cd home", bash("cd && go test ./..."), Ask},
+			{"cd ~", bash("cd ~ && go test ./..."), Ask},
+			{"cd an unknown variable", bash("cd $D && go test ./..."), Ask},
+			{"cd a variable with several values", bash("for d in internal " + scratch + "; do :; done; cd $d && go test ./..."), Ask},
+			{"cd -P", bash("cd -P " + scratch + " && go test ./..."), Ask},
+			{"cd --", bash("cd -- " + scratch + " && go test ./..."), Ask},
+			{"builtin cd", bash("builtin cd " + scratch + " && go test ./..."), Ask},
+			{"command cd", bash("command cd " + scratch + " && go test ./..."), Ask},
+			{"cd up and out", bash("cd .. && go test ./..."), Ask},
+			{"cd up in steps", bash("cd internal; cd ../..; go test ./..."), Ask},
+			{"a cd that may fail", bash("cd internal/policy || true; go test ../../..."), Ask},
+			{"a cd in a loop", bash("for i in 1 2; do go test ./...; cd " + scratch + "; done"), Ask},
+			{"a cd in a while loop", bash("while true; do go test ./...; cd ..; done"), Ask},
+			{"a cd in a loop beside a subshell", bash("for m in api web; do (cd $m && npm test); cd $m; done; npm test"), Ask},
+			{"a cd in a function", bash("f() { cd " + scratch + "; }; f; go test ./..."), Ask},
+			{"a cd in an if", bash("if true; then cd " + scratch + "; fi; npm test"), Ask},
+			{"a relative path from scratch", bash("cd " + scratch + " && cat ../../../../etc/hostname"), Ask},
+			{"cd then a relative test path", bash("cd /tmp/claude-1000/x && go test ./s/..."), Ask},
+
+			// a cd that doesn't leak, or stays in the workspace
+			{"cd in a subshell doesn't leak", bash("(cd " + scratch + "); go test ./..."), Allow},
+			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			// cd may fail, so ../.. may be counted from the workspace too
+			{"cd back up into the workspace asks", bash("cd internal/policy && cd ../.. && go test ./..."), Ask},
+			{"cd to the workspace by its path", bash("cd " + workspace + " && go test ./..."), Allow},
+			{"cd into scratch only to read", bash("cd " + scratch + " && cat out.txt"), Allow},
+			// a subshell's cd ends with it, in a loop too
+			{"a cd in a subshell in a loop", bash("for m in api web; do (cd $m && npm test); done"), Allow},
+			{"a cd in a subshell in a loop, then go test", bash("for m in api web; do (cd $m && go test ./...); done; go test ./..."), Allow},
+		})
+	}
+}
+
+// Words are judged as bash hands them on: with its backslashes gone and its
+// braces expanded, so a runner pointed outside, or a flag a rule denies, is
+// caught in any spelling (task-89, review round 3).
+func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
+	p := loadDefault(t)
+	up := strings.Repeat(`.\./`, 6)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// a backslash bash drops
+			{"cd an escaped path, npm test", bash(`cd \` + scratch + " && npm test"), Ask},
+			{"cd an escaped path, jest", bash(`cd \` + scratch + " && npx jest --ci"), Ask},
+			{"go test an escaped path", bash(`go test \` + scratch + "/..."), Ask},
+			{"go test up an escaped ..", bash("go test " + up + scratch[1:] + "/..."), Ask},
+			{"cd up an escaped .., go test", bash("cd " + up + scratch[1:] + " && go test ./..."), Ask},
+			{"pytest an escaped path", bash(`pytest \` + scratch), Ask},
+			{"jest an escaped reporter", bash(`npx jest --reporters=\` + scratch + "/r.js"), Ask},
+			{"vitest --exec\\-argv", bash(`npx vitest run --exec\-argv=--import=data:text/javascript,1`), Deny},
+			{"vitest --exec\\Argv", bash(`npx vitest run --exec\Argv=--import=data:text/javascript,1`), Deny},
+			{"vitest --e\\xecArgv", bash(`npx vitest run --e\xecArgv=--import=data:text/javascript,1`), Deny},
+			{"vitest --outp\\utFile", bash(`npx vitest run --outp\utFile=x`), Deny},
+			{"rg --p\\re", bash(`rg --p\re x .`), Deny},
+			{"a backslash and a newline", bash("npx vitest run --exec-\\\nargv=--import=data:text/javascript,1"), Deny},
+			{"an escape in double quotes", bash(`npx vitest run "--exec\-argv=1"`), Allow}, // bash keeps that backslash
+			{"an escaped quote in double quotes", bash(`npx vitest run "--exec-argv=\"1\""`), Deny},
+			{"go test $ and a backslash-newline", bash("x=" + scratch + "; go test $\\\nx/..."), Ask},
+			{"go test \"$ and a backslash-newline\"", bash("x=" + scratch + "; go test \"$\\\nx/...\""), Ask},
+			{"cd $ and a backslash-newline", bash("x=" + scratch + "; cd $\\\nx && npm test"), Ask},
+			{"jest a reporter at $ and a backslash-newline", bash("x=" + scratch + "; npx jest --reporters=$\\\nx/r.js"), Ask},
+			{"vitest a flag at $ and a backslash-newline", bash("x=--exec-argv=1; npx vitest run $\\\nx"), Ask},
+			{"ANSI-C quoting with an escape", bash(`cd $'\x2ftmp/claude-1000/x/s' && npm test`), Ask},
+
+			// a brace bash expands
+			{"cd a brace", bash("cd {/tmp,/tmp}/claude-1000/x/s && npm test"), Ask},
+			{"go test a brace", bash("go test {./internal/policy," + scratch + "}/"), Ask},
+			{"vitest --exec-arg{v,v}", bash("npx vitest run --exec-arg{v,v}=--import=data:text/javascript,1"), Deny},
+			{"vitest --exec-argv{,}", bash("npx vitest run --exec-argv{,}=1"), Deny},
+			{"a brace in a loop list", bash("for d in {internal," + scratch + "}; do cd $d; done; go test ./..."), Ask},
+			{"a brace in a redirect", bash("echo x > {" + scratch + "/../../../../../home/f,}"), Deny},
+			{"a brace in a declaration", bash("declare d={a,}; ls"), Ask},
+			{"a sequence", bash("go test ./x{1..3}/"), Allow},
+			{"a sequence outside", bash("go test {" + scratch + ",.}/x{1..3}/"), Ask},
+			{"a sequence in a loop list", bash("for i in {1..3}; do go test -count=1 ./...; done"), Allow},
+			{"a sequence bash may read otherwise", bash("ls {1..a}"), Ask},
+			{"a brace that stays open past a }", bash("cd {" + scratch + "}x,} && npm test"), Ask},
+			{"$ and a backslash-newline next to a brace", bash("x=" + scratch + "; go test $\\\nx{,}/..."), Ask},
+			{"a brace next to $name", bash("x=.; xy=" + scratch + "; go test $x{y,}/..."), Ask},
+
+			// a brace bash leaves as text, and a backslash that changes nothing
+			{"an escaped brace", bash(`ls \{a,b}`), Allow},
+			{"a quoted brace", bash(`ls "{a,b}" '{c,d}'`), Allow},
+			{"a brace in an assignment", bash("d={" + scratch + ",}; ls $d"), Allow}, // ls {/tmp/…,}
+			{"find an escaped glob", bash(`find . -name \*.go`), Allow},
+			{"go test a brace in the workspace", bash("go test ./internal/{policy,tasks}/"), Allow},
+
+			// a $ that starts nothing is text
+			{"grep a regex with $ in the middle", bash(`grep -E "^$|^#" README.md`), Allow},
+			{"grep a regex with $ before \\|", bash(`grep -n "foo$\|bar" README.md`), Allow},
+			{"git log a format with $", bash(`git log --format="%h$%s"`), Allow},
+			{"echo a $ in a path", bash("echo a$/b"), Allow},
+			{"grep a regex ending in $", bash(`grep -c ^$ README.md`), Allow},
+		})
+	}
+}
+
+// A word with too many braces to expand quickly asks, and quickly (task-89,
+// review round 4).
+func TestAWordWithManyBracesIsJudgedQuickly(t *testing.T) {
+	p := loadDefault(t)
+	nested := strings.Repeat("{", 20000) + "a" + strings.Repeat("}", 20000)
+	for _, word := range []string{nested, strings.Repeat("{", 20000) + "," + strings.Repeat("}", 20000), strings.Repeat("{a}", maxBraces+1)} {
+		call := bash("ls " + word)
+		start := time.Now()
+		check(t, p, "read-only", []decisionCase{{fmt.Sprintf("ls a %d-byte brace word", len(word)), call, Ask}})
+		if took := time.Since(start); took > raceSlowdown*time.Second/10 {
+			t.Errorf("a %d-byte brace word took %v to judge", len(word), took)
+		}
+	}
+	check(t, p, "read-only", []decisionCase{{"ls a brace word under the limits", bash("ls " + strings.Repeat("{a}", maxBraces)), Allow}})
+}
+
+// What the judging profiles are for still runs from the workspace (task-89).
+func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"go test", bash("go test ./..."), Allow},
+			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"go test a package", bash("go test ./internal/policy/"), Allow},
+			{"go test with flags", bash("go test -count=1 -run 'TestX/a' -timeout 10m ./internal/policy"), Allow},
+			{"go test by absolute path", bash("go test " + workspace + "/internal/..."), Allow},
+			{"npm test", bash("npm test"), Allow},
+			{"jest --ci", bash("npx jest --ci"), Allow},
+			{"jest with its reporter in the workspace", bash("npx jest --reporters=default,./tools/r.js"), Allow},
+			{"vitest with its config in the workspace", bash("npx vitest run --config vitest.config.ts"), Allow},
+			{"eslint with its config in the workspace", bash("npx eslint -c eslint.config.js src"), Allow},
+			{"pytest", bash("pytest"), Allow},
+			{"pytest with a filter", bash("python3 -m pytest -q -k 'not slow' tests"), Allow},
+			{"cargo test", bash("cargo test"), Allow},
+			{"jest JSON in the workspace", bash(`npx jest --moduleNameMapper='{"^@/(.*)$":"<rootDir>\u002fsrc\u002f$1"}'`), Allow},
+			{"jest JSON with a regex key", bash(`npx jest --transform='{"^.+\\.tsx?$":"ts-jest"}'`), Allow},
+			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			{"output to scratch", bash("go test ./... > " + scratch + "/out.txt"), Allow},
+		})
+	}
+}
+
+// The other profiles judge these as they did before (task-89).
+func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
+	p := loadDefault(t)
+	check(t, p, "developer", []decisionCase{
+		{"npm test from scratch", bash("cd " + scratch + " && npm test"), Allow},
+		{"go test a scratch package", bash("go test " + scratch + "/..."), Allow},
+		{"jest with a scratch reporter", bash("npx jest --reporters " + scratch + "/r.js"), Allow},
+		{"go test elsewhere", bash("go test /elsewhere/..."), Ask},
+		{"a cd in a subshell in a loop", bash("for m in api web; do (cd $m && npm test); done"), Allow},
+		{"a cd in a subshell in a loop, go test", bash("for m in api web; do (cd $m && go test ./...); done"), Allow},
+		{"vitest --execArgv", bash("npx vitest run --execArgv=--import=data:text/javascript,1"), Allow},
+		{"vitest --exec-argv", bash("npx vitest run --exec-argv=--import=data:text/javascript,1"), Allow},
+		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
+		{"go test an escaped scratch path", bash(`go test \` + scratch + "/..."), Allow},
+		{"go test a brace", bash("go test ./internal/{policy,tasks}/"), Allow},
+		{"a sequence in a loop list", bash("for i in {1..3}; do echo $i; done"), Allow},
+		{"ls a sequence", bash("ls {1..3}"), Allow},
+		{"grep a regex with $ in the middle", bash(`grep -E "^$|^#" README.md`), Allow},
+		{"git log a format with $", bash(`git log --format="%h$%s"`), Allow},
+		{"echo a $ in a path", bash("echo a$/b"), Allow},
+	})
+	for _, profile := range []string{"autonomous", "allow-everything"} {
+		check(t, p, profile, []decisionCase{
+			{"npm test from scratch", bash("cd " + scratch + " && npm test"), Allow},
+			{"go test elsewhere", bash("cd /elsewhere && go test ./..."), Allow},
+		})
+	}
+}
+
+// A relative path is counted from every folder a cd may have moved the shell
+// to, under every profile: `cd && cat .netrc` reads ~/.netrc (task-89).
+func TestARelativePathIsCountedFromWhereCdWent(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous"} {
+		check(t, p, profile, []decisionCase{
+			{"a secret read after cd home", bash("cd && cat .netrc"), Deny},
+			{"a secret read after cd ~", bash("cd ~ && cat .git-credentials"), Deny},
+		})
+	}
+}

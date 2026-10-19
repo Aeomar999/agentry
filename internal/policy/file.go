@@ -42,6 +42,7 @@ type ruleFile struct {
 	Paths           []string `toml:"paths"`
 	Where           string   `toml:"where"`
 	RedirectsToFile bool     `toml:"redirects_to_file"`
+	RunsOutside     []string `toml:"runs_outside"`
 }
 
 //go:embed default.toml
@@ -192,9 +193,12 @@ func compileProfile(name string, p profileFile, home string) (*profile, error) {
 	for _, r := range p.Rules {
 		rule := rule{name: r.Name, why: r.Why, decision: r.Decision, tools: r.Tools, where: r.Where,
 			redirectsToFile: r.RedirectsToFile}
-		if rule.runsAny, err = compileAll(r.RunsAny, home, ignoreHome(commandGlob)); err == nil {
-			if rule.runsOnly, err = compileAll(r.RunsOnly, home, ignoreHome(commandGlob)); err == nil {
-				rule.paths, err = compileAll(r.Paths, home, pathGlob)
+		commands := ignoreHome(commandGlob)
+		if rule.runsAny, err = compileAll(r.RunsAny, home, commands); err == nil {
+			if rule.runsOnly, err = compileAll(r.RunsOnly, home, commands); err == nil {
+				if rule.runsOutside, err = compileAll(r.RunsOutside, home, commands); err == nil {
+					rule.paths, err = compileAll(r.Paths, home, pathGlob)
+				}
 			}
 		}
 		if err != nil {

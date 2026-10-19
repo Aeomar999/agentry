@@ -1,7 +1,11 @@
 package policy
 
 import (
+	"encoding/json"
+	"fmt"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -16,8 +20,19 @@ type shellCall struct {
 	pipelines []string // each pipeline of two or more commands, as "a | b"
 	paths     []string // every word that may name a file, and every redirect target
 	writes    []string // redirect targets written to: > f, >> f, &> f, >| f, <> f
+	runs      []run    // each simple command, with where it starts and what it names
 	opaque    bool     // part of it can't be known before it runs: $(...), an unknown variable
 	invalid   bool     // the shell couldn't parse it
+}
+
+// run is one simple command as a runner rule sees it: the folders it may
+// start in (nil when they can't be known), and every file its arguments may
+// name, options' values included, so a rule can tell whether it may load
+// code from outside the workspace.
+type run struct {
+	texts []string // the command, once for each way its words can expand
+	dirs  []string
+	files []string
 }
 
 // variables Agentry knows the value of in an agent's session.
@@ -30,7 +45,10 @@ func inspectShell(command, workspace, home string) shellCall {
 	if err != nil {
 		return shellCall{invalid: true}
 	}
-	inspector := &shellInspector{variables: knownVariables(workspace, home)}
+	inspector := &shellInspector{variables: knownVariables(workspace, home), home: home, dirs: []string{workspace}}
+	if !expandBraces(file) {
+		inspector.call.opaque = true
+	}
 	inspector.learnVariables(file)
 	syntax.Walk(file, inspector.visit)
 	return inspector.call
@@ -39,6 +57,15 @@ func inspectShell(command, workspace, home string) shellCall {
 type shellInspector struct {
 	call      shellCall
 	variables map[string][]string // name → the literal values it can hold
+	home      string
+
+	// dirs are the folders the shell may be in at the command the walk has
+	// reached: the workspace, where Agentry starts it, and wherever a cd or
+	// pushd before it may have moved it. A cd can fail and leave the shell
+	// where it was, so a cd adds folders rather than replacing them. nil when
+	// they can't be known: after cd -, popd or a cd in a loop. Relative paths
+	// are counted from each of them.
+	dirs []string
 }
 
 // learnVariables records variables whose every possible value is written in
@@ -194,7 +221,7 @@ func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
 		if variableSetters[name] {
 			return true
 		}
-		if (name == "builtin" || name == "command") && s.setsVariables(withoutOption(args[1:], "-p")) {
+		if (name == "builtin" || name == "command") && s.setsVariables(s.withoutOption(args[1:], "-p")) {
 			return true // they run the builtin after them; command -v only looks it up
 		}
 		if name == "printf" && slices.ContainsFunc(args[1:], s.mayBeVariableOption) {
@@ -208,11 +235,17 @@ func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
 }
 
 // withoutOption is the words after any leading copies of option.
-func withoutOption(words []*syntax.Word, option string) []*syntax.Word {
-	for len(words) > 0 && words[0].Lit() == option {
+func (s *shellInspector) withoutOption(words []*syntax.Word, option string) []*syntax.Word {
+	for len(words) > 0 && s.isText(words[0], option) {
 		words = words[1:]
 	}
 	return words
+}
+
+// isText: the word can only be text, as the shell reads it (-\p is -p).
+func (s *shellInspector) isText(word *syntax.Word, text string) bool {
+	values, ok := s.values(word)
+	return ok && len(values) == 1 && values[0] == text
 }
 
 // mayBeVariableOption: the word may be printf's -v NAME or -vNAME.
@@ -234,10 +267,16 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 	switch n := node.(type) {
 	case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.FuncDecl, *syntax.CoprocClause:
 		s.call.opaque = true
+	case *syntax.Subshell:
+		s.inSubshell(n)
+		return false
 	case *syntax.ForClause:
 		if iteration, ok := n.Loop.(*syntax.WordIter); ok {
 			s.setVariable(iteration.Name.Value, false)
 		}
+		s.enterLoop(n)
+	case *syntax.WhileClause:
+		s.enterLoop(n)
 	case *syntax.CallExpr:
 		s.addCommand(n.Args, n.Assigns)
 	case *syntax.DeclClause:
@@ -270,18 +309,225 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	if len(args) == 0 {
 		return
 	}
-	for _, text := range s.commandTexts(args) {
+	texts := s.commandTexts(args)
+	for _, text := range texts {
 		if name, found := printfVariable(text); found {
 			s.setVariable(name, false)
 		}
 		s.call.commands = append(s.call.commands, text)
 	}
+	s.call.runs = append(s.call.runs, run{texts: texts, dirs: slices.Clone(s.dirs), files: s.namedFiles(args[1:])})
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
 		s.addPath(args[0]) // ./test.sh runs a file
 	}
 	for _, arg := range args[1:] {
 		s.addPath(arg)
 	}
+	s.followCd(args)
+}
+
+// namedFiles is every file the arguments may name: each argument, an
+// option's value after "=" (--config=x) or joined to a short option (-cx),
+// and each item of a list or a JSON value in them (--reporters=a,b,
+// --transform='{"x":"t.js"}'). Most are no file at all; a word that isn't
+// one is counted from the shell's folder and stays inside the workspace.
+func (s *shellInspector) namedFiles(args []*syntax.Word) []string {
+	var files []string
+	for _, arg := range args {
+		fields, _ := s.fields(arg) // a word that can't be known makes the call opaque elsewhere
+		for _, value := range slices.Concat(fields...) {
+			texts, ok := decoded(optionValue(value))
+			if !ok {
+				files = append(files, value) // not a path in the workspace, so it counts as outside
+				continue
+			}
+			for _, text := range texts {
+				for _, item := range strings.FieldsFunc(text, isListSeparator) {
+					files = append(files, s.resolve(item)...)
+				}
+			}
+		}
+	}
+	return files
+}
+
+// decoded is the strings a value holds, read as JSON when it starts like JSON,
+// since jest decodes such values itself ("\/tmp" and "/tmp" are /tmp). A
+// value that starts like JSON but doesn't decode can't be read: not ok.
+func decoded(value string) ([]string, bool) {
+	if !strings.HasPrefix(value, "{") && !strings.HasPrefix(value, "[") {
+		return []string{value}, true
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(value), &parsed); err != nil {
+		return nil, false
+	}
+	return jsonStrings(parsed), true
+}
+
+// jsonStrings is every string in a decoded JSON value, keys included.
+func jsonStrings(value any) []string {
+	switch v := value.(type) {
+	case string:
+		return []string{v}
+	case []any:
+		var texts []string
+		for _, item := range v {
+			texts = append(texts, jsonStrings(item)...)
+		}
+		return texts
+	case map[string]any:
+		var texts []string
+		for key, item := range v {
+			texts = append(texts, key)
+			texts = append(texts, jsonStrings(item)...)
+		}
+		return texts
+	}
+	return nil
+}
+
+// optionValue is what an option gives as its value: --x=v and -xv give v. A
+// word that isn't an option is its own value.
+func optionValue(word string) string {
+	if !strings.HasPrefix(word, "-") {
+		return word
+	}
+	if _, value, found := strings.Cut(word, "="); found {
+		return value
+	}
+	if !strings.HasPrefix(word, "--") && len(word) > 2 {
+		return word[2:]
+	}
+	return ""
+}
+
+// isListSeparator splits a value into what it may name. = splits a nested
+// option, as in --execArgv=--require=f.
+func isListSeparator(r rune) bool { return strings.ContainsRune(`,:;"'{}[]= `, r) }
+
+// dirBuiltins are the builtins that change the shell's folder.
+var dirBuiltins = map[string]bool{"cd": true, "pushd": true, "popd": true}
+
+// followCd moves dirs when the command may be cd, pushd or popd, as `builtin
+// cd` and `command cd` are too.
+func (s *shellInspector) followCd(args []*syntax.Word) {
+	names, args := s.dirBuiltin(args)
+	switch {
+	case len(names) == 0:
+	case slices.Contains(names, "popd"), slices.Contains(names, "pushd") && len(args) == 0:
+		s.dirs = nil // the folder stack isn't followed
+	default:
+		s.moveTo(args)
+	}
+}
+
+// dirBuiltin is the names the command may run when one of them is cd, pushd
+// or popd, and the words after the name. A name that can't be known may be
+// any of them.
+func (s *shellInspector) dirBuiltin(args []*syntax.Word) ([]string, []*syntax.Word) {
+	for len(args) > 0 {
+		names, ok := s.values(args[0])
+		switch {
+		case !ok:
+			return []string{"popd"}, nil
+		case slices.ContainsFunc(names, func(name string) bool { return dirBuiltins[name] }):
+			return names, args[1:]
+		case len(names) == 1 && (names[0] == "builtin" || names[0] == "command"):
+			args = args[1:]
+			continue
+		}
+		return nil, nil
+	}
+	return nil, nil
+}
+
+// cdOptions are cd's and pushd's options that don't change where they go.
+var cdOptions = []string{"-L", "-P", "-e", "-@", "--"}
+
+// moveTo adds the folder cd or pushd goes to, from each folder the shell may
+// be in. With no folder, cd goes home. cd - and a folder that can't be known
+// leave dirs unknown.
+func (s *shellInspector) moveTo(args []*syntax.Word) {
+	for len(args) > 0 && slices.ContainsFunc(cdOptions, func(option string) bool { return s.isText(args[0], option) }) {
+		args = args[1:]
+	}
+	targets := []string{s.home}
+	if len(args) > 0 {
+		fields, ok := s.fields(args[0])
+		if !ok || len(args) > 1 {
+			s.dirs = nil
+			return
+		}
+		targets = nil
+		for _, words := range fields {
+			if len(words) != 1 || words[0] == "-" || words[0] == "" {
+				s.dirs = nil
+				return
+			}
+			targets = append(targets, words[0])
+		}
+	}
+	dirs := s.dirs
+	for _, target := range targets {
+		for _, dir := range s.resolve(target) {
+			if !slices.Contains(dirs, dir) {
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	if s.dirs == nil || len(dirs) > maxValues {
+		dirs = nil
+	}
+	s.dirs = dirs
+}
+
+// resolve is every file a path may name from the folders the shell may be
+// in. With them unknown, a relative path is unknown too.
+func (s *shellInspector) resolve(path string) []string {
+	switch {
+	case path == "~" || strings.HasPrefix(path, "~/"):
+		return []string{s.home + strings.TrimPrefix(path, "~")}
+	case strings.HasPrefix(path, "~"): // ~user is that user's home
+		s.call.opaque = true
+		return []string{path}
+	case filepath.IsAbs(path):
+		return []string{filepath.Clean(path)}
+	case s.dirs == nil:
+		s.call.opaque = true
+		return []string{path}
+	}
+	paths := make([]string, len(s.dirs))
+	for i, dir := range s.dirs {
+		paths[i] = filepath.Join(dir, path)
+	}
+	return paths
+}
+
+// inSubshell walks a subshell, whose cd ends with it.
+func (s *shellInspector) inSubshell(n *syntax.Subshell) {
+	dirs := slices.Clone(s.dirs)
+	for _, stmt := range n.Stmts {
+		syntax.Walk(stmt, s.visit)
+	}
+	s.dirs = dirs
+}
+
+// enterLoop: a cd in a loop moves the commands of its next round, which the
+// walk has already passed, so with one the folder can't be known. A cd in a
+// subshell ends with it, so it moves no later round.
+func (s *shellInspector) enterLoop(loop syntax.Node) {
+	syntax.Walk(loop, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.Subshell:
+			return false
+		case *syntax.CallExpr:
+			if names, _ := s.dirBuiltin(n.Args); len(names) > 0 {
+				s.dirs = nil
+			}
+		}
+		return true
+	})
 }
 
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
@@ -320,9 +566,12 @@ func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 	if r.Op != syntax.RdrIn {
 		values, ok := s.values(r.Word)
 		if !ok {
-			values = []string{"$?"} // a file it can't name is still written
+			s.call.writes = append(s.call.writes, "$?") // a file it can't name is still written
+			return
 		}
-		s.call.writes = append(s.call.writes, values...)
+		for _, value := range values {
+			s.call.writes = append(s.call.writes, s.resolve(value)...)
+		}
 	}
 }
 
@@ -418,7 +667,7 @@ func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 		if value == "" || strings.Contains(value, "://") || (!isTarget && strings.HasPrefix(value, "-")) {
 			continue
 		}
-		s.call.paths = append(s.call.paths, value)
+		s.call.paths = append(s.call.paths, s.resolve(value)...)
 	}
 }
 
@@ -554,7 +803,7 @@ func (s *shellInspector) withoutGitOptions(words []string) []string {
 			s.call.opaque = true
 		}
 		if joined && (name == "--git-dir" || name == "--work-tree") {
-			s.call.paths = append(s.call.paths, value) // addPath skips the whole word: it starts with "-"
+			s.call.paths = append(s.call.paths, s.resolve(value)...) // addPath skips the whole word: it starts with "-"
 		}
 	}
 	return []string{"git"}
@@ -626,9 +875,16 @@ func (s *shellInspector) fields(word *syntax.Word) ([][]string, bool) {
 // values is every string a word can expand to, when that can be known without
 // running anything: literals, quotes, and variables learned from the command.
 func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
+	return s.partsValues(word.Parts, false)
+}
+
+func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]string, bool) {
+	if joinsDollar(parts) {
+		return nil, false
+	}
 	results := []string{""}
-	for _, part := range word.Parts {
-		pieces, ok := s.partValues(part)
+	for _, part := range parts {
+		pieces, ok := s.partValues(part, quoted)
 		if !ok || len(results)*len(pieces) > maxValues {
 			return nil, false
 		}
@@ -643,14 +899,37 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 	return results, true
 }
 
-func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
+// joinsDollar: a backslash and a newline sit between a $ and the rest of the
+// word. mvdan keeps any $ that starts no expansion as its own literal (a$/b is
+// a, $, /b) and drops a backslash-newline, but bash joins the lines first, so
+// $\<newline>x is $x. Only the backslash-newline leaves a gap in the source
+// between the $ and the next part; with no gap the $ is plain text.
+func joinsDollar(parts []syntax.WordPart) bool {
+	for i, part := range parts[:max(len(parts)-1, 0)] {
+		lit, isLit := part.(*syntax.Lit)
+		if isLit && lit.Value == "$" && parts[i+1].Pos().Offset() > lit.Pos().Offset()+1 {
+			return true
+		}
+	}
+	return false
+}
+
+// partValues is every string one part of a word can be. Inside double quotes
+// a literal loses fewer backslashes than outside, so the parts of a quoted
+// string are read with quoted set. Glob characters (* ? [) are judged as the
+// text they are: a relative glob can't reach .. (bash 5.2 skips dot files'
+// . and .. by default), and an absolute one starts with / and so is outside.
+func (s *shellInspector) partValues(part syntax.WordPart, quoted bool) ([]string, bool) {
 	switch p := part.(type) {
 	case *syntax.Lit:
-		return []string{p.Value}, true
+		return []string{unescaped(p.Value, quoted)}, true
 	case *syntax.SglQuoted:
+		if p.Dollar && strings.Contains(p.Value, `\`) { // $'\x41' is A
+			return nil, false
+		}
 		return []string{p.Value}, true
 	case *syntax.DblQuoted:
-		return s.values(&syntax.Word{Parts: p.Parts})
+		return s.partsValues(p.Parts, true)
 	case *syntax.ParamExp:
 		isPlain := p.Exp == nil && p.Repl == nil && p.Index == nil && p.Slice == nil && !p.Length && !p.Excl && !p.Width && p.Names == 0
 		if values, known := s.variables[p.Param.Value]; isPlain && known && len(values) > 0 {
@@ -658,4 +937,346 @@ func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+// unescaped is a literal as the shell hands it on. Outside quotes a backslash
+// keeps the character after it as text (\/tmp is /tmp, --exec\-argv is
+// --exec-argv); inside double quotes only before $ ` " \ or a newline, and
+// stays otherwise ("a\x" is a\x). A backslash and a newline are nothing.
+func unescaped(text string, quoted bool) string {
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\\' || i+1 == len(text) || quoted && !strings.ContainsRune("$`\"\\\n", rune(text[i+1])) {
+			b.WriteByte(text[i])
+			continue
+		}
+		i++
+		if text[i] != '\n' {
+			b.WriteByte(text[i])
+		}
+	}
+	return b.String()
+}
+
+// expandBraces replaces each word of a call or loop list with the words brace
+// expansion makes of it, before anything else reads them: go test ./{a,b}/ is
+// go test ./a/ ./b/. It rewrites the parsed file in place. A word it can't
+// expand, and any brace that would expand in a declaration or a redirect,
+// leaves the call unknown: not ok (declare x={a,} sets x to "", while x={a,}
+// sets {a,}).
+func expandBraces(file *syntax.File) (ok bool) {
+	ok = true
+	expandAll := func(words []*syntax.Word) []*syntax.Word {
+		var all []*syntax.Word
+		for _, word := range words {
+			expanded, known := braceWords(word)
+			if !known {
+				ok = false
+				expanded = []*syntax.Word{word}
+			}
+			all = append(all, expanded...)
+		}
+		return all
+	}
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.CallExpr:
+			n.Args = expandAll(n.Args)
+		case *syntax.WordIter:
+			n.Items = expandAll(n.Items)
+		case *syntax.DeclClause:
+			for _, assign := range n.Args {
+				if assign.Value != nil && !unbraced(assign.Value) {
+					ok = false
+				}
+			}
+		case *syntax.Redirect:
+			if n.Word != nil && n.Hdoc == nil && n.Op != syntax.WordHdoc && !unbraced(n.Word) {
+				ok = false
+			}
+		}
+		return true
+	})
+	return ok
+}
+
+// unbraced: brace expansion leaves the word as it is.
+func unbraced(word *syntax.Word) bool {
+	words, ok := braceWords(word)
+	return ok && len(words) == 1 && words[0] == word
+}
+
+// braceAtom is one piece of a word for brace expansion: a part that isn't a
+// literal, or one character of a literal's text. brace marks a { , or } the
+// shell reads as brace syntax: not quoted and not after a backslash.
+type braceAtom struct {
+	part  syntax.WordPart
+	text  string
+	brace bool
+}
+
+// mvdan's expand.Braces ignores backslashes, skips words with quotes and has
+// no limit, so braceWords expands as bash does.
+//
+// braceWords is the words brace expansion makes of word: {a,b}c is ac bc,
+// x{a,} is just xa, x{1..3} is x1 x2 x3. Not ok for a sequence this can't
+// read ({1..a}), for more than maxValues words, for a word too long or with
+// too many braces to expand quickly, and next to a $name or a $ that joins
+// the next line, which bash reads again after expanding, so that $x{y,} is
+// $xy $x.
+func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
+	atoms := braceAtoms(word)
+	opens := 0
+	for _, a := range atoms {
+		if a.brace && a.text == "{" {
+			opens++
+		}
+	}
+	if opens == 0 {
+		return []*syntax.Word{word}, true
+	}
+	if opens > maxBraces || len(atoms) > maxBracedLength {
+		return nil, false
+	}
+	ways, ok := expandAtoms(atoms)
+	if !ok || len(ways) > maxValues {
+		return nil, false
+	}
+	if len(ways) == 1 && len(ways[0]) == len(atoms) { // nothing expanded; {5..5} did
+		return []*syntax.Word{word}, true
+	}
+	if joinsDollar(word.Parts) || slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		p, isVariable := part.(*syntax.ParamExp)
+		return isVariable && p.Short
+	}) {
+		return nil, false
+	}
+	var words []*syntax.Word
+	for _, way := range ways {
+		if len(way) > 0 { // an empty one is no word at all
+			words = append(words, wordOf(way))
+		}
+	}
+	return words, true
+}
+
+func braceAtoms(word *syntax.Word) []braceAtom {
+	var atoms []braceAtom
+	for _, part := range word.Parts {
+		lit, isLit := part.(*syntax.Lit)
+		if !isLit {
+			atoms = append(atoms, braceAtom{part: part})
+			continue
+		}
+		for i := 0; i < len(lit.Value); i++ {
+			if lit.Value[i] == '\\' && i+1 < len(lit.Value) {
+				atoms = append(atoms, braceAtom{text: lit.Value[i : i+2]}) // kept for values to unescape
+				i++
+				continue
+			}
+			char := lit.Value[i : i+1]
+			atoms = append(atoms, braceAtom{text: char, brace: strings.Contains("{,}", char)})
+		}
+	}
+	return atoms
+}
+
+// maxBraces and maxBracedLength bound a word brace expansion reads, whose
+// time grows with their product. The length counts the word's pieces, not its
+// characters: an escape, a $x or a whole "…" is one piece.
+const (
+	maxBraces       = 256
+	maxBracedLength = 4096
+)
+
+// expandAtoms expands the first {…} holding a comma at its own level, or a
+// sequence, and the rest after it, as bash does. A { that doesn't close stays
+// text, but a brace after it may still expand ({x{a,b}} is {xa} {xb}).
+func expandAtoms(atoms []braceAtom) ([][]braceAtom, bool) {
+	for open, a := range atoms {
+		// bash passes a {} that starts the word through as text, so find
+		// -exec's {} survives; after other text the { opens a brace (x{},a}
+		// is x} xa).
+		if !a.brace || a.text != "{" || open == 0 && isBrace(atoms, 1, "}") {
+			continue
+		}
+		end, commas := closingBrace(atoms, open)
+		if end < 0 {
+			continue
+		}
+		choices, ok := braceChoices(atoms, open, end, commas)
+		if !ok {
+			return nil, false
+		}
+		rest, ok := expandAtoms(atoms[end+1:])
+		if !ok || len(choices)*len(rest) > maxValues {
+			return nil, false
+		}
+		var ways [][]braceAtom
+		for _, choice := range choices {
+			for _, after := range rest {
+				ways = append(ways, slices.Concat(atoms[:open], choice, after))
+			}
+		}
+		return ways, true
+	}
+	return [][]braceAtom{atoms}, true
+}
+
+// braceChoices is what one {…} expands to: each of its comma-separated parts
+// expanded, or a sequence's terms. Not ok for a sequence this can't read.
+func braceChoices(atoms []braceAtom, open, end int, commas []int) ([][]braceAtom, bool) {
+	if len(commas) == 0 {
+		return sequence(atoms[open+1 : end])
+	}
+	var choices [][]braceAtom
+	start := open
+	for _, stop := range append(commas, end) {
+		parts, ok := expandAtoms(atoms[start+1 : stop])
+		if !ok || len(choices)+len(parts) > maxValues {
+			return nil, false
+		}
+		choices = append(choices, parts...)
+		start = stop
+	}
+	return choices, true
+}
+
+// sequence is the terms of a brace sequence as bash makes them: {1..3} is
+// 1 2 3, {3..1} is 3 2 1, {1..10..3} is 1 4 7 10, {01..03} is 01 02 03, and
+// {a..c} is a b c. Not ok for any other {x..y}: a sign, a negative number
+// padded with zeros, letters of mixed case, or a step that isn't a number.
+func sequence(inner []braceAtom) ([][]braceAtom, bool) {
+	for _, a := range inner {
+		if a.part != nil || a.brace || len(a.text) != 1 {
+			return nil, false
+		}
+	}
+	ends := strings.Split(atomsText(inner), "..")
+	if len(ends) != 2 && len(ends) != 3 {
+		return nil, false
+	}
+	step := 1
+	if len(ends) == 3 {
+		var ok bool
+		if step, ok = sequenceNumber(ends[2]); !ok {
+			return nil, false
+		}
+		step = max(step, -step, 1)
+	}
+	first, last, format, ok := sequenceEnds(ends[0], ends[1])
+	if !ok || (max(first, last)-min(first, last))/step+1 > maxValues {
+		return nil, false
+	}
+	if last < first {
+		step = -step
+	}
+	var terms [][]braceAtom
+	for n := first; step > 0 && n <= last || step < 0 && n >= last; n += step {
+		term := format(n)
+		atoms := make([]braceAtom, len(term))
+		for i := range term {
+			atoms[i] = braceAtom{text: term[i : i+1]}
+		}
+		terms = append(terms, atoms)
+	}
+	return terms, true
+}
+
+// sequenceEnds reads a sequence's two ends, both numbers or both letters of
+// one case, and how each term is written.
+func sequenceEnds(from, to string) (first, last int, format func(int) string, ok bool) {
+	isLetter := func(s string) bool { return len(s) == 1 && ('a' <= s[0] && s[0] <= 'z' || 'A' <= s[0] && s[0] <= 'Z') }
+	if isLetter(from) && isLetter(to) {
+		sameCase := ('a' <= from[0]) == ('a' <= to[0])
+		return int(from[0]), int(to[0]), func(n int) string { return string(rune(n)) }, sameCase
+	}
+	first, okFirst := sequenceNumber(from)
+	last, okLast := sequenceNumber(to)
+	if !okFirst || !okLast {
+		return 0, 0, nil, false
+	}
+	padded := func(s string) bool {
+		digits := strings.TrimPrefix(s, "-")
+		return len(digits) > 1 && digits[0] == '0'
+	}
+	if !padded(from) && !padded(to) {
+		return first, last, strconv.Itoa, true
+	}
+	if first < 0 || last < 0 {
+		return 0, 0, nil, false
+	}
+	width := max(len(from), len(to))
+	return first, last, func(n int) string { return fmt.Sprintf("%0*d", width, n) }, true
+}
+
+// sequenceNumber reads a whole number of up to nine digits, maybe after a -.
+func sequenceNumber(s string) (int, bool) {
+	digits := strings.TrimPrefix(s, "-")
+	if digits == "" || len(digits) > 9 || strings.Trim(digits, "0123456789") != "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
+// closingBrace is where the { at open closes, -1 when it doesn't, and the
+// commas at its own level. As in bash, a } before any comma, which isn't the
+// end of something like a sequence, leaves the { open: {a}b,c} is a}b c.
+func closingBrace(atoms []braceAtom, open int) (end int, commas []int) {
+	depth, dots := 0, false
+	for i := open; i < len(atoms); i++ {
+		switch {
+		case !atoms[i].brace:
+			dots = dots || atoms[i].text == "." && atoms[i-1].text == "."
+		case atoms[i].text == "{":
+			depth++
+		case atoms[i].text == "}":
+			depth--
+			if depth > 0 {
+				continue
+			}
+			if len(commas) > 0 || dots {
+				return i, commas
+			}
+			depth = 1
+		case depth == 1:
+			commas = append(commas, i)
+		}
+	}
+	return -1, nil
+}
+
+func isBrace(atoms []braceAtom, i int, brace string) bool {
+	return i < len(atoms) && atoms[i].brace && atoms[i].text == brace
+}
+
+func atomsText(atoms []braceAtom) string {
+	var b strings.Builder
+	for _, a := range atoms {
+		b.WriteString(a.text)
+	}
+	return b.String()
+}
+
+// wordOf joins atoms back into a word, each run of text into one literal.
+func wordOf(atoms []braceAtom) *syntax.Word {
+	word := &syntax.Word{}
+	var text strings.Builder
+	flush := func() {
+		if text.Len() > 0 {
+			word.Parts = append(word.Parts, &syntax.Lit{Value: text.String()})
+			text.Reset()
+		}
+	}
+	for _, a := range atoms {
+		if a.part != nil {
+			flush()
+			word.Parts = append(word.Parts, a.part)
+			continue
+		}
+		text.WriteString(a.text)
+	}
+	flush()
+	return word
 }

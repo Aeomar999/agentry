@@ -34,7 +34,8 @@ type rule struct {
 	runsOnly        []glob
 	paths           []glob
 	where           string
-	redirectsToFile bool // a redirect writes a file other than /dev/null and scratch
+	redirectsToFile bool   // a redirect writes a file other than /dev/null and scratch
+	runsOutside     []glob // runners that ask when they may load code from outside the workspace
 }
 
 // Hash identifies this version of the policy in the log.
@@ -157,6 +158,9 @@ func (r rule) matches(call Call, f facts, prof *profile) bool {
 	if len(r.runsOnly) > 0 && !(f.isShell && runsOnly(r.runsOnly, f.shell)) {
 		return false
 	}
+	if len(r.runsOutside) > 0 && !(f.isShell && runsOutside(r.runsOutside, f.shell, call.Workspace)) {
+		return false
+	}
 	if r.redirectsToFile && !slices.ContainsFunc(f.writes, func(path string) bool { return writesAFile(path, prof.scratch) }) {
 		return false
 	}
@@ -196,6 +200,28 @@ func runsOnly(patterns []glob, s shellCall) bool {
 	return true
 }
 
+// runsOutside: a command matching a pattern may start outside the workspace,
+// in a folder that can't be known, or names a file outside it. The scratch
+// places count as outside here: an agent may write a test or a config there,
+// and a runner started there, or pointed at it, would run it.
+func runsOutside(patterns []glob, s shellCall, workspace string) bool {
+	for _, run := range s.runs {
+		if !slices.ContainsFunc(run.texts, func(text string) bool { return anyMatches(patterns, text) }) {
+			continue
+		}
+		if run.dirs == nil || slices.ContainsFunc(slices.Concat(run.dirs, run.files), func(path string) bool {
+			return !inWorkspace(path, workspace)
+		}) {
+			return true
+		}
+	}
+	return false
+}
+
+func inWorkspace(path, workspace string) bool {
+	return path == workspace || strings.HasPrefix(path, workspace+"/")
+}
+
 // writesAFile: writing to path changes a file someone keeps. /dev/null keeps
 // nothing, and the profile's scratch places are the agent's own.
 func writesAFile(path string, scratch []glob) bool {
@@ -209,8 +235,7 @@ func staysInside(f facts, workspace string, scratch []glob) bool {
 		return false
 	}
 	for _, path := range f.paths {
-		inWorkspace := path == workspace || strings.HasPrefix(path, workspace+"/")
-		if !inWorkspace && path != "/dev/null" && !anyMatches(scratch, path) {
+		if !inWorkspace(path, workspace) && path != "/dev/null" && !anyMatches(scratch, path) {
 			return false
 		}
 	}
