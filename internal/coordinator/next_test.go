@@ -502,7 +502,7 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 	lead, _ := roster.Get("tech-lead")
 	for name, h := range map[string]history{"denied": denied, "tests failed": testsFailed} {
 		task := h.task()
-		brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil)
+		brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil)
 		report := task.Turns[len(task.Turns)-1].Report
 		if !strings.Contains(brief, "deployer → tech-lead: "+report) || !strings.Contains(brief, "Now: the work isn't checked yet") {
 			t.Errorf("%s: the coordinator's brief should give the deployer's reason and say the work isn't checked:\n%s", name, brief)

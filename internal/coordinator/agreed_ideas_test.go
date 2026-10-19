@@ -1,7 +1,12 @@
 package coordinator
 
 import (
+	"cmp"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -248,4 +253,62 @@ func TestUnderNobodyDoubtedADuplicateIsNeverAccepted(t *testing.T) {
 			t.Errorf("Agentry tried something the rules refused, in %s: %s", e.Stream, e.Text("reason"))
 		}
 	}
+}
+
+// A Visionaries done with ideas, with accepting and starting them on,
+// writes the events it wrote before the ideas hook: the same types, actors
+// and data. testdata/visionaries-done-events.jsonl was written by the code
+// from before the hook, with the repo's path as <repo>.
+func TestAVisionariesDoneWritesWhatItDidBeforeTheHook(t *testing.T) {
+	got, repo := visionariesDoneEvents(t)
+	want, err := os.ReadFile(filepath.Join("testdata", "visionaries-done-events.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got = strings.ReplaceAll(got, repo, "<repo>"); got != string(want) {
+		t.Errorf("the events changed:\n got %s\nwant %s", got, want)
+	}
+}
+
+// visionariesDoneEvents are agreedDone's events, as JSON lines: the done,
+// every event of its five ideas, and Agentry making and starting the agreed
+// idea's task.
+func visionariesDoneEvents(t *testing.T) (string, string) {
+	t.Helper()
+	s, state, repo := withTeams(t, true)
+	runLoop(t, s, state)
+	byTitle := agreedDone(t, s, state, repo, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true})
+	agreed := byTitle["Search the board"]
+	waitUntil(t, s, agreed.Became, "started", func(task *tasks.Task) bool { return task.Parked == "" })
+	var b strings.Builder
+	add := func(e events.Event) {
+		line, err := json.Marshal(e.Proposal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.Write(append(line, '\n'))
+	}
+	for _, e := range mustStream(t, s, agreed.Task) {
+		if e.Type == events.TaskDone {
+			add(e)
+		}
+	}
+	var kept []*ideas.Idea
+	for _, idea := range byTitle {
+		kept = append(kept, idea)
+	}
+	slices.SortFunc(kept, func(a, b *ideas.Idea) int {
+		return cmp.Compare(mustStream(t, s, a.ID)[0].Position, mustStream(t, s, b.ID)[0].Position)
+	})
+	for _, idea := range kept {
+		for _, e := range mustStream(t, s, idea.ID) {
+			add(e)
+		}
+	}
+	for _, e := range mustStream(t, s, agreed.Became) {
+		if e.Actor == agentry && (e.Type == events.TaskCreated || e.Type == events.TaskHeld) {
+			add(e)
+		}
+	}
+	return b.String(), repo
 }

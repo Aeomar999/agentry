@@ -14,7 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -36,8 +36,9 @@ type Loop struct {
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
-	Clones   string       // where repos the user names by a git address are cloned, for a "move"
-	Defaults tasks.Limits // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Clones   string             // where repos the user names by a git address are cloned, for a "move"
+	Defaults tasks.Limits       // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Features []features.Feature // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
@@ -229,7 +230,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	shared, _ := l.filesFor(task)
 	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.chosenFor(task, move.Agent))
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -333,14 +334,8 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		summary := decision.Summary
-		if len(decision.Ideas) > 0 {
-			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
-			if own, _ := roster.Get(task.Coordinator); ideas.Suggests(own) {
-				note = l.suggest(task, decision.Ideas)
-			}
-			if note != "" {
-				summary += "\n\n" + note
-			}
+		if note := l.onDone(task, roster, decision); note != "" {
+			summary += "\n\n" + note
 		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)

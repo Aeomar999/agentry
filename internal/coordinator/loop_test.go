@@ -11,6 +11,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
@@ -232,7 +234,9 @@ func readBrief(t *testing.T, task *tasks.Task, turn string) string {
 func newLoop(s *store.Store, state *current.State, root string) *Loop {
 	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root,
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
-	return NewLoop(s, state, turns.NewRunner(s, state, fleet, turns.Config{}), fleet)
+	loop := NewLoop(s, state, turns.NewRunner(s, state, fleet, turns.Config{}), fleet)
+	loop.Features = []features.Feature{ideas.Feature()}
+	return loop
 }
 
 // A handoff the coordinator decided on before you parked the task, or

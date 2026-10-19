@@ -41,6 +41,7 @@ func TestParseDecision(t *testing.T) {
 			t.Errorf("%s: error %v, want error %v", c.name, err, c.wantErr)
 			continue
 		}
+		got.raw = nil // the reply as written, which the cases don't repeat
 		if !c.wantErr && !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
