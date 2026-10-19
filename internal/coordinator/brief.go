@@ -84,12 +84,12 @@ func wrapUpText(task *tasks.Task) string {
 const YouChoseToShip = "The user chose to ship this as it is, so no earlier review or test is needed. " +
 	"The checks you run after bringing it up to date still stand: if they fail, don't push; report why."
 
-func workerBrief(task *tasks.Task, agent agents.Agent, instructions string, shared []sharedfiles.File) string {
+func workerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, shared []sharedfiles.File) string {
 	var b strings.Builder
 	header(&b, agent, task)
 	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
-	if agent.Column == agents.Ships && task.Handoff != nil && task.Handoff.Ships {
+	if agent.Column == agents.Ships && yourShip(task, roster) {
 		instructions += "\n\n" + YouChoseToShip
 	}
 	section(&b, "Your instructions from the coordinator", instructions)

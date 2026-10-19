@@ -53,6 +53,58 @@ func verdictOf(report string) Verdict {
 	return NoVerdict
 }
 
+// check is a checker's verdict on the work, given in a turn.
+type check struct {
+	turn    *tasks.Turn
+	at      int
+	verdict Verdict
+}
+
+// workRecord is what the task's ended turns did to its work.
+type workRecord struct {
+	last    map[string]check // each checker's latest check
+	order   []string         // the checkers, in the order they first checked
+	change  int              // the turn that last changed the work, or -1
+	shipped int              // the last turn that pushed the work because you moved it to Shipping, or -1
+	retry   bool             // your ship didn't push, and nothing has changed or checked the work since
+}
+
+func recordOf(task *tasks.Task, roster agents.Roster) workRecord {
+	r := workRecord{last: map[string]check{}, change: -1, shipped: -1}
+	for i, turn := range task.Turns {
+		agent, known := roster.Get(turn.Agent)
+		switch {
+		case !turn.Ended || turn.Agent == task.Coordinator || agent.Coordinates:
+		case known && agent.Column == agents.Reviews:
+			r.retry = false
+			if _, seen := r.last[turn.Agent]; !seen {
+				r.order = append(r.order, turn.Agent)
+			}
+			verdict := NoVerdict
+			if turn.Issue == "" && !turn.Stopped {
+				verdict = verdictOf(turn.Report)
+			}
+			r.last[turn.Agent] = check{turn, i, verdict}
+		case known && agent.Column == agents.Ships: // ships the checked work; doesn't change it
+			yours := turn.Shipped || r.retry
+			r.retry = yours && !task.Pushed(turn.ID)
+			if yours && !r.retry {
+				r.shipped = i
+			}
+		default:
+			r.change, r.retry = i, false
+		}
+	}
+	return r
+}
+
+// yourShip says whether the next ship turn carries your move to Shipping:
+// it is the handoff your move asked for, or it retries your ship that
+// didn't push, with nothing changing or checking the work since.
+func yourShip(task *tasks.Task, roster agents.Roster) bool {
+	return task.Handoff != nil && task.Handoff.Ships || recordOf(task, roster).retry
+}
+
 // unchecked says why the task's work isn't checked yet, or "" when it is:
 // nothing has changed it, the team has no one to check it, every check
 // since the last change approves it, or you had it shipped since.
@@ -68,49 +120,17 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 		return ""
 	}
 
-	type check struct {
-		turn    *tasks.Turn
-		at      int
-		verdict Verdict
-	}
-	last := map[string]check{} // each checker's latest check
-	var order []string
-	change := -1   // the turn that last changed the work
-	shipped := -1  // the last turn that pushed the work because you moved it to Shipping
-	retry := false // your ship didn't push, and nothing has touched the work since
-	for i, turn := range task.Turns {
-		agent, known := roster.Get(turn.Agent)
-		switch {
-		case !turn.Ended || turn.Agent == task.Coordinator || agent.Coordinates:
-		case known && agent.Column == agents.Reviews:
-			retry = false
-			if _, seen := last[turn.Agent]; !seen {
-				order = append(order, turn.Agent)
-			}
-			verdict := NoVerdict
-			if turn.Issue == "" && !turn.Stopped {
-				verdict = verdictOf(turn.Report)
-			}
-			last[turn.Agent] = check{turn, i, verdict}
-		case known && agent.Column == agents.Ships: // ships the checked work; doesn't change it
-			yours := turn.Shipped || retry
-			retry = yours && !task.Pushed(turn.ID)
-			if yours && !retry {
-				shipped = i
-			}
-		default:
-			change, retry = i, false
-		}
-	}
-	if change < 0 || change < shipped { // nothing changed it, or nothing since you had it shipped
+	r := recordOf(task, roster)
+	change := r.change
+	if change < 0 || change < r.shipped { // nothing changed it, or nothing since you had it shipped
 		return ""
 	}
 
 	changed := task.Turns[change].ID + ", by " + task.Turns[change].Agent
 	var why []string
 	approvedSince := false
-	for _, name := range order {
-		c := last[name]
+	for _, name := range r.order {
+		c := r.last[name]
 		switch {
 		case c.at < change:
 			why = append(why, name+" checked it in "+c.turn.ID+", and it changed after that ("+changed+"): "+name+" checks it again")

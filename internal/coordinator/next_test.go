@@ -439,7 +439,9 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 }
 
 // Only a ship you chose tells the agent that ships it to skip the earlier
-// review: a ship the coordinator chose, or a builder, gets no such line.
+// review, and so does its retry after a ship that didn't push, until a
+// change or a check comes between. A ship the coordinator chose, or a
+// builder, gets no such line.
 func TestYourShipTellsTheShipperToShipItAsItIs(t *testing.T) {
 	roster := defaultRoster()
 	deployer, _ := roster.Get("deployer")
@@ -451,13 +453,30 @@ func TestYourShipTellsTheShipperToShipItAsItIs(t *testing.T) {
 	yours := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
 		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}).task()
 	theirs := built.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it."}).task()
+	// The coordinator hands it to the deployer again after your denied push:
+	// no "ships" flag, as the first handoff cleared the column you moved it to.
+	denied := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}).
+		shipTurn("turn-3", "The push was denied.", push(events.ActionDenied, false))
+	again := func(between ...string) *tasks.Task {
+		h := denied
+		for _, agent := range between {
+			h = h.turn("turn-4-"+agent, agent, "Done.\n\nVerdict: approved")
+		}
+		return h.turn("turn-5", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Ship it."}`).
+			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it."}).task()
+	}
 
-	if brief := workerBrief(yours, deployer, "Ship it.", nil); !strings.Contains(brief, "Ship it.\n\n"+YouChoseToShip) {
-		t.Errorf("your ship's brief should say you chose to ship it:\n%s", brief)
+	for name, task := range map[string]*tasks.Task{"your ship": yours, "your ship's retry after a denied push": again()} {
+		if brief := workerBrief(task, deployer, roster, "Ship it.", nil); !strings.Contains(brief, "Ship it.\n\n"+YouChoseToShip) {
+			t.Errorf("%s's brief should say you chose to ship it:\n%s", name, brief)
+		}
 	}
 	for name, brief := range map[string]string{
-		"the coordinator's ship": workerBrief(theirs, deployer, "Ship it.", nil),
-		"a builder":              workerBrief(yours, engineer, "Ship it.", nil),
+		"the coordinator's ship": workerBrief(theirs, deployer, roster, "Ship it.", nil),
+		"a builder":              workerBrief(yours, engineer, roster, "Ship it.", nil),
+		"a retry after a review": workerBrief(again("reviewer"), deployer, roster, "Ship it.", nil),
+		"a retry after a change": workerBrief(again("engineer"), deployer, roster, "Ship it.", nil),
 	} {
 		if strings.Contains(brief, YouChoseToShip) {
 			t.Errorf("%s's brief shouldn't say you chose to ship it:\n%s", name, brief)

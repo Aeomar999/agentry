@@ -240,7 +240,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 		return // the task's files are on their way: the loop comes back here
 	}
 	shared, _ := l.filesFor(task)
-	brief := workerBrief(task, move.Agent, move.Handoff, shared)
+	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
 	if move.Agent.Coordinates {
 		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.dismissedFor(task, move.Agent))
 	}

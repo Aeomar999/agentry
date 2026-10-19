@@ -238,8 +238,11 @@ func (t *Task) Action(id string) *Action {
 }
 
 // Pushed says whether the turn pushed the work: it made an approved git push
-// that finished. Only a tool call that succeeded gets a result (PostToolUse),
-// so a denied or failed push never counts. The prefix match relies on
+// that finished. A result comes from PostToolUse, which Claude fires only for
+// a tool call that succeeded, so with Claude a denied or failed push never
+// counts. Codex fires it for a command that exited non-zero too, with no exit
+// code in the payload (codex-cli 0.163.0), so with Codex a push that failed
+// may still count; a denied one never does. The prefix match relies on
 // deployer.md giving the exact command, git push origin HEAD:dev, to run on
 // its own: a push wrapped in timeout or chained after cd isn't seen.
 func (t *Task) Pushed(turn string) bool {
