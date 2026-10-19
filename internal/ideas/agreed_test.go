@@ -103,6 +103,9 @@ func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
 	}
 	accepted := other("idea-1", "Search the board", "/r", ideas.Accepted, 1)
 	accepted.Became = "task-64"
+	// You dismissed a later idea as it repeats this one: this one stays the original.
+	repeatsIt := other("idea-12", "Search the board", "/r", ideas.Dismissed, 12)
+	repeatsIt.Repeats = "idea-9"
 	cases := []struct {
 		name string
 		idea *ideas.Idea
@@ -111,7 +114,9 @@ func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
 	}{
 		{"new", idea, []*ideas.Idea{idea, other("idea-1", "Dark mode", "/r", ideas.Dismissed, 1)}, ""},
 		{"dismissed before", idea, []*ideas.Idea{other("idea-1", " search the Board", "/r", ideas.Dismissed, 1)}, "duplicate of idea-1"},
-		{"dismissed after", idea, []*ideas.Idea{other("idea-12", "Search the board", "/r", ideas.Dismissed, 12)}, "duplicate of idea-12"},
+		{"dismissed after", idea, []*ideas.Idea{other("idea-12", "Search the board", "/r", ideas.Dismissed, 12)}, ""},
+		{"dismissed after as it repeats this one", idea, []*ideas.Idea{repeatsIt}, ""},
+		{"accepted after", idea, []*ideas.Idea{other("idea-12", "Search the board", "/r", ideas.Accepted, 12)}, "duplicate of idea-12"},
 		{"accepted before", idea, []*ideas.Idea{accepted}, "duplicate of idea-1 (task-64)"},
 		{"accepted, the title reworded", idea, []*ideas.Idea{other("idea-1", "Search on the board!", "/r", ideas.Accepted, 1)}, "duplicate of idea-1"},
 		{"open before", idea, []*ideas.Idea{other("idea-1", "Search the board", "/r", ideas.Open, 1)}, "duplicate of idea-1"},

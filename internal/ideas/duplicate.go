@@ -12,10 +12,11 @@ import (
 // It is the one the Visionaries named in Repeats, even if list doesn't hold
 // it; otherwise an idea about the same repo, open, accepted or dismissed,
 // under the same title once normalised (sameTitle), or whose problem and
-// proposal say much the same (sameText). Of two open ideas only the later
-// repeats the earlier, so the first stays eligible; an accepted or
-// dismissed one is the original whenever it came, as you already chose.
-// The earliest match is the original.
+// proposal say much the same (sameText). An idea suggested earlier is the
+// original whatever became of it, so the later one stays out. A later one
+// is the original only when it was accepted, as you chose to build it: a
+// later open idea, or one you dismissed, maybe for repeating this one,
+// leaves this one eligible. The earliest match is the original.
 func Duplicate(idea *Idea, list []*Idea) *Idea {
 	if idea.Repeats != "" {
 		if i := slices.IndexFunc(list, func(other *Idea) bool { return other.ID == idea.Repeats }); i >= 0 {
@@ -27,7 +28,7 @@ func Duplicate(idea *Idea, list []*Idea) *Idea {
 	for _, other := range list {
 		switch {
 		case other.ID == idea.ID || other.Repo != idea.Repo:
-		case other.State == Open && !earlier(other, idea):
+		case other.State != Accepted && !earlier(other, idea):
 		case !sameTitle(other, idea) && !sameText(other, idea):
 		case original == nil || earlier(other, original):
 			original = other
