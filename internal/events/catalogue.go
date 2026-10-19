@@ -91,7 +91,7 @@ var catalogue = map[Type]spec{
 	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human, System}}, // "note" may be empty; Agentry's: an idea the Visionaries agreed on by your rule
 	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
 
-	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas"
+	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule"
 
 	ProposalRejected: {writers: nil},
 }
