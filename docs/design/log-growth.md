@@ -1469,10 +1469,13 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      not, has no counterpart; a value with every field set (`fill`) round
      trips `reflect.DeepEqual`.
 4. **Snapshots.** Depends on task-21 (items 2 and 3) and step 3.
-   - Files: `internal/current/snapshot.go` (header and body, entries one
-     to a line; the writer goroutine; load with every fallback; parallel
-     decode), `internal/store` (`Model.Since`, `Open` replays
-     `After(since)`, a read of one row's hash for the anchor),
+   - Files: `internal/current/snapshot.go` (a JSON header line, then the
+     body as length-prefixed gob chunks written by `internal/exactgob`, the
+     tasks 16 to a chunk; parallel decode), `internal/current/resume.go`
+     (`Restore` with every fallback, `Resume`, the atomic write; the
+     writer goroutine), `internal/store` (`Resumer`, which `Open` hands a
+     `Past` to check the snapshot's anchor and apply the events after it;
+     `Hash`, a read of one row's hash for the anchor),
      `cmd/agentry/serve.go` (`state.snapshot` in the data folder, leftover
      temporary files deleted, a write at clean shutdown).
    - Proves: section 2's equivalence tests 1 to 5 (every cut of every

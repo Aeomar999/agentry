@@ -108,3 +108,24 @@ func TestAShapeThatDoesntFitFails(t *testing.T) {
 		t.Errorf("a short shape read as %v", err)
 	}
 }
+
+// sameName is a key type whose keys all print the same.
+type sameName int
+
+func (sameName) String() string { return "same" }
+
+func TestKeysThatPrintTheSameFail(t *testing.T) {
+	var written bytes.Buffer
+	err := Encode(&written, map[sameName][]int{1: nil, 2: {}})
+	if err == nil || !strings.Contains(err.Error(), `print as "same"`) {
+		t.Errorf("two keys that print the same wrote as %v", err)
+	}
+}
+
+func TestAnInterfaceFieldFails(t *testing.T) {
+	var written bytes.Buffer
+	err := Encode(&written, struct{ Any any }{})
+	if err == nil || !strings.Contains(err.Error(), "interface") {
+		t.Errorf("an interface field wrote as %v", err)
+	}
+}

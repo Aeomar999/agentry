@@ -12,7 +12,9 @@
 // hand, so a field added later has its flag without anyone adding it.
 //
 // Like gob, it reads only exported fields, and fails on a nil pointer in a
-// slice or map, which gob can't write.
+// slice or map, which gob can't write. It also fails on an interface field,
+// whose shape it can't know from the type, and on a map with two keys that
+// print the same, as entries are put in order by how their keys print.
 package exactgob
 
 import (
@@ -39,7 +41,11 @@ func Encode(w io.Writer, v any) error {
 		return err
 	}
 	var s shape
-	walk(reflect.ValueOf(v), &shaping{record: &s})
+	recording := &shaping{record: &s}
+	walk(reflect.ValueOf(v), recording)
+	if recording.err != nil {
+		return recording.err
+	}
 	return encoder.Encode(s)
 }
 
@@ -142,6 +148,8 @@ func walk(v reflect.Value, s *shaping) {
 		if s.keeps(v) {
 			walkMap(v, s)
 		}
+	case reflect.Interface:
+		s.fail(fmt.Errorf("an interface, %s, has no shape its type gives", v.Type()))
 	case reflect.Struct:
 		for i := range v.NumField() {
 			if v.Type().Field(i).IsExported() {
@@ -159,6 +167,12 @@ func walkMap(v reflect.Value, s *shaping) {
 	}
 	keys := v.MapKeys()
 	slices.SortFunc(keys, func(a, b reflect.Value) int { return cmp.Compare(fmt.Sprint(a), fmt.Sprint(b)) })
+	for i := 1; i < len(keys); i++ {
+		if printed := fmt.Sprint(keys[i]); printed == fmt.Sprint(keys[i-1]) {
+			s.fail(fmt.Errorf("two keys of a %s print as %q, so its entries have no fixed order", v.Type(), printed))
+			return
+		}
+	}
 	for _, key := range keys {
 		value := reflect.New(v.Type().Elem()).Elem()
 		value.Set(v.MapIndex(key))
@@ -173,8 +187,9 @@ func walkMap(v reflect.Value, s *shaping) {
 var holding sync.Map // reflect.Type -> bool
 
 // holdsNils is whether a value of type t can hold a slice, map or pointer
-// gob writes: one in itself, or in an exported field or element. Values of
-// any other type are skipped whole.
+// gob writes: one in itself, or in an exported field or element. An
+// interface may hold one, so it counts, for walk to refuse. Values of any
+// other type are skipped whole.
 func holdsNils(t reflect.Type) bool {
 	if held, ok := holding.Load(t); ok {
 		return held.(bool)
@@ -182,7 +197,7 @@ func holdsNils(t reflect.Type) bool {
 	holding.Store(t, true) // a type that holds itself holds a pointer, slice or map
 	held := false
 	switch t.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Map:
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
 		held = true
 	case reflect.Array:
 		held = holdsNils(t.Elem())

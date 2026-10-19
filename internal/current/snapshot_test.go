@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -203,6 +205,8 @@ func TestEveryFallbackReplaysTheWholeLogAndSaysWhy(t *testing.T) {
 		{"truncated", logPath, func(t *testing.T, path string) string { return truncated(t, path) }, "build-1", "torn or corrupt", true},
 		{"a body byte flipped", logPath, func(t *testing.T, path string) string { return flipped(t, path) }, "build-1", "sha256 differs", true},
 		{"another build", logPath, nil, "build-2", "from other code", false},
+		{"a folder", logPath, func(t *testing.T, path string) string { return folder(t, path) }, "build-1", "can't be read", false},
+		{"not ours to read", logPath, func(t *testing.T, path string) string { return unreadable(t, path) }, "build-1", "can't be read", false},
 		{"past the end", shorterPath, nil, "build-1", "past the log's last", false},
 		{"no anchor row", copyOf(t, logPath, `DROP TRIGGER events_no_delete`, `DELETE FROM events WHERE position = 12`), nil, "build-1", "no event at its position", false},
 		{"the anchor row changed", copyOf(t, logPath, `DROP TRIGGER events_no_update`, `UPDATE events SET data = '{"title":"Other"}' WHERE position = 12`), nil, "build-1", "not the one it was written at", false},
@@ -239,6 +243,31 @@ func TestEveryFallbackReplaysTheWholeLogAndSaysWhy(t *testing.T) {
 			t.Errorf("task-1 is broken after a whole replay: %v", state.Broken("task-1"))
 		}
 	})
+}
+
+// folder puts a folder where the snapshot was.
+func folder(t *testing.T, path string) string {
+	t.Helper()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// unreadable takes away the owner's leave to read the snapshot. Root reads
+// it anyway, so the case is skipped there.
+func unreadable(t *testing.T, path string) string {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file of mode 0000")
+	}
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func truncated(t *testing.T, path string) string {
@@ -284,6 +313,21 @@ func TestACorruptSnapshotIsKeptOnce(t *testing.T) {
 	}
 	if bad, _ := os.ReadFile(found[0]); !bytes.Equal(bad, kept[1]) {
 		t.Error("state.snapshot.bad is not the last corrupt snapshot")
+	}
+}
+
+// The archived set comes back as it was written. No log fills it yet, so
+// it is filled by hand.
+func TestTheArchivedSetSurvivesASnapshot(t *testing.T) {
+	logPath, _ := seededLog(t, someProposals()...)
+	archived := map[string]bool{"task-1": true, "task-2": true}
+	path := snapshotted(t, logPath, 5, func(s *State) { s.archived = maps.Clone(archived) })
+	restored := Restore(path, "build-1", withIdeas, ideas.Streams())
+	if restored.snapshot == nil {
+		t.Fatal("the snapshot wasn't restored")
+	}
+	if !reflect.DeepEqual(restored.archived, archived) {
+		t.Errorf("restored archived %v, want %v", restored.archived, archived)
 	}
 }
 

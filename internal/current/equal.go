@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
-	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -89,22 +88,6 @@ func Equal(s *store.Store, state *State) error {
 	}
 	if held.position != index.last {
 		return fmt.Errorf("position: the state is at %d, the log at %d", held.position, index.last)
-	}
-	return nil
-}
-
-// settling is how long Equal waits for the log to reach the state.
-const settling = 5 * time.Second
-
-// awaitApplied waits until the log's readers see every event up to
-// position. A state that stays ahead was built from some other log.
-func awaitApplied(s *store.Store, position int64) error {
-	deadline := time.Now().Add(settling)
-	for s.LastPosition() < position {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("position: the state is at %d, the log at %d after %s", position, s.LastPosition(), settling)
-		}
-		time.Sleep(time.Millisecond)
 	}
 	return nil
 }

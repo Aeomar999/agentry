@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -129,6 +130,26 @@ func writeSnapshot(w io.Writer, s *State, log *store.Store, build string) error 
 	}
 	_, err = w.Write(body)
 	return err
+}
+
+// settling is how long a writer of the state waits for the log to reach it.
+const settling = 5 * time.Second
+
+// awaitApplied waits until the log's readers see every event up to
+// position. The store gives the state each event before its readers see
+// it, so a copy of the state can be an event or two ahead of what Hash and
+// Stream answer; a state that stays ahead was built from some other log.
+// writeSnapshot waits so the anchor is the event the state was copied at,
+// and Equal so it reads the log to the copy's position.
+func awaitApplied(s *store.Store, position int64) error {
+	deadline := time.Now().Add(settling)
+	for s.LastPosition() < position {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("position: the state is at %d, the log at %d after %s", position, s.LastPosition(), settling)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return nil
 }
 
 // body is the chunks of a copy of the state, which nothing else changes.

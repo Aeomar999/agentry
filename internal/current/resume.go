@@ -29,7 +29,8 @@ import (
 // resume from (Resume). build names the running code: a snapshot written by
 // other code is not used. When there is no snapshot it can use, Restore logs
 // why and returns a new state, which Open loads whole; a torn or corrupt
-// file is kept as path.bad, the last one only, for a person to look at.
+// file is kept as path.bad, the last one only, for a person to look at. A
+// file that can't be opened or read is left as it is.
 func Restore(path, build string, catalogue *events.Catalogue, owned ...*features.Streams) *State {
 	s := New(catalogue, owned...)
 	err := s.readFile(path, build)
@@ -42,6 +43,10 @@ func Restore(path, build string, catalogue *events.Catalogue, owned ...*features
 		slog.Info("current: there is no snapshot, so the whole log is replayed", "path", path)
 	case errors.Is(err, errOtherCode):
 		slog.Info("current: the snapshot is from other code, so the whole log is replayed", "path", path, "why", err)
+	case errors.As(err, new(*fs.PathError)):
+		// The file couldn't be opened or read, as when it is a folder or not
+		// the server's to read: it may be whole, so it is left where it is.
+		slog.Warn("current: the snapshot can't be read, so the whole log is replayed", "path", path, "why", err)
 	default:
 		slog.Warn("current: the snapshot is torn or corrupt, so the whole log is replayed", "path", path, "why", err, "kept", path+".bad")
 		if err := os.Rename(path, path+".bad"); err != nil {
