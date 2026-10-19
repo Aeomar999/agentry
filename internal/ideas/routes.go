@@ -1,6 +1,7 @@
 package ideas
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -26,7 +27,7 @@ func routes(c features.Core) []features.Route {
 // listIdeas answers the ideas, of every repo or of ?repo=, newest session
 // first: by when the task they came from was made, then newest idea first.
 // An idea from a session after an epic closed names that epic, an open one
-// why Agentry wouldn't accept it for you, under your rule, and an accepted
+// why Agentry wouldn't accept it for you, under your rule (LeftForYou), and an accepted
 // one the column its task is in now.
 func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 	list := List(c.Read, r.URL.Query().Get("repo"))
@@ -47,7 +48,7 @@ func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 	for _, idea := range list {
 		why := ""
 		if idea.State == Open {
-			why = NotAutoAccepted(idea, list, roster, rule)
+			why = LeftForYou(c.Read, idea, list, roster, rule)
 		}
 		var became *tasks.Task
 		if idea.Became != "" {
@@ -64,7 +65,8 @@ func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 // is no limit, and below that is a 400. Its turns are always NewLimits's.
 // It answers 404 for no such idea; 409 with the reason when it was refused
 // and nothing was written (the idea isn't open, the kind or the repo is
-// wrong); otherwise 200 with what happened: the task made, the column it is
+// wrong); 409 with JSON {error, duplicate: {id, title, column}} when the idea
+// looks like an open task, which "anyway" makes it despite; otherwise 200 with what happened: the task made, the column it is
 // in, whether the idea is marked accepted, and if not, why. A task made and
 // the idea not marked is still a 200, so the page can show the task.
 func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
@@ -72,6 +74,7 @@ func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 		Kind, Note string
 		Start      bool
 		Budget     int
+		Anyway     bool
 	}
 	if !httpapi.Decode(w, r, &request) {
 		return
@@ -85,15 +88,29 @@ func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	got, err := Accept(logOf(c), c.Read, id, Choice{Kind: strings.TrimSpace(request.Kind), Note: strings.TrimSpace(request.Note),
-		Defaults: c.Defaults, Budget: chosenBudget(request.Budget), Start: request.Start})
+		Defaults: c.Defaults, Budget: chosenBudget(request.Budget), Start: request.Start, Anyway: request.Anyway})
 	switch {
 	case err != nil:
 		httpapi.Failed(w, err)
+	case got.Duplicate != "":
+		refuseDuplicate(c, w, got)
 	case got.Task == "":
 		http.Error(w, got.Refused, http.StatusConflict)
 	default:
 		httpapi.Reply(w, acceptance{Task: got.Task, Column: got.Column, Accepted: got.Accepted, Refused: got.Refused})
 	}
+}
+
+// refuseDuplicate answers 409 naming the open task the idea looks like, so
+// the page can show it before you choose to make another.
+func refuseDuplicate(c features.Core, w http.ResponseWriter, got Acceptance) {
+	like := duplicateView{ID: got.Duplicate}
+	if task, err := c.Read.Task(got.Duplicate); err == nil && task != nil {
+		like.Title, like.Column = task.Title, task.BoardColumn(c.Read.Roster())
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusConflict)
+	json.NewEncoder(w).Encode(duplicateRefusal{Error: got.Refused, Duplicate: like})
 }
 
 // chosenBudget is the budget a request chose for an idea's task, nil when
@@ -171,7 +188,7 @@ type ideaView struct {
 	Repeats      string     `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
 	CreatedAt    time.Time  `json:"createdAt"`
 	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
-	// under your rule (NotAutoAccepted), even with that turned off; "" when
+	// under your rule (LeftForYou), even with that turned off; "" when
 	// it would, and for an idea that isn't open.
 	NotAutoAccepted string `json:"notAutoAccepted"`
 }
@@ -200,4 +217,17 @@ type acceptance struct {
 	Column   string `json:"column"`   // its column on the board now, as a task summary's column; "" when it can't be read
 	Accepted bool   `json:"accepted"` // the idea is marked accepted
 	Refused  string `json:"refused"`  // why it isn't, "" once accepted
+}
+
+// duplicateRefusal is the 409 for an idea that looks like an open task.
+type duplicateRefusal struct {
+	Error     string        `json:"error"`
+	Duplicate duplicateView `json:"duplicate"`
+}
+
+// duplicateView is the open task an idea looks like.
+type duplicateView struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Column string `json:"column"` // its column on the board, as a task summary's column; "" when it can't be read
 }

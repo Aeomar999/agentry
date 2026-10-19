@@ -197,6 +197,42 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	}
 }
 
+// An idea that looks like an open task is refused with a 409 naming that
+// task, so the page can show it, and nothing is written; with anyway it
+// becomes a second task.
+func TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	first := suggestIdea(t, s, "task-1", repo, "Make a ship the user chose actually push, and count it shipped only after the push")
+	second := suggestIdea(t, s, "task-1", repo, "Make a ship the user chose push, and count it shipped only when it pushed")
+	if code, body := call(t, server, "POST", "/api/ideas/"+first+"/accept", `{}`); code != 200 {
+		t.Fatalf("accept the first: %d %s", code, body)
+	}
+
+	before := s.LastPosition()
+	code, body := call(t, server, "POST", "/api/ideas/"+second+"/accept", `{}`)
+	var refusal struct {
+		Error     string
+		Duplicate struct{ ID, Title, Column string }
+	}
+	json.Unmarshal([]byte(body), &refusal)
+	if code != http.StatusConflict || refusal.Duplicate.ID != "task-2" || refusal.Duplicate.Column != "backlog" ||
+		!strings.HasPrefix(refusal.Duplicate.Title, "Make a ship the user chose actually push") || !strings.Contains(refusal.Error, "looks like the open task task-2") {
+		t.Fatalf("accept the second: %d %s, want a 409 naming task-2", code, body)
+	}
+	if s.LastPosition() != before {
+		t.Errorf("the refused accept wrote: log at %d from %d", s.LastPosition(), before)
+	}
+
+	code, body = call(t, server, "POST", "/api/ideas/"+second+"/accept", `{"anyway":true}`)
+	var got ideas.AcceptReply
+	json.Unmarshal([]byte(body), &got)
+	if code != 200 || got != (ideas.AcceptReply{Task: "task-3", Column: "backlog", Accepted: true}) {
+		t.Errorf("accept anyway: %d %s", code, body)
+	}
+}
+
 // Your accept gives the task the server's limits, unlimited ones too.
 func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
 	for _, limits := range []tasks.Limits{{}, {Budget: 5_000_000, MaxTurns: 24}} {
@@ -387,6 +423,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	two := suggest("Undo", []string{"skeptic", "technologist"}, nil)
 	agreed := suggest("Keyboard shortcuts", every, nil)
 	again := suggest("search the Board!", every, nil)
+	like := suggest("Search the whole board", every, nil) // no other idea's title, but close to task-2's
 
 	reasons := func() map[string]string {
 		t.Helper()
@@ -402,13 +439,14 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 		return got
 	}
 	strict := map[string]string{original: "", doubted: "doubted by skeptic", alone: "not backed by product-strategist, user-advocate, technologist",
-		two: "not backed by product-strategist, user-advocate", agreed: "", again: "duplicate of " + original + " (task-2)"}
+		two: "not backed by product-strategist, user-advocate", agreed: "", again: "duplicate of " + original + " (task-2)",
+		like: "looks like the open task task-2"}
 	if got := reasons(); !maps.Equal(got, strict) {
 		t.Errorf("everyoneBacked, accepting off:\ngot  %v\nwant %v", got, strict)
 	}
 	call(t, server, "PUT", "/api/settings", `{"autoAcceptIdeas":true,"autoAcceptRule":"nobodyDoubted"}`)
 	loose := map[string]string{original: "", doubted: "doubted by skeptic", alone: "only one backer", two: "", agreed: "",
-		again: "duplicate of " + original + " (task-2)"}
+		again: "duplicate of " + original + " (task-2)", like: "looks like the open task task-2"}
 	if got := reasons(); !maps.Equal(got, loose) {
 		t.Errorf("nobodyDoubted:\ngot  %v\nwant %v", got, loose)
 	}
