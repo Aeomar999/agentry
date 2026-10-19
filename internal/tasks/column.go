@@ -32,8 +32,9 @@ func TeamHas(roster agents.Roster, coordinator, column string) bool {
 }
 
 // BoardColumns are the board's columns, in order. Shipping is one only while
-// an agent ships work or one of these tasks is in it: without either it
-// means nothing.
+// any agent ships work or one of these tasks is in it: without either it
+// means nothing. Any agent in the roster counts, on purpose, not only one
+// team's assignees as in TeamHas.
 func BoardColumns(roster agents.Roster, all []*Task) []string {
 	columns := []string{"backlog", "todo", "in-progress", "review", "shipping", "done"}
 	ships := slices.ContainsFunc(roster, func(a agents.Agent) bool { return a.Column == agents.Ships })
