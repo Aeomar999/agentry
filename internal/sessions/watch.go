@@ -21,6 +21,9 @@ type Watch struct {
 // Attach watches the session until it is stopped or the watch is closed.
 // onDead is told when its program exits; the session stays, its screen kept.
 func Attach(name string, onOutput func([]byte), onDead func()) (*Watch, error) {
+	if liveUnderTest() {
+		return nil, errLiveUnderTest
+	}
 	conn, err := net.DialTimeout("unix", socketPath(name), 2*time.Second)
 	if err != nil {
 		return nil, err

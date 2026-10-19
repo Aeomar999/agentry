@@ -149,3 +149,20 @@ func TestASessionResizesAndSnapshots(t *testing.T) {
 		t.Errorf("running: %v", Running())
 	}
 }
+
+// A test that lost its own sessions folder fails, rather than start, find
+// or stop the sessions of the Agentry running on this machine.
+func TestATestCantUseTheLiveSessions(t *testing.T) {
+	t.Setenv(DirEnv, "")
+	socket := testSocket(t)
+	err := Start(Spec{Socket: socket, Dir: t.TempDir(), Command: []string{"sleep", "30"}})
+	if err == nil || !strings.Contains(err.Error(), "live sessions folder") {
+		t.Errorf("start in the live folder: %v", err)
+	}
+	if _, err := Attach(socket, func([]byte) {}, nil); err == nil {
+		t.Error("a test attached to a live session")
+	}
+	if _, err := os.Stat(filepath.Join(sessionsDir(), socket+".log")); err == nil {
+		t.Error("a test wrote to the live sessions folder")
+	}
+}
