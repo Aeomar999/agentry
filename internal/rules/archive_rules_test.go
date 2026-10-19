@@ -7,9 +7,9 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 )
 
 var archiver = events.Actor{Kind: events.System, ID: "archiver"}
@@ -49,28 +49,30 @@ func openArchived(t *testing.T) (*store.Store, *current.State) {
 	return s, state
 }
 
-// archive archives a done task with a marker the rules accept.
+// archive archives a done task through the store, as the archiver does.
 func archive(t *testing.T, s *store.Store, state *current.State, id string) {
 	t.Helper()
 	task, err := state.Task(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	own, err := s.Stream(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, rejection, err := s.Propose(taskstest.Marker(own, tasks.SummaryOf(task, state.Roster()))); rejection != nil || err != nil {
+	summary := tasks.SummaryOf(task, state.Roster())
+	if _, rejection, err := s.Archive(id, func() any { return summary }, sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
 }
 
-// An archived task takes its unarchiving and nothing else; once unarchived
-// it is whole again and takes events as before.
+// An archived task takes its unarchiving and nothing else. Only the store
+// writes the markers, so the rules' own refusals of them are read from
+// Check. (Store.Unarchive, in step 9 of log-growth.md section 8, takes it
+// on from there.)
 func TestAnArchivedTaskTakesOnlyItsUnarchiving(t *testing.T) {
 	s, state := openArchived(t)
+	if rejection := Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived, Data: archivedData(nil)}, state, withIdeas); rejection == nil ||
+		rejection.Reason != "task-1 is archived: an archived task takes no events" {
+		t.Errorf("archiving an archived task: %v", rejection)
+	}
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: archiver, Type: events.TaskArchived, Data: archivedData(nil)},
 		{Stream: "task-1", Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "More."}},
 		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
 	} {
@@ -86,19 +88,17 @@ func TestAnArchivedTaskTakesOnlyItsUnarchiving(t *testing.T) {
 		{unarchivedData(func(d map[string]any) { d["marker"] = 0 }), "an unarchiving names the position of the marker it undoes"},
 	} {
 		p := events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskUnarchived, Data: c.data}
-		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != c.want {
-			t.Errorf("unarchiving with %v: %v, %v, want %q", c.data, rejection, err, c.want)
+		if rejection := Check(p, state, withIdeas); rejection == nil || rejection.Reason != c.want {
+			t.Errorf("unarchiving with %v: %v, want %q", c.data, rejection, c.want)
 		}
 	}
-
-	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskUnarchived, Data: unarchivedData(nil)}); rejection != nil || err != nil {
-		t.Fatalf("unarchiving: %v, %v", rejection, err)
+	marker, err := s.Stream("task-1")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if task, err := state.Task("task-1"); task == nil || err != nil || !task.IsDone {
-		t.Fatalf("after unarchiving, task-1 should be whole and done again: %v, %v", task, err)
-	}
-	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "More."}}); rejection != nil || err != nil {
-		t.Errorf("reopening the unarchived task: %v, %v", rejection, err)
+	unarchiving := unarchivedData(func(d map[string]any) { d["marker"], d["archive"] = marker[0].Position, marker[0].Text("archive") })
+	if rejection := Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskUnarchived, Data: unarchiving}, state, withIdeas); rejection != nil {
+		t.Errorf("unarchiving: %v", rejection)
 	}
 }
 
@@ -110,12 +110,7 @@ func TestOnlyADoneTaskIsArchived(t *testing.T) {
 		t.Fatal(rejection, err)
 	}
 	propose := func(kind events.Type, data map[string]any) *events.Rejection {
-		t.Helper()
-		_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: archiver, Type: kind, Data: data})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return rejection
+		return Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: kind, Data: data}, state, withIdeas)
 	}
 	if rejection := propose(events.TaskArchived, archivedData(nil)); rejection == nil || rejection.Reason != "the task isn't done, so it can't be archived" {
 		t.Errorf("archiving an open task: %v", rejection)
@@ -142,6 +137,7 @@ func TestOnlyADoneTaskIsArchived(t *testing.T) {
 	if rejection := propose(events.TaskArchived, archivedData(nil)); rejection != nil {
 		t.Errorf("archiving the done task: %v", rejection)
 	}
+	archive(t, s, state, "task-1")
 	if task, err := state.Task("task-1"); task != nil || !errors.Is(err, current.ErrArchived) {
 		t.Errorf("an accepted marker archives the task: %v, %v", task, err)
 	}
@@ -160,13 +156,8 @@ func TestAMarkerKeepsASummaryTheStateCanRead(t *testing.T) {
 		}
 	}
 	archiving := func(summary any) *events.Rejection {
-		t.Helper()
-		_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived,
-			Data: archivedData(func(d map[string]any) { d["summary"] = summary })})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return rejection
+		return Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived,
+			Data: archivedData(func(d map[string]any) { d["summary"] = summary })}, state, withIdeas)
 	}
 	for _, summary := range []any{"Remove the TODOs", 7, nil, map[string]any{"title": 5}, map[string]any{"labels": "web"}, []any{}} {
 		if rejection := archiving(summary); rejection == nil || !strings.HasPrefix(rejection.Reason, "an archive keeps the task's summary: ") {
@@ -179,10 +170,11 @@ func TestAMarkerKeepsASummaryTheStateCanRead(t *testing.T) {
 	}
 }
 
-// Only the store writes the markers: no agent, no worker, not the page.
+// Only the store writes the markers: no agent, no worker, not the page,
+// not even the archiver's own actor through Propose.
 func TestOnlyTheStoreWritesTheMarkers(t *testing.T) {
 	s, _ := openArchived(t)
-	for _, actor := range []events.Actor{you, coordinator, engineer, worker, policy} {
+	for _, actor := range []events.Actor{you, coordinator, engineer, worker, policy, archiver} {
 		for kind, data := range map[events.Type]map[string]any{events.TaskArchived: archivedData(nil), events.TaskUnarchived: unarchivedData(nil)} {
 			_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Data: data})
 			if err != nil || rejection == nil || rejection.Check != "who" {

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -15,11 +14,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
@@ -183,6 +184,48 @@ func copyOf(t *testing.T, path string, statements ...string) string {
 	return copied
 }
 
+// streamAt is a stream's events in the closed log at path.
+func streamAt(t *testing.T, path, stream string) []events.Event {
+	t.Helper()
+	s, err := store.Open(path, withIdeas, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	own, err := s.Stream(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return own
+}
+
+// appendRow appends p to the closed log at path as the store writes a row,
+// past Propose, which refuses the markers, and returns its position. Until
+// Store.Unarchive (log-growth.md section 8, step 9) it is how a test keeps
+// a marker beside the rows it names, and unarchives it.
+func appendRow(t *testing.T, path string, p events.Proposal) int64 {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	data, err := json.Marshal(p.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Exec(`INSERT INTO events (at, stream, actor_kind, actor_id, type, correlation, data) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		time.Now().UTC().Format(time.RFC3339Nano), p.Stream, p.Actor.Kind, p.Actor.ID, p.Type, p.Correlation, string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	position, err := result.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return position
+}
+
 // Equivalence test 3: every way a snapshot can't be used ends in a whole
 // replay, equal to the log, and logs why.
 func TestEveryFallbackReplaysTheWholeLogAndSaysWhy(t *testing.T) {
@@ -338,9 +381,12 @@ func archivedLog(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	propose(t, s, taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), agents.FromEvents(roster))))
+	summary := tasks.SummaryOf(tasks.FromEvents(own), agents.FromEvents(roster))
+	if _, rejection, err := s.Archive("task-1", func() any { return summary }, sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
 	s.Close()
-	return copyOf(t, path, fmt.Sprintf(`DELETE FROM events WHERE stream = 'task-1' AND position <= %d`, own[len(own)-1].Position))
+	return path
 }
 
 // A marker alone in its stream folds to its summary: the state equals a
@@ -393,24 +439,18 @@ func TestAMarkerAloneFoldsToItsSummary(t *testing.T) {
 // holds the summary takes the unarchiving in its tail as a refold.
 func TestASnapshotTakesAnUnarchivingInItsTail(t *testing.T) {
 	path, _ := seededLog(t, someProposals()...)
+	own := streamAt(t, path, "task-1")
+	marker := appendRow(t, path, taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), nil)))
+	appendRow(t, path, taskstest.Unarchived("task-1", marker))
 	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	own, err := s.Stream("task-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	marker, _, err := s.Propose(taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), nil)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	propose(t, s, taskstest.Unarchived("task-1", marker.Position))
 	propose(t, s, proposal("task-1", you, events.TaskRenamed, map[string]any{"title": "Back"}))
 	last := s.LastPosition()
 	s.Close()
 	var cuts []int64
-	for cut := marker.Position - 1; cut <= last; cut++ {
+	for cut := marker - 1; cut <= last; cut++ {
 		cuts = append(cuts, cut)
 	}
 	if err := EqualThroughSnapshots(path, withIdeas, t.TempDir(), cuts, ideas.Streams()); err != nil {

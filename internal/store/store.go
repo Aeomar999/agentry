@@ -3,11 +3,12 @@
 // Triggers make UPDATE and DELETE fail in the database itself, so
 // "append-only" does not depend on the code remembering; the one delete
 // allowed is of a task's rows that its task.archived marker covers (see
-// migrations). Propose is the only way in: it runs the checks against the
-// model, appends the event (or a proposal.rejected) and applies it to the
-// model. A mutex makes proposals strictly one at a time, from the check to
-// the apply, so two can never both pass the order check against the same
-// state (proof 05). Reads of the log go through a separate pool of read-only
+// migrations). Propose is the way in for every event but the markers,
+// which only Archive writes: it runs the checks against the model, appends
+// the event (or a proposal.rejected) and applies it to the model. A mutex
+// makes proposals strictly one at a time, from the check to the apply, so
+// two can never both pass the order check against the same state (proof
+// 05). Reads of the log go through a separate pool of read-only
 // connections, so they never queue behind a write: in WAL mode a reader sees
 // every committed event and none in flight.
 package store
@@ -17,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -255,9 +257,14 @@ func (s *Store) made(kind events.Type) (int, error) {
 	return made, err
 }
 
+// byTheStore are the types the store writes itself, through Archive (and
+// Unarchive): Propose refuses them from anyone, so no marker goes into the
+// log without its rows moving with it.
+var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived}
+
 // propose is Propose, under Store.mu.
 func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, error) {
-	rejection := s.validate(p)
+	rejection := s.proposable(p)
 	stored := p
 	if rejection != nil {
 		stored = rejectionOf(p, rejection)
@@ -272,6 +279,15 @@ func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, err
 	s.applied.Store(event.Position)
 	s.changes.notify()
 	return event, rejection, nil
+}
+
+// proposable is validate, for a proposal: the types only the store writes
+// are refused first.
+func (s *Store) proposable(p events.Proposal) *events.Rejection {
+	if slices.Contains(byTheStore, p.Type) {
+		return &events.Rejection{Check: "who", Reason: fmt.Sprintf("only the store writes %s", p.Type)}
+	}
+	return s.validate(p)
 }
 
 func (s *Store) validate(p events.Proposal) *events.Rejection {

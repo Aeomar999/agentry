@@ -540,3 +540,23 @@ func TestArchiveSummarisesUnderTheLockAfterTheRows(t *testing.T) {
 		t.Fatal(rejection, err)
 	}
 }
+
+// Only the store writes the markers: Propose refuses them from anyone, the
+// archiver's own System actor too, and the task's events stay as they were
+// (the refusal is logged in its stream, as every refusal is).
+func TestProposeRefusesTheMarkers(t *testing.T) {
+	s := archivable(t)
+	before, err := s.Stream("task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []events.Proposal{marker("task-1", 1, 5, 4), unarchived("task-1", 6)} {
+		stored, rejection, err := s.Propose(p)
+		if err != nil || rejection == nil || rejection.Check != "who" || stored.Type != events.ProposalRejected {
+			t.Errorf("proposing %s as %s: %v, %v, stored %s, want refused by the who check", p.Type, p.Actor, rejection, err, stored.Type)
+		}
+	}
+	if after, err := s.Stream("task-1"); err != nil || !reflect.DeepEqual(after, before) {
+		t.Errorf("task-1's events after the refusals: %+v, %v\nwant them as they were: %+v", after, err, before)
+	}
+}

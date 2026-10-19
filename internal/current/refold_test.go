@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 )
@@ -79,15 +80,12 @@ func TestARefoldOfABrokenStreamStaysBroken(t *testing.T) {
 // After a refold the state still equals a replay of the log: an archived
 // task is back in full, and a broken one is still broken.
 func TestEqualHoldsAfterARefold(t *testing.T) {
-	s := openStore(t, someProposals()...)
+	path, _ := seededLog(t, someProposals()...)
+	own := streamAt(t, path, "task-1")
+	marker := appendRow(t, path, taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), nil)))
 	state := New(withIdeas, ideas.Streams())
 	state.Loaded(0)
-	fromTheLog(t, s, state)
-	own, err := s.Stream("task-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	marker, _, err := s.Propose(taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), nil)))
+	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,17 +93,28 @@ func TestEqualHoldsAfterARefold(t *testing.T) {
 	if err := Equal(s, state); err != nil {
 		t.Errorf("archived: %v", err)
 	}
-	for _, p := range []events.Proposal{taskstest.Unarchived("task-1", marker.Position), proposal("task-3", you, events.TaskLabeled, map[string]any{"labels": []any{"refolded"}})} {
-		before, err := s.Stream(p.Stream)
-		if err != nil {
-			t.Fatal(err)
-		}
-		e, _, err := s.Propose(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		state.Refold(p.Stream, before, e)
+	s.Close()
+
+	appendRow(t, path, taskstest.Unarchived("task-1", marker))
+	s, err = store.Open(path, withIdeas, nil, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { s.Close() })
+	unarchived, err := s.Stream("task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Refold("task-1", unarchived[:len(unarchived)-1], unarchived[len(unarchived)-1])
+	before, err := s.Stream("task-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	labeled, _, err := s.Propose(proposal("task-3", you, events.TaskLabeled, map[string]any{"labels": []any{"refolded"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Refold("task-3", before, labeled)
 	if err := Equal(s, state); err != nil {
 		t.Error(err)
 	}

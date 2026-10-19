@@ -9,9 +9,9 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 )
 
 // openStore is a real store with no order check, so it also takes events
@@ -195,7 +195,10 @@ func TestEqualSeesAWrongSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	propose(t, s, taskstest.Marker(own, tasks.SummaryOf(tasks.FromEvents(own), nil)))
+	summary := tasks.SummaryOf(tasks.FromEvents(own), nil)
+	if _, rejection, err := s.Archive("task-1", func() any { return summary }, sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
 	for _, c := range []struct {
 		name   string
 		change func(state *State)
