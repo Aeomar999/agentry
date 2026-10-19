@@ -69,7 +69,7 @@ export function AgentRow(props: AgentRowProps) {
             style={{ background: `var(--color-agent-${agent.color || "slate"})` }}
             aria-hidden
           />
-          <span className="truncate font-mono text-[12.5px] font-semibold text-ink-primary">{name}</span>
+          <span className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-ink-primary">{name}</span>
           {agent.coordinates && <Badge variant="brand">coordinator</Badge>}
           {column && <Badge>{COLUMN_TITLES[column]}</Badge>}
           {problems.length > 0 && (
@@ -85,7 +85,7 @@ export function AgentRow(props: AgentRowProps) {
             </span>
           )}
           {!open && agent.description && (
-            <span className="min-w-0 truncate text-[12px] text-ink-muted max-sm:hidden">{agent.description}</span>
+            <span className="min-w-0 shrink-[999] truncate text-[12px] text-ink-muted max-sm:hidden">{agent.description}</span>
           )}
         </button>
         <span className="shrink-0">
