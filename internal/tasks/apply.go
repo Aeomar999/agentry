@@ -242,18 +242,20 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskAssigned:
 		// Its coordinator's handoff takes over the column you moved it to,
 		// except a builder taking a task you put in Review, which a team
-		// with no checker can do: it stays there.
+		// with no checker can do: it stays there. Moved to Shipping, the
+		// handoff to an agent that ships work is the one your move asked for.
+		ships := t.Column == "shipping" && e.Flag("ships")
 		if t.Column != "review" || e.Flag("checks") {
 			t.Column, t.SentBack = "", false
 		}
 		t.reply(e)
 		t.step(e, e.Actor.ID, e.Text("agent"), e.Text("instructions"))
-		t.Handoff.Machine = e.Text("machine")
-		t.Trail[len(t.Trail)-1].Machine = t.Handoff.Machine
+		t.Handoff.Machine, t.Handoff.Ships = e.Text("machine"), ships
+		t.Trail[len(t.Trail)-1].Machine, t.Trail[len(t.Trail)-1].Ships = t.Handoff.Machine, ships
 
 	case events.TurnStarted:
 		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Worker: cmp.Or(e.Text("worker"), workers.Local), Hash: e.Text("hash"),
-			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At})
+			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
 		if e.Text("agent") == t.Coordinator {
@@ -391,8 +393,9 @@ func (t *Task) wrapUp(e events.Event, to, text string) {
 	}
 }
 
-// moveColumn records your move of the card to In progress or Review, which
-// the first event the move writes carries: the column stands at once.
+// moveColumn records your move of the card to In progress, Review or
+// Shipping, which the first event the move writes carries: the column stands
+// at once.
 func (t *Task) moveColumn(e events.Event) {
 	if column := e.Text("column"); column != "" {
 		t.Column, t.SentBack = column, e.Flag("sentBack")

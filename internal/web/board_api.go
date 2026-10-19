@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -14,16 +15,22 @@ import (
 //
 //   - Backlog, To do: park it there at once; a turn in progress stops, and
 //     the coordinator only wraps up
-//   - In progress: start it (let it go); from Review, send it back for more
-//     work, which an agent that checks work doesn't take
+//   - In progress: start it (let it go); from Review or Shipping, send it
+//     back for more work, for an agent that builds it
 //   - Review: have it checked next, by an agent that checks work if its
 //     team has one
+//   - Shipping: ship it now, by an agent of its team that ships work; a
+//     team with none refuses the move. Checked or not: your move stands, so
+//     work not yet reviewed or tested ships as you chose, and the agent that
+//     ships it still runs its usual checks before it pushes. Once it has
+//     shipped, the coordinator can finish the task without another round of
+//     checks; only a change after that needs checking again
 //   - Done: it is done at once, as it is; a turn in progress stops, and the
 //     coordinator only wraps up (an epic closes, and its open stories are
 //     parked in the Backlog)
 //
-// In progress and Review stand until the coordinator next hands the task
-// on: the first event the move writes carries the column. A finished task
+// In progress, Review and Shipping stand until the coordinator next hands
+// the task on: the first event the move writes carries the column. A finished task
 // moved anywhere but Done is reopened first. A task waiting for your answer
 // takes the words as the answer.
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +49,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	note := strings.TrimSpace(request.Note)
+	shippers := teammates(roster, task, agents.Ships)
 	park := func(place string) events.Proposal {
 		return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": place, "note": note}}
 	}
@@ -69,15 +77,25 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	case "in-progress", "review":
+	case "shipping":
+		if len(shippers) == 0 {
+			http.Error(w, teamOf(roster, task)+" has no agent that ships work", http.StatusConflict)
+			return
+		}
 	default:
 		http.Error(w, "no column called "+request.To, http.StatusBadRequest)
 		return
 	}
 
-	// Done work goes back for more, as does work a checker had, parked or not.
-	sentBack := request.To == "in-progress" && (task.IsDone || workColumn(task, roster) == "review")
+	// Done work goes back for more, as does work a checker or a shipper had,
+	// parked or not.
+	from := workColumn(task, roster)
+	sentBack := request.To == "in-progress" && (task.IsDone || from == "review" || from == "shipping")
 	text := ""
 	switch {
+	case request.To == "shipping":
+		text = "Ship this task now: hand it to " + strings.Join(shippers, " or ") + ", to land the work as it is. " +
+			"The user chose to ship it now, maybe before it was reviewed or tested; the agent that ships it still runs its usual checks before it pushes."
 	case request.To == "review":
 		text = "Have this task reviewed next."
 	case sentBack:
@@ -165,4 +183,20 @@ func (s *Server) proposeOrRefuse(w http.ResponseWriter, p events.Proposal) bool 
 		return false
 	}
 	return true
+}
+
+// teammates are the agents of the task's team whose work counts as column.
+func teammates(roster agents.Roster, task *tasks.Task, column string) []string {
+	var names []string
+	for _, agent := range roster.Assignees(teamOf(roster, task)) {
+		if agent.Column == column {
+			names = append(names, agent.Name)
+		}
+	}
+	return names
+}
+
+func teamOf(roster agents.Roster, task *tasks.Task) string {
+	lead, _ := roster.Get(task.Coordinator)
+	return lead.TeamName()
 }

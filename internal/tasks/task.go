@@ -34,8 +34,8 @@ type Task struct {
 	MaxTurns    int     // turns the task may have without your answer before it asks you; 0 is no limit
 	Rank        float64 // your priority order, lower first; a new task starts above every older one
 	Parked      string  // "todo" or "backlog" while you hold it there; the coordinator leaves it alone
-	Column      string  // "in-progress" or "review": the board column you moved it to, until its coordinator next hands it on
-	SentBack    bool    // that move took it from Review back to In progress: it needs more work, not checking
+	Column      string  // "in-progress", "review" or "shipping": the board column you moved it to, until its coordinator next hands it on
+	SentBack    bool    // that move took it from Review or Shipping back to In progress: it needs more work, not checking
 	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string
@@ -140,6 +140,7 @@ type Turn struct {
 	Report       string // the agent's final message
 	Issue        string // why the turn was cut short, if it was
 	Stopped      bool   // you ended it, to tell the coordinator something
+	Shipped      bool   // it ships the work because you moved the task to Shipping: you took the work as it was
 	Tokens       int    // what it used, when the engine said
 }
 
@@ -172,6 +173,7 @@ type Step struct {
 	To      string
 	Text    string
 	Machine string // for a handoff to an agent: where the coordinator wants it to work; "" lets Agentry choose
+	Ships   bool   // a handoff to an agent that ships work, which your move to Shipping asked for
 }
 
 // Names used in the trail for the people and things that are not agents.

@@ -27,7 +27,8 @@ type Agent struct {
 	// Color tells it apart on the page; one of Colors, or "" for the next free one.
 	Color string `json:"color"`
 	// Column is what its work counts as, and where a task shows on the
-	// board while it has it: Builds (In progress), Reviews, or Ships.
+	// board while it has it: Builds (In progress), Reviews (Review), or Ships
+	// (Shipping).
 	Column string `json:"column"`
 
 	// Knowledge is what the agent has learned as it works, in its own words

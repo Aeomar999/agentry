@@ -53,7 +53,7 @@ var catalogue = map[Type]spec{
 	WorktreeReady:      {fields: []string{"path", "branch", "port"}, writers: []ActorKind{Worker}},
 	WorktreeMoved:      {fields: []string{"worker", "path", "port"}, writers: []ActorKind{Worker}},
 
-	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}}, // "checks": the agent checks work
+	TaskAssigned:       {fields: []string{"agent", "instructions"}, writers: []ActorKind{Agent}}, // "checks": the agent checks work; "ships": it ships work
 	TurnStarted:        {fields: []string{"agent", "hash"}, correlation: true, writers: []ActorKind{Worker}},
 	PromptAcknowledged: {fields: []string{"hash"}, correlation: true, writers: []ActorKind{Worker}},
 	SessionStarted:     {fields: []string{"engineSession"}, correlation: true, writers: []ActorKind{Worker}},

@@ -231,6 +231,9 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 		}
 	}
 	if decision.Action == Finish {
+		if task.Column == "shipping" && tasks.TeamHas(roster, task.Coordinator, agents.Ships) {
+			return Move{Kind: RaiseIssue, Reason: "the user moved this task to Shipping; hand it to an agent that ships work before you finish"}
+		}
 		if why := unchecked(task, roster); why != "" {
 			return Move{Kind: RaiseIssue, Reason: why}
 		}

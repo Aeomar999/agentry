@@ -12,7 +12,9 @@ import (
 // it, and each ends its report with a verdict. Since the last turn that
 // changed the work, every one of them that has checked it must approve it
 // again. So a change made after a review gets another round of review. You
-// can still finish a task as it is, from the board.
+// can still finish a task as it is, from the board, or ship it: moved to
+// Shipping, the work as it was is yours, and once an agent has shipped it
+// the task can be done; only a change after that needs checking again.
 
 type Verdict string
 
@@ -48,8 +50,8 @@ func verdictOf(report string) Verdict {
 }
 
 // unchecked says why the task's work isn't checked yet, or "" when it is:
-// nothing has changed it, the team has no one to check it, or every check
-// since the last change approves it.
+// nothing has changed it, the team has no one to check it, every check
+// since the last change approves it, or you had it shipped since.
 func unchecked(task *tasks.Task, roster agents.Roster) string {
 	lead, _ := roster.Get(task.Coordinator)
 	var checkers []string
@@ -69,7 +71,8 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 	}
 	last := map[string]check{} // each checker's latest check
 	var order []string
-	change := -1 // the turn that last changed the work
+	change := -1  // the turn that last changed the work
+	shipped := -1 // the last turn that shipped the work because you moved it to Shipping
 	for i, turn := range task.Turns {
 		agent, known := roster.Get(turn.Agent)
 		switch {
@@ -84,11 +87,14 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 			}
 			last[turn.Agent] = check{turn, i, verdict}
 		case known && agent.Column == agents.Ships: // ships the checked work; doesn't change it
+			if turn.Shipped {
+				shipped = i
+			}
 		default:
 			change = i
 		}
 	}
-	if change < 0 {
+	if change < 0 || change < shipped { // nothing changed it, or nothing since you had it shipped
 		return ""
 	}
 

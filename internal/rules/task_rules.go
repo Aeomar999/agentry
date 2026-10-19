@@ -203,7 +203,7 @@ var taskRosterRules = map[events.Type]func(t *tasks.Task, roster agents.Roster, 
 }
 
 // toTheColumnYouMovedItTo: a handoff doesn't undo your move of the card to
-// In progress or Review.
+// In progress, Review or Shipping.
 func toTheColumnYouMovedItTo(t *tasks.Task, roster agents.Roster, p events.Proposal) string {
 	return t.UndoesYourColumn(p.Text("agent"), roster)
 }

@@ -22,7 +22,7 @@ type taskSummary struct {
 	Status           tasks.Status `json:"status"`
 	CurrentAgent     string       `json:"currentAgent"`
 	Stage            string       `json:"stage"`  // the agent the coordinator last handed it to
-	Column           string       `json:"column"` // its column on the board: backlog, todo, in-progress, review or done
+	Column           string       `json:"column"` // its column on the board: backlog, todo, in-progress, review, shipping or done
 	Turns            int          `json:"turns"`
 	NeedsYou         string       `json:"needsYou"`    // what you are asked, "" when nothing
 	HasQuestion      bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
@@ -189,14 +189,19 @@ func columnOf(t *tasks.Task, roster agents.Roster) string {
 }
 
 // workColumn is the column of the task's work, done or parked or not: the
-// column you moved it to while that stands; otherwise its stage's, Review
-// while an agent that checks work has it.
+// column you moved it to while that stands; otherwise its stage's: Review
+// while an agent that checks work has it, Shipping while one that ships
+// work has it.
 func workColumn(t *tasks.Task, roster agents.Roster) string {
 	if t.Column != "" {
 		return t.Column
 	}
-	if agent, ok := roster.Get(stageOf(t)); ok && agent.Column == agents.Reviews {
+	agent, _ := roster.Get(stageOf(t))
+	switch agent.Column {
+	case agents.Reviews:
 		return "review"
+	case agents.Ships:
+		return "shipping"
 	}
 	return "in-progress"
 }

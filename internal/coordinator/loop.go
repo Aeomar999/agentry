@@ -314,7 +314,7 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		l.propose(task.ID, coordinator, events.TaskAssigned, map[string]any{"agent": decision.Agent, "instructions": decision.Instructions,
-			"machine": machine, "toYou": decision.ToYou, "checks": agent.Column == agents.Reviews})
+			"machine": machine, "toYou": decision.ToYou, "checks": agent.Column == agents.Reviews, "ships": agent.Column == agents.Ships})
 	case Ask:
 		l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": decision.Question,
 			"options": decision.Options, "page": decision.Page, "toYou": decision.ToYou})

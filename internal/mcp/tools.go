@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,11 +23,11 @@ type tool struct {
 
 // The parts of the API's tasks and questions the tools read.
 type task struct {
-	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing string
-	Labels, BlockedBy                                                            []string
-	Stories, StoriesDone                                                         int
-	Rank                                                                         float64
-	Told                                                                         *struct{ At, From, Text string }
+	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
+	Labels, BlockedBy                                                                    []string
+	Stories, StoriesDone                                                                 int
+	Rank                                                                                 float64
+	Told                                                                                 *struct{ At, From, Text string }
 }
 
 type detail struct {
@@ -190,7 +191,7 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %s\nStatus: %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, t.Status, t.Coordinator, t.Repo,
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, t.Status, columnOf(t.task), t.Coordinator, t.Repo,
 		s.agentry.PageURL("/tasks/"+t.ID))
 	if t.Kind == "epic" {
 		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
@@ -220,6 +221,12 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		}
 	}
 	return b.String(), nil
+}
+
+// columnOf is where the task shows on the board: "on the board: Shipping".
+func columnOf(t task) string {
+	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
+	return "on the board: " + cmp.Or(names[t.Column], t.Column)
 }
 
 // budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
