@@ -371,18 +371,21 @@ alike, as `ideas.Accept` holds `accepting`
    made and that stopped before `schedule.fired`. The job reads that
    task's `task.created` from the log (`Core.Events.Stream`) for its
    `slot` and writes `schedule.fired` for it as System (with `slot` `""`
-   and `manual` for a task you made with Run now). If that write is
+   and `manual` for a task you made with Run now). That write can be
    refused (the refusal is stored as `proposal.rejected`,
-   `internal/store/store.go:260-265`; it can be, only when the schedule is
-   paused now, or was changed or resumed after that slot, so `Since` has
-   passed it and the slot isn't due either; a paused schedule never
-   reaches step 1, as the job fires only schedules that are on, but it
-   can be paused while step 1 runs), it writes `schedule.skipped {slot: "",
-   reason: "unrecorded", task, why}` once instead, which puts the task in
-   `Named` and says so in `LastRun`, so no later wake tries it again; if
-   even that is refused, the job logs it and keeps the task in a set in
-   memory until it restarts, never retrying it every minute. Either way it
-   carries on with steps 2 to 5 on the same wake.
+   `internal/store/store.go:260-265`) only when the schedule is paused
+   now, or was changed or resumed after that slot, so `Since` has passed
+   it and the slot isn't due either. A paused schedule never reaches step
+   1, as the job fires only schedules that are on, but it can be paused
+   while step 1 runs. If it is refused, the job writes
+   `schedule.skipped {slot: "", reason: "unrecorded", task, why}` once
+   instead, which puts the task in `Named` and says so in `LastRun`, so no
+   later wake tries it again. If even that is refused, the job logs it and
+   moves on. That can't loop or fire twice: the skip is refused only for
+   a removed schedule, which no later wake fires, or a task already in
+   `Named`, which can't be, as Run now and the job, the only writers of
+   `fired` and skips, both hold `firing`. Either way it carries on with
+   steps 2 to 5 on the same wake.
    This finds only what it should: a Run now made while the clock's task
    is open names its own task, so both are in `Named` and step 1 does
    nothing; reopening an old done scheduled task does nothing, as it was
@@ -436,9 +439,7 @@ Each claim, checked against the store:
   the other gap can't happen: no `schedule.fired` names a task that
   doesn't exist, because the rule needs the task first.
 - **A restart forgets nothing.** What has run is `LastSlot` and `Named`,
-  rebuilt from the log at start. The job's only state of its own is step
-  1's set of tasks it couldn't record even as a skip, which only stops it
-  retrying them; a restart tries each once more.
+  rebuilt from the log at start. The job keeps no state of its own.
 - **A sleeping machine.** Covered by the wall-clock compare and catch-up
   once above.
 - **What the mutex is for.** Not correctness of the log, which the rules
@@ -702,7 +703,8 @@ that seam, with the task done before the restart, recorded once and its
 slot not fired again; a Run now while the clock's task is open, after
 which the next wake writes no `fired` for either task; an old done
 scheduled task reopened, which step 1 ignores; a refused step 1 record
-written as one `unrecorded` skip and not retried on the next wake; and
+(the schedule changed after the slot) written as one `unrecorded` skip
+and not retried on the next wake; and
 two firings at once making one task. A panic in the job logs and stops
 it, the server goes on (`features.StartJobs`).
 
