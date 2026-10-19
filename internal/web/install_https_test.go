@@ -253,11 +253,11 @@ func TestThePinnedInstallCommandsRunInSh(t *testing.T) {
 		t.Errorf("the code was sent to a server with another CA: %v", sent[before:])
 	}
 
-	// An impostor handing out the same CA gets nothing carrying the code.
-	// (Like curl piped to sh anywhere, the command then exits 0.)
+	// An impostor handing out the same CA gets nothing carrying the code,
+	// and the command fails.
 	fake, faked := impostor(t, ca)
-	out, ran, _ = runShell(t, []string{"sh", "-c"}, commands(fake, "/worker/install", code, ca.Fingerprint())["command"].(string))
-	if !strings.Contains(out, "certificate") || ran[0] != "" || strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
+	out, ran, err = runShell(t, []string{"sh", "-c"}, commands(fake, "/worker/install", code, ca.Fingerprint())["command"].(string))
+	if err == nil || !strings.Contains(out, "certificate") || ran[0] != "" || strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
 		t.Errorf("an impostor with the CA: %v\n%s\nits requests: %v", err, out, faked())
 	}
 }

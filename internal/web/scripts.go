@@ -85,16 +85,17 @@ func pinnedCommands(base, sh, ps1, fingerprint string) map[string]any {
 
 // pinnedSh is pinnedCommands' sh, given the base ($1), the CA's SHA-256 ($2)
 // and the script ($3). curl's --cacert takes PEM, so the checked DER is
-// written as PEM in the same file.
+// written as PEM in the same file. The script is saved first, not piped,
+// so a failed download fails the command.
 var pinnedSh = strings.Join([]string{
-	`c=$(mktemp) &&`,
+	`c=$(mktemp) && p=$(mktemp) &&`,
 	`curl -fsSk "$1/trust/ca.crt" -o "$c" &&`,
 	`if [ "$({ sha256sum || shasum -a 256; } <"$c" 2>/dev/null | cut -c1-64)" = "$2" ]; then`, // sha256sum on Linux, shasum on macOS
 	`b=$(base64 <"$c" | tr -d "\n" | fold -w 64) &&`,
 	`printf "%s\n" "-----BEGIN CERTIFICATE-----" "$b" "-----END CERTIFICATE-----" >"$c" &&`,
-	`curl -fsSL --cacert "$c" "$3" | sh;`,
+	`curl -fsSL --cacert "$c" "$3" -o "$p" && sh "$p";`,
 	`else echo "` + otherCA("$1") + `" >&2; false; fi;`,
-	`s=$?; rm -f "$c"; exit $s`,
+	`s=$?; rm -f "$c" "$p"; exit $s`,
 }, " ")
 
 // pinnedPowerShell is pinnedCommands' PowerShell, a script block given the
