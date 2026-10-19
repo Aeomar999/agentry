@@ -187,6 +187,17 @@ export interface PolicyVersion {
   canRevert: boolean; // the log holds its text
 }
 
+// What reverting to a version would change: the diff from the text in
+// force to its text ("" for the version in force), and the profile each
+// puts every agent under ("" when use_for_everyone isn't set).
+export interface PolicyVersionChange {
+  position: number;
+  at: string;
+  diff: string;
+  useForEveryone: string;
+  inForceUseForEveryone: string;
+}
+
 // A change made to the policy from the page.
 export interface PolicyChange {
   hash: string;
