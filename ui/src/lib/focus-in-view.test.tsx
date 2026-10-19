@@ -59,6 +59,34 @@ describe("keepFocusInView", () => {
     expect(scroller.scrollTop).toBe(356);
   });
 
+  test("leaves an element whose lines shown above a fold's cut are in view", () => {
+    const scroller = feed();
+    render(
+      <div data-fold-cut="100" data-lines="250-350">
+        <pre tabIndex={0} data-lines="300-2300">
+          folded code
+        </pre>
+      </div>,
+      { container: scroller },
+    );
+    screen.getByText("folded code").focus();
+    expect(scroller.scrollTop).toBe(100);
+  });
+
+  test("scrolls only far enough to show the lines above a fold's cut", () => {
+    const scroller = feed();
+    render(
+      <div data-fold-cut="80" data-lines="300-380">
+        <pre tabIndex={0} data-lines="330-2330">
+          folded code
+        </pre>
+      </div>,
+      { container: scroller },
+    );
+    screen.getByText("folded code").focus();
+    expect(scroller.scrollTop).toBe(128);
+  });
+
   test("doesn't scroll for a click", () => {
     const scroller = feed();
     const visible = vi.spyOn(Element.prototype, "matches").mockReturnValue(false);
