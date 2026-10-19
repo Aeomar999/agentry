@@ -148,6 +148,9 @@ func TestTheHooksCheckTheCAOnce(t *testing.T) {
 	if info, err := os.Stat(keptCAFile()); err != nil || info.Mode().Perm() != 0o600 {
 		t.Errorf("the kept CA: %v, %v", info, err)
 	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(keptCAFile()), ".trusted-ca-*")); len(left) != 0 {
+		t.Errorf("left behind: %v", left)
+	}
 }
 
 func TestAnotherFingerprintChecksTheCAAgain(t *testing.T) {

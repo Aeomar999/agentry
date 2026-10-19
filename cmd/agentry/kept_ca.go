@@ -68,13 +68,27 @@ func readKeptCA(given, fingerprint string) (trustedServer, bool) {
 }
 
 // keepCA writes the CA as the connection is written: readable only by you.
+// It is written whole beside the file and renamed into place, so hooks
+// running at once never read half of it.
 func keepCA(kept keptCA) error {
 	path := keptCAFile()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, _ := json.MarshalIndent(kept, "", "  ")
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	temp, err := os.CreateTemp(filepath.Dir(path), ".trusted-ca-*.json") // made 0600
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name()) // gone once renamed
+	_, err = temp.Write(append(data, '\n'))
+	if closeErr := temp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), path)
 }
 
 // forgetKeptCA drops the kept CA, so the next run checks the server again.
