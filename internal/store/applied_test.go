@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,11 +41,22 @@ func seeded(t *testing.T) string {
 // of the log returns it, and LastPosition is still N-1.
 func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 	model := blocking{started: make(chan struct{}, 1), release: make(chan struct{})}
-	s, err := Open(seeded(t), model, nil)
+	path := seeded(t)
+	s, err := Open(path, model, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	var released sync.Once
+	release := func() { released.Do(func() { close(model.release) }) }
+	t.Cleanup(release) // a failing check must not leave Propose blocked
+	// The blocked Propose holds the store's only connection, so the log is
+	// read through another; in WAL mode it can't see an uncommitted event.
+	other, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { other.Close() })
 	reader := s.NewReader(3)
 	defer reader.Close()
 
@@ -55,7 +68,7 @@ func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 	<-model.started
 
 	var committed int64
-	s.db.QueryRow(`SELECT MAX(position) FROM events`).Scan(&committed)
+	other.QueryRow(`SELECT MAX(position) FROM events`).Scan(&committed)
 	if committed != 4 {
 		t.Fatalf("event 4 should be committed before it is applied, the log ends at %d", committed)
 	}
@@ -77,7 +90,7 @@ func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 		t.Errorf("the reader returned before the model had event 4: %+v, %v", batch, err)
 	}
 
-	close(model.release)
+	release()
 	if err := <-proposed; err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +129,8 @@ func TestOpenStartsAtTheLastPosition(t *testing.T) {
 
 // A write that fails never reaches the model, and the reads don't move.
 // The trigger fails the insert: a failed commit can't be forced as cheaply,
-// and leaves Propose by the same return.
+// and leaves Propose by the same return. Test 8 covers the order of Apply
+// and Commit.
 func TestAFailedWriteNeverReachesTheModel(t *testing.T) {
 	s, model := openAt(t, filepath.Join(t.TempDir(), "agentry.db"))
 	s.Propose(newTask("task-1"))
