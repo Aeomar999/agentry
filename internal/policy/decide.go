@@ -102,6 +102,9 @@ type facts struct {
 	shell   shellCall
 	paths   []string // absolute and cleaned
 	writes  []string // redirect targets, absolute and cleaned
+	// some path leads back into the file system through a process's
+	// working directory, root or open files
+	loopsBack bool
 }
 
 func (p *Policy) inspect(call Call) facts {
@@ -114,33 +117,95 @@ func (p *Policy) inspect(call Call) facts {
 		raw = []string{call.Input}
 	}
 	for _, path := range raw {
-		f.paths = append(f.paths, p.absolute(path, call.Workspace))
+		if below, inStack := inFolderStack(path); inStack {
+			f.loopsBack = f.loopsBack || below
+			continue
+		}
+		expanded := p.expanded(path, call.Workspace)
+		f.loopsBack = f.loopsBack || loopsBack(expanded)
+		f.paths = append(f.paths, filepath.Clean(expanded))
 	}
 	for _, path := range f.shell.writes {
-		f.writes = append(f.writes, p.absolute(path, call.Workspace))
+		f.writes = append(f.writes, filepath.Clean(p.expanded(path, call.Workspace)))
 	}
 	return f
 }
 
-func (p *Policy) absolute(path, workspace string) string {
+// expanded is path made absolute, its ~ read as the shell reads it, but not
+// cleaned: through a process's working directory, ".." leaves that
+// directory. Folders of the shell's stack (~-) are left to inFolderStack.
+func (p *Policy) expanded(path, workspace string) string {
 	switch {
 	case path == "~" || strings.HasPrefix(path, "~/"):
-		path = p.home + strings.TrimPrefix(path, "~")
+		return p.home + strings.TrimPrefix(path, "~")
+	case path == "~+" || strings.HasPrefix(path, "~+/"): // the working directory
+		return workspace + strings.TrimPrefix(path, "~+")
+	case strings.HasPrefix(path, "~"): // ~dev/x is dev's home, beside this one
+		return filepath.Dir(p.home) + "/" + strings.TrimPrefix(path, "~")
 	case !filepath.IsAbs(path):
-		path = filepath.Join(workspace, path)
+		return workspace + "/" + path
 	}
-	return filepath.Clean(path)
+	return path
+}
+
+// inFolderStack: path starts at a folder of the shell's stack, which can't
+// be known: ~- (the folder it was in before), ~N, ~+N or ~-N. below says it
+// goes on past that folder, so it may lead anywhere, as /proc/self/cwd does.
+func inFolderStack(path string) (below, inStack bool) {
+	first, rest, _ := strings.Cut(path, "/")
+	name, isTilde := strings.CutPrefix(first, "~")
+	if !isTilde {
+		return false, false
+	}
+	number := name
+	if strings.HasPrefix(name, "+") || strings.HasPrefix(name, "-") {
+		number = name[1:]
+	}
+	if name != "-" && (number == "" || strings.Trim(number, "0123456789") != "") {
+		return false, false
+	}
+	return rest != "", true
 }
 
 func (p *Policy) touchesAgentry(call Call, f facts) bool {
-	if strings.Contains(call.Input, "AGENTRY_HOOK_TOKEN") {
+	if strings.Contains(call.Input, "AGENTRY_HOOK_TOKEN") || f.loopsBack {
 		return true
 	}
+	if f.isShell && slices.ContainsFunc(f.shell.named, p.isProtectedName) {
+		return true
+	}
+	// A program that may read folders whole reaches Agentry's files through a
+	// folder that holds them. It counts for the whole call, as a pipe can
+	// hand one program's paths to another: echo ~ | xargs tar c.
+	recursive := call.Tool == "Grep" || f.isShell && f.shell.recursive
 	for _, path := range f.paths {
 		for _, protected := range p.protected {
-			if path == protected || strings.HasPrefix(path, protected+"-") { // agentry.db-wal, agentry.db-shm
+			if mayReach(path, protected, recursive) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// patternCharacters removes the characters that make a name a pattern.
+var patternCharacters = strings.NewReplacer("*", "", "?", "", "[", "", "]", "")
+
+// isProtectedName: name, spelt out by a path that can't be fully known, may
+// be one of Agentry's files or the folder that holds them, without case. It
+// is a best-effort rule: such a path can still reach them without spelling a
+// name out ($X alone), which only the rules that ask about unknown commands
+// cover. A name with at most one character besides * ? [ ] (*, c*, .*) isn't
+// spelt out: after a folder that can't be known, it may be anything there,
+// just as $X alone may, and refusing it would refuse ls $d/c*. One with more
+// text (tl*, ca.ke?, agentry.d[b]) is matched as a pattern.
+func (p *Policy) isProtectedName(name string) bool {
+	if len(patternCharacters.Replace(name)) <= 1 {
+		return false
+	}
+	for _, protected := range p.protected {
+		if nameMayBe(name, filepath.Base(protected), true) || nameMayBe(name, filepath.Base(filepath.Dir(protected)), true) {
+			return true
 		}
 	}
 	return false

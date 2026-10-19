@@ -122,3 +122,75 @@ func TestWordsAreReadAsBashReadsThem(t *testing.T) {
 		}
 	}
 }
+
+// Commands are judged as the shell runs them, quotes and backslashes gone.
+func TestCommandsAreReadUnquoted(t *testing.T) {
+	cases := map[string]string{
+		`\tar c x`:         "tar c x",
+		`t\ar c x`:         "tar c x",
+		`'tar' c x`:        "tar c x",
+		`"t"ar c x`:        "tar c x",
+		`echo a\ b`:        "echo a b",
+		`echo "a\nb\$c\\"`: `echo a\nb$c\`,
+		`echo 'a\nb'`:      `echo a\nb`,
+		"echo a\\\nb":      "echo ab",
+		`echo $'\x74ar'`:   "echo $?",
+		`echo $'tar'`:      "echo tar",
+		`grep -E 'a\|b' x`: `grep -E a\|b x`,
+		`grep -E a\\\|b x`: `grep -E a\|b x`,
+	}
+	for command, want := range cases {
+		if got := inspectShell(command, "/work", "/home").commands; len(got) != 1 || got[0] != want {
+			t.Errorf("%s: commands %q, want %q", command, got, want)
+		}
+	}
+}
+
+// A command handed to a shell as a string is unknown when the string is, or
+// when it runs too deep inside others.
+func TestInnerCommandsThatCantBeKnown(t *testing.T) {
+	cases := []struct {
+		command string
+		opaque  bool
+	}{
+		{"bash -c 'echo hi'", false},
+		{`bash -c "$x"`, true},
+		{"sh -c 'echo $(id)'", true},
+		{"eval eval eval eval echo hi", false},
+		{"eval eval eval eval eval echo hi", true},
+		// folders of the shell's stack
+		{"cat ~-/x", true},
+		{"ls ~-", true},
+		{"pushd ~1", true},
+		{"cat ~+2/x", true},
+		{"cat ~+/x", false},
+	}
+	for _, c := range cases {
+		if got := inspectShell(c.command, "/work", "/home").opaque; got != c.opaque {
+			t.Errorf("%s: opaque %v, want %v", c.command, got, c.opaque)
+		}
+	}
+}
+
+// A command run as a string starts in the folders the shell may be in, and
+// eval runs in this shell, so its cd moves the commands after it.
+func TestInnerCommandsStartWhereTheShellIs(t *testing.T) {
+	cases := []struct {
+		command string
+		want    string // a path the call names
+	}{
+		{"cd /a && bash -c 'cat x'", "/a/x"},
+		{`eval "cd /a" && cat x`, "/a/x"},
+		{`command eval "cd /a"; cat x`, "/a/x"},
+		{"cat ~+/x", "/work/x"},
+		{"cd /a; cat ~+/x", "/a/x"},
+	}
+	for _, c := range cases {
+		if got := inspectShell(c.command, "/work", "/home").paths; !slices.Contains(got, c.want) {
+			t.Errorf("%s: paths %q, want %s among them", c.command, got, c.want)
+		}
+	}
+	if got := inspectShell("bash -c 'cd /a'; cat x", "/work", "/home").paths; slices.Contains(got, "/a/x") {
+		t.Errorf("bash -c's cd moved the shell: paths %q", got)
+	}
+}

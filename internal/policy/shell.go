@@ -19,9 +19,11 @@ type shellCall struct {
 	commands  []string // each simple command, its words joined by single spaces
 	pipelines []string // each pipeline of two or more commands, as "a | b"
 	paths     []string // every word that may name a file, and every redirect target
+	named     []string // the names a path that can't be fully known still spells out: tls in $X/tls
 	writes    []string // redirect targets written to: > f, >> f, &> f, >| f, <> f
 	runs      []run    // each simple command, with where it starts and what it names
 	opaque    bool     // part of it can't be known before it runs: $(...), an unknown variable
+	recursive bool     // some program may read the folders it is given whole: any but ls, cd, stat and the like
 	invalid   bool     // the shell couldn't parse it
 }
 
@@ -41,23 +43,31 @@ func knownVariables(workspace, home string) map[string][]string {
 }
 
 func inspectShell(command, workspace, home string) shellCall {
+	return nestedInspector(command, workspace, home, []string{workspace}, 0).call
+}
+
+// nestedInspector inspects a command run depth levels inside others, by
+// bash -c or eval, started in one of dirs (nil: unknown). It is left with
+// the folders the shell may be in after the command.
+func nestedInspector(command, workspace, home string, dirs []string, depth int) *shellInspector {
 	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(command), "")
 	if err != nil {
-		return shellCall{invalid: true}
+		return &shellInspector{call: shellCall{invalid: true}}
 	}
-	inspector := &shellInspector{variables: knownVariables(workspace, home), home: home, dirs: []string{workspace}}
+	inspector := &shellInspector{variables: knownVariables(workspace, home), workspace: workspace, home: home, dirs: dirs, depth: depth}
 	if !expandBraces(file) {
 		inspector.call.opaque = true
 	}
 	inspector.learnVariables(file)
 	syntax.Walk(file, inspector.visit)
-	return inspector.call
+	return inspector
 }
 
 type shellInspector struct {
-	call      shellCall
-	variables map[string][]string // name → the literal values it can hold
-	home      string
+	call            shellCall
+	variables       map[string][]string // name → the literal values it can hold
+	workspace, home string
+	depth           int // how many bash -c or eval this command runs inside
 
 	// dirs are the folders the shell may be in at the command the walk has
 	// reached: the workspace, where Agentry starts it, and wherever a cd or
@@ -315,6 +325,7 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 			s.setVariable(name, false)
 		}
 		s.call.commands = append(s.call.commands, text)
+		s.call.recursive = s.call.recursive || readsFoldersWhole(strings.Fields(text))
 	}
 	s.call.runs = append(s.call.runs, run{texts: texts, dirs: slices.Clone(s.dirs), files: s.namedFiles(args[1:])})
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
@@ -323,6 +334,7 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	for _, arg := range args[1:] {
 		s.addPath(arg)
 	}
+	s.addInnerCommands(args)
 	s.followCd(args)
 }
 
@@ -343,7 +355,7 @@ func (s *shellInspector) namedFiles(args []*syntax.Word) []string {
 			}
 			for _, text := range texts {
 				for _, item := range strings.FieldsFunc(text, isListSeparator) {
-					files = append(files, s.resolve(item)...)
+					files = append(files, s.resolveClean(item)...)
 				}
 			}
 		}
@@ -470,7 +482,7 @@ func (s *shellInspector) moveTo(args []*syntax.Word) {
 	}
 	dirs := s.dirs
 	for _, target := range targets {
-		for _, dir := range s.resolve(target) {
+		for _, dir := range s.resolveClean(target) {
 			if !slices.Contains(dirs, dir) {
 				dirs = append(dirs, dir)
 			}
@@ -482,24 +494,39 @@ func (s *shellInspector) moveTo(args []*syntax.Word) {
 	s.dirs = dirs
 }
 
+// resolveClean is resolve's paths cleaned, for comparing with the workspace.
+func (s *shellInspector) resolveClean(path string) []string {
+	paths := s.resolve(path)
+	for i, path := range paths {
+		paths[i] = filepath.Clean(path)
+	}
+	return paths
+}
+
 // resolve is every file a path may name from the folders the shell may be
-// in. With them unknown, a relative path is unknown too.
+// in. With them unknown, a relative path is unknown too. The paths aren't
+// cleaned: through a process's working directory, ".." leaves that
+// directory, which inspect judges.
 func (s *shellInspector) resolve(path string) []string {
 	switch {
 	case path == "~" || strings.HasPrefix(path, "~/"):
 		return []string{s.home + strings.TrimPrefix(path, "~")}
+	case path == "~+": // the shell's folder
+		return s.resolve(".")
+	case strings.HasPrefix(path, "~+/"):
+		return s.resolve(strings.TrimPrefix(path, "~+/"))
 	case strings.HasPrefix(path, "~"): // ~user is that user's home
 		s.call.opaque = true
 		return []string{path}
 	case filepath.IsAbs(path):
-		return []string{filepath.Clean(path)}
+		return []string{path}
 	case s.dirs == nil:
 		s.call.opaque = true
 		return []string{path}
 	}
 	paths := make([]string, len(s.dirs))
 	for i, dir := range s.dirs {
-		paths[i] = filepath.Join(dir, path)
+		paths[i] = dir + "/" + path
 	}
 	return paths
 }
@@ -528,6 +555,157 @@ func (s *shellInspector) enterLoop(loop syntax.Node) {
 		}
 		return true
 	})
+}
+
+// shells run the string given after -c as a command of their own.
+var shells = map[string]bool{"bash": true, "sh": true, "zsh": true, "dash": true, "ksh": true}
+
+// maxNesting is how deep bash -c and eval may run inside one another before
+// the command counts as unknown.
+const maxNesting = 4
+
+// addInnerCommands judges the commands a call hands to a shell as a string:
+// bash -c 'cat x', a shell started further along (timeout 9 sh -c 'cat x'),
+// and eval "cat x", also behind command, builtin or exec. The inner
+// command's paths and flags count for the call; a string whose value can't
+// be known makes it unknown.
+func (s *shellInspector) addInnerCommands(args []*syntax.Word) {
+	program := s.wrappedProgram(args)
+	for i, arg := range args {
+		names, ok := s.values(arg)
+		if !ok {
+			continue // the word already makes the call opaque
+		}
+		for _, name := range names {
+			switch {
+			case i == program && name == "eval":
+				commands, known := s.evalStrings(args[i+1:])
+				s.addInnerCommand(commands, known, true)
+			case shells[filepath.Base(name)]:
+				if script := s.shellScript(args[i+1:]); script != nil {
+					commands, known := s.values(script)
+					s.addInnerCommand(commands, known, false)
+				}
+			}
+		}
+	}
+}
+
+// wrappers run the command named after them and their options.
+var wrappers = map[string]bool{"command": true, "builtin": true, "exec": true}
+
+// wrappedProgram is the index of the word that names the program a command
+// runs, past any wrappers and their options: 2 in command -p eval "x".
+// exec's -a takes a value, alone or clustered (-la NAME).
+func (s *shellInspector) wrappedProgram(args []*syntax.Word) int {
+	value := func(word *syntax.Word) string { // "" when not one known value
+		if values, ok := s.values(word); ok && len(values) == 1 {
+			return values[0]
+		}
+		return ""
+	}
+	i := 0
+	for i < len(args) && wrappers[value(args[i])] {
+		wrapper := value(args[i])
+		for i++; i < len(args); i++ {
+			option := value(args[i])
+			if option == "--" {
+				i++
+				break
+			}
+			if !strings.HasPrefix(option, "-") {
+				break
+			}
+			if wrapper == "exec" && strings.Contains(option[1:], "a") {
+				i++
+			}
+		}
+	}
+	return i
+}
+
+// shellScript is the word a shell runs as a command, when its options
+// include -c (alone or clustered: -lc, -ec), or nil. -o and -O take a value.
+func (s *shellInspector) shellScript(words []*syntax.Word) *syntax.Word {
+	runsString := false
+	for i := 0; i < len(words); i++ {
+		values, ok := s.values(words[i])
+		if !ok || len(values) != 1 {
+			s.call.opaque = true
+			return nil
+		}
+		option := values[0]
+		switch {
+		case option == "--":
+			if runsString && i+1 < len(words) {
+				return words[i+1]
+			}
+			return nil
+		case strings.HasPrefix(option, "--"):
+		case len(option) > 1 && (option[0] == '-' || option[0] == '+'):
+			runsString = runsString || option[0] == '-' && strings.Contains(option, "c")
+			if strings.ContainsAny(option[len(option)-1:], "oO") {
+				i++
+			}
+		case runsString:
+			return words[i]
+		default:
+			return nil // a script file and its arguments
+		}
+	}
+	return nil
+}
+
+// evalStrings is every command eval can run: its words joined by spaces.
+func (s *shellInspector) evalStrings(words []*syntax.Word) ([]string, bool) {
+	choices := make([][]string, len(words))
+	for i, word := range words {
+		values, ok := s.values(word)
+		if !ok {
+			return nil, false
+		}
+		choices[i] = values
+	}
+	ways, complete := combinations(choices)
+	if !complete {
+		return nil, false
+	}
+	commands := make([]string, len(ways))
+	for i, way := range ways {
+		commands[i] = strings.Join(way, " ")
+	}
+	return commands, true
+}
+
+// addInnerCommand merges what each of the commands does into the call. Each
+// starts in the folders the shell may be in; eval runs in this shell, so
+// with inThisShell its cd moves the commands after it too.
+func (s *shellInspector) addInnerCommand(commands []string, known, inThisShell bool) {
+	if !known || s.depth >= maxNesting {
+		s.call.opaque = true
+		return
+	}
+	var dirs []string // where the shell may be after them
+	dirsKnown := true
+	for _, command := range commands {
+		inner := nestedInspector(command, s.workspace, s.home, slices.Clone(s.dirs), s.depth+1)
+		s.call.paths = append(s.call.paths, inner.call.paths...)
+		s.call.named = append(s.call.named, inner.call.named...)
+		s.call.recursive = s.call.recursive || inner.call.recursive
+		s.call.opaque = s.call.opaque || inner.call.opaque || inner.call.invalid
+		dirsKnown = dirsKnown && inner.dirs != nil
+		for _, dir := range inner.dirs {
+			if !slices.Contains(dirs, dir) {
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	if inThisShell {
+		s.dirs = nil
+		if dirsKnown && len(dirs) <= maxValues {
+			s.dirs = dirs
+		}
+	}
 }
 
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
@@ -645,8 +823,9 @@ func isDescriptor(target string) bool {
 	return target == "-" || target != "" && strings.Trim(target, "0123456789") == ""
 }
 
-// addPath records a command argument that may name a file. Flags, URLs and
-// empty words don't; a word whose value can't be known makes the call opaque.
+// addPath records a command argument that may name a file. URLs, empty words
+// and options without a value don't; a word whose value can't be known makes
+// the call opaque.
 func (s *shellInspector) addPath(word *syntax.Word) { s.addWordAsPath(word, false) }
 
 func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
@@ -661,14 +840,78 @@ func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 	}
 	if !ok {
 		s.call.opaque = true
+		s.call.named = append(s.call.named, s.knownNames(word)...)
 		return
 	}
 	for _, value := range values {
-		if value == "" || strings.Contains(value, "://") || (!isTarget && strings.HasPrefix(value, "-")) {
+		if !isTarget && strings.HasPrefix(value, "-") {
+			value = optionPath(value)
+		}
+		if _, inStack := inFolderStack(value); inStack { // its folder can't be known; inspect judges what lies below it
+			s.call.opaque = true
+		}
+		if value == "" || strings.Contains(value, "://") {
 			continue
 		}
 		s.call.paths = append(s.call.paths, s.resolve(value)...)
 	}
+}
+
+// knownNames is the names a word that can't be fully known still spells
+// out: each piece of its known text that starts the word or follows a /, up
+// to the next / or unknown part. "$(pwd)/../x/y" names .., x and y; a piece
+// right after an unknown part, b in $(a)b, may be the end of any name, so it
+// isn't one.
+func (s *shellInspector) knownNames(word *syntax.Word) []string {
+	var names []string
+	text, atStart := "", true // the known text since the last unknown part
+	takeNames := func() {
+		pieces := strings.Split(text, "/")
+		if !atStart {
+			pieces = pieces[1:]
+		}
+		names = append(names, pieces...)
+	}
+	s.eachPart(word.Parts, false, func(value string, known bool) {
+		if known {
+			text += value
+			return
+		}
+		takeNames()
+		text, atStart = "", false
+	})
+	takeNames()
+	return names
+}
+
+// eachPart hands visit each part of a word, inside double quotes too, with
+// its value when it has exactly one that can be known.
+func (s *shellInspector) eachPart(parts []syntax.WordPart, quoted bool, visit func(value string, known bool)) {
+	for _, part := range parts {
+		if inner, ok := part.(*syntax.DblQuoted); ok {
+			s.eachPart(inner.Parts, true, visit)
+			continue
+		}
+		values, ok := s.partValues(part, quoted)
+		if ok && len(values) == 1 {
+			visit(values[0], true)
+		} else {
+			visit("", false)
+		}
+	}
+}
+
+// optionPath is the part of an option that may name a file: the value of
+// --opt=value, or of a short option joined to a value that holds a /
+// (-C/srv, -o./out). Other options name none.
+func optionPath(option string) string {
+	if _, value, found := strings.Cut(option, "="); found {
+		return value
+	}
+	if !strings.HasPrefix(option, "--") && len(option) > 2 && strings.Contains(option, "/") {
+		return option[2:]
+	}
+	return ""
 }
 
 // commandTexts is a command as the rules match it, once for each way its
@@ -786,13 +1029,13 @@ var gitOptions = map[string]bool{
 func (s *shellInspector) withoutGitOptions(words []string) []string {
 	for i := 1; i < len(words); {
 		word := words[i]
-		name, value, joined := strings.Cut(word, "=")
+		name, _, joined := strings.Cut(word, "=")
 		switch {
 		case gitOptions[word]:
 			i++
 			continue
 		case gitOptionsWithValue[word] && i+1 < len(words):
-			name, value, joined = word, words[i+1], false
+			name = word
 			i += 2
 		case joined && strings.HasPrefix(name, "--") && (gitOptionsWithValue[name] || name == "--exec-path"):
 			i++
@@ -801,9 +1044,6 @@ func (s *shellInspector) withoutGitOptions(words []string) []string {
 		}
 		if name == "-c" || name == "--config-env" || name == "--exec-path" {
 			s.call.opaque = true
-		}
-		if joined && (name == "--git-dir" || name == "--work-tree") {
-			s.call.paths = append(s.call.paths, s.resolve(value)...) // addPath skips the whole word: it starts with "-"
 		}
 	}
 	return []string{"git"}
@@ -878,6 +1118,8 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 	return s.partsValues(word.Parts, false)
 }
 
+// partsValues is every string the parts of a word can expand to; quoted says
+// they are inside double quotes.
 func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]string, bool) {
 	if joinsDollar(parts) {
 		return nil, false
@@ -928,6 +1170,8 @@ func (s *shellInspector) partValues(part syntax.WordPart, quoted bool) ([]string
 			return nil, false
 		}
 		return []string{p.Value}, true
+	case *syntax.ExtGlob: // kept as written, for the paths it may match
+		return []string{p.Op.String() + p.Pattern.Value + ")"}, true
 	case *syntax.DblQuoted:
 		return s.partsValues(p.Parts, true)
 	case *syntax.ParamExp:

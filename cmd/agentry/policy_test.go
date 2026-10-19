@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
 func TestEachPolicyVersionIsRecordedWithItsText(t *testing.T) {
@@ -40,6 +41,26 @@ func TestEachPolicyVersionIsRecordedWithItsText(t *testing.T) {
 	recordOnDisk(log, live, loaded, refused)
 	if stream, _ = log.Stream(events.PolicyStream); stream[len(stream)-1].Type != events.PolicyRefused {
 		t.Errorf("a broken file is recorded as refused: %s", stream[len(stream)-1].Type)
+	}
+}
+
+// The HTTPS CA's key is one of Agentry's own files: no profile reaches it.
+func TestTheCAKeyIsOffLimits(t *testing.T) {
+	dir := t.TempDir()
+	log, _ := storetest.Open(t, filepath.Join(dir, "agentry.db"))
+	live, err := openPolicy(dir, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := filepath.Join(tlsca.Dir(dir), "ca.key")
+	for _, call := range []policy.Call{
+		{Tool: "Read", Input: key, Workspace: dir},
+		{Tool: "Bash", Input: "cat " + key, Workspace: dir},
+		{Tool: "Bash", Input: "tar czf /tmp/ca.tgz " + tlsca.Dir(dir), Workspace: dir},
+	} {
+		if got := live.Current().Decide("allow-everything", call); got.Decision != policy.Deny {
+			t.Errorf("%s %q: %s (%s)", call.Tool, call.Input, got.Decision, got.Reason())
+		}
 	}
 }
 

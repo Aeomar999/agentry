@@ -61,6 +61,11 @@ func Dir(dataDir string) string {
 	return filepath.Join(dataDir, Folder)
 }
 
+// KeyPath is where the CA's private key is kept in a data folder.
+func KeyPath(dataDir string) string {
+	return filepath.Join(Dir(dataDir), keyFile)
+}
+
 // privateRanges are the addresses the CA may vouch for: loopback, the
 // private LAN ranges, the shared range Hawser and Tailscale give out, and
 // IPv6 unique local addresses (Tailscale's among them). hostaddrs.Network
