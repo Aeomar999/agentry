@@ -28,6 +28,7 @@ interface Size {
 }
 
 const FOCUSABLE = "a[href], button, [tabindex]";
+const OVERFLOWS = '[class*="overflow-"], [style*="overflow"]';
 
 export function Fold({ children, lines, lineHeight, kind, className, aside }: FoldProps) {
   const id = useId();
@@ -64,7 +65,11 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
 
   const long = size === null || size.full > limit; // folded until measured, so nothing jumps
   const folded = long && !open;
-  useLayoutEffect(() => takeHiddenOutOfTabOrder(box.current!));
+  const cut = size?.cut ?? limit;
+  // Again after a render that folds, opens or moves the cut. A remeasure
+  // redoes the Tab order before this render puts the new cut on the box, so
+  // this pass is the one that gets it right.
+  useLayoutEffect(() => takeHiddenOutOfTabOrder(box.current!), [folded, cut]);
   useLayoutEffect(() => {
     if (!closing.current) return;
     closing.current = false;
@@ -85,8 +90,8 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
         <div
           ref={box}
           id={id}
-          data-fold-cut={folded ? (size?.cut ?? limit) : undefined}
-          style={folded ? { maxHeight: (size?.cut ?? limit) + (size?.edge ? 1 : 0) } : undefined}
+          data-fold-cut={folded ? cut : undefined}
+          style={folded ? { maxHeight: cut + (size?.edge ? 1 : 0) } : undefined}
           // clip can't be scrolled, so focusing a link can't shift the lines; hidden where clip isn't known.
           className={cn(
             "relative overflow-hidden supports-[overflow:clip]:overflow-clip",
@@ -141,11 +146,13 @@ function sizeOf(text: HTMLElement, limit: number): Size {
 
 // takeHiddenOutOfTabOrder gives every focusable element in a fold whose first
 // line is cut off tabindex -1, keeping its own in data-fold-tabindex, and
-// gives the rest theirs back.
+// gives the rest theirs back. It reads every element's place before it
+// writes any tabindex, so no read has to lay the page out again.
 function takeHiddenOutOfTabOrder(box: HTMLElement) {
-  for (const element of focusables(box)) {
+  const places = focusables(box).map((element) => [element, cutOff(element)] as const);
+  for (const [element, hidden] of places) {
     const saved = element.dataset.foldTabindex;
-    if (cutOff(element)) {
+    if (hidden) {
       if (saved !== undefined) continue;
       element.dataset.foldTabindex = element.getAttribute("tabindex") ?? "";
       element.tabIndex = -1;
@@ -159,9 +166,13 @@ function takeHiddenOutOfTabOrder(box: HTMLElement) {
 
 // focusables are what Tab can reach in a box: links, buttons, what has a
 // tabindex, and, in Chromium and Firefox, any box that scrolls, such as a
-// code block too wide for a phone.
+// code block too wide for a phone. Only a box given an overflow, by a class
+// or its style, can scroll, so only those have their style looked up: for
+// every element of a long feed, that cost more than the rest of the pass.
 function focusables(box: HTMLElement): HTMLElement[] {
-  return [...box.querySelectorAll<HTMLElement>("*")].filter((element) => element.matches(FOCUSABLE) || scrolls(element));
+  return [...box.querySelectorAll<HTMLElement>(`${FOCUSABLE}, ${OVERFLOWS}`)].filter(
+    (element) => element.matches(FOCUSABLE) || scrolls(element),
+  );
 }
 
 function scrolls(element: HTMLElement): boolean {

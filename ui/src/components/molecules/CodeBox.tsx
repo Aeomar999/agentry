@@ -36,8 +36,9 @@ export function CodeBox({ code, language, command = false }: { code: string; lan
   );
 }
 
-// Corner is a fence's language, as written, and its Copy button. Positioned
-// with no z-index, so it is drawn over the code but under a stuck header.
+// Corner is a fence's language, as written, and its Copy button. The fold's
+// clipping box after it is positioned too, so z-index 1 keeps the Corner
+// over the code and its clicks, and under a stuck band or header (10).
 function Corner({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -50,7 +51,7 @@ function Corner({ code, language }: { code: string; language: string }) {
     }
   }
   return (
-    <div className="absolute top-1 right-1 flex items-center gap-2 bg-surface-1 pl-2">
+    <div className="absolute top-1 right-1 z-[1] flex items-center gap-2 bg-surface-1 pl-2">
       {language && <span className="max-w-[10ch] truncate font-mono text-[11px] text-ink-muted">{language.toLowerCase()}</span>}
       <IconButton
         icon={copied ? <Check className="text-success" /> : <Copy />}

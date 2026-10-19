@@ -112,6 +112,60 @@ describe("Fold", () => {
     expect(code.hasAttribute("tabindex")).toBe(false);
   });
 
+  test("looks up the style only of a box given an overflow", () => {
+    const styles = vi.spyOn(window, "getComputedStyle");
+    render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <p data-lines={TEN_LINES}>
+          A long report. <a href="#link">link</a>
+        </p>
+        <pre className="overflow-x-auto">code</pre>
+      </Fold>,
+    );
+    const looked = styles.mock.calls.map(([element]) => element.tagName);
+    styles.mockRestore();
+    expect(looked.length).toBeGreaterThan(0);
+    expect(looked.every((tag) => tag === "PRE")).toBe(true);
+  });
+
+  test("doesn't redo the Tab order on a render that changes nothing", () => {
+    const { rerender } = report();
+    const reads = vi.spyOn(Element.prototype, "getClientRects");
+    rerender(reportFold());
+    rerender(reportFold());
+    expect(reads).not.toHaveBeenCalled();
+    reads.mockRestore();
+  });
+
+  test("redoes the Tab order once the render after a remeasure puts the new cut on the box", async () => {
+    // Lines of 20px cut at 80; then lines of 24px, cut at 72, with a link (no
+    // text, so no line of the cut's own) ending at 78: under the old cut, so
+    // a pass before the render keeps it.
+    let grow = () => {};
+    function Growing() {
+      const [tall, setTall] = useState(false);
+      grow = () => setTall(true);
+      return tall ? (
+        <p key="tall" data-lines="0-24 24-48 48-72 72-96 96-120">
+          Taller lines. <a href="#late" aria-label="late" data-lines="60-78" />
+        </p>
+      ) : (
+        <p key="short" data-lines={TEN_LINES}>
+          A long report. <a href="#late" aria-label="late" data-lines="60-78" />
+        </p>
+      );
+    }
+    const { container } = render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <Growing />
+      </Fold>,
+    );
+    expect(tabOrder()).toEqual(["late", "Show all 10 lines of this report"]);
+    act(() => grow());
+    await waitFor(() => expect(container.querySelector("[data-fold-cut]")!.getAttribute("data-fold-cut")).toBe("72"));
+    expect(tabOrder()).toEqual(["Show all 6 lines of this report"]);
+  });
+
   test("redoes the Tab order when the text moves a link below the cut without changing its size", async () => {
     let moveDown = () => {};
     function Moving() {
