@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -45,6 +46,7 @@ func Equal(s *store.Store, state *State) error {
 		{events.AgentsStream, func(e []events.Event) (any, error) { return agents.FromEvents(e), nil }, state.Roster()},
 		{events.WorkersStream, func(e []events.Event) (any, error) { return workers.FromEvents(e), nil }, state.Workers()},
 		{events.ConnectionsStream, func(e []events.Event) (any, error) { return connections.FromEvents(e), nil }, state.Connections()},
+		{events.SettingsStream, func(e []events.Event) (any, error) { return settings.FromEvents(e), nil }, state.Settings()},
 	}
 	for _, r := range rosters {
 		held := func() (any, error) { return r.held, state.Broken(r.stream) }

@@ -72,7 +72,7 @@ func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
 		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved,
-		IdeaSuggested, IdeaAccepted, IdeaDismissed}
+		IdeaSuggested, IdeaAccepted, IdeaDismissed, SettingsChanged, FollowUpsSkipped}
 	for _, kind := range all {
 		if _, ok := catalogue[kind]; !ok {
 			t.Errorf("%s is not in the catalogue", kind)

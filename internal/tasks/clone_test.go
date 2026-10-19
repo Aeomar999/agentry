@@ -114,6 +114,7 @@ func everyEvent() []events.Event {
 	log = add(log, worker, events.TurnStarted, "turn-3", map[string]any{"agent": "builder", "hash": "h"})
 	log = add(log, you, events.TurnStopped, "turn-3", map[string]any{})
 	log = add(log, lead, events.TaskDone, "", map[string]any{"summary": "Fast now."})
+	log = add(log, agentry, events.FollowUpsSkipped, "", map[string]any{"reason": "No Visionaries team.", "close": float64(40)})
 	log = add(log, you, events.TaskReopened, "", map[string]any{"text": "One more thing."})
 	log = add(log, lead, events.TaskDone, "", map[string]any{"summary": "Done again."})
 	log = add(log, you, events.TaskReopened, "", map[string]any{"text": "And the board."})

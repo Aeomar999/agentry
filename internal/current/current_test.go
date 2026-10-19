@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -66,6 +67,7 @@ func everyStream() []events.Event {
 		proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "engineer", "hash": "h"}),
 		proposal("idea-1", system, events.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
 		proposal("idea-1", you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.VisionariesOnEpicClose: false}),
 	)
 }
 
@@ -133,6 +135,9 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	}
 	if want := connections.FromEvents(accepted(log, events.ConnectionsStream)); !reflect.DeepEqual(s.Connections(), want) {
 		t.Errorf("connections: %+v\nreplay: %+v", s.Connections(), want)
+	}
+	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose {
+		t.Errorf("settings: %+v\nreplay: %+v", s.Settings(), want)
 	}
 	if want := log[len(log)-1].Position; s.Position() != want {
 		t.Errorf("position %d, want %d", s.Position(), want)

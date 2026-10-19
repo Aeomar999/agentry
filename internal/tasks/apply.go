@@ -79,6 +79,7 @@ func (t *Task) Apply(e events.Event) {
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
 		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
 		t.Idea = e.Text("idea")
+		t.About, t.AboutClose = e.Text("about"), int64(e.Number("close"))
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
 	case events.TaskDirected:
@@ -239,6 +240,9 @@ func (t *Task) Apply(e events.Event) {
 			t.Closing = "" // no stories left to have finished
 		}
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: "I took " + story + " out of this epic: it is no longer one of its stories."})
+	case events.FollowUpsSkipped:
+		t.Skipped = int64(e.Number("close"))
+		t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: You, Text: e.Text("reason")})
 	case events.RequestAnswered:
 		t.WaitingOn = ""
 		t.step(e, e.Text("coordinator"), t.Coordinator, e.Text("child")+" is done: "+e.Text("summary"))

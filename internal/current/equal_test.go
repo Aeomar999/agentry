@@ -70,7 +70,7 @@ func TestEqualPassesOnAStateThatFollowedTheLog(t *testing.T) {
 	}
 
 	loadedState := New()
-	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1"} {
+	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1", events.SettingsStream} {
 		accepted, err := s.Stream(stream)
 		if err != nil {
 			t.Fatal(err)

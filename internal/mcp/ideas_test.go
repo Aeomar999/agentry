@@ -24,7 +24,8 @@ type ideasAgentry struct {
 
 func newIdeasAgentry(t *testing.T) (*ideasAgentry, client.Client) {
 	fake := &ideasAgentry{ideas: []map[string]any{
-		{"id": "idea-4", "title": "Faster boot", "problem": "Start takes 9 s.", "proposal": "Load lazily.", "size": "S", "task": "task-24", "repo": "/other", "state": "open"},
+		{"id": "idea-4", "title": "Faster boot", "problem": "Start takes 9 s.", "proposal": "Load lazily.", "size": "S", "task": "task-24", "repo": "/other", "state": "open",
+			"about": "task-20", "aboutTitle": "Boot faster"},
 		{"id": "idea-3", "title": "Webhook log", "problem": "No one sees failures.", "proposal": "A log page.", "size": "M", "task": "task-24", "repo": "/repo",
 			"state": "accepted", "became": "task-30", "note": "soon"},
 		{"id": "idea-2", "title": "Dark sidebar", "problem": "Too bright.", "proposal": "A dark one.", "size": "S", "task": "task-24", "repo": "/repo",
@@ -127,7 +128,7 @@ func TestListIdeasShowsTheOpenOnesUnlessAsked(t *testing.T) {
 	if dismissed := c.tool("list_ideas", map[string]any{"state": "dismissed"}); !strings.Contains(dismissed, "idea-2") || strings.Contains(dismissed, "idea-1 [") {
 		t.Errorf("dismissed:\n%s", dismissed)
 	}
-	if everywhere := c.tool("list_ideas", map[string]any{"all": true}); !strings.Contains(everywhere, "idea-4 [open] Faster boot") {
+	if everywhere := c.tool("list_ideas", map[string]any{"all": true}); !strings.Contains(everywhere, `idea-4 [open] Faster boot (size S, task, suggested in task-24, after the epic task-20 "Boot faster" closed)`) {
 		t.Errorf("every repo:\n%s", everywhere)
 	}
 }

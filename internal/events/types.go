@@ -31,16 +31,17 @@ const (
 	RepoChanged        Type = "task.repo_changed"  // the task's work goes in another repo from now on; its worktree is made again there
 	AgentRenamedInTask Type = "task.agent_renamed" // an agent the task names was renamed: its coordinator, or who it is handed to
 
-	TaskTransferred Type = "task.transferred"      // the task is another team's work: their coordinator takes it
-	TaskRequested   Type = "task.requested"        // the task asked another team for something, a task of theirs it waits for
-	RequestAnswered Type = "task.request_answered" // the other team's task it waited for is done: its summary comes back
-	TaskSplit       Type = "task.split"            // the coordinator split the task into stories: it is an epic now, or one with more stories
-	StoryDone       Type = "task.story_done"       // one of the epic's stories is done: its summary comes back
-	EpicWaits       Type = "task.epic_waits"       // the epic's coordinator has nothing to do until more of its stories are done
-	EpicJoined      Type = "task.epic_joined"      // you made the task a story of an epic
-	EpicLeft        Type = "task.epic_left"        // you took the task out of its epic
-	StoryAdded      Type = "task.story_added"      // you added a task of yours to the epic, as a story
-	StoryRemoved    Type = "task.story_removed"    // you took a story out of the epic
+	TaskTransferred  Type = "task.transferred"       // the task is another team's work: their coordinator takes it
+	TaskRequested    Type = "task.requested"         // the task asked another team for something, a task of theirs it waits for
+	RequestAnswered  Type = "task.request_answered"  // the other team's task it waited for is done: its summary comes back
+	TaskSplit        Type = "task.split"             // the coordinator split the task into stories: it is an epic now, or one with more stories
+	StoryDone        Type = "task.story_done"        // one of the epic's stories is done: its summary comes back
+	EpicWaits        Type = "task.epic_waits"        // the epic's coordinator has nothing to do until more of its stories are done
+	EpicJoined       Type = "task.epic_joined"       // you made the task a story of an epic
+	EpicLeft         Type = "task.epic_left"         // you took the task out of its epic
+	StoryAdded       Type = "task.story_added"       // you added a task of yours to the epic, as a story
+	StoryRemoved     Type = "task.story_removed"     // you took a story out of the epic
+	FollowUpsSkipped Type = "task.followups_skipped" // the epic you closed got no Visionaries session about it: "reason" says why, "close" is that task.done's position
 
 	// A task's shared files (package sharedfiles).
 	FileAdded      Type = "file.added"      // a file shared with the task, or a new version of one: yours, or from a turn's folder
@@ -97,6 +98,12 @@ const (
 	IdeaDismissed Type = "idea.dismissed" // you turned it down, saying why in "note"
 )
 
+// The settings stream: your choices for how Agentry works, each kept until
+// you change it.
+const (
+	SettingsChanged Type = "settings.changed" // the settings it names, each set to its new value
+)
+
 // ProposalRejected is written by the store, never proposed.
 const ProposalRejected Type = "proposal.rejected"
 
@@ -107,6 +114,7 @@ const (
 	PolicyStream      = "policy"      // every policy event
 	WorkersStream     = "workers"     // every worker event
 	ConnectionsStream = "connections" // every Claude Code connection's event
+	SettingsStream    = "settings"    // every settings event
 )
 
 // IdeaPrefix starts every idea's stream name, so ideas never show up as tasks.

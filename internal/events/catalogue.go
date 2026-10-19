@@ -22,7 +22,7 @@ var catalogue = map[Type]spec{
 	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 
-	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is
+	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close"
 	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
@@ -44,6 +44,7 @@ var catalogue = map[Type]spec{
 	EpicLeft:           {fields: []string{"epic"}, writers: []ActorKind{Human}},
 	StoryAdded:         {fields: []string{"story", "title"}, writers: []ActorKind{Human}}, // "done" and "summary" when it is done already
 	StoryRemoved:       {fields: []string{"story"}, writers: []ActorKind{Human}},
+	FollowUpsSkipped:   {fields: []string{"reason", "close"}, writers: []ActorKind{System}},
 	FileAdded:          {fields: []string{"name", "hash", "size"}, writers: []ActorKind{Human, System}}, // "by": the agent, or you; "turn"
 	FileRemoved:        {fields: []string{"name"}, writers: []ActorKind{Human, System}},
 	FilesCollected:     {fields: []string{"turn"}, writers: []ActorKind{System}},
@@ -90,6 +91,8 @@ var catalogue = map[Type]spec{
 	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human}}, // "note" may be empty
 	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
 
+	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose"
+
 	ProposalRejected: {writers: nil},
 }
 
@@ -100,16 +103,17 @@ var streamOf = map[Type]string{
 	WorkerInvited: WorkersStream, WorkerJoined: WorkersStream, WorkerConnected: WorkersStream,
 	WorkerDisconnected: WorkersStream, WorkerRemoved: WorkersStream,
 	ConnectionInvited: ConnectionsStream, ConnectionMade: ConnectionsStream, ConnectionRevoked: ConnectionsStream,
+	SettingsChanged: SettingsStream,
 }
 
 // ideaTypes go in an idea's stream.
 var ideaTypes = []Type{IdeaSuggested, IdeaAccepted, IdeaDismissed}
 
-// IsTaskStream is false for the agents, policy, workers and connections
-// streams, and for ideas.
+// IsTaskStream is false for the agents, policy, workers, connections and
+// settings streams, and for ideas.
 func IsTaskStream(stream string) bool {
 	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream && stream != ConnectionsStream &&
-		!IsIdeaStream(stream)
+		stream != SettingsStream && !IsIdeaStream(stream)
 }
 
 func IsIdeaStream(stream string) bool { return strings.HasPrefix(stream, IdeaPrefix) }

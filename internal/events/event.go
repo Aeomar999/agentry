@@ -28,11 +28,14 @@ func (p Proposal) Text(field string) string {
 	return value
 }
 
-// Number returns a data field as an int, or 0. JSON numbers decode as float64.
+// Number returns a data field as an int, or 0. JSON numbers decode as
+// float64; a proposal not yet written may carry an int64, as a position.
 func (p Proposal) Number(field string) int {
 	switch value := p.Data[field].(type) {
 	case int:
 		return value
+	case int64:
+		return int(value)
 	case float64:
 		return int(value)
 	}

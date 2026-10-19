@@ -113,3 +113,37 @@ func TestAnUnknownIdeaIsNotFound(t *testing.T) {
 		}
 	}
 }
+
+// An idea from the session Agentry started after an epic closed names the
+// epic; others name none.
+func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list", "repo": repo,
+			"coordinator": "tech-lead", "kind": "epic"}},
+		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Follow-ups after Ideas list",
+			"repo": repo, "coordinator": "tech-lead", "about": "task-1", "close": 9}},
+		{Stream: "task-3", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Think", "repo": repo, "coordinator": "tech-lead"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	after, plain := suggestIdea(t, s, "task-2", repo, "Search ideas"), suggestIdea(t, s, "task-3", repo, "Dark mode")
+
+	_, body := call(t, server, "GET", "/api/ideas", "")
+	var list []ideaView
+	if err := json.Unmarshal([]byte(body), &list); err != nil {
+		t.Fatal(err, body)
+	}
+	for _, idea := range list {
+		want := ideaView{}
+		if idea.ID == after {
+			want = ideaView{About: "task-1", AboutTitle: "Ideas list"}
+		}
+		if idea.ID != after && idea.ID != plain || idea.About != want.About || idea.AboutTitle != want.AboutTitle {
+			t.Errorf("%s: about %q %q, want %q %q", idea.ID, idea.About, idea.AboutTitle, want.About, want.AboutTitle)
+		}
+	}
+}

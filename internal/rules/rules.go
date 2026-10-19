@@ -75,6 +75,9 @@ func Check(p events.Proposal, state State) *events.Rejection {
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
 		}
+		if p.Actor.Kind == events.System && p.Text("about") == "" {
+			return refuse("Agentry makes a task only about an epic you closed")
+		}
 		if reason := cmp.Or(aBudget(nil, p), aTurnLimit(nil, p)); reason != "" {
 			return refuse(reason)
 		}
@@ -110,7 +113,8 @@ func Check(p events.Proposal, state State) *events.Rejection {
 // its work is really in, where it gets its worktree.
 var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.RepoChanged, events.WorktreeReady,
 	events.AgentRenamedInTask,          // a finished task reopened later goes to its coordinator by its new name
-	events.EpicJoined, events.EpicLeft} // finished work is filed under epics too
+	events.EpicJoined, events.EpicLeft, // finished work is filed under epics too
+	events.FollowUpsSkipped} // an epic you closed: why no Visionaries session started after it
 
 // duringWrapUp are what may happen to a task you moved to Done while its
 // coordinator wraps up: its one turn, the shared files around it, and

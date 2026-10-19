@@ -51,6 +51,8 @@ type Task struct {
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
 	Idea        string  // the idea you accepted as this task, "" for none
+	About       string  // for a Visionaries session Agentry started after you closed an epic: the epic, "" for any other task
+	AboutClose  int64   // and the log position of that close: a reopened epic closed again is a new close
 
 	Kind        Kind
 	KindChosen  bool     // you chose story or epic; otherwise the coordinator may split a story that is too big
@@ -59,6 +61,7 @@ type Task struct {
 	Stories     []string // for an epic: its stories, in the order they were planned
 	StoriesDone []string // for an epic: the stories whose summary came back
 	Closing     string   // for an epic whose stories are all done: the summary it closes with, once you approve; kept while you leave it open
+	Skipped     int64    // for an epic you closed: the close Agentry last said it started no Visionaries session for
 
 	// Shared files (files.go).
 	Files        map[string]SharedFile

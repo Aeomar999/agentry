@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -96,6 +97,8 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 		return equalReplay(stream, accepted, infallible(workers.FromEvents), held(state.Workers()))
 	case events.ConnectionsStream:
 		return equalReplay(stream, accepted, infallible(connections.FromEvents), held(state.Connections()))
+	case events.SettingsStream:
+		return equalReplay(stream, accepted, infallible(settings.FromEvents), held(state.Settings()))
 	case events.PolicyStream:
 		return nil
 	}

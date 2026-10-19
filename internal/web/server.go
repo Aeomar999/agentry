@@ -108,6 +108,8 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
+	api("GET /api/settings", s.showSettings)
+	api("PUT /api/settings", s.changeSettings)
 	api("GET /api/policy", s.showPolicy)
 	api("GET /api/workers", s.listWorkers)
 	api("POST /api/workers/invite", s.invite)

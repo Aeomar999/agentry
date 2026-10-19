@@ -17,6 +17,7 @@ import (
 // The parts of the API's ideas the tools read.
 type idea struct {
 	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
+	About, AboutTitle                                                         string // the epic whose close started its session
 	BackedBy, DoubtedBy                                                       []string
 }
 
@@ -224,6 +225,9 @@ func headerOf(i idea) string {
 	parts = append(parts, kindOf(i))
 	if i.Task != "" {
 		parts = append(parts, "suggested in "+i.Task)
+	}
+	if i.About != "" {
+		parts = append(parts, "after the epic "+i.About+" "+strconv.Quote(i.AboutTitle)+" closed")
 	}
 	return strings.Join(parts, ", ")
 }

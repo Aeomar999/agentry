@@ -6,8 +6,8 @@
 // A stream is a task's when events.IsTaskStream says so, as the rules and
 // the coordinator tell them apart, and an idea's when events.IsIdeaStream
 // does: an idea is never a task. The agents, workers and connections
-// streams each make a roster. The policy stream keeps no state here: its
-// events only move the position.
+// streams each make a roster, and the settings stream your settings. The
+// policy stream keeps no state here: its events only move the position.
 package current
 
 import (
@@ -21,6 +21,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -40,6 +41,7 @@ type State struct {
 	roster      agents.Roster
 	workers     workers.Roster
 	connections connections.Roster
+	settings    settings.Settings
 }
 
 // created is a task.created event's place in the log, which orders taskIDs.
@@ -49,7 +51,8 @@ type created struct {
 }
 
 func New() *State {
-	return &State{tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{}, broken: map[string]error{}}
+	return &State{tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{}, broken: map[string]error{},
+		settings: settings.Default()}
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -70,6 +73,8 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			s.workers = workers.FromEvents(accepted)
 		case events.ConnectionsStream:
 			s.connections = connections.FromEvents(accepted)
+		case events.SettingsStream:
+			s.settings = settings.FromEvents(accepted)
 		case events.PolicyStream:
 		default:
 			if events.IsIdeaStream(stream) {
@@ -124,6 +129,8 @@ func (s *State) Apply(e events.Event) {
 			s.workers = s.workers.Next(e)
 		case events.ConnectionsStream:
 			s.connections = s.connections.Next(e)
+		case events.SettingsStream:
+			s.settings = s.settings.Next(e)
 		case events.PolicyStream:
 		default:
 			if events.IsIdeaStream(e.Stream) {
@@ -228,6 +235,13 @@ func (s *State) Connections() connections.Roster {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.connections
+}
+
+// Settings are your settings; a broken stream is kept as Roster's is.
+func (s *State) Settings() settings.Settings {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settings
 }
 
 // Broken is why a stream's state could not be built, or nil.

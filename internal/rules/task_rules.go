@@ -41,6 +41,8 @@ var taskRules = map[events.Type]rule{
 	events.StoryAdded:      all(anEpic, notItsStoryYet),
 	events.StoryRemoved:    all(itsStory),
 
+	events.FollowUpsSkipped: all(aClosedEpic, notSkippedYet),
+
 	events.FileAdded:      all(aSharedFileName, aFileHash),
 	events.FileRemoved:    all(aSharedFile),
 	events.FilesCollected: all(anEndedTurn, notCollectedYet),
@@ -272,6 +274,20 @@ func notAStory(t *tasks.Task, _ events.Proposal) string {
 func anEpic(t *tasks.Task, _ events.Proposal) string {
 	if t.Kind != tasks.Epic {
 		return "only an epic waits for its stories"
+	}
+	return ""
+}
+
+func aClosedEpic(t *tasks.Task, _ events.Proposal) string {
+	if t.Kind != tasks.Epic || !t.IsDone {
+		return "only an epic you closed gets a Visionaries session after it"
+	}
+	return ""
+}
+
+func notSkippedYet(t *tasks.Task, p events.Proposal) string {
+	if t.Skipped == int64(p.Number("close")) {
+		return "Agentry has said already why this close got no Visionaries session"
 	}
 	return ""
 }

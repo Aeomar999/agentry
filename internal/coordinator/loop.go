@@ -32,6 +32,8 @@ type Loop struct {
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
 
+	startedAt int64 // the log's last position when Run started: what came before is history (followups.go)
+
 	Clones string // where repos the user names by a git address are cloned, for a "move"
 }
 
@@ -46,6 +48,7 @@ func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *
 const gitTimeout = 10 * time.Minute
 
 func (l *Loop) Run(ctx context.Context) error {
+	l.startedAt = l.store.LastPosition()
 	reader := l.store.NewReader(0)
 	defer reader.Close()
 	for {
@@ -56,6 +59,7 @@ func (l *Loop) Run(ctx context.Context) error {
 		for _, id := range touchedTasks(batch) {
 			l.act(id)
 		}
+		l.followUps(batch)
 	}
 }
 

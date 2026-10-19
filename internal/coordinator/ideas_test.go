@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
@@ -20,19 +21,37 @@ import (
 // Writing's agents by another name, so its coordinator is editor.
 func withVisionaries(t *testing.T) (*store.Store, string) {
 	t.Helper()
+	s, state, repo := withTeams(t, true)
+	runLoop(t, s, state)
+	return s, repo
+}
+
+// withTeams is a store with the Software team, and the Visionaries if
+// visionaries, and a repo, with no loop running yet.
+func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, string) {
+	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	visionaries, _ := agents.TemplateNamed("Writing")
-	visionaries.Team = "visionaries" // in any case
-	for _, p := range agents.AddTeam(visionaries, agents.FromEvents(mustStream(t, s, events.AgentsStream)), you) {
+	if !visionaries {
+		return s, state, repo
+	}
+	team, _ := agents.TemplateNamed("Writing")
+	team.Team = "visionaries" // in any case
+	for _, p := range agents.AddTeam(team, agents.FromEvents(mustStream(t, s, events.AgentsStream)), you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
 	}
+	return s, state, repo
+}
+
+// runLoop runs a loop on the store until the test ends.
+func runLoop(t *testing.T, s *store.Store, state *current.State) {
+	t.Helper()
 	loop := newLoop(s, state, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
@@ -51,7 +70,6 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 			sessions.Stop(sessions.SocketFor(id))
 		}
 	})
-	return s, repo
 }
 
 func startTask(t *testing.T, s *store.Store, id, repo, coordinator string) *tasks.Task {

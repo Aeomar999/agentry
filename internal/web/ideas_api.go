@@ -8,28 +8,33 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // listIdeas answers the ideas, of every repo or of ?repo=, newest session
 // first: by when the task they came from was made, then newest idea first.
+// An idea from a session after an epic closed names that epic.
 func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 	list, err := ideas.List(s.store, r.URL.Query().Get("repo"))
 	if err != nil {
 		failed(w, err)
 		return
 	}
-	started := map[string]time.Time{}
+	started, about := map[string]time.Time{}, map[string]*tasks.Task{}
 	for _, idea := range list {
 		if _, seen := started[idea.Task]; !seen {
 			if task, err := s.task(idea.Task); err == nil && task != nil {
 				started[idea.Task] = task.CreatedAt
+				if epic, err := s.task(task.About); err == nil && epic != nil {
+					about[idea.Task] = epic
+				}
 			}
 		}
 	}
 	slices.SortStableFunc(list, func(a, b *ideas.Idea) int { return started[b.Task].Compare(started[a.Task]) })
 	views := []ideaView{}
 	for _, idea := range list {
-		views = append(views, viewOf(idea))
+		views = append(views, viewOf(idea, about[idea.Task]))
 	}
 	reply(w, views)
 }
