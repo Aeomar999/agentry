@@ -467,7 +467,7 @@ func TestServeHTTPS(t *testing.T) {
 	}
 	plain := "http://" + strings.TrimPrefix(saved.URL, "https://")
 	printed := out.String()
-	for _, want := range []string{"Open " + saved.Page + "/?token=", "SHA-256 " + ca.Fingerprint(), plain + "/trust/ca.crt"} {
+	for _, want := range []string{"Open " + saved.Page + "/?token=", "SHA-256 " + ca.Fingerprint(), "device: " + plain + "/trust/\n"} {
 		if !strings.Contains(printed, want) {
 			t.Errorf("printed:\n%s\nwant it to say %q", printed, want)
 		}

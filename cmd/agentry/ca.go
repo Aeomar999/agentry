@@ -42,7 +42,7 @@ func runCA(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if *regenerate {
-		fmt.Fprintln(stdout, "Made a new CA. Devices that trusted the old one no longer trust this server: on each, remove the old Agentry local CA and trust the new one from /trust/ca.crt.")
+		fmt.Fprintln(stdout, "Made a new CA. Devices that trusted the old one no longer trust this server: on each, remove the old Agentry local CA and trust the new one from /trust/.")
 		fmt.Fprintln(stdout, "Workers and connected Claude Code machines must join again with the new fingerprint below: run the install command again, "+
 			"with -ca-fingerprint. Claude Code sessions open now can't reach Agentry until they are restarted, after joining again.")
 	}

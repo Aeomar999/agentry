@@ -66,7 +66,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	var options serveOptions
 	flags.StringVar(&options.address, "addr", "0.0.0.0:7800", "where to listen: every interface by default, so other machines reach it; 127.0.0.1:7800 for this machine only")
 	flags.StringVar(&options.publicURL, "public-url", "", "the address people open, for the printed link, such as https://agentry.example.com")
-	flags.BoolVar(&options.https, "https", false, "serve over https with Agentry's own local CA, which devices trust once from /trust/ca.crt")
+	flags.BoolVar(&options.https, "https", false, "serve over https with Agentry's own local CA, which devices trust once from /trust/")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
@@ -261,7 +261,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return serveUntilDone(ctx, listener, server.Handler(), nil)
 	}
 	fmt.Fprintf(stdout, "Served over https with Agentry's own CA, SHA-256 %s.\n", ca.Fingerprint())
-	fmt.Fprintf(stdout, "Trust it once on each device: %s%sca.crt\n", cmp.Or(plainURLs(append(slices.Clip(network), serverURL))...), trustPrefix)
+	fmt.Fprintf(stdout, "Trust it once on each device: %s%s\n", cmp.Or(plainURLs(append(slices.Clip(network), serverURL))...), trustPrefix)
 	issuer := tlsca.NewIssuer(ca, tlsca.Hosts, time.Now)
 	door := trust{ca: ca, issuer: issuer, addresses: append(slices.Clip(network), serverURL)}
 	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), door), tlsConfig(issuer))
