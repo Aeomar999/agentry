@@ -425,6 +425,7 @@ func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { storetest.CheckEqual(t, s, state) }) // cleanups run last first: before the close
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
