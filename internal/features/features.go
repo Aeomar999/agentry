@@ -4,6 +4,8 @@
 package features
 
 import (
+	"fmt"
+
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -65,15 +67,27 @@ type Line struct {
 }
 
 // Manifest is every feature's line, in list's order, as of state. A feature
-// with no Manifest is listed hidden.
+// with no Manifest is listed hidden, and so is one whose Manifest panics,
+// with Why saying so: one feature's bug doesn't cost the others their lines.
 func Manifest(list []Feature, state Reader) []Line {
 	lines := []Line{}
 	for _, f := range list {
 		line := Line{Name: f.Name}
 		if f.Manifest != nil {
-			line.Entry = f.Manifest(state)
+			line.Entry = entryOf(f, state)
 		}
 		lines = append(lines, line)
 	}
 	return lines
+}
+
+// entryOf is f's Manifest, a panic in it turned into a hidden, disabled
+// entry.
+func entryOf(f Feature, state Reader) (entry Entry) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			entry = Entry{Why: fmt.Sprintf("its manifest failed: %v", recovered)}
+		}
+	}()
+	return f.Manifest(state)
 }
