@@ -877,6 +877,9 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 }
 
 func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]string, bool) {
+	if joinsDollar(parts) {
+		return nil, false
+	}
 	results := []string{""}
 	for _, part := range parts {
 		pieces, ok := s.partValues(part, quoted)
@@ -892,6 +895,18 @@ func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]st
 		results = next
 	}
 	return results, true
+}
+
+// joinsDollar: a $ is followed by more of the word, which only a backslash and
+// a newline between them make. mvdan drops those and keeps the $ apart, but
+// bash joins the lines first, so $\<newline>x is $x.
+func joinsDollar(parts []syntax.WordPart) bool {
+	for _, part := range parts[:max(len(parts)-1, 0)] {
+		if lit, isLit := part.(*syntax.Lit); isLit && lit.Value == "$" {
+			return true
+		}
+	}
+	return false
 }
 
 // partValues is every string one part of a word can be. Inside double quotes
@@ -997,8 +1012,8 @@ type braceAtom struct {
 
 // braceWords is the words brace expansion makes of word: {a,b}c is ac bc,
 // x{a,} is just xa. Not ok for a sequence ({1..3}), for more than maxValues
-// words, and next to a $name, which bash reads again after expanding, so that
-// $x{y,} is $xy $x.
+// words, and next to a $name or a $ that joins the next line, which bash reads
+// again after expanding, so that $x{y,} is $xy $x.
 func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
 	atoms := braceAtoms(word)
 	if !slices.ContainsFunc(atoms, func(a braceAtom) bool { return a.brace && a.text == "{" }) {
@@ -1011,7 +1026,7 @@ func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
 	if len(ways) == 1 {
 		return []*syntax.Word{word}, true
 	}
-	if slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+	if joinsDollar(word.Parts) || slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
 		p, isVariable := part.(*syntax.ParamExp)
 		return isVariable && p.Short
 	}) {

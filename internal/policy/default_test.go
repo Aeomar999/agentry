@@ -807,6 +807,11 @@ func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 			{"a backslash and a newline", bash("npx vitest run --exec-\\\nargv=--import=data:text/javascript,1"), Deny},
 			{"an escape in double quotes", bash(`npx vitest run "--exec\-argv=1"`), Allow}, // bash keeps that backslash
 			{"an escaped quote in double quotes", bash(`npx vitest run "--exec-argv=\"1\""`), Deny},
+			{"go test $ and a backslash-newline", bash("x=" + scratch + "; go test $\\\nx/..."), Ask},
+			{"go test \"$ and a backslash-newline\"", bash("x=" + scratch + "; go test \"$\\\nx/...\""), Ask},
+			{"cd $ and a backslash-newline", bash("x=" + scratch + "; cd $\\\nx && npm test"), Ask},
+			{"jest a reporter at $ and a backslash-newline", bash("x=" + scratch + "; npx jest --reporters=$\\\nx/r.js"), Ask},
+			{"vitest a flag at $ and a backslash-newline", bash("x=--exec-argv=1; npx vitest run $\\\nx"), Ask},
 			{"ANSI-C quoting with an escape", bash(`cd $'\x2ftmp/claude-1000/x/s' && npm test`), Ask},
 
 			// a brace bash expands
