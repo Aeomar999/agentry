@@ -19,7 +19,11 @@ func startedHere(base string) []string {
 	var found []string
 	for _, pid := range fromThisRun(base) {
 		command, _ := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-		found = append(found, fmt.Sprintf("pid %d: %s", pid, strings.TrimSpace(string(bytes.ReplaceAll(command, []byte{0}, []byte{' '})))))
+		line := strings.TrimSpace(string(bytes.ReplaceAll(command, []byte{0}, []byte{' '})))
+		if len(line) > 160 {
+			line = line[:160] + "…"
+		}
+		found = append(found, fmt.Sprintf("pid %d: %s", pid, line))
 	}
 	return found
 }
