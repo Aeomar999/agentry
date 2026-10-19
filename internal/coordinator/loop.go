@@ -35,46 +35,7 @@ type Loop struct {
 	Clones string // where repos the user names by a git address are cloned, for a "move"
 }
 
-var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
-
-// AsksForItself says whether the task's open question is the loop's own, one
-// of its stops, rather than one a coordinator asked.
-func AsksForItself(task *tasks.Task) bool { return task.Question != "" && task.Asked.By == agentry.ID }
-
-// The limits that stop a task, as its question says.
-const (
-	LimitBudget = "budget"
-	LimitTurns  = "turns"
-)
-
-// StoppedAt is the limit the task's open question is the loop's stop for,
-// LimitBudget or LimitTurns, or "" for any other question: raising that
-// limit answers it, and nothing else does.
-func StoppedAt(task *tasks.Task) string {
-	switch {
-	case !AsksForItself(task):
-		return ""
-	case task.Asked.Limit != "":
-		return task.Asked.Limit
-	case task.Asked.Fetch != nil:
-		return "" // the copy question
-	}
-	// Asked before the question said which: the stops' fixed words tell, and
-	// the loop's other questions, which carry no limit, never match them.
-	switch {
-	case strings.HasPrefix(task.Question, oldTurnStop):
-		return LimitTurns
-	case strings.HasPrefix(task.Question, oldBudgetStop):
-		return LimitBudget
-	}
-	return ""
-}
-
-// How the loop's stops at the limits began before they said their limit.
-const (
-	oldTurnStop   = "This task has had "
-	oldBudgetStop = "This task has used "
-)
+var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
 	return &Loop{store: s, state: state, runner: runner, fleet: fleet}

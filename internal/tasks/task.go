@@ -2,7 +2,10 @@
 // stored, so it can never disagree with what happened.
 package tasks
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Status is the one word the page shows for a task.
 type Status string
@@ -98,6 +101,45 @@ func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget
 
 // AtTurnLimit says whether the task has had all the turns it may without your answer.
 func (t *Task) AtTurnLimit() bool { return t.MaxTurns > 0 && t.TurnsSinceAnswer >= t.MaxTurns }
+
+// Loop is the coordinator loop's actor ID: a question it asks is one of its
+// stops, not a coordinator's.
+const Loop = "coordinator-loop"
+
+// The limits that stop a task, as its question says.
+const (
+	LimitBudget = "budget"
+	LimitTurns  = "turns"
+)
+
+// StoppedAt is the limit the task's open question is the loop's stop for,
+// LimitBudget or LimitTurns, or "" for any other question: raising that
+// limit answers it, and nothing else does.
+func (t *Task) StoppedAt() string {
+	switch {
+	case t.Question == "" || t.Asked.By != Loop:
+		return ""
+	case t.Asked.Limit != "":
+		return t.Asked.Limit
+	case t.Asked.Fetch != nil:
+		return "" // the copy question
+	}
+	// Asked before the question said which: the stops' fixed words tell, and
+	// the loop's other questions, which carry no limit, never match them.
+	switch {
+	case strings.HasPrefix(t.Question, oldTurnStop):
+		return LimitTurns
+	case strings.HasPrefix(t.Question, oldBudgetStop):
+		return LimitBudget
+	}
+	return ""
+}
+
+// How the loop's stops at the limits began before they said their limit.
+const (
+	oldTurnStop   = "This task has had "
+	oldBudgetStop = "This task has used "
+)
 
 // WrapUp is the one turn a coordinator has after you move its task to Done,
 // To do or the Backlog yourself: to write its summary, commit or tidy the

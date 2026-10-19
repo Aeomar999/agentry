@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -15,46 +14,9 @@ import (
 // The JSON the page reads. Kept apart from the task state so the state can
 // change shape without breaking the page, and the page sees only what it shows.
 
-type taskSummary struct {
-	ID               string       `json:"id"`
-	Title            string       `json:"title"`
-	Repo             string       `json:"repo"`
-	Status           tasks.Status `json:"status"`
-	CurrentAgent     string       `json:"currentAgent"`
-	Stage            string       `json:"stage"`  // the agent the coordinator last handed it to
-	Column           string       `json:"column"` // its column on the board: backlog, todo, in-progress, review, shipping or done
-	Turns            int          `json:"turns"`
-	NeedsYou         string       `json:"needsYou"`    // what you are asked, "" when nothing
-	HasQuestion      bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
-	Labels           []string     `json:"labels"`
-	Budget           int          `json:"budget"`           // tokens; 0 is no limit
-	TokensUsed       int          `json:"tokensUsed"`       // by every turn that has ended
-	OverBudget       bool         `json:"overBudget"`       // stopped, or about to stop, for its budget
-	MaxTurns         int          `json:"maxTurns"`         // turns it may have without your answer; 0 is no limit
-	TurnsSinceAnswer int          `json:"turnsSinceAnswer"` // turns since it started or you last answered
-	AtTurnLimit      bool         `json:"atTurnLimit"`      // stopped, or about to stop, for its limit of turns
-	StoppedAt        string       `json:"stoppedAt"`        // the limit whose stop is the open question, "budget" or "turns": raising it answers; "" for none
-	Rank             float64      `json:"rank"`             // your priority order, lower first
-	Parked           string       `json:"parked"`           // "todo" or "backlog" while you hold it there
-	Parent           string       `json:"parent"`           // the task, of another team, that asked for this one
-	WaitingOn        string       `json:"waitingOn"`        // another team's task this one waits for
-	Kind             tasks.Kind   `json:"kind"`             // "" for a story, "epic"
-	Epic             string       `json:"epic"`             // a story's epic
-	After            []string     `json:"after"`            // the stories it builds on
-	BlockedBy        []string     `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
-	Stories          int          `json:"stories"`          // an epic's
-	StoriesDone      int          `json:"storiesDone"`
-	Closing          string       `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
-	Told             *told        `json:"told"`    // the coordinator's latest word to you besides questions and summaries
-	CreatedAt        time.Time    `json:"createdAt"`
-	LastActiveAt     time.Time    `json:"lastActiveAt"`
-}
-
-type told struct {
-	At   time.Time `json:"at"`
-	From string    `json:"from"`
-	Text string    `json:"text"`
-}
+// taskSummary is a task in the list, as the tasks package summarizes it,
+// so an archived task can be its summary alone.
+type taskSummary = tasks.Summary
 
 type taskDetail struct {
 	taskSummary
@@ -130,29 +92,6 @@ type eventEntry struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
-func summaryOf(t *tasks.Task, roster agents.Roster) taskSummary {
-	needsYou := t.Question
-	if waiting := t.WaitingForYou(); needsYou == "" && len(waiting) > 0 {
-		needsYou = waiting[0].Agent + " asks to run: " + waiting[0].Command
-	}
-	if open := t.OpenTurn(); needsYou == "" && open != nil {
-		needsYou = open.Waiting
-	}
-	closing := t.Closing
-	if t.IsDone {
-		closing = ""
-	}
-	var said *told
-	if t.Told.Text != "" {
-		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
-	}
-	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), Column: columnOf(t, roster), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
-		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: coordinator.StoppedAt(t), Rank: t.Rank, Parked: t.Parked,
-		Parent: t.Parent, WaitingOn: t.WaitingOn,
-		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
-		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
-}
-
 // blockedBy are the stories a story builds on that aren't done, while it
 // waits to start for them.
 func blockedBy(t *tasks.Task, done func(id string) bool) []string {
@@ -176,49 +115,8 @@ func listOf(items []string) []string {
 	return items
 }
 
-// columnOf is the task's column on the board: Done, where you parked it, or
-// its work's column.
-func columnOf(t *tasks.Task, roster agents.Roster) string {
-	switch {
-	case t.IsDone:
-		return "done"
-	case t.Parked != "":
-		return t.Parked
-	}
-	return workColumn(t, roster)
-}
-
-// workColumn is the column of the task's work, done or parked or not: the
-// column you moved it to while that stands; otherwise its stage's: Review
-// while an agent that checks work has it, Shipping while one that ships
-// work has it.
-func workColumn(t *tasks.Task, roster agents.Roster) string {
-	if t.Column != "" {
-		return t.Column
-	}
-	agent, _ := roster.Get(stageOf(t))
-	switch agent.Column {
-	case agents.Reviews:
-		return "review"
-	case agents.Ships:
-		return "shipping"
-	}
-	return "in-progress"
-}
-
-// stageOf is the agent the coordinator last handed the task to, or "" before
-// the first handoff.
-func stageOf(t *tasks.Task) string {
-	for i := len(t.Trail) - 1; i >= 0; i-- {
-		if step := t.Trail[i]; step.From == t.Coordinator && step.To != tasks.You {
-			return step.To
-		}
-	}
-	return ""
-}
-
 func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
-	detail := taskDetail{taskSummary: summaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
+	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {

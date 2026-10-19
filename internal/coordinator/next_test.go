@@ -239,7 +239,7 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}).
 			turn(turnID(len(h)+1), "engineer", "still broken")
 	}
-	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || move.Limit != LimitTurns || !strings.Contains(move.Reason, "24 of its 24 turns") {
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || move.Limit != tasks.LimitTurns || !strings.Contains(move.Reason, "24 of its 24 turns") {
 		t.Errorf("after %d turns: %+v", DefaultMaxTurns, move)
 	}
 	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": "?"}).add(you, events.TaskAnswered, "", map[string]any{"answer": "try X"})
@@ -307,15 +307,15 @@ func TestTheBudgetSendsTheTaskToYou(t *testing.T) {
 	h = h.add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
 		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "half done", "tokens": 50_000})
 	move := Next(h.task(), defaultRoster())
-	if move.Kind != AskYou || move.Limit != LimitBudget || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
+	if move.Kind != AskYou || move.Limit != tasks.LimitBudget || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
 		t.Errorf("over budget: %+v", move)
 	}
 	h = h.add(agentry, events.TaskNeedsYou, "", map[string]any{"question": move.Reason, "limit": move.Limit})
-	if task := h.task(); StoppedAt(task) != LimitBudget {
-		t.Errorf("the stop's limit: %q", StoppedAt(task))
+	if task := h.task(); task.StoppedAt() != tasks.LimitBudget {
+		t.Errorf("the stop's limit: %q", task.StoppedAt())
 	}
 	h = h.add(you, events.TaskAnswered, "", map[string]any{"answer": "Wrap up."})
-	if task := h.task(); task.Asked.Limit != "" || StoppedAt(task) != "" {
+	if task := h.task(); task.Asked.Limit != "" || task.StoppedAt() != "" {
 		t.Errorf("after your answer the limit is cleared: %q", task.Asked.Limit)
 	}
 	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn || move.Agent.Name != "tech-lead" {
