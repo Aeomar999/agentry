@@ -25,14 +25,15 @@ func TestTheCoordinatorMovesATaskToTheRepoYouNamed(t *testing.T) {
 	const id = "task-repos-1"
 	loop := newLoop(s, state, root)
 	loop.Clones = filepath.Join(root, ".repos")
-	run(t, loop, state)
-
 	remote := gitRepo(t)
 	address := "file://" + filepath.ToSlash(remote)
 	missing := "file://" + filepath.ToSlash(filepath.Join(t.TempDir(), "gone.git"))
+	repo := gitRepo(t)
+	run(t, loop, state)
+
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Make it installable", "description": "Clone " + missing + ", or else " + address + ", and make the app a PWA.",
-		"repo": gitRepo(t), "coordinator": "tech-lead"}})
+		"repo": repo, "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "move", "repo": "`+filepath.ToSlash(t.TempDir())+`"}`)

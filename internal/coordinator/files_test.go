@@ -28,12 +28,13 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
+	repo := gitRepo(t)
 	const id = "task-files-1"
 	run(t, newLoop(s, state, root), state)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Crunch the numbers", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Crunch the numbers", "repo": repo, "coordinator": "tech-lead"}})
 	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Make the report."}`)
 	task = waitForTurn(t, s, id, "turn-2", "engineer")

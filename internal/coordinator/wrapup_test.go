@@ -179,10 +179,11 @@ func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, *current
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
+	repo := gitRepo(t)
 	run(t, newLoop(s, state, t.TempDir()), state)
 
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO."}`)
 	waitForTurn(t, s, id, "turn-2", "engineer")
