@@ -24,12 +24,31 @@
 #   paths      the call touches a path matching these patterns
 #   where      "workspace": everything it touches is in the task's worktree or
 #              the profile's scratch places; "outside": something isn't
+#   redirects_to_file
+#              true: a shell command writes a file through a redirect (> f,
+#              >> f, &> f). > /dev/null, 2>&1 and the scratch places don't count
 #
 # Patterns
 #   commands   * matches anything, spaces included: 'git push *'. A trailing
 #              " *" may match nothing, so 'git push *' also matches 'git push'.
+#              # matches a number: 'sed -n #,#p *'. \ before a character
+#              matches that character as it is: '\#' is a #, '\*' a *.
 #   paths      * stays inside one folder, ** crosses folders, ~ is your home.
 #              A pattern with no / matches that name in any folder: '.env'.
+#   git        git's options before its subcommand are left out, so 'git commit *'
+#              also matches `git -C dir commit`; dir still counts for where and
+#              paths. A setting (git -c k=v) can make git run a command, so it
+#              counts as unknown until it runs, like $(...).
+#   variables  setting an upper-case or npm_config_ variable (GOFLAGS=x go test,
+#              export PAGER=x), or handing a lower-case one to a program
+#              (x=1 make test, export x), counts as unknown too, since programs
+#              read their settings from them, except GOTOOLCHAIN, GOPROXY,
+#              CGO_ENABLED, GOOS, GOARCH, NO_COLOR, LC_ALL, LANG and TZ. A
+#              variable that may hold several values (for c in a b) is matched
+#              with each of them.
+#   clusters   the short options of sort, tree, file, git grep, pytest and
+#              npx jest, vitest and eslint are matched one by one, so 'sort *-o*'
+#              also matches `sort -uo out`.
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
 # Allow everything, as shipped
@@ -186,10 +205,71 @@ scratch = ['/tmp/claude-*/**']
   why = "Its job is to judge the work, not to change it."
 
   [[profiles.read-only.rules]]
+  name = "writes no files from the shell"
+  decision = "deny"
+  redirects_to_file = true
+  why = "Its job is to judge the work, not to change it. Send output to /dev/null, or to a file in your scratch folder."
+
+  [[profiles.read-only.rules]]
+  name = "runs nothing that changes files"
+  decision = "deny"
+  runs_any = [
+    'rm *', 'rmdir *', 'mv *', 'cp *', 'touch *', 'mkdir *', 'chmod *', 'ln *', 'truncate *', 'dd *', 'tee *',
+    'sed *-i*', 'perl *-i*', 'perl *-pi*', 'sort *-o*', 'git * --output*',
+    'find *-delete*', 'find *-exec*', 'find *-ok*', 'find *-fprint*', 'find *-fls *',
+    'tree -o*', 'tree * -o*', 'tree -R*', 'tree * -R*', 'file -C*', 'file * -C*', 'file *--co*',
+    'gofmt *-w', 'gofmt *-w *', 'gofmt *-w=*', 'gofmt *-cpuprofile*',
+  ]
+  why = "Its job is to judge the work, not to change it. Read with cat, head or the Read tool, and search with grep -r."
+
+  [[profiles.read-only.rules]]
+  name = "go writes no files"
+  decision = "deny"
+  runs_any = [
+    'go build *', 'go install *', 'go test *-o *', 'go test *-o=*', 'go test *-c *', 'go test *profile*',
+    'go test *-trace*', 'go test *-outputdir*', 'go test *-fuzz*', 'go test *-c=*', 'go *testlogfile*', 'go *gocoverdir*',
+    'go *-exec*', 'go *-toolexec*', 'go *-vettool*', 'go *-mod=mod*', 'go *-pkgdir*',
+    'go *-ldflags*', 'go *-gcflags*', 'go *-asmflags*',
+  ]
+  why = "These write a binary, a profile, a log or go.mod into the repo, or run a program of their choosing (the compiler and linker flags can name one). go vet checks what go build would; go test runs the tests (its build cache is Go's own, outside the repo)."
+
+  [[profiles.read-only.rules]]
+  name = "test and lint tools write no files"
+  decision = "deny"
+  runs_any = [
+    'npx eslint *--fix', 'npx eslint *--fix *', 'npx eslint *-o *', 'npx eslint *--output-file*', 'npx eslint *--cache*',
+    'npx eslint *--init*', 'npx vitest *-u', 'npx vitest *-u *', 'npx vitest *--update*', 'npx vitest *--outputFile*',
+    'npx vitest *--output-file*', 'npx vitest *--outputJson*', 'npx vitest *--output-json*', 'npx vitest *--coverage*',
+    'npx vitest *--reporter*blob*', 'npx vitest *--reporter*html*',
+    'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
+    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--collectCoverage*',
+    'npx jest *--collect-coverage*', 'npx jest *--cacheDirectory*', 'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx jest *--config*', 'npx jest -c*', 'npx jest * -c*',
+    '*pytest *--junit*', '*pytest *--basetemp*', '*pytest *--cov*', '*pytest *--debug*', '*pytest *--log-file*',
+    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest -o*', '*pytest * -o*', '*pytest *--override-ini*',
+    '*pytest *--pastebin*',
+    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo -Z*',
+    'cargo * -Z*',
+  ]
+  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs (jest's --config can be inline JSON that turns coverage on). Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
+
+  [[profiles.read-only.rules]]
+  name = "runs no command a flag names"
+  decision = "deny"
+  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*']
+  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program. Search with plain git grep, rg or grep -r."
+
+  [[profiles.read-only.rules]]
   name = "reading is always allowed"
   decision = "allow"
   tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
   why = "Reading changes nothing; secrets are denied above."
+
+  [[profiles.read-only.rules]]
+  name = "beyond their plain forms, these ask"
+  decision = "ask"
+  runs_any = ['sed -n * -*', 'npx tsc -* -* -*']
+  why = "sed -n prints lines by number, and npx tsc checks types with --noEmit (and -p). Another option can add a script that writes, or make tsc write, so it asks."
 
   [[profiles.read-only.rules]]
   name = "reads and runs the tests"
@@ -197,15 +277,34 @@ scratch = ['/tmp/claude-*/**']
   where = "workspace"
   runs_only = [
     'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
-    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
-    'sed -n *', 'true', 'false', 'test *', '[ *',
-    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'diff *', 'cut *', 'tr *', 'jq *',
+    # uniq only filters a pipe: given two files, it writes the second
+    'uniq', 'uniq -c', 'uniq -d', 'uniq -u', 'uniq -i',
+    # sed only prints lines by number: its scripts can write files (w) and run commands (e)
+    'sed -n #p *', 'sed -n #,#p *', 'sed -n $p *', 'sed -n #,$p *',
+    'true', 'false', 'test *', '[ *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git ls-files *', 'git rev-parse *',
     'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
-    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
-    'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
+    # listing only: any of these puts git branch, tag or config in a mode that refuses changes
+    'git branch', 'git branch -a', 'git branch -r', 'git branch -v', 'git branch -vv', 'git branch --show-current',
+    'git branch *--list*', 'git branch *--contains*', 'git branch *--merged*', 'git branch *--no-merged*',
+    'git branch *--points-at*', 'git tag', 'git config --get *', 'git config --get-all *', 'git config --list',
+    'go test *', 'go vet *', 'gofmt -l *', 'npm test', 'npx tsc --noEmit', 'npx tsc --noEmit -p *', 'npx tsc -p * --noEmit',
+    'npx vitest *', 'npx jest *', 'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test', 'make lint',
     'cargo test *', 'cargo check *', 'cargo clippy *',
   ]
   why = "Reading and testing leave the code as it was."
+
+  [[profiles.read-only.rules]]
+  name = "never commits or changes branches"
+  decision = "deny"
+  runs_any = [
+    'git commit *', 'git push *', 'git pull *', 'git add *', 'git rm *', 'git mv *', 'git reset *', 'git restore *',
+    'git checkout *', 'git switch *', 'git stash *', 'git clean *', 'git merge *', 'git rebase *', 'git cherry-pick *',
+    'git revert *', 'git apply *', 'git am *', 'git update-ref *', 'git worktree *', 'git notes *',
+    'git branch ?*', 'git tag ?*', 'git config *',
+  ]
+  why = "It judges the work; the engineer commits. Branches, tags and settings stay as they are: the reading forms (git branch -a, git tag, git config --get) are allowed above."
 
 
 [profiles.read-mostly]
@@ -235,10 +334,59 @@ scratch = ['/tmp/claude-*/**']
   why = "Its job is to suggest, not to change the code."
 
   [[profiles.read-mostly.rules]]
-  name = "this agent never commits"
+  name = "writes no files from the shell"
   decision = "deny"
-  runs_any = ['git commit *', 'git push *', 'git -C * commit *', 'git -C * push *']
-  why = "It suggests ideas; the engineers commit."
+  redirects_to_file = true
+  why = "Its job is to suggest, not to change the code. Send output to /dev/null, or to a file in your scratch folder."
+
+  [[profiles.read-mostly.rules]]
+  name = "runs nothing that changes files"
+  decision = "deny"
+  runs_any = [
+    'rm *', 'rmdir *', 'mv *', 'cp *', 'touch *', 'mkdir *', 'chmod *', 'ln *', 'truncate *', 'dd *', 'tee *',
+    'sed *-i*', 'perl *-i*', 'perl *-pi*', 'sort *-o*', 'git * --output*',
+    'find *-delete*', 'find *-exec*', 'find *-ok*', 'find *-fprint*', 'find *-fls *',
+    'tree -o*', 'tree * -o*', 'tree -R*', 'tree * -R*', 'file -C*', 'file * -C*', 'file *--co*',
+    'gofmt *-w', 'gofmt *-w *', 'gofmt *-w=*', 'gofmt *-cpuprofile*',
+  ]
+  why = "Its job is to suggest, not to change the code. Read with cat, head or the Read tool, and search with grep -r."
+
+  [[profiles.read-mostly.rules]]
+  name = "go writes no files"
+  decision = "deny"
+  runs_any = [
+    'go build *', 'go install *', 'go test *-o *', 'go test *-o=*', 'go test *-c *', 'go test *profile*',
+    'go test *-trace*', 'go test *-outputdir*', 'go test *-fuzz*', 'go test *-c=*', 'go *testlogfile*', 'go *gocoverdir*',
+    'go *-exec*', 'go *-toolexec*', 'go *-vettool*', 'go *-mod=mod*', 'go *-pkgdir*',
+    'go *-ldflags*', 'go *-gcflags*', 'go *-asmflags*',
+  ]
+  why = "These write a binary, a profile, a log or go.mod into the repo, or run a program of their choosing (the compiler and linker flags can name one). go vet checks what go build would; go test runs the tests (its build cache is Go's own, outside the repo)."
+
+  [[profiles.read-mostly.rules]]
+  name = "test and lint tools write no files"
+  decision = "deny"
+  runs_any = [
+    'npx eslint *--fix', 'npx eslint *--fix *', 'npx eslint *-o *', 'npx eslint *--output-file*', 'npx eslint *--cache*',
+    'npx eslint *--init*', 'npx vitest *-u', 'npx vitest *-u *', 'npx vitest *--update*', 'npx vitest *--outputFile*',
+    'npx vitest *--output-file*', 'npx vitest *--outputJson*', 'npx vitest *--output-json*', 'npx vitest *--coverage*',
+    'npx vitest *--reporter*blob*', 'npx vitest *--reporter*html*',
+    'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
+    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--collectCoverage*',
+    'npx jest *--collect-coverage*', 'npx jest *--cacheDirectory*', 'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx jest *--config*', 'npx jest -c*', 'npx jest * -c*',
+    '*pytest *--junit*', '*pytest *--basetemp*', '*pytest *--cov*', '*pytest *--debug*', '*pytest *--log-file*',
+    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest -o*', '*pytest * -o*', '*pytest *--override-ini*',
+    '*pytest *--pastebin*',
+    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo -Z*',
+    'cargo * -Z*',
+  ]
+  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs (jest's --config can be inline JSON that turns coverage on). Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
+
+  [[profiles.read-mostly.rules]]
+  name = "runs no command a flag names"
+  decision = "deny"
+  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*']
+  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program. Search with plain git grep, rg or grep -r."
 
   [[profiles.read-mostly.rules]]
   name = "reading is always allowed"
@@ -253,20 +401,45 @@ scratch = ['/tmp/claude-*/**']
   why = "Seeing what is planned and done changes nothing; the tools that write to the board still ask."
 
   [[profiles.read-mostly.rules]]
+  name = "beyond their plain forms, these ask"
+  decision = "ask"
+  runs_any = ['sed -n * -*', 'npx tsc -* -* -*']
+  why = "sed -n prints lines by number, and npx tsc checks types with --noEmit (and -p). Another option can add a script that writes, or make tsc write, so it asks."
+
+  [[profiles.read-mostly.rules]]
   name = "reads and runs the tests"
   decision = "allow"
   where = "workspace"
   runs_only = [
     'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
-    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
-    'sed -n *', 'true', 'false', 'test *', '[ *',
-    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'diff *', 'cut *', 'tr *', 'jq *',
+    # uniq only filters a pipe: given two files, it writes the second
+    'uniq', 'uniq -c', 'uniq -d', 'uniq -u', 'uniq -i',
+    # sed only prints lines by number: its scripts can write files (w) and run commands (e)
+    'sed -n #p *', 'sed -n #,#p *', 'sed -n $p *', 'sed -n #,$p *',
+    'true', 'false', 'test *', '[ *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git ls-files *', 'git rev-parse *',
     'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
-    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
-    'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
+    # listing only: any of these puts git branch, tag or config in a mode that refuses changes
+    'git branch', 'git branch -a', 'git branch -r', 'git branch -v', 'git branch -vv', 'git branch --show-current',
+    'git branch *--list*', 'git branch *--contains*', 'git branch *--merged*', 'git branch *--no-merged*',
+    'git branch *--points-at*', 'git tag', 'git config --get *', 'git config --get-all *', 'git config --list',
+    'go test *', 'go vet *', 'gofmt -l *', 'npm test', 'npx tsc --noEmit', 'npx tsc --noEmit -p *', 'npx tsc -p * --noEmit',
+    'npx vitest *', 'npx jest *', 'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test', 'make lint',
     'cargo test *', 'cargo check *', 'cargo clippy *',
   ]
   why = "Reading and testing leave the code as it was."
+
+  [[profiles.read-mostly.rules]]
+  name = "never commits or changes branches"
+  decision = "deny"
+  runs_any = [
+    'git commit *', 'git push *', 'git pull *', 'git add *', 'git rm *', 'git mv *', 'git reset *', 'git restore *',
+    'git checkout *', 'git switch *', 'git stash *', 'git clean *', 'git merge *', 'git rebase *', 'git cherry-pick *',
+    'git revert *', 'git apply *', 'git am *', 'git update-ref *', 'git worktree *', 'git notes *',
+    'git branch ?*', 'git tag ?*', 'git config *',
+  ]
+  why = "It suggests ideas; the engineers commit. Branches, tags and settings stay as they are: the reading forms (git branch -a, git tag, git config --get) are allowed above."
 
 [profiles.autonomous]
 why = "Does anything on this machine, and asks you only before acting outside it. Agentry sees commands, not network traffic, so a script can still reach out unseen (T-030)."

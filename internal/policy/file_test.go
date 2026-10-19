@@ -27,6 +27,8 @@ func TestABadPolicyIsRefusedWithTheReason(t *testing.T) {
 		"rule without a name":   {minimal + "[[profiles.p.rules]]\ndecision = \"allow\"\n", "a rule needs a name"},
 		"rule with a bad where": {minimal + "[[profiles.p.rules]]\nname = \"x\"\ndecision = \"allow\"\nwhere = \"near\"\n", `where must be "workspace" or "outside"`},
 		"rule misspelt field":   {minimal + "[[profiles.p.rules]]\nname = \"x\"\ndecision = \"allow\"\nrun_only = ['ls']\n", "run_only"},
+		"misspelt redirect":     {minimal + "[[profiles.p.rules]]\nname = \"x\"\ndecision = \"deny\"\nredirect_to_file = true\n", "redirect_to_file"},
+		"redirect not a bool":   {minimal + "[[profiles.p.rules]]\nname = \"x\"\ndecision = \"deny\"\nredirects_to_file = \"yes\"\n", "RedirectsToFile"},
 	}
 	for name, c := range cases {
 		_, err := Parse([]byte(c.text), home, nil)

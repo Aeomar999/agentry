@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -14,6 +15,7 @@ type shellCall struct {
 	commands  []string // each simple command, its words joined by single spaces
 	pipelines []string // each pipeline of two or more commands, as "a | b"
 	paths     []string // every word that may name a file, and every redirect target
+	writes    []string // redirect targets written to: > f, >> f, &> f, >| f, <> f
 	opaque    bool     // part of it can't be known before it runs: $(...), an unknown variable
 	invalid   bool     // the shell couldn't parse it
 }
@@ -41,30 +43,190 @@ type shellInspector struct {
 
 // learnVariables records variables whose every possible value is written in
 // the command: NAME=literal, and the items of `for NAME in literal ...`. So
-// `S=out; ls $S` and `for f in a b; do cat $f; done` can still be judged.
+// `S=out; ls $S` and `for f in a b; do cat $f; done` can still be judged. A
+// loop with no items leaves its variable unset, so it isn't recorded.
+//
+// A variable set any other way (read, printf -v, unset, c+=x, c=(a b),
+// ${c:=x}, c=$x) would run with a value this can't see, and many of those
+// ways name their variable in arguments only the builtin can read. So when
+// any of them appears, no variable is known, Agentry's own included, and
+// every command that uses one asks.
+//
+// A loop can give a word a new value after the walk has passed it, so the
+// walk runs again until no variable gains a value; its last run judges every
+// word against all the values it can hold. A variable whose values never
+// stop growing (c=${c}x) isn't known either.
 func (s *shellInspector) learnVariables(file *syntax.File) {
+	for range maxLearningRounds {
+		before := valueCount(s.variables)
+		if s.learnOnce(file) {
+			break
+		}
+		if valueCount(s.variables) == before {
+			return
+		}
+	}
+	s.variables = map[string][]string{}
+}
+
+// maxLearningRounds is how many times learnVariables walks the command before
+// it gives up on the values settling.
+const maxLearningRounds = 8
+
+func valueCount(variables map[string][]string) int {
+	count := 0
+	for _, values := range variables {
+		count += len(values)
+	}
+	return count
+}
+
+// learnOnce walks the command once, adding the values it finds, and says
+// whether a variable is set in a way that can't be read.
+func (s *shellInspector) learnOnce(file *syntax.File) (unsure bool) {
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.Assign:
-			if n.Value != nil && !n.Append && n.Index == nil {
-				if values, ok := s.values(n.Value); ok {
-					s.variables[n.Name.Value] = append(s.variables[n.Name.Value], values...)
-				}
+			if n.Name == nil { // an option: declare -x
+				return true
 			}
+			if values, ok := s.assignedValues(n); ok {
+				s.learn(n.Name.Value, values)
+			} else {
+				unsure = true
+			}
+		case *syntax.DeclClause:
+			unsure = unsure || slices.ContainsFunc(n.Args, func(a *syntax.Assign) bool { return a.Name == nil }) // declare -n, -a, -i
 		case *syntax.ForClause:
 			if iteration, ok := n.Loop.(*syntax.WordIter); ok {
-				var items []string
-				for _, word := range iteration.Items {
-					values, ok := s.values(word)
-					if !ok {
-						return true
-					}
-					items = append(items, values...)
+				items, ok := s.loopItems(iteration)
+				if n.Select { // an answer not in the list leaves it empty
+					items = append(items, "")
 				}
-				s.variables[iteration.Name.Value] = append(s.variables[iteration.Name.Value], items...)
+				if !ok {
+					unsure = true
+				} else if len(items) > 0 {
+					s.learn(iteration.Name.Value, items)
+				}
 			}
+		case *syntax.ParamExp:
+			unsure = unsure || n.Exp != nil && (n.Exp.Op == syntax.AssignUnset || n.Exp.Op == syntax.AssignUnsetOrNull)
+		case *syntax.BinaryArithm:
+			unsure = unsure || slices.Contains(arithmeticAssignments, n.Op)
+		case *syntax.UnaryArithm:
+			unsure = unsure || n.Op == syntax.Inc || n.Op == syntax.Dec
+		case *syntax.CallExpr:
+			unsure = unsure || s.setsVariables(n.Args)
 		}
 		return true
+	})
+	return unsure
+}
+
+// learn adds the values a variable doesn't have yet. It stops at maxValues+1:
+// a variable with more than maxValues values is unknown in every word, so
+// which values past that it holds changes no verdict, and a full list no
+// longer grows, so learnVariables still sees the values settle.
+func (s *shellInspector) learn(name string, values []string) {
+	for _, value := range values {
+		if len(s.variables[name]) > maxValues {
+			return
+		}
+		if !slices.Contains(s.variables[name], value) {
+			s.variables[name] = append(s.variables[name], value)
+		}
+	}
+}
+
+// arithmeticAssignments set the variable on their left: ((c=1)), let c+=1.
+var arithmeticAssignments = []syntax.BinAritOperator{
+	syntax.Assgn, syntax.AddAssgn, syntax.SubAssgn, syntax.MulAssgn, syntax.QuoAssgn, syntax.RemAssgn,
+	syntax.AndAssgn, syntax.OrAssgn, syntax.XorAssgn, syntax.ShlAssgn, syntax.ShrAssgn,
+}
+
+// assignedValues is every value NAME=value can give its variable; an append,
+// an array, an element or a bare `export NAME` can't be read here.
+func (s *shellInspector) assignedValues(n *syntax.Assign) ([]string, bool) {
+	switch {
+	case n.Append, n.Array != nil, n.Index != nil, n.Naked:
+		return nil, false
+	case n.Value == nil: // c=
+		return []string{""}, true
+	}
+	return s.values(n.Value)
+}
+
+// loopItems is every value a for loop gives its variable. Without "in" it
+// loops over the script's arguments, which can't be read here.
+func (s *shellInspector) loopItems(iteration *syntax.WordIter) ([]string, bool) {
+	if !iteration.InPos.IsValid() {
+		return nil, false
+	}
+	var items []string
+	for _, word := range iteration.Items {
+		values, ok := s.values(word)
+		if !ok {
+			return nil, false
+		}
+		items = append(items, values...)
+	}
+	return items, true
+}
+
+// variableSetters are the builtins that set or unset a variable named in
+// their arguments.
+var variableSetters = map[string]bool{
+	"read": true, "mapfile": true, "readarray": true, "getopts": true, "unset": true, "let": true,
+	"declare": true, "typeset": true, "local": true, "export": true, "readonly": true,
+	"eval": true, "source": true, ".": true,
+}
+
+// setsVariables: the command may set a variable, or its name can't be read.
+func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
+	if len(args) == 0 {
+		return false
+	}
+	names, ok := s.values(args[0])
+	if !ok {
+		return true
+	}
+	for _, name := range names {
+		if variableSetters[name] {
+			return true
+		}
+		if (name == "builtin" || name == "command") && s.setsVariables(withoutOption(args[1:], "-p")) {
+			return true // they run the builtin after them; command -v only looks it up
+		}
+		if name == "printf" && slices.ContainsFunc(args[1:], s.mayBeVariableOption) {
+			return true
+		}
+		if name == "wait" && slices.ContainsFunc(args[1:], s.mayBeWaitVariableOption) {
+			return true
+		}
+	}
+	return false
+}
+
+// withoutOption is the words after any leading copies of option.
+func withoutOption(words []*syntax.Word, option string) []*syntax.Word {
+	for len(words) > 0 && words[0].Lit() == option {
+		words = words[1:]
+	}
+	return words
+}
+
+// mayBeVariableOption: the word may be printf's -v NAME or -vNAME.
+func (s *shellInspector) mayBeVariableOption(word *syntax.Word) bool {
+	values, ok := s.values(word)
+	return !ok || slices.ContainsFunc(values, func(value string) bool { return strings.HasPrefix(value, "-v") })
+}
+
+// mayBeWaitVariableOption: the word may be wait's -p NAME, alone or in a
+// cluster of its options (-np NAME).
+func (s *shellInspector) mayBeWaitVariableOption(word *syntax.Word) bool {
+	values, ok := s.values(word)
+	return !ok || slices.ContainsFunc(values, func(value string) bool {
+		return strings.HasPrefix(value, "-") && strings.Contains(value, "p")
 	})
 }
 
@@ -72,6 +234,10 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 	switch n := node.(type) {
 	case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.FuncDecl, *syntax.CoprocClause:
 		s.call.opaque = true
+	case *syntax.ForClause:
+		if iteration, ok := n.Loop.(*syntax.WordIter); ok {
+			s.setVariable(iteration.Name.Value, false)
+		}
 	case *syntax.CallExpr:
 		s.addCommand(n.Args, n.Assigns)
 	case *syntax.DeclClause:
@@ -80,7 +246,13 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 		s.addRedirect(n)
 	case *syntax.BinaryCmd:
 		if n.Op == syntax.Pipe || n.Op == syntax.PipeAll {
-			s.call.pipelines = append(s.call.pipelines, strings.Join(s.pipeline(n), " | "))
+			ways, complete := combinations(s.pipeline(n))
+			if !complete {
+				s.call.opaque = true
+			}
+			for _, way := range ways {
+				s.call.pipelines = append(s.call.pipelines, strings.Join(way, " | "))
+			}
 		}
 	}
 	return true
@@ -88,6 +260,9 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 
 func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assign) {
 	for _, assign := range assigns {
+		if assign.Name != nil {
+			s.setVariable(assign.Name.Value, len(args) > 0) // FOO=1 cmd hands FOO to cmd
+		}
 		if assign.Value != nil {
 			s.addPath(assign.Value)
 		}
@@ -95,7 +270,12 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	if len(args) == 0 {
 		return
 	}
-	s.call.commands = append(s.call.commands, s.commandText(args))
+	for _, text := range s.commandTexts(args) {
+		if name, found := printfVariable(text); found {
+			s.setVariable(name, false)
+		}
+		s.call.commands = append(s.call.commands, text)
+	}
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
 		s.addPath(args[0]) // ./test.sh runs a file
 	}
@@ -106,7 +286,13 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
 	words := []string{n.Variant.Value}
+	exported := s.exports(n)
 	for _, assign := range n.Args {
+		if assign.Name == nil { // an option: declare -x
+			words = append(words, s.wordText(assign.Value))
+			continue
+		}
+		s.setVariable(assign.Name.Value, exported)
 		text := assign.Name.Value
 		if assign.Value != nil {
 			value := s.wordText(assign.Value)
@@ -120,12 +306,94 @@ func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
 
 func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 	switch r.Op {
-	case syntax.DplIn, syntax.DplOut, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
-		return // 2>&1 joins outputs; a heredoc is the command's input, not a file
+	case syntax.DplIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+		return // a heredoc is the command's input, not a file
+	case syntax.DplOut:
+		if r.Word == nil || isDescriptor(s.wordText(r.Word)) {
+			return // 2>&1 joins outputs; only bash's >&file names a file
+		}
 	}
-	if r.Word != nil {
-		s.addWordAsPath(r.Word, true)
+	if r.Word == nil {
+		return
 	}
+	s.addWordAsPath(r.Word, true)
+	if r.Op != syntax.RdrIn {
+		values, ok := s.values(r.Word)
+		if !ok {
+			values = []string{"$?"} // a file it can't name is still written
+		}
+		s.call.writes = append(s.call.writes, values...)
+	}
+}
+
+// Variables a command may be given without being judged differently. The
+// programs agents run read their settings from the environment, and some of
+// those run a command or write a file: GIT_EXTERNAL_DIFF, GIT_CONFIG_*,
+// GOFLAGS=-toolexec, PATH, PAGER, LD_PRELOAD, npm's npm_config_script_shell
+// (npm takes npm_config_* in any case), and any variable make is handed, which
+// a Makefile may use. So setting an upper-case or npm_config_ variable, or
+// handing a lower-case one to a program (x=1 make test, export x), makes the
+// call unknown until it runs, as git -c does. These only choose a toolchain, a
+// platform or how output looks. A lower-case variable the shell keeps to
+// itself, as in `for f in a b`, is the command's own.
+var harmlessVariables = map[string]bool{
+	"GOTOOLCHAIN": true, "GOPROXY": true, "CGO_ENABLED": true, "GOOS": true, "GOARCH": true,
+	"NO_COLOR": true, "LC_ALL": true, "LANG": true, "TZ": true,
+}
+
+// setVariable judges a variable the command sets: before a command
+// (FOO=1 cmd), on its own, with export or declare, by a for loop or by
+// printf -v. An upper-case one may already be exported, so any of them can
+// reach the programs it runs; exported says this one is handed to them.
+func (s *shellInspector) setVariable(name string, exported bool) {
+	lower := strings.ToLower(name)
+	switch {
+	case harmlessVariables[name]:
+	case lower != name, strings.HasPrefix(lower, "npm_config_"), exported:
+		s.call.opaque = true
+	}
+}
+
+// exports: the declaration hands its variables to the programs the command
+// runs, as export and declare -x do.
+func (s *shellInspector) exports(n *syntax.DeclClause) bool {
+	if n.Variant.Value == "export" {
+		return true
+	}
+	for _, assign := range n.Args {
+		if assign.Name != nil {
+			continue
+		}
+		values, ok := s.values(assign.Value)
+		if !ok {
+			return true
+		}
+		for _, option := range values {
+			if strings.HasPrefix(option, "-") && strings.Contains(option, "x") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// printfVariable is the variable printf -v sets, if it is given one.
+func printfVariable(command string) (string, bool) {
+	words := strings.Fields(command)
+	for i := 1; i < len(words) && words[0] == "printf"; i++ {
+		switch {
+		case words[i] == "-v" && i+1 < len(words):
+			return words[i+1], true
+		case strings.HasPrefix(words[i], "-v"):
+			return strings.TrimPrefix(words[i], "-v"), true
+		}
+	}
+	return "", false
+}
+
+// isDescriptor: the target of >& is a file descriptor (2>&1) or "-" (close).
+func isDescriptor(target string) bool {
+	return target == "-" || target != "" && strings.Trim(target, "0123456789") == ""
 }
 
 // addPath records a command argument that may name a file. Flags, URLs and
@@ -134,6 +402,14 @@ func (s *shellInspector) addPath(word *syntax.Word) { s.addWordAsPath(word, fals
 
 func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 	values, ok := s.values(word)
+	if !isTarget { // a redirect target isn't split: the shell refuses one that would be
+		values = nil
+		fields, known := s.fields(word)
+		for _, words := range fields {
+			values = append(values, words...)
+		}
+		ok = known
+	}
 	if !ok {
 		s.call.opaque = true
 		return
@@ -146,19 +422,150 @@ func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 	}
 }
 
-func (s *shellInspector) commandText(args []*syntax.Word) string {
-	words := make([]string, len(args))
+// commandTexts is a command as the rules match it, once for each way its
+// words can expand: `for c in status commit; do git $c; done` runs both
+// `git status` and `git commit`, and each is judged, so the strictest rule
+// wins. Past maxValues ways the call is opaque, and only the first ways are
+// judged; a word that can't be known is "$?", and opaque too.
+func (s *shellInspector) commandTexts(args []*syntax.Word) []string {
+	choices := make([][][]string, len(args))
 	for i, arg := range args {
-		words[i] = s.wordText(arg)
+		fields, ok := s.fields(arg)
+		if !ok {
+			s.call.opaque = true
+			fields = [][]string{{"$?"}}
+		}
+		choices[i] = fields
 	}
-	return strings.Join(words, " ")
+	ways, complete := combinations(choices)
+	if !complete {
+		s.call.opaque = true
+	}
+	var texts []string
+	for _, way := range ways {
+		words := slices.Concat(way...)
+		if len(words) == 0 {
+			continue // every word expanded to nothing: no command runs
+		}
+		if words[0] == "git" {
+			words = s.withoutGitOptions(words)
+		}
+		texts = append(texts, strings.Join(withShortOptionsApart(words), " "))
+	}
+	return texts
 }
 
-// wordText is a word as the rules match it: its value, or its first value
-// when a variable could hold several, or "$?" when it can't be known.
+// combinations is every way to take one item from each choice, in order. It
+// stops growing at maxValues ways: past that, complete is false and later
+// choices give only their first item.
+func combinations[T any](choices [][]T) (ways [][]T, complete bool) {
+	ways, complete = [][]T{nil}, true
+	for _, choice := range choices {
+		if len(ways)*len(choice) > maxValues {
+			choice, complete = choice[:1], false
+		}
+		next := make([][]T, 0, len(ways)*len(choice))
+		for _, way := range ways {
+			for _, item := range choice {
+				next = append(next, append(way[:len(way):len(way)], item))
+			}
+		}
+		ways = next
+	}
+	return ways, complete
+}
+
+// Tools whose short options cluster, getopt style, and that have one which
+// writes a file or runs a program: `sort -uo out` is `sort -u -o out`,
+// `git grep -nO'cmd'` opens its files with cmd, and `pytest -vo cache_dir=x`
+// sets where pytest writes. Their options are split apart so a rule for -o
+// sees it. Only these: find's -name and go's -run are single options, not
+// clusters.
+var clusteringTools = map[string]bool{
+	"sort": true, "tree": true, "file": true, "git grep": true, "npx jest": true, "npx vitest": true, "npx eslint": true,
+	"pytest": true, "python -m pytest": true, "python3 -m pytest": true,
+}
+
+// withShortOptionsApart writes each cluster of a clustering tool's short
+// options as one option per letter, up to "--". A value joined to its option
+// (-oout) splits too; the letters it leaves only matter to a rule naming them.
+func withShortOptionsApart(words []string) []string {
+	start := 0
+	for n := 1; n <= min(len(words), 3); n++ {
+		if clusteringTools[strings.Join(words[:n], " ")] {
+			start = n
+		}
+	}
+	if start == 0 {
+		return words
+	}
+	apart := slices.Clone(words[:start])
+	for i, word := range words[start:] {
+		if word == "--" {
+			return append(apart, words[start+i:]...)
+		}
+		if len(word) < 3 || word[0] != '-' || word[1] == '-' {
+			apart = append(apart, word)
+			continue
+		}
+		for _, letter := range word[1:] {
+			apart = append(apart, "-"+string(letter))
+		}
+	}
+	return apart
+}
+
+// git's options before its subcommand that take a value: -C dir, -c k=v,
+// --git-dir dir or --git-dir=dir, and the like.
+var gitOptionsWithValue = map[string]bool{
+	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true, "--attr-source": true,
+}
+
+var gitOptions = map[string]bool{
+	"-p": true, "--paginate": true, "-P": true, "--no-pager": true, "--bare": true, "--no-replace-objects": true,
+	"--no-lazy-fetch": true, "--no-optional-locks": true, "--no-advice": true, "--literal-pathspecs": true,
+	"--glob-pathspecs": true, "--noglob-pathspecs": true, "--icase-pathspecs": true,
+}
+
+// withoutGitOptions drops git's options before its subcommand, so one
+// pattern, 'git commit *', matches `git -C dir commit` and `git --git-dir=x
+// commit` too. A directory they name stays a path, judged by `where`. A
+// setting (-c, --config-env, --exec-path=) can make git run a command of its
+// own, core.pager or core.fsmonitor, so it makes the call opaque. An option
+// it doesn't know stops the dropping: what is left then matches no git
+// pattern, so it is asked about rather than guessed.
+func (s *shellInspector) withoutGitOptions(words []string) []string {
+	for i := 1; i < len(words); {
+		word := words[i]
+		name, value, joined := strings.Cut(word, "=")
+		switch {
+		case gitOptions[word]:
+			i++
+			continue
+		case gitOptionsWithValue[word] && i+1 < len(words):
+			name, value, joined = word, words[i+1], false
+			i += 2
+		case joined && strings.HasPrefix(name, "--") && (gitOptionsWithValue[name] || name == "--exec-path"):
+			i++
+		default:
+			return append([]string{"git"}, words[i:]...)
+		}
+		if name == "-c" || name == "--config-env" || name == "--exec-path" {
+			s.call.opaque = true
+		}
+		if joined && (name == "--git-dir" || name == "--work-tree") {
+			s.call.paths = append(s.call.paths, value) // addPath skips the whole word: it starts with "-"
+		}
+	}
+	return []string{"git"}
+}
+
+// wordText is a word that must have one value, as a declaration's options
+// and a redirect's descriptor are matched: "$?", and the call opaque, when it
+// can't be known or could be one of several.
 func (s *shellInspector) wordText(word *syntax.Word) string {
 	values, ok := s.values(word)
-	if !ok {
+	if !ok || len(values) > 1 {
 		s.call.opaque = true
 		return "$?"
 	}
@@ -168,8 +575,9 @@ func (s *shellInspector) wordText(word *syntax.Word) string {
 	return values[0]
 }
 
-func (s *shellInspector) pipeline(n *syntax.BinaryCmd) []string {
-	var parts []string
+// pipeline is each command of a pipeline, in every way it can expand.
+func (s *shellInspector) pipeline(n *syntax.BinaryCmd) [][]string {
+	var parts [][]string
 	for _, side := range []*syntax.Stmt{n.X, n.Y} {
 		switch cmd := side.Cmd.(type) {
 		case *syntax.BinaryCmd:
@@ -178,14 +586,41 @@ func (s *shellInspector) pipeline(n *syntax.BinaryCmd) []string {
 				continue
 			}
 		case *syntax.CallExpr:
-			if len(cmd.Args) > 0 {
-				parts = append(parts, s.commandText(cmd.Args))
+			if texts := s.commandTexts(cmd.Args); len(texts) > 0 {
+				parts = append(parts, texts)
 				continue
 			}
 		}
-		parts = append(parts, "$?")
+		parts = append(parts, []string{"$?"})
 	}
 	return parts
+}
+
+// maxValues is how many values a word, or ways a command, may have before it
+// counts as unknown.
+const maxValues = 64
+
+// fields is every list of words a shell word can become: each of its values,
+// split at spaces when the word holds an unquoted $variable, as the shell
+// splits it (c='push -f'; git $c is git push -f).
+func (s *shellInspector) fields(word *syntax.Word) ([][]string, bool) {
+	values, ok := s.values(word)
+	if !ok {
+		return nil, false
+	}
+	splits := slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		_, isVariable := part.(*syntax.ParamExp)
+		return isVariable
+	})
+	fields := make([][]string, len(values))
+	for i, value := range values {
+		if splits {
+			fields[i] = strings.Fields(value)
+		} else {
+			fields[i] = []string{value}
+		}
+	}
+	return fields, true
 }
 
 // values is every string a word can expand to, when that can be known without
@@ -194,7 +629,7 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 	results := []string{""}
 	for _, part := range word.Parts {
 		pieces, ok := s.partValues(part)
-		if !ok || len(results)*len(pieces) > 64 {
+		if !ok || len(results)*len(pieces) > maxValues {
 			return nil, false
 		}
 		var next []string
@@ -218,7 +653,7 @@ func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
 		return s.values(&syntax.Word{Parts: p.Parts})
 	case *syntax.ParamExp:
 		isPlain := p.Exp == nil && p.Repl == nil && p.Index == nil && p.Slice == nil && !p.Length && !p.Excl && !p.Width && p.Names == 0
-		if values, known := s.variables[p.Param.Value]; isPlain && known {
+		if values, known := s.variables[p.Param.Value]; isPlain && known && len(values) > 0 {
 			return values, true
 		}
 	}

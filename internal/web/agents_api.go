@@ -175,7 +175,9 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, a := range template.Agents {
 		if problem := s.unknownProfile(a.Profile); problem != "" {
-			http.Error(w, problem+". Copy [profiles."+a.Profile+"] from internal/policy/default.toml, or the README's Profiles section, into that file, then add the team.", http.StatusBadRequest)
+			http.Error(w, problem+". Copy the [profiles."+a.Profile+"] section of the default policy into that file and save it, "+
+				"then add the team again. The latest default policy is at "+defaultPolicyURL+
+				" (internal/policy/default.toml in a source checkout); it may be newer than your Agentry.", http.StatusBadRequest)
 			return
 		}
 	}
@@ -209,6 +211,10 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	}
 	return agent, true
 }
+
+// defaultPolicyURL is the latest default policy, for someone who has only the
+// binary. It may be newer than theirs; the binary carries no version to link.
+const defaultPolicyURL = "https://github.com/francischempa/agentry/blob/dev/internal/policy/default.toml"
 
 // unknownProfile says why an agent can't have profile, or "" when the policy
 // has it. A policy written before a profile was added doesn't have it.

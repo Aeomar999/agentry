@@ -1,8 +1,11 @@
 package policy
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -66,7 +69,7 @@ func TestTheDeveloperProfile(t *testing.T) {
 		{"make a folder", bash("mkdir -p src/refunds && touch src/refunds/index.ts"), Allow},
 		{"remove a file in the workspace", bash("rm notes.md"), Allow},
 		{"a loop over known words", bash("for t in go gofmt git; do printf '%s: ' $t; command -v $t; done"), Allow},
-		{"a variable set in the command", bash("S=build/out; mkdir -p $S && ls $S"), Allow},
+		{"a variable set in the command", bash("out=build/out; mkdir -p $out && ls $out"), Allow},
 		{"set -e", bash("set -e\ngo vet ./...\ngo test ./..."), Allow},
 		{"Claude's scratch folder", bash("mkdir -p /tmp/claude-1000/x/scratchpad && ls /tmp/claude-1000/x/scratchpad"), Allow},
 		{"read the brief", file("Read", workspace+"/.agentry/turn-1.md"), Allow},
@@ -111,6 +114,26 @@ func TestTheDeveloperProfile(t *testing.T) {
 		{"ssh key by tilde", bash("cat ~/.ssh/id_rsa"), Deny},
 		{"edit outside", file("Write", "/etc/hosts"), Deny},
 		{"edit sneaky", file("Write", workspace+"/../escape.txt"), Deny},
+
+		// git's own options are left out before matching (task-30)
+		{"git -C . log", bash("git -C . log --oneline -5"), Allow},
+		{"git -C . commit", bash("git -C . commit -m x"), Allow},
+		{"git -C elsewhere is outside", bash("git -C /elsewhere log"), Ask},
+		{"--git-dir elsewhere is outside", bash("git --git-dir=/elsewhere/.git log"), Ask},
+		{"a setting can run a command, so it asks as before", bash("git -c k=v commit -m x"), Ask},
+		{"push to main from another folder", bash("git -C . push origin main"), Deny},
+		{"force push with a setting", bash("git -c k=v push -f origin dev"), Deny},
+
+		// an upper-case variable can make a program run a command, so it asks
+		// like git -c; a few that only pick a toolchain or a platform don't (task-30)
+		{"the agents' own settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+		{"a variable before git", bash("GIT_EXTERNAL_DIFF=./x.sh git diff"), Ask},
+		{"GOFLAGS", bash("GOFLAGS=-toolexec=./x.sh go test ./..."), Ask},
+		{"an upper-case variable on its own", bash("PATH=.; ls"), Ask},
+		{"export", bash("export PAGER=./x.sh; git log"), Ask},
+		{"declare -x", bash("declare -x PAGER=./x.sh; git log"), Ask},
+		{"a for loop", bash("for PATH in .; do ls; done"), Ask},
+		{"printf -v", bash("printf -v PATH %s .; ls"), Ask},
 	})
 }
 
@@ -139,9 +162,411 @@ func TestTheReadOnlyProfile(t *testing.T) {
 		{"edit", file("Edit", workspace+"/main.go"), Deny},
 		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
 		{"notes in another folder", file("Write", "/tmp/elsewhere/.agentry/knowledge.md"), Deny},
-		{"commit", bash("git commit -am 'x'"), Ask},
-		{"push", bash("git push origin HEAD:dev"), Ask},
+		{"commit", bash("git commit -am 'x'"), Deny},
+		{"push", bash("git push origin HEAD:dev"), Deny},
 	})
+}
+
+// read-only and read-mostly change no file and no history, from the shell
+// either (task-30). Each form that wrote before is denied under both.
+func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// redirects and tee
+			{"redirect", bash("echo hi > notes.md"), Deny},
+			{"append", bash("echo hi >> notes.md"), Deny},
+			{"both outputs", bash("go test ./... &> out.txt"), Deny},
+			{"clobber", bash("echo hi >| notes.md"), Deny},
+			{"bash's >&file", bash("echo hi >&notes.md"), Deny},
+			{"read and write", bash("cat <> notes.md"), Deny},
+			{"a heredoc into a file", bash("cat > notes.md <<'EOF'\nhi\nEOF"), Deny},
+			{"a redirect to an unknown file", bash("echo hi > $OUT"), Deny},
+			{"a redirect outside", bash("echo hi > /tmp/notes.md"), Deny},
+			{"a redirect after a pipe", bash("go test ./... 2>&1 | head > out.txt"), Deny},
+			{"tee", bash("echo hi | tee notes.md"), Deny},
+			{"tee -a", bash("echo hi | tee -a notes.md"), Deny},
+			{"tests through tee", bash("go test ./... | tee out.txt"), Deny},
+
+			// commands that change files
+			{"sort -o", bash("sort -o out.txt in.txt"), Deny},
+			{"sort --output", bash("sort --output=out.txt in.txt"), Deny},
+			{"sort -o joined", bash("sort -oout.txt in.txt"), Deny},
+			{"find -delete", bash("find . -name '*.log' -delete"), Deny},
+			{"find -exec rm", bash(`find . -exec rm {} \;`), Deny},
+			{"find -execdir", bash("find . -execdir rm {} +"), Deny},
+			{"find -ok", bash(`find . -ok rm {} \;`), Deny},
+			{"find -fprint", bash("find . -fprint list.txt"), Deny},
+			{"sed -i", bash("sed -i 's/a/b/' main.go"), Deny},
+			{"sed -n -i", bash("sed -n -i 's/a/b/p' main.go"), Deny},
+			{"sed --in-place", bash("sed --in-place 's/a/b/' main.go"), Deny},
+			{"perl -pi", bash("perl -pi -e 's/a/b/' main.go"), Deny},
+			{"rm", bash("rm main.go"), Deny},
+			{"mv", bash("mv a.go b.go"), Deny},
+			{"cp", bash("cp a.go b.go"), Deny},
+			{"touch", bash("touch new.go"), Deny},
+			{"mkdir", bash("mkdir -p docs"), Deny},
+			{"chmod", bash("chmod +x test.sh"), Deny},
+			{"ln", bash("ln -s a b"), Deny},
+			{"truncate", bash("truncate -s 0 main.go"), Deny},
+			{"dd", bash("dd if=/dev/zero of=main.go count=1"), Deny},
+			{"git log --output", bash("git log --output=log.txt"), Deny},
+
+			// go
+			{"go build", bash("go build ./..."), Deny},
+			{"go build -o", bash("go build -o bin/agentry ./cmd/agentry"), Deny},
+			{"go build -o late", bash("go build ./cmd/agentry -o agentry"), Deny},
+			{"go install", bash("go install ./cmd/agentry"), Deny},
+			{"go test -o", bash("go test -o policy.test ./internal/policy"), Deny},
+			{"go test -o=", bash("go test -o=policy.test ./internal/policy"), Deny},
+			{"go test -c", bash("go test -c ./internal/policy"), Deny},
+			{"go test -coverprofile", bash("go test -coverprofile=c.out ./..."), Deny},
+			{"go test -cpuprofile", bash("go test -cpuprofile cpu.out ./internal/policy"), Deny},
+			{"go test -trace", bash("go test -trace=t.out ./internal/policy"), Deny},
+			{"go test -fuzz", bash("go test -fuzz FuzzParse ./internal/policy"), Deny},
+			{"go test -exec", bash("go test -exec 'rm main.go' ./..."), Deny},
+			{"go test -mod=mod", bash("go test -mod=mod ./..."), Deny},
+			{"go vet -vettool", bash("go vet -vettool=./x ./..."), Deny},
+
+			// branches
+			{"git branch -D", bash("git branch -D old"), Deny},
+			{"git branch -d", bash("git branch -d old"), Deny},
+			{"git branch --delete", bash("git branch --delete old"), Deny},
+			{"git branch -m", bash("git branch -m old new"), Deny},
+			{"git branch -M", bash("git branch -M old new"), Deny},
+			{"git branch --move", bash("git branch --move old new"), Deny},
+			{"git branch -c", bash("git branch -c old new"), Deny},
+			{"git branch -C", bash("git branch -C old new"), Deny},
+			{"git branch --copy", bash("git branch --copy old new"), Deny},
+			{"git branch -f", bash("git branch -f old HEAD"), Deny},
+			{"git branch --set-upstream-to", bash("git branch --set-upstream-to=origin/dev"), Deny},
+			{"git branch -u", bash("git branch -u origin/dev"), Deny},
+			{"git branch makes one", bash("git branch new"), Deny},
+			{"git branch -v makes one", bash("git branch -v new"), Deny},
+			{"git branch -D after a listing", bash("git branch -a && git branch -D old"), Deny},
+
+			// commits and history, in every spelling git takes
+			{"commit", bash("git commit -m x"), Deny},
+			{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
+			{"commit with a setting", bash("git -c user.name=x commit -m x"), Deny},
+			{"commit with --git-dir=", bash("git --git-dir=.git commit -m x"), Deny},
+			{"commit with --git-dir", bash("git --git-dir .git commit -m x"), Deny},
+			{"commit with --work-tree", bash("git --work-tree . commit -m x"), Deny},
+			{"commit from a folder", bash("git -C . commit -m x"), Deny},
+			{"commit without a pager", bash("git --no-pager commit -m x"), Deny},
+			{"push", bash("git push origin HEAD:dev"), Deny},
+			{"push with a setting", bash("git -c k=v push origin HEAD:dev"), Deny},
+			{"push with --git-dir=", bash("git --git-dir=.git push"), Deny},
+			{"push with --git-dir", bash("git --git-dir .git push"), Deny},
+			{"push with --work-tree", bash("git --work-tree . push"), Deny},
+			{"push from a folder", bash("git -C /w push origin HEAD:dev"), Deny},
+			{"push from this folder", bash("git -C . push"), Deny},
+			{"add", bash("git add -A"), Deny},
+			{"reset", bash("git reset --hard HEAD~1"), Deny},
+			{"checkout a file", bash("git checkout -- main.go"), Deny},
+			{"restore", bash("git restore main.go"), Deny},
+			{"switch", bash("git switch dev"), Deny},
+			{"stash", bash("git stash"), Deny},
+			{"clean", bash("git clean -fd"), Deny},
+			{"merge", bash("git merge origin/dev"), Deny},
+			{"rebase", bash("git rebase dev"), Deny},
+			{"cherry-pick", bash("git cherry-pick abc123"), Deny},
+			{"revert", bash("git revert HEAD"), Deny},
+			{"apply", bash("git apply fix.patch"), Deny},
+			{"am", bash("git am fix.patch"), Deny},
+			{"tag", bash("git tag v1"), Deny},
+			{"update-ref", bash("git update-ref refs/heads/x HEAD"), Deny},
+			{"worktree", bash("git worktree add ../x"), Deny},
+			{"config", bash("git config user.name x"), Deny},
+		})
+	}
+}
+
+// What the reviewer of task-30 found still got through: variables before a
+// command, sed scripts, writing flags of tools on the allow lists, and flags
+// that run a command. Each denies or asks under both judging profiles.
+func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// variables set before a command
+			{"GOFLAGS=-mod=mod", bash("GOFLAGS=-mod=mod go test ./..."), Ask},
+			{"GOFLAGS=-toolexec", bash("GOFLAGS=-toolexec=sh go test ./..."), Ask},
+			{"GIT_EXTERNAL_DIFF", bash("GIT_EXTERNAL_DIFF='touch x; true' git diff"), Ask},
+			{"GIT_CONFIG_*", bash("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='touch x; true' git status"), Ask},
+			{"PATH on its own", bash("PATH=.; ls"), Ask},
+			{"printf -v", bash("printf -v PATH %s .; ls"), Ask},
+			{"export", bash("export GIT_PAGER='touch x'; git log"), Ask},
+
+			// sed scripts
+			{"sed -n w", bash("sed -n 'w out' f"), Ask},
+			{"sed -n 1w", bash("sed -n '1w out' f"), Ask},
+			{"sed -n s///w", bash("sed -n 's/a/b/w out' f"), Ask},
+			{"sed -n e runs a command", bash("sed -n '1e touch x' f"), Ask},
+			{"sed -n with another script", bash("sed -n 1p f -e 'w out'"), Ask},
+			{"sed -n with a script file", bash("sed -n 1p --file=x.sed f"), Ask},
+			{"sed -ni", bash("sed -n 1p -ni f"), Ask},
+
+			// tools on the allow lists that write
+			{"uniq in out", bash("uniq in.txt out.txt"), Ask},
+			{"tree -o", bash("tree -o out.txt"), Deny},
+			{"tree -o in a cluster", bash("tree -ao out.txt"), Deny},
+			{"tree -R", bash("tree -R -H . ."), Deny},
+			{"sort -uo", bash("sort -uo out.txt in.txt"), Deny},
+			{"sort -o in a cluster, joined", bash("sort -nuoout.txt in.txt"), Deny},
+			{"file -C", bash("file -C -m magic"), Deny},
+
+			// fix and update flags
+			{"gofmt -w", bash("gofmt -w ."), Deny},
+			{"gofmt -l -w", bash("gofmt -l -w ."), Deny},
+			{"gofmt -w=true", bash("gofmt -l -w=true ."), Deny},
+			{"gofmt -cpuprofile", bash("gofmt -l -cpuprofile=c.out ."), Deny},
+			{"eslint --fix", bash("npx eslint --fix ."), Deny},
+			{"eslint --fix late", bash("npx eslint . --fix"), Deny},
+			{"eslint --cache", bash("npx eslint --cache ."), Deny},
+			{"vitest -u", bash("npx vitest run -u"), Deny},
+			{"vitest --update", bash("npx vitest run --update"), Deny},
+			{"jest -u", bash("npx jest -u"), Deny},
+			{"jest --updateSnapshot", bash("npx jest --updateSnapshot"), Deny},
+			{"jest --coverage", bash("npx jest --coverage"), Deny},
+			{"cargo clippy --fix", bash("cargo clippy --fix"), Deny},
+			{"cargo --config can run a wrapper", bash("cargo test --config 'build.rustc-wrapper=\"sh\"'"), Deny},
+			{"pytest --junitxml", bash("pytest --junitxml=report.xml"), Deny},
+			{"pytest --basetemp clears a folder", bash("python3 -m pytest --basetemp=src"), Deny},
+			{"tsc without --noEmit", bash("npx tsc"), Ask},
+			{"tsc -p without --noEmit", bash("npx tsc -p ."), Ask},
+			{"tsc --noEmit --init", bash("npx tsc --noEmit -p . --init"), Ask},
+			{"tsc --build", bash("npx tsc --build --noEmit"), Ask},
+			{"npm test with npm settings", bash("npm test --script-shell=./x.sh"), Ask},
+			{"make test with a variable", bash("make test GO=./x.sh"), Ask},
+			{"go test -c=true", bash("go test -c=true ./internal/policy"), Deny},
+			{"go test -ldflags can name a linker", bash("go test -ldflags=-linkmode=external -ldflags=-extld=./x.sh ./..."), Deny},
+			{"go test -test.testlogfile", bash("go test ./internal/policy -args -test.testlogfile=log.txt"), Deny},
+
+			// flags that run a command
+			{"git grep -O", bash("git grep -O'touch x' foo"), Deny},
+			{"git grep -O in a cluster", bash("git grep -nO'touch x' foo"), Deny},
+			{"git grep --open-files-in-pager", bash("git grep --open-files-in-pager=sh foo"), Deny},
+			{"git grep --open, abbreviated", bash("git grep --open=sh foo"), Deny},
+			{"rg --pre", bash("rg --pre ./x.sh foo"), Deny},
+			{"rg --pre=", bash("rg --pre=./x.sh foo"), Deny},
+			{"rg --hostname-bin", bash("rg --hostname-bin=./x.sh foo"), Deny},
+			{"sort --compress-program", bash("sort --compress-program=./x.sh in.txt"), Deny},
+		})
+	}
+}
+
+// Round 2 of the review found writing flags in the first position, in short
+// option clusters and in other spellings of jest and vitest (task-30).
+func TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"pytest -o first", bash("pytest -o cache_dir=src"), Deny},
+			{"pytest -o first, through python", bash("python3 -m pytest -o cache_dir=src"), Deny},
+			{"pytest -o joined", bash("pytest -ocache_dir=src"), Deny},
+			{"pytest -o in a cluster", bash("pytest -vo cache_dir=src"), Deny},
+			{"cargo -Z first", bash("cargo -Zunstable-options test"), Deny},
+			{"jest --collectCoverage", bash("npx jest --collectCoverage"), Deny},
+			{"jest --collect-coverage", bash("npx jest --collect-coverage"), Deny},
+			{"jest --config can turn coverage on", bash(`npx jest --config='{"collectCoverage":true}'`), Deny},
+			{"jest -c", bash("npx jest -c jest.ci.json"), Deny},
+			{"jest -c late", bash("npx jest src -c jest.ci.json"), Deny},
+			{"jest -u in a cluster", bash("npx jest -iu"), Deny},
+			{"vitest bench --outputJson", bash("npx vitest bench --outputJson out.json"), Deny},
+			{"vitest --output-file", bash("npx vitest run --reporter=json --output-file=out.json"), Deny},
+			{"vitest --reporter=blob", bash("npx vitest run --reporter=blob"), Deny},
+			{"vitest --reporter html", bash("npx vitest run --reporter html"), Deny},
+			{"vitest -u in a cluster", bash("npx vitest run -ru"), Deny},
+			{"eslint -o in a cluster", bash("npx eslint -fo out.txt ."), Deny},
+
+			// the plain forms still run
+			{"pytest", bash("python3 -m pytest -q -k 'not slow' tests"), Allow},
+			{"jest --ci", bash("npx jest --ci"), Allow},
+			{"vitest run", bash("npx vitest run --reporter=verbose"), Allow},
+		})
+	}
+}
+
+// A variable that can hold several values is judged with each of them, and
+// one handed to a program is judged as a setting of that program (task-30,
+// review round 2).
+func TestEveryValueOfAVariableIsJudged(t *testing.T) {
+	p := loadDefault(t)
+	hiddenPush := bash("for c in status 'push -f origin main'; do git $c; done")
+	check(t, p, "developer", []decisionCase{
+		{"a loop that hides a push to main", hiddenPush, Deny},
+		{"a later value of a variable", bash("c=status; c='push origin main'; git $c"), Deny},
+		{"a loop over reading commands", bash("for c in status log; do git $c; done"), Allow},
+		// $c is unknown, as an unset variable is: 'git push * main' needs main last
+		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
+		{"an empty loop before a push to main", bash("for c in; do :; done; git push origin $c main"), Deny},
+		{"one empty value", bash("c=''; git $c status"), Allow},
+		// set again in a way that can't be read (review round 4)
+		{"printf -v hides a push to main", bash("c=status; printf -v c 'push -f origin main'; git $c"), Ask},
+		{"unset hides a push to main", bash("c=status; unset c; git $c push -f origin main"), Ask},
+		{"a plain variable still runs", bash("c=status; git $c"), Allow},
+		{"an empty assignment", bash("c=; git $c status"), Allow},
+		// a loop gives a word a new value after the walk has passed it (review round 5)
+		{"printf -v through a variable set later in a loop", bash("p=echo; c=status; for i in 1 2; do $p -v c 'push -f origin main'; p=printf; done; git $c"), Ask},
+		{"a value set later in a loop", bash("x=status; for i in 1 2; do c=$x; x='push -f origin main'; done; git $c"), Deny},
+	})
+	check(t, p, "autonomous", []decisionCase{
+		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
+	})
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"a loop that hides a push to main", hiddenPush, Deny},
+			{"a loop that hides a commit", bash("for c in status 'commit -qam x'; do git $c; done"), Deny},
+			{"a variable set twice", bash("c=log; c=commit; git $c -m x"), Deny},
+			{"a loop over sort's options", bash("for a in -n -uo; do sort $a out.txt in.txt; done"), Deny},
+			{"a loop over files", bash("for f in a b; do cat $f; done"), Allow},
+			{"an empty loop before a commit", bash("for c in; do :; done; git commit -m x $c"), Deny},
+			{"an empty loop before rm", bash("for c in; do :; done; rm $c f"), Deny},
+			{"an empty loop before tee", bash("for c in; do :; done; git log | tee $c out.txt"), Deny},
+			{"a value split into options", bash("o='-n -o out.txt'; sort $o in.txt"), Deny},
+			{"a value split into paths", bash("f='a.go /etc/hosts'; cat $f"), Ask},
+			{"a quoted value isn't split", bash(`m='commit -m x'; git log --grep "$m"`), Allow},
+			{"nested loops", bash("for a in git; do for b in status commit; do $a $b; done; done"), Deny},
+			{"select", bash("select c in status commit; do git $c; done"), Deny},
+			{"case", bash("for c in status commit; do case $c in commit) git $c ;; esac; done"), Deny},
+			{"a pipeline with several values", bash("for s in cat 'tee out.txt'; do git log | $s; done"), Deny},
+			{"too many ways to judge", bash("for a in 1 2 3 4 5 6 7 8; do for b in 1 2 3 4 5 6 7 8 9; do echo $a $b; done; done"), Ask},
+			{"a value read when it runs", bash("while read c; do git $c; done < cmds.txt"), Ask},
+			{"an array", bash("a=(status commit); git ${a[1]}"), Ask},
+			{"a default value", bash("git ${c:-commit}"), Ask},
+			{"a replaced value", bash("c=x; git ${c/x/commit}"), Ask},
+			{"a value from a command", bash("c=$(echo commit); git $c"), Ask},
+			{"an answer select doesn't list", bash("select c in log; do git $c commit -m x; done"), Deny},
+
+			// a variable set again in a way that can't be read isn't known (review round 4)
+			{"printf -v", bash("c=status; printf -v c commit; git $c -m x"), Ask},
+			{"printf -v through a variable", bash("c=status; p=printf; $p -v c commit; git $c -m x"), Ask},
+			{"an array assignment", bash("c=status; c=(commit); git $c -m x"), Ask},
+			{"an element assignment", bash("c=status; c[1]=commit; git $c"), Ask},
+			{"printf -v a push to main", bash("c=status; printf -v c 'push -f origin main'; git $c"), Ask},
+			{"unset", bash("c=status; unset c; git $c push -f origin main"), Ask},
+			{"a loop item that can't be read", bash("c=status; for c in a $x; do git $c -m x; done"), Ask},
+			{"an append", bash("c=status; c+=' commit'; git $c"), Ask},
+			{"read", bash("c=status; read c < f; git $c -m x"), Ask},
+			{"mapfile", bash("c=status; mapfile c < f; git $c"), Ask},
+			{"declare -n", bash("c=status; declare -n c=d; git $c"), Ask},
+			{"a value that can't be read", bash("c=status; c=$x; git $c"), Ask},
+			{"an assigned default", bash("git ${c:=commit} -m x"), Ask},
+			{"an arithmetic assignment", bash("c=status; ((c=1)); git $c"), Ask},
+			{"a plain variable", bash("c=status; git $c"), Allow},
+			{"a plain variable with options", bash("c=log; git $c --grep commit"), Allow},
+			{"the go test command", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"a loop over a glob", bash("for f in *.go; do gofmt -l $f; done"), Allow},
+
+			// a loop gives a word a new value after the walk has passed it (review round 5)
+			{"printf named later in a for loop", bash("p=echo; c=status; for i in 1 2; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"-v given later in a for loop", bash("o=-x; c=status; for i in 1 2; do printf $o c commit; o=-v; done; git $c -m x"), Ask},
+			{"printf named later in an until loop", bash("p=echo; c=status; until false; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"printf named later in a while loop", bash("p=echo; c=status; while true; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"a value set later in a loop", bash("x=status; for i in 1 2; do c=$x; x=commit; done; git $c -m x"), Deny},
+			{"a loop item set later in a loop", bash("x=status; for i in 1 2; do for c in $x; do git $c -m x; done; x=commit; done"), Deny},
+			{"the read list after a loop", bash("for f in a b; do cat $f; done; git -C . log --grep commit; gofmt -l $f"), Allow},
+
+			// npm reads npm_config_* in any case, and make takes every variable it is given
+			{"npm_config_node_options", bash("npm_config_node_options='--import=data:text/javascript,x' npm test"), Ask},
+			{"npm_config_script_shell", bash("npm_config_script_shell=./x.sh npm test"), Ask},
+			{"NPM_CONFIG_SCRIPT_SHELL", bash("NPM_CONFIG_SCRIPT_SHELL=./x.sh npm test"), Ask},
+			{"npm_config_ before npx", bash("npm_config_call='x' npx tsc --noEmit"), Ask},
+			{"npm_config_ on its own", bash("npm_config_script_shell=./x.sh; npm test"), Ask},
+			{"a lower-case variable for make", bash("go=./x.sh make test"), Ask},
+			{"an exported lower-case variable", bash("export go=./x.sh; make test"), Ask},
+			{"declare -x lower case", bash("declare -x go=./x.sh; make test"), Ask},
+		})
+	}
+}
+
+// manyValues gives c far more values than a word may have: a loop's 64 items
+// times each of 600 assignments (task-30, review round 6).
+func manyValues(use string) Call {
+	items := make([]string, maxValues)
+	for i := range items {
+		items[i] = strconv.Itoa(i)
+	}
+	var command strings.Builder
+	fmt.Fprintf(&command, "for p in %s; do :; done; ", strings.Join(items, " "))
+	for i := range 600 {
+		fmt.Fprintf(&command, "c=${p}a%d; ", i)
+	}
+	command.WriteString(use)
+	return bash(command.String())
+}
+
+func TestAVariableWithTooManyValuesIsUnknown(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly", "developer"} {
+		check(t, p, profile, []decisionCase{
+			{"git $c", manyValues("git $c"), Ask},
+			{"git $c after a push to main", manyValues("git push -f origin main $c"), Deny},
+		})
+	}
+	check(t, p, "read-only", []decisionCase{{"git $c after a commit", manyValues("git commit -m x $c"), Deny}})
+}
+
+func TestAVariableWithTooManyValuesIsJudgedQuickly(t *testing.T) {
+	p := loadDefault(t)
+	call := manyValues("git $c")
+	start := time.Now()
+	p.Decide("read-only", call)
+	if took := time.Since(start); took > raceSlowdown*time.Second {
+		t.Errorf("a %d-byte command took %v to judge", len(call.Input), took)
+	}
+}
+
+// What they are for still runs without asking: reading and testing.
+func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"git log --grep commit", bash("git log --grep commit"), Allow},
+			{"git -C . log", bash("git -C . log"), Allow},
+			{"git -C . log --grep commit", bash("git -C . log --grep commit"), Allow},
+			{"git --no-pager log", bash("git --no-pager log -1"), Allow},
+			{"git diff", bash("git diff"), Allow},
+			{"git branch", bash("git branch"), Allow},
+			{"git branch -a", bash("git branch -a"), Allow},
+			{"git branch --list", bash("git branch --list 'agentry/*'"), Allow},
+			{"git branch -r --contains", bash("git branch -r --contains HEAD"), Allow},
+			{"git branch --show-current", bash("git branch --show-current"), Allow},
+			{"git tag", bash("git tag"), Allow},
+			{"git config --get", bash("git config --get user.name"), Allow},
+			{"grep -r", bash("grep -r foo ."), Allow},
+			{"find -name", bash("find . -name x"), Allow},
+			{"sort in a pipe", bash("git log --format=%an | sort | uniq -c"), Allow},
+			{"sort with options", bash("sort -rn -k2 counts.txt"), Allow},
+			{"sed -n", bash("sed -n '1,5p' main.go"), Allow},
+			{"sed -n one line", bash("sed -n 12p main.go"), Allow},
+			{"sed -n to the end", bash("sed -n '40,$p' main.go"), Allow},
+			{"git grep", bash("git grep -n TODO"), Allow},
+			{"rg", bash("rg -n --glob '*.go' Decide"), Allow},
+			{"tree", bash("tree -L 2 internal"), Allow},
+			{"gofmt -l", bash("gofmt -l ."), Allow},
+			{"tsc --noEmit", bash("npx tsc --noEmit -p ui"), Allow},
+			{"eslint", bash("npx eslint ."), Allow},
+			{"npm test", bash("npm test"), Allow},
+			{"go vet", bash("go vet ./..."), Allow},
+			// go test writes only to Go's build cache, outside the repo: that
+			// changes no file anyone reviews, so it doesn't count as a write.
+			{"go test", bash("go test ./..."), Allow},
+			{"go test with flags that aren't -c or -o", bash("go test -count=1 -cover -run TestX -v ./internal/policy"), Allow},
+			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"go test with a toolchain", bash("GOTOOLCHAIN=local go test ./..."), Allow},
+			{"a lower-case variable", bash("for f in a.go b.go; do head -5 $f; done"), Allow},
+			{"output merged into a pipe", bash("go test ./... 2>&1 | head"), Allow},
+			{"output thrown away", bash("go test ./... > /dev/null"), Allow},
+			{"output to the scratch folder", bash("go test ./... > /tmp/claude-1000/x/scratchpad/out.txt"), Allow},
+			{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
+
+			// can't be judged before it runs, so asks rather than allows
+			{"a setting can run a command", bash("git -c core.pager=less log"), Ask},
+			{"git -C elsewhere", bash("git -C /elsewhere log"), Ask},
+		})
+	}
 }
 
 func TestTheReadMostlyProfile(t *testing.T) {
@@ -159,10 +584,6 @@ func TestTheReadMostlyProfile(t *testing.T) {
 		{"write", file("Write", workspace+"/ideas.md"), Deny},
 		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
 		{"commit", bash("git commit -am 'x'"), Deny},
-		{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
-		{"push", bash("git push origin HEAD:dev"), Deny},
-		{"commit in another folder", bash("git -C . commit -m x"), Deny},
-		{"push from another folder", bash("git -C /w push origin HEAD:dev"), Deny},
 		{"secrets", bash("cat .env"), Deny},
 	})
 }
@@ -176,6 +597,7 @@ func TestTheAutonomousProfile(t *testing.T) {
 		{"create a repo", bash("glab repo create hello --private"), Ask},
 		{"curl", bash("curl -s https://example.com"), Ask},
 		{"secrets", bash("cat .env"), Deny},
+		{"a variable before a command still runs", bash("GOFLAGS=-mod=mod go test ./..."), Allow},
 	})
 }
 

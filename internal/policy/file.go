@@ -33,14 +33,15 @@ type profileFile struct {
 }
 
 type ruleFile struct {
-	Name     string   `toml:"name"`
-	Decision Decision `toml:"decision"`
-	Why      string   `toml:"why"`
-	Tools    []string `toml:"tools"`
-	RunsAny  []string `toml:"runs_any"`
-	RunsOnly []string `toml:"runs_only"`
-	Paths    []string `toml:"paths"`
-	Where    string   `toml:"where"`
+	Name            string   `toml:"name"`
+	Decision        Decision `toml:"decision"`
+	Why             string   `toml:"why"`
+	Tools           []string `toml:"tools"`
+	RunsAny         []string `toml:"runs_any"`
+	RunsOnly        []string `toml:"runs_only"`
+	Paths           []string `toml:"paths"`
+	Where           string   `toml:"where"`
+	RedirectsToFile bool     `toml:"redirects_to_file"`
 }
 
 //go:embed default.toml
@@ -167,7 +168,8 @@ func compileProfile(name string, p profileFile, home string) (*profile, error) {
 		return nil, fmt.Errorf("profile %q scratch: %w", name, err)
 	}
 	for _, r := range p.Rules {
-		rule := rule{name: r.Name, why: r.Why, decision: r.Decision, tools: r.Tools, where: r.Where}
+		rule := rule{name: r.Name, why: r.Why, decision: r.Decision, tools: r.Tools, where: r.Where,
+			redirectsToFile: r.RedirectsToFile}
 		if rule.runsAny, err = compileAll(r.RunsAny, home, ignoreHome(commandGlob)); err == nil {
 			if rule.runsOnly, err = compileAll(r.RunsOnly, home, ignoreHome(commandGlob)); err == nil {
 				rule.paths, err = compileAll(r.Paths, home, pathGlob)
