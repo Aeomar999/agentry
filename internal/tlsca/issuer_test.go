@@ -189,6 +189,59 @@ func TestTheNewestHostListWins(t *testing.T) {
 	}
 }
 
+// Handshakes that come while the hosts are being listed again keep the old
+// list instead of each listing them too.
+func TestHandshakesDuringAListingKeepTheOldList(t *testing.T) {
+	ca, err := open(t.TempDir(), "box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	hosts := func() []string {
+		if calls.Add(1) == 1 {
+			return []string{"box", "192.168.1.20"}
+		}
+		close(asked)
+		<-release
+		return []string{"box", "192.168.1.20", "100.64.0.7"}
+	}
+	start := time.Now()
+	var now atomic.Pointer[time.Time]
+	now.Store(&start)
+	i := NewIssuer(ca, hosts, func() time.Time { return *now.Load() })
+	certificate(t, i)
+	later := start.Add(hostsFresh)
+	now.Store(&later)
+	slow := make(chan *tls.Certificate)
+	go func() {
+		cert, err := i.Certificate()
+		if err != nil {
+			t.Error(err)
+		}
+		slow <- cert
+	}()
+	<-asked
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			if cert := certificate(t, i); cert.Leaf.VerifyHostname("100.64.0.7") == nil {
+				t.Error("a handshake during the listing got the new list before it landed")
+			}
+		})
+	}
+	wg.Wait()
+	if n := calls.Load(); n != 2 {
+		t.Errorf("hosts called %d times, want 2: once at the start, once after %v", n, hostsFresh)
+	}
+	close(release)
+	for name, cert := range map[string]*tls.Certificate{"the listing call": <-slow, "a later call": certificate(t, i)} {
+		if cert.Leaf.VerifyHostname("100.64.0.7") != nil {
+			t.Errorf("%s got a certificate for the old list", name)
+		}
+	}
+}
+
 // A client that trusts only the CA completes a handshake with a server the
 // Issuer serves, by name and by address.
 func TestAClientTrustingTheCAConnects(t *testing.T) {

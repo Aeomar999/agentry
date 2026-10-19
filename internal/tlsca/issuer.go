@@ -29,14 +29,15 @@ type Issuer struct {
 	hosts func() []string
 	now   func() time.Time
 
-	mu       sync.Mutex
-	listed   []string  // the normal hosts the CA permits, as last asked
-	listedAt time.Time // when they were asked
-	asks     uint64    // listings started, in order
-	listedBy uint64    // the listing listed came from
-	leftOut  []string  // the hosts last reported as outside the CA's constraints
-	cert     *tls.Certificate
-	issued   []string // the normal hosts cert names
+	mu           sync.Mutex
+	listed       []string  // the normal hosts the CA permits, as last asked
+	listedAt     time.Time // when they were asked
+	listingSince time.Time // when the listing still running started; zero when none runs
+	asks         uint64    // listings started, in order
+	listedBy     uint64    // the listing listed came from
+	leftOut      []string  // the hosts last reported as outside the CA's constraints
+	cert         *tls.Certificate
+	issued       []string // the normal hosts cert names
 }
 
 // NewIssuer issues for the hosts hosts returns, asked at most every
@@ -79,21 +80,26 @@ func (i *Issuer) inTime(now time.Time) bool {
 }
 
 // listHosts asks for the hosts again once the list is hostsFresh old, or
-// from a time after now, as after the clock went back. When two listings
-// race, the one started last is kept, however slow it was.
+// from a time after now, as after the clock went back. While a listing runs,
+// callers keep the old list rather than each listing again. When two
+// listings race, the one started last is kept, however slow it was.
 func (i *Issuer) listHosts(now time.Time) {
 	i.mu.Lock()
-	fresh := !i.listedAt.IsZero() && !now.Before(i.listedAt) && now.Sub(i.listedAt) < hostsFresh
+	fresh := !i.listedAt.IsZero() && (recent(i.listedAt, now) || recent(i.listingSince, now))
 	if fresh {
 		i.mu.Unlock()
 		return
 	}
 	i.asks++
 	ask := i.asks
+	i.listingSince = now
 	i.mu.Unlock()
 	hosts, leftOut := i.split(normalHosts(i.hosts())) // outside the lock: hosts may be slow
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	if ask == i.asks {
+		i.listingSince = time.Time{} // no listing started after this one runs
+	}
 	if ask < i.listedBy {
 		return // a listing started after this one is already kept
 	}
@@ -105,6 +111,12 @@ func (i *Issuer) listHosts(now time.Time) {
 				"hosts", strings.Join(leftOut, ", "))
 		}
 	}
+}
+
+// recent is whether since is a time no later than now and less than
+// hostsFresh before it.
+func recent(since, now time.Time) bool {
+	return !since.IsZero() && !now.Before(since) && now.Sub(since) < hostsFresh
 }
 
 // split parts normal hosts into those the CA permits and those it doesn't.
