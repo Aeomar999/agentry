@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "actor": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "correlation": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "required": [
+        "question"
+      ],
+      "type": "object"
+    },
+    "position": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stream": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "type": {
+      "const": "agent.waiting"
+    }
+  },
+  "required": [
+    "stream",
+    "actor",
+    "type",
+    "correlation",
+    "data"
+  ],
+  "title": "agent.waiting",
+  "type": "object"
+}

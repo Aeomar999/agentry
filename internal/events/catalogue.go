@@ -260,6 +260,15 @@ func (c *Catalogue) Knows(kind Type) bool {
 	return known
 }
 
+// Types are every type the catalogue knows, sorted.
+func (c *Catalogue) Types() []Type { return slices.Sorted(maps.Keys(c.specs)) }
+
+// Spec is what the catalogue knows about a type, and whether it knows it.
+func (c *Catalogue) Spec(kind Type) (Spec, bool) {
+	spec, known := c.specs[kind]
+	return spec, known
+}
+
 // ForeignPrefix is a stream's name up to and with its last '-': "idea-"
 // for idea-3. A name with no '-' is its own prefix.
 func ForeignPrefix(stream string) string {

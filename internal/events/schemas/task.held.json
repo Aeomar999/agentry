@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "actor": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "correlation": {
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "type": "object"
+    },
+    "position": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stream": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "type": {
+      "const": "task.held"
+    }
+  },
+  "required": [
+    "stream",
+    "actor",
+    "type"
+  ],
+  "title": "task.held",
+  "type": "object"
+}
