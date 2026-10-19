@@ -81,6 +81,9 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		if reason := CheckLabels(p.List("labels")); reason != "" {
 			return refuse(reason)
 		}
+		if from, idea := p.Text("from"), p.Text("idea"); from != "" && idea != "" && from != idea {
+			return refuse("a task is made from one stream: its \"from\" and \"idea\" differ")
+		}
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
 		}

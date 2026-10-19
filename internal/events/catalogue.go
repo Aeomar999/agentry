@@ -130,7 +130,7 @@ var coreTypes = map[Type]Spec{
 	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {Fields: []string{"name", "to"}, Writers: []ActorKind{Human}},
 
-	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule
+	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)
 	TaskRenamed:        {Fields: []string{"title"}, Writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {Fields: []string{"text"}, Writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {Writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all

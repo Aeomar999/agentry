@@ -78,7 +78,7 @@ func (t *Task) Apply(e events.Event) {
 		t.TeamChosen, t.Parent, t.Depth = e.Flag("teamChosen"), e.Text("parent"), e.Number("depth")
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
 		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
-		t.Idea, t.ByAgentry = e.Text("idea"), e.Actor.Kind == events.System
+		t.MadeFrom, t.ByAgentry = MadeFromOf(e.Proposal), e.Actor.Kind == events.System
 		t.About, t.AboutClose = e.Text("about"), int64(e.Number("close"))
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -599,6 +599,12 @@ func (t *Task) moveRepo() {
 }
 
 func turnID(number int) string { return fmt.Sprintf("turn-%d", number) }
+
+// MadeFromOf is the stream a task.created says made the task, "" for none.
+// Older logs and binaries name it only as "idea", so that stays the fallback.
+func MadeFromOf(p events.Proposal) string {
+	return cmp.Or(p.Text("from"), p.Text("idea"))
+}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {

@@ -50,7 +50,7 @@ type Task struct {
 	WaitingOn   string  // another team's task this one asked for and waits for, "" for none
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
-	Idea        string  // the idea you accepted as this task, "" for none
+	MadeFrom    string  // the stream of whatever made the task, such as the idea you accepted, "" for none
 	ByAgentry   bool    // Agentry made it, as for an idea it accepted for you, rather than you or an agent
 	AutoStarted bool    // Agentry moved it out of the Backlog once already, to start it
 	About       string  // for a Visionaries session Agentry started after you closed an epic: the epic, "" for any other task

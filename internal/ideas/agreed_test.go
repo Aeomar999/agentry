@@ -399,6 +399,7 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 			Data: map[string]any{"place": "", "note": "", "column": column, "sentBack": sentBack}}
 	}
 	start := func(task string) events.Proposal { return held(task, "in-progress", false) }
+	open := suggestAgreed(t, s, repo, map[string]any{"title": "Still open"})
 	refused := []struct {
 		name string
 		p    events.Proposal
@@ -409,6 +410,10 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "idea": auto}}},
 		{"a task from no such idea", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "idea": "idea-99"}}},
+		{"a task from no such idea, by from", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
+			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": "idea-99"}}},
+		{"a task from no such idea, by from, beside an open one", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
+			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": "idea-99", "idea": open}}},
 		{"starting the task you accepted", start("task-3")},
 		{"starting the Visionaries' task", start("task-1")},
 		{"parking its own", events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}}},
