@@ -143,7 +143,7 @@ func updateNote(config workerConfig) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	switch newer, err := (&workerlink.Worker{Server: config.Server, Credential: config.Credential}).Newer(ctx, self); {
+	switch newer, err := config.link().Newer(ctx, self); {
 	case err != nil:
 		return "(couldn't ask the server for updates: " + err.Error() + ")"
 	case newer:
@@ -178,7 +178,7 @@ func runUpdate(w *workerSetup, _ []string, stdout io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	updated, err := (&workerlink.Worker{Server: config.Server, Credential: config.Credential}).Update(ctx)
+	updated, err := config.link().Update(ctx)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func runLeave(w *workerSetup, _ []string, stdout io.Writer) error {
 	}
 	request, _ := http.NewRequest(http.MethodPost, config.Server+workerlink.LeavePath, nil)
 	request.Header.Set("Authorization", "Bearer "+config.Credential)
-	response, err := http.DefaultClient.Do(request)
+	response, err := config.client().Do(request)
 	if err != nil {
 		return fmt.Errorf("couldn't reach %s to leave it: %w", config.Server, err)
 	}
