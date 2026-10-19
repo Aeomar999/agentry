@@ -74,6 +74,9 @@ var taskRules = map[events.Type]rule{
 	events.TaskNeedsYou: all(byTheCoordinatorOrAgentry, notUndoingYourMove, noOpenTurn, noQuestionOpen),
 	events.TaskAnswered: all(questionOpen),
 	events.TaskDone:     all(byTheCoordinatorOrYou, notUndoingYourMove, noOpenTurnUnlessMoved, closedByYouIfAnEpic),
+
+	events.TaskArchived:   all(doneToArchive, aMarker),
+	events.TaskUnarchived: all(anArchivedTask), // Check lets it onto an archived task; a task here is whole
 }
 
 func all(rules ...rule) rule {
@@ -547,10 +550,16 @@ func aSharedFileName(_ *tasks.Task, p events.Proposal) string {
 }
 
 func aFileHash(_ *tasks.Task, p events.Proposal) string {
-	if hash := p.Text("hash"); len(hash) != 64 || strings.Trim(hash, "0123456789abcdef") != "" {
+	if !isSHA256(p.Text("hash")) {
 		return "not a file's hash"
 	}
 	return ""
+}
+
+// isSHA256 says whether text is a sha256 in lower-case hex, as the shared
+// files' store names its files and blobs.
+func isSHA256(text string) bool {
+	return len(text) == 64 && strings.Trim(text, "0123456789abcdef") == ""
 }
 
 func aSharedFile(t *tasks.Task, p events.Proposal) string {

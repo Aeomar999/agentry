@@ -76,6 +76,10 @@ const (
 	TaskNeedsYou Type = "task.needs_you"
 	TaskAnswered Type = "task.answered"
 	TaskDone     Type = "task.done" // yours with "moved": you moved it to Done on the board, and a turn in progress stops
+
+	// Archiving (docs/design/log-growth.md section 4): only the store writes these.
+	TaskArchived   Type = "task.archived"   // the task's rows up to "through" ("count" of them) moved to the blob "archive"; "created" is its task.created position, "summary" what the list shows of it
+	TaskUnarchived Type = "task.unarchived" // the rows of the "archive" that the marker at "marker" moved are back: the task is whole again
 )
 
 // The workers stream: the machines, besides Agentry's own, that run agents.
