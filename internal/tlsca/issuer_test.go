@@ -32,6 +32,13 @@ func (w *world) Hosts() []string {
 	return slices.Clone(w.hosts)
 }
 
+// current is the hosts list, read without counting as asked.
+func (w *world) current() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.hosts)
+}
+
 func (w *world) timesAsked() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -96,7 +103,7 @@ func TestTheHostsAreAskedForAtMostEvery30Seconds(t *testing.T) {
 	if cert := certificate(t, i); w.timesAsked() != 1 || cert.Leaf.VerifyHostname("100.64.0.7") == nil {
 		t.Errorf("asked %d times within %v", w.timesAsked(), hostsFresh)
 	}
-	w.set(start.Add(hostsFresh), w.Hosts()...)
+	w.set(start.Add(hostsFresh), w.current()...)
 	if cert := certificate(t, i); cert.Leaf.VerifyHostname("100.64.0.7") != nil {
 		t.Errorf("a new address isn't named %v after it came: %v", hostsFresh, cert.Leaf.IPAddresses)
 	}
@@ -106,11 +113,11 @@ func TestANewCertificateNearItsEnd(t *testing.T) {
 	i, w := newIssuer(t)
 	first := certificate(t, i)
 	end := first.Leaf.NotAfter
-	w.set(end.Add(-renewBefore-time.Minute), w.Hosts()...)
+	w.set(end.Add(-renewBefore-time.Minute), w.current()...)
 	if certificate(t, i) != first {
 		t.Fatal("renewed more than 30 days before the end")
 	}
-	w.set(end.Add(-renewBefore+time.Minute), w.Hosts()...)
+	w.set(end.Add(-renewBefore+time.Minute), w.current()...)
 	second := certificate(t, i)
 	if second == first || !second.Leaf.NotAfter.After(end) {
 		t.Errorf("not renewed within 30 days of the end: ends %v", second.Leaf.NotAfter)
@@ -120,11 +127,11 @@ func TestANewCertificateNearItsEnd(t *testing.T) {
 func TestANewCertificateWhenTheClockWentBack(t *testing.T) {
 	i, w := newIssuer(t)
 	first := certificate(t, i)
-	w.set(first.Leaf.NotBefore, w.Hosts()...)
+	w.set(first.Leaf.NotBefore, w.current()...)
 	if certificate(t, i) != first {
 		t.Fatal("issued again at the certificate's start")
 	}
-	w.set(first.Leaf.NotBefore.Add(-time.Second), w.Hosts()...)
+	w.set(first.Leaf.NotBefore.Add(-time.Second), w.current()...)
 	second := certificate(t, i)
 	if second == first || second.Leaf.NotBefore.After(w.Now()) {
 		t.Errorf("served a certificate that begins at %v, at %v", second.Leaf.NotBefore, w.Now())
