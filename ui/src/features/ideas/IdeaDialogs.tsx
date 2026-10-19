@@ -149,6 +149,7 @@ function placeOf(column: IdeaAcceptance["column"]): string {
     case "backlog":
       return "In your Backlog until you start it.";
     case "in-progress":
+      return "Started.";
     case "review":
     case "shipping":
       return `Started, now in ${COLUMN_TITLES[column]}.`;
