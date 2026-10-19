@@ -51,6 +51,7 @@ export interface TaskDetail extends TaskSummary {
   coordinator: string;
   teamChosen: boolean; // false: its coordinator may still pass it to the right team
   epicTitle: string; // a story's epic's
+  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   storyList: TaskSummary[]; // an epic's stories, in the order they were planned
   shared: SharedFile[]; // its shared files
   movingTo: string; // the repo it moves to when the turn in progress ends

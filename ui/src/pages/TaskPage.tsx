@@ -234,13 +234,13 @@ export function TaskPage() {
                 </span>
               </>
             )}
-            {task.idea && (
+            {task.madeFrom && (
               <>
                 <span>·</span>
                 <span>
-                  from idea{" "}
-                  <Link to={`/ideas#${task.idea}`} className="font-mono text-info hover:underline">
-                    {task.idea}
+                  made from{" "}
+                  <Link to="/ideas" className="font-mono text-info hover:underline">
+                    {task.madeFrom}
                   </Link>
                 </span>
               </>

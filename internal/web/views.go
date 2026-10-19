@@ -29,6 +29,7 @@ type taskDetail struct {
 	Coordinator   string        `json:"coordinator"`
 	TeamChosen    bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
 	EpicTitle     string        `json:"epicTitle"`  // a story's epic's
+	MadeFrom      string        `json:"madeFrom"`   // the stream that made it, such as the idea you accepted, "" for none
 	StoryList     []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
 	Shared        []sharedFile  `json:"shared"`     // its shared files
 	MovingTo      string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
@@ -128,7 +129,7 @@ func listOf(items []string) []string {
 
 func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
 	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
-		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
+		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, MadeFrom: t.MadeFrom, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {
 		detail.Shared = append(detail.Shared, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})

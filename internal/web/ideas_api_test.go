@@ -110,7 +110,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
-		!strings.Contains(body, `"idea":"`+id+`"`) {
+		!strings.Contains(body, `"madeFrom":"`+id+`"`) {
 		t.Errorf("the task made from it: %s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != http.StatusConflict || !strings.Contains(body, "accepted already") {
@@ -285,5 +285,26 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 		again: "duplicate of " + original + " (task-2)"}
 	if got := reasons(); !maps.Equal(got, loose) {
 		t.Errorf("nobodyDoubted:\ngot  %v\nwant %v", got, loose)
+	}
+}
+
+// A task an old log made from an idea names it only as "idea"; its page
+// says it was made from the idea all the same. A task made from nothing says
+// nothing.
+func TestATaskFromAnOldLogShowsTheIdeaItWasMadeFrom(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	id := suggestIdea(t, s, "task-1", repo, "Search the board")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-2", Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}}); err != nil || rejection != nil {
+		t.Fatalf("old task.created: %v %v", rejection, err)
+	}
+	for task, want := range map[string]string{"task-2": id, "task-1": ""} {
+		_, body := call(t, server, "GET", "/api/tasks/"+task, "")
+		var detail taskDetail
+		if err := json.Unmarshal([]byte(body), &detail); err != nil || detail.MadeFrom != want {
+			t.Errorf("%s made from %q, want %q: %v", task, detail.MadeFrom, want, err)
+		}
 	}
 }
