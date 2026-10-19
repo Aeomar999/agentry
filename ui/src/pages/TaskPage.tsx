@@ -49,6 +49,7 @@ import { LoadEarlier } from "@/components/molecules/LoadEarlier";
 import { useNow } from "@/live/use-now";
 import { useTaskCommits, useTaskLinks } from "@/live/refs";
 import { COLUMN_TITLES, stageOf } from "@/lib/columns";
+import { FEATURES, featureLink } from "@/features";
 
 // A task in full. The header and a strip of facts stay put. Under them, on
 // the left, the agents' plans stay on every tab; on the right, the path of
@@ -593,14 +594,16 @@ function Scroll({
   );
 }
 
-// MadeFromLink goes to the page of the stream a task was made from: an idea
-// links to it on the Ideas page; a stream no page here shows is its name alone.
+// MadeFromLink goes to the page the owning feature gives the stream a task was
+// made from; a stream no feature here owns is its name alone. It asks every
+// feature, shown or not, since their routes are always mounted.
 function MadeFromLink({ stream }: { stream: string }) {
-  if (!stream.startsWith("idea-")) {
+  const to = featureLink(stream, FEATURES);
+  if (!to) {
     return <Mono>{stream}</Mono>;
   }
   return (
-    <Link to={`/ideas#${stream}`} className="font-mono text-info hover:underline">
+    <Link to={to} className="font-mono text-info hover:underline">
       {stream}
     </Link>
   );

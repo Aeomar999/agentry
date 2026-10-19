@@ -4,6 +4,7 @@ import type { PaletteItem } from "@/components/organisms/CommandPalette";
 import type { BoardColumn, FeatureLine, FeaturesReply, TaskSummary, UnknownEvents } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
+import type { FeatureStreams } from "./streams";
 import { ideas } from "./ideas";
 
 // A feature's UI is one folder here whose index exports a FeatureUI. The
@@ -19,9 +20,12 @@ export interface FeatureUI {
   nav?: { section: "work" | "setup"; to: string; label: string; icon: ReactNode }[];
   commands?: (navigate: NavigateFunction) => PaletteItem[]; // Ctrl K, under "Go to" or "Commands"
   turnOn?: ComponentType; // the feature's own button that turns it on, on Settings while it is off
+  streams?: FeatureStreams; // the streams it owns, linked from a task they made
 }
 
 export const FEATURES: FeatureUI[] = [ideas];
+
+export { featureLink } from "./streams";
 
 export interface Features {
   loaded: boolean; // the manifest is read
