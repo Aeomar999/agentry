@@ -34,17 +34,18 @@ type Config struct {
 	Helper      http.Handler       // the terminal of the Claude session beside a task, started on the way; nil for none
 	SetTheme    func(theme string) // the page tells the server its theme, for the sessions it starts
 
-	Fleet       *machines.Fleet    // where tasks' work is: for their Workspace page
-	Workers     *workerlink.Server // the server's end of the workers' links; nil for none
-	PublicURL   string             // the address people and workers reach; "" for the one a request came to
-	CA          string             // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
-	NetworkURLs []string           // the server on each of this machine's network addresses, when it listens on every one
-	LocalURL    string             // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
-	Binary      string             // this agentry, which a joining machine can download
-	Local       workers.Machine    // what this machine is, as a worker would say it, for the Workers page
-	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
-	Features    []features.Feature // what teams and settings can turn on, for GET /api/features
-	Worktrees   string             // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
+	Fleet       *machines.Fleet              // where tasks' work is: for their Workspace page
+	Workers     *workerlink.Server           // the server's end of the workers' links; nil for none
+	PublicURL   string                       // the address people and workers reach; "" for the one a request came to
+	CA          string                       // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
+	NetworkURLs []string                     // the server on each of this machine's network addresses, when it listens on every one
+	LocalURL    string                       // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
+	Binary      string                       // this agentry, which a joining machine can download
+	Local       workers.Machine              // what this machine is, as a worker would say it, for the Workers page
+	Blobs       sharedfiles.Disk             // where tasks' shared files are kept
+	Features    []features.Feature           // what teams and settings can turn on, for GET /api/features; their routes are mounted too
+	Logs        map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its routes may write through
+	Worktrees   string                       // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
 }
 
 // PolicySource is the policy in force and any problem with the file on
@@ -57,8 +58,9 @@ type PolicySource interface {
 }
 
 type Server struct {
-	store    *store.Store   // the log: what to propose, and events to show
-	state    *current.State // every task and roster, as of the log's last event
+	store    *store.Store      // the log: what to propose, and events to show
+	events   features.EventLog // the store, read-only: what features' routes read of the log
+	state    *current.State    // every task and roster, as of the log's last event
 	config   Config
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
@@ -67,7 +69,7 @@ type Server struct {
 }
 
 func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
+	return &Server{store: s, events: struct{ features.EventLog }{s}, state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -103,6 +105,9 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
 	api("GET /api/features", s.listFeatures)
+	for _, f := range s.config.Features {
+		s.mount(f, api, deskToo)
+	}
 	api("GET /api/ideas", s.listIdeas)
 	api("POST /api/ideas/{idea}/accept", s.acceptIdea)
 	api("POST /api/ideas/{idea}/dismiss", s.dismissIdea)
