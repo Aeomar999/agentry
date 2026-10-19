@@ -343,9 +343,10 @@ func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	history := []change{}
 	var roster agents.Roster
+	name := r.PathValue("name")
 	for _, e := range stream {
 		roster.Apply(e)
-		if name := r.PathValue("name"); e.Type == events.AgentLearned && e.Text("name") == name {
+		if e.Type == events.AgentLearned && e.Text("name") == name {
 			agent, _ := roster.Get(name)
 			history = append(history, change{By: e.Actor.ID, At: e.At, Knowledge: agent.Knowledge})
 		}

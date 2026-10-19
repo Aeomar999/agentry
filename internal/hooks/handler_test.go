@@ -492,6 +492,26 @@ func TestAStalePatchIsSentAgainAsAFullCopy(t *testing.T) {
 	}
 }
 
+// The agent writes a byte that isn't UTF-8 in its knowledge file: the rules
+// refuse a patch carrying it, and a full copy of the text lands instead.
+func TestAPatchThatIsNotUTF8IsSentAgainAsAFullCopy(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Use gofmt.")
+	h.recordWhatWasLearned("engineer", "Use gofmt.\nRun go vet \xff.")
+
+	stream, _ := s.Log(events.AgentsStream)
+	if rejected := stream[len(stream)-2]; rejected.Type != events.ProposalRejected || !strings.Contains(rejected.Text("reason"), "UTF-8") {
+		t.Errorf("before the full copy: %s %v, want the patch refused for its UTF-8", rejected.Type, rejected.Data)
+	}
+	if last := stream[len(stream)-1]; last.Type != events.AgentLearned || agents.IsPatch(last.Proposal) || last.Actor.ID != "engineer" {
+		t.Errorf("last: %s %v by %s, want the engineer's full copy", last.Type, last.Data, last.Actor)
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt.\nRun go vet \uFFFD." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
 func TestThePlanFollowsTheFile(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)

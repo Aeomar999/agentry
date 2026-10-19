@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -145,8 +146,14 @@ func patchFits(roster agents.Roster, p events.Proposal) string {
 	if err != nil {
 		return err.Error()
 	}
+	// The state applies the patch after a JSON round trip, which would
+	// change a middle that isn't UTF-8, so the text verified here wouldn't
+	// be the one it rebuilds.
+	if !utf8.ValidString(patch.Middle) {
+		return "a patch's middle must be UTF-8"
+	}
 	agent, _ := roster.Get(p.Text("name"))
-	if _, err := patch.Apply(agent.Knowledge); err != nil {
+	if _, err := patch.Verify(agent.Knowledge); err != nil {
 		return "this patch doesn't fit what " + agent.Name + " knows now: " + err.Error()
 	}
 	return ""

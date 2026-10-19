@@ -13,8 +13,8 @@ import (
 
 // Patch is a new version of a text, stored as what it keeps of the version
 // before: that version's first Head bytes and last Tail bytes, with Middle
-// between them. SHA256 is the hex hash of the whole new text, so a patch
-// applied to any text but the one it was made from is caught.
+// between them. SHA256 is the hex hash of the whole new text, so Verify
+// catches a patch meant for any text but the one it is checked against.
 type Patch struct {
 	Head   int
 	Tail   int
@@ -49,17 +49,24 @@ func startsRune(text string, i int) bool {
 	return i == len(text) || utf8.RuneStart(text[i])
 }
 
-// Apply is the text p makes of old, or an error if old isn't the text p was
-// made from.
+// Apply is the text p makes of old, or an error if p keeps more of old than
+// there is. It doesn't check the hash: replay applies what the rules
+// verified to the same text again, and hashing every version on every fold
+// would cost far more than the fold.
 func (p Patch) Apply(old string) (string, error) {
 	if p.Head < 0 || p.Tail < 0 || p.Head+p.Tail > len(old) {
 		return "", fmt.Errorf("the patch keeps %d bytes before and %d after, of a text of %d", p.Head, p.Tail, len(old))
 	}
-	text := old[:p.Head] + p.Middle + old[len(old)-p.Tail:]
-	if hashOf(text) != p.SHA256 {
-		return "", errors.New("the patch was made from another version of the text")
+	return old[:p.Head] + p.Middle + old[len(old)-p.Tail:], nil
+}
+
+// Verify is Apply, with an error too if old isn't the text p was made from.
+func (p Patch) Verify(old string) (string, error) {
+	text, err := p.Apply(old)
+	if err == nil && hashOf(text) != p.SHA256 {
+		err = errors.New("the patch was made from another version of the text")
 	}
-	return text, nil
+	return text, err
 }
 
 func hashOf(text string) string {

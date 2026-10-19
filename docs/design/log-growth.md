@@ -710,9 +710,13 @@ diffs, so the same holds.
   `sha256`. A human editing the file on the page between the hook's read
   and its proposal makes the hook's patch fail, and the hook sends a full
   copy instead.
-- **Apply:** a mismatch can then only be a bug. It panics, and the
-  `agents` stream is broken as any panicking apply is (`guard` in
-  `current`); the real-copy replay test catches it before a release.
+- **Apply:** the fold checks only the bounds (`head + tail` within the
+  text, every field present), never the hash: replay is deterministic, so
+  what the rules accepted fits again, and hashing every version made a fold
+  of the `agents` stream take 75 ms instead of 0.12 ms. A patch out of
+  bounds can then only be a bug. It panics, and the `agents` stream is
+  broken as any panicking apply is (`guard` in `current`); the real-copy
+  replay test catches it before a release.
 - **Plans, commands, reports and instructions stay inline.** They are task
   texts: archiving takes them out of the live log and gzips them, which
   beats anything here. Plans would keep 58% as diffs, the rest 100%.

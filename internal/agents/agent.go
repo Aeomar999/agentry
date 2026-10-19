@@ -169,8 +169,9 @@ func (r *Roster) Apply(e events.Event) {
 }
 
 // learn sets the agent's knowledge by an agent.learned: a full copy of it,
-// or a patch on what it knows. The rules checked the patch against this same
-// knowledge, so one that doesn't fit is a bug, and panics.
+// or a patch on what it knows. The rules verified the patch against this
+// same knowledge, so only its bounds are checked here; one that doesn't fit
+// them is a bug, and panics.
 func (a *Agent) learn(e events.Event) {
 	if !IsPatch(e.Proposal) {
 		a.Knowledge, a.patched = e.Text("knowledge"), 0

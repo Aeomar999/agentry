@@ -122,12 +122,24 @@ func TestAPatchFitsOnlyItsOwnBase(t *testing.T) {
 		"Run all the tests.": "another version",
 		"Run.":               "of a text of 4",
 	} {
-		if _, err := patch.Apply(base); err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("applied to %q: %v, want an error with %q", base, err, want)
+		if _, err := patch.Verify(base); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("verified on %q: %v, want an error with %q", base, err, want)
 		}
 	}
 	if _, err := (Patch{Head: -1, Tail: 2}).Apply("Run."); err == nil {
 		t.Error("a negative head applied")
+	}
+}
+
+// Apply checks only the bounds, so a fold never hashes: the rules verified
+// the patch before it was written.
+func TestApplyLeavesTheHashToVerify(t *testing.T) {
+	patch := Diff("Run the tests.", "Run the slow tests.")
+	if got, err := patch.Apply("Run all the tests."); err != nil || got != "Run all slow tests." {
+		t.Errorf("Apply on another base = %q, %v", got, err)
+	}
+	if _, err := patch.Apply("Run."); err == nil {
+		t.Error("Apply kept more of the text than there is")
 	}
 }
 
@@ -202,8 +214,9 @@ func TestPatchedCountsSinceTheLastFullCopy(t *testing.T) {
 	}
 }
 
-// The rules refuse a patch that doesn't fit, so one in the log is a bug:
-// applying it panics, which breaks the stream, and leaves the roster as it was.
+// The rules refuse a patch that doesn't fit, so one in the log that keeps
+// more of the text than there is is a bug: applying it panics, which breaks
+// the stream, and leaves the roster as it was.
 func TestAPatchThatDoesNotFitPanics(t *testing.T) {
 	stream := seeded()
 	engineer, _ := FromEvents(stream).Get("engineer")
@@ -216,5 +229,5 @@ func TestAPatchThatDoesNotFitPanics(t *testing.T) {
 			t.Errorf("the failed patch changed the knowledge to %q", got.Knowledge)
 		}
 	}()
-	roster.Apply(logged(t, engineer.Patching(you, Diff("Use tabs.", "Use tabs only."))))
+	roster.Apply(logged(t, engineer.Patching(you, Diff("Use tabs for indentation.", "Use tabs for all indentation."))))
 }

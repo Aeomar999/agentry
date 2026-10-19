@@ -395,6 +395,7 @@ func TestAgentRules(t *testing.T) {
 		{"a patch on a version since replaced", agent("engineer", "", "", false).Patching(engineer, agents.Diff("Use gofmt.", "Run go vet.\nUse gofmt.")), false},
 		{"a patch keeping more than there is", agent("engineer", "", "", false).Patching(engineer, agents.Patch{Head: 10, Tail: 10, SHA256: "x"}), false},
 		{"a patch with another text's hash", agent("engineer", "", "", false).Patching(engineer, agents.Patch{Head: 13, Middle: "!", SHA256: agents.Diff("", "x").SHA256}), false},
+		{"a patch whose middle isn't UTF-8", agent("engineer", "", "", false).Patching(engineer, agents.Diff("Use gofmt -s.", "Use gofmt -s.\xff")), false},
 		{"a patch with no head", events.Proposal{Stream: events.AgentsStream, Actor: engineer, Type: events.AgentLearned,
 			Data: map[string]any{"name": "engineer", "tail": 0, "middle": "x", "sha256": agents.Diff("", "x").SHA256}}, false},
 		{"a patch for an agent that doesn't exist", agent("ghost", "", "", false).Patching(you, agents.Diff("", "x")), false},
