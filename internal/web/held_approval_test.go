@@ -28,20 +28,23 @@ const hookToken = "hook-secret"
 // task needs you, and approving it late on the page's route records it and
 // hands the command back to the coordinator.
 func TestATimedOutApprovalStaysOpenUntilYouAnswer(t *testing.T) {
-	server, s := engineerAtWorkBehind(t)
+	server, s := serverWithEngineerAtWork(t)
 	const push = "git push origin HEAD:dev"
 
 	if err := giveUpOn(server, "toolu_1", push); err == nil {
 		t.Fatal("the hook should have given up waiting")
 	}
-	waitUntil(t, "the action is held", func() bool {
+	waitFor(t, "the action to be held", func() (bool, bool) {
 		stream, _ := s.Stream("task-1")
-		return tasks.FromEvents(stream).Action("toolu_1").Held
+		held := tasks.FromEvents(stream).Action("toolu_1").Held
+		return true, held
 	})
 
 	_, body := call(t, server, "GET", "/api/questions", "")
 	var questions []question
-	json.Unmarshal([]byte(body), &questions)
+	if err := json.Unmarshal([]byte(body), &questions); err != nil {
+		t.Fatalf("Questions isn't a list: %v\n%s", err, body)
+	}
 	if len(questions) != 1 || questions[0].Kind != "approval" || !questions[0].Held || questions[0].Action != "toolu_1" ||
 		questions[0].Text != push {
 		t.Fatalf("Questions should list the held approval:\n%s", body)
@@ -57,6 +60,9 @@ func TestATimedOutApprovalStaysOpenUntilYouAnswer(t *testing.T) {
 	if len(d.Actions) == 0 || d.Actions[len(d.Actions)-1].Decision != string(tasks.Approved) {
 		t.Errorf("the action should be recorded approved: %+v", d.Actions)
 	}
+	if len(d.Trail) == 0 {
+		t.Fatal("the trail should hand the coordinator the command back, but it's empty")
+	}
 	if last := d.Trail[len(d.Trail)-1]; last.To != "tech-lead" || !strings.Contains(last.Text, push) {
 		t.Errorf("the coordinator should be handed the command back: %+v", last)
 	}
@@ -65,9 +71,9 @@ func TestATimedOutApprovalStaysOpenUntilYouAnswer(t *testing.T) {
 	}
 }
 
-// engineerAtWorkBehind is a web server, with the real hook endpoint, on a
+// serverWithEngineerAtWork is a web server, with the real hook endpoint, on a
 // task whose engineer turn is open. Its policy asks you about everything.
-func engineerAtWorkBehind(t *testing.T) (*httptest.Server, *store.Store) {
+func serverWithEngineerAtWork(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
@@ -110,15 +116,4 @@ func giveUpOn(server *httptest.Server, id, command string) error {
 		response.Body.Close()
 	}
 	return err
-}
-
-// waitUntil waits for done, which the server makes true after the client
-// has given up.
-func waitUntil(t *testing.T, what string, done func() bool) {
-	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); !done(); time.Sleep(10 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting until %s", what)
-		}
-	}
 }
