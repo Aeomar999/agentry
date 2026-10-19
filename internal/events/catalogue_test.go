@@ -120,16 +120,18 @@ func TestNewCatalogueRefusesATypeOutsideItsNamespace(t *testing.T) {
 		registration []events.Registration
 		want         string // in the error
 	}{
-		{"a stream type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"task.noted": spec}}}, "stream type task.noted is outside note-'s namespace note."},
+		{"a stream type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"task.noted": spec}}}, `stream type task.noted is outside the note. namespace of stream prefix "note-"`},
 		{"a stream type in a core task namespace", []events.Registration{{Prefix: "turn-", Types: map[events.Type]events.Spec{"turn.noted": spec}}}, "stream type turn.noted is in the turn. namespace, which the core uses"},
 		{"a stream type in a core fixed-stream namespace", []events.Registration{{Prefix: "policy-", Types: map[events.Type]events.Spec{"policy.noted": spec}}}, "stream type policy.noted is in the policy. namespace, which the core uses"},
-		{"a prefix in a core namespace", []events.Registration{{Prefix: "worker-"}}, "stream prefix worker- is in the worker. namespace, which the core uses"},
+		{"a prefix in a core namespace", []events.Registration{{Prefix: "worker-"}}, `stream prefix "worker-" is in the worker. namespace, which the core uses`},
 		{"a task type in task.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"task.pr_opened": spec}}}, "task type task.pr_opened is in the task. namespace, which the core uses"},
 		{"a task type in turn.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"turn.paused": spec}}}, "task type turn.paused is in the turn. namespace, which the core uses"},
-		{"a task type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}}, "task type git.pr_opened is outside note-'s namespace note."},
-		{"task types in two namespaces", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "pr.merged": spec}}}, "task type pr.merged is outside git.pr_opened's namespace git."},
-		{"a prefix in another's namespace", []events.Registration{flags, notes}, "stream type note.written is in the note. namespace, which note.flagged has"},
-		{"task types in a prefix's namespace", []events.Registration{notes, flags}, "task type note.flagged is in the note. namespace, which note- has"},
+		{"a task type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}}, `task type git.pr_opened is outside the note. namespace of stream prefix "note-"`},
+		{"task types in two namespaces", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "pr.merged": spec}}}, "task type pr.merged is outside the git. namespace of task type git.pr_opened"},
+		{"a prefix in another's namespace", []events.Registration{flags, notes}, "stream type note.written is in the note. namespace, which task type note.flagged has"},
+		{"task types in a prefix's namespace", []events.Registration{notes, flags}, `task type note.flagged is in the note. namespace, which stream prefix "note-" has`},
+		{"a prefix with no namespace", []events.Registration{{Prefix: "-", Types: map[events.Type]events.Spec{"turn.noted": spec}}}, `stream prefix "-" has no namespace`},
+		{"a task type with no namespace", []events.Registration{{TaskTypes: map[events.Type]events.Spec{".x": spec}}}, "task type .x has no namespace"},
 	}
 	for _, c := range cases {
 		_, err := events.NewCatalogue(c.registration...)

@@ -109,21 +109,24 @@ func (c *Catalogue) add(kind Type, spec Spec) error {
 }
 
 // claimNamespace refuses a registration whose types aren't all in its own
-// namespace, or whose namespace is taken: by the core when taken says "",
-// else by the registration it names. It then takes the namespace for r.
+// namespace, or whose namespace is taken. taken maps each claimed namespace
+// to its owner, "" for the core. It then takes the namespace for r.
 func claimNamespace(r Registration, taken map[string]string) error {
 	owner, own := ownNamespace(r)
-	if own == "" {
-		return nil // no prefix and no types: nothing to claim
+	switch {
+	case owner == "":
+		return nil // no prefix and no task types: nothing to claim
+	case own == "":
+		return fmt.Errorf("%s has no namespace", owner)
 	}
 	for _, kind := range slices.Sorted(maps.Keys(r.Types)) {
 		if namespace(kind) != own {
-			return fmt.Errorf("stream type %s is outside %s's namespace %s.", kind, owner, own)
+			return fmt.Errorf("stream type %s is outside the %s. namespace of %s", kind, own, owner)
 		}
 	}
 	for _, kind := range slices.Sorted(maps.Keys(r.TaskTypes)) {
 		if namespace(kind) != own {
-			return fmt.Errorf("task type %s is outside %s's namespace %s.", kind, owner, own)
+			return fmt.Errorf("task type %s is outside the %s. namespace of %s", kind, own, owner)
 		}
 	}
 	if other, isTaken := taken[own]; isTaken {
@@ -136,17 +139,18 @@ func claimNamespace(r Registration, taken map[string]string) error {
 	return nil
 }
 
-// ownNamespace is a registration's namespace and what it is named by: its
-// prefix's ("note" by note-) or its first task type's ("git" by git.pr_opened).
+// ownNamespace is a registration's namespace and what names it: its prefix
+// ("note" by stream prefix "note-") or its first task type ("git" by task
+// type git.pr_opened). The owner is "" when there is neither.
 func ownNamespace(r Registration) (owner, own string) {
 	if r.Prefix != "" {
-		return r.Prefix, strings.TrimSuffix(r.Prefix, "-")
+		return fmt.Sprintf("stream prefix %q", r.Prefix), strings.TrimSuffix(r.Prefix, "-")
 	}
 	if len(r.TaskTypes) == 0 {
 		return "", ""
 	}
 	first := slices.Min(slices.Collect(maps.Keys(r.TaskTypes)))
-	return string(first), namespace(first)
+	return fmt.Sprintf("task type %s", first), namespace(first)
 }
 
 // nameOf names a registration in an error by its first type, or by its
@@ -158,7 +162,7 @@ func nameOf(r Registration) string {
 	case len(r.TaskTypes) > 0:
 		return fmt.Sprintf("task type %s", slices.Min(slices.Collect(maps.Keys(r.TaskTypes))))
 	}
-	return fmt.Sprintf("stream prefix %s", r.Prefix)
+	return fmt.Sprintf("stream prefix %q", r.Prefix)
 }
 
 // coreNamespaces are the namespaces of the core's types, each owned by the
