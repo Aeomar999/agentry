@@ -133,6 +133,7 @@ const instructions = `Agentry is the user's task board where AI agents do the wo
 - Epics: a goal too big for one change is an epic (kind "epic"); its coordinator splits it into stories, which wait in the user's Backlog until they start them. File tasks under an epic with file_under_epic, set priority with set_priority, and start stories with start.
 - Questions from coordinators: relay them to the user and send the user's own answer with answer_question. Never answer for the user.
 - Approvals: review_approvals and close_epic ask the user directly in Claude Code; you can't approve for them. Offer to run them when something waits.
+- Ideas: the Visionaries suggest features as ideas (list_ideas). Relay them to the user; the user accepts or dismisses each (accept_idea, dismiss_idea). Never accept or dismiss an idea on your own.
 - Every reply ends with what is waiting for the user. When something is, tell them in a line and offer to deal with it.`
 
 const boardPrompt = `Show me my Agentry board for this repo. Call the status tool, then tell me, briefly: first what needs me (and offer to deal with it), then what is running, then what is planned and not started.`

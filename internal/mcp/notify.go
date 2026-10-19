@@ -32,7 +32,7 @@ func (s *Server) Watch(ctx context.Context) {
 		}
 		for _, w := range fresh {
 			title := map[string]string{"done": "Agentry: " + w.Task + " is done", "said": "Agentry: " + w.Task + "'s coordinator",
-				"offline": "Agentry: a machine went offline"}[w.Kind]
+				"offline": "Agentry: a machine went offline", "ideas": "Agentry: a new idea"}[w.Kind]
 			if title == "" {
 				title = "Agentry: " + w.Task + " needs you"
 			}

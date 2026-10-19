@@ -63,7 +63,12 @@ type claude struct {
 
 func start(t *testing.T, canElicit bool, answers func(string, json.RawMessage) any) (*claude, *[]string) {
 	agentry, calls := fakeAgentry(t)
-	s := &Server{agentry: client.Client{Where: client.Where{URL: agentry.URL, Page: "https://agentry.example"}, Token: "secret"}, repo: "/repo", version: "test"}
+	return startOn(t, client.Client{Where: client.Where{URL: agentry.URL, Page: "https://agentry.example"}, Token: "secret"}, canElicit, answers), calls
+}
+
+// startOn starts the server in /repo on agentry, and Claude Code with it.
+func startOn(t *testing.T, agentry client.Client, canElicit bool, answers func(string, json.RawMessage) any) *claude {
+	s := &Server{agentry: agentry, repo: "/repo", version: "test"}
 	toServer, fromClaude := io.Pipe()
 	fromServer, toClaude := io.Pipe()
 	go s.Serve(context.Background(), toServer, toClaude)
@@ -74,7 +79,7 @@ func start(t *testing.T, canElicit bool, answers func(string, json.RawMessage) a
 		capabilities["elicitation"] = map[string]any{}
 	}
 	c.call("initialize", map[string]any{"protocolVersion": latest, "capabilities": capabilities})
-	return c, calls
+	return c
 }
 
 func (c *claude) call(method string, params any) json.RawMessage {

@@ -150,6 +150,7 @@ Then, in any repo:
 - **See your board:** ask, or type `/mcp__agentry__board`. Claude Code's status line shows `agentry · 1 needs you · 3 running`.
 - **Hear from it:** Claude tells you, without being asked, when something needs you, a task finishes, a coordinator replies, or a machine goes offline. A notification shows on your computer too.
 - **Answer and approve:** send a coordinator your answer. Approving an agent's action, closing an epic or copying a file from outside a machine's worktrees is asked of you by Claude Code itself, so the model can't approve for you.
+- **Decide on ideas:** `list_ideas` shows the features the Visionaries suggest, and open ones show among what waits for you. You decide on each: `accept_idea` makes one a task in your Backlog, `dismiss_idea` drops it. Claude Code asks you to confirm either, so the model only relays them.
 - **Share files:** `attach_file` shares a file from your machine with a task; `get_file` downloads one.
 
 Each machine connected gets its own credential (the log keeps only its hash); the Integrations page lists them, and Revoke stops one at once. Everything it does is on the page at once.

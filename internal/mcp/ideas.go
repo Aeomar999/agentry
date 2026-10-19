@@ -1,0 +1,225 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/client"
+)
+
+// Ideas are features the Visionaries suggest. Claude only relays them: you
+// accept an idea, which makes it a task in your Backlog, or dismiss it.
+
+// The parts of the API's ideas the tools read.
+type idea struct {
+	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
+	BackedBy, DoubtedBy                                                       []string
+}
+
+func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
+	var a struct {
+		All   bool
+		State string
+	}
+	json.Unmarshal(arguments, &a)
+	if a.State == "" {
+		a.State = "open"
+	}
+	repo := s.repo
+	if a.All {
+		repo = ""
+	}
+	list, err := ideasOf(s.agentry, repo)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, i := range list {
+		if a.State != "all" && i.State != a.State {
+			continue
+		}
+		fmt.Fprintf(&b, "%s [%s] %s (size %s, %s, suggested in %s)\n", i.ID, i.State, i.Title, i.Size, kindOf(i), i.Task)
+		fmt.Fprintf(&b, "    problem: %s\n    feature: %s\n", oneLine(i.Problem, 300), oneLine(i.Proposal, 300))
+		if len(i.BackedBy)+len(i.DoubtedBy) > 0 {
+			fmt.Fprintf(&b, "    backed by: %s · doubted by: %s\n", namesOf(i.BackedBy), namesOf(i.DoubtedBy))
+		}
+		switch i.State {
+		case "accepted":
+			fmt.Fprintf(&b, "    became %s", i.Became)
+		case "dismissed":
+			b.WriteString("    dismissed")
+		default:
+			continue
+		}
+		if i.Note != "" {
+			b.WriteString(": " + oneLine(i.Note, 200))
+		}
+		b.WriteString("\n")
+	}
+	if b.Len() == 0 {
+		which := a.State + " ideas"
+		if a.State == "all" {
+			which = "ideas"
+		}
+		return "No " + which + " for " + s.scope(a.All) + ".", nil
+	}
+	return b.String(), nil
+}
+
+// acceptIdea makes an idea a task in your Backlog. With elicitation Claude
+// Code asks you first, and you can change the kind and the note.
+func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ ID, Kind, Note string }
+	json.Unmarshal(arguments, &a)
+	i, err := s.idea(a.ID)
+	if err != nil {
+		return "", err
+	}
+	if a.Kind == "" {
+		a.Kind = kindOf(i)
+	}
+	if s.canElicit {
+		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog.\n\n"+aboutIdea(i), object(props{
+			"decision": enum("Make it a task, or leave the idea open", "accept", "leave open"),
+			"kind":     withDefault(enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
+			"note":     withDefault(text("Optional: what to tell its coordinator"), a.Note),
+		}, "decision"))
+		if err != nil {
+			return "", err
+		}
+		if !ok || answer["decision"] != "accept" {
+			return "The user left " + i.ID + " open. Nothing was written.", nil
+		}
+		a.Kind, _ = answer["kind"].(string)
+		a.Note, _ = answer["note"].(string)
+	}
+	var got struct {
+		Task     string
+		Accepted bool
+		Refused  string
+	}
+	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", map[string]string{"kind": a.Kind, "note": a.Note}, &got); err != nil {
+		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
+	}
+	text := fmt.Sprintf("%s became %s, in the user's Backlog until they start it: %s", i.ID, got.Task, s.agentry.PageURL("/tasks/"+got.Task))
+	if !got.Accepted {
+		text += "\nThe idea isn't marked accepted: " + got.Refused
+	}
+	return text, nil
+}
+
+// dismissIdea dismisses an idea. With elicitation Claude Code asks you
+// first, and you can change the note.
+func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
+	var a struct{ ID, Note string }
+	json.Unmarshal(arguments, &a)
+	i, err := s.idea(a.ID)
+	if err != nil {
+		return "", err
+	}
+	if s.canElicit {
+		answer, ok, err := s.elicit(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), object(props{
+			"decision": enum("Dismiss it, or leave it open", "dismiss", "leave open"),
+			"note":     withDefault(text("Optional: why, so the Visionaries don't suggest it again"), a.Note),
+		}, "decision"))
+		if err != nil {
+			return "", err
+		}
+		if !ok || answer["decision"] != "dismiss" {
+			return "The user left " + i.ID + " open. Nothing was written.", nil
+		}
+		a.Note, _ = answer["note"].(string)
+	}
+	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/dismiss", map[string]string{"note": a.Note}, nil); err != nil {
+		return "", fmt.Errorf("%s wasn't dismissed: %w", i.ID, err)
+	}
+	return "The user dismissed " + i.ID + ", " + i.Title + ".", nil
+}
+
+// idea is one idea, of any repo.
+func (s *Server) idea(id string) (idea, error) {
+	list, err := ideasOf(s.agentry, "")
+	if err != nil {
+		return idea{}, err
+	}
+	for _, i := range list {
+		if i.ID == id {
+			return i, nil
+		}
+	}
+	return idea{}, fmt.Errorf("no idea %s", id)
+}
+
+// ideasOf are the ideas about a repo, or every repo's for "", newest first.
+func ideasOf(agentry client.Client, repo string) ([]idea, error) {
+	path := "/api/ideas"
+	if repo != "" {
+		path += "?repo=" + url.QueryEscape(repo)
+	}
+	var list []idea
+	err := agentry.Call("GET", path, nil, &list)
+	return list, err
+}
+
+// openIdeas is one entry for every open idea: how many, and the newest
+// titles. Its key is the number of ideas ever suggested, so a new idea is
+// news and one you accept or dismiss isn't. ok is false with none open.
+func openIdeas(agentry client.Client) (w Waiting, ok bool) {
+	all, err := ideasOf(agentry, "")
+	if err != nil {
+		return Waiting{}, false
+	}
+	var open []idea
+	for _, i := range all {
+		if i.State == "open" {
+			open = append(open, i)
+		}
+	}
+	if len(open) == 0 {
+		return Waiting{}, false
+	}
+	var titles []string
+	for _, i := range open[:min(3, len(open))] {
+		titles = append(titles, oneLine(i.Title, 60))
+	}
+	if more := len(open) - len(titles); more > 0 {
+		titles = append(titles, fmt.Sprintf("and %d more", more))
+	}
+	what := "open ideas"
+	if len(open) == 1 {
+		what = "open idea"
+	}
+	return Waiting{Key: "ideas/" + strconv.Itoa(len(all)), Task: open[0].Task, Kind: "ideas",
+		Line: fmt.Sprintf("%d %s from the Visionaries: %s (list_ideas)", len(open), what, strings.Join(titles, ", "))}, true
+}
+
+// aboutIdea is what you read before deciding on an idea.
+func aboutIdea(i idea) string {
+	return fmt.Sprintf("Problem: %s\n\nFeature: %s\n\nSize %s, suggested as %s in %s.", i.Problem, i.Proposal, i.Size, kindOf(i), i.Task)
+}
+
+// kindOf is what the idea suggests making of it: a task or an epic.
+func kindOf(i idea) string {
+	if i.Kind == "epic" {
+		return "epic"
+	}
+	return "task"
+}
+
+func namesOf(agents []string) string {
+	if len(agents) == 0 {
+		return "none"
+	}
+	return strings.Join(agents, ", ")
+}
+
+func withDefault(schema map[string]any, value string) map[string]any {
+	if value != "" {
+		schema["default"] = value
+	}
+	return schema
+}

@@ -84,6 +84,13 @@ func (s *Server) tools() []tool {
 			object(props{"task": text("its id"), "path": text("the file's path here"), "as": text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), s.attachFile},
 		{"get_file", "Download one of a task's shared files to this machine.",
 			object(props{"task": text("its id"), "name": text("the shared file's name"), "to": text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
+		{"list_ideas", "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
+			object(props{"all": boolean("every repo, not only this one"), "state": enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
+		{"accept_idea", "Make an idea a task in the user's Backlog. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm.",
+			object(props{"id": text("the idea's id, such as idea-3"), "kind": enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
+				"note": text("optional: what the user said, for the task's coordinator")}, "id"), s.acceptIdea},
+		{"dismiss_idea", "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm.",
+			object(props{"id": text("the idea's id"), "note": text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
 	}
 }
 
@@ -527,13 +534,20 @@ func (s *Server) scope(everywhere bool) string {
 // waitingNote is what waits for you anywhere, for the end of every reply.
 func (s *Server) waitingNote() string {
 	_, waiting, err := s.board()
-	if err != nil || len(waiting) == 0 {
+	if err != nil {
+		return ""
+	}
+	notes := lines(waiting, func(q question) (string, bool) { return describe(q), true })
+	if ideas, ok := openIdeas(s.agentry); ok {
+		notes = append(notes, ideas.Line)
+	}
+	if len(notes) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n\nWaiting for the user (%d):", len(waiting))
-	for _, q := range waiting[:min(5, len(waiting))] {
-		b.WriteString("\n- " + describe(q))
+	fmt.Fprintf(&b, "\n\nWaiting for the user (%d):", len(notes))
+	for _, note := range notes[:min(5, len(notes))] {
+		b.WriteString("\n- " + note)
 	}
 	return b.String()
 }

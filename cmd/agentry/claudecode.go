@@ -70,7 +70,7 @@ func sayWhatWaits(agentry client.Client, event string, stdout io.Writer) int {
 		fmt.Fprintf(&b, "- %s\n", w.Line)
 	}
 	b.WriteString("If you haven't told the user about these yet, tell them briefly and offer to deal with them " +
-		"(review_approvals, close_epic, answer_question). Don't repeat what you have already told them.")
+		"(review_approvals, close_epic, answer_question, list_ideas). Don't repeat what you have already told them.")
 	reply, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": event, "additionalContext": b.String()}})
 	stdout.Write(reply)
 	return 0

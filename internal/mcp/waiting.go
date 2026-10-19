@@ -9,7 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/client"
 )
 
-// What waits for you, from any task, as one line each, and the news Claude
+// What waits for you, from any task, as one line each (open ideas share one), and the news Claude
 // tells you of between your messages: what newly waits for you, tasks that
 // finished, what a coordinator told you (its reply to you, an epic split
 // into stories that wait for you to start them), and machines that went
@@ -20,7 +20,7 @@ type Waiting struct {
 	Key  string // the same while it lasts: a new one has a new key
 	Task string
 	Line string // for a person: "task-4: deployer asks to run git push"
-	Kind string // "needs you", "done" (a task finished), "said" (a coordinator told you) or "offline" (a machine)
+	Kind string // "needs you", "ideas" (open ones), "done" (a task finished), "said" (a coordinator told you) or "offline" (a machine)
 }
 
 // WaitingFor is everything waiting for you now, oldest first.
@@ -32,6 +32,9 @@ func WaitingFor(agentry client.Client) ([]Waiting, error) {
 	var all []Waiting
 	for _, q := range questions {
 		all = append(all, Waiting{Key: q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text, Task: q.Task, Line: describe(q), Kind: "needs you"})
+	}
+	if ideas, ok := openIdeas(agentry); ok { // ideas the server can't list are left out, not an error
+		all = append(all, ideas)
 	}
 	return all, nil
 }
