@@ -316,19 +316,25 @@ func combinations[T any](choices [][]T) (ways [][]T, complete bool) {
 }
 
 // Tools whose short options cluster, getopt style, and that have one which
-// writes a file or runs a program: `sort -uo out` is `sort -u -o out`, and
-// `git grep -nO'cmd'` opens its files with cmd. Their options are split apart
-// so a rule for -o sees it. Only these: find's -name and go's -run are single
-// options, not clusters. The number is how many words name the tool.
-var clusteringTools = map[string]int{"sort": 1, "tree": 1, "file": 1, "git grep": 2}
+// writes a file or runs a program: `sort -uo out` is `sort -u -o out`,
+// `git grep -nO'cmd'` opens its files with cmd, and `pytest -vo cache_dir=x`
+// sets where pytest writes. Their options are split apart so a rule for -o
+// sees it. Only these: find's -name and go's -run are single options, not
+// clusters.
+var clusteringTools = map[string]bool{
+	"sort": true, "tree": true, "file": true, "git grep": true, "npx jest": true, "npx vitest": true, "npx eslint": true,
+	"pytest": true, "python -m pytest": true, "python3 -m pytest": true,
+}
 
 // withShortOptionsApart writes each cluster of a clustering tool's short
 // options as one option per letter, up to "--". A value joined to its option
 // (-oout) splits too; the letters it leaves only matter to a rule naming them.
 func withShortOptionsApart(words []string) []string {
-	start := clusteringTools[words[0]]
-	if len(words) > 1 && clusteringTools[words[0]+" "+words[1]] > 0 {
-		start = clusteringTools[words[0]+" "+words[1]]
+	start := 0
+	for n := 1; n <= min(len(words), 3); n++ {
+		if clusteringTools[strings.Join(words[:n], " ")] {
+			start = n
+		}
 	}
 	if start == 0 {
 		return words

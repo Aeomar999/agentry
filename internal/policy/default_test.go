@@ -350,6 +350,38 @@ func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 	}
 }
 
+// Round 2 of the review found writing flags in the first position, in short
+// option clusters and in other spellings of jest and vitest (task-30).
+func TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"pytest -o first", bash("pytest -o cache_dir=src"), Deny},
+			{"pytest -o first, through python", bash("python3 -m pytest -o cache_dir=src"), Deny},
+			{"pytest -o joined", bash("pytest -ocache_dir=src"), Deny},
+			{"pytest -o in a cluster", bash("pytest -vo cache_dir=src"), Deny},
+			{"cargo -Z first", bash("cargo -Zunstable-options test"), Deny},
+			{"jest --collectCoverage", bash("npx jest --collectCoverage"), Deny},
+			{"jest --collect-coverage", bash("npx jest --collect-coverage"), Deny},
+			{"jest --config can turn coverage on", bash(`npx jest --config='{"collectCoverage":true}'`), Deny},
+			{"jest -c", bash("npx jest -c jest.ci.json"), Deny},
+			{"jest -c late", bash("npx jest src -c jest.ci.json"), Deny},
+			{"jest -u in a cluster", bash("npx jest -iu"), Deny},
+			{"vitest bench --outputJson", bash("npx vitest bench --outputJson out.json"), Deny},
+			{"vitest --output-file", bash("npx vitest run --reporter=json --output-file=out.json"), Deny},
+			{"vitest --reporter=blob", bash("npx vitest run --reporter=blob"), Deny},
+			{"vitest --reporter html", bash("npx vitest run --reporter html"), Deny},
+			{"vitest -u in a cluster", bash("npx vitest run -ru"), Deny},
+			{"eslint -o in a cluster", bash("npx eslint -fo out.txt ."), Deny},
+
+			// the plain forms still run
+			{"pytest", bash("python3 -m pytest -q -k 'not slow' tests"), Allow},
+			{"jest --ci", bash("npx jest --ci"), Allow},
+			{"vitest run", bash("npx vitest run --reporter=verbose"), Allow},
+		})
+	}
+}
+
 // A variable that can hold several values is judged with each of them, and
 // one handed to a program is judged as a setting of that program (task-30,
 // review round 2).

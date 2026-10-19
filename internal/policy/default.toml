@@ -42,8 +42,9 @@
 #              counts as unknown too, since programs read their settings from
 #              them, except GOTOOLCHAIN, GOPROXY, CGO_ENABLED, GOOS, GOARCH,
 #              NO_COLOR, LC_ALL, LANG and TZ.
-#   clusters   the short options of sort, tree, file and git grep are matched
-#              one by one, so 'sort *-o*' also matches `sort -uo out`.
+#   clusters   the short options of sort, tree, file, git grep, pytest and
+#              npx jest, vitest and eslint are matched one by one, so 'sort *-o*'
+#              also matches `sort -uo out`.
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
 # Allow everything, as shipped
@@ -234,14 +235,19 @@ scratch = ['/tmp/claude-*/**']
   runs_any = [
     'npx eslint *--fix', 'npx eslint *--fix *', 'npx eslint *-o *', 'npx eslint *--output-file*', 'npx eslint *--cache*',
     'npx eslint *--init*', 'npx vitest *-u', 'npx vitest *-u *', 'npx vitest *--update*', 'npx vitest *--outputFile*',
-    'npx vitest *--coverage*', 'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
-    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--cacheDirectory*',
-    'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx vitest *--output-file*', 'npx vitest *--outputJson*', 'npx vitest *--output-json*', 'npx vitest *--coverage*',
+    'npx vitest *--reporter*blob*', 'npx vitest *--reporter*html*',
+    'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
+    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--collectCoverage*',
+    'npx jest *--collect-coverage*', 'npx jest *--cacheDirectory*', 'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx jest *--config*', 'npx jest -c*', 'npx jest * -c*',
     '*pytest *--junit*', '*pytest *--basetemp*', '*pytest *--cov*', '*pytest *--debug*', '*pytest *--log-file*',
-    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest * -o*', '*pytest *--override-ini*', '*pytest *--pastebin*',
-    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo * -Z*',
+    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest -o*', '*pytest * -o*', '*pytest *--override-ini*',
+    '*pytest *--pastebin*',
+    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo -Z*',
+    'cargo * -Z*',
   ]
-  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs. Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
+  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs (jest's --config can be inline JSON that turns coverage on). Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
 
   [[profiles.read-only.rules]]
   name = "runs no command a flag names"
@@ -358,14 +364,19 @@ scratch = ['/tmp/claude-*/**']
   runs_any = [
     'npx eslint *--fix', 'npx eslint *--fix *', 'npx eslint *-o *', 'npx eslint *--output-file*', 'npx eslint *--cache*',
     'npx eslint *--init*', 'npx vitest *-u', 'npx vitest *-u *', 'npx vitest *--update*', 'npx vitest *--outputFile*',
-    'npx vitest *--coverage*', 'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
-    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--cacheDirectory*',
-    'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx vitest *--output-file*', 'npx vitest *--outputJson*', 'npx vitest *--output-json*', 'npx vitest *--coverage*',
+    'npx vitest *--reporter*blob*', 'npx vitest *--reporter*html*',
+    'npx jest *-u', 'npx jest *-u *', 'npx jest *--updateSnapshot*', 'npx jest *--update-snapshot*',
+    'npx jest *--outputFile*', 'npx jest *--output-file*', 'npx jest *--coverage*', 'npx jest *--collectCoverage*',
+    'npx jest *--collect-coverage*', 'npx jest *--cacheDirectory*', 'npx jest *--cache-directory*', 'npx jest *--init*',
+    'npx jest *--config*', 'npx jest -c*', 'npx jest * -c*',
     '*pytest *--junit*', '*pytest *--basetemp*', '*pytest *--cov*', '*pytest *--debug*', '*pytest *--log-file*',
-    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest * -o*', '*pytest *--override-ini*', '*pytest *--pastebin*',
-    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo * -Z*',
+    '*pytest *--resultlog*', '*pytest *--report-log*', '*pytest -o*', '*pytest * -o*', '*pytest *--override-ini*',
+    '*pytest *--pastebin*',
+    'cargo *--fix*', 'cargo *--target-dir*', 'cargo *--config*', 'cargo *--out-dir*', 'cargo *--artifact-dir*', 'cargo -Z*',
+    'cargo * -Z*',
   ]
-  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs. Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
+  why = "These flags write into the repo (fixes, snapshots, reports, coverage, caches) or change where and how the build runs (jest's --config can be inline JSON that turns coverage on). Run the tests and linters without them; go test -cover prints coverage without writing it. cargo test and cargo check stay allowed: target/ is build output, like go test's build cache."
 
   [[profiles.read-mostly.rules]]
   name = "runs no command a flag names"
