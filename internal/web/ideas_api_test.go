@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"maps"
 	"net/http"
@@ -109,7 +110,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{"kind":"epic","note":"Soon"}`)
 	var got acceptance
 	json.Unmarshal([]byte(body), &got)
-	if code != 200 || got != (acceptance{Task: "task-2", Accepted: true}) {
+	if code != 200 || got != (acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
@@ -186,7 +187,7 @@ func TestYouAcceptAndStartAnIdea(t *testing.T) {
 		code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", c.body)
 		var got acceptance
 		json.Unmarshal([]byte(body), &got)
-		if code != 200 || got != (acceptance{Task: c.task, Accepted: true}) {
+		if code != 200 || got != (acceptance{Task: c.task, Column: cmp.Or(c.parked, "in-progress"), Accepted: true}) {
 			t.Fatalf("%s: %d %s", c.body, code, body)
 		}
 		task, err := state.Task(c.task)

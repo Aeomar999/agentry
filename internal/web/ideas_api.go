@@ -52,9 +52,9 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 // -1 is no limit, and below that is a 400. Its turns are always NewLimits's.
 // It answers 404 for no such idea; 409 with the reason when it was refused
 // and nothing was written (the idea isn't open, the kind or the repo is
-// wrong); otherwise 200 with what happened: the task made, whether the idea
-// is marked accepted, and if not, why. A task made and the idea not marked
-// is still a 200, so the page can show the task.
+// wrong); otherwise 200 with what happened: the task made, the column it is
+// in, whether the idea is marked accepted, and if not, why. A task made and
+// the idea not marked is still a 200, so the page can show the task.
 func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Kind, Note string
@@ -80,7 +80,7 @@ func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 	case got.Task == "":
 		http.Error(w, got.Refused, http.StatusConflict)
 	default:
-		reply(w, acceptance{Task: got.Task, Accepted: got.Accepted, Refused: got.Refused})
+		reply(w, acceptance{Task: got.Task, Column: got.Column, Accepted: got.Accepted, Refused: got.Refused})
 	}
 }
 

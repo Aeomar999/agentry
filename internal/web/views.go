@@ -286,6 +286,7 @@ func viewOf(idea *ideas.Idea, about, became *tasks.Task, roster agents.Roster, n
 // acceptance is what accepting an idea did (ideas.Acceptance).
 type acceptance struct {
 	Task     string `json:"task"`     // the task made from the idea
+	Column   string `json:"column"`   // its column on the board now, as a task summary's column; "" when it can't be read
 	Accepted bool   `json:"accepted"` // the idea is marked accepted
 	Refused  string `json:"refused"`  // why it isn't, "" once accepted
 }
