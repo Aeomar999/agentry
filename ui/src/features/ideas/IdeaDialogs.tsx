@@ -122,8 +122,19 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
 // answers, not the button pressed: a retry after a failed accept finds the
 // task where it was made. Empty when the column can't be read.
 function placeOf(column: IdeaAcceptance["column"]): string {
-  if (column === "") return "";
-  return column === "backlog" ? "In your Backlog until you start it." : `Started: it is ${COLUMN_TITLES[column]}.`;
+  switch (column) {
+    case "":
+      return "";
+    case "backlog":
+      return "In your Backlog until you start it.";
+    case "in-progress":
+    case "review":
+    case "shipping":
+      return `Started, now in ${COLUMN_TITLES[column]}.`;
+    case "done":
+      return `${COLUMN_TITLES[column]}.`;
+  }
+  return `In ${COLUMN_TITLES[column]}.`;
 }
 
 // DismissIdeaDialog puts the idea away, into the history, with your reason.

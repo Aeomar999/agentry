@@ -431,6 +431,8 @@ func TestAnAcceptedIdeaSaysWhereItsTaskReallyIs(t *testing.T) {
 		{true, "backlog", "idea-1 became task-31, in the user's Backlog"},
 		{false, "in-progress", "idea-1 became task-31, started (In progress)"},
 		{false, "review", "idea-1 became task-31, started (Review)"},
+		{true, "todo", "idea-1 became task-31, in To do:"},
+		{true, "done", "idea-1 became task-31, Done:"},
 		{true, "", "idea-1 became task-31: https://agentry.example/tasks/task-31"},
 	} {
 		fake.column = &step.column

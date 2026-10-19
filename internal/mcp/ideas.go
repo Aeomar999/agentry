@@ -165,8 +165,12 @@ func placeOf(column string) string {
 		return ""
 	case "backlog":
 		return ", in the user's Backlog until they start it"
+	case "in-progress", "review", "shipping":
+		return ", started (" + boardName(column) + ")"
+	case "done":
+		return ", " + boardName(column)
 	}
-	return ", started (" + boardName(column) + ")"
+	return ", in " + boardName(column)
 }
 
 // startOf is the elicitation's answer for start.
