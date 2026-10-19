@@ -149,6 +149,61 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 	}
 }
 
+// A task you start as you accept it is made unparked, in one event, so it
+// starts as a task you make does; the replayed log agrees.
+func TestAcceptAndStartMakesATaskOutOfTheBacklog(t *testing.T) {
+	for _, kind := range []string{"task", "epic"} {
+		t.Run(kind, func(t *testing.T) {
+			s, state, repo := openSeeded(t)
+			id := suggest(t, s, repo, nil)
+
+			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: kind, Defaults: tasks.Limits{Budget: 700, MaxTurns: 9}, Start: true})
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+				t.Fatalf("accept: %+v %v", got, err)
+			}
+			stream, err := s.Stream("task-2")
+			if err != nil || len(stream) != 1 || stream[0].Type != events.TaskCreated || stream[0].Actor != you {
+				t.Fatalf("want one task.created by you: %+v %v", stream, err)
+			}
+			if _, parked := stream[0].Data["parked"]; parked {
+				t.Errorf("task.created has parked: %v", stream[0].Data)
+			}
+			want := map[string]tasks.Kind{"task": tasks.Story, "epic": tasks.Epic}[kind]
+			for _, task := range []*tasks.Task{loadTask(t, s, "task-2"), mustTask(t, state, "task-2")} {
+				if task.Parked != "" || task.Status() == tasks.Held || task.Budget != 700 || task.MaxTurns != 9 || task.Kind != want || task.MadeFrom != id {
+					t.Errorf("task: parked %q status %s budget %d turns %d kind %q made from %q", task.Parked, task.Status(), task.Budget, task.MaxTurns, task.Kind, task.MadeFrom)
+				}
+			}
+			if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
+				t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+			}
+		})
+	}
+}
+
+// Only you start a task as you accept its idea: Agentry's accept would make
+// a task out of the Backlog, which the rules refuse it.
+func TestAgentryCantAcceptAndStart(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	id := suggestAgreed(t, s, repo, nil)
+	if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry, Start: true}); got.Task != "" || got.Accepted || got.Refused == "" {
+		t.Errorf("want refused with no task: %+v", got)
+	}
+	if ids := state.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) {
+		t.Errorf("a task was made: %v", ids)
+	}
+}
+
+func mustTask(t *testing.T, state *current.State, id string) *tasks.Task {
+	t.Helper()
+	task, err := state.Task(id)
+	if err != nil || task == nil {
+		t.Fatalf("task %s: %v %v", id, task, err)
+	}
+	return task
+}
+
 func TestDismissKeepsYourNote(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	kept, dropped := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})

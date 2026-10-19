@@ -19,6 +19,7 @@ type Choice struct {
 	Kind     string // "task" (or "story") or "epic"; "" takes the one the idea suggests
 	Note     string
 	Defaults tasks.Limits // the server's budget and turns for the new task, unless it follows up an epic, which gives its own
+	Start    bool         // start the task now instead of leaving it in the Backlog; only you may
 	By       events.Actor // who accepts it: you when unset, or Agentry for an idea the Visionaries agreed on by your rule
 }
 
@@ -40,11 +41,12 @@ type Board interface {
 	Roster() agents.Roster
 }
 
-// Accept makes an open idea a task in your Backlog, in the idea's repo, for
-// the first team's coordinator, then marks the idea accepted with it. The
-// task is made first, and the rules accept an idea only for a task made from
-// it, so a crash in between leaves a task and an idea still open, never an
-// accepted idea that points at no task. The next Accept finds that task and
+// Accept makes an open idea a task in your Backlog, or started when you
+// chose to start it, in the idea's repo, for the first team's coordinator,
+// then marks the idea accepted with it. The task is made first, and the
+// rules accept an idea only for a task made from it, so a crash in between
+// leaves a task and an idea still open, never an accepted idea that points
+// at no task. The next Accept finds that task and
 // only marks the idea, and Accepts run one at a time, so a double click or
 // the UI and MCP at once still make one task. The error is for the log
 // failing, not for a refusal.
@@ -140,8 +142,11 @@ func ideaOf(log *store.Store, taskID string) (string, error) {
 	return "", nil
 }
 
-// makeTask makes the idea's task, of the kind given, parked in the Backlog.
-// Task is "" and Refused says why when it can't.
+// makeTask makes the idea's task, of the kind given, parked in the Backlog;
+// one you chose to start isn't parked, so it starts as a task you make does,
+// with no second event. The rules refuse Agentry a task that isn't parked:
+// it starts one only by moving it, as you turned on. Task is "" and Refused
+// says why when it can't.
 func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
 	if reason := worktrees.IsRepo(idea.Repo); reason != "" {
 		return Acceptance{Refused: "the idea's repo can't take a task: " + reason}, nil
@@ -158,9 +163,13 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 		return Acceptance{Refused: "the epic " + idea.Epic + " it follows up wasn't found, so its limits can't go with the task: it is left for you"}, nil
 	}
 	limits := tasks.NewLimits(choice.Defaults, epic)
-	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: map[string]any{
-		"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo, "coordinator": coordinator.Name,
-		"budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true, "parked": "backlog", "from": idea.ID, "idea": idea.ID}})
+	data := map[string]any{"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo,
+		"coordinator": coordinator.Name, "budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true,
+		"from": idea.ID, "idea": idea.ID}
+	if !choice.Start {
+		data["parked"] = "backlog"
+	}
+	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: data})
 	switch {
 	case err != nil:
 		return Acceptance{}, err
