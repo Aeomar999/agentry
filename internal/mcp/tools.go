@@ -264,9 +264,12 @@ func (s *Server) tell(_ context.Context, arguments json.RawMessage) (string, err
 func (s *Server) answer(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task, Answer string }
 	json.Unmarshal(arguments, &a)
-	if q, ok := s.questionOf(a.Task); ok && closes(q, a.Answer) {
+	// Closing is the user's to approve, asked or not: an epic left open has
+	// no question waiting, yet this answer would still close it.
+	if closes(a.Answer) {
 		return s.closeEpic(ctx, json.RawMessage(fmt.Sprintf(`{"epic": %q}`, a.Task)))
-	} else if ok && copies(q, a.Answer) {
+	}
+	if q, ok := s.questionOf(a.Task); ok && copies(q, a.Answer) {
 		return s.approveCopy(ctx, q)
 	}
 	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/answer", map[string]string{"answer": a.Answer}, nil); err != nil {
@@ -444,8 +447,8 @@ func (s *Server) approveCopy(ctx context.Context, q question) (string, error) {
 	return "The user allowed it: the file is in " + q.Task + "'s shared files.", nil
 }
 
-func closes(q question, answer string) bool {
-	return slices.Contains(q.Options, closeEpic) && strings.EqualFold(strings.TrimSpace(answer), closeEpic)
+func closes(answer string) bool {
+	return strings.EqualFold(strings.TrimSpace(answer), closeEpic)
 }
 
 // ---- the board -----------------------------------------------------------------

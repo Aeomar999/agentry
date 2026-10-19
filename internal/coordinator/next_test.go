@@ -132,6 +132,13 @@ func TestWhenAnEpicMayWait(t *testing.T) {
 	if last := idle.Trail[len(idle.Trail)-1]; !strings.Contains(last.Text, "stays open until you close it or add a story") {
 		t.Errorf("the trail should say it stays open: %+v", last)
 	}
+
+	// Taking out its last story leaves nothing done to close with.
+	empty := idle
+	if empty = leftOpen.turn("turn-3", "tech-lead", wait).add(coordinator, events.EpicWaits, "", nil).
+		add(you, events.StoryRemoved, "", map[string]any{"story": "task-2"}).task(); empty.Closing != "" || len(empty.Stories) != 0 {
+		t.Errorf("no stories left: closing %q, stories %v", empty.Closing, empty.Stories)
+	}
 }
 
 func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {

@@ -165,6 +165,9 @@ func (t *Task) apply(e events.Event) {
 		story := e.Text("story")
 		t.Stories = slices.DeleteFunc(t.Stories, func(id string) bool { return id == story })
 		t.StoriesDone = slices.DeleteFunc(t.StoriesDone, func(id string) bool { return id == story })
+		if len(t.Stories) == 0 {
+			t.Closing = "" // no stories left to have finished
+		}
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: "I took " + story + " out of this epic: it is no longer one of its stories."})
 	case events.RequestAnswered:
 		t.WaitingOn = ""

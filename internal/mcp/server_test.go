@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,11 +190,12 @@ func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 // you can still close it; one with stories going can't be.
 func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 	var asked []string
+	decision := "close"
 	c, calls := start(t, true, func(method string, params json.RawMessage) any {
 		var p struct{ Message string }
 		json.Unmarshal(params, &p)
 		asked = append(asked, p.Message)
-		return map[string]any{"action": "accept", "content": map[string]any{"decision": "close"}}
+		return map[string]any{"action": "accept", "content": map[string]any{"decision": decision}}
 	})
 	board := c.tool("status", map[string]any{})
 	if !strings.Contains(board, "task-3 Polish: all 3 stories done, open until the user closes it (close_epic)") {
@@ -213,6 +215,21 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 	}
 	if text := c.tool("close_epic", map[string]any{"epic": "task-9"}); !strings.Contains(text, "task-9 isn't ready to close") {
 		t.Errorf("a task not ready closed: %s", text)
+	}
+
+	// Answering with the close answer, though nothing asks it, still asks
+	// you, and sends the answer only once you approve.
+	closeAnswer := `POST /api/tasks/task-3/answer {"answer":"Close the epic"}`
+	for _, try := range []struct {
+		decision, says string
+		sent           []string
+	}{{"keep open", "The user kept task-3 open", nil}, {"close", "The user closed task-3", []string{closeAnswer}}} {
+		asked, *calls, decision = nil, nil, try.decision
+		text := c.tool("answer_question", map[string]any{"task": "task-3", "answer": " close the EPIC "})
+		sent := slices.DeleteFunc(slices.Clone(*calls), func(call string) bool { return !strings.HasPrefix(call, "POST /api/tasks/task-3/answer") })
+		if !strings.Contains(text, try.says) || len(asked) != 1 || !slices.Equal(sent, try.sent) {
+			t.Errorf("answered %s: %q, asked %d times, sent %v", try.decision, text, len(asked), sent)
+		}
 	}
 }
 
