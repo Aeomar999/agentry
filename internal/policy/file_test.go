@@ -187,3 +187,21 @@ func TestTheStartErrorWrapsWhyTheFileIsRefused(t *testing.T) {
 		t.Errorf("OpenLive wraps Parse's error %q: %v", want, err)
 	}
 }
+
+func TestUseForEveryoneIsReadFromTheTextAlone(t *testing.T) {
+	cases := map[string]struct{ text, want string }{
+		"set":           {strings.Replace(minimal, `default_profile = "p"`, `default_profile = "p"`+"\nuse_for_everyone = \"p\"", 1), "p"},
+		"unset":         {minimal, ""},
+		"commented out": {strings.Replace(minimal, `default_profile = "p"`, `default_profile = "p"`+"\n# use_for_everyone = \"p\"", 1), ""},
+		// Read, not checked: a profile it names but doesn't define is still what it says.
+		"undefined profile": {strings.Replace(minimal, `default_profile = "p"`, `default_profile = "p"`+"\nuse_for_everyone = \"q\"", 1), "q"},
+	}
+	for name, c := range cases {
+		if got, err := UseForEveryoneOf([]byte(c.text)); err != nil || got != c.want {
+			t.Errorf("%s: got %q, %v, want %q", name, got, err, c.want)
+		}
+	}
+	if _, err := UseForEveryoneOf([]byte("use_for_everyone = ")); err == nil || !strings.Contains(err.Error(), "line 1, column") {
+		t.Errorf("bad TOML: %v", err)
+	}
+}
