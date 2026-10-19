@@ -966,6 +966,53 @@ func TestYourMovesOnTheBoardStand(t *testing.T) {
 	}
 }
 
+// An epic you move to Done, whether it is asking you to close it or you
+// left it open, is closed by the move: nothing is left to ask again.
+func TestAnEpicOntoDoneLeavesNothingToClose(t *testing.T) {
+	server, s := newTestServer(t)
+	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	ask := func(id string) {
+		if _, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: lead, Type: events.TaskNeedsYou, Data: map[string]any{
+			"question": "Close it?", "options": []string{"Close the epic"}, "closing": "All shipped."}}); err != nil || rejection != nil {
+			t.Fatal(err, rejection)
+		}
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
+	ask("task-1")
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship that","kind":"epic"}`)
+	ask("task-2")
+	call(t, server, "POST", "/api/tasks/task-2/answer", `{"answer":"Leave it open"}`)
+
+	for _, id := range []string{"task-1", "task-2"} {
+		if code, body := call(t, server, "POST", "/api/tasks/"+id+"/direct", `{"to":"done"}`); code != 200 {
+			t.Fatalf("%s onto Done: %d %s", id, code, body)
+		}
+		stream, _ := s.Stream(id)
+		if task := tasks.FromEvents(stream); !task.IsDone || task.Closing != "" || task.Question != "" || task.Asked.By != "" {
+			t.Errorf("%s: done %v, closing %q, question %q, asked by %q", id, task.IsDone, task.Closing, task.Question, task.Asked.By)
+		}
+		call(t, server, "POST", "/api/tasks/"+id+"/answer", `{"answer":"Close the epic"}`)
+		stream, _ = s.Stream(id)
+		if done := countOf(stream, events.TaskDone); done != 1 {
+			t.Errorf("%s: closed %d times", id, done)
+		}
+	}
+	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-") {
+		t.Errorf("a closed epic asks nothing: %s", body)
+	}
+}
+
+// countOf is how many events of a kind a stream has.
+func countOf(stream []events.Event, kind events.Type) int {
+	n := 0
+	for _, e := range stream {
+		if e.Type == kind {
+			n++
+		}
+	}
+	return n
+}
+
 // You can edit what an agent knows, and see who changed it.
 func TestYouEditWhatAnAgentKnows(t *testing.T) {
 	server, _ := newTestServer(t)
