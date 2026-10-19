@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
@@ -86,6 +87,19 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 		if tokens == 0 { // a turn always uses some, so 0 is never a count
 			p.Data["tokensUnknown"] = cmp.Or(unknown, NoTokensReported)
 		}
+	case engines.UsageLimited:
+		resetsAt := ""
+		if !signal.ResetsAt.IsZero() {
+			resetsAt = signal.ResetsAt.UTC().Format(time.RFC3339)
+		}
+		p.Type, p.Data = events.TurnLimited, map[string]any{"agent": call.Agent, "error": signal.Error, "details": signal.Details, "resetsAt": resetsAt}
+	case engines.TurnFailed:
+		// An issue ends whichever turn is open, so a late call from a turn
+		// that already ended must not end the next one.
+		if task, err := h.task(call.Task); err != nil || task.OpenTurn() == nil || task.OpenTurn().ID != call.Turn {
+			return
+		}
+		p.Type, p.Correlation, p.Data = events.IssueRaised, "", map[string]any{"reason": failedTurnReason(signal)}
 	default:
 		return
 	}
@@ -93,6 +107,16 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
 		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
 	}
+}
+
+// failedTurnReason says what stopped the turn, in the engine's own words
+// when it gave some.
+func failedTurnReason(signal engines.Signal) string {
+	reason := "the turn stopped at an API error (" + signal.Error + ")"
+	if details := strings.TrimSpace(signal.Details); details != "" {
+		reason += ": " + details
+	}
+	return reason
 }
 
 // recordPlan keeps the turn's plan when the agent has changed it. It goes

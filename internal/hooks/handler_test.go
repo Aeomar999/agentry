@@ -305,3 +305,48 @@ func TestThePlanFollowsTheFile(t *testing.T) {
 		t.Errorf("%d plan.updated events, want 2: an unchanged plan isn't recorded again", updates)
 	}
 }
+
+// Claude Code's StopFailure at a usage limit keeps the turn open with when
+// the limit resets; it raises no issue.
+func TestAUsageLimitIsRecordedWithItsResetTime(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure",
+		`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You've hit your session limit · resets 3am (UTC)"}`))
+
+	task := taskIn(t, s)
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-2" || turn.ResetsAt.IsZero() || turn.ResetsAt.Hour() != 3 || turn.ResetsAt.Location() != time.UTC {
+		t.Fatalf("the turn should stay open, limited until 3am UTC: %+v", turn)
+	}
+	stream, _ := s.Stream("task-1")
+	last := stream[len(stream)-1]
+	if last.Type != events.TurnLimited || last.Text("resetsAt") != turn.ResetsAt.Format(time.RFC3339) || last.Text("error") != "rate_limit" {
+		t.Errorf("last event: %+v", last)
+	}
+	if task.IssuesInARow != 0 {
+		t.Errorf("issues in a row: %d", task.IssuesInARow)
+	}
+}
+
+// Any other StopFailure ends the turn at once as an issue with what Claude
+// Code said, so nobody waits for the watchdog. A late one from a turn that
+// already ended doesn't end the next.
+func TestAnotherStopFailureIsAnIssue(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	stale := hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"overloaded"}`)
+	stale.Turn = "turn-1"
+	h.Handle(context.Background(), stale)
+	if task := taskIn(t, s); task.OpenTurn() == nil || task.IssuesInARow != 0 {
+		t.Fatalf("a call from an ended turn changed the open one: %+v", task.Turns)
+	}
+
+	h.Handle(context.Background(), hookCall("StopFailure",
+		`{"hook_event_name":"StopFailure","error":"overloaded","last_assistant_message":"API Error: Overloaded"}`))
+	task := taskIn(t, s)
+	turn := task.Turn("turn-2")
+	if !turn.Ended || turn.Issue != "the turn stopped at an API error (overloaded): API Error: Overloaded" || task.IssuesInARow != 1 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
+	}
+}
