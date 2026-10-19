@@ -2,9 +2,30 @@
 
 A task board where the workers are AI agents. You describe a task; a coordinator agent hands it from agent to agent (an engineer, a reviewer, a tester, a deployer, or another team's) and reads every report back, until the work is checked and done. You watch it all live, step in when you want, and approve what matters.
 
+<p align="center">
+  <img src="docs/screenshots/tasks-board.png" alt="The Tasks board in Agentry: Backlog, To do, In progress, Review and Done columns of real tasks, each card showing its epic, which agent is working on it, its labels and how many turns it has taken" width="100%">
+</p>
+
 Every action an agent takes passes Agentry's gate first, and your policy decides what runs, what is refused and what waits for you. Agents can work on any of your machines, Linux, macOS or Windows, and you can drive it all from the browser or from Claude Code in any repo. Every step is an event in one append-only log.
 
 `PLAN.md` has what's built, what's next, and the decisions behind it.
+
+## What it looks like
+
+<p align="center">
+  <img src="docs/screenshots/task-page.png" alt="A task's page in Agentry: its plan on the left, the path it has taken from agent to agent across the top (engineer, reviewer, engineer, reviewer and so on), and the Handoffs tab listing each brief and report between the tech-lead, the engineer and the reviewer" width="100%">
+  <br><sub>A task's path from agent to agent, with every handoff between them.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/agents-org-chart.png" alt="Agents as an org chart: the Software, Writing, Research and Design teams, each with its lead above the agents it hands work to, such as tech-lead over engineer, reviewer, tester and deployer" width="100%">
+  <br><sub>Your teams as an org chart: each lead and the agents it hands work to.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/agents-teams-claude.png" alt="The Agents page in Teams view with the Claude panel open at the bottom: a Claude Code session running in the page, beside the Questions tab" width="100%">
+  <br><sub>Claude in the page: a Claude Code session in a panel, beside the questions agents ask you.</sub>
+</p>
 
 ## Install
 
