@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { FocusEventHandler, ReactNode, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CircleCheck, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
@@ -42,6 +42,7 @@ import { LOCAL, machineName } from "@/lib/machines";
 import { tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
+import { keepFocusInView } from "@/lib/focus-in-view";
 import { useResource } from "@/live/use-resource";
 import { useNow } from "@/live/use-now";
 import { useTaskCommits, useTaskLinks } from "@/live/refs";
@@ -349,7 +350,7 @@ export function TaskPage() {
           <div className="h-[80dvh] min-h-0 md:h-auto md:flex-1">
             {tab === "handoffs" && (
               // Focus stops under the stuck card header.
-              <Scroll className="scroll-pt-10">
+              <Scroll className="scroll-pt-10" onFocus={keepFocusInView}>
                 <h2 className="sr-only">Handoffs</h2>
                 <div className="max-w-4xl px-6 py-5">
                   {task.trail?.length ? (
@@ -533,8 +534,20 @@ function Fact({ label, className, children }: { label: string; className?: strin
   );
 }
 
-function Scroll({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("h-full scrollbar-thin overflow-y-auto", className)}>{children}</div>;
+function Scroll({
+  children,
+  className,
+  onFocus,
+}: {
+  children: ReactNode;
+  className?: string;
+  onFocus?: FocusEventHandler<HTMLDivElement>;
+}) {
+  return (
+    <div onFocus={onFocus} className={cn("h-full scrollbar-thin overflow-y-auto", className)}>
+      {children}
+    </div>
+  );
 }
 
 // TaskLink goes to another task, such as the one another team does for this.

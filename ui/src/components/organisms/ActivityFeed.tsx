@@ -18,6 +18,7 @@ import { cn } from "@/lib/cn";
 import { clockMinutes, duration } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { LOCAL } from "@/lib/machines";
+import { keepFocusInView } from "@/lib/focus-in-view";
 import { useNow } from "@/live/use-now";
 
 // Everything that happened on a task, newest at the top and the oldest at
@@ -129,6 +130,7 @@ export function ActivityFeed(props: ActivityFeedProps) {
         <div
           ref={scroller}
           onScroll={onScroll}
+          onFocus={keepFocusInView}
           aria-busy={loading || undefined}
           // Focus and the row you came to see stop under the stuck band, and on a phone above Newest.
           // Positioned, so screen-reader-only text (absolute) is placed in it and scrolls with it, not the page.
