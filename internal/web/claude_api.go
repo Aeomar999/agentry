@@ -17,12 +17,7 @@ func (s *Server) claudeMessage(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
-		return
-	}
-	s.say(w, task, request.Text, "claude")
+	s.say(w, r.PathValue("task"), request.Text, "claude")
 }
 
 // requireClaude lets in only the token of the Claude sessions in tasks'

@@ -213,8 +213,10 @@ func TestAnEpicShowsItsQueuedStory(t *testing.T) {
 	queued("task-1 archived")
 }
 
-// Moving an archived task's card is refused as every other write to it
-// is, with the same words; a task that doesn't exist is still not found.
+// Moving an archived task's card to Done is refused as every other write
+// to it is, with the same words, and so is a column that isn't one; moving
+// it to another column reopens it (unarchive_test.go). A task that doesn't
+// exist is still not found.
 func TestMovingAnArchivedTaskIsRefused(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
@@ -233,8 +235,8 @@ func TestMovingAnArchivedTaskIsRefused(t *testing.T) {
 		{"PUT", "/api/tasks/task-1/rank", `{"rank":1}`},
 		{"PUT", "/api/tasks/task-1/labels", `{"labels":["x"]}`},
 		{"POST", "/api/tasks/task-1/answer", `{"answer":"yes"}`},
-		{"POST", "/api/tasks/task-1/direct", `{"to":"todo"}`},
 		{"POST", "/api/tasks/task-1/direct", `{"to":"done"}`},
+		{"POST", "/api/tasks/task-1/direct", `{"to":"nowhere"}`},
 	} {
 		if code, body := call(t, server, write.method, write.path, write.body); code != http.StatusConflict || body != refused {
 			t.Errorf("%s %s on an archived task: %d %q, want 409 %q", write.method, write.path, code, body, refused)
