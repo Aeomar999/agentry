@@ -145,6 +145,9 @@ func TestAResumedTurnIsNoLongerLimited(t *testing.T) {
 	if turn == nil || turn.ID != "turn-3" || turn.Limited != "" || !turn.ResetsAt.IsZero() || turn.Resumes != 1 {
 		t.Errorf("the turn should stay open, no longer limited, resumed once: %+v", turn)
 	}
+	if !turn.RetriedAt.Equal(resumed.At) {
+		t.Errorf("a resume at the reset is Agentry's retry: retried at %v", turn.RetriedAt)
+	}
 	if task.IssuesInARow != 1 {
 		t.Errorf("issues in a row %d, want the 1 from before", task.IssuesInARow)
 	}
