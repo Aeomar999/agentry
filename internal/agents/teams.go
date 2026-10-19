@@ -59,6 +59,20 @@ var Templates = []Template{
 			{Name: "design-critic", Engine: "claude", Profile: "developer", Color: "violet", Column: Reviews,
 				Description: "Reviews the designs against the spec, usability heuristics and WCAG 2.2 AA, with a severity for each finding"},
 		}},
+	{Team: "Visionaries", Folder: "visionaries",
+		Description: "Thinks together about what to build next: reads what exists, argues it out from several viewpoints, and suggests features as ideas. Changes no code.",
+		Agents: []Agent{
+			{Name: "visionary-lead", Coordinates: true, Engine: "claude", Profile: "read-mostly", Color: "orange",
+				Description: "Runs a short session of the viewpoints, then merges, ranks and writes up the ideas that survive"},
+			{Name: "product-strategist", Engine: "claude", Profile: "read-mostly", Color: "blue",
+				Description: "Proposes features from who the users are, what they value and where the product stands"},
+			{Name: "user-advocate", Engine: "claude", Profile: "read-mostly", Color: "pink",
+				Description: "Speaks for the people using it: their pain points, their workflows, what confuses them today"},
+			{Name: "technologist", Engine: "claude", Profile: "read-mostly", Color: "teal",
+				Description: "Says what is newly possible and what the architecture makes cheap or expensive to build"},
+			{Name: "skeptic", Engine: "claude", Profile: "read-mostly", Color: "violet", Column: Reviews,
+				Description: "Pushes back on every idea: cost, risk, scope creep, and whether we need it at all"},
+		}},
 }
 
 // prompted is the template's agents with their prompts and its team.

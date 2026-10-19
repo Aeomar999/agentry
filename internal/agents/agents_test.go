@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -173,6 +174,85 @@ func TestTeamsComeFromTemplatesWithTheirOwnCoordinator(t *testing.T) {
 	again := FromEvents(log)
 	if lead, _ := again.Coordinator("Writing 2"); lead.Name != "editor-2" {
 		t.Errorf("a second Writing team: %+v", again.Teams())
+	}
+}
+
+// The Visionaries think and suggest; every one of them reads the board and
+// changes nothing.
+func TestTheVisionariesTeam(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	visionaries, ok := TemplateNamed("visionaries")
+	if !ok {
+		t.Fatal("no Visionaries template")
+	}
+	log := seeded()
+	for _, p := range AddTeam(visionaries, FromEvents(log), you) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	roster := FromEvents(log)
+	if len(roster) != 10 {
+		t.Fatalf("want the 5 defaults and 5 visionaries, got %d agents", len(roster))
+	}
+	lead, ok := roster.Coordinator("Visionaries")
+	if !ok || lead.Name != "visionary-lead" || lead.Team != "Visionaries" {
+		t.Errorf("the Visionaries' coordinator: %+v", lead)
+	}
+	var names []string
+	for _, agent := range roster.Assignees("Visionaries") {
+		names = append(names, agent.Name)
+	}
+	if strings.Join(names, " ") != "product-strategist user-advocate technologist skeptic" {
+		t.Errorf("the Visionaries' agents: %v", names)
+	}
+	for _, name := range []string{"visionary-lead", "product-strategist", "user-advocate", "technologist", "skeptic"} {
+		agent, _ := roster.Get(name)
+		if agent.Team != "Visionaries" || agent.Profile != "read-mostly" || agent.Engine != "claude" || len(agent.Prompt) < 400 {
+			t.Errorf("%s: team %q, profile %q, engine %q, prompt %d chars", name, agent.Team, agent.Profile, agent.Engine, len(agent.Prompt))
+		}
+		wantColumn := ""
+		if name == "skeptic" {
+			wantColumn = Reviews // the skeptic checks the list
+		}
+		if agent.Column != wantColumn {
+			t.Errorf("%s: column %q, want %q", name, agent.Column, wantColumn)
+		}
+	}
+
+	// Adding it again keeps everything you have: a new team, new names.
+	for _, p := range AddTeam(visionaries, roster, you) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	again := FromEvents(log)
+	if lead, _ := again.Coordinator("Visionaries 2"); lead.Name != "visionary-lead-2" {
+		t.Errorf("a second Visionaries team: %v", again.Teams())
+	}
+	if skeptic, ok := again.Get("skeptic-2"); !ok || skeptic.Team != "Visionaries 2" {
+		t.Errorf("the second skeptic: %+v", skeptic)
+	}
+}
+
+// Adding a template must not rename or reorder the teams people already add.
+func TestTheTemplatesAndTheirAgents(t *testing.T) {
+	want := map[string]string{
+		DefaultTeam:   "tech-lead engineer reviewer tester deployer",
+		"Writing":     "editor researcher writer fact-checker",
+		"Research":    "research-lead investigator analyst critic",
+		"Design":      "product-lead product-designer ux-writer design-critic",
+		"Visionaries": "visionary-lead product-strategist user-advocate technologist skeptic",
+	}
+	var teams []string
+	for _, template := range Templates {
+		teams = append(teams, template.Team)
+		var names []string
+		for _, agent := range template.Agents {
+			names = append(names, agent.Name)
+		}
+		if got := strings.Join(names, " "); got != want[template.Team] {
+			t.Errorf("%s: %s, want %s", template.Team, got, want[template.Team])
+		}
+	}
+	if got := strings.Join(teams, ", "); got != DefaultTeam+", Writing, Research, Design, Visionaries" {
+		t.Errorf("templates: %s", got)
 	}
 }
 
