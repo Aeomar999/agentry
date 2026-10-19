@@ -12,8 +12,7 @@ import (
 // goes through JSON and gob as a snapshot writes it: a field added to Task that
 // Save and Restore don't carry comes back empty, and the test fails.
 func TestASavedTaskComesBackWhole(t *testing.T) {
-	var task Task
-	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
+	task := filled(t)
 	for _, encoding := range deeptest.Encodings {
 		if restored := through(t, encoding, &task); !reflect.DeepEqual(&task, restored) {
 			t.Errorf("the task read back from %s differs:\n%+v\n%+v", encoding.Name, task, *restored)
@@ -32,8 +31,7 @@ func through(t *testing.T, encoding deeptest.Encoding, task *Task) *Task {
 }
 
 func TestASavedTaskSharesNothing(t *testing.T) {
-	var task Task
-	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
+	task := filled(t)
 	saved := task.Save()
 	deeptest.Shared(t, "Task", reflect.ValueOf(task), reflect.ValueOf(saved.Task))
 	deeptest.Shared(t, "collected", reflect.ValueOf(task.collected), reflect.ValueOf(saved.Collected))

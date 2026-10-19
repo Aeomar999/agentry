@@ -326,7 +326,7 @@ func (t *Task) Apply(e events.Event) {
 	case events.ActionRequested:
 		turn := t.OpenTurn()
 		turn.Waiting, turn.RetriedAt = "", time.Time{} // working again after a retry
-		t.Actions = append(t.Actions, &Action{ID: e.Correlation, Turn: turn.ID, Agent: e.Actor.ID,
+		t.addAction(&Action{ID: e.Correlation, Turn: turn.ID, Agent: e.Actor.ID,
 			Tool: e.Text("tool"), Command: e.Text("command"), RequestedAt: e.At})
 	case events.ActionAsked:
 		action := t.Action(e.Correlation)

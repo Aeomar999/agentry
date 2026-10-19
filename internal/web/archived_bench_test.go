@@ -65,8 +65,7 @@ func TestArchivedTaskOpensBench(t *testing.T) {
 // A stand-in for Target 7 that always runs: a task of about 4,000 events,
 // half as many as the real log's largest (task-8, 7,726), archived, opens
 // within the target cold and warm. Half, so the check has room on a busy
-// machine: the fold grows a little faster than the events, and at task-8's
-// size this one takes some 70 ms cold.
+// machine: at task-8's size this one takes some 35 ms cold.
 func TestAnArchivedTaskOpensInTime(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {

@@ -19,6 +19,7 @@ func (t *Task) Save() Saved {
 	c := t.Clone()
 	saved := Saved{WrappedUp: c.wrappedUp, Collected: c.collected, StoryNews: c.storyNews, ApprovalNews: c.approvalNews}
 	c.wrappedUp, c.collected, c.storyNews, c.approvalNews = 0, nil, false, false
+	c.actionAt = nil // derived from Actions, so not saved: Restore builds it again
 	saved.Task = *c
 	return saved
 }
@@ -27,5 +28,6 @@ func (t *Task) Save() Saved {
 func Restore(s Saved) *Task {
 	t := s.Task.Clone()
 	t.wrappedUp, t.collected, t.storyNews, t.approvalNews = s.WrappedUp, maps.Clone(s.Collected), s.StoryNews, s.ApprovalNews
+	t.actionAt = indexActions(t.Actions)
 	return t
 }

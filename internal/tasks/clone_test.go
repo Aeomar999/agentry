@@ -11,8 +11,7 @@ import (
 // Every field of a fully populated task is filled by reflection, so a
 // field added to Task later is checked without anyone adding it here.
 func TestACloneSharesNothing(t *testing.T) {
-	var task Task
-	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
+	task := filled(t)
 	clone := task.Clone()
 	if !reflect.DeepEqual(&task, clone) {
 		t.Fatalf("the clone differs from the task:\n%+v\n%+v", task, *clone)
@@ -39,6 +38,17 @@ func TestNextLeavesTheTaskAsItWas(t *testing.T) {
 	if task == nil || !task.IsDone || !task.DoneByYou || task.WrapUp == nil || len(task.Turns) != 6 || len(task.Actions) != 4 {
 		t.Errorf("the log didn't run through: %+v", task)
 	}
+}
+
+// filled is a task with every field filled by reflection but actionAt,
+// which is made from the filled Actions: it is derived from them, and an
+// index filled at random would point at no action in particular.
+func filled(t *testing.T) Task {
+	var task Task
+	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
+	task.Actions[1].ID = "y"
+	task.actionAt = indexActions(task.Actions)
+	return task
 }
 
 func TestNextBeforeTheTaskIsCreated(t *testing.T) {

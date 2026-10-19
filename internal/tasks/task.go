@@ -78,10 +78,11 @@ type Task struct {
 	approvalNews bool            // you approved a held action while an agent's turn was open: the coordinator hears it next
 	CreatedAt    time.Time
 
-	Worktree *Worktree // nil until the worktree is ready
-	Turns    []*Turn   // every agent turn, in order
-	Actions  []*Action // every action an agent asked to take, in order
-	Trail    []Step    // the handoffs, as the page shows them
+	Worktree *Worktree      // nil until the worktree is ready
+	Turns    []*Turn        // every agent turn, in order
+	Actions  []*Action      // every action an agent asked to take, in order
+	actionAt map[string]int // where in Actions each ID first comes: derived from Actions, so Action needn't scan them
+	Trail    []Step         // the handoffs, as the page shows them
 
 	Told         Step   // the last thing a coordinator told you that is neither a question nor a summary: a reply, a split
 	Question     string // an open question for the user, "" when there is none
@@ -309,13 +310,41 @@ func (t *Task) NextTurnID() string {
 	return turnID(len(t.Turns) + 1)
 }
 
+// Action is the action with the ID, the first if a log has two, or nil.
+// The fold calls it several times for every action event, so it looks the
+// ID up rather than scanning a long task's actions.
 func (t *Task) Action(id string) *Action {
-	for _, action := range t.Actions {
-		if action.ID == id {
-			return action
-		}
+	if i, ok := t.actionAt[id]; ok {
+		return t.Actions[i]
 	}
 	return nil
+}
+
+// addAction appends the action, and indexes it unless an earlier one has
+// its ID.
+func (t *Task) addAction(action *Action) {
+	if t.actionAt == nil {
+		t.actionAt = map[string]int{}
+	}
+	if _, taken := t.actionAt[action.ID]; !taken {
+		t.actionAt[action.ID] = len(t.Actions)
+	}
+	t.Actions = append(t.Actions, action)
+}
+
+// indexActions is actionAt for the actions, nil when there are none, as a
+// fold leaves it.
+func indexActions(actions []*Action) map[string]int {
+	if len(actions) == 0 {
+		return nil
+	}
+	at := make(map[string]int, len(actions))
+	for i, action := range actions {
+		if _, taken := at[action.ID]; !taken {
+			at[action.ID] = i
+		}
+	}
+	return at
 }
 
 // Pushed says whether the turn pushed the work: it made an approved git push

@@ -43,6 +43,7 @@ func (t *Task) Clone() *Task {
 	c.Asked.Fetch = clonePointer(t.Asked.Fetch)
 	c.Turns = cloneEach(t.Turns)
 	c.Actions = cloneEach(t.Actions)
+	c.actionAt = maps.Clone(t.actionAt) // positions, so they hold in the copy's Actions too
 	return &c
 }
 
