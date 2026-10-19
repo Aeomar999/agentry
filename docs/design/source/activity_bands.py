@@ -361,12 +361,15 @@ class Feed:
 
     def body(self, blocks, size=13, lh=21):
         """Compact Markdown: ('p', runs), ('li', runs), ('ol', n, runs), ('h', text), ('code', lines, lang, plain),
-        ('table', rows), ('gap',)."""
+        ('table', rows), ('gap',), ('pi', runs) for a list item's next line."""
         s, t = self.s, self.t
         y = self.y
         for b in blocks:
             if b[0] == "p":
                 s.runs(self.cx, y + 16, b[1], size)
+                y += lh
+            elif b[0] == "pi":  # a list item's wrapped line
+                s.runs(self.cx + 18, y + 16, b[1], size)
                 y += lh
             elif b[0] == "h":
                 s.text(self.cx, y + 17, b[1], 14, t["ink"], 700)
@@ -645,7 +648,7 @@ def activity_mobile():
     tx, ty = f.cx, f.y + 6
     clip = f.cw + 6
     s.out.append(f'<clipPath id="tbl"><rect x="{tx}" y="{ty}" width="{clip}" height="80"/></clipPath><g clip-path="url(#tbl)">')
-    cols = [130, 70, 130]
+    cols = [130, 70, 150]
     for r, row in enumerate([["Check", "Result", "Where"], ["npm run lint", "pass", "ui/"], ["go test ./...", "pass", "internal/web"]]):
         yy = ty + 26 * r
         if r == 0:
@@ -658,9 +661,10 @@ def activity_mobile():
             s.text(cx + 8, yy + 17, cell, 12.5, t["ink"] if r == 0 else t["ink2"], 700 if r == 0 else 400)
             cx += cols[c]
     s.out.append("</g>")
-    s.rect(tx, ty + 82, clip, 3, t["s2"], r=1.5)
-    s.rect(tx, ty + 82, clip * 0.62, 3, t["div2"], r=1.5)
-    f.y = ty + 96
+    s.line(tx + clip, ty, tx + clip, ty + 92, t["div2"])  # the scroll box's edge: the Where column is cut here
+    s.rect(tx + 2, ty + 84, clip - 4, 6, t["s2"], r=3)
+    s.rect(tx + 2, ty + 84, (clip - 4) * 0.62, 6, t["muted"], r=3)
+    f.y = ty + 100
     s.note(470 + 340, ty + 30, 6)
     f.body([("code", [[("npm", "kw"), (" run build ", ""), ("&&", "op"), (" go", "kw"), (" test", "")]],
              "bash", False, f.cw)])
@@ -668,8 +672,18 @@ def activity_mobile():
     f.band("coordinator", status=("ended",), time="05:00", dur="9m")
     my = f.message("coordinator", "engineer")
     f.stamp(my, "05:08")
-    f.body([("h", "Build the author bands"), ("p", [("Read ", ""), ("spec.md", "linkm"), ("nt", "nt"), (" first. Then:", "")])])
+    f.body([("h", "Build the author bands"),
+            ("p", [("Read ", ""), ("spec.md", "linkm"), ("nt", "nt"), (" first. Then:", "")]),
+            ("ol", 1, [("Render briefs and reports with", "")]),
+            ("pi", [("Markdown", "code"), (" in compact mode", "")]),
+            ("ol", 2, [("Colour commands lazily, as", "")]),
+            ("pi", [("MonacoColorize", "code"), (" does", "")]),
+            ("ol", 3, [("Same link rules as ", ""), ("task-21", "linkm"), (" for", "")]),
+            ("pi", [("the chat", "")]),
+            ("ol", 4, [("Fold long entries at about 10", "")]),
+            ("pi", [("lines", "")])], lh=20)
     f.fold_line("Show all · 38 lines")
+    s.note(470 + 340, f.y - 60, 8)
     f.rail_line(top, f.y)
 
     s.notes(900, 130, [
@@ -678,8 +692,9 @@ def activity_mobile():
         (3, ["Rail: 56px, time only. Durations move into", "the band. Bands still name every author:", "you, Agentry, each agent."]),
         (4, ["Not stuck, the same one line. Nothing", "changes when a band sticks, so no script", "and no jump between two heights."]),
         (5, ["Links wrap with the text; their underline", "and ↗ go with them. Inline links in", "sentences are exempt from target size."]),
-        (6, ["A table wider than the column scrolls in", "its own box (thin scrollbar shown); the", "page never scrolls sideways. Fences too."]),
-        (7, ["Newest (after 200px of scroll) sits at the", "bottom right of the scroller, 16px in, 32px", "tall with a 44px hit area: it covers rail", "times passing under it, never a band's", "author. Was top centre, over the band."]),
+        (6, ["A table wider than the column scrolls in", "its own box: the Where column is cut at", "the box's edge, a thin scrollbar under it.", "The page never scrolls sideways. Fences too."]),
+        (7, ["Newest (after 200px of scroll) sits at the", "bottom right of the scroller, 16px in, 32px", "tall with a 44px hit area; never over a", "band's author. Was top centre. It covers", "the last ~40px of a line here, so the", "scroller has scroll-padding-bottom: 48px:", "Tab stops a link or Copy above it."]),
+        (8, ["The brief folds at about 10 lines, as", "every brief does: ‘Show all · 38 lines’."]),
     ])
     s.save("activity-mobile.svg")
 
@@ -733,12 +748,15 @@ def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False,
         fx = cx
         fy = yy + 23
         fx = s.text(fx, fy, footer[0], 11.5, t["muted"]) + 8
-        fx = s.text(fx, fy, footer[1], 11, t["ink2"], 400, True) + 8
-        s.agent_dot(fx, fy - 4, footer[2])
-        fx = s.text(fx + 12, fy, footer[2], 11, t["ink2"], 400, True) + 10
-        if not phone:
-            if len(footer) > 4:
-                fx += s.badge(fx, fy - 13, *footer[4]) + 10
+        fx = s.text(fx, fy, footer[1], 11, t["ink2"], 400, True)
+        fx = s.text(fx, fy, " · ", 11.5, t["muted"])
+        fx = s.text(fx, fy, footer[2], 11, t["ink2"], 400, True)
+        # the running badge stays at every width; duration and counts only from md
+        if len(footer) > 4:
+            fx = s.text(fx, fy, " · ", 11.5, t["muted"])
+            fx += s.badge(fx, fy - 13, *footer[4])
+        if not phone and footer[3]:
+            fx = s.text(fx, fy, " · ", 11.5, t["muted"])
             s.text(fx, fy, footer[3], 11.5, t["muted"])
         ax = x + w - pad
         s.path(f"M{ax - 4},{fy - 8} l4,4 l-4,4", t["muted"], 1.3)
@@ -755,7 +773,7 @@ def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False,
 
 
 def handoffs():
-    s = Sheet(1280, 1600, "Handoffs · Author bands",
+    s = Sheet(1280, 1700, "Handoffs · Author bands",
               "Each handoff names both people in text with chips and an arrow; the brief is Markdown, folded; the footer, not the card, opens the turn.")
     t = s.t
     X, Y, W = 40, 130, 740
@@ -801,22 +819,27 @@ def handoffs():
 
     # Phone
     PX = 820
-    py = phone_frame(s, PX, 130, "390 WIDE", 560, "Handoffs")
+    py = phone_frame(s, PX, 130, "390 WIDE", 720, "Handoffs")
     plx = PX + 16 + 5
-    s.line(plx, py + 20, plx, py + 500)
+    s.line(plx, py + 20, plx, py + 650)
     pcx, pcw = PX + 40, 390 - 40 - 16
     yy = py + 16
+    yy = card(s, pcx, yy, pcw, "coordinator", "reviewer", "05:58", None,
+              [("p", [("Review the author bands against ", ""), ("flows.md", "linkm"), ("nt", "nt")])],
+              ("Led to", "turn-6", "reviewer", "", ("running", "info")), phone=True) + 14
+    s.note(PX + 390 + 8, py + 20, 10)
     yy = card(s, pcx, yy, pcw, "coordinator", "engineer", "05:08", "Build the author bands",
               [("p", [("Read ", ""), ("spec.md", "linkm"), ("nt", "nt"), (" and ", ""), ("the flows", "link"), ("nt", "nt")]),
                ("p", [("first. Then:", "")]),
                ("ol", ("1.", [("Render briefs with ", ""), ("Markdown", "code")])),
                ("ol", ("2.", [("Colour commands lazily", "")]))],
               ("Led to", "turn-5", "engineer", ""), fold="Show all · 38 lines", phone=True) + 14
-    s.note(PX + 390 + 8, py + 20, 7)
+    s.note(PX + 390 + 8, py + 150, 7)
     yy = card(s, pcx, yy, pcw, "tech-lead", "engineer", "04:02", "Split the work in two",
               [("p", [("Links first, then the bands.", "")])], ("Led to", "turn-3", "engineer", ""), phone=True) + 14
     yy = card(s, pcx, yy, pcw, "you", "coordinator", "03:40", None,
               [("p", [("Like ", ""), ("task-21", "linkm"), (" did for the chat.", "")])], ("Led to", "turn-1", "coordinator", ""), phone=True, you=True)
+    assert yy < 130 + 710, yy
 
     # Scrolled into a long brief, opened: the card's header is stuck at the top of the scroller.
     SY, SH = 980, 300
@@ -842,10 +865,10 @@ def handoffs():
     s.line(cx, by, cx + cw, by)
     fy = by + 23
     fx = s.text(cx + 12, fy, "Led to", 11.5, t["muted"]) + 8
-    fx = s.text(fx, fy, "turn-5", 11, t["ink2"], 400, True) + 8
-    s.agent_dot(fx, fy - 4, "engineer")
-    fx = s.text(fx + 12, fy, "engineer", 11, t["ink2"], 400, True) + 10
-    s.text(fx, fy, "48m · 14 actions · 41k tokens", 11.5, t["muted"])
+    fx = s.text(fx, fy, "turn-5", 11, t["ink2"], 400, True)
+    fx = s.text(fx, fy, " · ", 11.5, t["muted"])
+    fx = s.text(fx, fy, "engineer", 11, t["ink2"], 400, True)
+    s.text(fx, fy, " · 48m · 14 actions · 41k tokens", 11.5, t["muted"])
     s.path(f"M{cx + cw - 16},{fy - 8} l4,4 l-4,4", t["muted"], 1.3)
     s.text(cx + cw - 22, fy, "Activity", 11.5, t["ink2"], 500, anchor="end")
     by += 36
@@ -868,9 +891,10 @@ def handoffs():
         (5, ["Said from a turn: ‘From turn-5’.", "6: said to you, no turn: no footer, nothing to open."]),
     ]
     right = [
-        (7, ["Phone: from → to and the time always on one line;", "names truncate at 96px each, full names in the", "card's accessible name. The footer keeps the agent:", "‘Led to turn-5 ● engineer · Activity ›’."]),
+        (7, ["Phone: from → to and the time always on one line;", "names truncate at 96px each, full names in the", "card's accessible name. The footer keeps the agent:", "‘Led to turn-5 · engineer · Activity ›’."]),
         (8, ["Stuck: the header is position: sticky; top: 0 inside", "its own article, same push rule as Activity's bands.", "The text under it always has an author on screen.", "The scroller's scroll-padding-top is 40px."]),
         (9, ["The card's end pushes its header out; the next", "card's header takes the top. They never overlap.", "You: a neutral slate dot and chip, never a colour."]),
+        (10, ["Phone, running: the badge stays,", "‘Led to turn-6 · reviewer · running · Activity ›’;", "the agent truncates at 72px to make room.", "Facts joined by ‘ · ’ at every width, no dot."]),
     ]
     s.notes(40, NY, left)
     s.notes(660, NY, right, "")
@@ -903,6 +927,12 @@ def states():
         for k, line in enumerate(body):
             s.text(x + PW / 2, y + 78 + 18 * k, line, 12.5, t["muted"], anchor="middle")
 
+    def sr_only(x, y, words):
+        """Text that only screen readers get: drawn as a dashed outline so nobody builds it visible."""
+        w = PW - 32
+        s.rect(x, y, w, 26, stroke=t["div2"], r=2, dash="4 3")
+        s.text(x + 10, y + 17, f"sr-only, not visible: ‘{words}’", 11, t["muted"], 400, True)
+
     def error(ex, ey, title):
         """The inline load error: title, the server's words, the muted next step, Try again."""
         s.rect(ex, ey, PW - 32, 160, t["s0"], t["div2"], 3)
@@ -929,8 +959,8 @@ def states():
         s.rect(f.x + 44, y + 16, 110, 12, t["s3"], r=2)
         for r in range(2):
             s.rect(f.x + 44, y + 58 + 22 * r, 220 - 40 * r, 10, t["s2"], r=2)
-        y += 44 + 62
-    s.text(f.x + PW / 2, f.oy + PH - 46, "Loading activity…", 12.5, t["muted"], anchor="middle")
+        y += 44 + 52
+    sr_only(f.x + 16, f.oy + PH - 60, "Loading activity…")
     s.text(f.x + 16, f.oy + PH - 16, "aria-busy; static blocks, no shimmer", 11, t["muted"], 400, True)
 
     # 3. Error
@@ -986,15 +1016,17 @@ def states():
     x, y = panel(0, 2, "7 · HANDOFFS, EMPTY", True)
     empty_state(x, y + 70, "No handoffs yet", ["When the coordinator hands the task to", "an agent, the brief shows here."])
     x, y = panel(1, 2, "8 · HANDOFFS, LOADING", True)
-    s.line(x + 21, y + 20, x + 21, y + 280)
-    for k in range(3):
+    s.line(x + 21, y + 20, x + 21, y + 190)
+    for k in range(2):
         cy = y + 16 + k * 92
         s.rect(x + 16, cy + 12, 11, 11, t["s3"], r=5.5)
         s.rect(x + 40, cy, PW - 56, 80, t["s0"], t["div"], 3)
         s.rect(x + 52, cy + 12, 150, 12, t["s3"], r=2)
         s.rect(x + 52, cy + 36, 240, 10, t["s2"], r=2)
         s.rect(x + 52, cy + 54, 180, 10, t["s2"], r=2)
-    s.text(x + PW / 2, y + PH - 8, "Loading handoffs…", 12, t["muted"], anchor="middle")
+    sr_only(x + 16, y + PH - 92, "Loading handoffs…")
+    s.text(x + 16, y + PH - 40, "aria-busy; static blocks, no shimmer.", 11.5, t["muted"])
+    s.text(x + 16, y + PH - 22, "The words are for screen readers only.", 11.5, t["muted"])
     x, y = panel(2, 2, "9 · HANDOFFS, FAILED TO LOAD", True)
     error(x + 16, y + 24, "Couldn't load the handoffs")
     s.text(x + 16, y + PH - 40, "Commits not loaded or failed: SHAs stay", 11.5, t["muted"])

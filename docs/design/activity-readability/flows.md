@@ -56,16 +56,16 @@ The user opens a task in the morning and scrolls down Activity (newest at the to
 
    The rail keeps time for all three. If the you message was sent to the turn's own agent, the arrow names it, so it can't be confused with the band.
 6. **Clicks a band.** Unchanged from today: the feed narrows to that turn (the "continued" band narrows to the same turn). The toolbar chip shows the turn and an × to go back.
-7. **Goes back up.** The existing **Newest** button appears after 200px of scroll, now at the **bottom right** of the scroller (16px in from the right and bottom, 32px tall with a 44px hit area), not top centre: there it sat over the stuck band and could hide a long author name on a phone. At the bottom right it can only cover rail times passing under it, never a band's author. Flat: `surface-2`, `divider-2` hairline, 3px corners, no shadow. Drawn in [activity-mobile.svg](activity-mobile.svg), note 7.
+7. **Goes back up.** The existing **Newest** button appears after 200px of scroll, now at the **bottom right** of the scroller (16px in from the right and bottom, 32px tall with a 44px hit area), not top centre: there it sat over the stuck band and could hide a long author name on a phone. At the bottom right it never covers a band's author. On desktop it only covers rail times; on a phone (56px rail) it also covers about 40px of the content column's last line, so below `md` the scroller sets `scroll-padding-bottom: 48px` (the button's 32px plus its 16px inset): a link or Copy button that Tab scrolls into view stops above it, never under it. WCAG 2.4.11. Flat: `surface-2`, `divider-2` hairline, 3px corners, no shadow. Drawn in [activity-mobile.svg](activity-mobile.svg), note 7.
 
 Where it can go wrong, and what we do:
 
-- A focused link or button scrolls under the stuck band. The band has one fixed height at every width, stuck or not (44px), so the scroller sets `scroll-padding-top: 44px`, and keyboard focus and `scrollIntoView` (the "row you came to see") never land under it. WCAG 2.4.11. Check it in all three engines (see [Build checklist](#build-checklist)).
+- A focused link or button scrolls under the stuck band. The band has one fixed height at every width, stuck or not (44px), so the scroller sets `scroll-padding-top: 44px` (and, on a phone, `scroll-padding-bottom: 48px` for Newest, step 7), and keyboard focus and `scrollIntoView` (the "row you came to see") never land under it. WCAG 2.4.11. Check it in all three engines (see [Build checklist](#build-checklist)).
 - A section is a single row shorter than the band: the band still shows, for one row. Fine: that's the honest author.
 - An agent the roster no longer has: the chip uses `ink-faint`'s neutral treatment (as `useAgentColor` falls back today), the name is still in text.
 - Filters (Everything, Actions, Messages) can empty a section: a section with no rows left is dropped with its band. A turn band is never dropped in Actions, as today.
 
-**The band.** 44px tall (was 36) at every width, stuck or not, one line that never wraps (`height: 44px; white-space: nowrap`; the issue text is the one item that shrinks and truncates). `surface-1`, hairline top and bottom. Left to right: chip (20px), **name** (mono 12.5, semibold, `ink-primary`), team and role (12, `ink-muted`: "Software · deployer"; just "Software" when the role is the agent's name), turn id (mono 11, `ink-muted`, was faint), "continued" when it is one, "on <worker>" when remote, status badge (`running`, `ended`, `stopped by you`, `issue`), tokens (mono 11, `ink-muted`), the issue text if any. The rail column (120px, 104px under `md`) carries the start time and the duration (`ink-muted`, was faint; live in `success` with "…"). **Every band is an `h3`.** For a turn, the `h3` holds the band's button (the whole band is the button, as today); its accessible name is in copy.md ("reviewer, Software team, turn-6, running. Show only this turn"). You and Agentry bands are the `h3` alone (no turn to narrow to). So screen-reader users jump band to band with H, the same for every kind.
+**The band.** 44px tall (was 36) at every width, stuck or not, one line that never wraps (`height: 44px; white-space: nowrap`; the issue text is the one item that shrinks and truncates). `surface-1`, hairline top and bottom. Left to right: chip (20px), **name** (mono 12.5, semibold, `ink-primary`), team and role (12, `ink-muted`: "Software · deployer"; just "Software" when the role is the agent's name), turn id (mono 11, `ink-muted`, was faint), "continued" when it is one, "on <worker>" when remote, status badge (`running`, `ended`, `stopped by you`, `issue`), tokens (mono 11, `ink-muted`), the issue text if any. The rail column (120px, 104px under `md`) carries the start time and the duration (`ink-muted`, was faint; live in `success-ink` with "…"). **Every band is an `h3`.** For a turn, the `h3` holds the band's button (the whole band is the button, as today); its accessible name is in copy.md ("reviewer, Software team, turn-6, running. Show only this turn"). You and Agentry bands are the `h3` alone (no turn to narrow to). So screen-reader users jump band to band with H, the same for every kind.
 
 **Role** (spec decisions 6 and 8): "coordinator" when `Agent.coordinates` is set; otherwise the column's role: `review` → "reviewer", `ship` → "deployer"; otherwise none. Left out when it equals the agent's name. Team "" shows as "Software".
 
@@ -81,6 +81,7 @@ Component map:
 | `Avatar` (moved) | from `CoordinatorChat.tsx` to `molecules/Avatar.tsx`; adds `size` (20, 28), the light-theme letter mix, and the neutral look for you and Agentry. The chat imports it from there, behaviour unchanged |
 | `AgentName`, `useAgentColor`, `Badge`, `Mono`, `SegmentedControl` | reused as they are |
 | `roleOf(agent)` (new, lib) | coordinator / reviewer / deployer / none, team "" → Software |
+| Tab heading (new) | a sr-only `h2` at the top of each tab panel, `Activity` or `Handoffs`, so the bands' `h3`s don't skip a level (the task page has no `h1` or `h2` above the panel today) |
 
 ## Flow 2: reading a long brief or report
 
@@ -89,7 +90,7 @@ The user wants to know what the coordinator told the engineer, or what the engin
 1. **Sees the first lines.** Messages (briefs), reports (Finished), waiting questions, issues, and notes with a body render as compact `Markdown`: headings at 14/13px semibold, lists and task lists, tables, quotes, inline code on `surface-3`, fenced code in a code box (flow 4). No raw `**`, `#`, `|---|` or fences.
 2. **Long ones are folded** by measured height, not characters: about 10 lines (240px at 24px line height in compact Markdown) for briefs, reports and questions; 8 lines in Handoffs cards; 4 for note bodies. The cut is a clean edge with no fade, snapped up to the bottom of the last whole line above the limit, so no line is cut in half. Under it, a text button **Show all · 38 lines** (`ink-muted`, 12px, semibold, underlined on hover, focus outline). The number is **about** the length: measured height ÷ line height, which for tables, headings and code is an estimate and changes with the width. It tells the user roughly what opening costs; tests must not expect an exact count.
 3. **Opens it.** The whole entry shows in place; the button now reads **Show less** and sits under the last line. Focus stays on the button. Nothing else on the page moves above the entry.
-4. **Closes it.** The entry folds back. If the entry's top is above the stuck band, the feed scrolls so the entry's first line sits just under the band (`scroll-margin-top: 44px`) and focus stays on the button, now back under the fold. Without this, closing a 200-line report would leave the user far below where they were.
+4. **Closes it.** The entry folds back. If the entry's top is above the stuck band, the feed scrolls so the entry's first line sits just under the band and focus stays on the button, now back under the fold. No `scroll-margin-top` on the entry: `scrollIntoView` would add it to the scroller's `scroll-padding-top` and land the line a band's height too low. The scroller's padding alone sets the offset, 44px in Activity and 40px in Handoffs (under the card header). Without the scroll-back, closing a 200-line report would leave the user far below where they were.
 5. **Short entries** (under the limit, measured after render) get no button.
 
 Keyboard and focus: Tab moves band → the entry's **visible** links, in reading order → Show all → the next row's links → the next band. Enter or Space toggles. The button has `aria-expanded` and `aria-controls` (the entry's id). Hit area: the text is 12px, the button's box is 44px tall (8px above, 24px below the text), overlapping the row's padding so the row doesn't grow.
@@ -144,18 +145,18 @@ Steps, per kind:
 
 Where it can go wrong: a SHA prefix shorter than 7 never links; two commits sharing a 7-char prefix: link the first, the Workspace resolves the full hash we pass.
 
-**The URL check, exactly.** One function, `safeHref(raw)` in `lib/links.ts` (no Monaco or React imports), used by `linkInto` and by `Markdown`'s own fallback. It returns a kind, or `null` for "not a link":
+**The URL check, exactly.** One function, `safeHref(raw)` in `lib/links.ts` (no Monaco or React imports), used by `linkInto` and by `Markdown`'s own fallback. It returns `null` for "not a link", or a kind with **the href to render**: for an external link the parsed URL's `href` (`new URL(s).href`), for a repo path the cleaned relative path, for an anchor the `#…` string. Every caller, `Markdown`'s fallback included, renders that returned href and never the raw string from the text:
 
 1. Remove every C0 control character and DEL (`\u0000`–`\u001F`, `\u007F`) anywhere in the string, including tab and newline: browsers drop them inside a scheme, so `java\tscript:` is `javascript:` to them.
 2. Trim leading and trailing whitespace.
-3. If it starts with `//`, or with `\\` (browsers read `\` as `/`): **external**, a protocol-relative URL to another host. It opens in a new tab like any external link; never a repo path.
+3. If its first two characters are each `/` or `\`, in any mix (`//`, `\\`, `/\`, `\/`; browsers read `\` as `/`): **external**, a protocol-relative URL to another host. It opens in a new tab like any external link; never a repo path.
 4. If it starts with a scheme, `^[A-Za-z][A-Za-z0-9+.-]*:`, lowercase the scheme. Allow-list: `http`, `https`, `mailto` → **external**, and confirm with `new URL(s)` that it parses and its `protocol` is still one of `http:`, `https:`, `mailto:`. Any other scheme (`javascript`, `data`, `vbscript`, `file`, `blob`, anything unknown) → `null`.
 5. If it starts with `#`: **anchor**, in-page, as today.
 6. Anything else is a **repo path**, relative to the repo root: a leading `/` or `./` is dropped, `..` segments are resolved, and a path that climbs above the root → `null`. The app's own routes (`/tasks/…`) are never taken from text: `linkInto` builds them itself from task ids and SHAs.
 
 `null` means the label renders as plain text: no `<a>`, no underline, no hint. The same check runs on bare autolinks, so a `javascript:` in prose never becomes a link.
 
-**The gap in `Markdown.tsx` today.** Without a `link` hook it builds `{ href, external: /^https?:\/\// }` and only refuses hrefs that don't start with `https?://`, `#`, `/`, `.` or a word character, or that start `javascript:` (case-insensitive, untrimmed). So `data:`, `vbscript:`, `file:` and `//evil.example` (as a same-tab link) get through, and `\u0001javascript:` or ` javascript:` slip past the `javascript:` test. The fix: the fallback calls `safeHref` too, so `Markdown` is safe on its own, with or without a hook.
+**The gap in `Markdown.tsx` today.** Without a `link` hook it builds `{ href, external: /^https?:\/\// }` and only refuses hrefs that don't start with `https?://`, `#`, `/`, `.` or a word character, or that start `javascript:` (case-insensitive, untrimmed). So `data:`, `vbscript:`, `file:` and `//evil.example` (as a same-tab link) get through, and `\u0001javascript:` or ` javascript:` slip past the `javascript:` test. It also renders `href={to.href}` with the raw string. The fix: the fallback calls `safeHref` too and renders the href it returns, so `Markdown` is safe on its own, with or without a hook.
 
 Test cases (each through `safeHref`, and through `Markdown` both with and without a `link` hook):
 
@@ -164,7 +165,7 @@ Test cases (each through `safeHref`, and through `Markdown` both with and withou
 | `javascript:alert(1)`, `JaVaScRiPt:alert(1)` | `null` |
 | `\u0001javascript:alert(1)`, `' javascript:alert(1)'`, `java\tscript:alert(1)`, `java\nscript:alert(1)` | `null` |
 | `data:text/html,<b>x</b>`, `vbscript:msgbox(1)`, `file:///etc/passwd`, `blob:https://x/1` | `null` |
-| `//evil.example`, `\\evil.example` | external, new tab |
+| `//evil.example`, `\\evil.example`, `/\evil.example`, `\/evil.example` | external, new tab, rendered as `https://evil.example/`, never as the raw string |
 | `https://example.com`, `HTTPS://EXAMPLE.COM/x`, `mailto:a@example.com` | external, new tab |
 | `docs/design.md`, `./docs/design.md`, `/docs/design.md` | repo path `docs/design.md` |
 | `../../etc/passwd` | `null` |
@@ -205,10 +206,10 @@ The user wants the chain of who asked whom to do what.
 2. **Reads a card.** Header: **from** chip and name → **to** chip and name, both as text, the arrow drawn (lucide `ArrowRight`, `ink-muted`), the time at the right in `ink-muted` mono (was faint). 40px tall, `surface-0`, a `divider` hairline under it. `you` has the neutral chip and a neutral slate (`ink-muted`) dot on the timeline, never a colour. If the brief starts with a heading, the heading becomes the card's title (14px semibold) and is not repeated in the body. The brief renders as compact Markdown (`EntryText`) folded at 8 lines, with **Show all · 38 lines**.
 3. **Scrolls through a long opened brief.** The card's header **sticks** to the top of the Handoffs scroller (`position: sticky; top: 0` inside its own `<article>`), so the text on screen always has its author. It works like the Activity bands: each header is sticky inside its own card, so the card's end pushes it out and the next card's header takes the top; two headers never overlap. The header is the same 40px stuck or not. The scroller sets `scroll-padding-top: 40px` so a focused link in the brief never hides under it (WCAG 2.4.11). Drawn in [handoffs.svg](handoffs.svg), notes 8 and 9.
 4. **Follows links in the brief** as in flow 3.
-5. **Opens the turn.** The card's footer ("Led to turn-4 engineer · 48m · 14 actions · Activity ›"; while the turn runs, a `running` badge and the action count, no duration, as copy.md says) is the button that opens that turn's Activity. The card itself is **no longer a button**: a button can't contain links or another button, so the footer takes over. Footer text is `ink-muted`.
+5. **Opens the turn.** The card's footer ("Led to turn-4 · engineer · 48m · 14 actions · Activity ›", the facts joined by ` · ` as in copy.md, no coloured dot; while the turn runs, a `running` badge and the action count, no duration, as copy.md says) is the button that opens that turn's Activity. The card itself is **no longer a button**: a button can't contain links or another button, so the footer takes over. Footer text is `ink-muted`.
 6. **A step with no turn** (said to you, or the turn is gone): no footer, nothing to open.
 
-Phone (390): cards go full width less the 24px timeline gutter. **The header never wraps**: from → to and the time always share one line, so the sticky header keeps one height. To fit, names truncate with an ellipsis at 96px each on a phone (120px from `md`); the full names are in the card's accessible name (copy.md). The footer keeps the agent, `Led to turn-5 ● engineer · Activity ›`, and drops the duration and counts; the "Activity ›" button stays at the end and is 44px tall.
+Phone (390): cards go full width less the 24px timeline gutter. **The header never wraps**: from → to and the time always share one line, so the sticky header keeps one height. To fit, names truncate with an ellipsis at 96px each on a phone (120px from `md`); the full names are in the card's accessible name (copy.md). The footer keeps the agent, `Led to turn-5 · engineer · Activity ›`, and drops the duration and counts; a running turn keeps its `running` badge too, `Led to turn-6 · reviewer · running · Activity ›`, with the agent truncating at 72px (was 96) to make room; the "Activity ›" button stays at the end and is 44px tall.
 
 `HandoffPath` (the path of agents above the tabs) is unchanged, except that its chevrons are decorative and its `×2` counts move from faint to muted.
 
@@ -236,7 +237,8 @@ Drawn in [states.svg](states.svg). The words are copy.md's.
 - Links underlined; new-tab links say so to screen readers.
 - Every band is an `h3` (a turn's holds its button), so screen-reader users jump band to band with H. Sections are plain `<li>`s: no `<section>` or `region` landmarks, which would flood landmark navigation on a long feed. Handoff cards are `<article>`s with an `aria-label` (copy.md).
 - Show all / Show less: `aria-expanded`, `aria-controls`; links below the cut leave the Tab order while folded (flow 2).
-- `scroll-padding-top` keeps focus out from under the stuck band (44px) and the stuck Handoffs header (40px); both have one fixed height.
+- `scroll-padding-top` keeps focus out from under the stuck band (44px) and the stuck Handoffs header (40px); both have one fixed height. On a phone, `scroll-padding-bottom: 48px` keeps it out from under Newest.
+- Each tab panel starts with a sr-only `h2` (`Activity`, `Handoffs`) above the bands' `h3`s.
 - Targets: bands 44px tall; Show all and Activity › 44px hit areas; Copy 44px hit area; Newest 44px; the message row's leads-to `turn-5` button at least 24 × 24 (its padding overlaps the row's, so the row doesn't grow). Inline links in sentences are exempt (WCAG 2.5.8).
 - 390px: no horizontal page scroll; tables and fences scroll in their own boxes.
 
@@ -281,14 +283,25 @@ Changes copy.md needs to match these flows (the designer doesn't edit copy.md):
 6. **Newest** (Activity toolbar): note that it now sits at the bottom right of the scroller; text and name unchanged.
 7. **Linked inline code** (Links table): a task id or commit written in backticks reads exactly like the bare link; no copy change, just a note.
 
+From the re-check (turn 14):
+
+8. **R4, live duration** (Time rail, "Duration, live", Notes): `success` colour → `success-ink` colour. Visible text unchanged.
+9. **N3, stale note** (Notes, the shared-files paragraph): drop "the wireframes' `Fetched 2 shared files` is just a sketch"; no wireframe shows it now.
+10. **N5, footer separator** (Card footer): no change to the strings; the wireframes now join every fact with ` · ` as copy.md does, with no coloured dot. Say in Notes that the footer has no agent dot.
+11. **N7, phone footer while running** (Card footer, Phone table, and the Handoffs footer row of the 390px table): add the badge: `Led to {turn} · {agent} · {status} · Activity ›` → `Led to turn-6 · reviewer · running · Activity ›`; the agent truncates at 72px on a phone (was 96) to make room. Ended turns keep `Led to {turn} · {agent} · Activity ›`. The accessible name already carries `{status}`.
+12. **R2, Newest** (Activity toolbar, Notes, with item 6): on a phone the scroller keeps 48px clear at the bottom so Newest never covers focus. No string change.
+13. **N6, tab heading** (new rows): a sr-only `h2` per tab panel, `Activity` and `Handoffs`, the tab's own label.
+
 ## Build checklist
 
 For the Software team's tests and manual checks, on top of the spec's measures.
 
-- [ ] **scroll-padding-top in all three engines.** In Chromium, Firefox and WebKit (Playwright's three browsers), Tab onto a link just under a stuck band in Activity, and just under a stuck card header in Handoffs; it must land fully below the band or header. If one engine lets it hide, add the fallback: a `focusin` handler on the scroller that scrolls the target into view less the band's height.
+- [ ] **scroll-padding-top and -bottom in all three engines.** In Chromium, Firefox and WebKit (Playwright's three browsers), Tab onto a link just under a stuck band in Activity, and just under a stuck card header in Handoffs; it must land fully below the band or header. At 390, Tab forward onto a link at the end of the last visible line and onto a fence's Copy button: each must stop above Newest (`scroll-padding-bottom: 48px`). If one engine lets it hide, add the fallback: a `focusin` handler on the scroller that scrolls the target into view less the band's height.
 - [ ] Fold: Tab through a folded entry reaches only the links above the cut; after Show all, all of them; after Show less, the visible ones again. A link wrapping across the cut stays reachable. Focusing a link in a folded entry never shifts its visible lines (`overflow: clip`).
 - [ ] Bands keep 44px when they stick, at 390 and 1280 (no layout shift; measure the band's height on both sides of the stick point).
 - [ ] Newest never overlaps a band's name at 390, with `product-designer` as the author.
+- [ ] Show less scrolls the entry's first line to just under the band (44px Activity, 40px Handoffs), not twice that: no `scroll-margin-top` on entries.
+- [ ] Links render the href `safeHref` returns, never the raw text: `/\evil.example` becomes `https://evil.example/` in a new tab.
 - [ ] Links: every row of the test table in flow 3, through `safeHref` and through `Markdown` with and without a `link` hook.
 - [ ] Lazy: a 500-row feed with no code on screen loads no `monaco` module; `CodeBox`, `LazyColorize`, `EntryText`, `ActivityFeed`, `HandoffTimeline` don't import `lib/monaco`.
 - [ ] Contrast, light: `success-ink` text on `surface-0`/`surface-1` (5.19 / 4.97), `link` on the row's surface, linked inline code with no `surface-3` behind it.
@@ -323,3 +336,19 @@ Each finding of [the critique](critique.md) assigned to the designer, and where 
 | 23 | Monaco #098658 noted, with an optional rule | Flow 4; Build checklist |
 
 Not done here: 6 and 15 (writer), 13 (light Badge contrast, a follow-up with the focus outline, spec decision 9).
+
+### Re-check fixes (turn 14)
+
+| # | Fix | Where |
+|---|---|---|
+| R1 | `safeHref` returns the href to render (parsed `href` for external, cleaned path for a repo path); callers, `Markdown`'s fallback included, never render the raw string. Any two leading `/` or `\` in any mix are external. `/\evil.example` and `\/evil.example` in the test table | Flow 3; Build checklist |
+| R2 | `scroll-padding-bottom: 48px` on the scroller below `md`; note 7 corrected | Flow 1 steps 7 and "Where it can go wrong"; Accessibility; Build checklist; activity-mobile.svg note 7 |
+| R3 | No `scroll-margin-top`; the scroller's `scroll-padding-top` (44 Activity, 40 Handoffs) sets the scroll-back offset | Flow 2 step 4; Build checklist |
+| R4 | Live duration `success-ink` | Flow 1, The band; For the writer 8 |
+| N1 | Phone brief drawn folded at about 10 lines | activity-mobile.svg |
+| N2 | Loading text drawn as a dashed sr-only label, marked "sr-only, not visible" | states.svg 2 and 8 |
+| N4 | Table drawn in its own box with a thin scrollbar under it | activity-mobile.svg note 6 |
+| N5 | Footer facts joined by ` · `, no coloured dot | Flow 5; handoffs.svg |
+| N6 | sr-only `h2` per tab | Flow 1 component map; Accessibility |
+| N7 | Phone footer keeps `running`; agent truncates at 72px | Flow 5; handoffs.svg; For the writer 11 |
+| N3 | copy.md's stale note: writer | For the writer 9 |
