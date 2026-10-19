@@ -93,7 +93,7 @@ export function rowFor(items: ActivityItem[], target: { action?: string; event?:
 // A Section is a run of rows with one author, under one band: a turn (its
 // agent's), or rows between turns by you, by Agentry or by another agent.
 export interface Section {
-  key: string; // its oldest row's, which stays as rows are added
+  key: string; // a turn's id, else its oldest row's: it stays as rows are added, and as older ones are read
   by: string;
   turn?: ActivityItem; // the turn's own row, for a turn's section
   continued: boolean; // the turn's later rows, after someone else's in the middle of it
@@ -128,7 +128,7 @@ function grouped(items: ActivityItem[]): Section[] {
     const last = out[out.length - 1];
     if (item.kind === "turn") {
       turns.set(item.turn, item);
-      out.push({ key: item.key, by: item.by, turn: item, continued: false, rows: [] });
+      out.push({ key: item.turn, by: item.by, turn: item, continued: false, rows: [] });
     } else if (item.turn ? last?.turn?.turn === item.turn : last?.by === item.by) {
       last.rows.push(item);
     } else {

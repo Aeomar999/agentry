@@ -28,7 +28,7 @@ describe("sections", () => {
       row("6", "action", "engineer", "turn-2"),
     ];
     expect(outline(items)).toEqual(["engineer turn-2: 6 5", "coordinator turn-1: 3 2"]);
-    expect(sections(items)[0].key).toBe("4");
+    expect(sections(items)[0].key).toBe("turn-2");
     expect(sections(items)[0].turn).toBe(items[3]);
   });
 
@@ -238,5 +238,10 @@ describe("activityOf, on a page that starts in the middle of a turn", () => {
       "turn-1 3",
       "undefined 1",
     ]);
+  });
+  test("keeps the turn's section key as the older page is read, so what you opened in it stays open", () => {
+    const [before] = sections(activityOf(ended, page));
+    const [after] = sections(activityOf(ended, log));
+    expect(after.key).toBe(before.key);
   });
 });
