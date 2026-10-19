@@ -219,6 +219,50 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 	}
 }
 
+// A broken task made from the idea can't be marked, so Accept refuses, but
+// makes no second task either; a broken task made from nothing is skipped.
+func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	repo := gitRepo(t)
+	// The rules would refuse a worktree.moved before the worktree is
+	// ready, so the log is written without them, then opened with them.
+	unchecked, err := store.Open(path, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {
+		mustPropose(t, unchecked, p)
+	}
+	fromBroken, fresh := suggest(t, unchecked, repo, nil), suggest(t, unchecked, repo, nil)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for stream, idea := range map[string]string{"task-2": fromBroken, "task-3": ""} {
+		mustPropose(t, unchecked, events.Proposal{Stream: stream, Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": idea}})
+		mustPropose(t, unchecked, events.Proposal{Stream: stream, Actor: worker, Type: events.WorktreeMoved,
+			Data: map[string]any{"worker": "local", "path": "/w", "port": 7901}})
+	}
+	unchecked.Close()
+	s, state := storetest.Open(t, path)
+	if state.Broken("task-2") == nil || state.Broken("task-3") == nil {
+		t.Fatal("task-2 and task-3 should be broken")
+	}
+
+	got, err := ideas.Accept(s, state, fromBroken, ideas.Choice{})
+	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "can't be read") {
+		t.Errorf("accepting %s: %+v %v", fromBroken, got, err)
+	}
+	if n := len(state.TaskIDs()); n != 3 {
+		t.Errorf("%d tasks, want no task made beside task-1 to task-3", n)
+	}
+	if idea := load(t, s, fromBroken); idea.State != ideas.Open {
+		t.Errorf("%s is %s", fromBroken, idea.State)
+	}
+	if got, err := ideas.Accept(s, state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Accepted: true}) {
+		t.Errorf("accepting %s past the broken tasks: %+v %v", fresh, got, err)
+	}
+}
+
 // A kind that is neither a task nor an epic is refused, whether or not a
 // task was made from the idea already.
 func TestAcceptRefusesAnUnknownKind(t *testing.T) {

@@ -32,7 +32,8 @@ type Acceptance struct {
 // Board is what Accept reads of every task and of the agents, as kept
 // from the log (current.State).
 type Board interface {
-	Tasks() []*tasks.Task
+	TaskIDs() []string
+	Task(id string) (*tasks.Task, error)
 	Roster() agents.Roster
 }
 
@@ -60,7 +61,10 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 	if !known {
 		return Acceptance{Refused: "an idea becomes a task or an epic, not " + choice.Kind}, nil
 	}
-	made := madeFrom(board, idea.ID)
+	made, err := madeFrom(log, board, idea.ID)
+	if err != nil || made.Refused != "" {
+		return made, err
+	}
 	if made.Task == "" {
 		if made, err = makeTask(log, board, idea, kind, choice); err != nil || made.Task == "" {
 			return made, err
@@ -88,14 +92,42 @@ var accepting sync.Mutex
 var beforeMarking = func() {}
 
 // madeFrom finds a task an earlier Accept made from the idea but stopped
-// before marking it.
-func madeFrom(board Board, id string) Acceptance {
-	for _, task := range board.Tasks() {
-		if task.Idea == id {
-			return Acceptance{Task: task.ID}
+// before marking it. A task the state can't hand out, as a broken one, is
+// skipped unless its task.created names the idea: then it can't be marked,
+// and Refused says so, but no second task is made from the idea either.
+func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {
+	for _, taskID := range board.TaskIDs() {
+		task, err := board.Task(taskID)
+		if err == nil {
+			if task != nil && task.Idea == id {
+				return Acceptance{Task: taskID}, nil
+			}
+			continue
+		}
+		from, readErr := ideaOf(log, taskID)
+		if readErr != nil {
+			return Acceptance{}, readErr
+		}
+		if from == id {
+			return Acceptance{Task: taskID, Refused: taskID + " was made from " + id + " but can't be read: " + err.Error()}, nil
 		}
 	}
-	return Acceptance{}
+	return Acceptance{}, nil
+}
+
+// ideaOf is the idea a task was made from, read from its task.created in
+// the log, "" for none.
+func ideaOf(log *store.Store, taskID string) (string, error) {
+	stream, err := log.Stream(taskID)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range stream {
+		if e.Type == events.TaskCreated {
+			return e.Text("idea"), nil
+		}
+	}
+	return "", nil
 }
 
 // makeTask makes the idea's task, of the kind given, parked in the Backlog.
