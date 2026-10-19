@@ -18,7 +18,7 @@ var you = events.Actor{Kind: events.Human, ID: "you"}
 type Choice struct {
 	Kind     string // "task" (or "story") or "epic"; "" takes the one the idea suggests
 	Note     string
-	Defaults tasks.Limits // the server's: the new task's limits, unless it follows up an epic, which gives its own
+	Defaults tasks.Limits // the server's budget and turns for the new task, unless it follows up an epic, which gives its own
 	By       events.Actor // who accepts it: you when unset, or Agentry for an idea every Visionary agreed on
 }
 
@@ -194,8 +194,9 @@ func epicOf(board Board, idea *Idea) (*tasks.Task, error) {
 }
 
 // description tells the coordinator the idea in full, and links back to it.
-// An idea that follows up an epic carries the epic's limits, as its stories
-// would, or says the epic wasn't found.
+// An idea that follows up an epic carries the epic's rules (its limits
+// block), as its stories would, or says the epic wasn't found. Its budget
+// and turns come from tasks.NewLimits.
 func description(idea *Idea, note string, epic *tasks.Task) string {
 	parts := []string{"From " + idea.ID + ", the idea \"" + idea.Title + "\", suggested in " + idea.Task + "."}
 	for _, part := range [][2]string{{"Problem", idea.Problem}, {"Proposal", idea.Proposal}, {"Why now", idea.WhyNow},
@@ -216,8 +217,8 @@ func description(idea *Idea, note string, epic *tasks.Task) string {
 // longestLimits is how much of an epic with no block of limits is copied.
 const longestLimits = 2000
 
-// limitsOf is the block of the epic's description that sets its limits: a
-// line naming limits, constraints or rules, and the bullets under it. An
+// limitsOf is the epic's rules: the block of its description written as
+// limits, constraints or rules, a line naming them and the bullets under it. An
 // epic with no such block gives its whole description, cut short.
 func limitsOf(epic *tasks.Task) string {
 	if epic == nil {

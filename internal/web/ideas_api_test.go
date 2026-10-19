@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -133,12 +132,8 @@ func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
 		if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != 200 {
 			t.Fatalf("accept: %d %s", code, body)
 		}
-		_, body := call(t, server, "GET", "/api/tasks/task-2", "")
-		if want := fmt.Sprintf(`"budget":%d,`, limits.Budget); !strings.Contains(body, want) {
-			t.Errorf("want %s: %s", want, body)
-		}
-		if want := fmt.Sprintf(`"maxTurns":%d,`, limits.MaxTurns); !strings.Contains(body, want) {
-			t.Errorf("want %s: %s", want, body)
+		if d := detailOfTask(t, server, "task-2"); d.Budget != limits.Budget || d.MaxTurns != limits.MaxTurns {
+			t.Errorf("budget %d, max turns %d, want %+v", d.Budget, d.MaxTurns, limits)
 		}
 	}
 }
