@@ -110,7 +110,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("the event catalogue: %w", err)
 	}
-	state := current.New(catalogue)
+	state := current.New(catalogue, ideas.Streams())
 	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		return err
@@ -225,7 +225,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	// Every feature in this binary, written out here: no feature registers itself.
 	installed := []features.Feature{
-		ideas.Feature(state),
+		ideas.Feature(),
 	}
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,

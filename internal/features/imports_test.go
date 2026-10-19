@@ -9,7 +9,7 @@ import (
 
 // features is a leaf: of Agentry's own packages it may import only these,
 // none of which imports anything that imports features.
-var mayImport = []string{"events", "agents", "tasks", "workers", "connections", "client"}
+var mayImport = []string{"events", "agents", "tasks", "workers", "connections", "settings", "client"}
 
 func TestFeaturesImportsNoOtherCorePackage(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps", ".").Output()

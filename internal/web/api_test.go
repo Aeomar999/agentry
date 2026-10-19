@@ -54,7 +54,7 @@ func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
-		Features: []features.Feature{ideas.Feature(state)}}, hooks, nil).Handler())
+		Features: []features.Feature{ideas.Feature()}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }

@@ -100,7 +100,11 @@ func loaded(log []events.Event) *State { return loadedWith(withIdeas, log) }
 
 // loadedWith is loaded, reading the streams as catalogue says.
 func loadedWith(catalogue *events.Catalogue, log []events.Event) *State {
-	s := New(catalogue)
+	return loadInto(New(catalogue, ideas.Streams()), log)
+}
+
+// loadInto loads the log into s, as the store does at Open.
+func loadInto(s *State, log []events.Event) *State {
 	for _, stream := range streamsOf(log) {
 		s.Load(stream, accepted(log, stream))
 	}
@@ -118,7 +122,7 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
 		if ideas.IsStream(stream) {
-			idea, err := s.Idea(stream)
+			idea, err := ideas.Get(s, stream)
 			if want := ideas.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(idea, want) {
 				t.Errorf("%s: %+v, %v\nreplay: %+v", stream, idea, err, want)
 			}
@@ -284,7 +288,7 @@ func TestAnArchivedTaskIsCountedButNotHandedOut(t *testing.T) {
 func TestAnIdeaIsNoTask(t *testing.T) {
 	log := everyStream()
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
-		if idea, err := s.Idea("idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
+		if idea, err := ideas.Get(s, "idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
 			t.Errorf("%s: idea-1 is %+v, %v; want it accepted", name, idea, err)
 		}
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
@@ -370,7 +374,7 @@ func TestTasksAreOldestFirstInANewSlice(t *testing.T) {
 // Readers call every getter while events are applied (run with -race).
 func TestReadersRaceApply(t *testing.T) {
 	log := everyStream()
-	s := New(withIdeas)
+	s := New(withIdeas, ideas.Streams())
 	s.Loaded(0)
 	var readers sync.WaitGroup
 	done := make(chan struct{})
@@ -407,7 +411,11 @@ func applied(log []events.Event) *State { return appliedWith(withIdeas, log) }
 
 // appliedWith is applied, reading the streams as catalogue says.
 func appliedWith(catalogue *events.Catalogue, log []events.Event) *State {
-	s := New(catalogue)
+	return applyInto(New(catalogue, ideas.Streams()), log)
+}
+
+// applyInto applies every event of the log to s, a new state.
+func applyInto(s *State, log []events.Event) *State {
 	s.Loaded(0)
 	for _, e := range log {
 		s.Apply(e)
@@ -453,7 +461,7 @@ func TestAnIdeaAgentryAcceptedEqualsAReplay(t *testing.T) {
 		}
 	}
 	s := loaded(log)
-	idea, _ := s.Idea("idea-2")
+	idea, _ := ideas.Get(s, "idea-2")
 	task, _ := s.Task("task-3")
 	if !idea.AutoAccepted || task.Parked != "" || !s.Settings().AutoAcceptIdeas || !s.Settings().AutoStartIdeas {
 		t.Errorf("idea %+v, task parked %q, settings %+v", idea, task.Parked, s.Settings())

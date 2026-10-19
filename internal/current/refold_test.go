@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
 // A refold rebuilds its stream from the events before it and itself, as a
@@ -55,7 +56,7 @@ func TestARefoldOfABrokenStreamStaysBroken(t *testing.T) {
 // task is back in full, and a broken one is still broken.
 func TestEqualHoldsAfterARefold(t *testing.T) {
 	s := openStore(t, someProposals()...)
-	state := New(withIdeas)
+	state := New(withIdeas, ideas.Streams())
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	state.Archive("task-1")

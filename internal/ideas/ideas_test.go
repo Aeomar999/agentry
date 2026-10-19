@@ -26,7 +26,13 @@ var (
 // and task-1, the Visionaries session the ideas come from, in repo.
 func openSeeded(t *testing.T) (s *store.Store, state *current.State, repo string) {
 	t.Helper()
-	s, state = storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	return openSeededAt(t, filepath.Join(t.TempDir(), "agentry.db"))
+}
+
+// openSeededAt is openSeeded with the log at path.
+func openSeededAt(t *testing.T, path string) (s *store.Store, state *current.State, repo string) {
+	t.Helper()
+	s, state = storetest.OpenWith(t, path, storetest.WithIdeas())
 	repo = gitRepo(t)
 	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {
@@ -71,7 +77,7 @@ func suggest(t *testing.T, s *store.Store, repo string, data map[string]any) str
 
 func load(t *testing.T, state *current.State, id string) *ideas.Idea {
 	t.Helper()
-	idea, err := state.Idea(id)
+	idea, err := ideas.Get(state, id)
 	if err != nil || idea == nil {
 		t.Fatalf("loading %s: %v %v", id, idea, err)
 	}
