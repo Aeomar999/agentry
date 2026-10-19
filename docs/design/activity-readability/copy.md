@@ -1,6 +1,6 @@
 # Readable Activity and Handoffs: copy deck
 
-The final words for [Direction A, Author bands](flows.md), for [the spec](../../../spec.md). Every string in [flows.md › Strings](flows.md#strings) is here, grouped by screen and state, with where it shows, the final text, its accessible name when that differs, plurals and a length limit. Wireframes: [desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg).
+The final words for [Direction A, Author bands](flows.md), for [the spec](../../../spec.md). It is the one list of strings for this work ([flows.md › Strings](flows.md#strings) points here); they are grouped by screen and state, with where each shows, the final text, its accessible name when that differs, plurals and a length limit. Wireframes: [desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg).
 
 **Who reads it.** One person running a board of AI agents on their own work, usually catching up in the morning after a night of turns. They scan for *who* did *what*, then read the few entries that matter. So: the author's name first, plain verbs, short facts, nothing to decode.
 
@@ -49,68 +49,68 @@ Words the team uses that never show: *band*, *section*, *author*, *fold*, *rail*
 | Row count, right | `{n} rows` | | `1 row`, `0 rows` | 10 | Today. Only `ink-faint` → `ink-muted` changes |
 | Narrowed chip | `{turn}` `{agent}` | | | 30 | Today: the turn id and the agent's name |
 | Narrowed chip × | (icon) | `Show every turn` | | | Today |
-| Back to top button, floating | `Newest` | `Back to the newest rows` | | 6 | Visible text today. The name says what it does and contains the visible word, so "click Newest" still works by voice |
+| Back to top button, floating | `Newest` | `Back to the newest rows` | | 6 | Visible text today. The name says what it does and contains the visible word, so "click Newest" still works by voice. It now sits at the bottom right of the scroller, clear of every band (flows, flow 1 step 7); text and name unchanged |
 
 ## Author bands (turns)
 
-The band is the author header. Order, left to right: chip, name, team · role, turn id, `continued`, `on {worker}`, status, tokens, issue text.
+The band is the author header. Order, left to right: chip, name, team · role, turn id, `continued`, `on {worker}`, status, tokens, issue text. On a phone (below `md`, 768px) the band shows only chip, name, status and duration, on one line; the rest is in its accessible name (see [Phone](#phone-390px)).
 
 | Where | Text | Accessible name / aria | Plural | Max | Notes |
 |---|---|---|---|---|---|
 | Chip | first letter of the agent's name, capital: `E` | `aria-hidden` | | 1 | The name is always beside it in text |
-| Name | `{agent}`, as named: `engineer` | | | 120px on phone, then ellipsis | |
-| Team and role | `{team} · {role}`: `Software · reviewer` | | | 28 | Middle dot with a space each side, as elsewhere on the board |
-| Team, no role | `{team}`: `Software` | | | 16 | |
+| Name | `{agent}`, as named: `engineer` | | | 120px on phone, then ellipsis | The full name is in the band's accessible name |
+| Team and role | `{team} · {role}`: `Software · deployer` | | | 28, desktop | Middle dot with a space each side, as elsewhere on the board. Not shown on a phone |
+| Team, no role | `{team}`: `Software` | | | 16, desktop | Also when the role is the agent's name (see [Roles](#roles)) |
 | Team, blank | `Software` | | | | Matches `DEFAULT_TEAM` in lib/teams.ts |
 | Role, coordinator | `coordinator` | | | | The agent coordinates a team |
 | Role, Review column | `reviewer` | | | | Column `review` |
 | Role, Shipping column | `deployer` | | | | Column `ship`; the agent form describes it as "Shipping checked work, such as deploying it" |
-| Turn id | `{turn}`: `turn-6` | | | 9 | `ink-faint` → `ink-muted` |
-| Continued | `continued` | (part of the band name, below) | | | Muted, after the turn id. A turn's later rows above a `you` band |
+| Turn id | `{turn}`: `turn-6` | | | 9, desktop | `ink-faint` → `ink-muted`. Not shown on a phone |
+| Continued | `continued` | (part of the band name, below) | | desktop | Muted, after the turn id. A turn's later rows above a `you` band. Not shown on a phone |
 | Remote | `on {worker}`: `on studio` | | | 24, desktop | Today. Shown only when the turn ran on another machine |
 | Status, running | `running` | | | | Today. `info` badge |
 | Status, ended | `ended` | | | | Today |
 | Status, stopped | `stopped by you` | | | | Today. `warning` badge |
 | Status, issue | `issue` | | | | Today. `danger` badge, then the issue text |
 | Issue text | `{issue}`, as raised | | | one line, truncated | Today; full text in the `Something went wrong` row |
-| Tokens | `{n} tokens`: `18k tokens`, `950 tokens`, `3.1M tokens` | | always `tokens` | 12 | Today; numbers from `tokens()` |
+| Tokens | `{n} tokens`: `18k tokens`, `950 tokens`, `3.1M tokens` | | always `tokens` | 12, desktop | Today; numbers from `tokens()`. Not shown on a phone |
 | Duration in band (phone only) | `{duration}` / `{duration}…` | | | 7 | On phone the rail has no room; same text as the rail |
 
 ### Band accessible name
 
-The band is a button. Its name starts with what's shown first, the agent, so it matches what's on screen (WCAG 2.5.3) and so screen-reader users hear the author first. Commas, not `·`, because some screen readers say "dot".
+Every band is an `h3`. A turn's `h3` holds the band's button, so the heading and the button have the same name, `Show only this turn` included; there is no separate section label. Its name starts with what's shown first, the agent, so it matches what's on screen (WCAG 2.5.3) and so screen-reader users hear the author first. Commas, not `·`, because some screen readers say "dot".
 
 | Case | Accessible name |
 |---|---|
-| Turn, all of it | `{agent}, {team} team, {role}, {turn}, {status}. Show only this turn` → "reviewer, Software team, turn-6, running. Show only this turn" |
+| Turn, all of it | `{agent}, {team} team, {role}, {turn}, {status}. Show only this turn` → "release, Software team, deployer, turn-9, running. Show only this turn" |
 | No role | drop `{role},` → "engineer, Software team, turn-5, ended. Show only this turn" |
 | Continued | add `continued` after the turn → "reviewer, Software team, turn-6, continued, running. Show only this turn" |
-| Remote | add `on {worker}` after the turn |
+| Remote | add `on {worker}` after the turn → "engineer, Software team, turn-5, on studio, ended. Show only this turn" |
 | Issue | `issue: {issue text}` as the status |
 | Already narrowed to this turn (button disabled) | drop `. Show only this turn` |
+| Role is the agent's name | drop `{role},` as for no role → "reviewer, Software team, turn-6, running. Show only this turn" |
+| Phone | the same name at every width: on a phone it is the only place team, role, turn id, `continued` and `on {worker}` are said, so keep them all |
 
 *Changed* from "{turn}, {agent}, {team · role}, {status}. Show only this turn": agent first, as it's shown first and it's what the reader is looking for; "team" spelled out so "Software" isn't heard as a word on its own; `·` replaced by commas.
 
-The `<section>` around each author section takes the band as its label (`aria-labelledby`), so the section is announced as, for example, "reviewer, Software team, turn-6, running" without "Show only this turn". Give the label element the facts and the button the extra sentence (sr-only), so `aria-labelledby` picks up just the facts.
+Screen-reader users jump band to band with H. Hearing "Show only this turn" on every turn heading is the cost of a heading that holds its button; it's short and says what Enter does.
 
 ### Roles
 
 - `coordinator` when the agent coordinates a team (`Agent.coordinates`).
 - else `reviewer` for the Review column, `deployer` for Shipping.
 - else no role, just the team.
-- **If the role is the agent's own name, leave it out.** An agent named `reviewer` shows `reviewer  Software`, not `reviewer  Software · reviewer`; a coordinator named `coordinator` shows `coordinator  Software`. The same word twice in one line reads as a glitch, and the name already says it. The wireframes show `reviewer · Software · reviewer`: the designer should update them (see [Questions](#questions-for-the-designer)). In the accessible name, drop the role in the same case.
+- **If the role is the agent's own name, leave it out.** An agent named `reviewer` shows `reviewer  Software`, not `reviewer  Software · reviewer`; a coordinator named `coordinator` shows `coordinator  Software`. The same word twice in one line reads as a glitch, and the name already says it. The team still shows, so no band is left with nothing after the name. In the accessible name, drop the role in the same case. Accepted in spec decision 8.
 
 ## The you and Agentry bands
 
 | Where | Text | Accessible name / aria | Max | Notes |
 |---|---|---|---|---|
 | You chip | `Y` | `aria-hidden` | 1 | Neutral chip |
-| You band name | `you` | heading text `you` | | Lowercase, as the board says it everywhere ("stopped by you", "waiting for you"). A heading, not a button |
-| You section label | | `you` | | `aria-labelledby` the heading |
+| You band | `you` | `h3`: `you` | | Lowercase, as the board says it everywhere ("stopped by you", "waiting for you"). A heading, not a button |
 | Agentry chip | `A` | `aria-hidden` | 1 | Neutral chip |
-| Agentry band name | `Agentry` | heading text `Agentry` | | Capitalised: it's the product's name |
-| Agentry section label | | `Agentry` | | |
-| Another agent's band outside a turn (rare) | `{agent}` `{team} · {role}` | heading: `{agent}, {team} team, {role}` | | Same as a turn band without turn facts; not a button |
+| Agentry band | `Agentry` | `h3`: `Agentry` | | Capitalised: it's the product's name. A heading, not a button |
+| Another agent's band outside a turn (rare) | `{agent}` `{team} · {role}` | `h3`: `{agent}, {team} team, {role}` → "coordinator, Design team" | | Same as a turn band without turn facts; not a button. Drop `, {role}` when there is none or it's the name. On a phone only the name shows |
 
 No team, role or turn facts on either: there is nothing true to say there.
 
@@ -176,6 +176,8 @@ flows.md's `Fetched {n} shared files` doesn't exist in the code: today it's `Fet
 
 `{kind}` is what the entry is, so a list of buttons makes sense out of context (a screen reader's buttons list would otherwise read "Show all 38 lines" ten times): `brief` (a message to an agent), `message` (to or from you), `report`, `question`, `issue`, `note`, `command`, `code`. Handoff cards use `brief`.
 
+`{n}` is **about** the length, not an exact count: it's the entry's measured height ÷ its line height, so tables, headings and code make it an estimate, and it changes with the width. The words don't say "about" (`Show all · about 38 lines` is long and the number's job is only to say roughly what opening costs); tests must not expect an exact number.
+
 The count can't be 1: commands fold at 3 lines and everything else later, so only the plural is needed. If the build ever shows `1`, write `Show all · 1 line`.
 
 **What a screen reader hears.**
@@ -201,10 +203,13 @@ Commands have no Copy button, by design.
 |---|---|---|---|
 | External (`https://`, `http://`, `mailto:`) | its label, underlined, then ↗ | `{label} (opens in a new tab)` | The ↗ icon is `aria-hidden`; the words are sr-only text after the label |
 | Repo file | its label (mono when it's a path), ↗ | `{label} (opens in a new tab)` | Opens the Workspace |
-| Task id the board knows | `task-21`, mono, no ↗ | `task-21` | Same tab |
+| Task id the board knows, with its title | `task-21`, mono, no ↗; `title` tooltip: the task's title, `Fix the chat links` | `task-21, {title}` → "task-21, Fix the chat links" | Same tab. The title comes from the live task list (no new fetch). Spec decision 8 |
+| Task id the board knows, no title yet | `task-21`, mono, no ↗, no tooltip | `task-21` | |
 | Commit of the task | `3f2a9c1`, mono, ↗ | `commit 3f2a9c1 (opens in a new tab)` | *Added* `commit`: a bare hash says nothing out of context, and screen readers read it letter by letter |
 | Any other SHA, unknown task id | plain code | | Not a link |
 | `javascript:`, `data:` and other unsafe links | the label as plain text | | No hint, no warning: it reads as a sentence |
+
+**Linked inline code.** A task id or commit written in backticks (`` `task-21` ``, `` `3f2a9c1` ``) becomes the same link as the bare one and reads exactly like it: mono, link colour, underline, no code background (spec decision 9), the same tooltip and accessible name. No copy change.
 
 "(opens in a new tab)" is the placeholder kept: it's the common wording, and it says what happens, not where the link goes. Bare URLs show as written; a very long one wraps.
 
@@ -230,10 +235,10 @@ The now row is text, not live-announced: an announcement on every turn start wou
 
 | Where | Text | Accessible name / aria | Plural | Max | Notes |
 |---|---|---|---|---|---|
-| From | chip + `{from}` | chip `aria-hidden` | | 120px phone | |
+| From | chip + `{from}` | chip `aria-hidden` | | 96px phone, 120px from `md` | Full name in the card's `aria-label`. From you: `you`, lowercase, as Activity (spec decision 8) |
 | Arrow | → | sr-only ` to ` | | | *Added*, as in Activity |
-| To | chip + `{to}` | chip `aria-hidden` | | 120px phone | |
-| Time | `{hh:mm}` | | | 5 | `ink-faint` → `ink-muted` |
+| To | chip + `{to}` | chip `aria-hidden` | | 96px phone, 120px from `md` | Full name in the card's `aria-label` |
+| Time | `{hh:mm}` | | | 5 | `ink-faint` → `ink-muted`. Always on the same line as the names |
 | Title | the brief's first heading, as written | the card's heading (`h3`) | | 2 lines | No heading, no title: the body starts at once |
 | Body | the brief, compact Markdown | | | folded at 8 lines | |
 | Card label | | `<article aria-label="{from} to {to}, {hh:mm}">` | | | So a screen reader's list of articles names each one |
@@ -247,16 +252,26 @@ The footer is the button that opens the turn.
 | A step that led to a turn | `Led to` | Today |
 | A step said from a turn | `From` | Today |
 | Turn | `{turn}` | Today |
-| Agent | `{agent}` | Today, after the turn id |
+| Agent | `{agent}` | Today, after the turn id, at every width. Truncates at 96px on a phone |
 | Status | badge: `running`, `issue` | Today (no badge once ended) |
-| Duration | `{duration}`, only once ended | Today |
+| Duration | `{duration}`, only once ended (a running turn shows the badge and the action count instead) | Today |
 | Actions | `{n} actions` | `1 action`, `0 actions`. Today |
 | Tokens | `{n} tokens` | Today, only when above 0 |
 | End | `Activity ›` | Today. ›, not >, is the icon, `aria-hidden` |
 
-Phone: `Led to {turn} · Activity ›` (no agent, duration, counts or tokens; the design drops them). The facts are joined by ` · ` in the footer as drawn.
+Desktop: `Led to turn-4 · engineer · 48m · 14 actions · 210k tokens · Activity ›`; running: `Led to turn-6 · reviewer · running · 6 actions · Activity ›`.
 
-**Footer accessible name**: `Open the activity of {turn}, {agent}` → "Open the activity of turn-6, reviewer". *Changed* from "Open {turn}'s activity": `turn-6's` reads badly aloud, the board already says "Open the terminal of {task}", and the agent says who did the work. Add `, running` or `, issue` when the badge shows, so the name carries what the badge says.
+Phone: `Led to {turn} · {agent} · Activity ›` and `From {turn} · {agent} · Activity ›`. The agent stays, since it says whose turn opens; the duration, counts and tokens go (the design's cut). The facts are joined by ` · `.
+
+**Footer accessible name**: it starts with the visible words, so a voice user can say "click Led to turn 6" (WCAG 2.5.3 Label in Name), then the badge's word, then what the button does.
+
+| Case | Accessible name |
+|---|---|
+| Led to, ended | `Led to {turn}, {agent}. Open its activity` → "Led to turn-4, engineer. Open its activity" |
+| Led to, running or issue | `Led to {turn}, {agent}, {status}. Open its activity` → "Led to turn-6, reviewer, running. Open its activity" |
+| From | `From {turn}, {agent}. Open its activity` → "From turn-5, engineer. Open its activity" (add `, {status}` the same way) |
+
+The same name at every width. Duration, counts and tokens are left out of it: they come after the words a voice user would say, and the card's text already holds them for a screen reader. *Changed* from "Open the activity of {turn}, {agent}", which didn't start with what's shown.
 
 A step with no turn has no footer; nothing to write.
 
@@ -269,6 +284,7 @@ A step with no turn has no footer; nothing to write.
 | Loading | sr-only, with `aria-busy="true"` on the feed | `Loading activity…` | | From flows. The grey blocks are `aria-hidden` |
 | Error | message title | `Couldn't load the activity` | `role="alert"` on the message | *Changed*: no full stop, as every other `Couldn't load the …` banner on the board |
 | Error | detail, muted mono | `{error}`, as the server said it: `GET /api/tasks/task-40: 502 Bad Gateway` | | Never alone: the title says it in words |
+| Error | next step, muted, under the detail | `If it keeps failing, check that Agentry is still running.` | (inside the alert, read after the detail) | Spec decision 8. `ink-muted`, 12px, a full sentence so it has a full stop. Wraps to two lines on a phone |
 | Error | button | `Try again` | | *Changed* from `Retry`: plain words a non-native reader knows, and what the button does |
 | Retrying | sr-only | `Loading activity…` again, then the feed | | The busy state says it; no extra announcement. If it fails again, the alert re-announces `Couldn't load the activity` |
 | Empty, a new task | `EmptyState` title | `Nothing here yet` | | Today |
@@ -289,6 +305,7 @@ A step with no turn has no footer; nothing to write.
 | Loading | sr-only, `aria-busy` | `Loading handoffs…` | |
 | Error | title, `role="alert"` | `Couldn't load the handoffs` | No full stop, as above |
 | Error | detail | `{error}` | |
+| Error | next step, muted | `If it keeps failing, check that Agentry is still running.` | As Activity |
 | Error | button | `Try again` | As Activity |
 | Empty | `EmptyState` title | `No handoffs yet` | Today |
 | Empty | `EmptyState` body | `When the coordinator hands the task to an agent, the brief shows here.` | *Changed*: today's `The coordinator reads the task first.` says what happens next but not what this tab will hold; flows' `…, it shows here.` leaves "it" unclear. Saying "the brief" names what appears |
@@ -300,23 +317,24 @@ Checked against [activity-mobile.svg](activity-mobile.svg) and the phone half of
 
 | String | Fits? | What changes on the phone |
 |---|---|---|
-| Stuck band: chip, name, status, live duration | yes: `product-designer` + `STOPPED BY YOU` + `1h 12m…` ≈ 300px of 342 | Team, role, turn id and tokens go (design). Names past 120px truncate |
-| Unstuck band second line: `Software · reviewer · turn-6` | yes, 28 characters | The design puts `{team} · {role}` and the turn id here; `continued` goes after the turn id and still fits (38) |
-| `on {worker}` | not on the band | Hidden on the phone, with the turn id (the accessible name keeps it) |
+| Band: chip, name, status, duration, one line, stuck or not | yes: `product-designer` (120px) + `STOPPED BY YOU` + `1h 12m…` ≈ 300px of 342 | Team, role, turn id, `continued`, `on {worker}` and tokens are not shown; all of them stay in the band's accessible name. Names past 120px truncate |
 | Toolbar: `Everything` `Actions` `Messages` `{n} rows` | the control scrolls sideways, as today | none |
 | `Show all · 38 lines` | yes, beside the badge | none |
 | Code language label | yes, 10 characters max | truncate past 10 |
 | Handoffs top line | wraps to two lines for long names | none: wrapping is fine here; the whole line is the button |
-| Handoffs card header | `from → to` on one line, time under it (design) | names truncate at 120px |
-| Handoffs footer | | **Shortened**: `Led to {turn} · Activity ›`, the design's own cut |
+| Handoffs card header | yes: `product-designer → engineer  06:15`, one line, never wraps: 18 + 96 + 16 + 18 + 96 + 8 + 33 ≈ 285px of 334 | names truncate at 96px each; full names in the card's `aria-label` |
+| Handoffs footer | yes: `Led to turn-12 · product-designer · Activity ›` ≈ 98 + 20 + 18 (chip) + 96 (truncated) + 85 ≈ 317px of 334 (card width at 390, less the 24px timeline gutter) | **Shortened**: `Led to {turn} · {agent} · Activity ›`; duration, counts and tokens go |
+| Error next step | wraps to two lines in the centred message | none |
 | Error, empty and loading texts | yes, they wrap in the centred `EmptyState` | none |
 | Note rows | one line, truncated | none (as today) |
 
-Shortened for the phone: only the Handoffs footer (and the band, by the design's hiding of team, role, turn id, tokens and `on {worker}`). No string has a separate phone wording.
+Shortened for the phone: only the Handoffs footer (and the band, by the design's hiding of team, role, turn id, `continued`, tokens and `on {worker}`). No string has a separate phone wording, and every accessible name is the same at every width.
 
 ## Questions for the designer
 
-1. **Role repeating the name.** The wireframes show `reviewer  Software · reviewer` and `coordinator  Software · coordinator`. I've written a rule to drop the role when it equals the agent's name. On the demo board almost every agent is named after its role, so most bands would show only the team. Fine with you, or would you rather show the role always for a steady column?
-2. **Task-id links' titles.** `task-21` alone doesn't say what the task is. A `title` (tooltip) with the task's title, and the same in the accessible name ("task-21, Fix the chat links"), would help the person catching up decide whether to follow it. The board has the titles in the live task list. Is a tooltip in scope?
-3. **The error's next step.** `Try again` covers a blip. When the person's own Agentry server has stopped, trying again won't help. Room for one muted line, "If it keeps failing, check that Agentry is still running."? I've left it out, since it's a new line in the design.
-4. **The you band on Handoffs.** Messages from you show `you` as the from name with a `Y` chip; there's no band there. Just checking the card header is meant to say `you`, lowercase, as Activity does.
+None open. The four from turn 6 were answered in spec decision 8 and are now in the tables above:
+
+1. ~~Role repeating the name~~: drop it; the team still shows. See [Roles](#roles).
+2. ~~Task-id links' titles~~: yes, tooltip and accessible name when the board has the title. See [Links](#links).
+3. ~~The error's next step~~: yes, one muted line. See [States](#states).
+4. ~~The you band on Handoffs~~: the card says `you`, lowercase. See [Card](#card).
