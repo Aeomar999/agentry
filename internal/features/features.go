@@ -3,14 +3,30 @@
 // back. Core reads a list of features; it never names one.
 package features
 
-import "gitlab.com/dev.chempa/agentry/internal/agents"
+import (
+	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/events"
+)
 
 // A Feature is one capability a team or a setting turns on. Every field but
 // Name may be left out.
 type Feature struct {
 	Name     string             // "ideas": its manifest entry, routes and UI folder use it
 	Version  int                // raised when its events or state change
+	Streams  *Streams           // the streams it owns, if any
 	Manifest func(Reader) Entry // whether the page shows it, and why
+}
+
+// Streams are a feature's own streams, each named Prefix and an ID: how the
+// state builds and keeps each one. Its types are in its events.Registration.
+// FromEvents builds a stream's state from its accepted events, as at Open;
+// Next is the state after one more event, built on a copy, so prev stays as
+// it was for whoever holds it. Both as tasks.FromEvents and tasks.Next, and a
+// nil state means the stream holds nothing yet.
+type Streams struct {
+	Prefix     string // "idea-"
+	FromEvents func(accepted []events.Event) any
+	Next       func(prev any, e events.Event) any
 }
 
 // Reader is the read side of the state a feature sees: current.State

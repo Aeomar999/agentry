@@ -3,6 +3,7 @@ package ideas
 import (
 	"fmt"
 
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
 
@@ -12,9 +13,33 @@ import (
 // need an answer and the rest are their history. Its badge is the number of
 // open ideas.
 func Feature(source Source) features.Feature {
-	return features.Feature{Name: Name, Version: 1, Manifest: func(state features.Reader) features.Entry {
+	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Manifest: func(state features.Reader) features.Entry {
 		return manifest(source.Ideas(), state)
 	}}
+}
+
+// Streams are the ideas' streams, for the state to build and keep: each
+// stream's state is its *Idea, nil until it is suggested.
+func Streams() *features.Streams {
+	return &features.Streams{Prefix: Prefix, FromEvents: fromEvents, Next: next}
+}
+
+// fromEvents is FromEvents with no idea as a plain nil, which the state
+// keeps nothing for, rather than a nil *Idea.
+func fromEvents(accepted []events.Event) any {
+	if idea := FromEvents(accepted); idea != nil {
+		return idea
+	}
+	return nil
+}
+
+// next is Next on what the state held, the same way.
+func next(prev any, e events.Event) any {
+	held, _ := prev.(*Idea)
+	if idea := Next(held, e); idea != nil {
+		return idea
+	}
+	return nil
 }
 
 func manifest(list []*Idea, state features.Reader) features.Entry {
