@@ -67,7 +67,7 @@ func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
 	if code, _ := callAs(t, server, "", "GET", "/api/waiting"); code != http.StatusUnauthorized {
 		t.Errorf("no token: %d, want 401", code)
 	}
-	if code, _ := callAs(t, server, "desk-secret", "GET", "/api/waiting"); code != 200 {
-		t.Errorf("the desk, as for questions: %d", code)
+	if code, _ := callAs(t, server, "desk-secret", "GET", "/api/waiting"); code != http.StatusUnauthorized {
+		t.Errorf("the desk: %d, want 401", code)
 	}
 }
