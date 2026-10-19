@@ -238,17 +238,17 @@ func TestTheFrontDoorTakesOnlyAPortNumberFromTheHost(t *testing.T) {
 }
 
 // A Host without a port asked at http's own port, 80, over plain HTTP, so
-// it is sent on to https there, at the port the request arrived on, and not
-// to https's own port, 443, which Agentry doesn't serve. Over TLS it asked
-// at 443.
-func TestAHostWithoutAPortIsSentToThePortItCameTo(t *testing.T) {
+// it is sent on to https there, and not to https's own port, 443, which
+// Agentry doesn't serve. That holds when 80 is forwarded to Agentry's real
+// port too: the browser reached 80. Over TLS it asked at 443.
+func TestAHostWithoutAPortIsSentToThePortItAskedAt(t *testing.T) {
 	cases := []struct {
 		name, arrivedOn string
 		overTLS         bool
 		want            string
 	}{
 		{"over plain HTTP", "192.168.1.160:80", false, "192.168.1.160:80"},
-		{"over plain HTTP, forwarded to another port", "192.168.1.160:7800", false, "192.168.1.160:7800"},
+		{"over plain HTTP, forwarded to another port", "192.168.1.160:7800", false, "192.168.1.160:80"},
 		{"over plain HTTP, arrival unknown", "", false, "192.168.1.160:80"},
 		{"over TLS", "192.168.1.160:443", true, "192.168.1.160"},
 	}
