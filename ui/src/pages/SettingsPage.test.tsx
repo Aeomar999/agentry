@@ -2,14 +2,15 @@ import { type ReactElement, useEffect, useState } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render as renderIn, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import type { Features, Manifest } from "@/features";
+import type { FeaturesReply } from "@/api/types";
+import type { Features } from "@/features";
 import type { AskVisionaries } from "@/features/ideas/visionaries";
 import { SettingsPage } from "./SettingsPage";
 
 // The page reads only the manifest; the test answers it, and asking the
 // visionaries is a fresh install's: a template, no team yet. Beside Ideas,
 // the page knows Quiet, a feature with no button that turns it on.
-let manifest: Manifest | undefined;
+let manifest: FeaturesReply | undefined;
 const { QUIET } = vi.hoisted(() => ({ QUIET: { name: "quiet", label: "Quiet" } }));
 vi.mock("@/features", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/features")>();
