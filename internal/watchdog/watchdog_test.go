@@ -25,16 +25,20 @@ var (
 )
 
 // world is a store with task-1 in an open coordinator turn, and a fake
-// process table: alive says whether the agent's process is running. What is
-// typed into the session goes to typed, after the events recorded by then.
+// process table: alive says whether the agent's process is running, except
+// for the task named exited, whose never is. What is typed into the session
+// goes to typed, after the events recorded by then; while held is open,
+// typing waits for it to close.
 type world struct {
 	t         *testing.T
 	store     *store.Store
 	alive     bool
+	exited    string
 	stopped   bool
 	typed     []string
 	typedFrom []events.Type // the last event recorded when each line was typed
 	typeErr   error
+	held      chan struct{}
 	dog       *Watchdog
 }
 
@@ -46,6 +50,9 @@ func newWorld(t *testing.T) *world {
 func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
 	w := &world{t: t, store: s, alive: true}
 	typeLine := func(task, line string) error {
+		if w.held != nil {
+			<-w.held
+		}
 		if w.typeErr != nil {
 			return w.typeErr
 		}
@@ -53,7 +60,8 @@ func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
 		w.typed, w.typedFrom = append(w.typed, line), append(w.typedFrom, stream[len(stream)-1].Type)
 		return nil
 	}
-	w.dog = New(s, state, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true }, typeLine)
+	isRunning := func(task string) bool { return w.alive && task != w.exited }
+	w.dog = New(s, state, DefaultLimits, isRunning, func(string) { w.stopped = true }, typeLine)
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -66,19 +74,27 @@ func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
 
 func (w *world) propose(actor events.Actor, kind events.Type, correlation string, data map[string]any) {
 	w.t.Helper()
-	if _, rejection, err := w.store.Propose(events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}); rejection != nil || err != nil {
+	w.proposeOn("task-1", actor, kind, correlation, data)
+}
+
+func (w *world) proposeOn(stream string, actor events.Actor, kind events.Type, correlation string, data map[string]any) {
+	w.t.Helper()
+	if _, rejection, err := w.store.Propose(events.Proposal{Stream: stream, Actor: actor, Type: kind, Correlation: correlation, Data: data}); rejection != nil || err != nil {
 		w.t.Fatal(kind, rejection, err)
 	}
 }
 
-func (w *world) task() *tasks.Task {
-	stream, _ := w.store.Stream("task-1")
+func (w *world) task() *tasks.Task { return w.taskOf("task-1") }
+
+func (w *world) taskOf(id string) *tasks.Task {
+	stream, _ := w.store.Stream(id)
 	return tasks.FromEvents(stream)
 }
 
 // after runs the watchdog as if d had passed, and returns the issue it raised, or "".
 func (w *world) after(d time.Duration) string {
 	w.dog.Check(time.Now().Add(d))
+	w.dog.Wait()
 	if turn := w.task().LastTurn(); turn.Issue != "" {
 		return turn.Issue
 	}
@@ -239,11 +255,47 @@ func TestAPromptThatCannotBeTypedIsAnIssue(t *testing.T) {
 	}
 }
 
+// Typing into a remote worker's session can take half a minute, and the
+// other tasks are checked meanwhile.
+func TestAPromptBeingTypedHoldsUpNoOtherTask(t *testing.T) {
+	w := newWorld(t)
+	w.limit(at(30 * time.Minute))
+	w.held = make(chan struct{})
+	tick := func(now time.Time) {
+		t.Helper()
+		checked := make(chan struct{})
+		go func() { w.dog.Check(now); close(checked) }()
+		select {
+		case <-checked:
+		case <-time.After(5 * time.Second):
+			close(w.held)
+			t.Fatal("the check waited for the prompt to be typed")
+		}
+	}
+	tick(time.Now().Add(31*time.Minute + time.Second))
+
+	w.proposeOn("task-2", you, events.TaskCreated, "", map[string]any{"title": "t2", "repo": "/r", "coordinator": "tech-lead"})
+	w.proposeOn("task-2", worker, events.WorktreeReady, "", map[string]any{"path": "/w2", "branch": "b2", "port": 7902})
+	w.proposeOn("task-2", worker, events.TurnStarted, "turn-1", map[string]any{"agent": "tech-lead", "hash": "h"})
+	w.exited = "task-2"
+	tick(time.Now().Add(4 * time.Second))
+	if issue := w.taskOf("task-2").LastTurn().Issue; !strings.Contains(issue, "process exited") {
+		t.Errorf("the next tick should catch task-2's crash: %q", issue)
+	}
+
+	close(w.held)
+	w.dog.Wait()
+	if len(w.typed) != 1 || w.task().LastTurn().Issue != "" {
+		t.Errorf("typed %q, task-1's issue %q", w.typed, w.task().LastTurn().Issue)
+	}
+}
+
 func TestARetriedTurnQuietForTooLongIsAStall(t *testing.T) {
 	w := newWorld(t)
 	w.limit(at(30 * time.Minute))
 	retried := time.Now().Add(31*time.Minute + time.Second)
 	w.dog.Check(retried)
+	w.dog.Wait()
 	// The resume is stamped with the real clock, so silence counts from it.
 	if issue := w.after(DefaultLimits.Silence + time.Minute); !strings.Contains(issue, "stalled") {
 		t.Errorf("after the retry the turn is watched for silence as any other: %q", issue)

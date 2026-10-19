@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -56,6 +57,7 @@ type Watchdog struct {
 	isRunning func(task string) bool        // is the task's agent process alive
 	stop      func(task string)             // end the task's session
 	typeLine  func(task, line string) error // type a line into the task's session and press Enter
+	typing    sync.WaitGroup                // carry-on prompts still being typed
 }
 
 var dog = events.Actor{Kind: events.System, ID: "watchdog"}
@@ -66,10 +68,11 @@ func New(s *store.Store, state *current.State, limits Limits, isRunning func(tas
 }
 
 // Run checks every second until ctx ends: a crash is flagged within about
-// StartGrace plus a second.
+// StartGrace plus a second. It returns once no prompt is being typed.
 func (w *Watchdog) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	defer w.Wait()
 	for {
 		select {
 		case <-ctx.Done():
@@ -134,6 +137,8 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 // checkLimited retries a turn stopped at a usage limit once it has reset:
 // the turn goes on, then its session is told to carry on. A resume that is
 // refused leaves the turn waiting, and silence after the reset is a stall.
+// The prompt is typed off the loop, since typing into a remote worker's
+// session can take half a minute; the accepted resume keeps it to one try.
 func (w *Watchdog) checkLimited(now time.Time, task *tasks.Task, turn *tasks.Turn) {
 	at := retryAt(turn)
 	if now.Before(at) {
@@ -145,10 +150,15 @@ func (w *Watchdog) checkLimited(now time.Time, task *tasks.Task, turn *tasks.Tur
 		}
 		return
 	}
-	if err := w.typeLine(task.ID, CarryOn); err != nil {
-		w.raise(task.ID, "could not type the carry-on prompt after the usage limit: "+err.Error())
-	}
+	w.typing.Go(func() {
+		if err := w.typeLine(task.ID, CarryOn); err != nil {
+			w.raise(task.ID, "could not type the carry-on prompt after the usage limit: "+err.Error())
+		}
+	})
 }
+
+// Wait returns once every carry-on prompt being typed is typed.
+func (w *Watchdog) Wait() { w.typing.Wait() }
 
 // retryAt is when a limited turn is retried: just after the engine said its
 // limit resets, or UnknownReset after it stopped when it didn't say, and
