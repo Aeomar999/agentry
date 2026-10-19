@@ -492,13 +492,14 @@ func TestAStalePatchIsSentAgainAsAFullCopy(t *testing.T) {
 	}
 }
 
-// The agent writes a byte that isn't UTF-8 in its knowledge file: the rules
-// refuse a patch carrying it, and a full copy of the text lands instead.
+// A patch with a byte that isn't UTF-8 reaches the rules: they refuse it,
+// and a full copy of the text lands instead.
 func TestAPatchThatIsNotUTF8IsSentAgainAsAFullCopy(t *testing.T) {
 	s, state := engineerAtWork(t)
 	h := NewHandler(s, state, judgeByCommand)
 	h.recordWhatWasLearned("engineer", "Use gofmt.")
-	h.recordWhatWasLearned("engineer", "Use gofmt.\nRun go vet \xff.")
+	read, _ := state.Roster().Get("engineer")
+	h.keepLearned(read, "Use gofmt.\nRun go vet \xff.")
 
 	stream, _ := s.Log(events.AgentsStream)
 	if rejected := stream[len(stream)-2]; rejected.Type != events.ProposalRejected || !strings.Contains(rejected.Text("reason"), "UTF-8") {
@@ -508,6 +509,24 @@ func TestAPatchThatIsNotUTF8IsSentAgainAsAFullCopy(t *testing.T) {
 		t.Errorf("last: %s %v by %s, want the engineer's full copy", last.Type, last.Data, last.Actor)
 	}
 	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt.\nRun go vet \uFFFD." {
+		t.Errorf("the engineer knows %q", engineer.Knowledge)
+	}
+}
+
+// The agent writes a byte that isn't UTF-8 in its knowledge file and leaves
+// it there: the knowledge keeps U+FFFD in its place, and the next turn, with
+// the same text, writes nothing.
+func TestTextThatIsNotUTF8IsKeptOnce(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Run go vet \xff.")
+	before, _ := s.Log(events.AgentsStream)
+	h.recordWhatWasLearned("engineer", "Run go vet \xff.")
+
+	if after, _ := s.Log(events.AgentsStream); len(after) != len(before) {
+		t.Errorf("the same text again added %v, want nothing", after[len(before):])
+	}
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Run go vet \uFFFD." {
 		t.Errorf("the engineer knows %q", engineer.Knowledge)
 	}
 }

@@ -205,6 +205,10 @@ func (h *Handler) recordWhatWasLearned(name, learned string) {
 	if h.state.Broken(events.AgentsStream) != nil {
 		return
 	}
+	// The stored knowledge went through JSON, which makes it valid UTF-8, so
+	// text with a bad byte would never equal it and every turn would write
+	// another full copy.
+	learned = strings.ToValidUTF8(learned, "\uFFFD")
 	agent, ok := h.state.Roster().Get(name)
 	if ok && learned != strings.TrimSpace(agent.Knowledge) {
 		h.keepLearned(agent, learned)
