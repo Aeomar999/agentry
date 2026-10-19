@@ -141,11 +141,16 @@ export function ActivityFeed(props: ActivityFeedProps) {
           ref={scroller}
           onScroll={onScroll}
           onFocus={keepFocusInView}
-          tabIndex={-1}
+          // A Tab stop, so the keyboard can scroll a turn whose rows hold nothing focusable; named,
+          // as anything focusable must be. One region for the feed, none per run.
+          tabIndex={0}
+          role="region"
+          aria-label="Activity"
           aria-busy={loading || undefined}
           // Focus and the row you came to see stop under the stuck band, and on a phone above Newest.
           // Positioned, so screen-reader-only text (absolute) is placed in it and scrolls with it, not the page.
-          className="relative h-full scroll-pt-11 scrollbar-thin overflow-y-auto max-md:scroll-pb-12"
+          // Its focus line sits inside its edge, where nothing around it clips it.
+          className="relative h-full scroll-pt-11 scrollbar-thin overflow-y-auto focus-visible:-outline-offset-1 max-md:scroll-pb-12"
         >
           {error ? (
             <LoadError error={error} onRetry={retry} />

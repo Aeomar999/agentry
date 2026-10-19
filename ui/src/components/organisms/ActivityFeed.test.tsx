@@ -68,11 +68,11 @@ describe("ActivityFeed", () => {
     ]);
   });
 
-  test("is one list of runs, one item each, with its band and its rows; no regions", () => {
+  test("is one list of runs, one item each, with its band and its rows; no regions among them", () => {
     const { container } = feed();
     const runs = container.querySelectorAll(":scope ol > li:has(> div > h3)");
     expect(runs).toHaveLength(8);
-    expect(container.querySelector("section, [role=region]")).toBeNull();
+    expect(container.querySelector("section, ol [role=region]")).toBeNull();
     const engineer = runs[4];
     expect(within(engineer as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
     expect(engineer.querySelector("h3")!.closest("div")!.className).toContain("sticky");
@@ -141,6 +141,16 @@ describe("ActivityFeed", () => {
   test("hides chips from screen readers", () => {
     const { container } = feed();
     for (const chip of container.querySelectorAll("h3 [class*='size-5']")) expect(chip.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", () => {
+    feed({ turn: "turn-2" });
+    const scroller = screen.getByRole("region", { name: "Activity" });
+    expect(scroller.className).toContain("overflow-y-auto");
+    expect(scroller.tabIndex).toBe(0);
+    scroller.scrollTop = 300;
+    fireEvent.focus(scroller);
+    expect(scroller.scrollTop).toBe(300); // focusing the scroller itself doesn't jump it
   });
 
   test("keeps screen-reader text in the tab's own scroller, its positioned box, so the page doesn't grow", () => {

@@ -51,7 +51,7 @@ function Activity() {
 const fail = (message: string) => act(async () => reads.shift()!.reject(new Error(message)));
 const answer = () => act(async () => reads.shift()!.resolve({ data: { events: [CREATED], more: false }, position: 1 }));
 const tryAgain = () => fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-const feedBox = (container: HTMLElement) => container.querySelector<HTMLElement>("[tabindex='-1']")!; // the scroller
+const feedBox = () => screen.getByRole("region", { name: "Activity" }); // the scroller
 
 describe("Activity: Try again after the events couldn't be read", () => {
   test("a failed read, then Try again, then the feed, with focus on it and no other read", async () => {
@@ -63,13 +63,13 @@ describe("Activity: Try again after the events couldn't be read", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("Loading activity…")).toBeTruthy();
     expect(container.querySelector("[aria-busy=true]")).toBeTruthy();
-    expect(document.activeElement).toBe(feedBox(container)); // not dropped on <body> with the button
+    expect(document.activeElement).toBe(feedBox()); // not dropped on <body> with the button
     expect(reads).toHaveLength(1);
 
     await answer();
     expect(screen.getByText("Make it readable")).toBeTruthy();
     expect(container.querySelector("[aria-busy=true]")).toBeNull();
-    expect(document.activeElement).toBe(feedBox(container));
+    expect(document.activeElement).toBe(feedBox());
     unmount();
   });
 
@@ -83,6 +83,12 @@ describe("Activity: Try again after the events couldn't be read", () => {
 
     await fail("503 Service Unavailable");
     expect(screen.getByRole("alert").textContent).toContain("503 Service Unavailable");
+    // Focus waited on the feed, a Tab stop; the next Tab from there is the new alert's button.
+    expect(document.activeElement).toBe(feedBox());
+    expect(feedBox().tabIndex).toBe(0);
+    const again = screen.getByRole("button", { name: "Try again" });
+    expect(feedBox().contains(again)).toBe(true);
+    expect(again.tabIndex).toBe(0);
     tryAgain();
     expect(reads).toHaveLength(1);
     await answer();
