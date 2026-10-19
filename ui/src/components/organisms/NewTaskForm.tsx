@@ -4,12 +4,13 @@ import { Button } from "@/components/atoms/Button";
 import { Input, TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
 import { Field } from "@/components/molecules/Field";
+import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
 import type { Agent, CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { FilterChip } from "@/components/molecules/FilterChip";
-import { VISIONARIES, addTeam, teamsOf } from "@/lib/teams";
+import { VISIONARIES, addTeam, missingProfilesOf, teamsOf } from "@/lib/teams";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
@@ -53,6 +54,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   const visionariesMissing = preset === VISIONARIES && agents.data !== undefined && !teams.some((t) => t.team === VISIONARIES);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
+  const [missingProfiles, setMissingProfiles] = useState<string[]>([]); // policy.toml lacks them, so the team was refused
   const [repo, setRepo] = useState("");
   const config = useResource<ServerConfig>("/api/config").data;
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
@@ -106,15 +108,18 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
     }
   }
 
-  async function addVisionaries() {
+  async function addVisionaries(addingProfiles = false) {
     setAdding(true);
     setAddError("");
     try {
-      await addTeam(VISIONARIES);
+      await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
+      setMissingProfiles([]);
       notify("success", "Added the Visionaries team", "It is picked: give it a theme or a question.");
       agents.reload();
     } catch (failure) {
-      setAddError((failure as Error).message);
+      const profiles = missingProfilesOf(failure);
+      if (profiles && !addingProfiles) setMissingProfiles(profiles);
+      else setAddError((failure as Error).message);
     }
     setAdding(false);
   }
@@ -143,11 +148,14 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
         <Banner tone="info" title="You have no Visionaries team yet">
           <div className="flex flex-col items-start gap-2">
             <span>Add it from its template: a lead and four viewpoints that argue out what to build next, and change no code.</span>
-            <Button size="sm" icon={<Users />} disabled={adding} onClick={addVisionaries}>
+            <Button size="sm" icon={<Users />} disabled={adding} onClick={() => addVisionaries()}>
               {adding ? "Adding…" : "Add the Visionaries team"}
             </Button>
           </div>
         </Banner>
+      )}
+      {visionariesMissing && missingProfiles.length > 0 && (
+        <MissingProfilesOffer team={VISIONARIES} profiles={missingProfiles} adding={adding} onAdd={() => addVisionaries(true)} />
       )}
       {visionariesMissing && addError && <Banner title="The Visionaries team wasn't added">{addError}</Banner>}
       {asksVisionaries ? (

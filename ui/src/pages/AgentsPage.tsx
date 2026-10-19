@@ -10,13 +10,14 @@ import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { Banner } from "@/components/molecules/Banner";
 import { Dialog } from "@/components/molecules/Dialog";
 import { Mono } from "@/components/molecules/Mono";
+import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
-import { api, ApiError } from "@/api/client";
+import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
-import { addTeam, teamOf, teamsOf } from "@/lib/teams";
+import { addTeam, missingProfilesOf, teamOf, teamsOf } from "@/lib/teams";
 import { profileInForce } from "@/lib/profiles";
 import type { Agent, Policy } from "@/api/types";
 import { useResource } from "@/live/use-resource";
@@ -356,20 +357,13 @@ function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
         add agents of your own with New agent.
       </p>
       {needs && (
-        <Banner tone="info" title={`This team needs ${profilesNamed(needs.profiles)}, which your policy file doesn't have`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="min-w-0 flex-1">
-              Agentry adds the default text to policy.toml, keeping a backup, then adds the {needs.team} team.
-            </span>
-            <Button size="sm" variant="primary" disabled={Boolean(busy)} onClick={() => add(needs.team, true)}>
-              {busy === needs.team
-                ? "Adding…"
-                : needs.profiles.length === 1
-                  ? "Add the profile and the team"
-                  : "Add the profiles and the team"}
-            </Button>
-          </div>
-        </Banner>
+        <MissingProfilesOffer
+          team={needs.team}
+          profiles={needs.profiles}
+          adding={busy === needs.team}
+          disabled={Boolean(busy)}
+          onAdd={() => add(needs.team, true)}
+        />
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         {templates.map((template) => {
@@ -406,18 +400,6 @@ function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
       </div>
     </div>
   );
-}
-
-// missingProfilesOf is the profiles a refused team needs, if that is why it was refused.
-function missingProfilesOf(failure: unknown): string[] | undefined {
-  if (!(failure instanceof ApiError) || failure.status !== 409) return undefined;
-  const missing = failure.body?.missingProfiles;
-  return Array.isArray(missing) && missing.length > 0 ? missing.map(String) : undefined;
-}
-
-function profilesNamed(profiles: string[]): string {
-  if (profiles.length === 1) return `the ${profiles[0]} profile`;
-  return `the ${profiles.slice(0, -1).join(", ")} and ${profiles[profiles.length - 1]} profiles`;
 }
 
 type Removing = { team: string; agents: Agent[] } | { agent: Agent };

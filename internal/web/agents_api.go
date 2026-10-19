@@ -188,7 +188,7 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]any{"missingProfiles": missing,
-			"error": "the " + template.Team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page, or add the team with addMissingProfiles"})
+			"error": "the " + template.Team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page"})
 		return
 	} else if len(missing) > 0 && !s.addProfilesFor(w, template.Team, missing, request.Hash) {
 		return
