@@ -419,6 +419,7 @@ export function TaskPage() {
                         ...(isEpic ? [] : [{ label: "Epic", value: <EpicPicker task={task} onChanged={reload} /> }]),
                         { label: "Coordinator", value: <AgentName name={task.coordinator} /> },
                         { label: "Budget", value: <LimitEditor task={task} kind="budget" onChanged={reload} /> },
+                        { label: "Turns", value: <Mono>{task.turns}</Mono> },
                         { label: "Max turns", value: <LimitEditor task={task} kind="turns" onChanged={reload} /> },
                         { label: "Created", value: dateTime(task.createdAt) },
                         { label: "Last active", value: dateTime(task.lastActiveAt) },
