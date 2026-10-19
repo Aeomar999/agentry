@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 )
 
 // ServerFile is where `agentry serve` writes how to reach it, in its data
@@ -21,13 +23,15 @@ const ServerFile = "server.json"
 
 // Where is how a server is reached: URL for the API, Page for links people
 // open (the public address, when it has one), Listen for the address it
-// listens on, which says whether other machines reach it. HTTPS says people
-// open it over https, with Agentry's own CA; URL stays plain HTTP on loopback.
+// listens on, which says whether other machines reach it. HTTPS says it is
+// served over https with Agentry's own CA, and CA is that CA's certificate,
+// PEM encoded, which the client trusts instead of the system's store.
 type Where struct {
 	URL    string `json:"url"`
 	Page   string `json:"page"`
 	Listen string `json:"listen,omitempty"`
 	HTTPS  bool   `json:"https,omitempty"`
+	CA     string `json:"ca,omitempty"`
 }
 
 // Save writes where the server is, in its data folder.
@@ -38,10 +42,12 @@ func Save(dataDir string, where Where) error {
 
 // Connection is a server this machine's Claude Code was connected to from
 // its Integrations page, and the credential it got: kept, private, in the
-// user's config folder.
+// user's config folder. CA is the server's own CA, PEM encoded, when it is
+// served over https with one.
 type Connection struct {
 	URL        string `json:"url"`
 	Credential string `json:"credential"`
+	CA         string `json:"ca,omitempty"`
 }
 
 // ConnectionFile is where the connection is kept.
@@ -74,7 +80,7 @@ func Connected() (Client, bool) {
 	if json.Unmarshal(data, &c) != nil || c.URL == "" || c.Credential == "" {
 		return Client{}, false
 	}
-	return Client{Where: Where{URL: c.URL, Page: c.URL}, Token: c.Credential}, true
+	return Client{Where: Where{URL: c.URL, Page: c.URL, CA: c.CA}, Token: c.Credential}, true
 }
 
 // Client calls one server with one token.
@@ -120,7 +126,7 @@ func (c Client) Call(method, path string, body, into any) error {
 	if timeout == 0 {
 		timeout = 15 * time.Second
 	}
-	response, err := (&http.Client{Timeout: timeout}).Do(request)
+	response, err := c.HTTP(timeout).Do(request)
 	if err != nil {
 		return fmt.Errorf("can't reach Agentry at %s: %w", c.URL, err)
 	}
@@ -133,6 +139,12 @@ func (c Client) Call(method, path string, body, into any) error {
 		return nil
 	}
 	return json.Unmarshal(content, into)
+}
+
+// HTTP is an HTTP client for the server, trusting only its CA when it has
+// one. It gives up after timeout, or never for 0.
+func (c Client) HTTP(timeout time.Duration) *http.Client {
+	return pinned.Client([]byte(c.CA), timeout)
 }
 
 // PageURL is the link to a page of Agentry, such as "/tasks/task-4".

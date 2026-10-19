@@ -72,7 +72,7 @@ func (s *Server) raw(method, path string, body io.Reader) (*http.Response, error
 		return nil, err
 	}
 	request.Header.Set("Authorization", "Bearer "+s.agentry.Token)
-	response, err := http.DefaultClient.Do(request)
+	response, err := s.agentry.HTTP(0).Do(request)
 	if err != nil {
 		return nil, err
 	}
