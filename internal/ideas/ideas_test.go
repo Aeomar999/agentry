@@ -1,11 +1,13 @@
 package ideas_test
 
 import (
+	"database/sql"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -165,6 +167,40 @@ func TestDismissKeepsYourNote(t *testing.T) {
 	}
 	if all, _ := ideas.List(s, ""); len(all) != 3 {
 		t.Errorf("every repo's ideas: %d", len(all))
+	}
+}
+
+// One idea the log can't read back, such as a row whose data isn't JSON,
+// is left out of the list; the others are still listed.
+func TestTheListSkipsAnIdeaItCantLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, err := store.Open(path, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := gitRepo(t)
+	first := suggest(t, s, repo, nil)
+	s.Close()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO events (at, stream, actor_kind, actor_id, type, data) VALUES (?, 'idea-2', 'system', 'agentry', ?, 'not json')`,
+		time.Now().UTC().Format(time.RFC3339Nano), events.IdeaSuggested)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err = store.Open(path, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	last := suggest(t, s, repo, map[string]any{"title": "Dark mode"})
+
+	list, err := ideas.List(s, "")
+	if err != nil || len(list) != 2 || list[0].ID != last || list[1].ID != first {
+		t.Errorf("the ideas but idea-2, newest first: %v %v", list, err)
 	}
 }
 

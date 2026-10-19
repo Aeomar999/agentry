@@ -1,6 +1,7 @@
 package ideas
 
 import (
+	"log/slog"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -26,7 +27,10 @@ func List(log *store.Store, repo string) ([]*Idea, error) {
 	for _, id := range slices.Backward(ids) {
 		idea, err := Load(log, id)
 		if err != nil {
-			return nil, err
+			// As the task list skips a broken task: one idea that can't be
+			// read must not empty the Ideas page.
+			slog.Error("ideas: an idea can't be loaded, so the list leaves it out", "idea", id, "err", err)
+			continue
 		}
 		if idea != nil && (repo == "" || idea.Repo == repo) {
 			list = append(list, idea)
