@@ -164,3 +164,51 @@ func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
 		t.Errorf("the epic's story list has task-4 blocked by %v, want only task-2", epic.StoryList[at].BlockedBy)
 	}
 }
+
+// An epic's story list says which of its live stories waits for a slot,
+// and still does once a sibling story is archived.
+func TestAnEpicShowsItsQueuedStory(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	worker := events.Actor{Kind: events.Worker, ID: workers.Local}
+	call(t, server, "POST", "/api/tasks", `{"title":"Shipped","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Waits","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","stories":["task-1","task-2"]}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Runs"}`)
+	// task-4 has a turn open, so with a limit of one task-2, ready for its
+	// first, waits for a slot.
+	for _, p := range []events.Proposal{
+		{Stream: "task-4", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-4", "branch": "agentry/task-4", "port": 7904}},
+		{Stream: "task-4", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "agentry/task-2", "port": 7902}},
+		{Stream: events.SettingsStream, Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.SettingsChanged, Data: map[string]any{"maxRunningTasks": 1}},
+	} {
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	queued := func(when string) {
+		t.Helper()
+		_, body := call(t, server, "GET", "/api/tasks/task-3", "")
+		var epic taskDetail
+		json.Unmarshal([]byte(body), &epic)
+		at := slices.IndexFunc(epic.StoryList, func(summary taskSummary) bool { return summary.ID == "task-2" })
+		if at < 0 {
+			t.Fatalf("%s: the epic's story list has no task-2: %s", when, body)
+		}
+		if !epic.StoryList[at].Queued {
+			t.Errorf("%s: the epic's story list doesn't show task-2 queued: %+v", when, epic.StoryList[at])
+		}
+	}
+	queued("all live")
+
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {
+		t.Fatalf("task-1 onto Done: %d %s", code, body)
+	}
+	storetest.Archive(t, s, state, "task-1")
+	queued("task-1 archived")
+}
