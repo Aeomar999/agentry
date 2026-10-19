@@ -1,8 +1,8 @@
 # Log growth: bounded startup and disk use
 
-Status: measurements only, for task-23. The design sections follow in a
-later turn. Research only: nothing in the server changes with this
-document.
+Status: measurements and design (sections 1 to 5), for task-23. The
+projections, recommendation and build plan follow in a later turn.
+Research only: nothing in the server changes with this document.
 
 ## In short
 
@@ -131,6 +131,11 @@ The workers are not: `Worker.credential` (the hash of its credential) is
 unexported and is lost, and so are the unexported `invites` of
 `workers.Roster` and `connections.Roster`. A real snapshot must carry all
 of them, so each package needs its own exported snapshot form.
+`agents.Agent` has one more, `untouched` (`internal/agents/agent.go`), and
+`connections.Connection` has its own `credential`
+(`internal/connections/connections.go`). The agents' round trip came out
+equal only because no agent in the copy is still untouched (below); with
+one, it would not have.
 
 Where the snapshot's bytes are (JSON):
 
@@ -254,6 +259,52 @@ database while it runs. The database has `auto_vacuum` off (0), so
 `PRAGMA incremental_vacuum` is not available without first rebuilding
 with `auto_vacuum = INCREMENTAL`.
 
+### Measured for the design
+
+From the later copy (24,180 events, a 27.8 MB file, 22.9 MB of data),
+with the cases sections 2 to 5 needed added to the same benchmark:
+
+| | |
+|---|---|
+| Agents in the roster | 17, none still `untouched` |
+| Knowledge files now | 9.9 KB mean, 59 KB largest |
+| Snapshot, done tasks as summaries (gob) | 1.47 MB (6 open tasks, 18 summaries), decoded in 1.4 ms; 0.43 MB gzipped |
+| Writing the full 9.4 MB gob snapshot atomically (temporary file, fsync, rename, fsync the folder) | 3.2 ms |
+| Hashing the 26 MB `agentry` binary (`sha256sum`, the whole process) | 70 ms |
+| Every text over 1 KB gzipped inside its row, as base64 | data 62.6% of what it is |
+
+Knowledge versions stored as diffs, with a full copy now and then (line
+diffs as above; "most read" is a full copy plus the diffs after it, the
+bytes needed to rebuild one version):
+
+| Knowledge stored as | Bytes | Of 13.18 MB | Longest chain | Most read |
+|---|---|---|---|---|
+| Whole, as today | 13.18 MB | 100% | 0 | 59 KB |
+| A full copy every 8 versions | 1.97 MB | 15.0% | 7 | 65 KB |
+| A full copy every 32 versions | 0.77 MB | 5.8% | 31 | 85 KB |
+| A full copy every 128 versions | 0.42 MB | 3.2% | 127 | 168 KB |
+| A full copy when the diffs since the last outgrow the text | 0.62 MB | 4.7% | 100 | 118 KB |
+| One hunk per version (the common head and tail kept, the middle stored), no full copies | 0.35 MB | 2.7% | all | |
+
+One hunk does as well as a line diff (2.7% against 2.8%): an agent changes
+its file in one place per turn, mostly at the end. Plans gain nothing from
+either: one hunk keeps 57.8% of their 1.78 MB, and the cadence of full
+copies changes nothing, because a turn's plan has at most 10 versions and
+most plan events are a turn's first.
+
+Rebuilt database files, as in the table above:
+
+| | Log file | Beside it |
+|---|---|---|
+| As it is | 27.78 MB | |
+| Knowledge as one hunk per version | 14.46 MB | |
+| Knowledge as one hunk, done tasks archived | 2.64 MB | 2.28 MB of archive blobs |
+
+The archive blobs: each of the 18 done tasks' rows, rejections included,
+as JSON lines, gzipped one task to a blob: 10.19 MB becomes 2.28 MB
+(22.3%). The largest, `task-8`, is 4.84 MB raw and 1.08 MB gzipped, and
+gunzips in 17 ms.
+
 ### Projection inputs
 
 The numbers the 1, 10 and 100 GB projections will use, all from the
@@ -331,3 +382,686 @@ copy 8 minutes later had 762 more events (24,180) and a 27.8 MB file, and
 every share above moved by under 3 points: knowledge diffs kept 2.8%, done
 tasks held 35.6% of the bytes, and the archived, diffed live log was
 1.7 MB.
+
+The cases for sections 2 to 5 are `benchDesign` in the same file; they
+ran on the later copy, and their output is kept beside it in
+`.agentry/files/bench/log-growth-run-2.txt`.
+
+## 2. Snapshots of the read model
+
+`read-model.md` left snapshots out while a replay took 0.2 s, and said
+they could come later under the same `current.State` API if startup ever
+passed a few seconds. At 7.8 s per GB of file (section 1), a year of busy
+days (about 4 GB) would take about 30 s to start, so they are needed. This
+section adds them without changing that API.
+
+One promise changes in wording, not in substance. `internal/tasks/task.go`
+says "The state is never stored, so it can never disagree with what
+happened", and `read-model.md` section 3 counts that against snapshots.
+With them the state is stored, but only as a cache that is thrown away
+whenever it might disagree: the log stays the only truth, and a full
+replay stays the definition of the state.
+
+### Where it lives
+
+| | A file beside the database | A table in the database |
+|---|---|---|
+| Atomic | temporary file, fsync, rename, fsync the folder | a transaction |
+| Writing it | 3.2 ms for 9.4 MB, outside SQLite | the whole snapshot through the WAL and again at checkpoint, on the one write connection, so proposals wait |
+| The log's file | unchanged | a table outside the append-only triggers, rewritten beside the truth; the file churns by a snapshot per write |
+| Backups and `VACUUM INTO` copies | not carried | carried, so a restore brings its own snapshot |
+| Starting over | delete the file | a `DELETE` |
+
+**Pick: a file**, `state.snapshot` in the data folder beside `agentry.db`,
+mode 0600, since it holds the same texts as the log. Not being carried by
+a backup is no loss: every snapshot is checked against the log before use
+(the anchor, below), and a missing one costs one replay.
+
+### Format
+
+The state has unexported fields an encoder can't reach:
+`tasks.Task.collected` and `storyNews` (`internal/tasks/task.go`),
+`agents.Agent.untouched` (`internal/agents/agent.go`),
+`workers.Worker.credential` and `workers.Roster.invites`
+(`internal/workers/workers.go`), and `connections.Connection.credential`
+and `connections.Roster.invites` (`internal/connections/connections.go`).
+Each one changes behaviour if lost: `untouched` decides whether a new
+default prompt replaces an agent's (`internal/agents/defaults.go`), and a
+lost `credential` locks a worker out.
+
+| | Per-package saved forms | One encoder using reflection and `unsafe` (as the benchmark does) | Export the fields |
+|---|---|---|---|
+| What | a `Saved` type and a `Save`, `Restore` pair in each package | reads and sets unexported fields from outside | rename them |
+| A field added later | a reflection test fails until the form has it | carried, by accident | carried |
+| Cost | one struct and two short functions per package | `unsafe` in production code; a rename breaks it silently | anyone could set a credential or `untouched` |
+
+**Pick: saved forms**, each beside its type, so a field and its saved
+twin change in the same file:
+
+```go
+// Saved is a task as a snapshot keeps it: every field, exported.
+type Saved struct {
+	Task      Task            // its exported fields; the encoder skips the rest
+	Collected map[string]bool // collected
+	StoryNews bool            // storyNews
+}
+
+func (t *Task) Save() Saved
+func Restore(s Saved) *Task
+```
+
+`agents.Saved` adds `Untouched` to each agent; `workers.Saved` and
+`connections.Saved` add each `Credential` and the invites (code, expiry,
+used). A test in each package walks the type with reflection and fails if
+any field, exported or not, has no counterpart, then round-trips a value
+with every field set (task-21's `fill` helper in
+`internal/tasks/clone_test.go` does the setting) and requires it
+`reflect.DeepEqual` to the original.
+
+Encoding, on the later copy (section 1):
+
+| | JSON | gob |
+|---|---|---|
+| Every task whole, as today | 10.6 MB, encoded in 20 ms, decoded in 28 ms | 9.4 MB, 7.6 ms, 4.3 ms |
+| Done tasks as summaries (section 4) | about 1.7 MB and a few ms, scaled from gob | 1.47 MB, decoded in 1.4 ms |
+| `nil` and empty | kept apart (`null`, `[]`) | both decode as `nil` |
+| Read by a person | `jq` | no |
+
+gzip would save 8 MB on the whole state and about 1 MB on the summarised
+one, and costs 31 to 34 ms on every read and about 70 ms on every write.
+
+**Pick: JSON, not compressed.** Its decode is under 30 ms even with every
+done task in it, and it keeps `nil` and empty apart, which
+`reflect.DeepEqual`, and so the equivalence test, does not forgive. gob is
+the switch to make if the open work's state ever takes 100 ms to decode.
+
+The file is one header line, then the body:
+
+```text
+{"format":1,"build":"<sha256 of the binary>","position":24180,"anchor":"<sha256 of row 24180>","size":10589375,"sha256":"<sha256 of the body>"}
+{"tasks":[...],"archived":[...],"roster":[...],"workers":{...},"connections":{...}}
+```
+
+The header is checked before the body is read, so a snapshot from other
+code is turned down without decoding megabytes.
+
+### The version tag
+
+| | A constant bumped by hand | A hash of the apply code's source | The build: a hash of the running binary |
+|---|---|---|---|
+| A change nobody marks | a stale snapshot loads silently; a golden test catches only what its fixture reaches | apply leans on helpers in other packages (the `events` accessors, `tasks` helpers), so which files count is itself a list to keep | can't happen |
+| Snapshots kept across an upgrade | yes, when nothing changed | yes, when no listed file changed | no: each new binary replays once |
+| Cost | a test and a habit | a `go generate` step | hashing the binary at startup: 70 ms for 26 MB with `sha256sum`, while the database opens |
+
+The VCS revision from `debug.ReadBuildInfo` is not enough: two builds of
+the same uncommitted tree share it.
+
+**Pick: the binary's hash.** It costs one full replay after each upgrade
+or rebuild, and archiving (section 4) keeps that replay small, because the
+live log then holds only open and recent work. There is no bump to forget,
+so no test has to catch one; a test checks that a snapshot with another
+`build` is ignored. `format` changes only if the header itself does.
+
+### When it is written
+
+- **Trigger:** a goroutine in `current`, woken as events are applied.
+  It writes when 10,000 events have been applied since the last snapshot,
+  or when 10 minutes have passed with at least one event, at a clean
+  shutdown, and after each archiving round (section 4), which shrinks the
+  state.
+- **Never on the request path, and never under `Store.mu`.** It takes the
+  state's read lock only to copy the map of task pointers, the rosters and
+  the position. Copy on write (`read-model.md`, "Locking") means nothing
+  it then encodes can change, so it encodes and writes with no lock held.
+  One write at a time; a failed write is logged and leaves the old file.
+- **Cost now:** about 25 ms of CPU (encode 20 ms, write 3.2 ms) per
+  10 MB, about every 3 busy hours at today's rate. With done tasks as
+  summaries, a few ms.
+- **The tail it can leave:** at most 10,000 events or 10 minutes, so at
+  most about 90 ms of replay (8.9 µs per event, section 1).
+
+### Atomic writes
+
+1. `os.CreateTemp` in the data folder (`state.snapshot.tmp-*`), the
+   header and body written, `Sync`, `Close`.
+2. `os.Rename` over `state.snapshot`.
+3. Open the folder and `Sync` it, so the rename itself survives a power
+   cut (Linux and macOS; Windows can't sync a folder, and its rename
+   replaces in place).
+4. At startup, delete any leftover `state.snapshot.tmp-*`.
+
+The header's `size` and `sha256` catch a torn file anyway, if a disk lies
+about fsync.
+
+### Loading it, and every fallback
+
+At `Open`: read the header; check `format` and `build`; read row
+`position` and compare its hash with `anchor`; read the body and check
+`size` and `sha256`; decode; load the state from it; then apply every
+event after `position` in order (`After`, by primary key, so the cost is
+the tail, not the log), and call `Loaded` with the last position. The
+tail is applied in place, with no clone per event: nothing has read the
+decoded state yet.
+
+| Case | Found by | Then |
+|---|---|---|
+| Missing | no file | full replay |
+| Corrupt or torn | a header that doesn't parse, `size` or `sha256` wrong, a decode error | full replay; the file is kept once as `state.snapshot.bad` |
+| From other code | `build` differs | full replay |
+| Ahead of the log, as after restoring an older database | no row at `position` | full replay |
+| From another log at the same position, as after a restore that has since grown past it | the row's hash differs from `anchor` | full replay |
+| Its anchor row archived since (section 4) | no row at `position` | full replay; rare, because a snapshot is written after every archiving round |
+| The tail's apply panics | `guard` in `current` | throw the loaded state away and replay fully; if that panics too, the stream is broken, as today |
+| Older than the log | `position` below the last | the normal case: apply the tail |
+
+Every fallback logs why, and a full replay at startup writes a fresh
+snapshot straight after, in the background. The full replay is
+`read-model.md`'s `Open`, which groups the whole table by stream: it
+scans every row, so its cost is the live log's size, and archiving is what
+keeps that bounded.
+
+### The equivalence test
+
+`current.Equal` (task-21's, `reflect.DeepEqual` with unexported fields
+included) against a full replay is the judge, as in `read-model.md`.
+
+1. **Every cut of the fixture logs.** For each log the suite builds
+   (every scenario's store, `read-model.md` test 2), task-21's
+   `everyEvent()` log and the seeded random sequences (test 4): at every
+   position, build the state of the events up to it, write a snapshot,
+   load it back as `Open` would, apply the rest, and require it `Equal` to
+   a full replay. Logs of a few thousand events make that a few seconds.
+2. **The real copy**, when `AGENTRY_BENCH_DB` is set: cuts every 500
+   positions, about 50 of them, plus the first event of each type.
+3. **Every fallback** in the table: a truncated file, one byte of the body
+   flipped, another `build`, a position past the end, a missing anchor
+   row, and a copy of the log with one row changed under the anchor. Each
+   must load `Equal` to a full replay and log its reason.
+4. **Sabotage checks.** Leaving `StoryNews` out of `tasks.Saved` (with a
+   fixture where a story finishes while the coordinator decides,
+   `internal/tasks/apply.go` line 145), leaving out `Worker.credential`,
+   or decoding the body with gob, must each fail test 1.
+5. **The forms are complete:** the reflection test in each package
+   (above).
+
+## 3. Slimmer events
+
+What is big (section 1): knowledge 57.6% of the bytes, commands 17%,
+reports 9%, plans 8%, instructions 4%. Knowledge is the odd one out
+twice over. It is the only big text in no task (the `agents` stream), so
+archiving can't move it. And it is the only one copied again and again:
+each `agent.learned` holds the whole file
+(`agents.Agent.Learned`, `internal/agents/agent.go`, written by
+`hooks.recordWhatWasLearned`, `internal/hooks/handler.go`), of which 2.7%
+is new. The task texts are mostly unique (under 1% exact repeats, plans
+43%) and sit in task streams, which archiving moves out and gzips to 22%
+(section 4).
+
+| | (a) Hash references into the content store | (b) Diffs of versions | (c) A bound on the knowledge file | (d) Compression inside the rows |
+|---|---|---|---|---|
+| Knowledge, 13.18 MB | 12.6 MB of unique blobs: moved, hardly saved | 0.62 MB with a full copy when the diffs outgrow the text (4.7%); 0.35 MB as one hunk with no full copies | still a whole copy per change; caps only the largest (59 KB) | part of the 62.6% below |
+| Task texts | moved about one for one; in 4 KB blocks, more disk (23 MB for 18.4 MB of text over 1 KB) | plans 58%; commands, reports and instructions nothing | none | part of the 62.6% below |
+| The log file | 6.3 MB plus 18.4 MB of blobs (texts over 1 KB moved) | 14.46 MB (knowledge only), from 27.78 MB | | data 62.6% of today's |
+| Reading | a file opened per text: 2,173 of them | replay applies each patch to the version before | none | a gunzip per text, at every replay |
+| New code | references, fetching, collection rules | one patch shape and its apply; the knowledge history rebuilt | a check when learning | encoding per field; rows no longer readable in `sqlite3` |
+
+**Pick: (b), for knowledge only, as one hunk.** A changed knowledge file
+is stored as what it keeps of the version before and what it puts in
+between:
+
+```json
+{"name": "engineer", "head": 9120, "tail": 0, "middle": "<the new lines>", "sha256": "<of the whole new text>"}
+```
+
+The new text is `old[:head] + middle + old[len(old)-tail:]`. One hunk
+measured as small as a line diff (2.7% against 2.8%), needs no diff
+library (Go's standard library has none) and no LCS, and applies with one
+slice. The writer sends a full copy, the old shape `{"name", "knowledge"}`,
+for an agent's first version and whenever the middles since its last full
+copy add up to more than the text. Measured with line diffs, that keeps
+0.62 MB of 13.18 MB (4.7%) and bounds a rebuild to the text plus as much
+again (118 KB at most); one hunk is within a few percent of the line
+diffs, so the same holds.
+
+- **Who writes it:** `hooks.recordWhatWasLearned` already has the old
+  knowledge (from the roster) and the new; it works out `head` and `tail`
+  and proposes.
+- **The check:** the rules, under the store's lock, apply the patch to
+  the roster's current knowledge and refuse it if the result's hash is not
+  `sha256`. A human editing the file on the page between the hook's read
+  and its proposal makes the hook's patch fail, and the hook sends a full
+  copy instead.
+- **Apply:** a mismatch can then only be a bug. It panics, and the
+  `agents` stream is broken as any panicking apply is (`guard` in
+  `current`); the real-copy replay test catches it before a release.
+- **Plans, commands, reports and instructions stay inline.** They are task
+  texts: archiving takes them out of the live log and gzips them, which
+  beats anything here. Plans would keep 58% as diffs, the rest 100%.
+
+Why not the others: (a) moves bytes rather than removing them, gives
+almost every event a reference that collection must honour, and opens a
+file for every turn and action read; the content store is used for one
+thing in this design, the archive (section 4). (d) keeps 62.6%, worse than
+(b) on knowledge by a factor of ten, and makes the rows opaque. (c) is a
+question about briefs, not disk (below).
+
+### Old events keep replaying
+
+No event is ever rewritten for this. The shape says which kind an
+`agent.learned` is: with `knowledge`, a full copy (every event written so
+far); with `middle`, a patch. `agents.FromEvents` and the roster's `apply`
+handle both, and so does `web.knowledgeHistory`
+(`internal/web/agents_api.go`), which today lists each event's
+`knowledge` and would rebuild each version walking forward from the
+stream's start (461 `agent.learned` events today). The catalogue entry
+(`internal/events/catalogue.go`) needs only `name` already, so the patch
+shape passes the shape check without a new type. No version number is
+needed while the shapes differ by field.
+
+### Blobs are never collected while an event names them
+
+Nothing deletes from the content store today: `sharedfiles.Disk`
+(`internal/sharedfiles/blobs.go`) has `Put`, `Has` and `Open`, no delete.
+The design keeps it that way as a rule: a blob goes only through the
+privacy path (section 5), which first removes or rewrites, under the
+store's lock, every event that names it. If collection is ever added, it
+marks every hash named by a live event, by an archive marker and by the
+events inside each archive blob (`file.added` carries hashes,
+`internal/tasks/files.go`), and sweeps only files older than a day, so a
+blob put for an event not yet committed survives.
+
+The archive (section 4) needs the blob on disk before the event that
+names it commits. `Disk.Put` renames into place but does not fsync; the
+archiver needs a put that syncs the file and its folder first.
+
+### What bounds the agents stream
+
+It belongs to no task, so archiving can't touch it, and a snapshot only
+stops it being replayed at each start. Its growth is knowledge, and (b)
+takes that from 13.18 MB in 2.9 days, and rising with each file's length,
+to 0.62 MB: about 0.2 MB a day, 80 MB a year, growing with how much the
+agents write, not with how long their files are. The full-replay fallback
+reads it once: about 0.6 s for a year's worth at 7.8 s per GB.
+
+A bound on the file itself, (c), is a separate choice: the largest is
+59 KB, about 15,000 tokens in every brief that agent gets. With diffs it
+no longer matters for disk, so it is left to the user (open question):
+for example, telling the agent in its brief when its file passes 32 KB.
+
+### The saving on the real data
+
+On the later copy:
+
+| | Live log file | Archive blobs |
+|---|---|---|
+| As it is | 27.78 MB | |
+| Knowledge as one hunk per version | 14.46 MB (52%) | |
+| And done tasks archived (section 4) | 2.64 MB (9.5%) | 2.28 MB |
+
+A busy day falls from 10 to 12 MB to about 4.5 to 5 MB (the 42% that is
+not knowledge), and that part leaves the live log once its tasks are
+archived, at 22% of its size.
+
+## 4. Archiving finished tasks
+
+| | (a) A `task.archived` event, and the task's rows moved out | (b) The log rotated into time segments | (c) One file: a summary event, the rows stay |
+|---|---|---|---|
+| The live log | open and recent work, plus one marker per archived task | the current segment; but an open task's early events sit in old segments | everything, for ever |
+| Startup without a snapshot | replays the live log | replays every segment that holds an open task's events, so in practice all | must find the markers first, then skip those streams |
+| Memory | a summary per archived task | every task, unless summarised as well | a summary per archived task |
+| Disk | archived rows gzipped to 22% | old segments could be compressed, but none can be dropped while it holds any open task's event | nothing saved |
+| Append-only | one delete, allowed only by the marker, in the trigger itself | no deletes; positions split across files | unchanged |
+| An archived task's history | one blob | a query across segments | its rows, by the index |
+| Erasing a task (section 5) | delete one blob | rewrite a segment | rewrite rows |
+
+**Pick: (a).** (c) is its first half: the marker and the summary alone
+already bound memory and the work at startup; the move adds the bound on
+disk. (b) bounds each file but not what startup reads, since open work
+spans segments.
+
+Where the moved rows go:
+
+| | A second SQLite file, `archive.db` | One gzipped blob per task, in the content store |
+|---|---|---|
+| Size | the rows one for one (10.19 MB for the 18 done tasks) | 2.28 MB (22.3%) |
+| Reading one task | by index | gunzip one blob: 17 ms for the largest |
+| Checked by | counting rows | its hash, which is its name |
+| Erasing a task | a delete there too, with its own triggers | delete one file |
+| Kept with | a second database to migrate, back up and vacuum | the shared files, already backed up with the data folder |
+
+**Pick: a blob per task**, in the same store as the shared files
+(`sharedfiles.Disk`, `<data folder>/files`, `cmd/agentry/serve.go`): the
+task's rows up to the marker, rejections included, as JSON lines
+(position, time, actor, type, correlation, data), gzipped.
+
+### How it fits "the log is the truth"
+
+The archive is part of the log. The marker, appended to the task's own
+stream, says exactly where its rows went:
+
+```json
+{"through": 21877, "count": 7726, "archive": "<sha256 of the blob>", "created": 112, "summary": {"title": "...", "status": "done", "...": "..."}}
+```
+
+Rows keep their positions inside the blob. The schema's `AUTOINCREMENT`
+(`internal/store/store.go`) means SQLite never hands out a deleted
+position again, so a position names one event for ever. A full read of a
+stream is the blob's rows up to `through` plus the live rows after; no
+event is lost, only moved.
+
+The delete trigger stays in the database, and allows exactly one thing:
+deleting rows that a marker covers, unless the task has been unarchived
+since.
+
+```sql
+CREATE TRIGGER events_no_delete BEFORE DELETE ON events
+WHEN NOT EXISTS (
+	SELECT 1 FROM events m
+	WHERE m.stream = OLD.stream AND m.type = 'task.archived'
+	  AND OLD.position <= json_extract(m.data, '$.through')
+	  AND NOT EXISTS (SELECT 1 FROM events u WHERE u.stream = m.stream
+	                  AND u.type = 'task.unarchived' AND u.position > m.position))
+BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+```
+
+So "append-only" still does not depend on the code remembering: a stray
+`DELETE` is refused by SQLite as today. Changing the trigger is the
+schema's first migration: `Open` drops and recreates it in one
+transaction and records `PRAGMA user_version = 1`. An older Agentry
+opening the database keeps the new trigger (`CREATE TRIGGER IF NOT
+EXISTS`), ignores the unknown marker in its replay, and shows archived
+tasks as gone, since their `task.created` rows are; nothing else breaks.
+
+### The move, step by step
+
+An archiver goroutine (`internal/archive`) runs at startup and then
+hourly, a task at a time:
+
+1. **Choose:** tasks done for at least the age (below), not archived yet,
+   and not an epic with a story still in the state (below).
+2. **Write the blob:** read the stream with `Log`, rejections included,
+   up to `through`, its last position now. Encode, gzip (Go's gzip writes
+   no time into its header, so the same rows always make the same bytes),
+   put it in the store with the file and folder synced.
+3. **Append the marker:** propose `task.archived`. The rules, under the
+   store's lock, require the task done for the age, its last position
+   still `through` (anything since and the marker is refused, to be tried
+   next round), and the blob present (`Blobs.Has`). The state applies it:
+   the task becomes its summary.
+4. **Delete:** in one transaction, `DELETE FROM events WHERE stream = ?
+   AND position <= ?`. If SQLite's `changes()` is not `count`, roll back
+   and log; the blob and the marker stay, and reads still work (below).
+5. **Give the space back:** `PRAGMA incremental_vacuum` and a WAL
+   checkpoint (below), and a new snapshot after the round.
+
+Each step checks before it acts, so a restart redoes only what is
+missing:
+
+| Crash after | What is left | At restart |
+|---|---|---|
+| Step 2 | a blob no event names | the next round makes the same bytes; `Put` finds them there |
+| Step 3 | the marker, with the rows still live | the archiver finds markers whose rows are still there and does step 4 |
+| During step 4 | the transaction rolled back | the same |
+
+Until step 4 commits, a task's rows are both live and in the blob.
+Readers of an archived task's history merge the two by position, so they
+see each event once either way.
+
+### The age
+
+A server option, `archive after`, 30 days by default; 0 turns archiving
+off. It counts from the `task.done` event. `tasks.Task` has `IsDone` but
+not when (`internal/tasks/apply.go`, the `task.done` case), so it gains
+`DoneAt`, cleared on reopening. Nothing in the copy is even 3 days done
+yet (section 1), so with the default the first task is archived a month
+after it is done, and the Done column keeps a month of whole tasks.
+
+### Opening an archived task's history
+
+`GET /api/tasks/{id}` (`web.showTask`), and through it the MCP
+`show_task` tool (`internal/mcp/tools.go`, which calls that endpoint):
+when the state holds only a summary, the handler opens the marker's blob
+(`Blobs.Open`), gunzips it (17 ms for the largest task), adds any live rows
+up to the marker (only a crash leaves those), folds them with
+`tasks.FromEvents`, and returns the same detail with `archived: true` and
+when it was archived. A small cache of the last few tasks opened, keyed by
+stream and marker, keeps the Events tab and repeated MCP calls from
+gunzipping again. Nothing goes into `current.State`; the folded task is
+dropped after the reply. Every other reader of a task's events goes
+through one store function that does the same merge, so none reads the
+live rows alone by mistake.
+
+The page marks the task as archived; Reopen stays where it is and does the
+next step first.
+
+### Reopening an archived task
+
+The rules refuse every event on an archived task except
+`task.unarchived`. Reopening one is three steps:
+
+1. **Rows back:** `INSERT OR IGNORE` the blob's rows into `events` with
+   their own positions, which are free (`AUTOINCREMENT` never reused
+   them), in one transaction, counting them.
+2. **`task.unarchived`**, naming the blob. From here the trigger refuses
+   deletes of those rows again. The state applies it by folding the
+   restored stream, read through the store under its lock: one task's
+   replay, about 40 ms for the largest (`read-model.md`, task-8).
+3. **`task.reopened`**, as today.
+
+Readers that follow the log by position (`After`, the coordinator's
+`Reader`, `/api/changes`) never see the restored rows, whose positions
+they passed long ago, only `task.unarchived`. That is right: they are not
+new events. A task archived a second time gets a new blob with every row;
+the first blob stays, named by the first marker, which is now among the
+rows in the second.
+
+### Epics and their stories
+
+What crosses tasks (`internal/tasks/apply.go`): an epic's `Stories` and
+`StoriesDone`, and each story's summary copied into the epic's own
+`task.story_done` events; a story's `Epic` and `After`. The epic's page
+reads its stories' states (`read-model.md` section 2).
+
+- **A story is archived on its own age.** The epic's page lists it from
+  its summary, which keeps its title, status and done summary.
+- **An epic is archived only when it is done for the age and none of its
+  stories is still in the state** (each is archived, or has been erased).
+  The user may close an epic with stories still open
+  (`closedByYouIfAnEpic`, `internal/rules/task_rules.go`), so an epic can
+  wait longer than its own age: until its last story is done and archived.
+- **Before or after:** each is its own stream with its own marker, so the
+  order is free. An open story whose `After` names an archived story reads
+  "done" from the summary.
+- **Reopening a story of an archived epic** unarchives the epic first, in
+  the same request: a reopened story's news goes to the epic's stream
+  (`task.story_done`), which an archived epic would refuse.
+- Across teams: a task waiting on another team's (`WaitingOn`) is open, so
+  never archived; a done request whose asker is archived still posts
+  `task.request_answered`, and that asker is unarchived first, as above.
+
+### Done tasks leave the state, not just the disk
+
+`read-model.md` put a task at about 60 KB of heap ("Risks and open
+points"). Measured, the state is 9.5 MB for 24 tasks, about 400 KB each,
+because it keeps every action's command and every turn's plan and report
+(section 1). Kept for ever that is about 350 MB of heap per GB of file.
+
+An archived task is in the state as a `tasks.Summary`, the fields
+`web.summaryOf` (`internal/web/views.go`) reads today: id, title, repo,
+status, kind, epic and story counts, labels, rank, budget and tokens,
+created and last active, plus the done summary. About 630 bytes as JSON.
+`current.State` keeps them in `archived map[string]tasks.Summary`;
+`Task(id)` returns nil and `ErrArchived` for one; a new `Summaries()`
+serves the list. Task ids stay in creation order and are never reused:
+the marker's `created` is the `task.created` position the state orders by,
+and the next id counts archived tasks too.
+
+At scale: a task is about 1.2 MB of file today, so 1 GB of history is
+about 900 tasks, and 100 GB about 90,000: some 60 MB of summaries in
+memory and in the list's JSON. The list will then have to page archived
+tasks (open question).
+
+### VACUUM
+
+A delete frees pages inside the file but does not shrink it; `VACUUM`
+gives the space back, at about 5 s per GB, with an exclusive lock (no
+proposals meanwhile) and free disk as big as what it copies (section 1).
+
+| | Never | A full `VACUUM` now and then | `auto_vacuum = INCREMENTAL` |
+|---|---|---|---|
+| File size | stays at its high-water mark; new events reuse the freed pages, so it stops growing once archiving keeps pace | shrinks to the live data | shrinks after each round |
+| Cost | none | about 5 s per GB of live data, everything waiting | `PRAGMA incremental_vacuum` after each round, in proportion to the pages freed |
+| To switch | | | one full `VACUUM` after setting the pragma: SQLite changes the mode of an existing database only that way |
+
+**Pick: incremental.** The release that adds archiving sets the pragma,
+runs the first archiving round, and only then runs the one `VACUUM`:
+`VACUUM` copies only the live rows, so it is cheapest once the done tasks
+are gone. If the disk lacks room for the copy, it logs that and tries
+again at the next start. After each round: `PRAGMA incremental_vacuum`,
+then `PRAGMA wal_checkpoint(TRUNCATE)`, so the WAL does not keep the old
+pages either.
+
+## 5. Deleting data for privacy
+
+Two cases: removing a whole task (work for someone who asks for it gone,
+or a mistake), and removing one secret pasted into a chat, a command or a
+knowledge file.
+
+A text can be in more places than its event: the live rows; the archive
+blobs; the snapshot; the database's free pages and its WAL; copies in
+other streams (a story's summary in its epic's `task.story_done`, a
+request's in its asker's `task.request_answered`, a coordinator's words in
+`task.assigned`, in `internal/tasks/apply.go`); the task's shared files;
+its worktree and branch, and any remote they were pushed to; the
+engine's own session files outside Agentry; and backups.
+
+| | Redaction events and an allowed rewrite | Crypto-shredding | Deleting blobs |
+|---|---|---|---|
+| How | an event names the rows; the triggers allow rewriting or deleting exactly those | every text encrypted with a key per task (or per text) in a key table; erasing deletes the key | texts live in the content store; erasing deletes the blob, and events keep a hash that leads nowhere |
+| Reaches | anything in the database and the archive | anything encrypted, and backups too if the keys are kept apart from them | only texts in blobs: the archives, not the short commands where secrets usually are |
+| Cost | the gated triggers, a rewrite path, `secure_delete` | encrypting and decrypting on every read and replay; gzip and repeats gain nothing on encrypted text; a key file whose loss loses the log | nothing more than the store |
+
+**Pick: redaction events with an allowed rewrite** for rows, and deleting
+blobs for archives. Crypto-shredding is the only way to reach backups,
+but for one user's own machine its key handling costs more than it buys,
+and a lost key file would lose the log.
+
+So yes, deletion is possible under append-only, in the same way as
+archiving: the database allows exactly what an event in the log names,
+and the log records that it happened (who, when, why, which positions),
+never what was removed.
+
+### Removing a whole task
+
+1. Stop its turn if one is running.
+2. Propose `task.erased` (who, why, `through`, the archive blobs). It is
+   the stream's last accepted event: the rules refuse anything after it.
+   The state keeps a stub, so the id is never reused and the list can say
+   "task-12 was erased on 3 November".
+3. Delete every row of the stream up to `through`. The delete trigger
+   gets a second allowed case, a `task.erased` marker, which nothing
+   reverses. Run it with `PRAGMA secure_delete = ON`, so the freed pages
+   are zeroed, then checkpoint the WAL with `TRUNCATE` and run
+   `incremental_vacuum`.
+4. Delete its archive blobs, and the blobs of its shared files that no
+   other task's event names.
+5. Redact the copies in other streams: the epic's `task.story_done`, the
+   asker's `task.request_answered` (below).
+6. Write a new snapshot at once, and delete `state.snapshot.bad` if there
+   is one.
+7. Offer to remove its worktree and branch; Agentry can't reach a remote
+   it was pushed to.
+
+### Removing a secret
+
+The user marks the text on the page: a command, a message, a report. The
+server finds the rows of the task (or the whole log, for a secret pasted
+widely) whose `data` contains it, and shows the user the count first.
+
+1. Propose `event.redacted` on the same stream, with the positions, the
+   fields and the length removed. Never the text, and never its hash: a
+   short secret's hash can be guessed.
+2. Rewrite each named row in one transaction, the secret replaced by
+   `[redacted]` and the rest of the text kept. The update trigger allows
+   an `UPDATE` only of `data`, only of a row that an `event.redacted` later
+   in the same stream names:
+
+   ```sql
+   CREATE TRIGGER events_no_update BEFORE UPDATE ON events
+   WHEN NEW.position IS NOT OLD.position OR NEW.at IS NOT OLD.at
+     OR NEW.stream IS NOT OLD.stream OR NEW.type IS NOT OLD.type
+     OR NEW.actor_kind IS NOT OLD.actor_kind OR NEW.actor_id IS NOT OLD.actor_id
+     OR NEW.correlation IS NOT OLD.correlation
+     OR NOT EXISTS (SELECT 1 FROM events r, json_each(r.data, '$.positions') p
+                    WHERE r.stream = OLD.stream AND r.type = 'event.redacted'
+                      AND r.position > OLD.position AND p.value = OLD.position)
+   BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+   ```
+
+   With `secure_delete` on, then a WAL checkpoint with `TRUNCATE`, since
+   the old page is in the WAL too.
+3. The state applies `event.redacted` by folding the stream again from
+   the rewritten rows, as for `task.unarchived`, and a new snapshot is
+   written at once.
+4. **A secret in a knowledge file** is in every version after it was
+   written. The path first proposes a full copy of the current file
+   without it, then rewrites each earlier version that holds it as a full
+   copy of its redacted text, from the first such version up to that new
+   one. A patch's `head` and `tail` would be wrong against a redacted
+   base; full copies leave nothing to mismatch, and versions before the
+   secret are untouched.
+5. **A secret in an archived task:** unarchive it, redact, archive it
+   again (a new blob), then delete the old blob. The `event.redacted` names
+   the deleted blob, so a reader that meets the old marker knows the blob
+   is gone on purpose.
+
+### Snapshots, archives, backups and worktrees
+
+- **Snapshots** are rewritten at once after any erasure or redaction.
+  The old file's blocks may stay on the disk until reused; a filesystem
+  can't promise more.
+- **Archives** are handled above: an erased task's blobs are deleted, a
+  redacted one is re-archived.
+- **Backups** of `agentry.db` and the data folder are out of Agentry's
+  reach. The page says so after an erasure, with the time, so the user
+  knows which backups still hold it.
+- **Worktrees, branches and remotes:** the text may be in files an agent
+  wrote, or in commits. Agentry offers to remove the worktree and the
+  local branch; pushed commits are the user's to rewrite.
+- **The engine's own records**, such as a session's transcript, live
+  outside Agentry; the page names them, and does not delete them.
+
+## What task-21 should leave room for
+
+Small things the read-model build can do now, so the snapshot, archive
+and privacy work add to it instead of reworking it:
+
+1. **Saved forms beside `Clone`.** `tasks.Saved` with `(*Task).Save()`
+   and `tasks.Restore`, and the same in `agents` (`untouched`), `workers`
+   and `connections` (`credential`, `invites`): the same field list
+   `Clone` walks, checked by the same kind of reflection test.
+2. **An in-place apply that starts from a given state.** Export the body
+   `tasks.FromEvents` loops over (`tasks.Apply(t, e)`) and the rosters'
+   `apply`, so a loaded snapshot takes its tail without a clone per event.
+3. **Let the model start part way.** A `store.Model` that can say where
+   it already is (say `Since() int64`, 0 for empty), so `Open` replays
+   `After(since)` instead of grouping every stream.
+4. **Keep each stream's last applied position** in `current.State`, next
+   to `position`; archiving refuses a marker if the task moved since.
+5. **Order tasks by their `task.created` position, held per task**, not
+   only in the `created` list `Loaded` sorts, since an archived task
+   keeps that position in its marker and has no `task.created` row left.
+6. **Count tasks, not `len(Tasks())`, for the next id**, so tasks kept
+   only as summaries are counted.
+7. **Done tasks behind a summary type.** Move `web.summaryOf` into
+   `tasks.Summary` and have the list read summaries, so an archived task
+   can be a summary alone.
+8. **Getters that can say "archived".** Room for `Task(id)` to return
+   nil with an `ErrArchived`, and for readers to handle a task with no
+   full state.
+9. **One way to fold a stream again** under the store's lock, for
+   `task.unarchived` and `event.redacted`: `State.Refold(stream,
+   accepted)`.
+10. **`Task.DoneAt`**, set by `task.done` and cleared by `task.reopened`.
+11. **No version constant.** The snapshot will be tagged with the
+    binary's hash, so nothing needs bumping by hand.

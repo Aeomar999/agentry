@@ -5,12 +5,14 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +53,7 @@ func TestLogGrowthBench(t *testing.T) {
 	benchSnapshot(t, state)
 	archived := benchArchive(t, rows, state)
 	benchSlim(t, rows, archived)
+	benchDesign(t, rows, state, archived)
 }
 
 // replayed is every stream's state, as startup with a read model builds it.
@@ -576,4 +579,224 @@ func check(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// benchDesign measures what the design sections need beyond the above:
+// the agents' third unexported field, the snapshot once done tasks are
+// summaries, writing it atomically, diff chains with full copies, and
+// compressing texts inside the rows.
+func benchDesign(t *testing.T, rows []row, state replayed, archived map[string]bool) {
+	untouched := 0
+	for _, a := range state.roster {
+		if reflect.ValueOf(a).FieldByName("untouched").Bool() {
+			untouched++
+		}
+	}
+	t.Logf("agents: %d in the roster, %d still untouched (Agent.untouched is unexported)", len(state.roster), untouched)
+	var knowledge []int
+	for _, a := range state.roster {
+		knowledge = append(knowledge, len(a.Knowledge))
+	}
+	t.Logf("  knowledge files now: mean %d bytes, largest %d", mean(knowledge), slices.Max(knowledge))
+
+	// The snapshot once done tasks leave the state: open tasks whole, done
+	// ones as the list's summary.
+	type thinSnapshot struct {
+		Position  int64
+		Tasks     []snapshotTask
+		Summaries []taskSummary
+		Roster    agents.Roster
+		Workers   []workers.Worker
+	}
+	thin := thinSnapshot{Roster: state.roster, Workers: state.workers.Workers}
+	for _, id := range state.order {
+		if archived[id] {
+			thin.Summaries = append(thin.Summaries, summaryOf(state.tasks[id]))
+		} else {
+			thin.Tasks = append(thin.Tasks, mirror(state.tasks[id]))
+		}
+	}
+	plain := gobEncode(thin)
+	decode := minOf3(func() { var back thinSnapshot; check(gob.NewDecoder(bytes.NewReader(plain)).Decode(&back)) })
+	t.Logf("snapshot with done tasks as summaries: gob %d bytes (%d open tasks, %d summaries), decode %s, gzip %d bytes",
+		len(plain), len(thin.Tasks), len(thin.Summaries), decode.Round(100*time.Microsecond), len(gzipped(plain)))
+
+	// Writing the full snapshot as a file: temporary file, fsync, rename,
+	// fsync the folder.
+	full := gobEncode(snapshotOf(state))
+	dir := t.TempDir()
+	write := minOf3(func() {
+		tmp := must(os.CreateTemp(dir, "snapshot-*"))
+		must(tmp.Write(full))
+		check(tmp.Sync())
+		check(tmp.Close())
+		check(os.Rename(tmp.Name(), filepath.Join(dir, "state.snapshot")))
+		d := must(os.Open(dir))
+		check(d.Sync())
+		check(d.Close())
+	})
+	read := minOf3(func() { must(os.ReadFile(filepath.Join(dir, "state.snapshot"))) })
+	t.Logf("  writing the full gob snapshot (%d bytes) atomically: %s; reading it back: %s",
+		len(full), write.Round(100*time.Microsecond), read.Round(100*time.Microsecond))
+
+	// Diff chains: a version is a line diff from the one before, except a
+	// full copy every k versions, or (k = 0) whenever the diffs since the
+	// last full copy add up to more than the text itself.
+	t.Log("knowledge and plans as diff chains with full copies:")
+	for _, typ := range []string{string(events.AgentLearned), string(events.PlanUpdated)} {
+		for _, k := range []int{0, 8, 32, 128} {
+			previous := map[string]string{}
+			since := map[string]int{} // versions since the last full copy
+			chain := map[string]int{} // diff bytes since the last full copy
+			stored, longest, worst := 0, 0, 0
+			for _, r := range rows {
+				if r.typ != typ {
+					continue
+				}
+				text := textOf(r, bigText[typ])
+				series := r.stream + "/" + r.corr
+				if typ == string(events.AgentLearned) {
+					var d map[string]any
+					check(json.Unmarshal([]byte(r.data), &d))
+					series = d["name"].(string)
+				}
+				diff := lineDiffSize(previous[series], text)
+				fullCopy := previous[series] == "" || (k > 0 && since[series] >= k-1) || (k == 0 && chain[series]+diff > len(text))
+				if fullCopy {
+					stored += len(text)
+					since[series], chain[series] = 0, 0
+				} else {
+					stored += diff
+					since[series]++
+					chain[series] += diff
+				}
+				longest = max(longest, since[series])
+				// Rebuilding this version reads its full copy and the diffs since.
+				worst = max(worst, len(text)+chain[series])
+				previous[series] = text
+			}
+			label := "full copy when the diffs outgrow the text"
+			if k > 0 {
+				label = "full copy every " + strconv.Itoa(k) + " versions"
+			}
+			t.Logf("  %-16s %-42s %8d bytes stored, longest chain %3d, most read to rebuild one %6d",
+				typ, label+":", stored, longest, worst)
+		}
+	}
+
+	// Compression inside the rows: each big text over 1 KB gzipped (as
+	// base64, since data is JSON text).
+	left, totalBytes := 0, dataBytes(rows)
+	for _, r := range rows {
+		field, ok := bigText[r.typ]
+		if !ok {
+			left += len(r.data)
+			continue
+		}
+		text := textOf(r, field)
+		if len(text) <= 1024 {
+			left += len(r.data)
+			continue
+		}
+		left += len(r.data) - len(must(json.Marshal(text))) + 2 + base64.StdEncoding.EncodedLen(len(gzipped([]byte(text))))
+	}
+	t.Logf("texts over 1 KB gzipped inside their rows (base64): data %d bytes (%.1f%% of %d)", left, pct(left, totalBytes), totalBytes)
+
+	// One hunk per version: the common head and tail kept, the middle of
+	// the new text stored whole (no LCS), with 24 bytes for the two lengths.
+	for _, typ := range []string{string(events.AgentLearned), string(events.PlanUpdated)} {
+		previous := map[string]string{}
+		total, hunks := 0, 0
+		for _, r := range rows {
+			if r.typ != typ {
+				continue
+			}
+			text := textOf(r, bigText[typ])
+			series := r.stream + "/" + r.corr
+			if typ == string(events.AgentLearned) {
+				var d map[string]any
+				check(json.Unmarshal([]byte(r.data), &d))
+				series = d["name"].(string)
+			}
+			total += len(text)
+			hunks += oneHunkSize(previous[series], text)
+			previous[series] = text
+		}
+		t.Logf("  %-16s one hunk (common head and tail): %8d bytes (%4.1f%% of %d)", typ, hunks, pct(hunks, total), total)
+	}
+
+	// The database with only knowledge slimmed (one hunk per version, filler
+	// of that size), then also with done tasks archived to one summary each.
+	hunk := map[int64]int{}
+	previous := map[string]string{}
+	for _, r := range rows {
+		if r.typ == string(events.AgentLearned) {
+			var d map[string]any
+			check(json.Unmarshal([]byte(r.data), &d))
+			text, _ := d["knowledge"].(string)
+			hunk[r.position] = oneHunkSize(previous[d["name"].(string)], text)
+			previous[d["name"].(string)] = text
+		}
+	}
+	knowledgeOnly := func(r row) (string, bool) {
+		if size, ok := hunk[r.position]; ok {
+			return withText(r, "knowledge", strings.Repeat("x", size)), true
+		}
+		return r.data, true
+	}
+	summarised := map[string]bool{}
+	andArchived := func(r row) (string, bool) {
+		if !archived[r.stream] {
+			return knowledgeOnly(r)
+		}
+		if summarised[r.stream] {
+			return "", false
+		}
+		summarised[r.stream] = true
+		return strings.Repeat("x", 600), true
+	}
+	t.Logf("  database with knowledge as one hunk per version: %d bytes; and done tasks archived: %d bytes",
+		rebuiltSize(t, rows, knowledgeOnly), rebuiltSize(t, rows, andArchived))
+
+	// The archive: each done task's rows, rejections included, as JSON
+	// lines in one gzipped blob.
+	byStream := map[string]*bytes.Buffer{}
+	for _, r := range rows {
+		if archived[r.stream] {
+			if byStream[r.stream] == nil {
+				byStream[r.stream] = &bytes.Buffer{}
+			}
+			byStream[r.stream].Write(must(json.Marshal([]any{r.position, r.at, r.kind, r.id, r.typ, r.corr, json.RawMessage(r.data)})))
+			byStream[r.stream].WriteByte('\n')
+		}
+	}
+	raw, zipped, largest, largestZipped := 0, 0, 0, 0
+	var biggest []byte
+	for _, b := range byStream {
+		z := gzipped(b.Bytes())
+		raw, zipped = raw+b.Len(), zipped+len(z)
+		if b.Len() > largest {
+			largest, largestZipped, biggest = b.Len(), len(z), z
+		}
+	}
+	open := minOf3(func() { gunzipped(biggest) })
+	t.Logf("archive blobs, one gzipped JSON-lines file per done task: %d tasks, %d bytes raw, %d gzipped (%.1f%%); largest %d raw, %d gzipped, gunzip %s",
+		len(byStream), raw, zipped, pct(zipped, raw), largest, largestZipped, open.Round(100*time.Microsecond))
+}
+
+// oneHunkSize is the size of a version stored as one replaced middle: the
+// new text less the head and tail it shares with the old one, plus 24 bytes.
+func oneHunkSize(from, to string) int {
+	if from == "" {
+		return len(to)
+	}
+	head := 0
+	for head < len(from) && head < len(to) && from[head] == to[head] {
+		head++
+	}
+	tail := 0
+	for tail < len(from)-head && tail < len(to)-head && from[len(from)-1-tail] == to[len(to)-1-tail] {
+		tail++
+	}
+	return len(to) - head - tail + 24
 }
