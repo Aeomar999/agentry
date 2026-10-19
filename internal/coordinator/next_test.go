@@ -483,3 +483,19 @@ func TestYourShipTellsTheShipperToShipItAsItIs(t *testing.T) {
 		}
 	}
 }
+
+// A turn that hit a usage limit and then went silent: the coordinator reads
+// the limit just before the issue.
+func TestTheBriefTellsOfAUsageLimit(t *testing.T) {
+	task := started().turn("turn-1", "tech-lead", "assign").
+		add(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(worker, events.TurnLimited, "turn-2", map[string]any{"agent": "engineer", "error": "rate_limit", "details": "limit", "resetsAt": ""}).
+		add(events.Actor{Kind: events.System, ID: "watchdog"}, events.IssueRaised, "", map[string]any{"reason": "silent"}).task()
+	roster := defaultRoster()
+	lead, _ := roster.Get("tech-lead")
+	brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil)
+	if !strings.Contains(brief, "agentry → tech-lead: engineer's turn-2 hit a usage limit, reset time unknown\n\n4. agentry → tech-lead: silent") {
+		t.Errorf("the brief should tell of the limit before the issue:\n%s", brief)
+	}
+}

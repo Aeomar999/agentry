@@ -340,6 +340,9 @@ func (t *Task) Apply(e events.Event) {
 		if turn := t.Turn(e.Correlation); !turn.Ended {
 			turn.Limited = cmp.Or(e.Text("details"), e.Text("error"), "usage limit")
 			turn.ResetsAt, _ = time.Parse(time.RFC3339, e.Text("resetsAt"))
+			// Only noted in the trail: the turn goes on after the reset.
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " hit a " + LimitText(turn.ResetsAt, e.At)})
 		}
 
 	case events.IssueRaised:
@@ -500,6 +503,21 @@ func stoppedText(turn *Turn, coordinator string) string {
 		" wrote no report, but its work so far is in the worktree, and its unfinished plan carries over to its next turn. " +
 		"Unless what they said changes the direction, hand the task back to " + turn.Agent + " to carry on, with its " +
 		"instructions brought up to date for what they said."
+}
+
+// LimitText says when a usage limit hit at at resets, in the server's local
+// time: "usage limit, resets ~03:00", with the date when that isn't the day
+// it was hit, or "usage limit, reset time unknown".
+func LimitText(resetsAt, at time.Time) string {
+	if resetsAt.IsZero() {
+		return "usage limit, reset time unknown"
+	}
+	resets, hit := resetsAt.Local(), at.Local()
+	layout := "15:04"
+	if resets.Format(time.DateOnly) != hit.Format(time.DateOnly) {
+		layout = "Jan 2 15:04"
+	}
+	return "usage limit, resets ~" + resets.Format(layout)
 }
 
 // moveRepo makes the move you asked for: the next turn works in a new

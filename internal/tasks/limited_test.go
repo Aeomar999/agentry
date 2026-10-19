@@ -85,3 +85,35 @@ func limitedLog(data map[string]any) []events.Event {
 		event(worker, events.TurnLimited, "turn-3", data),
 	}
 }
+
+// The trail notes the limit for the coordinator, and it is no handoff.
+func TestAUsageLimitIsNotedInTheTrail(t *testing.T) {
+	resets := time.Now().Add(time.Minute).Truncate(time.Second)
+	task := FromEvents(limitedLog(map[string]any{"agent": "engineer", "resetsAt": resets.UTC().Format(time.RFC3339)}))
+	last := task.Trail[len(task.Trail)-1]
+	want := "engineer's turn-3 hit a " + LimitText(resets, time.Now())
+	if last.From != Agentry || last.To != "tech-lead" || last.Text != want {
+		t.Errorf("last step %+v, want %q", last, want)
+	}
+	if task.Stage() != "engineer" || task.Handoff != nil {
+		t.Errorf("stage %q, handoff %+v: a note is no handoff", task.Stage(), task.Handoff)
+	}
+}
+
+func TestLimitText(t *testing.T) {
+	hit := time.Date(2026, 10, 19, 22, 30, 0, 0, time.Local)
+	cases := map[string]struct {
+		resetsAt time.Time
+		want     string
+	}{
+		"later today": {time.Date(2026, 10, 19, 23, 45, 0, 0, time.Local), "usage limit, resets ~23:45"},
+		"tomorrow":    {time.Date(2026, 10, 20, 3, 0, 0, 0, time.Local), "usage limit, resets ~Oct 20 03:00"},
+		"in UTC":      {time.Date(2026, 10, 19, 23, 45, 0, 0, time.Local).UTC(), "usage limit, resets ~23:45"},
+		"not said":    {time.Time{}, "usage limit, reset time unknown"},
+	}
+	for name, c := range cases {
+		if got := LimitText(c.resetsAt, hit); got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
+		}
+	}
+}
