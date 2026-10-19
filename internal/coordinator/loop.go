@@ -211,7 +211,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	shared, _ := l.filesFor(task)
 	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.dismissedFor(task, move.Agent))
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.chosenFor(task, move.Agent))
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)

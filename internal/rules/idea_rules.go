@@ -12,9 +12,9 @@ import (
 
 // checkIdea is check 3 for an idea's events: an idea is suggested once, from
 // a task that exists, and you accept or dismiss it once, while it is open.
-// Only you may do either, except that Agentry accepts an idea every
-// Visionary agreed on when you turned that on; the catalogue checks that
-// no agent does.
+// Only you may do either, except that Agentry accepts an idea the
+// Visionaries agreed on, by your rule, when you turned that on; the
+// catalogue checks that no agent does.
 func checkIdea(p events.Proposal, state State) *events.Rejection {
 	idea, err := state.Idea(p.Stream)
 	if err != nil {
@@ -40,7 +40,8 @@ func checkIdea(p events.Proposal, state State) *events.Rejection {
 }
 
 // aGoodSuggestion has a title, a size, a kind of task, and comes from a task
-// that exists; an agent suggests only from the task it is working on.
+// that exists; an agent suggests only from the task it is working on. The
+// idea it says it repeats, if any, exists.
 func aGoodSuggestion(p events.Proposal, state State) string {
 	switch {
 	case strings.TrimSpace(p.Text("title")) == "":
@@ -60,6 +61,22 @@ func aGoodSuggestion(p events.Proposal, state State) string {
 		return "task " + p.Text("task") + " doesn't exist"
 	case p.Actor.Kind == events.Agent && from.CurrentAgent() != p.Actor.ID:
 		return p.Actor.ID + " is not working on " + from.ID
+	}
+	return repeatsAnIdea(p, state)
+}
+
+// repeatsAnIdea: an idea said to repeat another names one that exists.
+func repeatsAnIdea(p events.Proposal, state State) string {
+	repeats := p.Text("repeats")
+	if repeats == "" {
+		return ""
+	}
+	original, err := state.Idea(repeats)
+	switch {
+	case err != nil:
+		return "could not read the idea it repeats: " + err.Error()
+	case original == nil:
+		return "the idea it repeats, " + repeats + ", doesn't exist"
 	}
 	return ""
 }
@@ -81,16 +98,19 @@ func madeFromIt(idea *ideas.Idea, p events.Proposal, state State) string {
 }
 
 // agentryMayAccept: Agentry accepts an idea for you only while you have that
-// turned on, and only one every Visionary agreed on, so the log can't hold
-// any other, whoever proposes it.
+// turned on, and only one the Visionaries agreed on by your rule that
+// repeats no other idea (ideas.NotAutoAccepted), so the log can't hold any
+// other, whoever proposes it.
 func agentryMayAccept(idea *ideas.Idea, p events.Proposal, state State) string {
+	now := state.Settings()
 	switch {
 	case p.Actor.Kind != events.System:
 		return ""
-	case !state.Settings().AutoAcceptIdeas:
+	case !now.AutoAcceptIdeas:
 		return "Agentry accepts an idea for you only when you turn that on"
-	case !ideas.Agreed(idea, state.Roster(), ideas.VisionariesTeam):
-		return "Agentry accepts only an idea every Visionary agreed on"
+	}
+	if why := ideas.NotAutoAccepted(idea, ideas.List(state, idea.Repo), state.Roster(), now.AutoAcceptRule); why != "" {
+		return "Agentry accepts only an idea the Visionaries agreed on, by your rule, that repeats no other, and " + idea.ID + " isn't: " + why
 	}
 	return ""
 }
@@ -99,7 +119,7 @@ func agentryMayAccept(idea *ideas.Idea, p events.Proposal, state State) string {
 // only from an idea that is still open, to accept it for you, so one it may
 // accept.
 func forAnOpenIdea(p events.Proposal, state State) string {
-	const only = "Agentry makes a task only about an epic you closed, or from an idea every Visionary agreed on"
+	const only = "Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on"
 	if p.Text("idea") == "" {
 		return only
 	}

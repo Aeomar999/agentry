@@ -25,6 +25,7 @@ type Verdict struct {
 	Rule     string
 	Why      string
 	Policy   string // the hash of the policy that decided
+	Order    int    // the matching rule's place in its profile, from 1; 0 when no profile rule decided
 }
 
 // Reason is the verdict in one line, for the agent and the log.

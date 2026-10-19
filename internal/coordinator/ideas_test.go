@@ -145,6 +145,29 @@ func TestADoneNamingOneTitleTwiceKeepsOneIdea(t *testing.T) {
 	}
 }
 
+// An idea that says it repeats an idea the repo doesn't have, here a title
+// in place of the id, is kept as a new idea, and the summary says so.
+func TestAnIdeaRepeatingNoIdeaIsKeptAsANewOne(t *testing.T) {
+	s, state, repo := withVisionaries(t)
+	const id = "task-vision-8"
+	startTask(t, s, id, repo, "editor")
+
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "repeats": "Board search"}]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	const note = `"Search the board" repeats Board search, which doesn't exist; kept as a new idea.`
+	if task.Summary != "One idea.\n\n"+note {
+		t.Errorf("the summary should say the idea was kept as a new one:\n%s", task.Summary)
+	}
+	list := ideas.List(state, repo)
+	if len(list) != 1 {
+		t.Fatalf("ideas: %v", list)
+	}
+	if idea := list[0]; idea.Title != "Search the board" || idea.Repeats != "" || idea.State != ideas.Open {
+		t.Errorf("want the idea kept, open, repeating nothing: %+v", idea)
+	}
+}
+
 // Only a Visionaries session suggests ideas: a Software done carrying some
 // goes through, keeps none and says so.
 func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
@@ -185,10 +208,10 @@ func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) 
 }
 
 // The story's "dismissals reach a Visionaries brief": a Visionaries
-// coordinator reads what you dismissed in its repo, and a Software one
+// coordinator reads what you dismissed and accepted in its repo, and a Software one
 // doesn't, nor how to suggest ideas.
 func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
-	s, _, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	startTask(t, s, "task-vision-3", repo, "editor")
 	endTurn(t, s, "task-vision-3", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Dark mode", "problem": "Bright at night", "proposal": "A dark theme", "size": "S"}]}`)
@@ -199,8 +222,19 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 	}
 
 	vision := startTask(t, s, "task-vision-4", repo, "editor")
-	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode: The OS does it") {
+	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode (idea-1): The OS does it") {
 		t.Errorf("the editor's brief should name the dismissed idea:\n%s", brief)
+	}
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": "Search",
+		"problem": "p", "proposal": "f", "size": "S", "task": "task-vision-3", "repo": repo}})
+	got, err := ideas.Accept(s, state, accepted, ideas.Choice{})
+	if err != nil || !got.Accepted {
+		t.Fatalf("accepting: %+v %v", got, err)
+	}
+	again := startTask(t, s, "task-vision-6", repo, "editor")
+	if brief := readBrief(t, again, "turn-1"); !strings.Contains(brief, "## Ideas already accepted\n\n- Search (idea-2): became "+got.Task) ||
+		!strings.Contains(brief, `"repeats"`) {
+		t.Errorf("the editor's brief should name the accepted idea and how to repeat one:\n%s", brief)
 	}
 	software := startTask(t, s, "task-vision-5", repo, "tech-lead")
 	if brief := readBrief(t, software, "turn-1"); strings.Contains(brief, "Dark mode") || strings.Contains(brief, `"ideas"`) {

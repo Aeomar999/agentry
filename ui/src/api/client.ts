@@ -5,7 +5,7 @@
 // in: the server sets a cookie too, and an installed app, on iOS
 // especially, may keep only that. So only a 401 means signed out.
 
-import type { PolicyChange, Settings, SigninCode } from "@/api/types";
+import type { PolicyChange, Settings, SigninCode, TriedCall } from "@/api/types";
 
 const tokenKey = "agentry-token";
 
@@ -186,6 +186,12 @@ export function turnOffUseForEveryone(hash: string): Promise<PolicyChange> {
 
 export function revertPolicy(position: number, hash: string): Promise<PolicyChange> {
   return api<PolicyChange>("POST", "/api/policy/revert", { position, hash });
+}
+
+// tryPolicyCall judges a call as profile would, without running it or
+// changing anything. With no workspace, the server picks a stand-in.
+export function tryPolicyCall(call: { profile: string; tool: string; input: string; workspace?: string }): Promise<TriedCall> {
+  return api<TriedCall>("POST", "/api/policy/try", call);
 }
 
 // Websockets can't send headers, so the terminal's carries the token in its address.

@@ -39,3 +39,21 @@ func TestIdeasAreNeverAcceptedForYouUnlessYouSaySo(t *testing.T) {
 		t.Errorf("turned starting off: accepting should stay on: %+v", s)
 	}
 }
+
+func TestTheAutoAcceptRuleIsStrictUntilYouLoosenIt(t *testing.T) {
+	s := FromEvents([]events.Event{changed(map[string]any{AutoAcceptIdeas: true})})
+	if s.AutoAcceptRule != EveryoneBacked {
+		t.Errorf("a log that never named the rule should read as %s: %q", EveryoneBacked, s.AutoAcceptRule)
+	}
+	if s = s.Next(changed(map[string]any{AutoAcceptRule: NobodyDoubted})); s.AutoAcceptRule != NobodyDoubted || !s.AutoAcceptIdeas {
+		t.Errorf("loosened: %+v", s)
+	}
+	for _, unknown := range []any{"mostBacked", "", 3, true} {
+		if got := s.Next(changed(map[string]any{AutoAcceptRule: unknown})); got != s {
+			t.Errorf("an unknown rule %v should leave the one before: %+v", unknown, got)
+		}
+	}
+	if s = s.Next(changed(map[string]any{AutoAcceptIdeas: false})); s.AutoAcceptRule != NobodyDoubted {
+		t.Errorf("turning accepting off keeps the rule: %+v", s)
+	}
+}

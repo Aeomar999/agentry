@@ -4,6 +4,7 @@ import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
+import { Radio } from "@/components/atoms/Radio";
 import { Banner } from "@/components/molecules/Banner";
 import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { EmptyState } from "@/components/molecules/EmptyState";
@@ -12,7 +13,7 @@ import { Panel } from "@/components/molecules/Panel";
 import { IdeaCard, TaskLink } from "@/components/organisms/IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "@/components/organisms/IdeaDialogs";
 import { changeSettings } from "@/api/client";
-import type { Idea, Settings, TaskSummary } from "@/api/types";
+import type { AutoAcceptRule, Idea, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { VISIONARIES } from "@/lib/teams";
 import { useAskVisionaries } from "@/lib/visionaries";
@@ -24,8 +25,9 @@ import { useAskVisionaries } from "@/lib/visionaries";
 // your note. Ask the visionaries starts a new session on a theme or a
 // question, adding the team first if you don't have it. Settings here say
 // whether closing an epic starts a session about its follow-ups, and whether
-// Agentry accepts, and starts, the ideas every Visionary agreed on; those
-// show in the history as Agentry's.
+// Agentry accepts, and starts, the ideas the Visionaries agreed on, by your
+// rule; those show in the history as Agentry's, and an open idea says why
+// Agentry didn't accept it.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -131,16 +133,28 @@ export function IdeasPage() {
 }
 
 // The settings' values before you change any, and while they can't be read.
-const DEFAULTS: Settings = { visionariesOnEpicClose: true, autoAcceptIdeas: false, autoStartIdeas: false };
+const DEFAULTS: Settings = {
+  visionariesOnEpicClose: true,
+  autoAcceptIdeas: false,
+  autoStartIdeas: false,
+  autoAcceptRule: "everyoneBacked",
+};
+
+// The rules for which ideas Agentry accepts for you, the strict one first.
+const RULES: { rule: AutoAcceptRule; label: string; hint: string }[] = [
+  { rule: "everyoneBacked", label: "Everyone backed it", hint: "Every viewpoint backed it, no one doubted it." },
+  { rule: "nobodyDoubted", label: "Nobody doubted it", hint: "No one doubted it and at least two viewpoints backed it." },
+];
 
 // IdeaSettings are the settings about ideas: whether closing an epic starts
 // a Visionaries session about its follow-ups, and whether Agentry accepts,
-// and starts, the ideas every Visionary agreed on. Each change names only
-// its setting. They wait for the settings before you can change them, show
-// what you chose while the server saves it and what it saved until the
-// settings load again (they only reload when the event log moves), and the
-// defaults when the settings can't be read. Starting them counts only with
-// accepting them, so it reads as off and can't be changed while that is off.
+// and starts, the ideas the Visionaries agreed on, and by which rule. Each
+// change names only its setting. They wait for the settings before you can
+// change them, show what you chose while the server saves it and what it
+// saved until the settings load again (they only reload when the event log
+// moves), and the defaults when the settings can't be read. Starting them
+// counts only with accepting them, so it reads as off and can't be changed
+// while that is off; the rule can't be changed then either.
 function IdeaSettings() {
   const { data, error } = useResource<Settings>("/api/settings");
   const [saving, setSaving] = useState<Partial<Settings> | null>(null);
@@ -152,14 +166,14 @@ function IdeaSettings() {
     setSaved(null);
   }
 
-  const value = (name: keyof Settings) => saving?.[name] ?? saved?.[name] ?? data?.[name] ?? DEFAULTS[name];
+  const value = <K extends keyof Settings>(name: K): Settings[K] => saving?.[name] ?? saved?.[name] ?? data?.[name] ?? DEFAULTS[name];
   const busy = saving !== null || (!data && !error);
 
-  async function change(name: keyof Settings, on: boolean) {
-    setSaving({ [name]: on });
+  async function change(setting: Partial<Settings>) {
+    setSaving(setting);
     setFailed("");
     try {
-      setSaved(await changeSettings({ [name]: on }));
+      setSaved(await changeSettings(setting));
     } catch (failure) {
       setSaved(null);
       setFailed((failure as Error).message);
@@ -174,22 +188,36 @@ function IdeaSettings() {
         <div className="flex flex-col gap-3">
           <Checkbox
             checked={value("visionariesOnEpicClose")}
-            onChange={(on) => change("visionariesOnEpicClose", on)}
+            onChange={(on) => change({ visionariesOnEpicClose: on })}
             disabled={busy}
             label="Ask the visionaries for follow-ups when you close an epic"
             hint="A small session about what the epic delivered and what could come next, with the server's default budget and turn limit. Its ideas show here, linked to the epic."
           />
           <Checkbox
             checked={value("autoAcceptIdeas")}
-            onChange={(on) => change("autoAcceptIdeas", on)}
+            onChange={(on) => change({ autoAcceptIdeas: on })}
             disabled={busy}
-            label="Auto-accept ideas all Visionaries agree on"
-            hint="Agentry accepts for you an idea every viewpoint backed and none doubted, into your Backlog, unless you dismissed or accepted one like it before. The others wait here for you."
+            label="Auto-accept ideas the Visionaries agree on"
+            hint="Agentry accepts for you an idea that qualifies, into your Backlog, unless it repeats one you have already. The others wait here, saying why."
           />
+          <fieldset className="flex flex-col gap-2 pl-6.5">
+            <legend className="mb-2 text-[12px] font-medium text-ink-secondary">Which ideas qualify</legend>
+            {RULES.map(({ rule, label, hint }) => (
+              <Radio
+                key={rule}
+                name="auto-accept-rule"
+                checked={value("autoAcceptRule") === rule}
+                onChange={() => change({ autoAcceptRule: rule })}
+                disabled={busy || !value("autoAcceptIdeas")}
+                label={label}
+                hint={hint}
+              />
+            ))}
+          </fieldset>
           <div className="pl-6.5">
             <Checkbox
               checked={value("autoAcceptIdeas") && value("autoStartIdeas")}
-              onChange={(on) => change("autoStartIdeas", on)}
+              onChange={(on) => change({ autoStartIdeas: on })}
               disabled={busy || !value("autoAcceptIdeas")}
               label="and start them"
               hint="Moves each task it accepted to In progress, as Start does, instead of leaving it in your Backlog."
@@ -204,14 +232,18 @@ function IdeaSettings() {
   );
 }
 
-// An idea decided on, by you or, when every Visionary agreed, by Agentry:
+// An idea decided on, by you or, when the Visionaries agreed, by Agentry:
 // what became of it, and what was said.
 function HistoryRow({ idea }: { idea: Idea }) {
   return (
     <li className="flex flex-col gap-1 px-4 py-3">
       <span className="flex flex-wrap items-center gap-2">
         <Badge variant={idea.state === "accepted" ? "success" : "default"}>{idea.state}</Badge>
-        {idea.autoAccepted && <Badge variant="info">Auto-accepted: all agreed</Badge>}
+        {idea.autoAccepted && (
+          <span title={idea.note || undefined}>
+            <Badge variant="info">Auto-accepted</Badge>
+          </span>
+        )}
         <span className="text-[13px] font-medium text-ink-primary">{idea.title}</span>
         <span className="ml-auto flex gap-3 text-[12px] text-ink-muted">
           {idea.became && (

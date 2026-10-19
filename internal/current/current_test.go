@@ -68,6 +68,7 @@ func everyStream() []events.Event {
 		proposal("idea-1", system, events.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
 		proposal("idea-1", you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
 		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.VisionariesOnEpicClose: false}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptRule: settings.NobodyDoubted}),
 	)
 }
 
@@ -136,7 +137,8 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	if want := connections.FromEvents(accepted(log, events.ConnectionsStream)); !reflect.DeepEqual(s.Connections(), want) {
 		t.Errorf("connections: %+v\nreplay: %+v", s.Connections(), want)
 	}
-	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose {
+	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose ||
+		want.AutoAcceptRule != settings.NobodyDoubted {
 		t.Errorf("settings: %+v\nreplay: %+v", s.Settings(), want)
 	}
 	for _, stream := range streamsOf(log) {

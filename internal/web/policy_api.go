@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"time"
@@ -240,6 +241,69 @@ func (s *Server) versionAt(w http.ResponseWriter, position int64) (string, time.
 
 // versionTime is when a version was put in force, as a change names it.
 func versionTime(at time.Time) string { return at.Local().Format("2 Jan 2006 15:04:05") }
+
+// verdictView is a verdict as the page shows it.
+type verdictView struct {
+	Decision policy.Decision `json:"decision"`
+	Profile  string          `json:"profile"`
+	Rule     string          `json:"rule"`
+	Why      string          `json:"why"`
+	Policy   string          `json:"policy"`          // the hash of the version that decided
+	Order    int             `json:"order,omitempty"` // the deciding rule's place in its profile, from 1
+}
+
+func verdictOf(v policy.Verdict) verdictView {
+	return verdictView{Decision: v.Decision, Profile: v.Profile, Rule: v.Rule, Why: v.Why, Policy: v.Policy, Order: v.Order}
+}
+
+// tryPolicy judges a call as a profile would, once use_for_everyone is off,
+// without running it or logging anything. When use_for_everyone puts
+// another profile in its place, the reply says what that one decides today.
+// With no workspace named, the call runs in a stand-in task's worktree.
+func (s *Server) tryPolicy(w http.ResponseWriter, r *http.Request) {
+	if s.config.Policy == nil {
+		http.Error(w, "no policy", http.StatusNotFound)
+		return
+	}
+	var request struct {
+		Profile, Tool, Input, Workspace string
+	}
+	if !decode(w, r, &request) {
+		return
+	}
+	current := s.config.Policy.Current()
+	switch {
+	case !slices.Contains(current.ProfileNames(), request.Profile):
+		http.Error(w, "policy.toml has no profile called "+request.Profile, http.StatusNotFound)
+		return
+	case request.Tool == "":
+		http.Error(w, "name the tool the call uses", http.StatusBadRequest)
+		return
+	case request.Workspace != "" && !filepath.IsAbs(request.Workspace):
+		http.Error(w, "the workspace must be an absolute path", http.StatusBadRequest)
+		return
+	case request.Workspace == "" && s.config.Worktrees == "":
+		http.Error(w, "this server has no worktrees folder to put a stand-in workspace in: name an absolute workspace", http.StatusBadRequest)
+		return
+	}
+	workspace := s.standInWorkspace()
+	if request.Workspace != "" {
+		workspace = filepath.Clean(request.Workspace)
+	}
+	call := policy.Call{Tool: request.Tool, Input: request.Input, Workspace: workspace}
+	tried := map[string]any{"verdict": verdictOf(current.DecideAs(request.Profile, call)), "workspace": workspace}
+	if everyone := current.UseForEveryone(); everyone != "" && everyone != request.Profile {
+		tried["override"] = map[string]any{"profile": everyone, "verdict": verdictOf(current.Decide(request.Profile, call))}
+	}
+	reply(w, tried)
+}
+
+// standInWorkspace is the worktree a tried call runs in when it names none:
+// one beside the real tasks', so the rules about the workspace judge it as
+// they would a task's.
+func (s *Server) standInWorkspace() string {
+	return filepath.Join(s.config.Worktrees, "example")
+}
 
 // changePolicy makes edit to the policy file against the version seen,
 // logs it as yours, and replies with the new version.

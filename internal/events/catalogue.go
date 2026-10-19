@@ -22,7 +22,7 @@ var catalogue = map[Type]spec{
 	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 
-	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" every Visionary agreed on
+	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule
 	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
@@ -88,10 +88,10 @@ var catalogue = map[Type]spec{
 	PolicyRefused: {fields: []string{"reason", "path"}, writers: []ActorKind{System}},
 
 	IdeaSuggested: {fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, writers: []ActorKind{Agent, System}},
-	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human, System}}, // "note" may be empty; Agentry's: an idea every Visionary agreed on
+	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human, System}}, // "note" may be empty; Agentry's: an idea the Visionaries agreed on by your rule
 	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
 
-	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas"
+	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule"
 
 	ProposalRejected: {writers: nil},
 }

@@ -19,7 +19,7 @@ import (
 const longestStep = 4000
 
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
-	dismissed []*ideas.Idea) string {
+	chosen []*ideas.Idea) string {
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
@@ -38,7 +38,10 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	otherTeams(&b, task, coordinator, roster)
 	epicSection(&b, task, f)
-	if len(dismissed) > 0 {
+	if accepted := ideas.InState(chosen, ideas.Accepted); len(accepted) > 0 {
+		section(&b, "Ideas already accepted", acceptedText(accepted))
+	}
+	if dismissed := ideas.InState(chosen, ideas.Dismissed); len(dismissed) > 0 {
 		section(&b, "Ideas the user dismissed", dismissedText(dismissed))
 	}
 
