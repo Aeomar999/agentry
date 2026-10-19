@@ -262,10 +262,12 @@ On a schedule's own stream, `checkSchedule` refuses:
   made for and meet the same checks as any run's.
 - `fired` by you (Run now): a `slot` that isn't `""`; a `task` not made
   from this schedule; a removed schedule.
-- `skipped`: a `slot` that isn't after `LastSlot`; a `reason` it doesn't
-  know. With reason `unrecorded`: a `slot` that isn't `""`, or a `task`
-  that doesn't exist, wasn't made from this schedule or is in `Named`
-  already; a removed schedule.
+- `skipped`: a `reason` it doesn't know. With reason `open` or
+  `refused`: a `slot` that isn't after `LastSlot`. With reason
+  `unrecorded`, only this list, as its `slot` is `""` and comes after
+  nothing: a `slot` that isn't `""`, or a `task` that doesn't exist,
+  wasn't made from this schedule or is in `Named` already; a removed
+  schedule.
 
 And one rule on a core type. `rules.Check` sends a `task.created` by
 System with no `"about"` to `forAnOpenIdea` today
@@ -677,9 +679,10 @@ log.
 `rules.go:91` choosing by the owner of `"from"`. Done: a test per
 refusal in section 4; a System `task.created` from a schedule that is on
 passes, a second one while the first is open is refused (and one while
-a Run now's task is open), one from a paused schedule is refused; a
-`fired` or an `unrecorded` skip naming a task already in `Named` is
-refused; an auto-accepted idea's task still passes
+a Run now's task is open), one from a paused schedule is refused; an
+`unrecorded` skip with `slot` `""` naming an unnamed task made from the
+schedule passes, whatever `LastSlot` is; a `fired` or an `unrecorded`
+skip naming a task already in `Named` is refused; an auto-accepted idea's task still passes
 and an epic follow-up still passes (Ideas' existing rule tests stay
 green).
 
