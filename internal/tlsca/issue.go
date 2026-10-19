@@ -31,9 +31,13 @@ func (ca *CA) Issue(hosts []string, now time.Time) (*tls.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, err
+	}
 	hostname, _ := os.Hostname()
 	template := &x509.Certificate{
-		SerialNumber: randomSerial(),
+		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: "Agentry (" + hostname + ")", Organization: []string{"Agentry"}},
 		NotBefore:    now.Add(-time.Hour), // a device whose clock is a little behind
 		NotAfter:     notAfter(now, ca.cert.NotAfter),

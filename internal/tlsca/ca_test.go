@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -261,6 +262,15 @@ func TestALeafForEveryHostVerifies(t *testing.T) {
 	}
 }
 
+func serial(t *testing.T) *big.Int {
+	t.Helper()
+	serial, err := randomSerial()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serial
+}
+
 // A leaf the CA key signs for a public name or address is refused by Go's
 // verifier, as by browsers: the constraints make a leaked key useless there.
 func TestALeafForThePublicWebIsRefused(t *testing.T) {
@@ -270,7 +280,7 @@ func TestALeafForThePublicWebIsRefused(t *testing.T) {
 	}
 	for _, host := range []string{"example.com", "8.8.8.8", "box.example.com", "notbox", "2001:4860:4860::8888"} {
 		template := &x509.Certificate{
-			SerialNumber: randomSerial(),
+			SerialNumber: serial(t),
 			NotBefore:    time.Now().Add(-time.Hour),
 			NotAfter:     time.Now().Add(time.Hour),
 			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -300,7 +310,7 @@ func TestACAWithoutConstraintsIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	template := &x509.Certificate{
-		SerialNumber:          randomSerial(),
+		SerialNumber:          serial(t),
 		Subject:               ca.cert.Subject,
 		NotBefore:             ca.cert.NotBefore,
 		NotAfter:              ca.cert.NotAfter,

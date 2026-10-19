@@ -211,9 +211,13 @@ func create(dir, hostname string) (*CA, error) {
 	if err != nil {
 		return nil, err
 	}
+	serial, err := randomSerial()
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	template := &x509.Certificate{
-		SerialNumber:          randomSerial(),
+		SerialNumber:          serial,
 		Subject:               pkix.Name{CommonName: fmt.Sprintf("Agentry local CA (%s)", hostname), Organization: []string{"Agentry"}},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(caLifetime),
@@ -349,7 +353,6 @@ func decodePEM(path string, data []byte, kind string) ([]byte, error) {
 	return block.Bytes, nil
 }
 
-func randomSerial() *big.Int {
-	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	return serial
+func randomSerial() (*big.Int, error) {
+	return rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 }
