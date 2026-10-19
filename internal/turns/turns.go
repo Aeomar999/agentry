@@ -100,7 +100,8 @@ func (r *Runner) IsRunning(task string) bool { return r.MachineOf(task).IsRunnin
 const enterPause = 300 * time.Millisecond
 
 // TypeLine types a line into the task's session and presses Enter, wherever
-// it runs, as you would in its terminal.
+// it runs, as you would in its terminal. Pane.Type drops write errors, so
+// TypeLine checks only that it reached the session, not that the line arrived.
 func (r *Runner) TypeLine(task, line string) error {
 	pane, err := r.MachineOf(task).Attach(task, func([]byte) {})
 	if err != nil {
