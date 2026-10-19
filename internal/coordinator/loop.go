@@ -425,7 +425,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 		}
 		after := []string{}
 		for _, ref := range story.After {
-			after = append(after, cmp.Or(ref.ID, ids[ref.Number-1]))
+			after = append(after, storyID(ref, ids))
 		}
 		description := strings.TrimSpace(story.Brief) + "\n\n(A story of " + task.ID + ", the epic \"" + task.Title +
 			"\". When it is done, your summary goes back to the epic's coordinator, " + task.Coordinator + ".)"
@@ -446,6 +446,17 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 	if refused != "" {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": refused})
 	}
+}
+
+// storyID is the task a story builds on: the existing story ref names, or
+// the one made for its number in this split. ParseDecision has already
+// refused a number that isn't an earlier story's, and ids holds every story
+// made before this one, so the index is in range.
+func storyID(ref StoryRef, ids []string) string {
+	if ref.ID != "" {
+		return ref.ID
+	}
+	return ids[ref.Number-1]
 }
 
 // newTask makes a task with the next free id, and returns the id, or why it
