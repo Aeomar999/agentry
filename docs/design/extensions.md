@@ -150,7 +150,7 @@ way (`agents_api.go`, `store.go`, `new-task.ts`, `NewTaskDialog.tsx`,
 | Per-team policy profiles | Each template's agents name a `Profile`; `read-mostly` exists only for Visionaries | `internal/policy/default.toml` (no inheritance, so it copies `read-only`); `web.unknownProfile` refuses the team on an older policy file; task-35 tracks profiles per team. |
 | Integrations | Claude Code connections | Core: the `connections` stream (`events.ConnectionInvited`, `ConnectionMade`, `ConnectionRevoked`), `connections.Roster` in `current.State`, `agentry mcp` (`internal/mcp`, a separate process over `client.Client`), `ui/src/pages/IntegrationsPage.tsx`. |
 | Design, Research, Writing templates | Nothing but data | Only entries in `agents.Templates` and prompts under `internal/agents/defaults/<folder>/`. They need no code: their agents use `read-only` and `developer`, and their critic has `Column: Reviews`. |
-| Server capabilities | How the server was started | `GET /api/config` already carries `hasTerminal`, `hasDesk` and `canAddWorkers`; only `canAddWorkers` is read by the page (`WorkersPage`). This is the one precedent for "the page follows what the server says is on". |
+| Server capabilities | How the server was started | `GET /api/config` carries `canAddWorkers`, read by the page (`WorkersPage`). It also carried `hasTerminal` and `hasDesk`, which nothing read; story 24 dropped them, since `serve` always has both. This is the one precedent for "the page follows what the server says is on". |
 
 So the line between a team and a feature is already visible: Design,
 Research and Writing are pure data, Shipping is a capability of an agent's

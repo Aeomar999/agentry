@@ -244,8 +244,6 @@ export interface ServerConfig {
   defaultRepo: string;
   budget: number; // what a new task gets, in tokens; 0 is no limit
   maxTurns: number; // what a new task gets; 0 is no limit
-  hasTerminal: boolean;
-  hasDesk: boolean;
   engines: string[];
   workers: string[]; // the machines agents can be given: "local" first, then every worker
   canAddWorkers: boolean;
