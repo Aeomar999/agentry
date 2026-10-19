@@ -97,8 +97,9 @@ func TestClosingAnEpicSkipsItsArchivedStory(t *testing.T) {
 	}
 }
 
-// An archived task is done, so neither the list nor a detail shows it
-// blocking the story after it; the story after one that isn't done waits.
+// An archived task is done, so neither the list, a detail nor the epic's
+// story list shows it blocking the story after it; the story after one that
+// isn't done waits.
 func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
@@ -110,8 +111,11 @@ func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
 	call(t, server, "POST", "/api/tasks", `{"title":"Not yet","kind":"story"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","stories":["task-1","task-2"]}`)
 	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-4", Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskCreated,
-		Data: map[string]any{"title": "After both", "repo": "/r", "coordinator": "tech-lead", "kind": "", "epic": "task-3", "after": []string{"task-1", "task-2"}}}); err != nil || rejection != nil {
+		Data: map[string]any{"title": "After both", "repo": "/r", "coordinator": "tech-lead", "kind": "", "epic": "", "after": []string{"task-1", "task-2"}}}); err != nil || rejection != nil {
 		t.Fatal(rejection, err)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-3"}`); code != 200 {
+		t.Fatalf("task-4 into the epic: %d %s", code, body)
 	}
 	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {
 		t.Fatalf("task-1 onto Done: %d %s", code, body)
@@ -133,5 +137,15 @@ func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
 	json.Unmarshal([]byte(body), &detail)
 	if !slices.Equal(detail.BlockedBy, []string{"task-2"}) {
 		t.Errorf("task-4's detail has it blocked by %v, want only task-2", detail.BlockedBy)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-3", "")
+	var epic taskDetail
+	json.Unmarshal([]byte(body), &epic)
+	at = slices.IndexFunc(epic.StoryList, func(summary taskSummary) bool { return summary.ID == "task-4" })
+	if at < 0 {
+		t.Fatalf("the epic's story list has no task-4: %s", body)
+	}
+	if !slices.Equal(epic.StoryList[at].BlockedBy, []string{"task-2"}) {
+		t.Errorf("the epic's story list has task-4 blocked by %v, want only task-2", epic.StoryList[at].BlockedBy)
 	}
 }
