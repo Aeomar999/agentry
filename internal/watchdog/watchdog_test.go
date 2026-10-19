@@ -1,6 +1,7 @@
 package watchdog
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -8,7 +9,9 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -22,19 +25,35 @@ var (
 )
 
 // world is a store with task-1 in an open coordinator turn, and a fake
-// process table: alive says whether the agent's process is running.
+// process table: alive says whether the agent's process is running. What is
+// typed into the session goes to typed, after the events recorded by then.
 type world struct {
-	t       *testing.T
-	store   *store.Store
-	alive   bool
-	stopped bool
-	dog     *Watchdog
+	t         *testing.T
+	store     *store.Store
+	alive     bool
+	stopped   bool
+	typed     []string
+	typedFrom []events.Type // the last event recorded when each line was typed
+	typeErr   error
+	dog       *Watchdog
 }
 
 func newWorld(t *testing.T) *world {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	return newWorldOn(t, s, state)
+}
+
+func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
 	w := &world{t: t, store: s, alive: true}
-	w.dog = New(s, state, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true })
+	typeLine := func(task, line string) error {
+		if w.typeErr != nil {
+			return w.typeErr
+		}
+		stream, _ := w.store.Stream(task)
+		w.typed, w.typedFrom = append(w.typed, line), append(w.typedFrom, stream[len(stream)-1].Type)
+		return nil
+	}
+	w.dog = New(s, state, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true }, typeLine)
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -158,45 +177,117 @@ func (w *world) limit(resetsAt string) {
 	w.propose(worker, events.TurnLimited, "turn-1", map[string]any{"agent": "tech-lead", "error": "rate_limit", "details": "limit reached", "resetsAt": resetsAt})
 }
 
-func TestALimitedTurnIsQuietUntilTheResetPlusSilence(t *testing.T) {
+// at is the time d from now, as the engine writes a reset time.
+func at(d time.Duration) string { return time.Now().Add(d).UTC().Format(time.RFC3339) }
+
+func TestALimitedTurnIsRetriedOnceJustAfterTheReset(t *testing.T) {
 	w := newWorld(t)
-	w.limit(time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339))
-	if issue := w.after(39 * time.Minute); issue != "" || w.stopped {
-		t.Errorf("quiet before the reset plus the silence limit is waiting, not a stall: %q", issue)
+	w.limit(at(30 * time.Minute))
+	if issue := w.after(30 * time.Minute); issue != "" || len(w.typed) != 0 || w.task().OpenTurn().Limited == "" {
+		t.Fatalf("nothing is typed before the reset and its slack: issue %q, typed %q", issue, w.typed)
 	}
-	if issue := w.after(41 * time.Minute); !strings.Contains(issue, "usage limit") || !w.stopped {
-		t.Errorf("a turn that never goes on after the reset is a stall: issue %q, stopped %v", issue, w.stopped)
+	if issue := w.after(31*time.Minute + time.Second); issue != "" || w.stopped {
+		t.Errorf("issue %q, stopped %v", issue, w.stopped)
+	}
+	if len(w.typed) != 1 || w.typed[0] != CarryOn {
+		t.Fatalf("typed %q", w.typed)
+	}
+	if w.typedFrom[0] != events.TurnResumed {
+		t.Errorf("the turn should be resumed before the prompt is typed, last event was %s", w.typedFrom[0])
+	}
+	stream, _ := w.store.Stream("task-1")
+	if resumed := stream[len(stream)-1]; resumed.Type != events.TurnResumed || resumed.Text("reason") != "reset" || resumed.Actor != dog ||
+		resumed.Correlation != "turn-1" || resumed.Text("agent") != "tech-lead" {
+		t.Errorf("resumed %+v", resumed)
+	}
+	w.after(32 * time.Minute)
+	w.after(33 * time.Minute)
+	if len(w.typed) != 1 {
+		t.Errorf("a retried turn is typed into once: %q", w.typed)
 	}
 }
 
-func TestALimitWithNoResetTimeWaitsAnHour(t *testing.T) {
+func TestALimitWithNoResetTimeIsRetriedAfterAnHour(t *testing.T) {
 	w := newWorld(t)
 	w.limit("")
-	if issue := w.after(UnknownReset + 9*time.Minute); issue != "" {
-		t.Errorf("issue %q", issue)
+	if w.after(UnknownReset - time.Second); len(w.typed) != 0 {
+		t.Errorf("typed %q", w.typed)
 	}
-	if issue := w.after(UnknownReset + 11*time.Minute); !strings.Contains(issue, "usage limit") {
-		t.Errorf("issue %q", issue)
+	if w.after(UnknownReset + time.Second); len(w.typed) != 1 {
+		t.Errorf("typed %q", w.typed)
 	}
 }
 
-func TestALimitResetDaysAwayIsWaitedOutForADayAtMost(t *testing.T) {
+func TestALimitResetDaysAwayIsRetriedAfterADayAtMost(t *testing.T) {
 	w := newWorld(t)
-	w.limit(time.Now().Add(3 * 24 * time.Hour).UTC().Format(time.RFC3339))
-	if issue := w.after(MaxLimitWait + 9*time.Minute); issue != "" {
-		t.Errorf("issue %q", issue)
+	w.limit(at(3 * 24 * time.Hour))
+	if w.after(MaxLimitWait - time.Second); len(w.typed) != 0 {
+		t.Errorf("typed %q", w.typed)
 	}
-	if issue := w.after(MaxLimitWait + 11*time.Minute); !strings.Contains(issue, "usage limit") {
-		t.Errorf("a reset days away still stalls after a day plus the silence limit: issue %q", issue)
+	if w.after(MaxLimitWait + time.Second); len(w.typed) != 1 {
+		t.Errorf("a reset days away is still retried after a day: typed %q", w.typed)
+	}
+}
+
+func TestAPromptThatCannotBeTypedIsAnIssue(t *testing.T) {
+	w := newWorld(t)
+	w.limit("")
+	w.typeErr = errors.New("no session is running")
+	issue := w.after(UnknownReset + time.Second)
+	if issue != "could not type the carry-on prompt after the usage limit: no session is running" || !w.stopped {
+		t.Errorf("issue %q, stopped %v", issue, w.stopped)
+	}
+}
+
+func TestARetriedTurnQuietForTooLongIsAStall(t *testing.T) {
+	w := newWorld(t)
+	w.limit(at(30 * time.Minute))
+	retried := time.Now().Add(31*time.Minute + time.Second)
+	w.dog.Check(retried)
+	// The resume is stamped with the real clock, so silence counts from it.
+	if issue := w.after(DefaultLimits.Silence + time.Minute); !strings.Contains(issue, "stalled") {
+		t.Errorf("after the retry the turn is watched for silence as any other: %q", issue)
+	}
+}
+
+func TestARefusedResumeTypesNothingAndStallsAfterTheReset(t *testing.T) {
+	refuseResumes := func(p events.Proposal, state rules.State) *events.Rejection {
+		if p.Type == events.TurnResumed {
+			return &events.Rejection{Reason: "refused for the test"}
+		}
+		return rules.Check(p, state)
+	}
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return refuseResumes(p, state) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	w := newWorldOn(t, s, state)
+	w.limit(at(30 * time.Minute))
+	if issue := w.after(39 * time.Minute); issue != "" || len(w.typed) != 0 {
+		t.Errorf("issue %q, typed %q", issue, w.typed)
+	}
+	if issue := w.after(42 * time.Minute); !strings.Contains(issue, "usage limit was due to reset") || len(w.typed) != 0 {
+		t.Errorf("issue %q, typed %q", issue, w.typed)
 	}
 }
 
 func TestALimitedTurnWhoseProcessExitedIsACrash(t *testing.T) {
 	w := newWorld(t)
-	w.limit(time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	w.limit(at(time.Hour))
 	w.alive = false
 	if issue := w.after(4 * time.Second); !strings.Contains(issue, "process exited") {
 		t.Errorf("issue %q", issue)
+	}
+}
+
+func TestADeadLimitedTurnIsACrashNotARetry(t *testing.T) {
+	w := newWorld(t)
+	w.limit(at(time.Minute))
+	w.alive = false
+	if issue := w.after(time.Hour); !strings.Contains(issue, "process exited") || len(w.typed) != 0 {
+		t.Errorf("issue %q, typed %q", issue, w.typed)
 	}
 }
 

@@ -163,7 +163,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
 	go loop.Run(ctx)
-	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
+	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
 
 	// The desk starts when you first open it on the page, and stops with the server.

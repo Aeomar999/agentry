@@ -42,18 +42,27 @@ const UnknownReset = time.Hour
 // the engine says it resets, so a misread reset can't hide a stall for days.
 const MaxLimitWait = 24 * time.Hour
 
+// ResetSlack is how long after the engine's reset time a limited turn is
+// retried, so a reset read to the minute has surely passed.
+const ResetSlack = time.Minute
+
+// CarryOn is typed into a limited turn's session when its limit resets.
+const CarryOn = "Your Claude usage limit has reset. Carry on from where you stopped."
+
 type Watchdog struct {
 	store     *store.Store   // where it raises issues
 	state     *current.State // the tasks it watches
 	limits    Limits
-	isRunning func(task string) bool // is the task's agent process alive
-	stop      func(task string)      // end the task's session
+	isRunning func(task string) bool        // is the task's agent process alive
+	stop      func(task string)             // end the task's session
+	typeLine  func(task, line string) error // type a line into the task's session and press Enter
 }
 
 var dog = events.Actor{Kind: events.System, ID: "watchdog"}
 
-func New(s *store.Store, state *current.State, limits Limits, isRunning func(task string) bool, stop func(task string)) *Watchdog {
-	return &Watchdog{store: s, state: state, limits: limits, isRunning: isRunning, stop: stop}
+func New(s *store.Store, state *current.State, limits Limits, isRunning func(task string) bool, stop func(task string),
+	typeLine func(task, line string) error) *Watchdog {
+	return &Watchdog{store: s, state: state, limits: limits, isRunning: isRunning, stop: stop, typeLine: typeLine}
 }
 
 // Run checks every second until ctx ends: a crash is flagged within about
@@ -84,11 +93,14 @@ func (w *Watchdog) Check(now time.Time) {
 
 func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) {
 	if problem := w.findProblem(now, task, turn); problem != "" {
-		w.stop(task.ID)
-		w.propose(task.ID, events.IssueRaised, "", map[string]any{"reason": problem})
+		w.raise(task.ID, problem)
 		return
 	}
-	if turn.Limited == "" && !turn.Acknowledged && turn.Waiting == "" && now.Sub(turn.StartedAt) > w.limits.Acknowledge {
+	if turn.Limited != "" {
+		w.checkLimited(now, task, turn)
+		return
+	}
+	if !turn.Acknowledged && turn.Waiting == "" && now.Sub(turn.StartedAt) > w.limits.Acknowledge {
 		w.propose(task.ID, events.AgentWaiting, turn.ID, map[string]any{"question": fmt.Sprintf(
 			"%s hasn't received its prompt after %s. It may be showing a question on screen, such as whether to trust "+
 				"this repository: open its terminal and answer it.", turn.Agent, w.limits.Acknowledge)})
@@ -101,7 +113,7 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 		return fmt.Sprintf("%s's process exited in %s (crashed or was killed)", turn.Agent, turn.ID)
 	}
 	if turn.Limited != "" {
-		return w.limitedProblem(now, turn)
+		return "" // checkLimited watches it
 	}
 	if command, times := repeatedCommand(task, turn); times >= w.limits.Repeats {
 		return fmt.Sprintf("%s requested the same command %d times in a row, so it may be stuck in a loop: %s", turn.Agent, times, command)
@@ -119,23 +131,38 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 	return ""
 }
 
-// limitedProblem is what is wrong with a turn stopped at a usage limit: the
-// engine is quiet on purpose until the reset, so only silence after it counts.
-func (w *Watchdog) limitedProblem(now time.Time, turn *tasks.Turn) string {
-	quietFrom := turn.ResetsAt
-	if quietFrom.IsZero() {
-		quietFrom = turn.LastEventAt.Add(UnknownReset)
+// checkLimited retries a turn stopped at a usage limit once it has reset:
+// the turn goes on, then its session is told to carry on. A resume that is
+// refused leaves the turn waiting, and silence after the reset is a stall.
+func (w *Watchdog) checkLimited(now time.Time, task *tasks.Task, turn *tasks.Turn) {
+	at := retryAt(turn)
+	if now.Before(at) {
+		return
 	}
-	if latest := turn.LastEventAt.Add(MaxLimitWait); quietFrom.After(latest) {
-		quietFrom = latest
+	if !w.propose(task.ID, events.TurnResumed, turn.ID, map[string]any{"agent": turn.Agent, "reason": "reset"}) {
+		if now.Sub(at) > w.limits.Silence {
+			w.raise(task.ID, fmt.Sprintf("%s has been silent for over %s since its usage limit was due to reset", turn.Agent, w.limits.Silence))
+		}
+		return
 	}
-	if turn.LastEventAt.After(quietFrom) {
-		quietFrom = turn.LastEventAt
+	if err := w.typeLine(task.ID, CarryOn); err != nil {
+		w.raise(task.ID, "could not type the carry-on prompt after the usage limit: "+err.Error())
 	}
-	if now.Sub(quietFrom) > w.limits.Silence {
-		return fmt.Sprintf("%s has been silent for over %s since its usage limit was due to reset", turn.Agent, w.limits.Silence)
+}
+
+// retryAt is when a limited turn is retried: just after the engine said its
+// limit resets, or UnknownReset after it stopped when it didn't say, and
+// never later than MaxLimitWait after it stopped, so a misread reset can't
+// hold the turn for days.
+func retryAt(turn *tasks.Turn) time.Time {
+	at := turn.ResetsAt.Add(ResetSlack)
+	if turn.ResetsAt.IsZero() {
+		at = turn.LastEventAt.Add(UnknownReset)
 	}
-	return ""
+	if latest := turn.LastEventAt.Add(MaxLimitWait); at.After(latest) {
+		return latest
+	}
+	return at
 }
 
 // runningTool is the turn's approved action that has no result yet, if any.
@@ -172,8 +199,17 @@ func repeatedCommand(task *tasks.Task, turn *tasks.Turn) (string, int) {
 	return last, times
 }
 
-func (w *Watchdog) propose(task string, kind events.Type, correlation string, data map[string]any) {
+// raise ends the task's session and its turn as an issue.
+func (w *Watchdog) raise(task, reason string) {
+	w.stop(task)
+	w.propose(task, events.IssueRaised, "", map[string]any{"reason": reason})
+}
+
+// propose says whether the event was recorded.
+func (w *Watchdog) propose(task string, kind events.Type, correlation string, data map[string]any) bool {
 	if _, rejection, err := w.store.Propose(events.Proposal{Stream: task, Actor: dog, Type: kind, Correlation: correlation, Data: data}); err != nil || rejection != nil {
 		slog.Warn("watchdog: proposal refused", "task", task, "type", kind, "rejection", rejection, "err", err)
+		return false
 	}
+	return true
 }

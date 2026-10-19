@@ -75,7 +75,7 @@ func TestAWrapUpThatCrashesStillEnds(t *testing.T) {
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 
 	dead := func(string) bool { return false }
-	watch.New(s, state, watch.DefaultLimits, dead, func(string) {}).Check(time.Now().Add(time.Minute))
+	watch.New(s, state, watch.DefaultLimits, dead, func(string) {}, func(string, string) error { return nil }).Check(time.Now().Add(time.Minute))
 	task := waitUntil(t, s, id, "the wrap-up to end", func(task *tasks.Task) bool { return task.WrapUp == nil })
 	if !task.IsDone || task.Turns[2].Issue == "" || !strings.Contains(task.Told.Text, "ended without a reply") {
 		t.Errorf("done %v, issue %q, told %q", task.IsDone, task.Turns[2].Issue, task.Told.Text)

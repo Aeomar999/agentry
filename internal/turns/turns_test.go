@@ -117,3 +117,44 @@ func mustStream(t *testing.T, s *store.Store, name string) []events.Event {
 	}
 	return stream
 }
+
+func TestTypeLineSendsALineToTheSession(t *testing.T) {
+	sessionstest.Isolate(t)
+	bin := t.TempDir()
+	typed := filepath.Join(bin, "typed.txt")
+	// Reads one line from its terminal, as an engine waiting at its prompt.
+	script := "#!/bin/sh\nread line; printf '%s' \"$line\" > " + typed + ".part && mv " + typed + ".part " + typed + "\n" + sessionstest.Wait() + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	task := taskWithWorktree(t, s, "task-turns-3")
+	defer sessions.Stop(sessions.SocketFor(task.ID))
+	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
+	runner := NewRunner(s, state, here(), Config{})
+	if err := runner.Start(task, coordinator, "brief"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runner.TypeLine(task.ID, "Carry on."); err != nil {
+		t.Fatal(err)
+	}
+	var line string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && line == ""; time.Sleep(50 * time.Millisecond) {
+		content, _ := os.ReadFile(typed)
+		line = string(content)
+	}
+	if line != "Carry on." {
+		t.Errorf("the session read %q", line)
+	}
+}
+
+func TestTypeLineIntoNoSessionIsAnError(t *testing.T) {
+	sessionstest.Isolate(t)
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	task := taskWithWorktree(t, s, "task-turns-4")
+	if err := NewRunner(s, state, here(), Config{}).TypeLine(task.ID, "Carry on."); err == nil {
+		t.Error("typing into a session that isn't running should fail")
+	}
+}
