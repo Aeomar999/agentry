@@ -47,9 +47,12 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   const chosen = teams.find((t) => t.team === team); // none: the coordinators decide
   const lead = chosen?.agents.find((a) => a.coordinates);
   const asksVisionaries = chosen?.team === VISIONARIES;
+  // A visionaries session is one plain task, never split; your kind comes back if you pick another team.
+  const sentKind = asksVisionaries ? "story" : kind;
   // Asked for the Visionaries team, and you don't have it yet.
   const visionariesMissing = preset === VISIONARIES && agents.data !== undefined && !teams.some((t) => t.team === VISIONARIES);
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState("");
   const [repo, setRepo] = useState("");
   const config = useResource<ServerConfig>("/api/config").data;
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
@@ -78,7 +81,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
         ...asked,
         repo: where === "default" ? "" : repo.trim(),
         team: chosen?.team ?? "",
-        kind,
+        kind: sentKind,
         epic,
         newRepo: where === "new",
       });
@@ -105,12 +108,13 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
 
   async function addVisionaries() {
     setAdding(true);
+    setAddError("");
     try {
       await addTeam(VISIONARIES);
       notify("success", "Added the Visionaries team", "It is picked: give it a theme or a question.");
       agents.reload();
     } catch (failure) {
-      setError((failure as Error).message);
+      setAddError((failure as Error).message);
     }
     setAdding(false);
   }
@@ -145,6 +149,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
           </div>
         </Banner>
       )}
+      {visionariesMissing && addError && <Banner title="The Visionaries team wasn't added">{addError}</Banner>}
       {asksVisionaries ? (
         <Field
           label="Theme or question"
@@ -162,7 +167,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
       {teams.length > 1 && (
         <Field
           label="Team"
-          htmlFor="task-team"
+          labelId="task-team-label"
           hint={
             !chosen
               ? `${teams[0].agents.find((a) => a.coordinates)?.name ?? "The first team's coordinator"} reads it first and passes it to the team whose work it is.`
@@ -174,7 +179,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
                 : "This team has no coordinator yet."
           }
         >
-          <div id="task-team" role="group" aria-label="Team" className="flex flex-wrap gap-1.5">
+          <div role="group" aria-labelledby="task-team-label" className="flex flex-wrap gap-1.5">
             <FilterChip label="Let the coordinators decide" active={!chosen} onClick={() => setTeam("")} />
             {teams.map((t) => (
               <FilterChip key={t.team} label={t.team} active={chosen?.team === t.team} onClick={() => setTeam(t.team)} />
@@ -188,7 +193,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
             {epic}
           </span>
         </Field>
-      ) : (
+      ) : asksVisionaries ? null : (
         <Field
           label="Kind"
           htmlFor="task-kind"
@@ -306,7 +311,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
       )}
       <div className="flex items-center gap-3">
         <Button type="submit" variant="primary" icon={<Plus />} disabled={busy || !description.trim()}>
-          {epic ? "Add story" : kind === "epic" ? "Add epic" : "Add task"}
+          {epic ? "Add story" : sentKind === "epic" ? "Add epic" : "Add task"}
         </Button>
         <Button variant="ghost" onClick={onCancel}>
           Cancel

@@ -55,22 +55,21 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
         <div className="flex flex-col gap-4">
           <Field
             label="Make it"
-            htmlFor="idea-kind"
+            labelId="idea-kind-label"
             hint={`The session suggests ${idea.kind === "epic" ? "an epic: too big for one change, split into stories" : "one task: one change, on one branch"}.`}
           >
-            <div id="idea-kind">
-              <SegmentedControl
-                active={kind}
-                onChange={(id) => setKind(id as typeof kind)}
-                segments={[
-                  { id: "task", label: "A task" },
-                  { id: "epic", label: "An epic" },
-                ]}
-              />
-            </div>
+            <SegmentedControl
+              active={kind}
+              onChange={(id) => setKind(id as typeof kind)}
+              labelledBy="idea-kind-label"
+              segments={[
+                { id: "task", label: "A task" },
+                { id: "epic", label: "An epic" },
+              ]}
+            />
           </Field>
           <Field label="Note" htmlFor="idea-note" hint="Optional. Kept with the idea, in its history.">
-            <TextArea id="idea-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+            <TextArea id="idea-note" autoFocus rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
           {refused && <Banner title="It wasn't accepted">{refused}</Banner>}
           <div className="flex gap-2">

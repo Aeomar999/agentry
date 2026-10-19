@@ -7,10 +7,21 @@ export interface Segment {
   icon?: ReactNode;
 }
 
-// A row of choices where one is on, such as Board or List.
-export function SegmentedControl({ segments, active, onChange }: { segments: Segment[]; active: string; onChange: (id: string) => void }) {
+// A row of choices where one is on, such as Board or List. labelledBy names
+// the element that labels the choices, such as a Field's label.
+export function SegmentedControl({
+  segments,
+  active,
+  onChange,
+  labelledBy,
+}: {
+  segments: Segment[];
+  active: string;
+  onChange: (id: string) => void;
+  labelledBy?: string;
+}) {
   return (
-    <div role="radiogroup" className="inline-flex h-7 shrink-0 rounded-md border border-divider p-0.5">
+    <div role="radiogroup" aria-labelledby={labelledBy} className="inline-flex h-7 shrink-0 rounded-md border border-divider p-0.5">
       {segments.map((segment) => (
         <button
           key={segment.id}
