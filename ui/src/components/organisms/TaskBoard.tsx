@@ -103,9 +103,17 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
   }
 
   async function move(task: TaskSummary, to: BoardColumn, rank: number | null, note: string) {
+    const mine: Move = { to, sent: false };
+    // Settles this move only: a newer move of the same card is left as it is.
     const settle = (keep: boolean) =>
-      setMoves(({ [task.id]: mine, ...others }) => (keep && mine ? { ...others, [task.id]: { ...mine, sent: true } } : others));
-    setMoves((current) => ({ ...current, [task.id]: { to, sent: false } }));
+      setMoves((current) => {
+        if (current[task.id] !== mine) return current;
+        const next = { ...current };
+        if (keep) next[task.id] = { ...mine, sent: true };
+        else delete next[task.id];
+        return next;
+      });
+    setMoves((current) => ({ ...current, [task.id]: mine }));
     try {
       await api("POST", `/api/tasks/${encodeURIComponent(task.id)}/direct`, { to, note });
     } catch (failure) {
