@@ -21,8 +21,8 @@ server changes with this document.
   against the version before, with a full copy when the hunks outgrow the
   text: 4.7% of today's knowledge bytes. Old events replay as they are.
   Plans, commands and reports stay inline.
-- **Snapshots** (section 2): `state.snapshot` beside the database, JSON,
-  tagged with the binary's hash and anchored to a row's hash; any doubt
+- **Snapshots** (section 2): `state.snapshot` beside the database, gob
+  (JSON was measured too slow in build step 2), tagged with the binary's hash and anchored to a row's hash; any doubt
   means a full replay. Written every 10,000 events or 10 minutes, off the
   request path, and proven `Equal` to a full replay at every cut of the
   fixture logs.
@@ -523,6 +523,14 @@ projection passes with margin: 186 MB × 2.8 ms/MB is 0.52 s on one core,
 is about 0.16 + 0.26 + 0.011 ≈ 0.43 s. If gob also misses 0.5 s with two
 or more cores, the build stops and asks the user; 0.75 s on one core stays
 the limit.
+
+**Measured in build step 2: gob.** `TestStartupBench` on a 1 GB synthetic
+log grown from the 19 October copy: a 201.7 MB body (128.5 MB of working-set
+tasks, 90,000 summaries at about 810 B each) decodes as JSON lines in 0.81 /
+0.43 / 0.14 s on 1 / 2 / 8 cores, and as gob (127.7 MB, 64 streams) in
+0.14 / 0.10 / 0.08 s. JSON misses 0.34 s on two cores, and so would a 186 MB
+body (about 0.40 s), so step 4 writes gob over saved forms with presence
+flags.
 
 The file is one header line, then the body:
 
@@ -1390,7 +1398,7 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      as patches rebuilds byte for byte.
    - Target 9.
 2. **The startup benchmark.** Depends on task-21.
-   - Files: `internal/store/storetest/synthetic.go` (grows the copy into a
+   - Files: `internal/storetest/synthetic.go` (grows the copy into a
      synthetic log: its task streams repeated under new ids and later
      times, its knowledge extended, to `AGENTRY_BENCH_GB` of history and
      the working set W or 2W), `internal/current/startup_bench_test.go`.
@@ -1402,7 +1410,8 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      and applies
      [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model):
      over 0.34 s on 2 goroutines means gob, chosen here before step 4 is
-     built (projected: about 0.43 s of startup, so JSON passes).
+     built (projected: about 0.43 s of startup, so JSON passes; measured:
+     JSON 0.43 s on 2 goroutines, gob 0.10 s, so gob; see section 2).
    - Measures Targets 1 to 5 from here on; none passes yet.
 3. **Saved forms.** Depends on task-21; skip whatever task-21 already
    built (its item 1).

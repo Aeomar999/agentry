@@ -1,5 +1,6 @@
 // Package storetest opens stores for tests the way serve does: the rules
 // check each proposal against a current.State the store keeps up to date.
+// It also grows synthetic logs from a copy of a real one, for benchmarks.
 package storetest
 
 import (
