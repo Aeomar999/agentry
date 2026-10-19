@@ -363,6 +363,17 @@ func TestARefusedResumeTypesNothingAndStallsAfterTheReset(t *testing.T) {
 	}
 }
 
+func TestALimitedTurnWithAToolStillOpenIsNotAStall(t *testing.T) {
+	w := newWorld(t)
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	w.propose(coordinator, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "npm test"})
+	w.propose(policy, events.ActionApproved, "toolu_1", map[string]any{"reason": "ok"})
+	w.limit(at(2 * time.Hour))
+	if issue := w.after(DefaultLimits.Tool + DefaultLimits.Silence + time.Minute); issue != "" || w.stopped || len(w.typed) != 0 {
+		t.Errorf("a limited turn waits for its reset, whatever was open: issue %q, stopped %v, typed %q", issue, w.stopped, w.typed)
+	}
+}
+
 func TestALimitedTurnWhoseProcessExitedIsACrash(t *testing.T) {
 	w := newWorld(t)
 	w.limit(at(time.Hour))
