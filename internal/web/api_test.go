@@ -578,6 +578,30 @@ func TestANewTaskHasItsLimits(t *testing.T) {
 	}
 }
 
+// The config sends no flag the page doesn't read: not whether there is a
+// terminal or a desk, even on a server that has both.
+func TestTheConfigSendsNoTerminalOrDeskFlags(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Desk: http.NotFoundHandler()}, http.NotFoundHandler(), http.NotFoundHandler()).Handler())
+	defer server.Close()
+	_, body := call(t, server, "GET", "/api/config", "")
+	var config map[string]any
+	if err := json.Unmarshal([]byte(body), &config); err != nil {
+		t.Fatalf("config: %v %s", err, body)
+	}
+	for _, key := range []string{"hasTerminal", "hasDesk"} {
+		if _, ok := config[key]; ok {
+			t.Errorf("config sends %s: %s", key, body)
+		}
+	}
+	if _, ok := config["canAddWorkers"]; !ok {
+		t.Errorf("config has no canAddWorkers: %s", body)
+	}
+}
+
 // Raising the budget, or making it unlimited, on a task stopped at its
 // budget answers for you, and the task carries on. A coordinator's own
 // question still waits for your answer.
