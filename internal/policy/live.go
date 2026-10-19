@@ -3,7 +3,11 @@ package policy
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,10 +22,29 @@ type Live struct {
 	protected []string
 	current   atomic.Pointer[Policy]
 
+	// mu is held from reading the file to storing what it holds, so a
+	// change Agentry makes and a reload never see each other half done.
 	mu       sync.Mutex
 	problem  string
 	lastSeen [32]byte // the content last loaded or refused, so each version is judged once
 }
+
+// A Change is a new version of the policy put in force.
+type Change struct {
+	Policy *Policy
+	Before *Policy // the version in force until then
+	Diff   string  // from Before's text to Policy's
+	Backup string  // the file as it was, when Agentry wrote the change; "" when it didn't
+}
+
+// ErrStale refuses a change made to a version of the policy that is no
+// longer the file on disk.
+var ErrStale = errors.New("the policy file changed since you loaded it; reload and try again")
+
+// keepBackups is how many of its backups Agentry keeps beside the policy:
+// the newest, as each is named by its time. Older ones go after each
+// change it writes, so the folder doesn't fill with them.
+const keepBackups = 20
 
 // OpenLive loads path, writing the default policy there first if there is
 // none. It fails if that first load fails: Agentry never runs without a policy.
@@ -59,10 +82,14 @@ func (l *Live) Problem() string {
 
 // Reload reads the file once. It reports a newly loaded policy, or the
 // error of a newly refused file; both are nil when the file hasn't changed.
-func (l *Live) Reload() (*Policy, error) {
-	text, err := os.ReadFile(l.path)
+func (l *Live) Reload() (*Change, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.reloadLocked()
+}
+
+func (l *Live) reloadLocked() (*Change, error) {
+	text, err := os.ReadFile(l.path)
 	if err != nil {
 		return nil, l.refuseLocked(err, [32]byte{})
 	}
@@ -74,9 +101,82 @@ func (l *Live) Reload() (*Policy, error) {
 	if err != nil {
 		return nil, l.refuseLocked(err, sum)
 	}
-	l.lastSeen, l.problem = sum, ""
+	return l.storeLocked(loaded, ""), nil
+}
+
+// An Edit is a change to make to the policy file.
+type Edit struct {
+	Seen   string                            // the hash of the version it was made against
+	Apply  func(text []byte) ([]byte, error) // the file's text, changed
+	Check  func(next *Policy) error          // may refuse the new version before it is written; nil for none
+	Record func(*Change)                     // logs it before any other change or reload can start; nil for none
+}
+
+// Change makes the edit to the policy file and puts the result in force.
+// When the version e.Seen isn't the one in force, or the file on disk
+// isn't it (changed but not reloaded yet), it refuses with ErrStale. The
+// old file is backed up first, as WriteFile does.
+func (l *Live) Change(e Edit, now time.Time) (*Change, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	before := l.current.Load()
+	text, err := os.ReadFile(l.path)
+	if err != nil {
+		return nil, err
+	}
+	if l.problem != "" {
+		return nil, fmt.Errorf("policy.toml doesn't load, so Agentry won't change it until you fix it: %s", l.problem)
+	}
+	if e.Seen != before.Hash() || string(text) != before.Text() {
+		return nil, ErrStale
+	}
+	edited, err := e.Apply(text)
+	if err != nil {
+		return nil, err
+	}
+	next, err := Parse(edited, l.home, l.protected)
+	if err != nil {
+		return nil, fmt.Errorf("the changed policy wouldn't load: %w", err)
+	}
+	if e.Check != nil {
+		if err := e.Check(next); err != nil {
+			return nil, err
+		}
+	}
+	backup, err := WriteFile(l.path, edited, now)
+	if err != nil {
+		return nil, err
+	}
+	pruneBackups(l.path, keepBackups)
+	change := l.storeLocked(next, backup)
+	if e.Record != nil {
+		e.Record(change)
+	}
+	return change, nil
+}
+
+// storeLocked puts loaded in force: the watcher won't report it again.
+func (l *Live) storeLocked(loaded *Policy, backup string) *Change {
+	before := l.current.Load()
+	l.lastSeen, l.problem = sha256.Sum256([]byte(loaded.Text())), ""
 	l.current.Store(loaded)
-	return loaded, nil
+	return &Change{Policy: loaded, Before: before, Backup: backup,
+		Diff: LineDiff("before", "after", before.Text(), loaded.Text())}
+}
+
+// pruneBackups deletes all but the newest keep backups of the policy at
+// path. A backup it can't delete stays; the next change tries again.
+func pruneBackups(path string, keep int) {
+	entries, _ := os.ReadDir(filepath.Dir(path)) // sorted by name, and the names end in the time: oldest first
+	var backups []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), filepath.Base(path)+"-backup-") {
+			backups = append(backups, filepath.Join(filepath.Dir(path), e.Name()))
+		}
+	}
+	for _, old := range backups[:max(len(backups)-keep, 0)] {
+		os.Remove(old)
+	}
 }
 
 func (l *Live) refuseLocked(err error, sum [32]byte) error {
@@ -87,8 +187,9 @@ func (l *Live) refuseLocked(err error, sum [32]byte) error {
 	return err
 }
 
-// Watch reloads every interval until ctx ends, and reports each change.
-func (l *Live) Watch(ctx context.Context, interval time.Duration, report func(loaded *Policy, refused error)) {
+// Watch reloads every interval until ctx ends, and reports each change
+// made on disk, before any other change or reload can start.
+func (l *Live) Watch(ctx context.Context, interval time.Duration, report func(loaded *Change, refused error)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -96,9 +197,11 @@ func (l *Live) Watch(ctx context.Context, interval time.Duration, report func(lo
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if loaded, refused := l.Reload(); loaded != nil || refused != nil {
+			l.mu.Lock()
+			if loaded, refused := l.reloadLocked(); loaded != nil || refused != nil {
 				report(loaded, refused)
 			}
+			l.mu.Unlock()
 		}
 	}
 }
