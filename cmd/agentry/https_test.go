@@ -14,7 +14,9 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -193,7 +195,44 @@ func TestTheFrontDoorSendsNoOneWhereTheCertificateDoesNotReach(t *testing.T) {
 			!strings.Contains(body, `href="https://192.168.1.160:7800/"`) || strings.Contains(body, "https://"+host) || strings.Contains(body, "localhost") {
 			t.Errorf("at %s: %d, Location %q\n%s", host, w.Code, w.Header().Get("Location"), body)
 		}
+		// Asked at a deep path, its download links still reach the downloads.
+		asked := &url.URL{Scheme: "http", Host: host, Path: "/tasks/task-1"}
+		links := downloadLinks(t, body)
+		if len(links) != 3 {
+			t.Fatalf("at %s: download links %q", host, links)
+		}
+		for _, link := range links {
+			target, err := asked.Parse(link)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := httptest.NewRequest("GET", target.RequestURI(), nil)
+			r.Host, r.RemoteAddr = host, "192.168.1.20:5000"
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			if want := downloadTypes[path.Ext(target.Path)]; w.Code != http.StatusOK || want == "" || w.Header().Get("Content-Type") != want {
+				t.Errorf("at %s, %q is %s: %d %s", host, link, target.Path, w.Code, w.Header().Get("Content-Type"))
+			}
+		}
 	}
+}
+
+// downloadTypes are the trust page's downloads' content types, by extension.
+var downloadTypes = map[string]string{".crt": "application/x-x509-ca-cert", ".pem": "application/x-pem-file",
+	".mobileconfig": "application/x-apple-aspen-config"}
+
+// downloadLinks are the hrefs in the trust page's list of downloads.
+func downloadLinks(t *testing.T, page string) []string {
+	t.Helper()
+	list := regexp.MustCompile(`(?s)<ul class="downloads">(.*?)</ul>`).FindStringSubmatch(page)
+	if list == nil {
+		t.Fatalf("no downloads in\n%s", page)
+	}
+	var links []string
+	for _, href := range regexp.MustCompile(`href="([^"]*)"`).FindAllStringSubmatch(list[1], -1) {
+		links = append(links, href[1])
+	}
+	return links
 }
 
 // The CA's certificate is at /trust/ca.crt and /trust/ca.pem, without the

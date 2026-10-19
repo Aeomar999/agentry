@@ -44,13 +44,16 @@ type trustView struct {
 	Name, Fingerprint string
 	Addresses         []string // the https addresses to open once the CA is trusted
 	Uncovered         string   // the address the page was asked at, when the certificate doesn't name it
+	// Downloads is the path the downloads are under, from the root, as the
+	// page is served at any path to a host the certificate doesn't name.
+	Downloads, Profile string
 }
 
 // page writes the trust page with status, saying so when it was asked at
 // uncovered, a host the certificate doesn't name.
 func (door trust) page(w http.ResponseWriter, r *http.Request, status int, uncovered string) {
 	view := trustView{Name: door.ca.Name(), Fingerprint: door.ca.Fingerprint(),
-		Addresses: door.httpsAddresses(r.Host), Uncovered: uncovered}
+		Addresses: door.httpsAddresses(r.Host), Uncovered: uncovered, Downloads: trustPrefix, Profile: profileName}
 	var page bytes.Buffer
 	if err := trustPage.Execute(&page, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

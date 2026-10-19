@@ -61,7 +61,7 @@ func TestTheTrustPageIsServedToAnyone(t *testing.T) {
 			t.Fatalf("over TLS %v: %d %s, Location %q", overTLS, w.Code, w.Header().Get("Content-Type"), w.Header().Get("Location"))
 		}
 		for _, want := range []string{"<title>Trust this device</title>", ca.Name(), ca.Fingerprint(),
-			`href="ca.crt"`, `href="ca.pem"`, `href="agentry.mobileconfig"`, `href="https://192.168.1.160:7800/"`} {
+			`href="/trust/ca.crt"`, `href="/trust/ca.pem"`, `href="/trust/agentry.mobileconfig"`, `href="https://192.168.1.160:7800/"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("over TLS %v: the page doesn't have %q", overTLS, want)
 			}
