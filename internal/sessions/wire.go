@@ -83,8 +83,12 @@ func readFrame(r io.Reader) (byte, []byte, error) {
 // program that started them.
 const DirEnv = "AGENTRY_SESSIONS_DIR"
 
+// A test run takes a folder of its own even when it inherits one, as when
+// two runs start from the same shell: sharing it, each would stop the
+// other's sessions as its own leftovers. A host keeps the folder it was
+// given, which is its run's.
 func init() {
-	if testing.Testing() && os.Getenv(DirEnv) == "" {
+	if testing.Testing() && os.Getenv(hostEnv) == "" {
 		os.Setenv(DirEnv, filepath.Join(os.TempDir(), fmt.Sprintf("agentry-test-%d", os.Getpid())))
 	}
 }

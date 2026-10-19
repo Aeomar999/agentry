@@ -174,6 +174,7 @@ func TestATestCantUseTheLiveSessions(t *testing.T) {
 func TestAHostEndsWithTheTestsThatStartedIt(t *testing.T) {
 	socket := testSocket(t)
 	if os.Getenv("AGENTRY_TEST_START_AND_LEAVE") != "" {
+		t.Setenv(DirEnv, os.Getenv("AGENTRY_TEST_START_AND_LEAVE_IN")) // the first run's, where it looks
 		if err := Start(Spec{Socket: os.Getenv("AGENTRY_TEST_START_AND_LEAVE"), Dir: t.TempDir(), Command: []string{"sleep", "30"}}); err != nil {
 			t.Fatal(err)
 		}
@@ -181,7 +182,7 @@ func TestAHostEndsWithTheTestsThatStartedIt(t *testing.T) {
 	}
 	self, _ := os.Executable()
 	run := exec.Command(self, "-test.run=^TestAHostEndsWithTheTestsThatStartedIt$")
-	run.Env = append(os.Environ(), "AGENTRY_TEST_START_AND_LEAVE="+socket)
+	run.Env = append(os.Environ(), "AGENTRY_TEST_START_AND_LEAVE="+socket, "AGENTRY_TEST_START_AND_LEAVE_IN="+Dir())
 	if output, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("the run that starts the session: %v %s", err, output)
 	}

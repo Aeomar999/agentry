@@ -1,7 +1,10 @@
 package sessionstest
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
@@ -41,5 +44,39 @@ func TestASessionLeftRunningIsFoundAndStopped(t *testing.T) {
 	stopAll()
 	if left := leftovers(); len(left) != 0 {
 		t.Errorf("still running after stopping: %v", left)
+	}
+}
+
+// Two runs started from a shell that names a sessions folder each take one
+// of their own: a run never stops what another left in the shared one, and
+// removes only its own folder. Here the other run is this test binary
+// again, running a test that starts and stops a session.
+func TestARunLeavesTheSessionsOfAFolderItInherits(t *testing.T) {
+	shared, err := os.MkdirTemp("", "") // short: a socket's path is limited
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(shared) })
+	t.Setenv(sessions.DirEnv, shared)
+	if err := sessions.Start(sessions.Spec{Socket: "agentry-other", Dir: t.TempDir(), Command: []string{"sleep", "30"}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sessions.Stop("agentry-other") })
+
+	self, _ := os.Executable()
+	run := exec.Command(self, "-test.run=^TestAnIsolatedTestStopsItsSessionsWhenItEnds$")
+	run.Env = os.Environ() // the shared folder with it
+	if output, err := run.CombinedOutput(); err != nil {
+		t.Errorf("the other run failed: %v %s", err, output)
+	}
+	if !sessions.IsRunning("agentry-other") {
+		t.Error("the other run stopped a session in the folder it inherited")
+	}
+	own := filepath.Join(os.TempDir(), fmt.Sprintf("agentry-test-%d", run.Process.Pid))
+	if _, err := os.Stat(own); !os.IsNotExist(err) {
+		t.Errorf("the other run's own folder should be gone: %v", err)
+	}
+	if _, err := os.Stat(shared); err != nil {
+		t.Errorf("the shared folder should stay: %v", err)
 	}
 }
