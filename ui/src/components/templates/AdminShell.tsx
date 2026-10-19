@@ -182,6 +182,7 @@ export function AdminShell() {
               onToggleTheme={toggleTheme}
               onToggleSidebar={() => (matchMedia("(min-width: 768px)").matches ? setCollapsed((c) => !c) : setDrawerOpen((open) => !open))}
               onOpenPalette={() => setPalette(true)}
+              trust={config?.trust}
             />
             <div className="flex min-h-0 flex-1">
               <Sidebar

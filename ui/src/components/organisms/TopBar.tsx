@@ -6,6 +6,7 @@ import { LogoTile } from "@/components/atoms/LogoTile";
 import { Breadcrumbs, Crumb } from "@/components/molecules/Breadcrumbs";
 import { InstallAppButton } from "@/components/molecules/InstallAppButton";
 import { AccountMenu } from "./AccountMenu";
+import type { Trust } from "@/api/types";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/cn";
 import { modKey } from "@/lib/shortcuts";
@@ -17,9 +18,10 @@ interface TopBarProps {
   onToggleTheme: () => void;
   onToggleSidebar: () => void;
   onOpenPalette: () => void;
+  trust?: Trust; // the server's own CA, when the page is served with it
 }
 
-export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar, onOpenPalette }: TopBarProps) {
+export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar, onOpenPalette, trust }: TopBarProps) {
   return (
     <header className="relative z-20 flex h-topbar shrink-0 items-center gap-3 border-b border-divider bg-surface-1 px-3">
       <IconButton icon={<PanelLeft />} label="Show or hide the sidebar" onClick={onToggleSidebar} />
@@ -46,7 +48,7 @@ export function TopBar({ crumbs, needsYou, theme, onToggleTheme, onToggleSidebar
         <Kbd className="max-md:hidden">{modKey} K</Kbd>
       </button>
 
-      <InstallAppButton />
+      <InstallAppButton trust={trust} />
       <AccountMenu />
       <IconButton
         icon={theme === "dark" ? <Sun /> : <Moon />}
