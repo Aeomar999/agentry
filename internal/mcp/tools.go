@@ -132,7 +132,7 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 			what = t.CurrentAgent + " is working"
 		}
 		if t.Column != "" {
-			what += " (" + boardName(t) + ")"
+			what += " (" + boardName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
 			what = "waits for " + strings.Join(t.BlockedBy, ", ")
@@ -172,7 +172,7 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		}
 		status := t.Status
 		if t.Column != "" && t.Column != "done" { // done says it already
-			status += " · " + boardName(t)
+			status += " · " + boardName(t.Column)
 		}
 		fmt.Fprintf(&b, "%s [%s] %s", t.ID, status, t.Title)
 		switch {
@@ -255,13 +255,13 @@ func statusOf(t task) string {
 
 // columnOf is where the task shows on the board: "on the board: Shipping".
 func columnOf(t task) string {
-	return "on the board: " + boardName(t)
+	return "on the board: " + boardName(t.Column)
 }
 
-// boardName is the task's column as the board names it: "Shipping".
-func boardName(t task) string {
+// boardName is a column as the board names it: "Shipping".
+func boardName(column string) string {
 	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
-	return cmp.Or(names[t.Column], t.Column)
+	return cmp.Or(names[column], column)
 }
 
 // usageOf is what the task has used of its budget and its turns, shown

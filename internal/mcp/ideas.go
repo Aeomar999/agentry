@@ -110,9 +110,9 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		a.Start = answer["start"] == "start"
 	}
 	var got struct {
-		Task     string
-		Accepted bool
-		Refused  string
+		Task, Column string
+		Accepted     bool
+		Refused      string
 	}
 	body := map[string]any{"kind": a.Kind, "note": a.Note}
 	if a.Start {
@@ -121,11 +121,7 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got); err != nil {
 		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
 	}
-	where := "in the user's Backlog until they start it"
-	if a.Start {
-		where = "started (In progress)"
-	}
-	text := fmt.Sprintf("%s became %s, %s: %s", i.ID, got.Task, where, s.agentry.PageURL("/tasks/"+got.Task))
+	text := fmt.Sprintf("%s became %s%s: %s", i.ID, got.Task, placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
 	if !got.Accepted {
 		text += "\nThe idea isn't marked accepted: " + got.Refused
 	}
@@ -158,6 +154,19 @@ func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (st
 		return "", fmt.Errorf("%s wasn't dismissed: %w", i.ID, err)
 	}
 	return "The user dismissed " + i.ID + ", " + i.Title + ".", nil
+}
+
+// placeOf says where an accepted idea's task is, from the column Agentry
+// answers, not from start: a retry reuses a task made before, started or
+// not. "" when the column can't be read.
+func placeOf(column string) string {
+	switch column {
+	case "":
+		return ""
+	case "backlog":
+		return ", in the user's Backlog until they start it"
+	}
+	return ", started (" + boardName(column) + ")"
 }
 
 // startOf is the elicitation's answer for start.

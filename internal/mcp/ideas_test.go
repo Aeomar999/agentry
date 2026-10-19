@@ -14,12 +14,14 @@ import (
 
 // A fake Agentry with ideas in every state and nothing else waiting. It
 // records what the tools ask of it, and refuses as the server does: an idea
-// that isn't open can't be accepted or dismissed.
+// that isn't open can't be accepted or dismissed. An accepted idea's task
+// is in the column asked for, In progress with start, unless column is set.
 type ideasAgentry struct {
-	mu    sync.Mutex
-	ideas []map[string]any
-	calls []string
-	fail  bool // GET /api/ideas fails
+	mu     sync.Mutex
+	ideas  []map[string]any
+	calls  []string
+	fail   bool    // GET /api/ideas fails
+	column *string // the column an accept answers, when set
 }
 
 func newIdeasAgentry(t *testing.T) (*ideasAgentry, client.Client) {
@@ -67,12 +69,19 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if action == "accept" {
-				var choice struct{ Kind string }
+				var choice struct {
+					Kind  string
+					Start bool
+				}
 				if json.Unmarshal(body, &choice); choice.Kind == "bug" {
 					http.Error(w, "an idea becomes a task or an epic, not bug", http.StatusConflict)
 					return
 				}
-				io.WriteString(w, `{"task":"task-31","accepted":true,"refused":""}`)
+				column := map[bool]string{false: "backlog", true: "in-progress"}[choice.Start]
+				if f.column != nil {
+					column = *f.column
+				}
+				json.NewEncoder(w).Encode(map[string]any{"task": "task-31", "column": column, "accepted": true, "refused": ""})
 				return
 			}
 			io.WriteString(w, `{}`)
@@ -407,5 +416,26 @@ func TestAcceptingAnIdeaCanStartItsTask(t *testing.T) {
 	}
 	if len(offered) != 2 || offered[0] != "start" || offered[1] != "backlog" {
 		t.Errorf("the start argument should be the default offered: %v", offered)
+	}
+}
+
+// The reply says where Agentry says the task is, not what was asked: a
+// retry after a crashed accept reuses the task where it was made.
+func TestAnAcceptedIdeaSaysWhereItsTaskReallyIs(t *testing.T) {
+	c, fake := startOnIdeas(t, false, nil)
+	for _, step := range []struct {
+		start  bool
+		column string
+		reply  string
+	}{
+		{true, "backlog", "idea-1 became task-31, in the user's Backlog"},
+		{false, "in-progress", "idea-1 became task-31, started (In progress)"},
+		{false, "review", "idea-1 became task-31, started (Review)"},
+		{true, "", "idea-1 became task-31: https://agentry.example/tasks/task-31"},
+	} {
+		fake.column = &step.column
+		if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": step.start}); !strings.Contains(text, step.reply) {
+			t.Errorf("start %v, in %q: %s", step.start, step.column, text)
+		}
 	}
 }
