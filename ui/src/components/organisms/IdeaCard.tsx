@@ -13,7 +13,8 @@ export const SIZES: Record<Idea["size"], string> = { S: "small", M: "medium", L:
 
 // IdeaCard is one open idea, the way its session wrote it up: the problem,
 // the feature, why now, its risks, and which viewpoints backed or doubted
-// it. Accept makes it a task in your Backlog; Dismiss puts it away.
+// it, and why Agentry didn't accept it for you. Accept makes it a task in
+// your Backlog; Dismiss puts it away.
 export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: () => void; onDismiss: () => void }) {
   return (
     <Panel
@@ -34,6 +35,7 @@ export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: 
           <Voices label="Backed by" agents={idea.backedBy} />
           <Voices label="Doubted by" agents={idea.doubtedBy} />
         </div>
+        {idea.notAutoAccepted && <p className="text-[12px] text-ink-muted">Not auto-accepted: {idea.notAutoAccepted}</p>}
         <div className="flex flex-wrap items-center gap-2 border-t border-divider pt-3">
           <Button size="sm" icon={<Check />} onClick={onAccept}>
             Accept
