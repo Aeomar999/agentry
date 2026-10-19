@@ -55,12 +55,32 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 		if reason := asAnAgent(nil, agent.Proposal(p.Actor, false)); reason != "" {
 			return "agent " + agent.Name + ": " + reason
 		}
+		if reason := keepsNothingOfAnInstall(agent); reason != "" {
+			return "agent " + agent.Name + ": " + reason
+		}
 		if len(agent.Name) > templateAgentNameLimit {
 			return fmt.Sprintf("agent %s: a template's agent names are at most %d characters, to leave room for a number when the name is taken", agent.Name, templateAgentNameLimit)
 		}
 	}
 	if coordinators != 1 {
 		return "a template has exactly one coordinator"
+	}
+	return ""
+}
+
+// keepsNothingOfAnInstall refuses what SaveTemplate drops from a team's
+// agents: the machines one runs on may not be there when the template is
+// added, and its knowledge, team and template are set again then.
+func keepsNothingOfAnInstall(agent agents.Agent) string {
+	switch {
+	case len(agent.Workers) > 0:
+		return "a template's agents name no workers, as the machines may not be there when it is added"
+	case agent.Knowledge != "":
+		return "a template's agents carry no knowledge"
+	case agent.Team != "":
+		return "a template's agents name no team: adding the template sets it"
+	case agent.Template != "":
+		return "a template's agents name no template: adding the template sets it"
 	}
 	return ""
 }

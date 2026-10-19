@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	chief    = agents.Agent{Name: "chief", Prompt: "Hand the work on.", Engine: "claude", Coordinates: true, Team: "Papers", Color: "teal"}
-	courier  = agents.Agent{Name: "courier", Prompt: "Take the papers.", Engine: "claude", Profile: "safe", Team: "Papers", Column: agents.Ships}
-	redrafts = agents.Agent{Name: "courier", Prompt: "Take the papers, signed.", Engine: "codex", Team: "Papers", Workers: []string{"laptop"}}
+	chief    = agents.Agent{Name: "chief", Prompt: "Hand the work on.", Engine: "claude", Coordinates: true, Color: "teal"}
+	courier  = agents.Agent{Name: "courier", Prompt: "Take the papers.", Engine: "claude", Profile: "safe", Column: agents.Ships}
+	redrafts = agents.Agent{Name: "courier", Prompt: "Take the papers, signed.", Engine: "codex"}
 )
 
 func saved(id, description string, members ...agents.Agent) events.Proposal {
@@ -66,13 +66,13 @@ func TestALogWithoutTemplatesHasNone(t *testing.T) {
 	}
 }
 
-// Changing what Templates gave, down to an agent's workers, changes
+// Changing what Templates gave, down to an agent's prompt, changes
 // nothing the state holds, and a later event changes nothing given before.
 func TestTemplatesHandedOutShareNothing(t *testing.T) {
 	log := logOf(saved("papers", "First", chief, redrafts))
 	s := loaded(log)
 	given := s.Templates()
-	given[0].Description, given[0].Agents[1].Workers[0] = "changed", "changed"
+	given[0].Description, given[0].Agents[1].Prompt = "changed", "changed"
 	if want := agents.UserTemplatesFromEvents(log); !reflect.DeepEqual(s.Templates(), want) {
 		t.Errorf("changing what was handed out changed the state:\n%+v", s.Templates())
 	}

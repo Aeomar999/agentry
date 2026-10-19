@@ -119,6 +119,25 @@ func TestATemplatesAgentNameMayBe28Characters(t *testing.T) {
 	}
 }
 
+func TestATemplatesAgentKeepsNothingOfAnInstall(t *testing.T) {
+	for _, test := range []struct {
+		field string
+		set   func(*agents.Agent)
+		want  string
+	}{
+		{"workers", func(a *agents.Agent) { a.Workers = []string{"laptop"} }, "agent reader: a template's agents name no workers"},
+		{"knowledge", func(a *agents.Agent) { a.Knowledge = "Skim the abstract first." }, "agent reader: a template's agents carry no knowledge"},
+		{"team", func(a *agents.Agent) { a.Team = "Research" }, "agent reader: a template's agents name no team"},
+		{"template", func(a *agents.Agent) { a.Template = "research" }, "agent reader: a template's agents name no template"},
+	} {
+		t.Run(test.field, func(t *testing.T) {
+			members := research()
+			test.set(&members[1])
+			refusedSaying(t, savingTemplate("papers", "Research", members), test.want)
+		})
+	}
+}
+
 func TestATemplatesAgentHasAKnownEngine(t *testing.T) {
 	members := research()
 	members[1].Engine = "gpt"
