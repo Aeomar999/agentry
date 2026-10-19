@@ -1,6 +1,10 @@
 package web
 
-import "testing"
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
 
 func TestYouTurnTheVisionariesAfterAnEpicOffAndOn(t *testing.T) {
 	server, _ := newTestServer(t)
@@ -18,5 +22,29 @@ func TestYouTurnTheVisionariesAfterAnEpicOffAndOn(t *testing.T) {
 	}
 	if _, body := call(t, server, "PUT", "/api/settings", `{"visionariesOnEpicClose":true}`); body != `{"visionariesOnEpicClose":true}`+"\n" {
 		t.Errorf("turned on again: %s", body)
+	}
+}
+
+// A request that changes nothing it can read is refused, and the setting
+// stays as it was; without the UI token nothing changes either.
+func TestABadSettingsChangeLeavesTheSettingAlone(t *testing.T) {
+	server, _ := newTestServer(t)
+	call(t, server, "PUT", "/api/settings", `{"visionariesOnEpicClose":false}`)
+	for _, body := range []string{`{"visionariesOnEpicClose":null}`, `{"visionariesOnEpicClose":"yes"}`, `{"another":true}`, `{bad`, ``} {
+		if code, answer := call(t, server, "PUT", "/api/settings", body); code != 400 {
+			t.Errorf("%s: want 400, got %d %s", body, code, answer)
+		}
+	}
+	request, _ := http.NewRequest("PUT", server.URL+"/api/settings", strings.NewReader(`{"visionariesOnEpicClose":true}`))
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != 401 {
+		t.Errorf("no token: want 401, got %d", response.StatusCode)
+	}
+	if _, body := call(t, server, "GET", "/api/settings", ""); body != `{"visionariesOnEpicClose":false}`+"\n" {
+		t.Errorf("it should still be off: %s", body)
 	}
 }
