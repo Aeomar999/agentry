@@ -4,12 +4,14 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -116,12 +118,28 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("the event catalogue: %w", err)
 	}
-	state := current.New(catalogue, ideas.Streams())
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	build, err := buildOf(self)
+	if err != nil {
+		return err
+	}
+	// The state starts from its snapshot when it can, and goes on from it.
+	snapshot := filepath.Join(o.dataDir, snapshotFile)
+	if err := current.RemoveLeftovers(snapshot); err != nil {
+		slog.Warn("agentry: unfinished snapshot writes can't be removed", "err", err)
+	}
+	state := current.Restore(snapshot, build, catalogue, ideas.Streams())
 	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		return err
 	}
 	defer log.Close()
+	snapshots := current.NewSnapshotWriter(snapshot, build, state, log)
+	snapshots.Start()
+	defer snapshots.Close() // the last snapshot, before the log closes
 	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {
 		return err
@@ -136,10 +154,6 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	// Listen before anything starts, so a busy port fails at once.
 	listener, err := net.Listen("tcp", o.address)
-	if err != nil {
-		return err
-	}
-	self, err := os.Executable()
 	if err != nil {
 		return err
 	}
@@ -372,6 +386,24 @@ func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Han
 		}
 	}
 	return failed
+}
+
+// snapshotFile is the state's snapshot, in the data folder beside the log.
+const snapshotFile = "state.snapshot"
+
+// buildOf names the code in binary, for snapshots: a hash of the file, so a
+// snapshot written by any other build, even of the same commit, isn't used.
+func buildOf(binary string) (string, error) {
+	file, err := os.Open(binary)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // The tokens kept in the data folder, next to the UI token.

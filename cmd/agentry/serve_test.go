@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
@@ -110,5 +114,59 @@ func TestStartingSaysOncePerSkippedPrefix(t *testing.T) {
 	said.Reset()
 	if reportSkipped(&said, []current.Unknown{}); said.Len() != 0 {
 		t.Errorf("nothing skipped, but it said %q", said.String())
+	}
+}
+
+// servedOnce starts serve on dataDir, waits until it is running and stops
+// it cleanly. It returns what it logged.
+func servedOnce(t *testing.T, dataDir string) string {
+	t.Helper()
+	var logged, out syncBuffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(previous)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- serve(ctx, serveOptions{address: "127.0.0.1:0", repo: t.TempDir(), dataDir: dataDir}, &out)
+	}()
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(out.String(), "Agentry is running"); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("serve printed:\n%s", out.String())
+		}
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("serve: %v", err)
+	}
+	return logged.String()
+}
+
+// serve keeps the state's snapshot in the data folder, readable by its
+// owner alone: it removes the temporary files of writes that never
+// finished, writes a snapshot at a clean shutdown, and the next start goes
+// on from it with no fallback.
+func TestServeKeepsTheSnapshotAcrossARestart(t *testing.T) {
+	dataDir := t.TempDir()
+	leftover := filepath.Join(dataDir, snapshotFile+".tmp-123")
+	if err := os.WriteFile(leftover, []byte("half a snapshot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if said := servedOnce(t, dataDir); !strings.Contains(said, "there is no snapshot") {
+		t.Errorf("the first start should say there is no snapshot; it logged:\n%s", said)
+	}
+	if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+		t.Errorf("the unfinished write is still there: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(dataDir, snapshotFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("the snapshot's mode is %v, want 0600", mode)
+	}
+	if said := servedOnce(t, dataDir); strings.Contains(said, "replayed") {
+		t.Errorf("the second start didn't go on from the snapshot; it logged:\n%s", said)
 	}
 }
