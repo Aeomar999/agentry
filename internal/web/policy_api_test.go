@@ -528,6 +528,54 @@ func TestACallIsTriedAsAProfileWouldJudgeIt(t *testing.T) {
 	}
 }
 
+func TestATriedCallSaysWhichRuleDecidedByItsPlace(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	got := try(t, server, `{"profile":"developer","tool":"Bash","input":"git push origin feature"}`)
+	rules := profileRules(t, server, "developer")
+	if got.Verdict.Order < 1 || got.Verdict.Order > len(rules) || rules[got.Verdict.Order-1] != got.Verdict.Rule {
+		t.Errorf("order should be the push rule's place among %q: got %+v", rules, got.Verdict)
+	}
+	for _, request := range []string{
+		`{"profile":"developer","tool":"Bash","input":"frobnicate"}`,
+		fmt.Sprintf(`{"profile":"developer","tool":"Read","input":%q}`, server.path),
+	} {
+		_, body := call(t, server.Server, "POST", "/api/policy/try", request)
+		var raw struct{ Verdict map[string]any }
+		if err := json.Unmarshal([]byte(body), &raw); err != nil {
+			t.Fatal(err)
+		}
+		if order, ok := raw.Verdict["order"]; ok {
+			t.Errorf("%s: a built-in verdict has no order, got %v (rule %v)", request, order, raw.Verdict["rule"])
+		}
+	}
+}
+
+// profileRules are the names of a profile's rules, in order, as the page gets them.
+func profileRules(t *testing.T, server policyServer, name string) []string {
+	t.Helper()
+	_, body := call(t, server.Server, "GET", "/api/policy", "")
+	var shown struct {
+		Profiles []struct {
+			Name  string
+			Rules []struct{ Name string }
+		}
+	}
+	if err := json.Unmarshal([]byte(body), &shown); err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range shown.Profiles {
+		if profile.Name == name {
+			var names []string
+			for _, rule := range profile.Rules {
+				names = append(names, rule.Name)
+			}
+			return names
+		}
+	}
+	t.Fatalf("no profile %s in %s", name, body)
+	return nil
+}
+
 func TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys(t *testing.T) {
 	server := servePolicy(t, string(policy.Default()))
 	got := try(t, server, `{"profile":"developer","tool":"Read","input":"main.go"}`)

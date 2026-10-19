@@ -100,8 +100,8 @@ function ProfilePanel({ profile, policy }: { profile: PolicyProfile; policy: Pol
   const inUse = policy.useForEveryone ? policy.useForEveryone === profile.name : true;
   const rules = profile.rules.map((rule, i) => ({ ...rule, order: i + 1 }));
   const [tried, setTried] = useState<TriedCall>();
-  // The first rule by that name decided, if the version shown is the one that judged.
-  const matched = tried?.verdict.policy === policy.hash ? rules.find((rule) => rule.name === tried.verdict.rule) : undefined;
+  // The rule at that place decided, if the version shown is the one that judged.
+  const matched = tried?.verdict.policy === policy.hash ? rules.find((rule) => rule.order === tried.verdict.order) : undefined;
   return (
     <Panel
       flush

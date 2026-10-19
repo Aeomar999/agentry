@@ -137,3 +137,38 @@ func TestDecideAsSkipsUseForEveryone(t *testing.T) {
 		}
 	}
 }
+
+func TestAVerdictSaysWhichRuleDecidedByItsPlace(t *testing.T) {
+	shipped, err := Parse(Default(), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := shipped.DecideAs("developer", bash("git push origin feature"))
+	if got.Order == 0 || shipped.profiles["developer"].rules[got.Order-1].name != got.Rule {
+		t.Errorf("the push rule's place should come back: got %+v", got)
+	}
+	if got := shipped.DecideAs("developer", bash("frobnicate")); got.Rule != "otherwise" || got.Order != 0 {
+		t.Errorf("otherwise is no rule of the profile: got %+v", got)
+	}
+	if got := shipped.DecideAs("developer", file("Read", "/home/dev/.agentry/policy.toml")); got.Rule != "Agentry's own files are off limits" || got.Order != 0 {
+		t.Errorf("the built-in own-files deny is no rule of the profile: got %+v", got)
+	}
+
+	// Rule names needn't be unique, so the place tells two of the same name apart.
+	twins, err := Parse([]byte(minimal+`
+[[profiles.p.rules]]
+name = "same"
+decision = "deny"
+runs_any = ['rm *']
+[[profiles.p.rules]]
+name = "same"
+decision = "allow"
+runs_any = ['ls *']
+`), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := twins.DecideAs("p", bash("ls -l")); got.Decision != Allow || got.Order != 2 {
+		t.Errorf("the second rule named same decided: got %+v", got)
+	}
+}

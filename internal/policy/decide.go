@@ -87,9 +87,9 @@ func (p *Policy) decide(name string, call Call) Verdict {
 	if facts.isShell && facts.shell.invalid {
 		return Verdict{Decision: prof.unreadable, Profile: name, Rule: "Agentry couldn't read this shell command"}
 	}
-	for _, r := range prof.rules {
+	for i, r := range prof.rules {
 		if r.matches(call, facts, prof) {
-			return Verdict{Decision: r.decision, Profile: name, Rule: r.name, Why: r.why}
+			return Verdict{Decision: r.decision, Profile: name, Rule: r.name, Why: r.why, Order: i + 1}
 		}
 	}
 	return Verdict{Decision: prof.otherwise, Profile: name, Rule: "otherwise", Why: prof.why}

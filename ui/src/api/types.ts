@@ -216,6 +216,7 @@ export interface Verdict {
   rule: string;
   why: string;
   policy: string; // the hash of the version that decided
+  order?: number; // the deciding rule's place in its profile, from 1; absent for built-in verdicts
 }
 
 // A call tried against a profile, run in workspace. override is what

@@ -248,11 +248,12 @@ type verdictView struct {
 	Profile  string          `json:"profile"`
 	Rule     string          `json:"rule"`
 	Why      string          `json:"why"`
-	Policy   string          `json:"policy"` // the hash of the version that decided
+	Policy   string          `json:"policy"`          // the hash of the version that decided
+	Order    int             `json:"order,omitempty"` // the deciding rule's place in its profile, from 1
 }
 
 func verdictOf(v policy.Verdict) verdictView {
-	return verdictView{Decision: v.Decision, Profile: v.Profile, Rule: v.Rule, Why: v.Why, Policy: v.Policy}
+	return verdictView{Decision: v.Decision, Profile: v.Profile, Rule: v.Rule, Why: v.Why, Policy: v.Policy, Order: v.Order}
 }
 
 // tryPolicy judges a call as a profile would, once use_for_everyone is off,
