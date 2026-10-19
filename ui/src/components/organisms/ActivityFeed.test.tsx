@@ -152,13 +152,13 @@ describe("ActivityFeed", () => {
     for (const band of container.querySelectorAll("h3")) expect(band.parentElement!.className).toContain("sticky top-0 z-10");
   });
 
-  test("keeps a phone's rail time on one line, as hh:mm", () => {
+  test("shows the rail time as hh:mm at every width, on one line", () => {
     const { container } = feed();
-    const times = [...container.querySelectorAll("span.md\\:hidden")].filter((span) => span.textContent!.includes(":"));
+    const times = [...container.querySelectorAll(".whitespace-nowrap > span")].filter((span) => span.textContent!.includes(":"));
     expect(times.length).toBeGreaterThan(0);
     for (const time of times) {
       expect(time.textContent).toMatch(/^\d\d:\d\d$/);
-      expect(time.parentElement!.className).toContain("whitespace-nowrap");
+      expect(time.className).not.toMatch(/hidden/);
     }
   });
 

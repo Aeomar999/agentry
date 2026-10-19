@@ -15,7 +15,7 @@ import { ActionBadge } from "@/components/molecules/StatusBadges";
 import { EntryText, TaskLinks } from "@/components/organisms/EntryText";
 import { ActivityItem, ActivityTone, Section, Show, inTurn, sections, shown } from "@/lib/activity";
 import { cn } from "@/lib/cn";
-import { clockMinutes, clockTime, duration } from "@/lib/time";
+import { clockMinutes, duration } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { LOCAL } from "@/lib/machines";
 import { useNow } from "@/live/use-now";
@@ -455,8 +455,7 @@ function Rail({ item, clock, band = false }: { item: ActivityItem; clock: number
           band ? "pt-3.5" : item.kind === "note" ? "pt-1" : "pt-2",
         )}
       >
-        <span className="hidden md:inline">{clockTime(item.at)}</span>
-        <span className="md:hidden">{clockMinutes(item.at)}</span>
+        <span>{clockMinutes(item.at)}</span>
         {timed && <Duration item={item} clock={clock} className="hidden md:inline" />}
       </div>
     </div>
