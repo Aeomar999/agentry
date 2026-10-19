@@ -96,7 +96,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
               <LimitSelect
                 id="idea-budget"
                 scale={SCALES.budget}
-                choice={budget ?? choiceOf(SCALES.budget, untouched.shown)}
+                choice={budget ?? choiceOf(SCALES.budget, untouched.shown, untouched.limit)}
                 onChange={setBudget}
                 defaultLimit={untouched.limit}
               />

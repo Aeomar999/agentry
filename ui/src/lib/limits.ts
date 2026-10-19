@@ -47,9 +47,16 @@ export interface LimitChoice {
   custom: string;
 }
 
-export function choiceOf(scale: LimitScale, limit: number): LimitChoice {
+// The limits the select lists: the presets, and a default that isn't one
+// in its place among them, so it can be marked and picked like a preset.
+export function optionsOf(scale: LimitScale, defaultLimit?: number): number[] {
+  if (!defaultLimit || defaultLimit < 0 || scale.presets.includes(defaultLimit)) return scale.presets;
+  return [...scale.presets, defaultLimit].sort((a, b) => a - b);
+}
+
+export function choiceOf(scale: LimitScale, limit: number, defaultLimit?: number): LimitChoice {
   if (limit <= 0) return { option: UNLIMITED, custom: "" };
-  if (scale.presets.includes(limit)) return { option: String(limit), custom: "" };
+  if (optionsOf(scale, defaultLimit).includes(limit)) return { option: String(limit), custom: "" };
   // tokens() rounds, so 1,250,000 shows as 1.3M: write it out when it would.
   const shown = scale.parse(scale.show(limit)) === limit ? scale.show(limit) : String(limit);
   return { option: CUSTOM, custom: shown };

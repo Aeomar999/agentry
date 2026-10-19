@@ -320,7 +320,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
             <LimitSelect
               id="task-budget"
               scale={SCALES.budget}
-              choice={limits.budget ?? choiceOf(SCALES.budget, config.budget)}
+              choice={limits.budget ?? choiceOf(SCALES.budget, config.budget, config.budget)}
               onChange={(choice) => setLimits({ ...limits, budget: choice })}
               defaultLimit={config.budget}
             />
@@ -329,7 +329,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
             <LimitSelect
               id="task-turns"
               scale={SCALES.turns}
-              choice={limits.turns ?? choiceOf(SCALES.turns, config.maxTurns)}
+              choice={limits.turns ?? choiceOf(SCALES.turns, config.maxTurns, config.maxTurns)}
               onChange={(choice) => setLimits({ ...limits, turns: choice })}
               defaultLimit={config.maxTurns}
             />
