@@ -19,6 +19,7 @@ type Choice struct {
 	Kind     string // "task" (or "story") or "epic"; "" takes the one the idea suggests
 	Note     string
 	Defaults tasks.Limits // the server's budget and turns for the new task, unless it follows up an epic, which gives its own
+	Budget   *int         // the token budget you chose for the new task, 0 for no limit; nil takes its limits' budget
 	Start    bool         // start the task now instead of leaving it in the Backlog; only you may
 	By       events.Actor // who accepts it: you when unset, or Agentry for an idea the Visionaries agreed on by your rule
 }
@@ -163,6 +164,9 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 		return Acceptance{Refused: "the epic " + idea.Epic + " it follows up wasn't found, so its limits can't go with the task: it is left for you"}, nil
 	}
 	limits := tasks.NewLimits(choice.Defaults, epic)
+	if choice.Budget != nil {
+		limits.Budget = *choice.Budget
+	}
 	data := map[string]any{"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo,
 		"coordinator": coordinator.Name, "budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true,
 		"from": idea.ID, "idea": idea.ID}

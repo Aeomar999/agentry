@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"maps"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -140,6 +143,55 @@ func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
 		}
 		if d := detailOfTask(t, server, "task-2"); d.Budget != limits.Budget || d.MaxTurns != limits.MaxTurns {
 			t.Errorf("budget %d, max turns %d, want %+v", d.Budget, d.MaxTurns, limits)
+		}
+	}
+}
+
+// Accept and start makes the task out of the Backlog, with the budget you
+// gave or the server's, and always the server's turns; a bad start or
+// budget is a 400 that makes nothing.
+func TestYouAcceptAndStartAnIdea(t *testing.T) {
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 12,
+		Features: []features.Feature{ideas.Feature(state)}}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+
+	for _, bad := range []string{`{"start":"yes"}`, `{"start":1}`, `{"budget":-2}`, `{"budget":"lots"}`} {
+		id := suggestIdea(t, s, "task-1", repo, "Bad "+bad)
+		if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", bad); code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", bad, code, body)
+		}
+	}
+	if ids := state.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) {
+		t.Fatalf("a bad accept made a task: %v", ids)
+	}
+
+	for _, c := range []struct {
+		body   string
+		task   string
+		parked string
+		budget int
+	}{
+		{`{"start":true,"budget":700}`, "task-2", "", 700},
+		{`{"start":true}`, "task-3", "", 5_000_000},
+		{`{"start":true,"budget":-1}`, "task-4", "", 0},
+		{`{"start":false,"budget":0}`, "task-5", "backlog", 5_000_000},
+	} {
+		id := suggestIdea(t, s, "task-1", repo, "Idea for "+c.task)
+		code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", c.body)
+		var got acceptance
+		json.Unmarshal([]byte(body), &got)
+		if code != 200 || got != (acceptance{Task: c.task, Accepted: true}) {
+			t.Fatalf("%s: %d %s", c.body, code, body)
+		}
+		task, err := state.Task(c.task)
+		if err != nil || task.Parked != c.parked || task.Budget != c.budget || task.MaxTurns != 12 {
+			t.Errorf("%s: parked %q budget %d turns %d, want %q %d 12 (%v)", c.body, task.Parked, task.Budget, task.MaxTurns, c.parked, c.budget, err)
 		}
 	}
 }

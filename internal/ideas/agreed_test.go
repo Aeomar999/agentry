@@ -262,6 +262,37 @@ func TestATaskFromAnIdeaTakesTheDefaultLimitsOrItsEpics(t *testing.T) {
 	}
 }
 
+// A budget you choose as you accept replaces only the budget the task's
+// limits give it: its turns are still the server's, or its epic's.
+func TestTheBudgetYouChooseKeepsTheTasksTurns(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{
+		"title": "Improve Portside", "repo": repo, "coordinator": "tech-lead", "kind": "epic", "budget": 800, "maxTurns": 6}})
+	defaults := tasks.Limits{Budget: 5_000_000, MaxTurns: 24}
+	for _, c := range []struct {
+		epic   string
+		budget int
+		want   tasks.Limits
+	}{
+		{"", 700, tasks.Limits{Budget: 700, MaxTurns: 24}},
+		{"", 0, tasks.Limits{Budget: 0, MaxTurns: 24}},
+		{"task-2", 700, tasks.Limits{Budget: 700, MaxTurns: 6}},
+	} {
+		id := suggest(t, s, repo, map[string]any{"epic": c.epic, "title": "Follow " + c.epic})
+		got, err := ideas.Accept(s, state, id, ideas.Choice{Defaults: defaults, Budget: &c.budget, Start: true})
+		if err != nil || !got.Accepted {
+			t.Fatalf("accept: %+v %v", got, err)
+		}
+		stream, err := s.Stream(got.Task)
+		if err != nil || stream[0].Data["budget"] != float64(c.want.Budget) || stream[0].Data["maxTurns"] != float64(c.want.MaxTurns) {
+			t.Errorf("epic %q, budget %d: task.created %v (%v), want %+v", c.epic, c.budget, stream[0].Data, err, c.want)
+		}
+		if limits := loadTask(t, s, got.Task).Limits(); limits != c.want {
+			t.Errorf("epic %q, budget %d: limits %+v, want %+v", c.epic, c.budget, limits, c.want)
+		}
+	}
+}
+
 // turnOn adds the default Visionaries team and turns on Agentry accepting,
 // for you, the ideas every Visionary agreed on, and starting them.
 func turnOn(t *testing.T, s *store.Store, state *current.State) {
