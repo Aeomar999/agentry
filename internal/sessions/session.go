@@ -125,6 +125,27 @@ func Running() []string {
 	return tasks
 }
 
+// All are the sessions in Dir() that have a host, with the host's pid.
+func All() map[string]int {
+	entries, _ := os.ReadDir(Dir())
+	hosts := map[string]int{}
+	for _, entry := range entries {
+		if name, ok := strings.CutSuffix(entry.Name(), ".sock"); ok {
+			if a, err := ask(name, request{Op: "status"}); err == nil {
+				hosts[name] = a.PID
+			}
+		}
+	}
+	return hosts
+}
+
+// StopAll stops every session in Dir(), as a test does when it ends.
+func StopAll() {
+	for name := range All() {
+		Stop(name)
+	}
+}
+
 var errLiveUnderTest = errors.New("a test can't use the live sessions folder: give it its own (sessionstest)")
 
 // liveUnderTest is true when a test would reach the sessions of the
