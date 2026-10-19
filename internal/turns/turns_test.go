@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
@@ -97,6 +99,17 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 		if !strings.Contains(launched, want) {
 			t.Errorf("launch is missing %q:\n%s", want, launched)
 		}
+	}
+}
+
+// The hook gives up on an ask before the engine's own timeout kills it, so
+// the server holds the action for you and the gate fails closed.
+func TestTheHookGivesUpBeforeTheEngineKillsIt(t *testing.T) {
+	task := &tasks.Task{ID: "task-1", Worktree: &tasks.Worktree{Port: 7901}}
+	env := (&Runner{}).environment(task, "turn-1", agents.Agent{Name: "engineer", Engine: "claude"})
+	deadline, err := time.ParseDuration(env[hookcall.EnvDeadline])
+	if killed := engines.GateTimeoutSeconds * time.Second; err != nil || deadline <= 0 || deadline >= killed {
+		t.Errorf("the hook's deadline %q should be under the engine's timeout, %s (%v)", env[hookcall.EnvDeadline], killed, err)
 	}
 }
 
