@@ -40,7 +40,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 // newTestServerWith is newTestServer with the new tasks' limits in limits.
 func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -166,6 +166,54 @@ func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	if elapsed := time.Since(began); elapsed > 5*time.Second || !strings.Contains(body, `"position":`+itoa(start+1)) {
 		t.Errorf("after %s: %s", elapsed, body)
 	}
+}
+
+func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
+	server, s := newTestServer(t)
+	for _, title := range []string{"one", "two"} {
+		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
+	}
+	at := itoa(s.LastPosition())
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+		if got := positionOf(t, server, "GET", path); got != at {
+			t.Errorf("GET %s: position %q, want %s", path, got, at)
+		}
+	}
+	for _, request := range [][2]string{{"POST", "/api/tasks"}, {"GET", "/"}} {
+		if got := positionOf(t, server, request[0], request[1]); got != "" {
+			t.Errorf("%s %s: position %q, want none", request[0], request[1], got)
+		}
+	}
+}
+
+func TestThePositionIsTakenBeforeTheRead(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	server := NewServer(s, state, Config{UIToken: token}, http.NotFoundHandler(), nil)
+	before := s.LastPosition()
+	read := server.atPosition(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
+	}))
+	recorder := httptest.NewRecorder()
+	read.ServeHTTP(recorder, httptest.NewRequest("GET", "/api/tasks", nil))
+	if s.LastPosition() == before {
+		t.Fatal("the read proposed nothing")
+	}
+	if got := recorder.Header().Get(positionHeader); got != itoa(before) {
+		t.Errorf("position %q, want %d, the one before the read", got, before)
+	}
+}
+
+func positionOf(t *testing.T, server *httptest.Server, method, path string) string {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(`{"title":"x"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	return response.Header.Get(positionHeader)
 }
 
 func TestHookCallsGoToTheHookHandler(t *testing.T) {
@@ -434,10 +482,10 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 
 // limitsServerChecked is limitsServer with its own rules, to refuse what the
 // real rules would refuse only in a race.
-func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
+func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	state, catalogue := current.New(), events.Core()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -600,11 +648,11 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 // A limit is kept though its answer to the task's stop is refused, as when
 // the stop was answered as you saved: the reply says why, with a 200.
 func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
-	answeredFirst := func(p events.Proposal, state rules.State) *events.Rejection {
+	answeredFirst := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
 		if p.Type == events.TaskAnswered {
 			return &events.Rejection{Check: "order", Reason: "there's no open question"}
 		}
-		return rules.Check(p, state)
+		return rules.Check(p, state, catalogue)
 	}
 	server, work, ask := limitsServerChecked(t, answeredFirst)
 	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)

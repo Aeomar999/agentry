@@ -45,12 +45,12 @@ func everyEvent() []events.Event {
 	}
 
 	var log []events.Event
-	log = add(log, you, events.IdeaDismissed, map[string]any{"note": "before it was suggested"})
-	log = add(log, agentry, events.IdeaSuggested, map[string]any{"title": "Search the board", "problem": "Scrolling",
+	log = add(log, you, IdeaDismissed, map[string]any{"note": "before it was suggested"})
+	log = add(log, agentry, IdeaSuggested, map[string]any{"title": "Search the board", "problem": "Scrolling",
 		"proposal": "A search box", "whyNow": "200 tasks", "size": "M", "risks": "Slow", "backedBy": []any{"dreamer", "builder"},
 		"doubtedBy": []any{"skeptic"}, "repo": "/r", "task": "task-1", "epic": "task-9", "kind": "story"})
-	log = add(log, you, events.IdeaDismissed, map[string]any{"note": "not now"})
-	log = add(log, agentry, events.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"})
-	log = add(log, you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "now"})
+	log = add(log, you, IdeaDismissed, map[string]any{"note": "not now"})
+	log = add(log, agentry, IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"})
+	log = add(log, you, IdeaAccepted, map[string]any{"task": "task-2", "note": "now"})
 	return log
 }

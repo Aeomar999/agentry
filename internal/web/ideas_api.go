@@ -79,12 +79,12 @@ func (s *Server) dismissIdea(w http.ResponseWriter, r *http.Request) {
 	if !s.ideaExists(w, id) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": strings.TrimSpace(request.Note)}})
+	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": strings.TrimSpace(request.Note)}})
 }
 
 // ideaExists answers 404 when there is no such idea.
 func (s *Server) ideaExists(w http.ResponseWriter, id string) bool {
-	if !events.IsIdeaStream(id) {
+	if !ideas.IsStream(id) {
 		http.Error(w, "no such idea", http.StatusNotFound)
 		return false
 	}

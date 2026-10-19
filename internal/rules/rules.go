@@ -30,8 +30,9 @@ type State interface {
 	Broken(stream string) error
 }
 
-// Check is the store's OrderCheck, made with the state it reads.
-func Check(p events.Proposal, state State) *events.Rejection {
+// Check is the store's OrderCheck, made with the state it reads and the
+// catalogue the store has, which says which streams are tasks.
+func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.Rejection {
 	if err := state.Broken(events.AgentsStream); err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
@@ -57,10 +58,10 @@ func Check(p events.Proposal, state State) *events.Rejection {
 			return refuse(reason)
 		}
 	}
-	if events.IsIdeaStream(p.Stream) {
+	if ideas.IsStream(p.Stream) {
 		return checkIdea(p, state)
 	}
-	if !events.IsTaskStream(p.Stream) {
+	if !catalogue.IsTaskStream(p.Stream) {
 		return nil
 	}
 

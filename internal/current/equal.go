@@ -190,7 +190,7 @@ func indexOf(s *store.Store, cut int64) (index, error) {
 				continue
 			case events.TaskCreated:
 				found.tasks = append(found.tasks, e.Stream)
-			case events.IdeaSuggested:
+			case ideas.IdeaSuggested:
 				found.ideas = append(found.ideas, e.Stream)
 			}
 			found.streams[e.Stream] = e.Position

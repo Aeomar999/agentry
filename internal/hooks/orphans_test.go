@@ -15,7 +15,7 @@ import (
 func TestARestartSkipsABrokenTask(t *testing.T) {
 	state := current.New()
 	// No rules: they would refuse the worktree.moved that breaks task-1.
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), events.Core(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

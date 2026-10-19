@@ -651,3 +651,18 @@ func TestATriedCallIsRefusedWhenItCantBeJudged(t *testing.T) {
 		t.Errorf("a tool with no input is judged: %d", code)
 	}
 }
+
+// A version's read carries the log position like every other read, so the
+// page's shared cache reads it again only when the log moves past it.
+func TestAVersionReadSaysThePositionItWasReadAt(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	server.log.Propose(policy.Loaded(server.path, &policy.Change{Policy: server.live.Current()}, "first loaded", policy.Agentry))
+	call(t, server.Server, "POST", "/api/policy/use-for-everyone/off", `{"hash":"`+server.hash()+`"}`)
+	path := "/api/policy/history/" + itoa(server.policyEvents(t)[0].Position)
+	if code, body := call(t, server.Server, "GET", path, ""); code != 200 {
+		t.Fatalf("GET %s: %d %s", path, code, body)
+	}
+	if got, at := positionOf(t, server.Server, "GET", path), itoa(server.log.LastPosition()); got != at {
+		t.Errorf("GET %s: position %q, want %s", path, got, at)
+	}
+}

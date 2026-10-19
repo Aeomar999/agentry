@@ -251,14 +251,14 @@ func TestARetriedTurnQuietForTooLongIsAStall(t *testing.T) {
 }
 
 func TestARefusedResumeTypesNothingAndStallsAfterTheReset(t *testing.T) {
-	refuseResumes := func(p events.Proposal, state rules.State) *events.Rejection {
+	refuseResumes := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
 		if p.Type == events.TurnResumed {
 			return &events.Rejection{Reason: "refused for the test"}
 		}
-		return rules.Check(p, state)
+		return rules.Check(p, state, catalogue)
 	}
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return refuseResumes(p, state) })
+	state, catalogue := current.New(), events.Core()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return refuseResumes(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}

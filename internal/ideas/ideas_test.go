@@ -26,7 +26,7 @@ var (
 // and task-1, the Visionaries session the ideas come from, in repo.
 func openSeeded(t *testing.T) (s *store.Store, state *current.State, repo string) {
 	t.Helper()
-	s, state = storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state = storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
 	repo = gitRepo(t)
 	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {
@@ -62,7 +62,7 @@ func suggest(t *testing.T, s *store.Store, repo string, data map[string]any) str
 	for field, value := range data {
 		full[field] = value
 	}
-	created, rejection, err := s.Create("idea-", events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: full})
+	created, rejection, err := s.Create("idea-", events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: full})
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
@@ -150,7 +150,7 @@ func TestDismissKeepsYourNote(t *testing.T) {
 	kept, dropped := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})
 	other := suggest(t, s, gitRepo(t), map[string]any{"title": "Elsewhere"})
 	for _, id := range []string{dropped, other} {
-		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "Not now"}})
+		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "Not now"}})
 	}
 
 	if idea := load(t, state, dropped); idea.State != ideas.Dismissed || idea.Note != "Not now" {
@@ -174,7 +174,7 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{}); err != nil || !got.Accepted {
 		t.Fatal(got, err)
 	}
-	mustPropose(t, s, events.Proposal{Stream: dismissed, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}})
+	mustPropose(t, s, events.Proposal{Stream: dismissed, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "No"}})
 
 	for _, id := range []string{accepted, dismissed} {
 		if got, err := ideas.Accept(s, state, id, ideas.Choice{}); err != nil || got.Task != "" || got.Accepted || got.Refused == "" {
@@ -183,12 +183,12 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 	}
 	// The rules refuse it too, not only Accept: here with a task made from
 	// the idea, so only the idea's state stands in the way.
-	again := events.Proposal{Stream: accepted, Actor: you, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}}
+	again := events.Proposal{Stream: accepted, Actor: you, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2"}}
 	for _, p := range []events.Proposal{
 		again,
-		{Stream: accepted, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "Changed my mind"}},
-		{Stream: dismissed, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "Still no"}},
-		{Stream: dismissed, Actor: you, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}},
+		{Stream: accepted, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "Changed my mind"}},
+		{Stream: dismissed, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "Still no"}},
+		{Stream: dismissed, Actor: you, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2"}},
 	} {
 		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || !strings.Contains(rejection.Reason, "already") {
 			t.Errorf("%s on %s: %v %v", p.Type, p.Stream, rejection, err)
@@ -226,7 +226,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	repo := gitRepo(t)
 	// The rules would refuse a worktree.moved before the worktree is
 	// ready, so the log is written without them, then opened with them.
-	unchecked, err := store.Open(path, nil, nil)
+	unchecked, err := store.Open(path, storetest.WithIdeas(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 			Data: map[string]any{"worker": "local", "path": "/w", "port": 7901}})
 	}
 	unchecked.Close()
-	s, state := storetest.Open(t, path)
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	if state.Broken("task-2") == nil || state.Broken("task-3") == nil {
 		t.Fatal("task-2 and task-3 should be broken")
 	}
@@ -288,7 +288,7 @@ func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	ideas.BeforeMarking(t, func() {
-		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}})
+		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "No"}})
 	})
 
 	got, err := ideas.Accept(s, state, id, ideas.Choice{})
@@ -326,11 +326,11 @@ func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 	id := suggest(t, s, repo, nil)
 	for _, by := range []events.Actor{coordinator, agentry} {
 		for _, p := range []events.Proposal{
-			{Stream: id, Actor: by, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-1"}},
-			{Stream: id, Actor: by, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}},
+			{Stream: id, Actor: by, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-1"}},
+			{Stream: id, Actor: by, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "No"}},
 		} {
 			check := "who"
-			if by == agentry && p.Type == events.IdeaAccepted {
+			if by == agentry && p.Type == ideas.IdeaAccepted {
 				check = "order"
 			}
 			if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Check != check {
@@ -363,7 +363,7 @@ func TestAnAcceptedIdeaPointsAtATaskMadeFromIt(t *testing.T) {
 	s, _, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	for _, task := range []string{"task-1", "task-99"} { // not made from it; not made at all
-		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.IdeaAccepted, Data: map[string]any{"task": task}})
+		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaAccepted, Data: map[string]any{"task": task}})
 		if err != nil || rejection == nil {
 			t.Errorf("accepted as %s: %v", task, err)
 		}
@@ -397,7 +397,7 @@ func TestASuggestionComesFromATask(t *testing.T) {
 		{"from no task", "idea-3", agentry, with("task", "task-99"), false},
 		{"by an agent not working on the task", "idea-3", coordinator, usual, false},
 	} {
-		_, rejection, err := s.Propose(events.Proposal{Stream: c.stream, Actor: c.by, Type: events.IdeaSuggested, Data: c.data})
+		_, rejection, err := s.Propose(events.Proposal{Stream: c.stream, Actor: c.by, Type: ideas.IdeaSuggested, Data: c.data})
 		if err != nil || (rejection == nil) != c.accepted {
 			t.Errorf("%s: %v %v", c.name, rejection, err)
 		}

@@ -62,11 +62,12 @@ type Model interface {
 type OrderCheck func(p events.Proposal) *events.Rejection
 
 type Store struct {
-	db      *sql.DB // the one connection that writes
-	reads   *sql.DB // read-only connections for the reads in read.go
-	model   Model   // nil when nothing keeps state from the log
-	check   OrderCheck
-	changes *changes
+	db        *sql.DB // the one connection that writes
+	reads     *sql.DB // read-only connections for the reads in read.go
+	catalogue *events.Catalogue
+	model     Model // nil when nothing keeps state from the log
+	check     OrderCheck
+	changes   *changes
 
 	mu      sync.Mutex   // one proposal at a time, from its check to its apply
 	applied atomic.Int64 // the last position in the model; no read of the log goes past it
@@ -80,7 +81,8 @@ var Driver = "sqlite"
 const readConnections = 4
 
 // Open opens the log at path and loads it into model, if there is one.
-func Open(path string, model Model, check OrderCheck) (*Store, error) {
+// Every proposal must be of a type in catalogue, in a stream it belongs in.
+func Open(path string, catalogue *events.Catalogue, model Model, check OrderCheck) (*Store, error) {
 	db, err := sql.Open(Driver, path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
@@ -108,10 +110,13 @@ func Open(path string, model Model, check OrderCheck) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("opening the read pool: %w", err)
 	}
-	s := &Store{db: db, reads: reads, model: model, check: check, changes: newChanges()}
+	s := &Store{db: db, reads: reads, catalogue: catalogue, model: model, check: check, changes: newChanges()}
 	s.applied.Store(last)
 	return s, nil
 }
+
+// Catalogue is the event types the log was opened with.
+func (s *Store) Catalogue() *events.Catalogue { return s.catalogue }
 
 func (s *Store) Close() error { return errors.Join(s.reads.Close(), s.db.Close()) }
 
@@ -171,10 +176,10 @@ func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, err
 }
 
 func (s *Store) validate(p events.Proposal) *events.Rejection {
-	if rejection := events.CheckShape(p); rejection != nil {
+	if rejection := s.catalogue.CheckShape(p); rejection != nil {
 		return rejection
 	}
-	if rejection := events.CheckWriter(p); rejection != nil {
+	if rejection := s.catalogue.CheckWriter(p); rejection != nil {
 		return rejection
 	}
 	if s.check == nil {

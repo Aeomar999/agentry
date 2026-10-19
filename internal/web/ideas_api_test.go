@@ -23,7 +23,7 @@ var agentry = events.Actor{Kind: events.System, ID: "agentry"}
 // Visionaries done does.
 func suggestIdea(t *testing.T, s *store.Store, task, repo, title string) string {
 	t.Helper()
-	created, rejection, err := s.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+	created, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
 		"title": title, "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": task, "kind": ""}})
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
@@ -144,7 +144,7 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
 	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
-	created, rejection, err := s.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+	created, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
 		"title": "Search the board", "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": "task-1", "kind": "",
 		"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"}}})
 	if rejection != nil || err != nil {
@@ -155,7 +155,7 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Search the board", "repo": repo,
 			"coordinator": "tech-lead", "parked": "backlog", "idea": id}},
-		{Stream: id, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
+		{Stream: id, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
 	}...) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(p.Type, rejection, err)
@@ -241,7 +241,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	every := []string{"product-strategist", "user-advocate", "technologist", "skeptic"}
 	suggest := func(title string, backedBy, doubtedBy []string) string {
 		t.Helper()
-		created, rejection, err := s.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+		created, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
 			"title": title, "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": "task-1", "kind": "",
 			"backedBy": backedBy, "doubtedBy": doubtedBy}})
 		if rejection != nil || err != nil {

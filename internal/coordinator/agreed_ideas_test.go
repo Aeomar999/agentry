@@ -31,10 +31,10 @@ func agreedDone(t *testing.T, s *store.Store, state *current.State, repo string,
 		"kind": "epic", "parked": "backlog"}})
 	mustPropose(t, s, events.Proposal{Stream: "task-earlier", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Earlier ideas",
 		"repo": repo, "coordinator": "editor", "parked": "backlog"}})
-	for title, by := range map[string]events.Type{"Dark mode": events.IdeaDismissed, "Export": events.IdeaAccepted} {
-		created := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": title,
+	for title, by := range map[string]events.Type{"Dark mode": ideas.IdeaDismissed, "Export": ideas.IdeaAccepted} {
+		created := mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": title,
 			"problem": "p", "proposal": "f", "size": "S", "task": "task-earlier", "repo": repo}})
-		if by == events.IdeaDismissed {
+		if by == ideas.IdeaDismissed {
 			mustPropose(t, s, events.Proposal{Stream: created, Actor: you, Type: by, Data: map[string]any{"note": "No"}})
 		} else if got, err := ideas.Accept(s, state, created, ideas.Choice{}); err != nil || !got.Accepted {
 			t.Fatalf("accepting %s: %+v %v", title, got, err)
@@ -65,7 +65,7 @@ func agreedDone(t *testing.T, s *store.Store, state *current.State, repo string,
 
 func mustCreate(t *testing.T, s *store.Store, p events.Proposal) string {
 	t.Helper()
-	created, rejection, err := s.Create(events.IdeaPrefix, p)
+	created, rejection, err := s.Create(ideas.Prefix, p)
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
@@ -213,7 +213,7 @@ func TestUnderNobodyDoubtedADuplicateIsNeverAccepted(t *testing.T) {
 
 	const problem = "Finding the right task on a busy board takes a lot of scrolling through every column"
 	const proposal = "Add a search box above the board that filters the cards by title as you type"
-	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": "Board search",
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": "Board search",
 		"problem": problem, "proposal": proposal, "size": "M", "task": "task-earlier", "repo": repo}})
 	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{}); err != nil || !got.Accepted {
 		t.Fatalf("accepting the original: %+v %v", got, err)

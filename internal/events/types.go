@@ -92,14 +92,6 @@ const (
 	PolicyRefused Type = "policy.refused" // the file had an error; the policy before it stays
 )
 
-// An idea's stream, named by its ID (idea-N): a feature a Visionaries
-// session suggested for a repo, which you accept as a task or dismiss.
-const (
-	IdeaSuggested Type = "idea.suggested"
-	IdeaAccepted  Type = "idea.accepted"  // you took it on: it became the task in "task", made just before
-	IdeaDismissed Type = "idea.dismissed" // you turned it down, saying why in "note"
-)
-
 // The settings stream: your choices for how Agentry works, each kept until
 // you change it.
 const (
@@ -110,7 +102,7 @@ const (
 const ProposalRejected Type = "proposal.rejected"
 
 // Streams that aren't tasks. Every other stream is one task's, named by its
-// ID, or one idea's (IdeaPrefix).
+// ID, or one of a feature's, named by the prefix it registered.
 const (
 	AgentsStream      = "agents"      // every agent event
 	PolicyStream      = "policy"      // every policy event
@@ -118,6 +110,3 @@ const (
 	ConnectionsStream = "connections" // every Claude Code connection's event
 	SettingsStream    = "settings"    // every settings event
 )
-
-// IdeaPrefix starts every idea's stream name, so ideas never show up as tasks.
-const IdeaPrefix = "idea-"

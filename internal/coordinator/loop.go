@@ -59,7 +59,7 @@ func (l *Loop) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for _, id := range touchedTasks(batch) {
+		for _, id := range touchedTasks(l.store.Catalogue(), batch) {
 			l.act(id)
 		}
 		l.followUps(batch)
@@ -67,11 +67,11 @@ func (l *Loop) Run(ctx context.Context) error {
 }
 
 // touchedTasks are the tasks a batch changed, each once, in order.
-func touchedTasks(batch []events.Event) []string {
+func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 	seen := map[string]bool{}
 	var ids []string
 	for _, e := range batch {
-		if !events.IsTaskStream(e.Stream) || e.Type == events.ProposalRejected || seen[e.Stream] {
+		if !catalogue.IsTaskStream(e.Stream) || e.Type == events.ProposalRejected || seen[e.Stream] {
 			continue
 		}
 		seen[e.Stream] = true

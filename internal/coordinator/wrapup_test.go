@@ -236,7 +236,7 @@ func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
 // worktree.moved: the last one counts.
 func TestABrokenTaskKeepsItsPort(t *testing.T) {
 	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), events.Core(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

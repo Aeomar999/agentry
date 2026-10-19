@@ -534,9 +534,13 @@ A reader sees every event applied before it asked, and nothing that
 wasn't applied: the state and the log reads agree, because both stop at
 `applied`. To let the page skip refetches, each `GET` reply carries
 the position its state was read at, in an `X-Agentry-Position` header,
-taken from `State.Position()` before the handler reads. If an event lands
-between the two, the reply is newer than its header says, which only costs
-one extra refetch.
+taken before the handler reads. If an event lands between the two, the
+reply is newer than its header says, which only costs one extra refetch.
+The header is the store's applied position (`LastPosition`, which
+`/api/changes` reports too), not `State.Position()`: while an event is
+being applied the state is one ahead of the log's reads, so a reply that
+also reads the log (ideas, a task's events) would otherwise claim a
+position its log read didn't see.
 
 ### The page
 
@@ -614,8 +618,11 @@ it.
    `Apply` fails it. A second case opens a store on an existing log and
    checks `LastPosition()` equals the last event's position before any
    proposal, and a third does the same with a nil model.
-9. **The page.** A Playwright check: a refresh makes one request per
-   path, and an event refetches each path once.
+9. **The page.** A refresh makes one request per path, an event refetches
+   each shown path once, and N events during one read give one more read.
+   Built as a vitest test of the cache (`ui/src/live/resource-cache.test.ts`,
+   `npm test`) with a fake server and a fake live position; the browser
+   numbers were measured once with Playwright, not as a committed test.
 
 ### Startup and migration
 

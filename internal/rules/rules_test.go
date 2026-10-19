@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -34,13 +35,22 @@ type step struct {
 	accepted    bool
 }
 
+// withIdeas is the catalogue serve opens the log with.
+var withIdeas = func() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(ideas.Registration())
+	if err != nil {
+		panic(err)
+	}
+	return catalogue
+}()
+
 // openSeeded is a store with the rules and the five default agents. It
 // wires the state as storetest.Open does (which imports rules, so it can't
 // be used here), the replay check included.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
 	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return Check(p, state) })
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +385,7 @@ func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
 	apply(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeMoved,
 		Data: map[string]any{"worker": "laptop", "path": "/w", "port": 7901}})
 	for _, st := range []step{created, {you, events.TaskRenamed, "", map[string]any{"title": "Again"}, false}} {
-		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state)
+		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state, withIdeas)
 		if rejection == nil || !strings.Contains(rejection.Reason, "could not read the task: applying worktree.moved to task-1") {
 			t.Errorf("%s: %v, want refused with where the replay stopped", st.kind, rejection)
 		}
@@ -568,7 +578,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 	for _, c := range cases {
 		state := current.New()
 		state.Loaded(0)
-		if rejection := Check(c.p, brokenStream{state, c.stream}); rejection == nil || rejection.Reason != c.want {
+		if rejection := Check(c.p, brokenStream{state, c.stream}, withIdeas); rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s broken, %s: %v, want %q", c.stream, c.p.Type, rejection, c.want)
 		}
 	}

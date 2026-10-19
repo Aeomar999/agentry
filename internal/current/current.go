@@ -3,11 +3,11 @@
 // state is built from it at every start and changed only by the store,
 // as each event commits, so it can't disagree with what happened.
 //
-// A stream is a task's when events.IsTaskStream says so, as the rules and
-// the coordinator tell them apart, and an idea's when events.IsIdeaStream
-// does: an idea is never a task. The agents, workers and connections
-// streams each make a roster, and the settings stream your settings. The
-// policy stream keeps no state here: its events only move the position.
+// A stream is an idea's when ideas.IsStream says so, and every other
+// stream that isn't one of the core's below is a task's: an idea is never
+// a task. The agents, workers and connections streams each make a roster,
+// and the settings stream your settings. The policy stream keeps no state
+// here: its events only move the position.
 package current
 
 import (
@@ -83,7 +83,7 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			s.settings = settings.FromEvents(accepted)
 		case events.PolicyStream:
 		default:
-			if events.IsIdeaStream(stream) {
+			if ideas.IsStream(stream) {
 				if idea := ideas.FromEvents(accepted); idea != nil {
 					s.ideas[stream] = idea
 				}
@@ -143,7 +143,7 @@ func (s *State) Apply(e events.Event) {
 			s.settings = s.settings.Next(e)
 		case events.PolicyStream:
 		default:
-			if events.IsIdeaStream(e.Stream) {
+			if ideas.IsStream(e.Stream) {
 				if idea := ideas.Next(s.ideas[e.Stream], e); idea != nil {
 					s.ideas[e.Stream] = idea
 				}
@@ -160,7 +160,7 @@ func (s *State) made(e events.Event) {
 	switch e.Type {
 	case events.TaskCreated:
 		s.created = append(s.created, created{e.Position, e.Stream})
-	case events.IdeaSuggested:
+	case ideas.IdeaSuggested:
 		s.suggested = append(s.suggested, created{e.Position, e.Stream})
 	}
 }

@@ -33,7 +33,7 @@ func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, st
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -216,7 +216,7 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 	endTurn(t, s, "task-vision-3", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Dark mode", "problem": "Bright at night", "proposal": "A dark theme", "size": "S"}]}`)
 	waitUntil(t, s, "task-vision-3", "done", func(task *tasks.Task) bool { return task.IsDone })
-	if _, rejection, err := s.Propose(events.Proposal{Stream: "idea-1", Actor: you, Type: events.IdeaDismissed,
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "idea-1", Actor: you, Type: ideas.IdeaDismissed,
 		Data: map[string]any{"note": "The OS does it"}}); rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
@@ -225,7 +225,7 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode (idea-1): The OS does it") {
 		t.Errorf("the editor's brief should name the dismissed idea:\n%s", brief)
 	}
-	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": "Search",
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": "Search",
 		"problem": "p", "proposal": "f", "size": "S", "task": "task-vision-3", "repo": repo}})
 	got, err := ideas.Accept(s, state, accepted, ideas.Choice{})
 	if err != nil || !got.Accepted {

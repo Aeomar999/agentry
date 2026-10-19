@@ -65,8 +65,8 @@ func everyStream() []events.Event {
 		proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Second, renamed"}),
 		proposal(events.AgentsStream, you, events.AgentRemoved, map[string]any{"name": "tech-lead"}),
 		proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "engineer", "hash": "h"}),
-		proposal("idea-1", system, events.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
-		proposal("idea-1", you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
+		proposal("idea-1", system, ideas.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
+		proposal("idea-1", you, ideas.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
 		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.VisionariesOnEpicClose: false}),
 		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptRule: settings.NobodyDoubted}),
 	)
@@ -113,14 +113,14 @@ func loaded(log []events.Event) *State {
 func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
-		if events.IsIdeaStream(stream) {
+		if ideas.IsStream(stream) {
 			idea, err := s.Idea(stream)
 			if want := ideas.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(idea, want) {
 				t.Errorf("%s: %+v, %v\nreplay: %+v", stream, idea, err, want)
 			}
 			continue
 		}
-		if !events.IsTaskStream(stream) {
+		if !withIdeas.IsTaskStream(stream) {
 			continue
 		}
 		task, err := s.Task(stream)
@@ -404,11 +404,11 @@ func idsOf(list []*tasks.Task) []string {
 // that turn it on, loaded at any point, give what a replay gives.
 func TestAnIdeaAgentryAcceptedEqualsAReplay(t *testing.T) {
 	log := append(everyStream(), logOf(
-		proposal("idea-2", system, events.IdeaSuggested, map[string]any{"title": "Agreed", "problem": "p", "proposal": "f", "size": "S",
+		proposal("idea-2", system, ideas.IdeaSuggested, map[string]any{"title": "Agreed", "problem": "p", "proposal": "f", "size": "S",
 			"repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
 		proposal("task-3", system, events.TaskCreated, map[string]any{"title": "Agreed", "repo": "/r", "coordinator": "tech-lead",
 			"parked": "backlog", "idea": "idea-2"}),
-		proposal("idea-2", system, events.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"}),
+		proposal("idea-2", system, ideas.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"}),
 		proposal("task-3", system, events.TaskHeld, map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}),
 		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true}),
 	)...)

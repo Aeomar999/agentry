@@ -292,11 +292,11 @@ func TestASplitStoryAfterAStoryNotBeforeItIsRefused(t *testing.T) {
 // task instead of stopping the server, and the loop goes on to the next
 // task. Here the store's check breaks on the story it is asked to make.
 func TestADecisionThatPanicsRaisesAnIssueAndTheLoopGoesOn(t *testing.T) {
-	broken := func(p events.Proposal, state rules.State) *events.Rejection {
+	broken := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
 		if p.Type == events.TaskCreated && p.Text("title") == "Break the check" {
 			panic("the check broke")
 		}
-		return rules.Check(p, state)
+		return rules.Check(p, state, catalogue)
 	}
 	s, state, epic := splittingWith(t, broken, `{"action": "split", "stories": [{"title": "Break the check", "brief": "Boom."}]}`)
 	loop := newLoop(s, state, t.TempDir())
@@ -321,10 +321,10 @@ func splitting(t *testing.T, report string) (*store.Store, *current.State, strin
 }
 
 // splittingWith is splitting with the rules the store checks proposals by.
-func splittingWith(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection, report string) (*store.Store, *current.State, string) {
+func splittingWith(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection, report string) (*store.Store, *current.State, string) {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	state, catalogue := current.New(), events.Core()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}
