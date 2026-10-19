@@ -96,8 +96,11 @@ func streamsOf(log []events.Event) []string {
 }
 
 // loaded is a state loaded from the log, as the store does at Open.
-func loaded(log []events.Event) *State {
-	s := New()
+func loaded(log []events.Event) *State { return loadedWith(withIdeas, log) }
+
+// loadedWith is loaded, reading the streams as catalogue says.
+func loadedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	s := New(catalogue)
 	for _, stream := range streamsOf(log) {
 		s.Load(stream, accepted(log, stream))
 	}
@@ -367,7 +370,7 @@ func TestTasksAreOldestFirstInANewSlice(t *testing.T) {
 // Readers call every getter while events are applied (run with -race).
 func TestReadersRaceApply(t *testing.T) {
 	log := everyStream()
-	s := New()
+	s := New(withIdeas)
 	s.Loaded(0)
 	var readers sync.WaitGroup
 	done := make(chan struct{})
@@ -400,8 +403,11 @@ func TestReadersRaceApply(t *testing.T) {
 }
 
 // applied is a state built by applying every event, from nothing.
-func applied(log []events.Event) *State {
-	s := New()
+func applied(log []events.Event) *State { return appliedWith(withIdeas, log) }
+
+// appliedWith is applied, reading the streams as catalogue says.
+func appliedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	s := New(catalogue)
 	s.Loaded(0)
 	for _, e := range log {
 		s.Apply(e)

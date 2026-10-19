@@ -49,7 +49,7 @@ var withIdeas = func() *events.Catalogue {
 // be used here), the replay check included.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
-	state := current.New()
+	state := current.New(withIdeas)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
 	if err != nil {
 		t.Fatal(err)
@@ -439,7 +439,7 @@ func TestYourMoveToDoneStands(t *testing.T) {
 // A task whose log can't be replayed takes no more events, not even a
 // task.created that would start it again.
 func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
-	state := current.New()
+	state := current.New(withIdeas)
 	state.Loaded(0)
 	var position int64
 	apply := func(p events.Proposal) {
@@ -644,7 +644,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 		{events.ConnectionsStream, connected, "could not read the connections: applying it panicked"},
 	}
 	for _, c := range cases {
-		state := current.New()
+		state := current.New(withIdeas)
 		state.Loaded(0)
 		if rejection := Check(c.p, brokenStream{state, c.stream}, withIdeas); rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s broken, %s: %v, want %q", c.stream, c.p.Type, rejection, c.want)
@@ -655,7 +655,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 // An archived task takes no events, whoever proposes them, and the
 // rejection says why.
 func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
-	state := current.New()
+	state := current.New(withIdeas)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
 	if err != nil {
 		t.Fatal(err)

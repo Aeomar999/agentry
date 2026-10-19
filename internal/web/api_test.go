@@ -485,7 +485,8 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 // real rules would refuse only in a race.
 func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state, catalogue := current.New(), events.Core()
+	catalogue := events.Core()
+	state := current.New(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)

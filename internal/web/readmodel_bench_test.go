@@ -205,7 +205,8 @@ func watchdogLoad(state *current.State, stop chan struct{}) {
 // it, and returns the state.
 func openAndClose(t *testing.T, path string) *current.State {
 	t.Helper()
-	state, catalogue := current.New(), storetest.WithIdeas()
+	catalogue := storetest.WithIdeas()
+	state := current.New(catalogue)
 	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)

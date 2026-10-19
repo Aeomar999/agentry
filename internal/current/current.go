@@ -3,11 +3,13 @@
 // state is built from it at every start and changed only by the store,
 // as each event commits, so it can't disagree with what happened.
 //
-// A stream is an idea's when ideas.IsStream says so, and every other
-// stream that isn't one of the core's below is a task's: an idea is never
-// a task. The agents, workers and connections streams each make a roster,
-// and the settings stream your settings. The policy stream keeps no state
-// here: its events only move the position.
+// The catalogue the state is made with says what each stream is. A task's
+// stream makes a task, and an idea's an idea: an idea is never a task. The
+// agents, workers and connections streams each make a roster, and the
+// settings stream your settings. The policy stream keeps no state here: its
+// events only move the position. A foreign stream, which a feature this
+// build doesn't have wrote, is skipped and only counted, as is an event of
+// a type the catalogue doesn't know in any other stream.
 package current
 
 import (
@@ -34,6 +36,7 @@ import (
 // They must not change it themselves.
 type State struct {
 	mu          sync.RWMutex
+	catalogue   *events.Catalogue
 	position    int64                  // of the last event applied, rejections included
 	streams     map[string]int64       // each stream's last accepted event applied, by stream
 	tasks       map[string]*tasks.Task // by stream
@@ -46,6 +49,7 @@ type State struct {
 	workers     workers.Roster
 	connections connections.Roster
 	settings    settings.Settings
+	skipped     tally // foreign streams and unknown types
 }
 
 // created is a task.created or idea.suggested event's place in the log.
@@ -62,9 +66,11 @@ type created struct {
 // as they skip a done task, without reading its stream.
 var ErrArchived = errors.New("the task is archived")
 
-func New() *State {
-	return &State{streams: map[string]int64{}, tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{},
-		broken: map[string]error{}, archived: map[string]bool{}, settings: settings.Default()}
+// New is an empty state that reads streams as catalogue says, which must be
+// the catalogue the store is opened with.
+func New(catalogue *events.Catalogue) *State {
+	return &State{catalogue: catalogue, streams: map[string]int64{}, tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{},
+		broken: map[string]error{}, archived: map[string]bool{}, settings: settings.Default(), skipped: newTally()}
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -72,18 +78,27 @@ func New() *State {
 func (s *State) Load(stream string, accepted []events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, e := range accepted {
-		s.made(e)
-	}
 	if len(accepted) > 0 {
 		s.streams[stream] = accepted[len(accepted)-1].Position
+	}
+	kind := s.catalogue.KindOf(stream)
+	for i, e := range accepted {
+		s.skipped.count(s.catalogue, kind, e, i == 0)
+	}
+	if kind == events.ForeignStream {
+		return
+	}
+	for _, e := range accepted {
+		s.made(e)
 	}
 	s.fold(stream, accepted)
 }
 
 // fold builds a stream's state from its accepted events, as a replay does,
-// and keeps it, or marks the stream broken if it can't be built.
+// and keeps it, or marks the stream broken if it can't be built. A foreign
+// stream never gets here.
 func (s *State) fold(stream string, accepted []events.Event) {
+	kind := s.catalogue.KindOf(stream)
 	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
 		case events.AgentsStream:
@@ -96,10 +111,12 @@ func (s *State) fold(stream string, accepted []events.Event) {
 			s.settings = settings.FromEvents(accepted)
 		case events.PolicyStream:
 		default:
-			if ideas.IsStream(stream) {
+			if kind == events.OwnedStream && ideas.IsStream(stream) {
 				if idea := ideas.FromEvents(accepted); idea != nil {
 					s.ideas[stream] = idea
 				}
+			} else if kind != events.TaskStream {
+				return
 			} else if task, err := tasks.Replay(accepted); err != nil {
 				s.breaks(stream, err)
 			} else if task != nil {
@@ -121,10 +138,13 @@ func (s *State) Refold(stream string, before []events.Event, e events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.position = e.Position
+	kind := s.catalogue.KindOf(stream)
+	s.skipped.count(s.catalogue, kind, e, s.streams[stream] == 0)
 	s.streams[stream] = e.Position
-	if e.Type == events.TaskCreated {
-		s.created = append(s.created, created{e.Position, stream})
+	if kind == events.ForeignStream {
+		return
 	}
+	s.made(e)
 	delete(s.tasks, stream)
 	delete(s.ideas, stream)
 	delete(s.broken, stream)
@@ -149,7 +169,8 @@ func (s *State) Since() int64 { return s.Position() }
 
 // Apply changes the state by one committed event. A proposal.rejected only
 // moves the position, as Store.Stream leaves it out: it never happened.
-// A broken stream takes no more events, as a replay would fail before them.
+// A foreign stream's event is only counted. A broken stream takes no more
+// events, as a replay would fail before them.
 func (s *State) Apply(e events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -157,7 +178,12 @@ func (s *State) Apply(e events.Event) {
 	if e.Type == events.ProposalRejected {
 		return
 	}
+	kind := s.catalogue.KindOf(e.Stream)
+	s.skipped.count(s.catalogue, kind, e, s.streams[e.Stream] == 0)
 	s.streams[e.Stream] = e.Position
+	if kind == events.ForeignStream {
+		return
+	}
 	// The store applies in the log's order, after everything Load or an
 	// earlier Apply gave, so appending keeps the positions in order.
 	s.made(e)
@@ -179,10 +205,12 @@ func (s *State) Apply(e events.Event) {
 			s.settings = s.settings.Next(e)
 		case events.PolicyStream:
 		default:
-			if ideas.IsStream(e.Stream) {
+			if kind == events.OwnedStream && ideas.IsStream(e.Stream) {
 				if idea := ideas.Next(s.ideas[e.Stream], e); idea != nil {
 					s.ideas[e.Stream] = idea
 				}
+			} else if kind != events.TaskStream {
+				return
 			} else if task := tasks.Next(s.tasks[e.Stream], e); task != nil {
 				s.tasks[e.Stream] = task
 			}
@@ -239,6 +267,7 @@ func (s *State) copy() *State {
 		workers:     s.workers,
 		connections: s.connections,
 		settings:    s.settings,
+		skipped:     s.skipped.clone(),
 	}
 }
 
@@ -375,6 +404,14 @@ func (s *State) Settings() settings.Settings {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.settings
+}
+
+// Unknown is what the state skipped or didn't understand: each foreign
+// stream prefix's events, then each unknown type's in the other streams.
+func (s *State) Unknown() []Unknown {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.skipped.list()
 }
 
 // Broken is why a stream's state could not be built, or nil.

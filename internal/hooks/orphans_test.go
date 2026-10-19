@@ -14,7 +14,7 @@ import (
 // A broken task before the one with an orphaned ask doesn't stop the start:
 // it is skipped, and the ask after it is still held.
 func TestARestartSkipsABrokenTask(t *testing.T) {
-	state := current.New()
+	state := current.New(events.Core())
 	// No rules: they would refuse the worktree.moved that breaks task-1.
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), events.Core(), state, nil)
 	if err != nil {
