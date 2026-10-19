@@ -2,6 +2,7 @@ package current
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 
@@ -16,11 +17,11 @@ import (
 )
 
 // Equal checks the state against a replay of the store's log, which stays
-// the definition of state: every task, idea and roster, the task order and
-// the position. It returns the first difference, named by stream, or nil. A
+// the definition of state: every task, idea and roster, the task order, each
+// stream's last position and the log's. It returns the first difference, named by stream, or nil. A
 // stream the state holds as broken must fail to replay too.
 func Equal(s *store.Store, state *State) error {
-	ids, err := taskIDsIn(s)
+	ids, streams, err := indexOf(s)
 	if err != nil {
 		return err
 	}
@@ -56,6 +57,9 @@ func Equal(s *store.Store, state *State) error {
 	}
 	if order := state.TaskIDs(); !slices.Equal(order, ids) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, ids)
+	}
+	if err := equalStreamPositions(state, streams); err != nil {
+		return err
 	}
 	if position, last := state.Position(), s.LastPosition(); position != last {
 		return fmt.Errorf("position: the state is at %d, the log at %d", position, last)
@@ -125,24 +129,44 @@ func differingField(got, want any) string {
 	return "an unexported field"
 }
 
-// taskIDsIn is the stream of every accepted task.created in the log,
-// oldest first, whatever the stream.
-func taskIDsIn(s *store.Store) ([]string, error) {
+// indexOf reads the whole log for the stream of every accepted task.created,
+// oldest first, whatever the stream, and each stream's last accepted
+// position.
+func indexOf(s *store.Store) (ids []string, streams map[string]int64, err error) {
 	const page = 1000
-	var ids []string
+	streams = map[string]int64{}
 	for position := int64(0); ; {
 		batch, err := s.After(position, page)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, e := range batch {
+			if e.Type == events.ProposalRejected {
+				continue
+			}
 			if e.Type == events.TaskCreated {
 				ids = append(ids, e.Stream)
 			}
+			streams[e.Stream] = e.Position
 		}
 		if len(batch) < page {
-			return ids, nil
+			return ids, streams, nil
 		}
 		position = batch[len(batch)-1].Position
 	}
+}
+
+// equalStreamPositions compares each stream's last position in the state
+// with the log's, naming the first stream, in order, that differs.
+func equalStreamPositions(state *State, inLog map[string]int64) error {
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	streams := slices.Concat(slices.Collect(maps.Keys(state.streams)), slices.Collect(maps.Keys(inLog)))
+	slices.Sort(streams)
+	for _, stream := range slices.Compact(streams) {
+		if held, last := state.streams[stream], inLog[stream]; held != last {
+			return fmt.Errorf("%s: the state's last position is %d, the log's %d", stream, held, last)
+		}
+	}
+	return nil
 }

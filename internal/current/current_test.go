@@ -139,6 +139,15 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose {
 		t.Errorf("settings: %+v\nreplay: %+v", s.Settings(), want)
 	}
+	for _, stream := range streamsOf(log) {
+		var want int64
+		if own := accepted(log, stream); len(own) > 0 {
+			want = own[len(own)-1].Position
+		}
+		if position := s.StreamPosition(stream); position != want {
+			t.Errorf("%s: last position %d, want %d", stream, position, want)
+		}
+	}
 	if want := log[len(log)-1].Position; s.Position() != want {
 		t.Errorf("position %d, want %d", s.Position(), want)
 	}

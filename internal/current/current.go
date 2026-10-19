@@ -33,6 +33,7 @@ import (
 type State struct {
 	mu          sync.RWMutex
 	position    int64                  // of the last event applied, rejections included
+	streams     map[string]int64       // each stream's last accepted event applied, by stream
 	tasks       map[string]*tasks.Task // by stream
 	taskIDs     []string               // every task.created applied, oldest first, as the log lists them
 	ideas       map[string]*ideas.Idea // by stream
@@ -51,8 +52,8 @@ type created struct {
 }
 
 func New() *State {
-	return &State{tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{}, broken: map[string]error{},
-		settings: settings.Default()}
+	return &State{streams: map[string]int64{}, tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{},
+		broken: map[string]error{}, settings: settings.Default()}
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -64,6 +65,9 @@ func (s *State) Load(stream string, accepted []events.Event) {
 		if e.Type == events.TaskCreated {
 			s.created = append(s.created, created{e.Position, stream})
 		}
+	}
+	if len(accepted) > 0 {
+		s.streams[stream] = accepted[len(accepted)-1].Position
 	}
 	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
@@ -112,6 +116,7 @@ func (s *State) Apply(e events.Event) {
 	if e.Type == events.ProposalRejected {
 		return
 	}
+	s.streams[e.Stream] = e.Position
 	if e.Type == events.TaskCreated {
 		s.taskIDs = append(s.taskIDs, e.Stream)
 	}
@@ -168,6 +173,14 @@ func (s *State) Position() int64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.position
+}
+
+// StreamPosition is the position of the last accepted event applied to a
+// stream, 0 for a stream with none.
+func (s *State) StreamPosition(stream string) int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.streams[stream]
 }
 
 // Task is a task's state: nil, nil when there is no such task, and the

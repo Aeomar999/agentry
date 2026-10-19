@@ -93,6 +93,7 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 		{"new task", proposal("task-4", you, events.TaskCreated, map[string]any{"title": "Missed", "repo": "/r", "coordinator": "tech-lead"}), "task-4:"},
 		{"roster", proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Missed."}), "agents:"},
 		{"workers", proposal(events.WorkersStream, system, events.WorkerDisconnected, map[string]any{"name": "laptop"}), "workers: field Workers"},
+		{"policy", proposal(events.PolicyStream, system, events.PolicyLoaded, map[string]any{"hash": "h2", "path": "/p"}), "policy: the state's last position is"},
 		{"rejection", proposal("task-1", you, "task.exploded", nil), "position: the state is at"},
 	}
 	for _, c := range cases {
@@ -106,6 +107,19 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 				t.Errorf("Equal after a missed %s: %v, want it to start %q", c.missed.Type, err, c.want)
 			}
 		})
+	}
+}
+
+// Equal checks each stream's last position, so it sees one an Apply left
+// behind even where the stream's state is right.
+func TestEqualSeesAStreamsWrongPosition(t *testing.T) {
+	s := openStore(t, someProposals()...)
+	state := New()
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	state.streams["task-1"]--
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "task-1: the state's last position is") {
+		t.Errorf("Equal with task-1's last position wrong: %v", err)
 	}
 }
 
