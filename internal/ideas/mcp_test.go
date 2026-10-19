@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/features"
@@ -78,7 +79,23 @@ func TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows(t *testing.T) {
 				}
 			}
 		}
-		return call, func() string { return read().Method }
+		next = func() string { // what the server sends next, within a few seconds
+			t.Helper()
+			scanned := make(chan bool, 1)
+			go func() { scanned <- out.Scan() }()
+			select {
+			case ok := <-scanned:
+				if !ok {
+					t.Fatal("the server stopped")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("the server sent nothing within 5 s")
+			}
+			var m struct{ Method string }
+			json.Unmarshal(out.Bytes(), &m)
+			return m.Method
+		}
+		return call, next
 	}
 	tools := func(call func(string) json.RawMessage) []string {
 		var listed struct{ Tools []struct{ Name string } }

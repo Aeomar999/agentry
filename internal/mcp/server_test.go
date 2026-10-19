@@ -124,12 +124,21 @@ func (c *claude) call(method string, params any) json.RawMessage {
 	return nil
 }
 
-// waitFor reads what the server sends until it notifies method.
+// waitFor reads what the server sends until it notifies method, and fails
+// if that takes more than a few seconds.
 func (c *claude) waitFor(method string) {
 	c.t.Helper()
+	deadline := time.After(5 * time.Second)
 	for !slices.Contains(c.notified, method) {
-		if !c.out.Scan() {
-			c.t.Fatalf("no %s", method)
+		scanned := make(chan bool, 1)
+		go func() { scanned <- c.out.Scan() }()
+		select {
+		case ok := <-scanned:
+			if !ok {
+				c.t.Fatalf("no %s: the server stopped", method)
+			}
+		case <-deadline:
+			c.t.Fatalf("no %s within 5 s; notified %v", method, c.notified)
 		}
 		var m message
 		json.Unmarshal(c.out.Bytes(), &m)
