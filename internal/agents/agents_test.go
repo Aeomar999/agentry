@@ -272,3 +272,92 @@ func TestEveryTemplateHasACoordinatorAndPrompts(t *testing.T) {
 		}
 	}
 }
+
+// A team made from a template records it on every agent, so it is known
+// whatever the team is called: a second Visionaries team is one too.
+func TestATeamRecordsItsTemplate(t *testing.T) {
+	visionaries, _ := TemplateNamed("visionaries")
+	log := seeded()
+	for range 2 {
+		for _, p := range AddTeam(visionaries, FromEvents(log), you) {
+			if p.Text("template") != "visionaries" {
+				t.Errorf("%s: template %q", p.Text("name"), p.Text("template"))
+			}
+			log = append(log, events.Event{Proposal: p})
+		}
+	}
+	roster := FromEvents(log)
+	for team, want := range map[string]string{DefaultTeam: "software", "Visionaries": "visionaries", "Visionaries 2": "visionaries", "Writing": ""} {
+		if got := roster.TemplateOf(team); got != want {
+			t.Errorf("%s: template %q, want %q", team, got, want)
+		}
+	}
+	if skeptic, _ := roster.Get("skeptic-2"); skeptic.Template != "visionaries" {
+		t.Errorf("the second skeptic: template %q", skeptic.Template)
+	}
+}
+
+// A team you make yourself has no template, even with a template's name.
+func TestAHandMadeTeamHasNoTemplate(t *testing.T) {
+	log := seeded()
+	for _, agent := range []Agent{{Name: "lead", Coordinates: true, Team: "Visionaries"}, {Name: "thinker", Team: "Visionaries"}} {
+		agent.Engine, agent.Prompt = "claude", "Think."
+		log = append(log, events.Event{Proposal: agent.Proposal(you, false)})
+	}
+	if got := FromEvents(log).TemplateOf("Visionaries"); got != "" {
+		t.Errorf("a hand-made Visionaries team: template %q", got)
+	}
+}
+
+// before is the event p as Agentry wrote it before agents recorded their
+// template: without the field at all.
+func before(p events.Proposal) events.Event {
+	data := map[string]any{}
+	for field, value := range p.Data {
+		if field != "template" {
+			data[field] = value
+		}
+	}
+	p.Data = data
+	return events.Event{Proposal: p}
+}
+
+// Agents from before the field find their template by their team's name,
+// as AddTeam names teams; the log needs no new event.
+func TestAnOldLogFindsItsTemplatesByName(t *testing.T) {
+	want := map[string]string{"": "software", "Visionaries": "visionaries", "visionaries 3": "visionaries", "Visionaries 2": "visionaries",
+		"Writing 12": "writing", "Visionaries Two": "", "Visionaries2": "", "Visionaries 2b": "", "Thinkers": ""}
+	var log []events.Event
+	for team := range want {
+		log = append(log, before(agent("lead of "+team, team, "").Proposal(you, false)))
+	}
+	roster := FromEvents(log)
+	for team, template := range want {
+		if got, _ := roster.Get("lead of " + team); got.Template != template {
+			t.Errorf("team %q: template %q, want %q", team, got.Template, template)
+		}
+	}
+}
+
+// An old agent.changed keeps the template the agent has, unless it moves
+// the agent to another team.
+func TestAnOldChangeKeepsTheTemplate(t *testing.T) {
+	made := agent("thinker", "Thinkers", "visionaries")
+	hand := agent("lead", "Visionaries", "")
+	moved := agent("mover", "Thinkers", "visionaries")
+	log := []events.Event{{Proposal: made.Proposal(you, false)}, {Proposal: hand.Proposal(you, false)}, {Proposal: moved.Proposal(you, false)}}
+	moved.Team = "Writing"
+	log = append(log, before(made.Proposal(you, true)), before(hand.Proposal(you, true)), before(moved.Proposal(you, true)))
+	roster := FromEvents(log)
+	for name, want := range map[string]string{"thinker": "visionaries", "lead": "", "mover": "writing"} {
+		if got, _ := roster.Get(name); got.Template != want {
+			t.Errorf("%s: template %q, want %q", name, got.Template, want)
+		}
+	}
+}
+
+var you = events.Actor{Kind: events.Human, ID: "you"}
+
+func agent(name, team, template string) Agent {
+	return Agent{Name: name, Team: team, Template: template, Engine: "claude", Prompt: "Work."}
+}

@@ -31,11 +31,12 @@ func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 	if _, rejection, _ := s.Propose(tester.Proposal(you, true)); rejection != nil {
 		t.Fatal(rejection)
 	}
+	repo := gitRepo(t)
 	const id = "task-machine-1"
 	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Fix it", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Fix it", "repo": repo, "coordinator": "tech-lead"}})
 	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	brief := readBrief(t, task, "turn-1")
 	for _, want := range []string{"## Machines", "- laptop (host laptop.lan, darwin/arm64), offline; may run tester", "The task's work is on local now"} {

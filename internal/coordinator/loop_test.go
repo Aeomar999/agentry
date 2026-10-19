@@ -129,11 +129,12 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	if _, rejection, _ := s.Propose(engineer.Proposal(you, true)); rejection != nil {
 		t.Fatal(rejection)
 	}
+	repo := gitRepo(t)
 	const id = "task-loop-2"
 	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Go."}`)
 	task := waitUntil(t, s, id, "a question", func(task *tasks.Task) bool { return task.Question != "" })

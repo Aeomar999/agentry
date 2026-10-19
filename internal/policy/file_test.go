@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,5 +106,84 @@ func TestABrokenFileStopsTheFirstStart(t *testing.T) {
 	os.WriteFile(path, []byte("version = "), 0o600)
 	if _, err := OpenLive(path, home, nil); err == nil {
 		t.Error("Agentry must not run without a policy")
+	}
+}
+
+func TestABrokenFileAtStartNamesTheLineAndTheNewestBackup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.toml")
+	os.WriteFile(path, []byte("version = 1\n\n[profile.p\n"), 0o600)
+	older, newer := path+"-backup-20260101T000000.000000000Z", path+"-backup-20260102T000000.000000000Z"
+	for _, name := range []string{newer, older, path + "-mine"} {
+		os.WriteFile(name, []byte(minimal), 0o600)
+	}
+	os.Mkdir(path+"-backup-99999999T999999.999999999Z", 0o700)
+
+	_, err := OpenLive(path, home, nil)
+	if err == nil {
+		t.Fatal("Agentry must not run without a policy")
+	}
+	for _, want := range []string{"policy " + path + " is refused: ", "line 3", "cp '" + newer + "' '" + path + "'"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the error says %q:\n%v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), older) {
+		t.Errorf("only the newest backup is named:\n%v", err)
+	}
+}
+
+// An error that quotes the file starts on a line of its own, and so does
+// its hint.
+func TestAnUnknownKeyAtStartPutsTheHintOnItsOwnLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.toml")
+	os.WriteFile(path, []byte(strings.Replace(minimal, "[profiles.p]", "bogus_key = true\n[profiles.p]", 1)), 0o600)
+	backup := path + "-backup-20260101T000000.000000000Z"
+	os.WriteFile(backup, []byte(minimal), 0o600)
+
+	_, err := OpenLive(path, home, nil)
+	if err == nil {
+		t.Fatal("Agentry must not run without a policy")
+	}
+	lines := strings.Split(err.Error(), "\n")
+	if !strings.HasSuffix(lines[0], " is refused:") || len(lines) < 2 || !strings.HasPrefix(lines[1], "2| ") {
+		t.Errorf("the file's first quoted line starts a line of its own:\n%v", err)
+	}
+	hint := "To go back to its newest backup: cp '" + backup + "' '" + path + "'"
+	if len(lines) < 2 || lines[len(lines)-1] != hint || lines[len(lines)-2] != `7| otherwise = "ask"` {
+		t.Errorf("the hint is the last line and the file's last quoted line is before it:\n%v", err)
+	}
+}
+
+// A ' in the path must not break the cp line.
+func TestTheStartHintQuotesAPathWithAQuote(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "it's")
+	os.Mkdir(dir, 0o700)
+	path := filepath.Join(dir, "policy.toml")
+	os.WriteFile(path, []byte("version = "), 0o600)
+	os.WriteFile(path+"-backup-20260101T000000.000000000Z", []byte(minimal), 0o600)
+
+	_, err := OpenLive(path, home, nil)
+	quoted := strings.ReplaceAll(path, "'", `'\''`)
+	if want := "cp '" + quoted + "-backup-20260101T000000.000000000Z' '" + quoted + "'"; err == nil || !strings.HasSuffix(err.Error(), want) {
+		t.Errorf("the error ends %q:\n%v", want, err)
+	}
+}
+
+func TestARefusedFileAtStartSaysThereIsNoBackup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.toml")
+	os.WriteFile(path, []byte(strings.Replace(minimal, "version = 1", "version = 2", 1)), 0o600)
+	_, err := OpenLive(path, home, nil)
+	if err == nil || !strings.HasSuffix(err.Error(), "; there is no backup of it") || !strings.Contains(err.Error(), path) {
+		t.Errorf("the error names the file and says there is no backup: %v", err)
+	}
+}
+
+func TestTheStartErrorWrapsWhyTheFileIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.toml")
+	os.WriteFile(path, []byte("version = "), 0o600)
+	_, want := Parse([]byte("version = "), home, nil)
+	_, err := OpenLive(path, home, nil)
+	if err == nil || errors.Unwrap(err) == nil || errors.Unwrap(err).Error() != want.Error() {
+		t.Errorf("OpenLive wraps Parse's error %q: %v", want, err)
 	}
 }

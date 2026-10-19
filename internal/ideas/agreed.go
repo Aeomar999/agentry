@@ -10,6 +10,10 @@ import (
 // VisionariesTeam is the team whose coordinators suggest ideas.
 const VisionariesTeam = "Visionaries"
 
+// Feature is what a team template lists to make its coordinators suggest
+// ideas.
+const Feature = "ideas"
+
 // Agreed says whether every viewpoint of team, in any case, backs the idea
 // and none doubts it. The viewpoints are the team's agents that don't
 // coordinate, read from the roster, so a team with other viewpoints works.

@@ -30,6 +30,9 @@ type Agent struct {
 	// board while it has it: Builds (In progress), Reviews (Review), or Ships
 	// (Shipping).
 	Column string `json:"column"`
+	// Template is the ID of the team template the agent was made from, ""
+	// for one you made yourself. Editing the agent keeps it.
+	Template string `json:"template"`
 
 	// Knowledge is what the agent has learned as it works, in its own words
 	// and yours; part of every brief. Changed only by agent.learned, so
@@ -66,7 +69,7 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
-		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team,
+		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team, "template": a.Template,
 	}}
 }
 
@@ -90,7 +93,17 @@ func (a Agent) workers() []string {
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
 		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
-		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), untouched: e.Actor.Kind == events.System}
+		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), Template: e.Text("template"), untouched: e.Actor.Kind == events.System}
+}
+
+// templateBefore is the template of agent, read from an event written
+// before agents had one, which has no "template" at all: the one whose team
+// it is in, by name. An agent that stays in its team keeps what it had.
+func templateBefore(agent Agent, had *Agent) string {
+	if had != nil && had.TeamName() == agent.TeamName() {
+		return had.Template
+	}
+	return templateByName(agent.TeamName()).ID
 }
 
 // Roster is every agent, in the order they were created.
@@ -117,12 +130,19 @@ func (r *Roster) Apply(e events.Event) {
 	roster := *r
 	switch e.Type {
 	case events.AgentCreated:
-		roster = append(roster, fromEvent(e))
+		agent := fromEvent(e)
+		if !e.Has("template") {
+			agent.Template = templateBefore(agent, nil)
+		}
+		roster = append(roster, agent)
 	case events.AgentChanged:
 		if i := roster.index(e.Text("name")); i >= 0 {
-			knowledge := roster[i].Knowledge
-			roster[i] = fromEvent(e)
-			roster[i].Knowledge = knowledge
+			agent := fromEvent(e)
+			if !e.Has("template") {
+				agent.Template = templateBefore(agent, &roster[i])
+			}
+			agent.Knowledge = roster[i].Knowledge
+			roster[i] = agent
 		}
 	case events.AgentRenamed:
 		if i := roster.index(e.Text("name")); i >= 0 {
@@ -180,6 +200,13 @@ func (r Roster) Coordinator(team string) (Agent, bool) {
 		return r[i], true
 	}
 	return Agent{}, false
+}
+
+// TemplateOf is the ID of the template team was made from: its
+// coordinator's. "" for a team you made yourself, or no such team.
+func (r Roster) TemplateOf(team string) string {
+	coordinator, _ := r.Coordinator(team)
+	return coordinator.Template
 }
 
 // Assignees are the agents of team a coordinator can hand work to.

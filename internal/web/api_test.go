@@ -1488,6 +1488,52 @@ func TestATeamIsRemovedWithItsAgents(t *testing.T) {
 	}
 }
 
+// Editing an agent keeps the template it came from, whatever the page sends,
+// so its team keeps the features the template turns on.
+func TestEditingAnAgentKeepsItsTemplate(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
+		t.Fatalf("add Visionaries: %d %s", code, body)
+	}
+	for _, change := range []string{
+		`{"engine":"claude","profile":"read-mostly","prompt":"Lead.","coordinates":true,"team":"Visionaries"}`,
+		`{"engine":"claude","profile":"read-mostly","prompt":"Lead.","coordinates":true,"team":"Visionaries","template":"software"}`,
+	} {
+		if code, body := call(t, server, "PUT", "/api/agents/visionary-lead", change); code != 200 {
+			t.Fatalf("change: %d %s", code, body)
+		}
+		stream, _ := s.Stream(events.AgentsStream)
+		if template := agents.FromEvents(stream).TemplateOf("Visionaries"); template != "visionaries" {
+			t.Errorf("%s: the team's template is %q, not visionaries", change, template)
+		}
+	}
+	_, body := call(t, server, "GET", "/api/agents", "")
+	var roster []agents.Agent
+	json.Unmarshal([]byte(body), &roster)
+	for _, agent := range roster {
+		if agent.Name == "visionary-lead" && agent.Template != "visionaries" {
+			t.Errorf("the page should show the lead's template: %+v", agent)
+		}
+	}
+	if !strings.Contains(body, `"template":"visionaries"`) {
+		t.Errorf("GET /api/agents should show template: %s", body)
+	}
+}
+
+// Only adding a team makes agents from a template: one you make yourself has
+// none, even if the page sends one.
+func TestAnAgentYouMakeHasNoTemplate(t *testing.T) {
+	server, s := newTestServer(t)
+	agent := `{"name":"thinker","engine":"claude","prompt":"Think.","coordinates":true,"team":"Thinkers","template":"visionaries"}`
+	if code, body := call(t, server, "POST", "/api/agents", agent); code != 200 {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	if template := agents.FromEvents(stream).TemplateOf("Thinkers"); template != "" {
+		t.Errorf("a team you made has template %q", template)
+	}
+}
+
 // Tasks are filed under epics, from the page or the desk: made with their
 // stories, moved between epics, and taken out.
 func TestTasksAreFiledUnderEpics(t *testing.T) {
