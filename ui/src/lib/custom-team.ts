@@ -1,4 +1,4 @@
-import { api } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { shippedProfiles } from "./profiles";
@@ -83,6 +83,37 @@ export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft
     return { ...agent, key: nextKey(), name };
   });
   return { team: freeTeamName(template.team, roster), agents };
+}
+
+// newAgent is the row + Add agent adds: no name yet, a colour no row has,
+// Building, the first engine and the default profile. The first row of an
+// empty team coordinates it, since there is nobody else to pick.
+export function newAgent(draft: TeamDraft, engines: string[]): DraftAgent {
+  const used = draft.agents.map((agent) => agent.color);
+  return {
+    key: nextKey(),
+    name: "",
+    description: "",
+    coordinates: draft.agents.length === 0,
+    prompt: "",
+    engine: engines[0] ?? "claude",
+    model: "",
+    profile: "",
+    color: AGENT_COLORS.find((color) => !used.includes(color)) ?? "",
+    column: "",
+  };
+}
+
+// changedAgents are the names of the rows that differ from how the team
+// started: changed, added or removed. Starting again replaces them.
+export function changedAgents(start: TeamDraft, now: TeamDraft): string[] {
+  const same = (a: DraftAgent, b: DraftAgent) => (Object.keys(a) as (keyof DraftAgent)[]).every((field) => a[field] === b[field]);
+  const changed = now.agents.filter((agent) => {
+    const was = start.agents.find((other) => other.key === agent.key);
+    return !was || !same(was, agent);
+  });
+  const removed = start.agents.filter((agent) => !now.agents.some((other) => other.key === agent.key));
+  return [...changed, ...removed].map(shownName);
 }
 
 // freeName is name, or name-2, name-3… when it is taken, cut to fit MAX_NAME.
@@ -274,6 +305,13 @@ export function missingProfiles(draft: TeamDraft, policy: Pick<Policy, "profiles
     if (shipped.has(profile) && !inPolicy(profile, policy) && !missing.includes(profile)) missing.push(profile);
   }
   return missing;
+}
+
+// whyNotCreated is a refusal in words: the server's own, or ours when
+// Agentry couldn't be reached at all.
+export function whyNotCreated(failure: unknown): string {
+  if (failure instanceof ApiError || !(failure instanceof TypeError)) return (failure as Error).message;
+  return "Couldn't reach Agentry. Check it's running, then try again.";
 }
 
 // addCustomTeam adds the team as drafted, trimmed. With policyHash, as for

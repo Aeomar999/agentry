@@ -8,13 +8,22 @@ interface RadioProps {
   label: ReactNode;
   hint?: ReactNode;
   disabled?: boolean;
+  readOnly?: boolean; // aria-disabled: still focusable and read out, but it takes no change
 }
 
 // One choice of a group, drawn like a Checkbox; the whole row picks it.
-export function Radio({ name, checked, onChange, label, hint, disabled }: RadioProps) {
+export function Radio({ name, checked, onChange, label, hint, disabled, readOnly }: RadioProps) {
   return (
     <label className={cn("flex cursor-pointer items-start gap-2.5 text-[13px]", disabled && "cursor-not-allowed opacity-50")}>
-      <input type="radio" className="peer sr-only" name={name} checked={checked} disabled={disabled} onChange={onChange} />
+      <input
+        type="radio"
+        className="peer sr-only"
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        aria-disabled={readOnly || undefined}
+        onChange={() => !readOnly && onChange()}
+      />
       <span
         className={cn(
           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-(--dur-fast)",

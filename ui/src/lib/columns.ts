@@ -20,6 +20,6 @@ export function stageOf(task: TaskSummary): string {
 
 // columnOfAgent is the board column an agent's work shows in, or "" for
 // building, which is In progress.
-export function columnOfAgent(agent: Agent): BoardColumn | "" {
+export function columnOfAgent(agent: Pick<Agent, "column">): BoardColumn | "" {
   return agent.column === "review" ? "review" : agent.column === "ship" ? "shipping" : "";
 }

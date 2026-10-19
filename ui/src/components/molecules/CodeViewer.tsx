@@ -13,13 +13,22 @@ export interface CodeViewerProps {
   maxHeight?: number; // grows with the text up to this, then scrolls
   minHeight?: number;
   onChange?: (text: string) => void; // makes it editable
+  readOnly?: boolean; // editable, but not for now, as while a form saves
+  placeholder?: string; // shown while the text is empty
 }
 
 const MonacoView = lazy(() => import("./MonacoView"));
 
 export function CodeViewer(props: CodeViewerProps) {
   const plain = props.onChange ? (
-    <TextArea value={props.text} onChange={(event) => props.onChange!(event.target.value)} rows={16} className="font-mono text-[12.5px]" />
+    <TextArea
+      value={props.text}
+      onChange={(event) => props.onChange!(event.target.value)}
+      readOnly={props.readOnly}
+      placeholder={props.placeholder}
+      rows={16}
+      className="font-mono text-[12.5px]"
+    />
   ) : (
     <CodeBlock text={props.text} className="border-0 bg-transparent" />
   );

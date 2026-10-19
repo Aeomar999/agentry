@@ -5,7 +5,15 @@ import type { CodeViewerProps } from "./CodeViewer";
 // The Monaco half of CodeViewer, in its own bundle. The editor is made once
 // per language; new text from outside is put into it, and typing in it
 // (when onChange is given) goes out through onChange.
-export default function MonacoView({ text, language, maxHeight = 640, minHeight = 0, onChange }: CodeViewerProps) {
+export default function MonacoView({
+  text,
+  language,
+  maxHeight = 640,
+  minHeight = 0,
+  onChange,
+  readOnly = false,
+  placeholder,
+}: CodeViewerProps) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const changed = useRef(onChange);
@@ -57,6 +65,10 @@ export default function MonacoView({ text, language, maxHeight = 640, minHeight 
   useEffect(() => {
     if (editor.current && editor.current.getValue() !== text) editor.current.setValue(text);
   }, [text]);
+
+  useEffect(() => {
+    editor.current?.updateOptions({ readOnly: !editable || readOnly, placeholder });
+  }, [editable, readOnly, placeholder]);
 
   return <div ref={host} className={editable ? "rounded-md border border-divider focus-within:border-focus" : undefined} />;
 }

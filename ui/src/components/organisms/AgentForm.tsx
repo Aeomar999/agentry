@@ -7,6 +7,7 @@ import { Input } from "@/components/atoms/Input";
 import { Select } from "@/components/atoms/Select";
 import { Banner } from "@/components/molecules/Banner";
 import { CodeViewer } from "@/components/molecules/CodeViewer";
+import { ColorSwatches } from "@/components/molecules/ColorSwatches";
 import { Field } from "@/components/molecules/Field";
 import { DEFAULT_TEAM, teamsOf } from "@/lib/teams";
 import { Panel } from "@/components/molecules/Panel";
@@ -15,8 +16,6 @@ import type { Agent, Policy, ServerConfig } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
 import { effectiveProfile } from "@/lib/profiles";
-import { AGENT_COLORS } from "@/live/agent-colors";
-import { cn } from "@/lib/cn";
 import { LOCAL, machineName } from "@/lib/machines";
 
 // Add an agent, or change one. A new name renames it: it keeps its prompt,
@@ -25,7 +24,7 @@ import { LOCAL, machineName } from "@/lib/machines";
 // machine Agentry runs on.
 
 // Model names each engine understands besides a full model id.
-const MODELS: Record<string, string[]> = { claude: ["opus", "sonnet", "haiku"], codex: [] };
+export const MODELS: Record<string, string[]> = { claude: ["opus", "sonnet", "haiku"], codex: [] };
 
 const BLANK: Agent = {
   name: "",
@@ -149,25 +148,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
             </Field>
             <div className="flex flex-col gap-1.5">
               <span className="text-[12px] font-medium text-ink-secondary">Colour</span>
-              <div role="radiogroup" aria-label="Colour" className="flex flex-wrap gap-1.5">
-                {AGENT_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    role="radio"
-                    aria-checked={draft.color === color}
-                    aria-label={color}
-                    title={color}
-                    onClick={() => set({ color })}
-                    className={cn(
-                      "size-6 cursor-pointer rounded-sm border",
-                      draft.color === color ? "border-ink-primary" : "border-transparent hover:border-divider-2",
-                    )}
-                  >
-                    <span className="mx-auto block size-3.5 rounded-full" style={{ background: `var(--color-agent-${color})` }} />
-                  </button>
-                ))}
-              </div>
+              <ColorSwatches value={draft.color} onChange={(color) => set({ color })} />
             </div>
             <Field
               label="Its work counts as"
