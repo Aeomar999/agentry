@@ -48,6 +48,9 @@
 
   /* Links in text: info, made darker in light so it reads at 4.5:1. */
   --color-link: var(--color-info);
+  /* Green words (a live duration, Finished): success, darker in light so
+     they read at 4.5:1. Dots, icons and badges keep success. */
+  --color-success-ink: var(--color-success);
 
   /* The terminals' screen. It follows the theme, and Agentry starts each
      Claude session in the page's theme so its colours suit it. */
@@ -100,6 +103,7 @@ html.light {
   --color-warning: #b45309;
   --color-info: #0284c7;
   --color-link: color-mix(in srgb, var(--color-info) 85%, var(--color-ink-primary));
+  --color-success-ink: color-mix(in srgb, var(--color-success) 70%, var(--color-ink-primary));
 
   --color-terminal: #ffffff;
 }
