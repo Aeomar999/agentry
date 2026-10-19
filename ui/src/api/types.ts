@@ -61,7 +61,6 @@ export interface TaskDetail extends TaskSummary {
   tokensUnknown: string; // on how many turns the tokens couldn't be counted, and why; "" when every turn was
   approvals: Action[] | null;
   actions: Action[] | null;
-  events: LogEvent[] | null;
 }
 
 export interface Worktree {

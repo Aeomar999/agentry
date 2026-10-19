@@ -117,7 +117,8 @@ func agentryMayAccept(idea *ideas.Idea, p events.Proposal, state State) string {
 
 // forAnOpenIdea: besides a task about an epic you closed, Agentry makes one
 // only from an idea that is still open, to accept it for you, so one it may
-// accept.
+// accept, and only in your Backlog: it starts one only by moving it, while
+// you have that turned on (startingAnAcceptedIdea).
 func forAnOpenIdea(p events.Proposal, state State) string {
 	const only = "Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on"
 	from := tasks.MadeFromOf(p)
@@ -132,6 +133,8 @@ func forAnOpenIdea(p events.Proposal, state State) string {
 		return "idea " + from + " doesn't exist"
 	case idea.State != ideas.Open:
 		return "idea " + idea.ID + " was " + string(idea.State) + " already"
+	case p.Text("parked") != "backlog":
+		return "Agentry makes a task from an idea only in your Backlog"
 	}
 	return agentryMayAccept(idea, p, state)
 }

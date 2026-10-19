@@ -4,9 +4,10 @@ import { readPlan } from "./plan";
 import { limitText } from "./time";
 import { tokens } from "./tokens";
 
-// A task's activity: its whole event log read as rows a person follows,
-// oldest first (newestFirst turns it round for the page). An action's request, decision and result are one row, and
-// each turn opens with a row of its own. The Events tab keeps the raw log.
+// A task's activity: its event log, or the newest part of it, read as rows
+// a person follows, oldest first (newestFirst turns it round for the page).
+// An action's request, decision and result are one row, and each turn opens
+// with a row of its own. The Events tab keeps the raw log.
 
 export type ActivityKind = "turn" | "action" | "message" | "waiting" | "issue" | "ended" | "note";
 export type ActivityTone = "default" | "success" | "warning" | "danger" | "info";
@@ -32,10 +33,9 @@ export interface ActivityItem {
 export const SHOWS = ["all", "actions", "messages"] as const;
 export type Show = (typeof SHOWS)[number];
 
-export function activityOf(task: TaskDetail): ActivityItem[] {
+export function activityOf(task: TaskDetail, log: LogEvent[]): ActivityItem[] {
   const actions = new Map((task.actions ?? []).map((a) => [a.id, a]));
   const turns = new Map((task.turnList ?? []).map((t) => [t.id, t]));
-  const log = task.events ?? [];
 
   // When each action was settled: its result, or its denial.
   const settledAt = new Map<string, string>();

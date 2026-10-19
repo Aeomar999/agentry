@@ -3,10 +3,15 @@ package web
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // ideasLine is Ideas' line in GET /api/features.
@@ -89,5 +94,46 @@ func TestFeaturesNeedTheUIToken(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != 401 {
 		t.Errorf("no token: %d", response.StatusCode)
+	}
+}
+
+// The features carry what the log holds that this build skipped: the
+// streams of a feature it doesn't have, and a type it doesn't know.
+func TestFeaturesCountWhatThisBuildSkipped(t *testing.T) {
+	spec := events.Spec{Writers: []events.ActorKind{events.System}}
+	newer, err := events.NewCatalogue(ideas.Registration(),
+		events.Registration{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	written, err := store.Open(path, newer, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentry := events.Actor{Kind: events.System, ID: "agentry"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "One", "repo": "/r", "coordinator": "tech-lead", "about": "task-0"}},
+		{Stream: "note-1", Actor: agentry, Type: "note.written"},
+		{Stream: "task-1", Actor: agentry, Type: "git.pr_opened"},
+		{Stream: "note-2", Actor: agentry, Type: "note.written"},
+		{Stream: "note-1", Actor: agentry, Type: "note.written"},
+	} {
+		if _, rejection, err := written.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	written.Close()
+
+	server, _ := newTestServerOn(t, path, tasks.Limits{})
+	code, body := call(t, server, "GET", "/api/features", "")
+	want := `"unknown":[{"prefix":"note-","streams":2,"events":3,"last":5},{"type":"git.pr_opened","events":1,"last":3}]`
+	if code != 200 || !strings.Contains(body, want) {
+		t.Errorf("features: %d %s\nwant %s", code, body, want)
+	}
+
+	fresh, _ := newTestServer(t)
+	if _, body := call(t, fresh, "GET", "/api/features", ""); !strings.Contains(body, `"unknown":[]`) {
+		t.Errorf("a log with nothing skipped: %s", body)
 	}
 }

@@ -14,6 +14,7 @@ import { Panel } from "@/components/molecules/Panel";
 import { changeSettings } from "@/api/client";
 import type { AutoAcceptRule, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
+import { COLUMN_TITLES } from "@/lib/columns";
 import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
@@ -24,16 +25,17 @@ import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 // Ideas are the features Visionaries sessions suggest. The open ones wait
 // here, grouped by the session that suggested them, newest first (the
 // server's order), for you to accept, which makes a task or an epic in your
-// Backlog, or dismiss. What you decided stays below, in the history, with
-// your note. Ask the visionaries starts a new session on a theme or a
-// question, adding the team first if you don't have it. Settings here say
-// whether closing an epic starts a session about its follow-ups, and whether
-// Agentry accepts, and starts, the ideas the Visionaries agreed on, by your
-// rule; those show in the history as Agentry's, and an open idea says why
-// Agentry didn't accept it. With no Visionaries team and no ideas, Ideas is
-// off: the page only says what it is and offers to ask the visionaries,
-// which adds the team; the settings wait until there is a team or an idea.
-// With no team template that turns Ideas on, it says so instead of offering.
+// Backlog or starts it, or dismiss. What you decided stays below, in the
+// history, with your note and the column its task is in now. Ask the
+// visionaries starts a new session on a theme or a question, adding the
+// team first if you don't have it. Settings here say whether closing an epic
+// starts a session about its follow-ups, and whether Agentry accepts, and
+// starts, the ideas the Visionaries agreed on, by your rule; those show in
+// the history as Agentry's, and an open idea says why Agentry didn't accept
+// it. With no Visionaries team and no ideas, Ideas is off: the page only
+// says what it is and offers to ask the visionaries, which adds the team;
+// the settings wait until there is a team or an idea. With no team template
+// that turns Ideas on, it says so instead of offering.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -61,7 +63,7 @@ export function IdeasPage() {
     <>
       <PageHeader
         title="Ideas"
-        meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
+        meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog, or accept and start it."
         actions={
           !on || !canAsk(visionaries)
             ? []
@@ -302,6 +304,7 @@ function HistoryRow({ idea }: { idea: Idea }) {
           {idea.became && (
             <span>
               became <TaskLink id={idea.became} />
+              {idea.becameColumn && <> ({COLUMN_TITLES[idea.becameColumn]})</>}
             </span>
           )}
           <span>

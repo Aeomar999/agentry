@@ -84,6 +84,14 @@ func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 	if log, _ := s.Log("task-3"); len(log) != 0 {
 		t.Errorf("Log returned an event the model doesn't have yet: %+v", log)
 	}
+	for _, types := range [][]events.Type{nil, {events.TaskCreated}} {
+		if page, _ := s.LogAfter("task-3", types, 0, 10, 10); len(page) != 0 {
+			t.Errorf("LogAfter of types %v returned an event the model doesn't have yet: %+v", types, page)
+		}
+		if page, _ := s.LogBefore("task-3", types, 0, 10, 10); len(page) != 0 {
+			t.Errorf("LogBefore of types %v returned an event the model doesn't have yet: %+v", types, page)
+		}
+	}
 	if position := s.LastPosition(); position != 3 {
 		t.Errorf("LastPosition is %d while event 4 is being applied, want 3", position)
 	}

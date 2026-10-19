@@ -42,7 +42,7 @@ func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
 	}
 	defer s.Close()
 
-	state := New()
+	state := New(withIdeas)
 	accepted := map[string][]events.Event{} // each stream's accepted events so far
 	touched := map[string]bool{}
 	applied := 0

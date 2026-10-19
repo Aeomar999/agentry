@@ -111,7 +111,7 @@ describe("the page's reads (test 9)", () => {
     cache.watch("/api/tasks", () => told.push("page"));
     await server.answer(40);
     expect(told).toEqual(["shell", "page"]);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
   });
 });
 
@@ -198,12 +198,12 @@ describe("the cache", () => {
     await server.answer(40);
     cache.moved(41);
     await server.pending.splice(0)[0].fail("database is locked");
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked", position: 40 });
     expect(server.readsOf("/api/tasks")).toBe(2); // not retried in a loop
 
     cache.moved(42);
     await server.answer(42);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "" });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "", position: 42 });
   });
 
   test("each path has its own data: a new path shows nothing until it is read", async () => {

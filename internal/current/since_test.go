@@ -73,7 +73,7 @@ func TestTheTaskOrderIsByPositionWhateverTheLoadOrder(t *testing.T) {
 	}
 	want := []string{"task-1", "task-2", "task-3", "task-4"}
 	for cut := range len(log) + 1 {
-		s := New()
+		s := New(withIdeas)
 		streams := streamsOf(log[:cut])
 		slices.Reverse(streams)
 		for _, stream := range streams {
@@ -101,7 +101,7 @@ func TestTheIdeasAreInLogOrderWithoutBrokenOnes(t *testing.T) {
 		log[i].Position = int64(i + 1)
 	}
 	for cut := range len(log) + 1 {
-		s := New()
+		s := New(withIdeas)
 		streams := streamsOf(log[:cut])
 		slices.Reverse(streams)
 		for _, stream := range streams {

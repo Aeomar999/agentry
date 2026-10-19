@@ -59,14 +59,22 @@ func (l *Loop) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for _, id := range touchedTasks(l.store.Catalogue(), batch) {
-			l.act(id)
-		}
-		l.followUps(batch)
+		l.take(batch)
 	}
 }
 
-// touchedTasks are the tasks a batch changed, each once, in order.
+// take acts on each task a batch of the log touched, then follows up the
+// closes in it.
+func (l *Loop) take(batch []events.Event) {
+	for _, id := range touchedTasks(l.store.Catalogue(), batch) {
+		l.act(id)
+	}
+	l.followUps(batch)
+}
+
+// touchedTasks are the tasks a batch changed, each once, in order. A
+// foreign stream is no task's, so the loop never reads one as a task. When
+// tasks can be archived, an archived task is skipped here too.
 func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 	seen := map[string]bool{}
 	var ids []string

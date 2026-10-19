@@ -91,9 +91,10 @@ func (s *Server) tools() []tool {
 			object(props{"task": text("its id"), "name": text("the shared file's name"), "to": text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
 		{"list_ideas", "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
 			object(props{"all": boolean("every repo, not only this one"), "state": enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
-		{"accept_idea", "Make an idea a task in the user's Backlog. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
+		{"accept_idea", "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			object(props{"id": text("the idea's id, such as idea-3"), "kind": enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
-				"note": text("optional: what the user said, for the task's coordinator")}, "id"), s.acceptIdea},
+				"note":  text("optional: what the user said, for the task's coordinator"),
+				"start": boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), s.acceptIdea},
 		{"dismiss_idea", "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			object(props{"id": text("the idea's id"), "note": text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
 	}
@@ -131,7 +132,7 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 			what = t.CurrentAgent + " is working"
 		}
 		if t.Column != "" {
-			what += " (" + boardName(t) + ")"
+			what += " (" + boardName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
 			what = "waits for " + strings.Join(t.BlockedBy, ", ")
@@ -171,7 +172,7 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		}
 		status := t.Status
 		if t.Column != "" && t.Column != "done" { // done says it already
-			status += " · " + boardName(t)
+			status += " · " + boardName(t.Column)
 		}
 		fmt.Fprintf(&b, "%s [%s] %s", t.ID, status, t.Title)
 		switch {
@@ -254,13 +255,13 @@ func statusOf(t task) string {
 
 // columnOf is where the task shows on the board: "on the board: Shipping".
 func columnOf(t task) string {
-	return "on the board: " + boardName(t)
+	return "on the board: " + boardName(t.Column)
 }
 
-// boardName is the task's column as the board names it: "Shipping".
-func boardName(t task) string {
+// boardName is a column as the board names it: "Shipping".
+func boardName(column string) string {
 	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
-	return cmp.Or(names[t.Column], t.Column)
+	return cmp.Or(names[column], column)
 }
 
 // usageOf is what the task has used of its budget and its turns, shown

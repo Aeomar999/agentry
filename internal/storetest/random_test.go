@@ -125,11 +125,15 @@ func (g *generator) agentOf(task *tasks.Task) events.Actor {
 	return events.Actor{Kind: events.Agent, ID: g.agent(task)}
 }
 
+// createTask aims at the next task stream, the one the rules take, as often
+// as at any.
 func (g *generator) createTask() events.Proposal {
-	return g.onTask(func(*tasks.Task) events.Proposal {
+	p := g.onTask(func(*tasks.Task) events.Proposal {
 		return events.Proposal{Actor: pick(g, you, you, g.agentActor()), Type: events.TaskCreated,
 			Data: map[string]any{"title": "Random task", "repo": "/src/app", "coordinator": g.coordinator()}}
 	})
+	p.Stream = pick(g, g.state.NextTask(), p.Stream)
+	return p
 }
 
 func (g *generator) worktreeReady() events.Proposal {

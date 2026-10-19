@@ -70,7 +70,7 @@ func someProposals() []events.Proposal {
 
 func TestEqualPassesOnAStateThatFollowedTheLog(t *testing.T) {
 	s := openStore(t, someProposals()...)
-	state := New()
+	state := New(withIdeas)
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	if err := Equal(s, state); err != nil {
@@ -80,7 +80,7 @@ func TestEqualPassesOnAStateThatFollowedTheLog(t *testing.T) {
 		t.Errorf("task-3 should be broken, and Equal should have accepted that its replay fails too")
 	}
 
-	loadedState := New()
+	loadedState := New(withIdeas)
 	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1", events.SettingsStream} {
 		accepted, err := s.Stream(stream)
 		if err != nil {
@@ -110,7 +110,7 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			s := openStore(t, someProposals()...)
-			state := New()
+			state := New(withIdeas)
 			state.Loaded(0)
 			fromTheLog(t, s, state)
 			propose(t, s, c.missed)
@@ -125,7 +125,7 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 // behind even where the stream's state is right.
 func TestEqualSeesAStreamsWrongPosition(t *testing.T) {
 	s := openStore(t, someProposals()...)
-	state := New()
+	state := New(withIdeas)
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	state.streams["task-1"]--
@@ -136,7 +136,7 @@ func TestEqualSeesAStreamsWrongPosition(t *testing.T) {
 
 func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	s := openStore(t, someProposals()...)
-	state := New()
+	state := New(withIdeas)
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	state.created[0].id, state.created[1].id = state.created[1].id, state.created[0].id
@@ -145,10 +145,21 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	}
 }
 
+func TestEqualCatchesTheWrongNextTask(t *testing.T) {
+	s := openStore(t, someProposals()...)
+	state := New(withIdeas)
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	state.tasksMade++
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "next task:") {
+		t.Errorf("Equal with one task.created too many counted: %v", err)
+	}
+}
+
 func TestEqualCatchesTheWrongIdeaOrder(t *testing.T) {
 	s := openStore(t, append(someProposals(), proposal("idea-2", system, ideas.IdeaSuggested,
 		map[string]any{"title": "Later", "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"}))...)
-	state := New()
+	state := New(withIdeas)
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	state.suggested[0].id, state.suggested[1].id = state.suggested[1].id, state.suggested[0].id
@@ -161,7 +172,7 @@ func TestEqualCatchesTheWrongIdeaOrder(t *testing.T) {
 // wrong though every other field is right.
 func TestEqualSeesAWrongDoneAt(t *testing.T) {
 	s := openStore(t, someProposals()...)
-	state := New()
+	state := New(withIdeas)
 	state.Loaded(0)
 	fromTheLog(t, s, state)
 	wrong := state.tasks["task-1"].Clone()
@@ -196,7 +207,7 @@ func (h *heldApply) Apply(e events.Event) {
 // difference with a state that is ahead of the log, nor with events
 // committed while it reads.
 func TestEqualHoldsWhileTheStoreTakesEvents(t *testing.T) {
-	state := &heldApply{State: New(), applied: make(chan struct{}), release: make(chan struct{})}
+	state := &heldApply{State: New(withIdeas), applied: make(chan struct{}), release: make(chan struct{})}
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, nil)
 	if err != nil {
 		t.Fatal(err)

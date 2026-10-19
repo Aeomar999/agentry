@@ -323,7 +323,8 @@ func splitting(t *testing.T, report string) (*store.Store, *current.State, strin
 // splittingWith is splitting with the rules the store checks proposals by.
 func splittingWith(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection, report string) (*store.Store, *current.State, string) {
 	t.Helper()
-	state, catalogue := current.New(), events.Core()
+	catalogue := events.Core()
+	state := current.New(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)

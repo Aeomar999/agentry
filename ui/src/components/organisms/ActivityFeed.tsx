@@ -30,6 +30,8 @@ interface ActivityFeedProps {
   show: Show;
   row: string; // the key of the row you came to see, picked out; "" for none
   now: Now | null; // null when nothing is happening
+  loading: boolean; // the newest events aren't read yet
+  foot?: ReactNode; // under the oldest row: a way to read earlier ones
   onTurn: (turn: string) => void;
   onShow: (show: Show) => void;
 }
@@ -42,7 +44,7 @@ const NODE: Record<ActivityTone, string> = {
   danger: "bg-danger",
 };
 
-export function ActivityFeed({ items, turn, show, row, now, onTurn, onShow }: ActivityFeedProps) {
+export function ActivityFeed({ items, turn, show, row, now, loading, foot, onTurn, onShow }: ActivityFeedProps) {
   const rows = newestFirst(shown(turn ? inTurn(items, turn) : items, show));
   const open = turn ? items.find((item) => item.kind === "turn" && item.turn === turn) : undefined;
   const live = rows.some((row) => row.live) || Boolean(now);
@@ -98,7 +100,9 @@ export function ActivityFeed({ items, turn, show, row, now, onTurn, onShow }: Ac
 
       <div className="relative min-h-0 flex-1">
         <div ref={scroller} onScroll={onScroll} className="h-full scrollbar-thin overflow-y-auto">
-          {rows.length === 0 && !now ? (
+          {loading ? (
+            <p className="px-6 py-6 text-center text-[12px] text-ink-faint">Loading the activity…</p>
+          ) : rows.length === 0 && !now ? (
             <EmptyState title="Nothing here yet">Every message, turn and tool call shows here as it happens.</EmptyState>
           ) : (
             <ol className="pb-2">
@@ -108,6 +112,7 @@ export function ActivityFeed({ items, turn, show, row, now, onTurn, onShow }: Ac
               ))}
             </ol>
           )}
+          {foot}
         </div>
         {away && (
           <button

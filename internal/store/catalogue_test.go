@@ -39,8 +39,8 @@ func TestTwoStoresKeepTheirOwnCatalogues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rejection == nil || rejection.Check != "shape" || !strings.Contains(rejection.Reason, `unknown event type "idea.suggested"`) {
-		t.Errorf("with the core's types alone: %v, want refused as an unknown type", rejection)
+	if rejection == nil || rejection.Check != "shape" || !strings.Contains(rejection.Reason, "stream idea-1 belongs to a feature this build doesn't have") {
+		t.Errorf("with the core's types alone: %v, want refused as a foreign stream", rejection)
 	}
 	if stored.Type != events.ProposalRejected {
 		t.Errorf("stored %s, want the rejection", stored.Type)

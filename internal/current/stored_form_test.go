@@ -14,7 +14,7 @@ import (
 // live from them equals a replay of the log, and the state a restart loads.
 func TestTheLiveStateEqualsARestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	live := New()
+	live := New(withIdeas)
 	s, err := store.Open(path, withIdeas, live, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestTheLiveStateEqualsARestart(t *testing.T) {
 	}
 	s.Close()
 
-	restarted := New()
+	restarted := New(withIdeas)
 	again, err := store.Open(path, withIdeas, restarted, nil)
 	if err != nil {
 		t.Fatal(err)

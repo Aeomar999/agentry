@@ -41,7 +41,13 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 // newTestServerWith is newTestServer with the new tasks' limits in limits.
 func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	return newTestServerOn(t, filepath.Join(t.TempDir(), "agentry.db"), limits)
+}
+
+// newTestServerOn is newTestServerWith on the log at path.
+func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -90,7 +96,7 @@ func TestCreateListAndShowATask(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" || len(detail.Events) != 1 {
+	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" {
 		t.Errorf("detail: %+v", detail)
 	}
 	if code, _ := call(t, server, "GET", "/api/tasks/task-9", ""); code != http.StatusNotFound {
@@ -175,7 +181,7 @@ func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
 		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
 	}
 	at := itoa(s.LastPosition())
-	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
 		if got := positionOf(t, server, "GET", path); got != at {
 			t.Errorf("GET %s: position %q, want %s", path, got, at)
 		}
@@ -485,7 +491,8 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 // real rules would refuse only in a race.
 func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state, catalogue := current.New(), events.Core()
+	catalogue := events.Core()
+	state := current.New(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)

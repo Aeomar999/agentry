@@ -23,7 +23,7 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 // OpenWith is Open with another catalogue, such as one with ideas registered.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
-	state := current.New()
+	state := current.New(catalogue)
 	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
