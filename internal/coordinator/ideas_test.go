@@ -281,6 +281,29 @@ func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
 	}
 }
 
+// A hook's Core.Events only reads the log: it can't be asserted back to the
+// store to write past the feature's checked proposer.
+func TestAHooksEventsCantPropose(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
+		For: func(agents.Agent) bool { return true }, Field: "votes",
+		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
+			if _, writes := c.Events.(features.Proposer); writes {
+				return "Core.Events is a Proposer"
+			}
+			return ""
+		}}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	if task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone }); task.Summary != "Built it." {
+		t.Errorf("summary %q", task.Summary)
+	}
+}
+
 // A done from a coordinator the roster no longer has, here renamed while its
 // session ran, keeps no ideas and says so.
 func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) {

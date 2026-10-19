@@ -92,7 +92,7 @@ func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision)
 			continue
 		}
 		read = append(read, hook.Field)
-		core := features.Core{Log: l.logOf(f), Events: l.store, Read: l.state, Defaults: l.Defaults}
+		core := features.Core{Log: l.logOf(f), Events: l.events, Read: l.state, Defaults: l.Defaults}
 		var note string
 		if failed := guarded(f, "OnDone", func() { note = hook.OnDone(core, task, field) }); failed != "" {
 			note = fmt.Sprintf("Agentry couldn't keep %q: %s", hook.Field, failed)

@@ -27,8 +27,9 @@ import (
 // Next says. Its own proposals are events too, so each one wakes it again:
 // the task moves step by step, and a restart picks up where it was.
 type Loop struct {
-	store  *store.Store   // the log: what the loop reads and proposes
-	state  *current.State // every task and roster, as of the log's last event
+	store  *store.Store      // the log: what the loop reads and proposes
+	events features.EventLog // the store, read-only: what a feature's hooks read of the log
+	state  *current.State    // every task and roster, as of the log's last event
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
@@ -47,7 +48,7 @@ var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 // NewLoop makes the loop before the server takes requests, so a close
 // written once it does is never mistaken for history.
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
+	return &Loop{store: s, events: struct{ features.EventLog }{s}, state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:
