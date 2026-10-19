@@ -241,6 +241,8 @@ func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
 // A task whose state can't be built still holds the port its stream last
 // gave it, on that machine only, so it isn't handed out again. The rules
 // never let a worktree.moved come first; with no check, it breaks the task.
+// The broken tasks' streams then give other ports, by worktree.ready and
+// worktree.moved: the last one counts.
 func TestABrokenTaskKeepsItsPort(t *testing.T) {
 	state := current.New()
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
@@ -256,8 +258,12 @@ func TestABrokenTaskKeepsItsPort(t *testing.T) {
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}},
 		created("task-2"),
 		{Stream: "task-2", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": workers.Local, "path": "/w/task-2", "port": 7902}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "b", "port": 7912}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "b", "port": 7922}},
 		created("task-3"),
 		{Stream: "task-3", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "port": 7903}},
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "branch": "b", "port": 7913}},
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "port": 7923}},
 	} {
 		propose(t, s, p)
 	}
@@ -265,10 +271,10 @@ func TestABrokenTaskKeepsItsPort(t *testing.T) {
 		t.Fatal("task-2 and task-3 should be broken")
 	}
 	loop := &Loop{store: s, state: state}
-	if ports := loop.portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
-		t.Errorf("ports in use here %v: want task-1's and broken task-2's", ports)
+	if ports := loop.portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7922}) {
+		t.Errorf("ports in use here %v: want task-1's and broken task-2's last", ports)
 	}
-	if ports := loop.portsInUse("laptop"); !slices.Equal(ports, []int{7903}) {
-		t.Errorf("ports in use on the laptop %v: want broken task-3's", ports)
+	if ports := loop.portsInUse("laptop"); !slices.Equal(ports, []int{7923}) {
+		t.Errorf("ports in use on the laptop %v: want broken task-3's last", ports)
 	}
 }
