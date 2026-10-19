@@ -13,6 +13,7 @@ package current
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sync"
 
@@ -61,7 +62,7 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			s.created = append(s.created, created{e.Position, stream})
 		}
 	}
-	s.guard(stream, "building", func() {
+	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
 		case events.AgentsStream:
 			s.roster = agents.FromEvents(accepted)
@@ -75,7 +76,9 @@ func (s *State) Load(stream string, accepted []events.Event) {
 				if idea := ideas.FromEvents(accepted); idea != nil {
 					s.ideas[stream] = idea
 				}
-			} else if task := tasks.FromEvents(accepted); task != nil {
+			} else if task, err := tasks.Replay(accepted); err != nil {
+				s.breaks(stream, err)
+			} else if task != nil {
 				s.tasks[stream] = task
 			}
 		}
@@ -110,7 +113,10 @@ func (s *State) Apply(e events.Event) {
 	if s.broken[e.Stream] != nil {
 		return
 	}
-	s.guard(e.Stream, "applying "+string(e.Type)+" to", func() {
+	// Said as tasks.Replay says it, so a task that breaks here reads as one
+	// that broke at Load.
+	applying := func() string { return fmt.Sprintf("applying %s to %s at %d", e.Type, e.Stream, e.Position) }
+	s.guard(e.Stream, applying, func() {
 		switch e.Stream {
 		case events.AgentsStream:
 			s.roster = s.roster.Next(e)
@@ -132,14 +138,22 @@ func (s *State) Apply(e events.Event) {
 }
 
 // guard runs change, and marks the stream broken if it panics, so one bad
-// stream fails its own reads and leaves every other stream working.
-func (s *State) guard(stream, doing string, change func()) {
+// stream fails its own reads and leaves every other stream working. doing
+// says what change was doing, for the error.
+func (s *State) guard(stream string, doing func() string, change func()) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			s.broken[stream] = fmt.Errorf("%s %s: %v", doing, stream, recovered)
+			s.breaks(stream, fmt.Errorf("%s: %v", doing(), recovered))
 		}
 	}()
 	change()
+}
+
+// breaks marks a stream broken, and logs it: a broken task leaves the lists,
+// and the log line is where you find out why.
+func (s *State) breaks(stream string, err error) {
+	s.broken[stream] = err
+	slog.Error("current: a stream's state can't be built, so its reads fail", "stream", stream, "err", err)
 }
 
 // Position is the last event applied, rejections included.

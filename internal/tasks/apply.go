@@ -10,10 +10,25 @@ import (
 )
 
 // FromEvents builds a task by applying its accepted events in order.
-// It returns nil if the events don't include task.created.
+// It returns nil if the events don't include task.created, and nil for a
+// stream Replay can't replay.
 func FromEvents(stream []events.Event) *Task {
-	var t *Task
-	for _, e := range stream {
+	t, _ := Replay(stream)
+	return t
+}
+
+// Replay is FromEvents with the error for a stream whose apply panics: the
+// stream, position and event it stopped at. Apply is meant to replay every
+// event the rules ever accepted, so the error is a bug, but one task's
+// stream must not take down the reads of every other.
+func Replay(stream []events.Event) (t *Task, err error) {
+	var e events.Event
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t, err = nil, fmt.Errorf("applying %s to %s at %d: %v", e.Type, e.Stream, e.Position, recovered)
+		}
+	}()
+	for _, e = range stream {
 		if e.Type == events.TaskCreated {
 			t = &Task{ID: e.Stream, CreatedAt: e.At}
 		}
@@ -21,7 +36,7 @@ func FromEvents(stream []events.Event) *Task {
 			t.apply(e)
 		}
 	}
-	return t
+	return t, nil
 }
 
 func (t *Task) apply(e events.Event) {

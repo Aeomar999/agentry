@@ -3,6 +3,7 @@ package rules
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -297,6 +298,30 @@ func TestYourMoveToDoneStands(t *testing.T) {
 	task := taskIn(s)
 	if !task.IsDone || !task.DoneByYou || task.WrapUp != nil || !task.Turns[1].Stopped || task.Summary != "The parser is half done, committed." {
 		t.Errorf("done %v by you %v, wrap-up %+v, engineer stopped %v, summary %q", task.IsDone, task.DoneByYou, task.WrapUp, task.Turns[1].Stopped, task.Summary)
+	}
+}
+
+// A task whose log can't be replayed takes no more events, not even a
+// task.created that would start it again.
+func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
+	state := current.New()
+	state.Loaded(0)
+	var position int64
+	apply := func(p events.Proposal) {
+		position++
+		state.Apply(events.Event{Position: position, Proposal: p})
+	}
+	for _, p := range agents.SeedProposals(nil) {
+		apply(p)
+	}
+	apply(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data})
+	apply(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeMoved,
+		Data: map[string]any{"worker": "laptop", "path": "/w", "port": 7901}})
+	for _, st := range []step{created, {you, events.TaskRenamed, "", map[string]any{"title": "Again"}, false}} {
+		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state)
+		if rejection == nil || !strings.Contains(rejection.Reason, "could not read the task: applying worktree.moved to task-1") {
+			t.Errorf("%s: %v, want refused with where the replay stopped", st.kind, rejection)
+		}
 	}
 }
 

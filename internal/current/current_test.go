@@ -1,6 +1,7 @@
 package current
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -104,7 +105,8 @@ func loaded(log []events.Event) *State {
 	return s
 }
 
-// sameAsReplay fails the test where the state differs from FromEvents over the log.
+// sameAsReplay fails the test where the state differs from a replay of the
+// log, or either one is broken.
 func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
@@ -119,8 +121,8 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 			continue
 		}
 		task, err := s.Task(stream)
-		if want := tasks.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(task, want) {
-			t.Errorf("%s: %+v, %v\nreplay: %+v", stream, task, err, want)
+		if want, replayErr := tasks.Replay(accepted(log, stream)); err != nil || replayErr != nil || !reflect.DeepEqual(task, want) {
+			t.Errorf("%s: %+v, %v\nreplay: %+v, %v", stream, task, err, want, replayErr)
 		}
 	}
 	if want := agents.FromEvents(accepted(log, events.AgentsStream)); !reflect.DeepEqual(s.Roster(), want) {
@@ -189,12 +191,15 @@ func TestAPanicBreaksOnlyItsStream(t *testing.T) {
 	more := proposal("task-1", lead, events.TaskRenamed, map[string]any{"title": "Still applied"})
 	after := proposal("task-3", lead, events.TaskRenamed, map[string]any{"title": "Never applied"})
 
+	breaks := map[string]error{}
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
 		s.Apply(events.Event{Position: 200, Proposal: more})
 		s.Apply(events.Event{Position: 201, Proposal: after})
-		if task, err := s.Task("task-3"); task != nil || err == nil || !strings.Contains(err.Error(), "task-3") {
+		task, err := s.Task("task-3")
+		if task != nil || err == nil || !strings.Contains(err.Error(), "task-3") {
 			t.Errorf("%s: task-3 should fail with its stream's error, got %+v, %v", name, task, err)
 		}
+		breaks[name] = err
 		if task, err := s.Task("task-1"); err != nil || task.Title != "Still applied" {
 			t.Errorf("%s: task-1 should carry on, got %+v, %v", name, task, err)
 		}
@@ -207,6 +212,10 @@ func TestAPanicBreaksOnlyItsStream(t *testing.T) {
 		if s.Position() != 201 {
 			t.Errorf("%s: position %d", name, s.Position())
 		}
+	}
+	// Broken at Load, by tasks.Replay, or later by Apply's guard: the same answer.
+	if a, l := fmt.Sprint(breaks["applied"]), fmt.Sprint(breaks["loaded"]); a != l {
+		t.Errorf("task-3 broke differently when applied (%s) and loaded (%s)", a, l)
 	}
 }
 
@@ -258,7 +267,7 @@ func TestABrokenRosterKeepsItsLastState(t *testing.T) {
 	log := everyStream()
 	s := loaded(log)
 	workersBefore := s.Workers()
-	s.guard(events.WorkersStream, "applying worker.exploded to", func() { panic("boom") })
+	s.guard(events.WorkersStream, func() string { return "applying worker.exploded to workers" }, func() { panic("boom") })
 	s.Apply(events.Event{Position: 60, Proposal: proposal(events.WorkersStream, system, events.WorkerDisconnected, map[string]any{"name": "laptop"})})
 	s.Apply(events.Event{Position: 61, Proposal: proposal(events.AgentsStream, you, events.AgentRemoved, map[string]any{"name": "engineer"})})
 

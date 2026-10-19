@@ -24,7 +24,7 @@ func Equal(s *store.Store, state *State) error {
 		return err
 	}
 	for _, id := range ids {
-		if err := equalStream(s, id, tasks.FromEvents, func() (any, error) { return state.Task(id) }); err != nil {
+		if err := equalStream(s, id, tasks.Replay, func() (any, error) { return state.Task(id) }); err != nil {
 			return err
 		}
 	}
@@ -33,18 +33,18 @@ func Equal(s *store.Store, state *State) error {
 		return err
 	}
 	for _, id := range ideaIDs {
-		if err := equalStream(s, id, ideas.FromEvents, func() (any, error) { return state.Idea(id) }); err != nil {
+		if err := equalStream(s, id, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(id) }); err != nil {
 			return err
 		}
 	}
 	rosters := []struct {
 		stream string
-		replay func([]events.Event) any
+		replay func([]events.Event) (any, error)
 		held   any
 	}{
-		{events.AgentsStream, func(e []events.Event) any { return agents.FromEvents(e) }, state.Roster()},
-		{events.WorkersStream, func(e []events.Event) any { return workers.FromEvents(e) }, state.Workers()},
-		{events.ConnectionsStream, func(e []events.Event) any { return connections.FromEvents(e) }, state.Connections()},
+		{events.AgentsStream, func(e []events.Event) (any, error) { return agents.FromEvents(e), nil }, state.Roster()},
+		{events.WorkersStream, func(e []events.Event) (any, error) { return workers.FromEvents(e), nil }, state.Workers()},
+		{events.ConnectionsStream, func(e []events.Event) (any, error) { return connections.FromEvents(e), nil }, state.Connections()},
 	}
 	for _, r := range rosters {
 		held := func() (any, error) { return r.held, state.Broken(r.stream) }
@@ -63,7 +63,7 @@ func Equal(s *store.Store, state *State) error {
 
 // equalStream compares what the state holds for a stream with a replay of
 // the stream's accepted events in the log.
-func equalStream[T any](s *store.Store, stream string, replay func([]events.Event) T, held func() (any, error)) error {
+func equalStream[T any](s *store.Store, stream string, replay func([]events.Event) (T, error), held func() (any, error)) error {
 	accepted, err := s.Stream(stream)
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func equalStream[T any](s *store.Store, stream string, replay func([]events.Even
 
 // equalReplay compares what the state holds for a stream with a replay of
 // accepted, the stream's accepted events.
-func equalReplay[T any](stream string, accepted []events.Event, replay func([]events.Event) T, held func() (any, error)) error {
+func equalReplay[T any](stream string, accepted []events.Event, replay func([]events.Event) (T, error), held func() (any, error)) error {
 	want, replayErr := replayed(replay, accepted)
 	got, heldErr := held()
 	switch {
@@ -91,13 +91,20 @@ func equalReplay[T any](stream string, accepted []events.Event, replay func([]ev
 }
 
 // replayed runs a replay, turning a panic into an error as the state does.
-func replayed[T any](replay func([]events.Event) T, accepted []events.Event) (state T, err error) {
+// A task's replay gives its own error, as tasks.Replay recovers the panic.
+func replayed[T any](replay func([]events.Event) (T, error), accepted []events.Event) (state T, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("%v", recovered)
 		}
 	}()
-	return replay(accepted), nil
+	return replay(accepted)
+}
+
+// infallible is a FromEvents in the shape of tasks.Replay: its failure is
+// a panic, which replayed recovers.
+func infallible[T any](fromEvents func([]events.Event) T) func([]events.Event) (T, error) {
+	return func(accepted []events.Event) (T, error) { return fromEvents(accepted), nil }
 }
 
 // differingField names the first exported field that differs, when both

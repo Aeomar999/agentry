@@ -17,7 +17,7 @@ import (
 // Test 3: every prefix of a real log. On a copy of a real agentry.db, named
 // by AGENTRY_BENCH_DB as for TestReadModelBench, a state takes the log one
 // event at a time through Apply, as the store feeds it live. Every 50
-// events, each stream those events touched must equal FromEvents over the
+// events, each stream those events touched must equal a replay of the
 // same prefix; at the end, Equal compares everything, and no stream may be
 // broken: a replay must never fail on an event the store accepted.
 //
@@ -91,16 +91,16 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 	}
 	switch stream {
 	case events.AgentsStream:
-		return equalReplay(stream, accepted, agents.FromEvents, held(state.Roster()))
+		return equalReplay(stream, accepted, infallible(agents.FromEvents), held(state.Roster()))
 	case events.WorkersStream:
-		return equalReplay(stream, accepted, workers.FromEvents, held(state.Workers()))
+		return equalReplay(stream, accepted, infallible(workers.FromEvents), held(state.Workers()))
 	case events.ConnectionsStream:
-		return equalReplay(stream, accepted, connections.FromEvents, held(state.Connections()))
+		return equalReplay(stream, accepted, infallible(connections.FromEvents), held(state.Connections()))
 	case events.PolicyStream:
 		return nil
 	}
 	if events.IsIdeaStream(stream) {
-		return equalReplay(stream, accepted, ideas.FromEvents, func() (any, error) { return state.Idea(stream) })
+		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(stream) })
 	}
-	return equalReplay(stream, accepted, tasks.FromEvents, func() (any, error) { return state.Task(stream) })
+	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
 }
