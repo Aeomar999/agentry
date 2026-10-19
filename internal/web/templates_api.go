@@ -27,8 +27,8 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	team, found := teamCalled(roster, r.PathValue("team"))
-	if !found {
+	team := roster.TeamNamed(r.PathValue("team"))
+	if team == "" {
 		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
 		return
 	}
@@ -109,17 +109,6 @@ func (s *Server) removeTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Propose(w, s.store, agents.RemoveTemplate(id, httpapi.You))
-}
-
-// teamCalled is the roster's name for team, which the URL may spell in
-// another case, as removeTeam allows.
-func teamCalled(roster agents.Roster, team string) (string, bool) {
-	for _, name := range roster.Teams() {
-		if strings.EqualFold(name, team) {
-			return name, true
-		}
-	}
-	return "", false
 }
 
 var notInAnID = regexp.MustCompile(`[^a-z0-9]+`)

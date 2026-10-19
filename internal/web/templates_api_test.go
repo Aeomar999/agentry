@@ -124,6 +124,18 @@ func TestATeamNamedInAnotherCaseIsSaved(t *testing.T) {
 	}
 }
 
+// A team named with spaces around it is that team, as TeamNamed finds it.
+func TestATeamNamedWithSpacesIsSaved(t *testing.T) {
+	server, s := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	if code, body := call(t, server, "POST", "/api/teams/%20Planning/template", `{"id":"my-planning"}`); code != 200 {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	if saved, _ := savedTemplates(t, s).WithID("my-planning"); saved.Team != "Planning" || len(saved.Agents) != 1 {
+		t.Errorf("saved %+v", saved)
+	}
+}
+
 func TestSavingATeamThereIsntIsNotFound(t *testing.T) {
 	server, _ := newTestServer(t)
 	if code, body := call(t, server, "POST", "/api/teams/Nobody/template", `{"id":"nobody"}`); code != http.StatusNotFound {
