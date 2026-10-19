@@ -317,7 +317,10 @@ func TestADecisionThatPanicsRaisesAnIssueAndTheLoopGoesOn(t *testing.T) {
 // splitting is a store with task-2, an epic with one story, task-1, whose
 // coordinator's turn ended with report.
 func splitting(t *testing.T, report string) (*store.Store, *current.State, string) {
-	return splittingWith(t, rules.Check, report)
+	core := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
+		return rules.Check(p, state, catalogue)
+	}
+	return splittingWith(t, core, report)
 }
 
 // splittingWith is splitting with the rules the store checks proposals by.

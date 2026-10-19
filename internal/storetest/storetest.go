@@ -25,11 +25,12 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 }
 
 // OpenWith is Open with another catalogue, such as one with ideas registered.
-// The state keeps the ideas' streams whenever the catalogue registers them.
+// The state keeps the ideas' streams, and the rules run the ideas' own, as
+// serve does; under a catalogue without them, idea streams are foreign.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
 	state := NewState(catalogue)
-	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
 	if err != nil {
 		t.Fatal(err)
 	}

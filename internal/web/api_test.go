@@ -483,7 +483,10 @@ func TestTasksCarryLabels(t *testing.T) {
 // event's data: the loop's limit stops say "limit".
 func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	return limitsServerChecked(t, rules.Check)
+	core := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
+		return rules.Check(p, state, catalogue)
+	}
+	return limitsServerChecked(t, core)
 }
 
 // limitsServerChecked is limitsServer with its own rules, to refuse what the

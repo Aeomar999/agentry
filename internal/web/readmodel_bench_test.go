@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -115,7 +116,7 @@ func TestReadModelBench(t *testing.T) {
 	proposal := events.Proposal{Stream: biggest, Actor: events.Actor{Kind: events.Agent, ID: "bench"}, Type: events.ActionResult,
 		Correlation: "no-such-action", Data: map[string]any{}}
 	catalogue := storetest.WithIdeas()
-	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state, catalogue) }))
+	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state, catalogue, ideas.Feature()) }))
 
 	t.Log("what replaying everything costs, as Open does once:")
 	var logged int
@@ -207,7 +208,7 @@ func openAndClose(t *testing.T, path string) *current.State {
 	t.Helper()
 	catalogue := storetest.WithIdeas()
 	state := storetest.NewState(catalogue)
-	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
 	if err != nil {
 		t.Fatal(err)
 	}

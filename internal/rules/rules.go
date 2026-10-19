@@ -6,25 +6,44 @@ package rules
 import (
 	"cmp"
 	"errors"
+	"log/slog"
 	"slices"
+	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // State is what the rules read: the state the proposal would be appended to,
 // as a feature reads it. *current.State is one. The rules refuse what would
-// be checked against a broken roster, and read a feature's stream through
-// its typed helper, such as ideas.Get.
+// be checked against a broken roster.
 type State = features.Reader
 
-// Check is the store's OrderCheck, made with the state it reads and the
-// catalogue the store has, which says which streams are tasks. Nothing goes
-// into a foreign stream: its feature isn't in this build.
-func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.Rejection {
+// Check is the store's OrderCheck, made with the state it reads, the
+// catalogue the store has, which says which streams are tasks, and the
+// features installed. Nothing goes into a foreign stream: its feature isn't
+// in this build. A feature's rules run only once the core's pass, so they
+// can only refuse: its Streams.Check for a proposal on one of its streams,
+// and every feature's Guards for the proposal's type.
+func Check(p events.Proposal, state State, catalogue *events.Catalogue, installed ...features.Feature) *events.Rejection {
+	if rejection := checkCore(p, state, catalogue, installed); rejection != nil {
+		return rejection
+	}
+	for _, f := range installed {
+		if guard := f.Guards[p.Type]; guard != nil {
+			if rejection := byFeature(f, guard, p, state); rejection != nil {
+				return rejection
+			}
+		}
+	}
+	return nil
+}
+
+// checkCore is Check without the Guards: the core's rules, and the owning
+// feature's Streams.Check once they pass.
+func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, installed []features.Feature) *events.Rejection {
 	if catalogue.KindOf(p.Stream) == events.ForeignStream {
 		return refuse(events.ForeignReason(p.Stream))
 	}
@@ -53,8 +72,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 			return refuse(reason)
 		}
 	}
-	if ideas.IsStream(p.Stream) {
-		return checkIdea(p, state)
+	if catalogue.KindOf(p.Stream) == events.OwnedStream {
+		return checkOwned(p, state, installed)
 	}
 	if !catalogue.IsTaskStream(p.Stream) {
 		return nil
@@ -88,10 +107,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
 		}
-		if p.Actor.Kind == events.System && p.Text("about") == "" {
-			if reason := forAnOpenIdea(p, state); reason != "" {
-				return refuse(reason)
-			}
+		if p.Actor.Kind == events.System && p.Text("about") == "" && !guarded(installed, tasks.MadeFromOf(p), p.Type) {
+			return refuse("Agentry makes a task only about an epic you closed, or from an idea the Visionaries agreed on")
 		}
 		if reason := cmp.Or(aBudget(nil, p), aTurnLimit(nil, p)); reason != "" {
 			return refuse(reason)
@@ -115,10 +132,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	if reason := taskRules[p.Type](task, p); reason != "" {
 		return refuse(reason)
 	}
-	if p.Type == events.TaskHeld && p.Actor.Kind == events.System {
-		if reason := startingAnAcceptedIdea(task, p, state); reason != "" {
-			return refuse(reason)
-		}
+	if p.Type == events.TaskHeld && p.Actor.Kind == events.System && !guarded(installed, task.MadeFrom, p.Type) {
+		return refuse("Agentry only starts, once, a task it made from an idea it accepted")
 	}
 	if rule := taskRosterRules[p.Type]; rule != nil {
 		if reason := rule(task, roster, p); reason != "" {
@@ -126,6 +141,51 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		}
 	}
 	return nil
+}
+
+// checkOwned runs the Streams.Check of the feature that owns p's stream. The
+// catalogue registers only installed features' streams, so one with no
+// owner here is refused rather than let through unchecked.
+func checkOwned(p events.Proposal, state State, installed []features.Feature) *events.Rejection {
+	owner, found := ownerOf(installed, p.Stream)
+	switch {
+	case !found:
+		return refuse("no installed feature checks stream " + p.Stream)
+	case owner.Streams.Check == nil:
+		return nil
+	}
+	return byFeature(owner, owner.Streams.Check, p, state)
+}
+
+// guarded says whether stream belongs to an installed feature with a Guard
+// for kind: the core lets Agentry make or start a task from a feature's
+// stream only when that feature checks it.
+func guarded(installed []features.Feature, stream string, kind events.Type) bool {
+	owner, found := ownerOf(installed, stream)
+	return found && owner.Guards[kind] != nil
+}
+
+// ownerOf is the installed feature whose streams stream is one of.
+func ownerOf(installed []features.Feature, stream string) (features.Feature, bool) {
+	for _, f := range installed {
+		if f.Streams != nil && f.Streams.Prefix != "" && strings.HasPrefix(stream, f.Streams.Prefix) {
+			return f, true
+		}
+	}
+	return features.Feature{}, false
+}
+
+// byFeature runs one of f's rules. One that panics refuses the proposal,
+// and is logged, so a broken feature stops only what it checks: the store
+// unlocks and goes on as after any refusal.
+func byFeature(f features.Feature, rule features.Rule, p events.Proposal, state State) (rejection *events.Rejection) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.Warn("rules: a feature's rule panicked", "feature", f.Name, "type", p.Type, "stream", p.Stream, "panic", recovered)
+			rejection = refuse("the " + f.Name + " feature's rules failed on this " + string(p.Type) + ", so it is refused")
+		}
+	}()
+	return rule(p, state)
 }
 
 // afterDone are what may happen to a finished task: labels, order and epics

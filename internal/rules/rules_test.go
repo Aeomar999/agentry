@@ -38,14 +38,18 @@ type step struct {
 	accepted    bool
 }
 
-// withIdeas is the catalogue serve opens the log with.
-var withIdeas = func() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
-	if err != nil {
-		panic(err)
-	}
-	return catalogue
-}()
+// installed are the features serve installs, and withIdeas the catalogue it
+// opens the log with.
+var (
+	installed = []features.Feature{ideas.Feature()}
+	withIdeas = func() *events.Catalogue {
+		catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
+		if err != nil {
+			panic(err)
+		}
+		return catalogue
+	}()
+)
 
 // openSeeded is a store with the rules and the five default agents. It
 // wires the state as storetest.Open does (which imports rules, so it can't
@@ -61,7 +65,7 @@ func openSeeded(t *testing.T) *store.Store {
 func openSeededState(t *testing.T) (*store.Store, *current.State) {
 	t.Helper()
 	state := current.New(withIdeas, ideas.Streams())
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas, installed...) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -677,7 +681,7 @@ func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
 	apply(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeMoved,
 		Data: map[string]any{"worker": "laptop", "path": "/w", "port": 7901}})
 	for _, st := range []step{created, {you, events.TaskRenamed, "", map[string]any{"title": "Again"}, false}} {
-		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state, withIdeas)
+		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state, withIdeas, installed...)
 		if rejection == nil || !strings.Contains(rejection.Reason, "could not read the task: applying worktree.moved to task-1") {
 			t.Errorf("%s: %v, want refused with where the replay stopped", st.kind, rejection)
 		}
@@ -870,7 +874,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 	for _, c := range cases {
 		state := current.New(withIdeas, ideas.Streams())
 		state.Loaded(0)
-		if rejection := Check(c.p, brokenStream{state, c.stream}, withIdeas); rejection == nil || rejection.Reason != c.want {
+		if rejection := Check(c.p, brokenStream{state, c.stream}, withIdeas, installed...); rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s broken, %s: %v, want %q", c.stream, c.p.Type, rejection, c.want)
 		}
 	}
@@ -880,7 +884,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 // rejection says why.
 func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
 	state := current.New(withIdeas, ideas.Streams())
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas, installed...) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -958,7 +962,7 @@ func TestNothingGoesIntoAForeignStream(t *testing.T) {
 			t.Errorf("%s into idea-3: %v, want the foreign stream's refusal", p.Type, rejection)
 		}
 	}
-	if rejection := Check(dismissed, state, withIdeas); rejection != nil && rejection.Reason == events.ForeignReason("idea-3") {
+	if rejection := Check(dismissed, state, withIdeas, installed...); rejection != nil && rejection.Reason == events.ForeignReason("idea-3") {
 		t.Errorf("with ideas registered, idea-3 is refused as foreign: %v", rejection)
 	}
 }

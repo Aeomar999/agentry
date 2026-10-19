@@ -13,23 +13,24 @@ import (
 // their history. Its badge is the number of open ideas. Those coordinators'
 // done decisions carry the ideas Agentry keeps (coordinator.go). Of the
 // core's types it writes the task an accepted idea becomes (makeTask), and
-// the task.held that starts one Agentry accepted (startIdea). In agentry mcp
+// the task.held that starts one Agentry accepted (startIdea), and its Guards
+// check both when Agentry proposes them (rules.go). In agentry mcp
 // it brings its tools and their instructions (tools.go), and the open
 // ideas wait for you there.
 func Feature() features.Feature {
-	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Writes: []events.Type{events.TaskCreated, events.TaskHeld},
+	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Writes: []events.Type{events.TaskCreated, events.TaskHeld}, Guards: guards,
 		Coordinator: coordinatorHook(), Routes: routes, Manifest: manifest, Tools: tools, Instructions: instructions, Waiting: openIdeas}
 }
 
 // Streams are the ideas' streams, for the catalogue to check and the state
 // to build and keep: each holds the three idea types, and its state is its
-// *Idea, nil until it is suggested.
+// *Idea, nil until it is suggested. checkIdea checks what goes into one.
 func Streams() *features.Streams {
 	return &features.Streams{Prefix: Prefix, Types: map[events.Type]events.Spec{
 		IdeaSuggested: {Fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, Writers: []events.ActorKind{events.Agent, events.System}},
 		IdeaAccepted:  {Fields: []string{"task"}, Writers: []events.ActorKind{events.Human, events.System}}, // "note" may be empty; Agentry's: an idea the Visionaries agreed on by your rule
 		IdeaDismissed: {Fields: []string{"note"}, Writers: []events.ActorKind{events.Human}},
-	}, FromEvents: fromEvents, Next: next}
+	}, FromEvents: fromEvents, Next: next, Check: checkIdea}
 }
 
 // fromEvents is FromEvents with no idea as a plain nil, which the state

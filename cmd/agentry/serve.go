@@ -149,7 +149,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		slog.Warn("agentry: unfinished snapshot writes can't be removed", "err", err)
 	}
 	state := current.Restore(snapshot, build, catalogue, ideas.Streams())
-	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
+	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, installed...) })
 	if err != nil {
 		return err
 	}
