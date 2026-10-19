@@ -131,6 +131,21 @@ func TestUpgradesLeaveAgentsYouChanged(t *testing.T) {
 	}
 }
 
+// An untouched default deployer from before task-44 gets the prompt that
+// reports the pushed commit's pipeline.
+func TestUpgradesBringTheDeployerItsPipelineReport(t *testing.T) {
+	old := events.Actor{Kind: events.System, ID: "defaults"}
+	before := Agent{Name: "deployer", Engine: "claude", Profile: "developer", Prompt: "You are the deployer. Push the task branch to dev."}
+	stream := []events.Event{{Proposal: before.Proposal(old, false)}}
+	for _, p := range Upgrades(FromEvents(stream)) {
+		stream = append(stream, events.Event{Proposal: p})
+	}
+	deployer, _ := FromEvents(stream).Get("deployer")
+	if !strings.Contains(deployer.Prompt, "glab ci list --sha <hash>") || !strings.Contains(deployer.Prompt, "gh run list --commit <hash>") {
+		t.Errorf("the deployer's prompt after the upgrade: %q", deployer.Prompt)
+	}
+}
+
 // Knowledge is the agent's own: settings changes keep it.
 func TestKnowledgeSurvivesSettingsChanges(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
