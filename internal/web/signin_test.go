@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,6 +100,9 @@ func TestOnlyTheUITokenIssuesSigninCodes(t *testing.T) {
 		}
 	}
 
+	if response := s.send("POST", "/api/signin/codes?token="+token, "", "10.0.0.1"); response.StatusCode != 200 {
+		t.Errorf("issuing with ?token=: %d", response.StatusCode)
+	}
 	response := s.send("POST", "/api/signin/codes", "", "10.0.0.1", "Cookie: "+uiCookie+"="+token)
 	var issued struct {
 		Code      string
@@ -233,6 +237,42 @@ func TestFailedSigninsAreLimited(t *testing.T) {
 	s.now = s.now.Add(time.Minute)
 	if response := s.signIn(`{"code":"`+code+`"}`, "10.0.0.3"); response.StatusCode != 200 {
 		t.Errorf("a code a minute later: %d", response.StatusCode)
+	}
+}
+
+// Wrong codes sent at once must not all pass the check before any of them
+// is counted.
+func TestFailedSigninsSentAtOnceAreLimited(t *testing.T) {
+	s := newSigninServer(t)
+	statuses := make(chan int, 50)
+	var sent sync.WaitGroup
+	for range cap(statuses) {
+		sent.Go(func() { statuses <- s.signIn(`{"code":"WRONG-CODE"}`, "10.0.0.66").StatusCode })
+	}
+	sent.Wait()
+	close(statuses)
+	counts := map[int]int{}
+	for status := range statuses {
+		counts[status]++
+	}
+	if counts[http.StatusUnauthorized] != failuresPerClient || counts[http.StatusTooManyRequests] != cap(statuses)-failuresPerClient {
+		t.Errorf("50 wrong codes at once: %v, want %d refused and the rest told to wait", counts, failuresPerClient)
+	}
+}
+
+// A good attempt is counted while it is checked, then taken back.
+func TestSigningInDoesNotCountAsAFailure(t *testing.T) {
+	s := newSigninServer(t)
+	for range failuresPerClient + 1 {
+		if response := s.signIn(`{"token":"`+token+`"}`, "10.0.0.2"); response.StatusCode != 200 {
+			t.Fatalf("signing in again: %d", response.StatusCode)
+		}
+	}
+	for range failuresPerClient - 1 {
+		s.signIn(`{"code":"WRONG-CODE"}`, "10.0.0.2")
+	}
+	if response := s.signIn(`{"code":"`+s.issue()+`"}`, "10.0.0.2"); response.StatusCode != 200 {
+		t.Errorf("a good code after %d failures: %d", failuresPerClient-1, response.StatusCode)
 	}
 }
 

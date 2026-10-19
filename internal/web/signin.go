@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,28 +109,55 @@ func (s *signins) redeem(typed string) bool {
 	return s.now().Before(expires)
 }
 
-// wait is how long client must wait before it may try again, 0 for no wait.
-func (s *signins) wait(client string, withCode bool) time.Duration {
+// attempt is a try to sign in, counted as failed until it succeeds.
+type attempt struct {
+	client   string
+	withCode bool
+	at       time.Time
+}
+
+// try counts an attempt as failed up front, in the same locked step as the
+// check, so attempts made at once can't all pass the check before any of
+// them is counted. It returns how long client must wait instead, if it must.
+func (s *signins) try(client string, withCode bool) (attempt, time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
 	s.forgetOldFailures(now)
-	longest := retryAfter(s.failures[client], failuresPerClient, now)
+	wait := retryAfter(s.failures[client], failuresPerClient, now)
 	if withCode {
-		longest = max(longest, retryAfter(s.codeFailures, codeFailuresInAll, now))
+		wait = max(wait, retryAfter(s.codeFailures, codeFailuresInAll, now))
 	}
-	return longest
-}
-
-// failed counts a failed attempt against client.
-func (s *signins) failed(client string, withCode bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
+	if wait > 0 {
+		return attempt{}, wait
+	}
 	s.failures[client] = append(s.failures[client], now)
 	if withCode {
 		s.codeFailures = append(s.codeFailures, now)
 	}
+	return attempt{client, withCode, now}, 0
+}
+
+// succeeded takes back the failure try counted: signing in never counts.
+func (s *signins) succeeded(a attempt) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if times := withoutOne(s.failures[a.client], a.at); len(times) == 0 {
+		delete(s.failures, a.client)
+	} else {
+		s.failures[a.client] = times
+	}
+	if a.withCode {
+		s.codeFailures = withoutOne(s.codeFailures, a.at)
+	}
+}
+
+// withoutOne drops one failure made at, keeping the rest in time order.
+func withoutOne(times []time.Time, at time.Time) []time.Time {
+	if i := slices.IndexFunc(times, at.Equal); i >= 0 {
+		return slices.Delete(times, i, i+1)
+	}
+	return times
 }
 
 func (s *signins) forgetOldFailures(now time.Time) {
@@ -188,8 +216,8 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "send a code or the token", http.StatusBadRequest)
 		return
 	}
-	client := clientAddress(r)
-	if wait := s.signins.wait(client, withCode); wait > 0 {
+	try, wait := s.signins.try(clientAddress(r), withCode)
+	if wait > 0 {
 		w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
 		http.Error(w, "too many failed tries: wait a minute and try again", http.StatusTooManyRequests)
 		return
@@ -200,10 +228,10 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		signedIn, refusal = s.isUIToken(request.Token), wrongToken
 	}
 	if !signedIn {
-		s.signins.failed(client, withCode)
 		http.Error(w, refusal, http.StatusUnauthorized)
 		return
 	}
+	s.signins.succeeded(try)
 	setUICookie(w, r, s.config.UIToken)
 	reply(w, map[string]string{"token": s.config.UIToken})
 }
