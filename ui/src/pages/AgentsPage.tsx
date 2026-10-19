@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List, Network, Plus, Trash2, Users } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
@@ -315,6 +315,7 @@ function Node({ agent }: { agent: Agent }) {
 // for its kind of work. A team whose profiles policy.toml lacks is refused
 // with the names of those profiles; it can then be added with them, in one
 // change of the policy made against the version the page saw (policyHash).
+// The offer shows in the refused team's card, next to what you clicked.
 interface AddTeamProps {
   templates: TeamTemplate[];
   existing: string[];
@@ -327,10 +328,15 @@ interface NeedsProfiles {
   profiles: string[];
 }
 
-function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
+export function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
   const notify = useToast();
   const [busy, setBusy] = useState("");
   const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
+  const offer = useRef<HTMLDivElement>(null);
+  // The card may be the last one, its offer below the dialog's fold.
+  useEffect(() => {
+    if (needs) offer.current?.scrollIntoView({ block: "nearest" });
+  }, [needs]);
   async function add(team: string, addMissingProfiles = false) {
     setBusy(team);
     try {
@@ -350,20 +356,16 @@ function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
         Each team comes with a coordinator and its specialists, each with a prompt written for the work. Change any of them afterwards, or
         add agents of your own with New agent.
       </p>
-      {needs && (
-        <MissingProfilesOffer
-          team={needs.team}
-          profiles={needs.profiles}
-          adding={busy === needs.team}
-          disabled={Boolean(busy)}
-          onAdd={() => add(needs.team, true)}
-        />
-      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {templates.map((template) => {
           const has = existing.includes(template.team);
           return (
-            <div key={template.team} className="flex flex-col gap-2 rounded-lg border border-divider bg-surface-0 p-4">
+            <div
+              key={template.team}
+              role="group"
+              aria-label={template.team}
+              className="flex flex-col gap-2 rounded-lg border border-divider bg-surface-0 p-4"
+            >
               <span className="flex items-center gap-2">
                 <span className="text-[14px] font-semibold text-ink-primary">{template.team}</span>
                 {has && <Badge>you have it</Badge>}
@@ -388,6 +390,17 @@ function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
                   {busy === template.team ? "Adding…" : has ? "Add another" : "Add this team"}
                 </Button>
               </span>
+              {needs?.team === template.team && (
+                <div ref={offer}>
+                  <MissingProfilesOffer
+                    team={needs.team}
+                    profiles={needs.profiles}
+                    adding={busy === needs.team}
+                    disabled={Boolean(busy)}
+                    onAdd={() => add(needs.team, true)}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
