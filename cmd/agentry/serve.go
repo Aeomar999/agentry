@@ -26,8 +26,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/desk"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
@@ -205,10 +207,15 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
+	// Every feature in this binary, written out here: no feature registers itself.
+	installed := []features.Feature{
+		ideas.Feature(state),
+	}
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
-		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs},
+		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs,
+		Features: installed},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
