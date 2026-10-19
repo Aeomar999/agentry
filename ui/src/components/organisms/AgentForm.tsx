@@ -14,6 +14,7 @@ import { api } from "@/api/client";
 import type { Agent, Policy, ServerConfig } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
+import { profileInForce } from "@/lib/profiles";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { cn } from "@/lib/cn";
 import { LOCAL, machineName } from "@/lib/machines";
@@ -214,9 +215,11 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               label="Policy profile"
               htmlFor="agent-profile"
               hint={
-                policy?.useForEveryone
-                  ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
-                  : "What it may do without asking you, from policy.toml."
+                agent?.effective?.overridden
+                  ? `In force: ${profileInForce(agent)}. This picks its own profile, for when use_for_everyone is off.`
+                  : policy?.useForEveryone
+                    ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
+                    : "What it may do without asking you, from policy.toml."
               }
             >
               <Select id="agent-profile" value={draft.profile} onChange={(e) => set({ profile: e.target.value })}>

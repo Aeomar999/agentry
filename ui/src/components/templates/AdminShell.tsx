@@ -214,6 +214,7 @@ export function AdminShell() {
               connection={connection}
               position={position}
               defaultRepo={config?.defaultRepo ?? ""}
+              policyProblem={config?.policyProblem ?? false}
               working={tasks.filter((task) => task.status === "working").length}
               needsYou={questions.length}
               onOpenQuestions={() => openDock(QUESTIONS)}

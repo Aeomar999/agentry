@@ -25,6 +25,9 @@ export function teamsOf(agents: Agent[]): { team: string; agents: Agent[] }[] {
 }
 
 // addTeam adds the team made from a template (GET /api/teams/templates).
-export function addTeam(template: string): Promise<unknown> {
-  return api("POST", "/api/teams", { template });
+// With policyHash, the version of the policy the page saw, it also adds the
+// default profiles the team needs and policy.toml lacks.
+export function addTeam(template: string, policyHash?: string): Promise<unknown> {
+  const request = policyHash === undefined ? { template } : { template, addMissingProfiles: true, hash: policyHash };
+  return api("POST", "/api/teams", request);
 }

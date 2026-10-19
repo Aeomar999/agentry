@@ -195,6 +195,14 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 		len(shown.Profiles) != 5 || shown.UseForEveryone != "allow-everything" {
 		t.Errorf("policy: %+v", shown)
 	}
+	if _, body := call(t, server, "GET", "/api/config", ""); !strings.Contains(body, `"policyProblem":true`) {
+		t.Errorf("config: %s", body)
+	}
+	os.WriteFile(path, policy.Default(), 0o600)
+	live.Reload()
+	if _, body := call(t, server, "GET", "/api/config", ""); !strings.Contains(body, `"policyProblem":false`) {
+		t.Errorf("config once the file is fixed: %s", body)
+	}
 }
 
 func TestServesTheUI(t *testing.T) {

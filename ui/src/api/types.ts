@@ -128,6 +128,7 @@ export interface Agent {
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
+  effective?: EffectiveProfile; // the profile in force; none while the policy isn't loaded
 }
 
 export type Decision = "allow" | "ask" | "deny";
@@ -207,6 +208,7 @@ export interface ServerConfig {
   engines: string[];
   workers: string[]; // the machines agents can be given: "local" first, then every worker
   canAddWorkers: boolean;
+  policyProblem: boolean; // policy.toml has a mistake; the Policy page says what
 }
 
 // A machine, besides the one Agentry runs on, that agents can run on.

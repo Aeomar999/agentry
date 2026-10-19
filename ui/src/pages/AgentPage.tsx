@@ -13,6 +13,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { runsOn } from "@/lib/machines";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
+import { profileInForce } from "@/lib/profiles";
 
 export function AgentPage() {
   const { name = "" } = useParams();
@@ -45,7 +46,7 @@ export function AgentPage() {
               items={[
                 { label: "Engine", value: <Mono>{agent.engine}</Mono> },
                 { label: "Model", value: <Mono>{agent.model || "the engine's default"}</Mono> },
-                { label: "Policy profile", value: <Mono>{agent.profile || "the default profile"}</Mono> },
+                { label: "Policy profile", value: <Mono>{profileInForce(agent)}</Mono> },
                 { label: "Role", value: agent.coordinates ? "Decides who works next" : "Works on the task" },
                 { label: "Runs on", value: runsOn(agent.workers) },
               ]}

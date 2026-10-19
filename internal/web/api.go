@@ -462,10 +462,14 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	reply(w, agentsOf(roster, inForce))
 }
 
-// showConfig is what the page needs to know about the server.
+// showConfig is what the page needs to know about the server. policyProblem
+// says policy.toml has a mistake, so every page can point to the Policy
+// page, which says what it is.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
+	policyProblem := s.config.Policy != nil && s.config.Policy.Problem() != ""
 	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
-		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil})
+		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil,
+		"policyProblem": policyProblem})
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started
