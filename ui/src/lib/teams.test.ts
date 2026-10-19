@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import type { Agent } from "@/api/types";
-import { teamMadeFrom } from "./teams";
+import { roleOf, teamMadeFrom, teamOf } from "./teams";
 
 // The client reads the address when it loads, and there is none here.
 vi.mock("@/api/client", () => ({ api: vi.fn(), ApiError: class {} }));
@@ -65,5 +65,29 @@ describe("teamMadeFrom", () => {
 
   test("names the default team Software", () => {
     expect(teamMadeFrom([agent("lead", "", "software", true)], "software")).toBe("Software");
+  });
+});
+
+const member = (name: string, fields: Partial<Agent> = {}) => ({ name, coordinates: false, column: "", team: "", ...fields }) as Agent;
+
+describe("roleOf", () => {
+  test.each([
+    ["a coordinator", member("product-lead", { coordinates: true, team: "Design" }), "coordinator"],
+    ["a coordinator with a column", member("lead", { coordinates: true, column: "review" }), "coordinator"],
+    ["the Review column", member("checker", { column: "review" }), "reviewer"],
+    ["the Shipping column", member("shipper", { column: "ship" }), "deployer"],
+    ["no column", member("engineer"), ""],
+    ["a reviewer named reviewer", member("reviewer", { column: "review" }), ""],
+    ["a deployer named deployer", member("deployer", { column: "ship" }), ""],
+    ["a coordinator named coordinator", member("coordinator", { coordinates: true }), ""],
+  ])("names %s's role", (_, of, role) => {
+    expect(roleOf(of)).toBe(role);
+  });
+});
+
+describe("teamOf", () => {
+  test("shows no team as Software", () => {
+    expect(teamOf(member("engineer"))).toBe("Software");
+    expect(teamOf(member("product-lead", { team: "Design" }))).toBe("Design");
   });
 });

@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { FocusEventHandler, ReactNode, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CircleCheck, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Clamp } from "@/components/molecules/Clamp";
 import { Tabs } from "@/components/molecules/Tabs";
-import { HandoffTimeline } from "@/components/molecules/HandoffTimeline";
+import { HandoffTimeline } from "@/components/organisms/HandoffTimeline";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { ActionBadge, TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { KeyValueList } from "@/components/molecules/KeyValueList";
@@ -42,10 +42,12 @@ import { LOCAL, machineName } from "@/lib/machines";
 import { tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
+import { keepFocusInView } from "@/lib/focus-in-view";
 import { useResource } from "@/live/use-resource";
 import { useEvents } from "@/live/use-events";
 import { LoadEarlier } from "@/components/molecules/LoadEarlier";
 import { useNow } from "@/live/use-now";
+import { useTaskCommits, useTaskLinks } from "@/live/refs";
 import { COLUMN_TITLES, stageOf } from "@/lib/columns";
 
 // A task in full. The header and a strip of facts stay put. Under them, on
@@ -149,6 +151,7 @@ export function TaskPage() {
   const { data: task, error, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
+  const links = useTaskLinks(taskId, useTaskCommits(taskId));
   // The Activity and Events tabs share the task's events, newest first from
   // where the detail was read, and the rest of the page never waits on them.
   const showsLog = ["activity", "events"].includes(params.get("tab") ?? "");
@@ -379,19 +382,23 @@ export function TaskPage() {
 
           <div className="h-[80dvh] min-h-0 md:h-auto md:flex-1">
             {tab === "handoffs" && (
-              <Scroll>
+              // Focus stops under the stuck card header.
+              <Scroll className="scroll-pt-10" onFocus={keepFocusInView}>
+                <h2 className="sr-only">Handoffs</h2>
                 <div className="max-w-4xl px-6 py-5">
                   {task.trail?.length ? (
                     <HandoffTimeline
                       steps={task.trail}
                       turns={turns}
+                      coordinator={task.coordinator}
+                      links={links}
                       actionsIn={(id) => actions.filter((a) => a.turn === id).length}
                       working={task.status === "working" ? working : ""}
                       onOpen={openTurn}
                       onWatch={watch}
                     />
                   ) : (
-                    <EmptyState title="No handoffs yet">The coordinator reads the task first.</EmptyState>
+                    <EmptyState title="No handoffs yet">When the coordinator hands the task to an agent, the brief shows here.</EmptyState>
                   )}
                 </div>
               </Scroll>
@@ -402,11 +409,15 @@ export function TaskPage() {
             {tab === "activity" && (
               <ActivityFeed
                 items={items}
+                agents={roster}
+                links={links}
                 turn={turn}
                 show={show}
                 row={picked}
                 now={now}
                 loading={log.loading && !log.error}
+                // With no events read, the error is the tab's; once some are, it is the foot's line.
+                error={log.events.length ? undefined : log.error}
                 foot={logFoot}
                 onTurn={(id) => go({ tab: "activity", turn: id, show }, Boolean(id))}
                 onShow={(next) => go({ tab: "activity", turn, show: next })}
@@ -565,8 +576,20 @@ function Fact({ label, className, children }: { label: string; className?: strin
   );
 }
 
-function Scroll({ children }: { children: ReactNode }) {
-  return <div className="h-full scrollbar-thin overflow-y-auto">{children}</div>;
+function Scroll({
+  children,
+  className,
+  onFocus,
+}: {
+  children: ReactNode;
+  className?: string;
+  onFocus?: FocusEventHandler<HTMLDivElement>;
+}) {
+  return (
+    <div onFocus={onFocus} className={cn("h-full scrollbar-thin overflow-y-auto", className)}>
+      {children}
+    </div>
+  );
 }
 
 // MadeFromLink goes to the page of the stream a task was made from: an idea

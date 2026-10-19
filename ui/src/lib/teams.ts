@@ -12,6 +12,14 @@ export const IDEAS = "ideas";
 
 export const teamOf = (agent: Agent) => agent.team || DEFAULT_TEAM;
 
+// roleOf is the agent's part in its team, in words: coordinator, or what its
+// column's work counts as; "" when it has none, or when the word is only its
+// own name again ("reviewer, Software · reviewer" reads as a glitch).
+export function roleOf(agent: Agent): string {
+  const role = agent.coordinates ? "coordinator" : { "": "", review: "reviewer", ship: "deployer" }[agent.column];
+  return role === agent.name ? "" : role;
+}
+
 // teamMadeFrom is the team made from the template, if you have one: the
 // team of a coordinator the template made, as the server decides, so a
 // second copy ("Visionaries 2") counts and a team you made and named as the

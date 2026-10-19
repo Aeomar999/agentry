@@ -1,6 +1,7 @@
-import { Fragment, ReactNode } from "react";
-import { Square, SquareCheck } from "lucide-react";
+import { Fragment, MouseEvent, ReactNode } from "react";
+import { ArrowUpRight, Square, SquareCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { LinkTo, safeHref } from "@/lib/links";
 
 // The Markdown people and agents write, as text to read: headings, lists
 // (nested, and task lists), tables, code blocks, quotes, rules, paragraphs;
@@ -12,6 +13,11 @@ import { cn } from "@/lib/cn";
 // editor's preview shows a README, with headings that can be linked to. A
 // document's host draws its images and code blocks, so images can come from
 // the workspace and code can be highlighted.
+//
+// A link goes where the host's link hook says, or, without one, where
+// safeHref allows; anything else reads as its label. With a refs hook, a
+// bare word or a one-word inline code can be a link too (a task id, a
+// commit), drawn as a mono link with no code background.
 
 export interface MarkdownProps {
   text: string;
@@ -19,7 +25,9 @@ export interface MarkdownProps {
   doc?: boolean;
   image?: (src: string, alt: string) => ReactNode;
   code?: (code: string, language: string) => ReactNode;
-  link?: (href: string) => { href: string; onClick?: () => void; external: boolean }; // where a link goes
+  link?: (href: string) => LinkTo | null; // where a link goes; null: not a link
+  refs?: (word: string) => LinkTo | null; // what a word names, if anything
+  marks?: boolean; // links in the link colour, underlined, with ↗ on those that open a new tab
 }
 
 export interface Heading {
@@ -41,6 +49,12 @@ export function Markdown(props: MarkdownProps) {
       {blocks(text, props, new Map())}
     </div>
   );
+}
+
+// InlineMarkdown draws one line's inline Markdown (code, emphasis, links)
+// with no block around it, for a title that is a heading of its own.
+export function InlineMarkdown(props: MarkdownProps) {
+  return <>{inline(props.text, props)}</>;
 }
 
 // headingsOf lists a document's headings, for its outline, with the same
@@ -266,13 +280,17 @@ const INLINE =
 function inline(text: string, props: MarkdownProps): ReactNode {
   const parts = text.split(INLINE);
   return parts.map((part, i) => {
-    if (i % 2 === 0) return <Fragment key={i}>{part}</Fragment>;
-    if (part.startsWith("`"))
+    if (i % 2 === 0) return <Fragment key={i}>{words(part, props)}</Fragment>;
+    if (part.startsWith("`")) {
+      const code = part.slice(1, -1);
+      const to = props.refs && /^\S+$/.test(code) ? props.refs(code) : null;
+      if (to) return <Fragment key={i}>{anchor(to, code, props, true)}</Fragment>;
       return (
-        <code key={i} className="rounded-sm bg-surface-3 px-1 py-px font-mono text-[0.88em] text-ink-primary">
-          {part.slice(1, -1)}
+        <code key={i} className={cn("rounded-sm bg-surface-3 px-1 py-px font-mono text-[0.88em] text-ink-primary", whole(code))}>
+          {code}
         </code>
       );
+    }
     if (part.startsWith("**") || part.startsWith("__"))
       return (
         <strong key={i} className="font-semibold text-ink-primary">
@@ -291,24 +309,82 @@ function inline(text: string, props: MarkdownProps): ReactNode {
     const bare = /^https?:\/\//.test(part) ? part : "";
     if (link || bare) {
       const href = link ? link[2] : bare;
-      const label = link ? inline(link[1], props) : bare;
-      const to = props.link ? props.link(href) : { href, external: /^https?:\/\//.test(href) };
-      if (!/^(https?:\/\/|#|\/|\.|[\w-])/.test(to.href) || /^javascript:/i.test(to.href)) return <Fragment key={i}>{label}</Fragment>;
-      return (
-        <a
-          key={i}
-          href={to.href}
-          onClick={to.onClick ? (event) => (event.preventDefault(), to.onClick!()) : undefined}
-          target={to.external ? "_blank" : undefined}
-          rel={to.external ? "noreferrer noopener" : undefined}
-          className="text-info underline-offset-2 hover:underline"
-        >
-          {label}
-        </a>
-      );
+      const label = link ? inline(link[1], { ...props, refs: undefined }) : bare; // no link inside a link
+      const to = props.link ? props.link(href) : fallback(href);
+      // A hook's href is the host's own, but it can't send a link anywhere safeHref refuses.
+      if (!to || !safeHref(to.href)) return <Fragment key={i}>{label}</Fragment>;
+      return <Fragment key={i}>{anchor(to, label, props)}</Fragment>;
     }
     return <em key={i}>{inline(part.slice(1, -1), props)}</em>;
   });
+}
+
+// Without a link hook, a link goes where safeHref allows, to the href it returns.
+function fallback(href: string): LinkTo | null {
+  const safe = safeHref(href);
+  return safe && { href: safe.href, external: safe.kind === "external" };
+}
+
+// words makes the words of plain text that the refs hook knows into links.
+function words(text: string, props: MarkdownProps): ReactNode {
+  if (!props.refs) return text;
+  const out: ReactNode[] = [];
+  let from = 0;
+  for (const word of text.matchAll(/[\w-]+/g)) {
+    const to = props.refs(word[0]);
+    if (!to) continue;
+    out.push(text.slice(from, word.index), <Fragment key={word.index}>{anchor(to, word[0], props, true)}</Fragment>);
+    from = word.index + word[0].length;
+  }
+  if (!out.length) return text;
+  out.push(text.slice(from));
+  return out;
+}
+
+// whole keeps a short one-word ref or bit of code (a task id, a commit, a
+// branch) whole, moving it to the next line rather than breaking at its
+// hyphen. A longer one, such as a path, a full hash or a long branch, wraps
+// inline as text does, so a phone doesn't give it a line of its own and push
+// the words after it down.
+function whole(text: ReactNode): string | false {
+  return typeof text === "string" && /^\S{1,24}$/.test(text) && "inline-block max-w-full";
+}
+
+function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false): ReactNode {
+  const marked = props.marks && to.external;
+  return (
+    <a
+      href={to.href}
+      onClick={
+        to.onClick
+          ? (event) => {
+              if (!plainClick(event)) return; // a new tab or window, as the browser does
+              event.preventDefault();
+              to.onClick!();
+            }
+          : undefined
+      }
+      target={to.external ? "_blank" : undefined}
+      rel={to.external ? "noopener noreferrer" : undefined}
+      title={to.title}
+      aria-label={to.name}
+      className={cn(
+        props.marks ? "text-link underline underline-offset-2" : "text-info underline-offset-2 hover:underline",
+        mono && cn("font-mono text-[0.88em]", whole(label)),
+      )}
+    >
+      {label}
+      {/* A margin, not a space, so the underline stops at the label. */}
+      {marked && <ArrowUpRight aria-hidden className="ml-1 inline size-3 align-[-1px]" />}
+      {marked && !to.name && <span className="sr-only"> (opens in a new tab)</span>}
+    </a>
+  );
+}
+
+// plainClick says whether a click is a plain left click, with no key that
+// asks the browser for a new tab, a new window or a download.
+function plainClick(event: MouseEvent): boolean {
+  return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 function plain(text: string): string {

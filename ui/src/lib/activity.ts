@@ -5,7 +5,8 @@ import { limitText } from "./time";
 import { tokens } from "./tokens";
 
 // A task's activity: its event log, or the newest part of it, read as rows
-// a person follows, oldest first (newestFirst turns it round for the page).
+// a person follows, oldest first (sections groups them by author, newest
+// first, for the page).
 // An action's request, decision and result are one row, and each turn opens
 // with a row of its own. The Events tab keeps the raw log.
 
@@ -19,6 +20,7 @@ export interface ActivityItem {
   until?: string; // when it finished; none while it is still happening
   live: boolean; // still happening
   turn: string; // the turn it happened in, "" between turns
+  by: string; // who wrote it: an agent, you, or Agentry; a turn's row is its agent's
   leadsTo?: string; // a handoff: the turn it started
   from?: string; // who said it, for a message
   to?: string;
@@ -44,11 +46,19 @@ export function activityOf(task: TaskDetail, log: LogEvent[]): ActivityItem[] {
   }
 
   const items: ActivityItem[] = [];
+  const opened = new Set<string>(); // the turns with their own row so far
   let handoff: ActivityItem | undefined; // the last handoff to an agent, until its turn starts
   for (const e of log) {
     const turn = turnOfEvent(e, turns, actions);
     const item = rowOf(e, turn, turns, actions, settledAt, task.coordinator);
     if (!item) continue;
+    // A page that starts in the middle of a turn opens it with the row its
+    // start would give, made from the turn, so its rows are under its band.
+    const info = turns.get(item.turn);
+    if (item.kind !== "turn" && info && !opened.has(item.turn)) {
+      items.push(turnRow({ key: `turn:${info.id}`, at: info.startedAt, turn: item.turn }, info));
+    }
+    opened.add(item.turn);
     if (item.kind === "message" && item.to && item.to !== "you") handoff = item;
     if (item.kind === "turn" && handoff && handoff.to === item.turnInfo?.agent) {
       handoff.leadsTo = item.turn;
@@ -80,16 +90,53 @@ export function rowFor(items: ActivityItem[], target: { action?: string; event?:
   return (id && items.find((item) => item.action?.id === id)?.key) || "";
 }
 
-// newestFirst puts the latest rows first, but keeps each turn's band above
-// the rows of its turn, as a heading stays above what it heads.
-export function newestFirst(items: ActivityItem[]): ActivityItem[] {
-  const blocks: ActivityItem[][] = [];
-  for (const item of items) {
-    const block = blocks[blocks.length - 1];
-    if (item.kind !== "turn" && item.turn && block?.[0].kind === "turn" && block[0].turn === item.turn) block.push(item);
-    else blocks.push([item]);
+// A Section is a run of rows with one author, under one band: a turn (its
+// agent's), or rows between turns by you, by Agentry or by another agent.
+export interface Section {
+  key: string; // a turn's id, else its oldest row's: it stays as rows are added, and as older ones are read
+  by: string;
+  turn?: ActivityItem; // the turn's own row, for a turn's section
+  continued: boolean; // the turn's later rows, after someone else's in the middle of it
+  rows: ActivityItem[]; // newest first, the turn's own row left out
+}
+
+// sections groups rows, oldest first as activityOf gives them, into author
+// sections, newest first. A new turn or a new author starts a section; rows
+// between turns by the agent of the turn just before them stay in its
+// section (the coordinator's handoff after its turn). Your message in the
+// middle of a turn splits it: the turn's later rows go under a continued
+// band. A turn left with no rows by the Messages filter goes, and what was
+// on either side of it joins up if it has one author; in Actions and
+// Everything a turn's band stays, as the turn happened.
+export function sections(items: ActivityItem[], show: Show = "all"): Section[] {
+  const kept: Section[] = [];
+  for (const section of grouped(items)) {
+    const last = kept[kept.length - 1];
+    if (!section.rows.length && show === "messages") continue;
+    if (!section.turn && last?.by === section.by) last.rows.push(...section.rows);
+    else kept.push(section);
   }
-  return blocks.reverse().flatMap(([first, ...rest]) => [first, ...rest.reverse()]);
+  for (const section of kept) section.rows.reverse();
+  return kept.reverse();
+}
+
+// grouped is sections' first pass: every section, oldest first, its rows too.
+function grouped(items: ActivityItem[]): Section[] {
+  const out: Section[] = [];
+  const turns = new Map<string, ActivityItem>();
+  for (const item of items) {
+    const last = out[out.length - 1];
+    if (item.kind === "turn") {
+      turns.set(item.turn, item);
+      out.push({ key: item.turn, by: item.by, turn: item, continued: false, rows: [] });
+    } else if (item.turn ? last?.turn?.turn === item.turn : last?.by === item.by) {
+      last.rows.push(item);
+    } else {
+      const turn = item.turn ? turns.get(item.turn) : undefined;
+      out.push({ key: item.key, by: turn?.by ?? item.by, turn, continued: Boolean(turn), rows: [item] });
+    }
+  }
+  return out;
 }
 
 function turnOfEvent(e: LogEvent, turns: Map<string, Turn>, actions: Map<string, Action>): string {
@@ -98,16 +145,34 @@ function turnOfEvent(e: LogEvent, turns: Map<string, Turn>, actions: Map<string,
   return actions.get(e.correlation)?.turn ?? "";
 }
 
+// AGENTRY is the name Agentry's own rows go by: the loop's, the workers'
+// and the policy's.
+export const AGENTRY = "Agentry";
+
 // who is the name an event's actor goes by in the trail: "agent:dev" is
-// dev, and a person is you.
+// dev, a person is you, and anyone else is Agentry.
 function who(e: LogEvent): string {
   const [kind, id] = e.actor.split(":", 2);
-  return kind === "human" ? "you" : (id ?? kind);
+  return kind === "human" ? "you" : kind === "agent" ? (id ?? kind) : AGENTRY;
 }
 
 function text(e: LogEvent, key: string): string {
   const value = e.data?.[key];
   return typeof value === "string" ? value : "";
+}
+
+// turnRow is a turn's own row, its band, from what the turn says of itself.
+function turnRow(base: Pick<ActivityItem, "key" | "at" | "turn">, info: Turn): ActivityItem {
+  return {
+    ...base,
+    kind: "turn",
+    by: info.agent,
+    title: info.agent,
+    turnInfo: info,
+    until: info.ended ? info.lastEventAt : undefined,
+    live: !info.ended && !info.limited,
+    tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
+  };
 }
 
 function rowOf(
@@ -118,7 +183,7 @@ function rowOf(
   settledAt: Map<string, string>,
   coordinator: string,
 ): ActivityItem | null {
-  const base = { key: String(e.position), at: e.at, turn, live: false, tone: "default" as ActivityTone };
+  const base = { key: String(e.position), at: e.at, turn, by: who(e), live: false, tone: "default" as ActivityTone };
   const message = (from: string, to: string, body: string, tone: ActivityTone = "default"): ActivityItem => ({
     ...base,
     kind: "message",
@@ -146,17 +211,7 @@ function rowOf(
 
     case "turn.started": {
       const info = turns.get(turn);
-      if (!info) return null;
-      const ended = info.ended ? info.lastEventAt : undefined;
-      return {
-        ...base,
-        kind: "turn",
-        title: info.agent,
-        turnInfo: info,
-        until: ended,
-        live: !info.ended && !info.limited,
-        tone: info.issue ? "danger" : info.limited && !info.ended ? "warning" : "info",
-      };
+      return info ? turnRow(base, info) : null;
     }
     case "turn.ended": {
       const used = Number(e.data?.tokens ?? 0);

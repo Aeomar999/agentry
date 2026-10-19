@@ -1,9 +1,9 @@
-import { lazy, Suspense, useState } from "react";
+import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { LazyColorize } from "./LazyColorize";
 
 // A code block in a document: its language, a copy button, and the code
-// highlighted as the editor would, once Monaco has loaded.
-const MonacoColorize = lazy(() => import("./MonacoColorize"));
+// highlighted as the editor would, once it is on screen and Monaco has loaded.
 
 export function CodeFence({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
@@ -27,7 +27,7 @@ export function CodeFence({ code, language }: { code: string; language: string }
         </button>
       </div>
       <pre className="scrollbar-thin overflow-x-auto px-4 py-3 font-mono text-[12.5px] leading-5 text-ink-primary">
-        <Suspense fallback={code}>{language ? <MonacoColorize code={code} language={language} /> : code}</Suspense>
+        <LazyColorize code={code} language={language} />
       </pre>
     </div>
   );

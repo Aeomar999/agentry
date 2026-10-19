@@ -46,6 +46,12 @@
   --color-info: #38bdf8;
   --color-info-soft: #38bdf81f;
 
+  /* Links in text: info, made darker in light so it reads at 4.5:1. */
+  --color-link: var(--color-info);
+  /* Green words (a live duration, Finished): success, darker in light so
+     they read at 4.5:1. Dots, icons and badges keep success. */
+  --color-success-ink: var(--color-success);
+
   /* The terminals' screen. It follows the theme, and Agentry starts each
      Claude session in the page's theme so its colours suit it. */
   --color-terminal: #0e1014;
@@ -96,6 +102,8 @@ html.light {
   --color-success: #16a34a;
   --color-warning: #b45309;
   --color-info: #0284c7;
+  --color-link: color-mix(in srgb, var(--color-info) 85%, var(--color-ink-primary));
+  --color-success-ink: color-mix(in srgb, var(--color-success) 70%, var(--color-ink-primary));
 
   --color-terminal: #ffffff;
 }
@@ -113,6 +121,11 @@ html.light {
   --color-agent-red: #f87171;
   --color-agent-pink: #f472b6;
   --color-agent-slate: #94a3b8;
+
+  /* An agent's avatar: its colour on a tint of itself. In light the letter
+     mixes toward ink-primary, so every colour reads at 3:1 on its tint. */
+  --chip-letter: 100%;
+  --chip-tint: 22%;
 }
 html.light {
   --color-agent-blue: #2563eb;
@@ -124,6 +137,9 @@ html.light {
   --color-agent-red: #dc2626;
   --color-agent-pink: #db2777;
   --color-agent-slate: #64748b;
+
+  --chip-letter: 75%;
+  --chip-tint: 18%;
 }
 
 html {
