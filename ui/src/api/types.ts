@@ -180,6 +180,7 @@ export interface PolicyVersion {
   actor: { kind: string; id: string };
   change: string; // what changed; for a refused file, why it was refused
   refused?: boolean;
+  onDisk?: boolean; // a hand edit of the file, or a file refused: Agentry only read it
   hash: string;
   diff?: string;
   backup?: string;
