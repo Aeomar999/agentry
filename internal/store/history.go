@@ -63,7 +63,7 @@ func (s *Store) History(stream string, archived Archived) ([]events.Event, error
 
 // MarkerOf is the marker of a stream archived now, from its live rows or
 // its history: its last task.archived, unless a task.unarchived came after
-// it.
+// it. tasks.Archived finds the same marker: change the rule in both.
 func MarkerOf(live []events.Event) (events.Event, bool) {
 	for _, e := range slices.Backward(live) {
 		switch e.Type {

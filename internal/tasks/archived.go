@@ -10,7 +10,8 @@ import (
 // Archived is the summary an archived task keeps: the "summary" of its
 // stream's last task.archived that no task.unarchived follows. It is false
 // for a task that isn't archived. A marker whose summary can't be read
-// panics, as an event apply can't take does.
+// panics, as an event apply can't take does. store.MarkerOf finds the
+// same marker: change the rule in both.
 func Archived(stream []events.Event) (Summary, bool) {
 	var marker *events.Event
 	for i, e := range stream {
