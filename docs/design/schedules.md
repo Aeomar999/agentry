@@ -31,14 +31,14 @@ recorded run with no task.
 
 Three things decide how safe an unattended run is:
 
-- A schedule never piles up. While the task of its last run is open, a due
-  run is skipped and says why (`schedule.skipped`), so a run that stalls on
-  an approval overnight blocks only the next runs of its own schedule. A
-  rule refuses a second open task from one schedule, so this holds even if
-  two firings race.
+- A schedule never piles up. While a task from it is open, a due run is
+  skipped and says why (`schedule.skipped`), so a run that stalls on an
+  approval overnight blocks only the next runs of its own schedule. A rule
+  refuses the clock's task while one from the schedule is open, so this
+  holds even if two firings race.
 - Missed runs catch up once. A machine that was off or asleep runs the
-  latest missed slot when it wakes, and counts the rest; it never runs a
-  week of nights back to back.
+  latest missed slot when it wakes, however old, and counts the rest; it
+  never runs a week of nights back to back.
 - `System` is already among `task.created`'s writers
   (`internal/events/catalogue.go:134`), but the rules let Agentry make a
   task only about an epic you closed or from an idea it may accept
@@ -98,7 +98,7 @@ The prefix passes `events.NewCatalogue`'s checks
 stream or `idea-`.
 
 The types, registered by `schedules.Registration()` as Ideas registers its
-own (`internal/ideas/events.go:105`). `Fields` are required, so
+own (`internal/ideas/events.go:25`). `Fields` are required, so
 `CheckShape` (`internal/events/catalogue.go:279`) refuses a proposal
 without them; the rest are optional. Writers are checked by `CheckWriter`
 (`catalogue.go:321`).
@@ -155,8 +155,16 @@ type Schedule struct {
 	LastTask           string    // the task its last run made, "" for none
 	LastRun            Run       // what the last firing or skip said, for the page
 	Runs               int       // runs made, Run now included
+	Named              map[string]bool // every task a schedule.fired named
 }
 ```
+
+`Named` is how the job tells a recorded run from one a crash cut short
+(section 5, step 1). A task number alone can't: `Store.Create` numbers
+tasks in order, but a run the job made and didn't record can sit below a
+later Run now's task (section 5, "Why it is idempotent"). It grows by one
+per run, a few hundred a year for a nightly schedule, and `Next` copies it
+on each `fired`: an estimate of microseconds per event, unmeasured.
 
 How `Next` folds each type (on a copy, as `features.Streams` requires):
 
@@ -167,7 +175,7 @@ How `Next` folds each type (on a copy, as `features.Streams` requires):
   in a minute for a slot that has passed.
 - `paused`, `resumed`, `removed`: `State`; `resumed` also moves `Since`.
 - `fired`: `LastSlot` (when `slot` isn't `""`), `LastTask`, `LastRun`,
-  `Runs`.
+  `Runs`, and `task` added to a copy of `Named`.
 - `skipped`: `LastSlot` and `LastRun`.
 - anything else, such as a type a later version adds: nothing.
 
@@ -210,7 +218,7 @@ schedule never fires (the job skips what `Get` can't read).
 
 Snapshots need nothing new. A snapshot holds an owned stream only by its
 place in the order and rebuilds it from the log on resume
-(`internal/current/snapshot.go:59`), and a new binary has a new hash, so
+(`internal/current/snapshot.go:60`), and a new binary has a new hash, so
 the first start after the upgrade replays in full anyway
 (`log-growth.md` section 2).
 
