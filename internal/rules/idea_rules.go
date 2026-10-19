@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 
@@ -30,7 +31,7 @@ func checkIdea(p events.Proposal, state State) *events.Rejection {
 	case idea.State != ideas.Open:
 		reason = "idea " + p.Stream + " was " + string(idea.State) + " already"
 	case p.Type == events.IdeaAccepted:
-		reason = madeFromIt(idea, p, state)
+		reason = cmp.Or(madeFromIt(idea, p, state), agentryMayAccept(idea, p, state))
 	}
 	if reason != "" {
 		return refuse(reason)
@@ -79,8 +80,24 @@ func madeFromIt(idea *ideas.Idea, p events.Proposal, state State) string {
 	return ""
 }
 
+// agentryMayAccept: Agentry accepts an idea for you only while you have that
+// turned on, and only one every Visionary agreed on, so the log can't hold
+// any other, whoever proposes it.
+func agentryMayAccept(idea *ideas.Idea, p events.Proposal, state State) string {
+	switch {
+	case p.Actor.Kind != events.System:
+		return ""
+	case !state.Settings().AutoAcceptIdeas:
+		return "Agentry accepts an idea for you only when you turn that on"
+	case !ideas.Agreed(idea, state.Roster(), ideas.VisionariesTeam):
+		return "Agentry accepts only an idea every Visionary agreed on"
+	}
+	return ""
+}
+
 // forAnOpenIdea: besides a task about an epic you closed, Agentry makes one
-// only from an idea that is still open, to accept it for you.
+// only from an idea that is still open, to accept it for you, so one it may
+// accept.
 func forAnOpenIdea(p events.Proposal, state State) string {
 	const only = "Agentry makes a task only about an epic you closed, or from an idea every Visionary agreed on"
 	if p.Text("idea") == "" {
@@ -95,7 +112,7 @@ func forAnOpenIdea(p events.Proposal, state State) string {
 	case idea.State != ideas.Open:
 		return "idea " + idea.ID + " was " + string(idea.State) + " already"
 	}
-	return ""
+	return agentryMayAccept(idea, p, state)
 }
 
 // startingAnAcceptedIdea: Agentry moves a task on the board only to start

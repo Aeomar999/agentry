@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -45,7 +46,7 @@ func (l *Loop) followUp(id string, close int64) {
 	if err != nil || epic == nil || epic.Kind != tasks.Epic || !epic.IsDone || l.followedUp(id, close) {
 		return
 	}
-	team := teamNamed(roster, VisionariesTeam)
+	team := teamNamed(roster, ideas.VisionariesTeam)
 	lead, ok := roster.Coordinator(team)
 	if team == "" || !ok {
 		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as there is no Visionaries team. "+

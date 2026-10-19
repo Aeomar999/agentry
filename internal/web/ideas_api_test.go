@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -93,12 +96,20 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
-	id := suggestIdea(t, s, "task-1", repo, "Search the board")
-	for _, p := range []events.Proposal{
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	created, rejection, err := s.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+		"title": "Search the board", "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": "task-1", "kind": "",
+		"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"}}})
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	id := created.Stream
+	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
+		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Search the board", "repo": repo,
 			"coordinator": "tech-lead", "parked": "backlog", "idea": id}},
 		{Stream: id, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
-	} {
+	}...) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(p.Type, rejection, err)
 		}

@@ -19,11 +19,8 @@ import (
 // Agentry accepts for you each idea every Visionary agreed on, and can
 // start its task too.
 
-// VisionariesTeam is the team whose coordinators suggest ideas.
-const VisionariesTeam = "Visionaries"
-
 func isVisionaries(coordinator agents.Agent) bool {
-	return strings.EqualFold(coordinator.TeamName(), VisionariesTeam)
+	return strings.EqualFold(coordinator.TeamName(), ideas.VisionariesTeam)
 }
 
 // Idea is one feature a done decision suggests.
@@ -107,10 +104,9 @@ func (l *Loop) acceptAgreed(repo string, added []string) {
 		return
 	}
 	roster := l.state.Roster()
-	team := teamNamed(roster, VisionariesTeam)
 	for _, id := range added {
 		i := slices.IndexFunc(list, func(idea *ideas.Idea) bool { return idea.ID == id })
-		if i < 0 || !ideas.Agreed(list[i], roster, team) {
+		if i < 0 || !ideas.Agreed(list[i], roster, ideas.VisionariesTeam) {
 			continue
 		}
 		if why := ideas.Repeats(list[i], list, l.madeFromIdea); why != "" {

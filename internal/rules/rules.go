@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -22,6 +23,7 @@ type State interface {
 	Task(id string) (*tasks.Task, error)
 	Idea(id string) (*ideas.Idea, error)
 	Roster() agents.Roster
+	Settings() settings.Settings
 	Workers() workers.Roster
 	Connections() connections.Roster
 	Broken(stream string) error

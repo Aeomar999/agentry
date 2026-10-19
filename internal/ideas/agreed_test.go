@@ -5,8 +5,11 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 func team(name string, members ...string) agents.Roster {
@@ -143,9 +146,34 @@ func TestATaskFromAnIdeaCarriesItsEpicsLimits(t *testing.T) {
 	}
 }
 
+// turnOn adds the default Visionaries team and turns on Agentry accepting,
+// for you, the ideas every Visionary agreed on.
+func turnOn(t *testing.T, s *store.Store, state *current.State) {
+	t.Helper()
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	for _, p := range agents.AddTeam(visionaries, state.Roster(), you) {
+		mustPropose(t, s, p)
+	}
+	mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
+		Data: map[string]any{settings.AutoAcceptIdeas: true}})
+}
+
+// suggestAgreed makes an idea about repo every default Visionary backs and
+// none doubts, following up no epic, with data's fields over those.
+func suggestAgreed(t *testing.T, s *store.Store, repo string, data map[string]any) string {
+	t.Helper()
+	full := map[string]any{"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"},
+		"doubtedBy": []string{}, "epic": ""}
+	for field, value := range data {
+		full[field] = value
+	}
+	return suggest(t, s, repo, full)
+}
+
 func TestAgentryAcceptsAnIdeaAsItself(t *testing.T) {
 	s, state, repo := openSeeded(t)
-	id := suggest(t, s, repo, nil)
+	turnOn(t, s, state)
+	id := suggestAgreed(t, s, repo, nil)
 	got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "auto-accepted: all Visionaries agreed", By: agentry})
 	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
 		t.Fatalf("accept: %+v %v", got, err)
@@ -165,12 +193,48 @@ func TestAgentryAcceptsAnIdeaAsItself(t *testing.T) {
 	}
 }
 
+// The rules, not only the loop, keep Agentry to the ideas every Visionary
+// agreed on, and only while you have that turned on; your accepts are
+// yours to make either way.
+func TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	off := suggestAgreed(t, s, repo, nil)
+	if got, _ := ideas.Accept(s, state, off, ideas.Choice{By: agentry}); got.Task != "" || got.Accepted {
+		t.Errorf("with the setting off: %+v", got)
+	}
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "idea": off}})
+	accept := events.Proposal{Stream: off, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}}
+	if _, rejection, err := s.Propose(accept); err != nil || rejection == nil {
+		t.Errorf("marking it accepted with the setting off: want refused, got %v %v", rejection, err)
+	}
+
+	turnOn(t, s, state)
+	for name, data := range map[string]map[string]any{
+		"a doubter":         {"title": "Doubted", "doubtedBy": []string{"skeptic"}},
+		"a missing backer":  {"title": "Short", "backedBy": []string{"product-strategist", "user-advocate", "technologist"}},
+		"the usual dissent": {"title": "Usual", "backedBy": []string{"dreamer", "builder"}, "doubtedBy": []string{"skeptic"}},
+	} {
+		id := suggestAgreed(t, s, repo, data)
+		if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry}); got.Task != "" || got.Accepted {
+			t.Errorf("%s: %+v", name, got)
+		}
+		if got, _ := ideas.Accept(s, state, id, ideas.Choice{}); !got.Accepted {
+			t.Errorf("%s: you may accept it: %+v", name, got)
+		}
+	}
+	if _, rejection, err := s.Propose(accept); err != nil || rejection != nil {
+		t.Errorf("marking an agreed idea accepted with the setting on: %v %v", rejection, err)
+	}
+}
+
 // Agentry makes a task from an idea only while it is open, starts only a
 // task it made from an idea it accepted, and only starts it; no agent
 // accepts an idea.
 func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	s, state, repo := openSeeded(t)
-	auto, yours := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})
+	turnOn(t, s, state)
+	auto, yours := suggestAgreed(t, s, repo, nil), suggestAgreed(t, s, repo, map[string]any{"title": "Dark mode"})
 	if got, _ := ideas.Accept(s, state, auto, ideas.Choice{By: agentry}); !got.Accepted {
 		t.Fatalf("accept: %+v", got)
 	}
