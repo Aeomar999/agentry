@@ -973,6 +973,37 @@ one `created`). The rules (`internal/rules/rules.go`) refuse a
 `task.created` on a stream that holds a summary, as on one that holds a
 task.
 
+**Built in step 5.** `internal/store/store.go` keeps the schema's
+`migrations` as a list: entry i takes a file at `user_version` i to i+1,
+so the version is the list's length and nothing is bumped by hand. `Open`
+runs the ones a file hasn't had and records the version in one
+transaction; a new file starts at 0 and runs them all, and a file from a
+newer build isn't opened. Migration 1 is the gated trigger above, plus a
+partial index of the markers, `events_archived` on `(stream, position)
+WHERE type = 'task.archived'`: the trigger runs once per deleted row, and
+without the index each run scanned the stream, so deleting 8,000 rows took
+4.6 s under `Store.mu`; with it, 29 ms.
+`auto_vacuum = INCREMENTAL` is a pragma of the writing connection, so a
+new file is incremental from the start; an existing one keeps its mode
+until the one full `VACUUM` (below), which `Open` does not run. `made`
+is the `UNION` above. `task.archived` (`through`, `count`, `archive`,
+`created`, `summary`) and `task.unarchived` (`marker`, `archive`) are in
+the catalogue, written by Agentry alone; `task.unarchived` refolds its
+stream. The rules (`internal/rules/archive_rules.go`) let an archived task
+take only `task.unarchived`, archive only a done task with a marker whose
+hash and positions make sense, and refuse `task.unarchived` on a whole
+task. The state can't fold a marker until step 6: a task is archived in
+it only by the test helper `State.Archive`, and a replay of a stream that
+is only a marker leaves no task there (no `task.created`), so until step 6
+the next id after a restart would differ between `made` and the rules'
+`NextTask`. Nothing writes a marker outside tests before step 7. Tests:
+`TestAStrayDeleteIsRefused`, `TestAMarkerAllowsDeletingOnlyTheRowsItCovers`,
+`TestUnarchivingEndsWhatTheMarkerAllows`, `TestAVersionZeroLogMigratesOnce`,
+`TestANewLogStartsAtTheLatestSchema`, `TestALogFromANewerBuildIsNotOpened`
+and `TestCreateCountsArchivedTasksOnce` in `internal/store`;
+`TestAnArchivedTaskTakesOnlyItsUnarchiving`, `TestOnlyADoneTaskIsArchived`
+and `TestOnlyTheStoreWritesTheMarkers` in `internal/rules`.
+
 ### The move, step by step
 
 An archiver goroutine (`internal/archive`) runs at startup and then
@@ -1151,7 +1182,8 @@ runs the first archiving round, and only then runs the one `VACUUM`:
 are gone. If the disk lacks room for the copy, it logs that and tries
 again at the next start. After each round: `PRAGMA incremental_vacuum`,
 then `PRAGMA wal_checkpoint(TRUNCATE)`, so the WAL does not keep the old
-pages either.
+pages either. Step 5 sets the pragma on every open; the `VACUUM` is step
+7's.
 
 ## 5. Deleting data for privacy
 
@@ -1413,8 +1445,8 @@ value, since JSON allows a newline between elements; at build step 2 it
 gave way to gob chunks, see section 2), and the loader
 splits on newlines and decodes the entries on up to 8 goroutines: 0.22
 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps
-`nil` and empty apart for the equivalence test. Whether it gives way to
-gob is
+`nil` and empty apart for the equivalence test. It gave way to gob at
+build step 2, by
 [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model).
 
 **Archiving third.** The biggest piece: a schema migration, store methods
