@@ -84,7 +84,7 @@ type held map[string]bool
 // lets go of it first, so a task whose move is no longer a turn is never
 // woken for one.
 func (l *Loop) holdBack(task *tasks.Task) bool {
-	if !l.slots().Queued(task.ID) {
+	if l.state.Settings().MaxRunningTasks == 0 || !l.slots().Queued(task.ID) {
 		return false
 	}
 	if l.held == nil {
