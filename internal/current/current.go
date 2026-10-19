@@ -1,7 +1,10 @@
 // Package current keeps the state of every stream in memory, as of the
-// last event the log committed. The log stays the only thing stored: the
-// state is built from it at every start and changed only by the store,
-// as each event commits, so it can't disagree with what happened.
+// last event the log committed. The log stays the only truth: the state is
+// built from it at every start and changed only by the store, as each event
+// commits, so it can't disagree with what happened. A start may read the
+// state from a snapshot instead and apply only the events after it, but a
+// snapshot is only a cache, thrown away whenever it might disagree with
+// the log (snapshot.go).
 //
 // The catalogue the state is made with says what each stream is. A task's
 // stream makes a task, and a feature's own stream whatever that feature's
@@ -54,6 +57,10 @@ type State struct {
 	connections connections.Roster
 	settings    settings.Settings
 	skipped     tally // foreign streams and unknown types
+
+	snapshot *snapshotAt // read from a snapshot, still to be checked against the log by Resume
+	tail     *tail       // set while Resume applies the events after a snapshot
+	resumed  int64       // the snapshot position Open went on from, 0 after a whole replay
 }
 
 var _ features.Reader = (*State)(nil)
@@ -85,9 +92,25 @@ func New(catalogue *events.Catalogue, owned ...*features.Streams) *State {
 		}
 		owners[streams.Prefix] = streams
 	}
-	return &State{catalogue: catalogue, streams: map[string]int64{}, tasks: map[string]*tasks.Task{},
-		owners: owners, owned: map[string]any{}, ownedOrder: map[string][]created{},
-		broken: map[string]error{}, archived: map[string]bool{}, settings: settings.Default(), skipped: newTally()}
+	s := &State{catalogue: catalogue, owners: owners}
+	s.empty()
+	return s
+}
+
+// empty sets everything the log fills back to nothing, as New makes it:
+// for New, and for Resume to throw a snapshot away. A field the log fills
+// must be set here, even to its zero value, or a thrown away snapshot
+// leaves it behind.
+func (s *State) empty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.position, s.streams, s.tasks = 0, map[string]int64{}, map[string]*tasks.Task{}
+	s.created, s.tasksMade = nil, 0
+	s.owned, s.ownedOrder = map[string]any{}, map[string][]created{}
+	s.broken, s.archived = map[string]error{}, map[string]bool{}
+	s.roster, s.workers, s.connections, s.settings = nil, workers.Roster{}, connections.Roster{}, settings.Default()
+	s.skipped = newTally()
+	s.snapshot, s.tail, s.resumed = nil, nil, 0
 }
 
 // ownerOf is the Streams that keeps a stream, or nil for a stream no
@@ -251,11 +274,24 @@ func (s *State) Apply(e events.Event) {
 				}
 			} else if kind != events.TaskStream {
 				return
-			} else if task := tasks.Next(s.tasks[e.Stream], e); task != nil {
+			} else if task := s.nextTask(s.tasks[e.Stream], e); task != nil {
 				s.tasks[e.Stream] = task
 			}
 		}
 	})
+}
+
+// nextTask is tasks.Next, or, while Resume applies the events after a
+// snapshot, the same change made in place: nobody has read the restored
+// tasks yet, and copying a large task for every event would cost more than
+// the rest of the load. A panic part way through leaves the task half
+// changed, but Resume then throws the whole state away.
+func (s *State) nextTask(task *tasks.Task, e events.Event) *tasks.Task {
+	if s.tail == nil || task == nil || e.Type == events.TaskCreated {
+		return tasks.Next(task, e)
+	}
+	task.Apply(e)
+	return task
 }
 
 // made notes where a task.created, or the first event of a stream a
@@ -293,6 +329,9 @@ func (s *State) guard(stream string, doing func() string, change func()) {
 // and the log line is where you find out why.
 func (s *State) breaks(stream string, err error) {
 	s.broken[stream] = err
+	if s.tail != nil && s.tail.broke == nil {
+		s.tail.broke = err
+	}
 	slog.Error("current: a stream's state can't be built, so its reads fail", "stream", stream, "err", err)
 }
 

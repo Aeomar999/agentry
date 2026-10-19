@@ -1,5 +1,7 @@
-// Package tasks computes a task's state from its events. The state is never
-// stored, so it can never disagree with what happened.
+// Package tasks computes a task's state from its events. The events are the
+// only truth: a snapshot may store the state (Saved), but only as a cache
+// that is thrown away whenever it might disagree with them, so the state
+// never disagrees with what happened.
 package tasks
 
 import (

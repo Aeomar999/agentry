@@ -4,6 +4,8 @@
 package storetest
 
 import (
+	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -15,7 +17,7 @@ import (
 
 // Open opens the log at path with the core's event types, the rules and a
 // state. When the test ends it checks the state still equals a replay of
-// the log, then closes it.
+// the log, and that snapshots of it do, then closes it.
 func Open(t testing.TB, path string) (*store.Store, *current.State) {
 	t.Helper()
 	return OpenWith(t, path, events.Core())
@@ -31,7 +33,10 @@ func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.St
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	t.Cleanup(func() { CheckEqual(t, s, state) }) // cleanups run last first: before the close
+	t.Cleanup(func() { // cleanups run last first: before the close
+		CheckEqual(t, s, state)
+		CheckSnapshots(t, path, catalogue, s.LastPosition())
+	})
 	return s, state
 }
 
@@ -43,6 +48,34 @@ func WithIdeas() *events.Catalogue {
 		panic(err)
 	}
 	return catalogue
+}
+
+// snapshotCuts is how many positions CheckSnapshots takes in a longer log:
+// every position of a log this long or shorter.
+const snapshotCuts = 40
+
+// CheckSnapshots fails the test if a snapshot of the log at path, opened
+// with catalogue, differs from a replay once opened, as serve opens it
+// (current.EqualThroughSnapshots): at every position of a short log, and at
+// a seeded sample of a longer one's and its last.
+func CheckSnapshots(t testing.TB, path string, catalogue *events.Catalogue, last int64) {
+	t.Helper()
+	cuts := make([]int64, 0, snapshotCuts)
+	if last <= snapshotCuts {
+		for position := range last {
+			cuts = append(cuts, position+1)
+		}
+	} else {
+		sample := rand.New(rand.NewPCG(1, uint64(last)))
+		for range snapshotCuts - 1 {
+			cuts = append(cuts, 1+sample.Int64N(last))
+		}
+		cuts = append(cuts, last)
+		slices.Sort(cuts)
+	}
+	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), ideas.Streams()); err != nil {
+		t.Errorf("a snapshot differs from a replay of the log: %v", err)
+	}
 }
 
 // CheckEqual fails the test if the state differs from a replay of the log.

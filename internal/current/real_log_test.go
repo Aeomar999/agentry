@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -106,4 +107,71 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return ideas.Get(state, stream) })
 	}
 	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
+}
+
+// Snapshots of a real log: on a copy named by AGENTRY_BENCH_DB, the state
+// at a few cuts, the last among them, goes through a snapshot and equals a
+// replay. At the last cut it logs the snapshot's size and how long a write
+// and a load take, a load being Restore and Open with no tail.
+//
+//	AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestARealLogThroughASnapshot -v -count=1
+func TestARealLogThroughASnapshotEqualsAReplay(t *testing.T) {
+	source := os.Getenv("AGENTRY_BENCH_DB")
+	if source == "" {
+		t.Skip("AGENTRY_BENCH_DB is not set")
+	}
+	content, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "agentry.db") // Open may write: never to the copy itself
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.Open(path, withIdeas, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := s.LastPosition()
+	s.Close()
+	cuts := []int64{last / 4, last / 2, last - 10_000, last}
+	if err := EqualThroughSnapshots(path, withIdeas, t.TempDir(), cuts, ideas.Streams()); err != nil {
+		t.Fatal(err)
+	}
+
+	state := New(withIdeas, ideas.Streams())
+	s, err = store.Open(path, withIdeas, state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(t.TempDir(), "state.snapshot")
+	started := time.Now()
+	if err := WriteSnapshot(snapshot, state, s, "bench"); err != nil {
+		t.Fatal(err)
+	}
+	wrote := time.Since(started)
+	s.Close()
+	info, err := os.Stat(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started = time.Now()
+	restored := Restore(snapshot, "bench", withIdeas, ideas.Streams())
+	read := time.Since(started)
+	s, err = store.Open(path, withIdeas, restored, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	loaded := time.Since(started)
+	if restored.resumed != last {
+		t.Fatalf("Open replayed the whole log instead of going on from the snapshot at %d", last)
+	}
+	for _, stream := range []string{events.AgentsStream, events.WorkersStream, events.ConnectionsStream, events.SettingsStream} {
+		if err := restored.Broken(stream); err != nil {
+			t.Errorf("%s is broken: %v", stream, err)
+		}
+	}
+	t.Logf("%d events, cuts %v equal a replay; the snapshot at %d: %.1f MB, written in %s, read in %s, opened (read, checked, rebuilt) in %s",
+		last, cuts, last, float64(info.Size())/1e6, wrote.Round(time.Millisecond), read.Round(time.Millisecond), loaded.Round(time.Millisecond))
 }
