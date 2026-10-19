@@ -4,10 +4,14 @@
 package deeptest
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 	"unsafe"
+
+	"gitlab.com/dev.chempa/agentry/internal/exactgob"
 )
 
 // Fill gives every field, exported or not, a value: every pointer, map and
@@ -97,4 +101,29 @@ func Shared(t testing.TB, path string, a, b reflect.Value) {
 	case reflect.Interface, reflect.Chan, reflect.Func, reflect.UnsafePointer, reflect.Array:
 		t.Errorf("%s is a %s, which Shared doesn't check", path, a.Kind())
 	}
+}
+
+// An Encoding is a way a saved form is written out and read back.
+type Encoding struct {
+	Name      string
+	RoundTrip func(saved, read any) error // writes saved and reads it into read, a pointer
+}
+
+// Encodings are the ways saved forms are written: JSON, which a person can
+// read, and the snapshot's gob, which keeps nil and empty apart as JSON does.
+var Encodings = []Encoding{
+	{"JSON", func(saved, read any) error {
+		written, err := json.Marshal(saved)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(written, read)
+	}},
+	{"gob", func(saved, read any) error {
+		var written bytes.Buffer
+		if err := exactgob.Encode(&written, saved); err != nil {
+			return err
+		}
+		return exactgob.Decode(&written, read)
+	}},
 }

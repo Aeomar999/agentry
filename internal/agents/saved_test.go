@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -9,22 +8,26 @@ import (
 )
 
 // Every field, exported or not, is filled by reflection, and the saved form
-// goes through JSON as a snapshot will write it: a field added to Agent that
+// goes through JSON and gob as a snapshot writes it: a field added to Agent that
 // Save and Restore don't carry comes back empty, and the test fails.
 func TestASavedRosterComesBackWhole(t *testing.T) {
 	var roster Roster
 	deeptest.Fill(t, reflect.ValueOf(&roster).Elem())
-	written, err := json.Marshal(roster.Save())
-	if err != nil {
-		t.Fatal(err)
+	for _, encoding := range deeptest.Encodings {
+		if restored := through(t, encoding, roster); !reflect.DeepEqual(roster, restored) {
+			t.Errorf("the roster read back from %s differs:\n%+v\n%+v", encoding.Name, roster, restored)
+		}
 	}
+}
+
+// through saves the roster, writes and reads it as encoding does, and restores it.
+func through(t *testing.T, encoding deeptest.Encoding, roster Roster) Roster {
+	t.Helper()
 	var read Saved
-	if err := json.Unmarshal(written, &read); err != nil {
+	if err := encoding.RoundTrip(roster.Save(), &read); err != nil {
 		t.Fatal(err)
 	}
-	if restored := Restore(read); !reflect.DeepEqual(roster, restored) {
-		t.Errorf("the roster read back differs:\n%+v\n%+v", roster, restored)
-	}
+	return Restore(read)
 }
 
 func TestARestoredRosterSharesNothing(t *testing.T) {
@@ -44,21 +47,15 @@ func TestARestoredRosterSharesNothing(t *testing.T) {
 	}
 }
 
-// A roster replayed from its log, and an empty one, come back the same.
+// A roster replayed from its log, an empty one and a nil one come back the same.
 func TestAReplayedRosterComesBackWhole(t *testing.T) {
 	stream := seeded()
 	stream = append(stream, everyAgentEvent(FromEvents(stream))...)
-	for _, roster := range []Roster{nil, FromEvents(stream)} {
-		written, err := json.Marshal(roster.Save())
-		if err != nil {
-			t.Fatal(err)
-		}
-		var read Saved
-		if err := json.Unmarshal(written, &read); err != nil {
-			t.Fatal(err)
-		}
-		if restored := Restore(read); !reflect.DeepEqual(roster, restored) {
-			t.Errorf("the roster read back differs:\n%+v\n%+v", roster, restored)
+	for _, roster := range []Roster{nil, {}, FromEvents(stream)} {
+		for _, encoding := range deeptest.Encodings {
+			if restored := through(t, encoding, roster); !reflect.DeepEqual(roster, restored) {
+				t.Errorf("the roster read back from %s differs:\n%#v\n%#v", encoding.Name, roster, restored)
+			}
 		}
 	}
 }

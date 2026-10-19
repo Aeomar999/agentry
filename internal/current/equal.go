@@ -4,13 +4,14 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"reflect"
 	"slices"
-	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -87,22 +88,6 @@ func Equal(s *store.Store, state *State) error {
 	}
 	if held.position != index.last {
 		return fmt.Errorf("position: the state is at %d, the log at %d", held.position, index.last)
-	}
-	return nil
-}
-
-// settling is how long Equal waits for the log to reach the state.
-const settling = 5 * time.Second
-
-// awaitApplied waits until the log's readers see every event up to
-// position. A state that stays ahead was built from some other log.
-func awaitApplied(s *store.Store, position int64) error {
-	deadline := time.Now().Add(settling)
-	for s.LastPosition() < position {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("position: the state is at %d, the log at %d after %s", position, s.LastPosition(), settling)
-		}
-		time.Sleep(time.Millisecond)
 	}
 	return nil
 }
@@ -256,4 +241,96 @@ func equalStreamPositions(state *State, inLog map[string]int64) error {
 		}
 	}
 	return nil
+}
+
+// EqualThroughSnapshots checks snapshots as Equal checks the state: for
+// each cut, the state of the log at path up to it is written to a snapshot
+// in dir, restored and opened as serve opens it, and must equal a replay.
+// It must have gone on from the snapshot, unless a stream breaks after the
+// cut: Resume then replays the whole log, as it can't tell a stream the log
+// breaks from one the snapshot does. The log is opened with catalogue and
+// the state keeps owned, as the store being checked does. It returns the
+// first difference, with its cut.
+func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string, cuts []int64, owned ...*features.Streams) error {
+	const build = "equal"
+	log, err := store.Open(path, catalogue, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	all, err := everyEvent(log)
+	if err != nil {
+		return err
+	}
+	snapshot := filepath.Join(dir, "state.snapshot")
+	for _, cut := range cuts {
+		state := New(catalogue, owned...)
+		state.loadAll(upTo(all, cut))
+		if err := WriteSnapshot(snapshot, state, log, build); err != nil {
+			return fmt.Errorf("at %d: writing the snapshot: %w", cut, err)
+		}
+		restored := Restore(snapshot, build, catalogue, owned...)
+		opened, err := store.Open(path, catalogue, restored, nil)
+		if err != nil {
+			return fmt.Errorf("at %d: %w", cut, err)
+		}
+		err = Equal(opened, restored)
+		opened.Close()
+		switch {
+		case err != nil:
+			return fmt.Errorf("at %d: %w", cut, err)
+		case restored.resumed != cut && !breaksAfter(state, restored):
+			return fmt.Errorf("at %d: Open replayed the whole log instead of going on from the snapshot", cut)
+		}
+	}
+	return nil
+}
+
+// breaksAfter is whether a stream whole in before is broken in after.
+func breaksAfter(before, after *State) bool {
+	for stream := range after.broken {
+		if before.broken[stream] == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// everyEvent is the whole log, rejections included.
+func everyEvent(s *store.Store) ([]events.Event, error) {
+	var all []events.Event
+	for {
+		var after int64
+		if len(all) > 0 {
+			after = all[len(all)-1].Position
+		}
+		page, err := s.After(after, 1000)
+		if err != nil || len(page) == 0 {
+			return all, err
+		}
+		all = append(all, page...)
+	}
+}
+
+// loadAll loads a log into s, a new state, as Open loads a whole log.
+func (s *State) loadAll(log []events.Event) {
+	var streams []string
+	byStream := map[string][]events.Event{}
+	for _, e := range log {
+		if e.Type == events.ProposalRejected {
+			continue
+		}
+		if _, seen := byStream[e.Stream]; !seen {
+			streams = append(streams, e.Stream)
+		}
+		byStream[e.Stream] = append(byStream[e.Stream], e)
+	}
+	for _, stream := range streams {
+		s.Load(stream, byStream[stream])
+	}
+	var last int64
+	if len(log) > 0 {
+		last = log[len(log)-1].Position
+	}
+	s.Loaded(last)
 }

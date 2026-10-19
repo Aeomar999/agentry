@@ -109,10 +109,13 @@ func TestOnlyAChangeAgentryWontMakeIsARefusal(t *testing.T) {
 			t.Errorf("%s: %v should be a refusal", name, err)
 		}
 	}
-	os.Chmod(filepath.Dir(path), 0o500)
-	t.Cleanup(func() { os.Chmod(filepath.Dir(path), 0o700) })
+	// A folder where the backup goes can't be written over, by root either.
+	os.Mkdir(path+"-backup-"+at.Format(backupTime), 0o700)
 	if _, err := live.Change(Edit{Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone}, at); err == nil || errors.As(err, &refusal) {
-		t.Errorf("a folder Agentry can't write to: %v should be a failure, not a refusal", err)
+		t.Errorf("a backup Agentry can't write: %v should be a failure, not a refusal", err)
+	}
+	if text, _ := os.ReadFile(path); string(text) != string(Default()) || live.Current().UseForEveryone() == "" {
+		t.Error("the file and the policy in force should be as they were")
 	}
 }
 

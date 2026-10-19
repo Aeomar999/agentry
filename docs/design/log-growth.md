@@ -532,12 +532,35 @@ tasks, 90,000 summaries at about 810 B each) decodes as JSON lines in 0.81 /
 body (about 0.40 s), so step 4 writes gob over saved forms with presence
 flags.
 
+**Built in step 4a: the presence flags by reflection.** Gob writes an
+empty slice or map, and a pointer to a zero value, as nothing, and reads
+nothing back as `nil`; it also reads a `nil` map inside a slice back as an
+empty one. Rather than a hand-kept flag beside each slice and map in each
+saved form, `internal/exactgob` writes the value with gob, then its shape:
+one bit for every slice, map and pointer in it, set when it isn't `nil`,
+in a fixed order (fields in order, elements in order, map entries by key).
+Reading sets each one back as its bit says. That is a presence flag per
+slice, map and pointer, made by the same walk on both sides, so a field
+added later has its flag without anyone adding it, and the saved forms
+stay as they were. Each package's saved-form test round-trips through both
+JSON and `exactgob`, filled by `deeptest.Fill` and replayed with `nil` and
+empty lists side by side.
+
 The file is one header line, then the body:
 
 ```text
 {"format":1,"build":"<sha256 of the binary>","position":24180,"anchor":"<sha256 of row 24180>","size":10589375,"sha256":"<sha256 of the body>"}
-{"tasks":[...],"archived":[...],"order":[...],"broken":[...],"roster":[...],"workers":{...},"connections":{...}}
+<chunk><chunk>...
 ```
+
+Each chunk is its length (a uvarint), then an `exactgob` value, so the
+chunks are split without decoding and decode on their own, in parallel
+(`current.inParallel`, one goroutine per core). The first chunk is
+everything but the tasks: the positions, `created` and the task count,
+each owned prefix's order, the broken streams' names, the archived set, the
+rosters' saved forms, the settings and the skipped tally. Each later chunk
+is a run of 16 tasks' saved forms with their streams. The anchor is
+`store.Hash`: the sha256 of the row's columns as stored, as a JSON array.
 
 The header is checked before the body is read, so a snapshot from other
 code is turned down without decoding megabytes.
@@ -550,14 +573,23 @@ included, since the state keeps every `task.created` row in its
 panicked, without their state.
 
 A broken stream is **rebuilt at load by a full replay of that stream**
-(its accepted events up to the snapshot's position, through `Load`), so
-it breaks again by the same panic and says why. The other choice, writing
+(its accepted events up to the snapshot's position, folded as `Load` folds
+them), so it breaks again by the same panic and says why. The other choice, writing
 no snapshot while any stream is broken, was dropped: a stream stays broken
 until a release fixes its apply, and that may be many restarts away, so
 startup would go back to replaying the whole log exactly when something is
 already wrong. The rebuild costs one stream's replay. A broken roster then
 reads as empty, not as it was before the event that broke it; that is what
 a restart does today, and `Equal` only asks that both sides fail.
+
+**Built in step 4a: owned streams are rebuilt too.** A feature's own
+streams (`features.Streams`, the ideas) keep `any` state with no saved
+form. Rather than add an optional `Save` and `Restore` to
+`features.Streams`, which every feature would have to write and test,
+Resume rebuilds each owned stream the same way as a broken one, from its
+events up to the snapshot's position; the snapshot keeps only each prefix's
+order. They are small: on the 19 October copy, 81 of 149,839 rows in 42
+idea streams.
 
 ### The version tag
 
@@ -631,11 +663,27 @@ current rows, which hold the rest of the tail too.
 | Ahead of the log, as after restoring an older database | no row at `position` | full replay |
 | From another log at the same position, as after a restore that has since grown past it | the row's hash differs from `anchor` | full replay |
 | Its anchor row archived since (section 4) | no row at `position` | full replay; rare, because a snapshot is written after every archiving round |
-| The tail's apply panics | `guard` in `current` | throw the loaded state away and replay fully; if that panics too, the stream is broken, as today |
+| The tail's apply panics | `guard` in `current` | throw the loaded state away and replay fully; if that panics too, the stream is broken, as today. A stream the log itself breaks after the snapshot lands here too, as Resume can't tell it from one the snapshot breaks: one whole replay, then the next snapshot holds the stream as broken and loads as usual |
 | Older than the log | `position` below the last | the normal case: apply the tail |
 
 Every fallback logs why, and a full replay at startup writes a fresh
-snapshot straight after, in the background. The full replay is
+snapshot straight after, in the background.
+
+**Built in step 4a.** The store has an optional `store.Resumer`, which
+`current.State` is: `Open` calls `Resume(store.Past)` first, in its one
+transaction, and `Past` reads the log as `Open` loads it (`Last`, `Hash`,
+`Stream` up to a position, `ApplyAfter`). Resume makes every check above,
+rebuilds the broken and owned streams, applies the tail in place (a task
+changes without a copy per event, as nothing has read it yet) and calls
+`Loaded`; a snapshot that doesn't fit empties the state, and `Open` loads
+it whole. Step 4b calls `current.RemoveLeftovers(path)` and
+`current.Restore(path, build, catalogue, owned...)` before `store.Open`,
+and `current.WriteSnapshot(path, state, log, build)` to write, which is
+atomic (below). `current.EqualThroughSnapshots` is equivalence test 1's
+judge: `storetest.Open` runs it at cleanup on every store a test opens (at
+every position of a log of 40 events or fewer, otherwise at 40 seeded ones
+and the last), and `internal/current` on its fixture logs at every
+position. The full replay is
 `read-model.md`'s `Open`, which groups the whole table by stream: it
 scans every row, so its cost is the live log's size, and archiving is what
 keeps that bounded.
@@ -1421,10 +1469,13 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      not, has no counterpart; a value with every field set (`fill`) round
      trips `reflect.DeepEqual`.
 4. **Snapshots.** Depends on task-21 (items 2 and 3) and step 3.
-   - Files: `internal/current/snapshot.go` (header and body, entries one
-     to a line; the writer goroutine; load with every fallback; parallel
-     decode), `internal/store` (`Model.Since`, `Open` replays
-     `After(since)`, a read of one row's hash for the anchor),
+   - Files: `internal/current/snapshot.go` (a JSON header line, then the
+     body as length-prefixed gob chunks written by `internal/exactgob`, the
+     tasks 16 to a chunk; parallel decode), `internal/current/resume.go`
+     (`Restore` with every fallback, `Resume`, the atomic write; the
+     writer goroutine), `internal/store` (`Resumer`, which `Open` hands a
+     `Past` to check the snapshot's anchor and apply the events after it;
+     `Hash`, a read of one row's hash for the anchor),
      `cmd/agentry/serve.go` (`state.snapshot` in the data folder, leftover
      temporary files deleted, a write at clean shutdown).
    - Proves: section 2's equivalence tests 1 to 5 (every cut of every

@@ -1,7 +1,9 @@
 package store
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -105,12 +107,78 @@ func ofTypes(name string, types []events.Type, after, before, applied int64) (st
 	return ` AND type IN (?` + strings.Repeat(`, ?`, len(types)-1) + `)`, args
 }
 
+// Hash is a fingerprint of the event at position as stored, every column
+// of its row: a snapshot names the row it was taken at by it, so a log that
+// differs there, such as an older backup restored and grown since, is told
+// apart. Found is false when no event has that position.
+func (s *Store) Hash(position int64) (hash string, found bool, err error) {
+	if position > s.applied.Load() {
+		return "", false, nil
+	}
+	return hashOf(s.reads, position)
+}
+
+func hashOf(db querier, position int64) (string, bool, error) {
+	rows, err := db.Query(`SELECT `+columns+` FROM events WHERE position = ?`, position)
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", false, rows.Err()
+	}
+	var at, stream, actorKind, actorID, kind, correlation, data string
+	if err := rows.Scan(&position, &at, &stream, &actorKind, &actorID, &kind, &correlation, &data); err != nil {
+		return "", false, err
+	}
+	// A JSON array of the columns, so no two rows' columns run together alike.
+	row, err := json.Marshal([]any{position, at, stream, actorKind, actorID, kind, correlation, data})
+	if err != nil {
+		return "", false, err
+	}
+	sum := sha256.Sum256(row)
+	return hex.EncodeToString(sum[:]), true, nil
+}
+
+// Past is the log as Open loads it, up to its last position, read in Open's
+// one transaction: what a Resumer checks its copy against.
+type Past struct {
+	tx        *sql.Tx
+	catalogue *events.Catalogue
+	last      int64
+}
+
+// Last is the log's last position, rejections included.
+func (p Past) Last() int64 { return p.last }
+
+// Hash is Store.Hash, in the log as Open loads it.
+func (p Past) Hash(position int64) (hash string, found bool, err error) {
+	if position > p.last {
+		return "", false, nil
+	}
+	return hashOf(p.tx, position)
+}
+
+// Stream is a stream's accepted events at or before through, in order, as
+// Store.Stream gives them.
+func (p Past) Stream(name string, through int64) ([]events.Event, error) {
+	return queryEvents(p.tx, `SELECT `+columns+` FROM events
+		WHERE stream = ? AND type != ? AND position <= ? ORDER BY position`, name, events.ProposalRejected, min(through, p.last))
+}
+
+// ApplyAfter gives the model every event after since, as Open gives them to
+// a model that starts part way.
+func (p Past) ApplyAfter(model Model, since int64) error {
+	return applyAfter(p.tx, p.catalogue, model, since, p.last)
+}
+
 // LastPosition is the position of the newest event in the model, 0 for an
 // empty log.
 func (s *Store) LastPosition() int64 { return s.applied.Load() }
 
-// load fills the model and returns the log's last position. A model that
-// holds nothing is given each stream's accepted events, streams in the order
+// load fills the model and returns the log's last position. A Resumer is
+// first given the log, to check its saved copy against. A model that holds
+// nothing is then given each stream's accepted events, streams in the order
 // of their first accepted event (tasks in creation order); one that starts
 // part way is given each event after its position, rejections included, as
 // Propose gives them. It runs in Open, before applied is set and before any
@@ -128,6 +196,11 @@ func load(db *sql.DB, catalogue *events.Catalogue, model Model) (int64, error) {
 	}
 	if model == nil {
 		return last, nil
+	}
+	if resumer, ok := model.(Resumer); ok {
+		if err := resumer.Resume(Past{tx: tx, catalogue: catalogue, last: last}); err != nil {
+			return 0, err
+		}
 	}
 	if since := model.Since(); since > 0 {
 		return last, applyAfter(tx, catalogue, model, since, last)

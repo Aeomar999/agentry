@@ -325,12 +325,16 @@ func splittingWith(t *testing.T, check func(events.Proposal, rules.State, *event
 	t.Helper()
 	catalogue := events.Core()
 	state := current.New(catalogue)
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
-	t.Cleanup(func() { storetest.CheckEqual(t, s, state) }) // cleanups run last first: before the close
+	t.Cleanup(func() { // cleanups run last first: before the close
+		storetest.CheckEqual(t, s, state)
+		storetest.CheckSnapshots(t, path, catalogue, s.LastPosition())
+	})
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
