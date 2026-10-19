@@ -8,10 +8,16 @@ import "gitlab.com/dev.chempa/agentry/internal/events"
 // Settings are your choices for how Agentry works.
 type Settings struct {
 	VisionariesOnEpicClose bool // a Visionaries session starts after you close an epic, about what it delivered and what could follow
+	AutoAcceptIdeas        bool // Agentry accepts an idea every Visionary backs, as you would
+	AutoStartIdeas         bool // and starts the task it made; only with AutoAcceptIdeas
 }
 
 // The settings' names in settings.changed.
-const VisionariesOnEpicClose = "visionariesOnEpicClose"
+const (
+	VisionariesOnEpicClose = "visionariesOnEpicClose"
+	AutoAcceptIdeas        = "autoAcceptIdeas"
+	AutoStartIdeas         = "autoStartIdeas"
+)
 
 // Default is the settings before you change any.
 func Default() Settings { return Settings{VisionariesOnEpicClose: true} }
@@ -31,8 +37,11 @@ func (s Settings) Next(e events.Event) Settings {
 	if e.Type != events.SettingsChanged {
 		return s
 	}
-	if _, given := e.Data[VisionariesOnEpicClose]; given {
-		s.VisionariesOnEpicClose = e.Flag(VisionariesOnEpicClose)
+	for name, setting := range map[string]*bool{VisionariesOnEpicClose: &s.VisionariesOnEpicClose,
+		AutoAcceptIdeas: &s.AutoAcceptIdeas, AutoStartIdeas: &s.AutoStartIdeas} {
+		if _, given := e.Data[name]; given {
+			*setting = e.Flag(name)
+		}
 	}
 	return s
 }

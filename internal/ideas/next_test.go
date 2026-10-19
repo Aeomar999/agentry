@@ -23,7 +23,7 @@ func TestNextLeavesTheIdeaAsItWas(t *testing.T) {
 		}
 		idea = next
 	}
-	if idea == nil || idea.State != Accepted || idea.Became != "task-2" || len(idea.BackedBy) != 2 {
+	if idea == nil || idea.State != Accepted || idea.Became != "task-2" || idea.AutoAccepted || len(idea.BackedBy) != 2 {
 		t.Errorf("the log didn't run through: %+v", idea)
 	}
 }
@@ -50,6 +50,7 @@ func everyEvent() []events.Event {
 		"proposal": "A search box", "whyNow": "200 tasks", "size": "M", "risks": "Slow", "backedBy": []any{"dreamer", "builder"},
 		"doubtedBy": []any{"skeptic"}, "repo": "/r", "task": "task-1", "epic": "task-9", "kind": "story"})
 	log = add(log, you, events.IdeaDismissed, map[string]any{"note": "not now"})
+	log = add(log, agentry, events.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"})
 	log = add(log, you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "now"})
 	return log
 }

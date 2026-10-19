@@ -22,14 +22,14 @@ var catalogue = map[Type]spec{
 	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 
-	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close"
+	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" every Visionary agreed on
 	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
 	TaskBudgeted:       {fields: []string{"budget"}, writers: []ActorKind{Human}},
 	TaskTurnsLimited:   {fields: []string{"maxTurns"}, writers: []ActorKind{Human}},
 	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
-	TaskHeld:           {writers: []ActorKind{Human}},                                  // "place" "" lets it go, with a board move's "column", "sentBack"
+	TaskHeld:           {writers: []ActorKind{Human, System}},                          // "place" "" lets it go, with a board move's "column", "sentBack"; Agentry's: starting a task it made from an idea
 	TaskWrappedUp:      {writers: []ActorKind{Agent, System}},                          // "summary" from the coordinator; Agentry's "reason" when it had none
 	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},        // with a board move's "column", "sentBack"
 	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human, Agent}}, // an agent: the coordinator, to a repo you named
@@ -88,10 +88,10 @@ var catalogue = map[Type]spec{
 	PolicyRefused: {fields: []string{"reason", "path"}, writers: []ActorKind{System}},
 
 	IdeaSuggested: {fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, writers: []ActorKind{Agent, System}},
-	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human}}, // "note" may be empty
+	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human, System}}, // "note" may be empty; Agentry's: an idea every Visionary agreed on
 	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
 
-	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose"
+	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas"
 
 	ProposalRejected: {writers: nil},
 }

@@ -355,12 +355,15 @@ export interface Idea {
   state: "open" | "accepted" | "dismissed";
   note: string; // what you said when you accepted or dismissed it
   became: string; // the task an accepted idea became
+  autoAccepted: boolean; // Agentry accepted it, as every Visionary agreed, not you
   createdAt: string;
 }
 
 // Your settings for how Agentry works (internal/web/settings_api.go).
 export interface Settings {
   visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
+  autoAcceptIdeas: boolean; // Agentry accepts an idea every Visionary agreed on, as you would
+  autoStartIdeas: boolean; // and starts the task it made; only with autoAcceptIdeas
 }
 
 // What accepting an idea did: a task can be made and the idea still not be

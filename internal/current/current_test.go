@@ -397,3 +397,36 @@ func idsOf(list []*tasks.Task) []string {
 	}
 	return ids
 }
+
+// An idea Agentry accepted, the task it made and started, and the settings
+// that turn it on, loaded at any point, give what a replay gives.
+func TestAnIdeaAgentryAcceptedEqualsAReplay(t *testing.T) {
+	log := append(everyStream(), logOf(
+		proposal("idea-2", system, events.IdeaSuggested, map[string]any{"title": "Agreed", "problem": "p", "proposal": "f", "size": "S",
+			"repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
+		proposal("task-3", system, events.TaskCreated, map[string]any{"title": "Agreed", "repo": "/r", "coordinator": "tech-lead",
+			"parked": "backlog", "idea": "idea-2"}),
+		proposal("idea-2", system, events.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"}),
+		proposal("task-3", system, events.TaskHeld, map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true}),
+	)...)
+	for i := range log {
+		log[i].Position = int64(i + 1)
+	}
+	for split := range len(log) + 1 {
+		s := loaded(log[:split])
+		for _, e := range log[split:] {
+			s.Apply(e)
+		}
+		sameAsReplay(t, s, log)
+		if t.Failed() {
+			t.Fatalf("loading the first %d events", split)
+		}
+	}
+	s := loaded(log)
+	idea, _ := s.Idea("idea-2")
+	task, _ := s.Task("task-3")
+	if !idea.AutoAccepted || task.Parked != "" || !s.Settings().AutoAcceptIdeas || !s.Settings().AutoStartIdeas {
+		t.Errorf("idea %+v, task parked %q, settings %+v", idea, task.Parked, s.Settings())
+	}
+}

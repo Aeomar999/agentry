@@ -19,6 +19,7 @@ type idea struct {
 	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
 	About, AboutTitle                                                         string // the epic whose close started its session
 	BackedBy, DoubtedBy                                                       []string
+	AutoAccepted                                                              bool // Agentry accepted it for you
 }
 
 func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
@@ -170,18 +171,23 @@ func ideasOf(agentry client.Client, repo string) ([]idea, error) {
 // the newest titles. It points at list_ideas with all when some are in
 // another repo than repo, or when repo is "" (not known). Its key is the
 // number of ideas ever suggested, so a new idea is news and one you accept or
-// dismiss isn't. ok is false with none open.
+// dismiss isn't; one Agentry accepted for you was never yours to decide, so
+// it isn't counted. ok is false with none open.
 func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	all, err := ideasOf(agentry, "")
 	if err != nil {
 		return Waiting{}, false
 	}
 	var open []idea
+	yours := 0
 	pointer := "list_ideas"
 	if repo == "" {
 		pointer = "list_ideas all"
 	}
 	for _, i := range all {
+		if !i.AutoAccepted {
+			yours++
+		}
 		if i.State != "open" {
 			continue
 		}
@@ -204,7 +210,7 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	if len(open) == 1 {
 		what = "open idea"
 	}
-	return Waiting{Key: "ideas/" + strconv.Itoa(len(all)), Task: open[0].Task, Kind: "ideas",
+	return Waiting{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
 		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}, true
 }
 

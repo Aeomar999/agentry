@@ -78,7 +78,7 @@ func (t *Task) Apply(e events.Event) {
 		t.TeamChosen, t.Parent, t.Depth = e.Flag("teamChosen"), e.Text("parent"), e.Number("depth")
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
 		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
-		t.Idea = e.Text("idea")
+		t.Idea, t.ByAgentry = e.Text("idea"), e.Actor.Kind == events.System
 		t.About, t.AboutClose = e.Text("about"), int64(e.Number("close"))
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
@@ -113,6 +113,7 @@ func (t *Task) Apply(e events.Event) {
 		default: // a wrap-up still going is over: you want more work
 			wrapping := t.WrapUp != nil
 			t.Parked, t.WrapUp = "", nil
+			t.AutoStarted = t.AutoStarted || e.Actor.Kind == events.System
 			t.moveColumn(e)
 			if t.stopTurn() || wrapping || t.idle() {
 				t.step(e, You, t.Coordinator, "I moved this task back to work. Carry on from where it was.")
