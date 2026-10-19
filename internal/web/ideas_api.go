@@ -49,7 +49,7 @@ func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 	if !s.ideaExists(w, id) {
 		return
 	}
-	got, err := ideas.Accept(s.store, id, ideas.Choice{Kind: strings.TrimSpace(request.Kind), Note: strings.TrimSpace(request.Note),
+	got, err := ideas.Accept(s.store, s.state, id, ideas.Choice{Kind: strings.TrimSpace(request.Kind), Note: strings.TrimSpace(request.Note),
 		Budget: s.config.Budget})
 	switch {
 	case err != nil:

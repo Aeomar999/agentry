@@ -32,12 +32,12 @@ const token = "ui-secret"
 
 func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
@@ -174,7 +174,7 @@ func TestHookCallsGoToTheHookHandler(t *testing.T) {
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 func TestThePolicyShowsWithItsProblem(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	path := filepath.Join(t.TempDir(), "policy.toml")
 	live, err := policy.OpenLive(path, "/home/dev", nil)
 	if err != nil {
@@ -182,7 +182,7 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 	}
 	os.WriteFile(path, []byte("version = 2"), 0o600)
 	live.Reload()
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 
 	_, body := call(t, server, "GET", "/api/policy", "")
@@ -290,11 +290,11 @@ func TestServesTheAppFilesWithoutTheToken(t *testing.T) {
 // The desk hands work to the coordinator and reads it back, and nothing
 // more: approving an agent's action takes the UI token.
 func TestTheDeskTokenOpensOnlyTasks(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DeskToken: "desk-secret"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	asDesk := func(method, path, body string) int {
 		request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
@@ -429,7 +429,7 @@ func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) 
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server = httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 2}, http.NotFoundHandler(), nil).Handler())
+	server = httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 2}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	propose := func(p events.Proposal) {
 		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
@@ -1261,7 +1261,7 @@ func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
 // agents need it is refused, not added with agents that can do nothing.
 func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	serve := func(policyText string) (*httptest.Server, *store.Store, string) {
-		s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 		for _, p := range agents.SeedProposals(nil) {
 			s.Propose(p)
 		}
@@ -1271,7 +1271,7 @@ func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		server := httptest.NewServer(NewServer(s, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
+		server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
 		t.Cleanup(server.Close)
 		return server, s, path
 	}
@@ -1398,11 +1398,11 @@ func TestTasksAreFiledUnderEpics(t *testing.T) {
 // You approve closing an epic, on the page; the desk can't for you, and
 // any other answer goes to its coordinator.
 func TestYouCloseAnEpic(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
 	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
@@ -1426,11 +1426,11 @@ func TestYouCloseAnEpic(t *testing.T) {
 // An epic you leave open, with every story done, isn't waiting for you, and
 // you can still close it from the page.
 func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
 	s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskNeedsYou,

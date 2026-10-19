@@ -20,7 +20,7 @@ func twoTeams(t *testing.T) (*store.Store, context.CancelFunc, string) {
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -30,7 +30,7 @@ func twoTeams(t *testing.T) (*store.Store, context.CancelFunc, string) {
 		s.Propose(p)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	go newLoop(s, t.TempDir()).Run(ctx)
+	go newLoop(s, state, t.TempDir()).Run(ctx)
 	return s, cancel, repo
 }
 

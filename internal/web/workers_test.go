@@ -33,7 +33,7 @@ import (
 // moves to it over git, its agent's terminal shows on the server, the page
 // peeks at its files, and the work comes back with what it did.
 func TestAWorkerJoinsAndTakesWork(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -41,7 +41,7 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 	fleet := machines.NewFleet(here)
 	binary := filepath.Join(t.TempDir(), "agentry")
 	os.WriteFile(binary, []byte("the agentry binary"), 0o755)
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, Fleet: fleet, Workers: workerlink.NewServer(s, fleet),
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Fleet: fleet, Workers: workerlink.NewServer(s, fleet),
 		Binary: binary}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 

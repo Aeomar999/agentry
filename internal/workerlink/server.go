@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -129,12 +130,11 @@ func (s *Server) propose(p events.Proposal) {
 // start no link is open yet; they come back as their workers dial in, and
 // the fleet expects every one meanwhile (machines.OfflineGrace): any of
 // them may have agents running, whatever the log last said.
-func ForgetConnections(s *store.Store, fleet *machines.Fleet) error {
-	stream, err := s.Stream(events.WorkersStream)
-	if err != nil {
+func ForgetConnections(s *store.Store, state *current.State, fleet *machines.Fleet) error {
+	if err := state.Broken(events.WorkersStream); err != nil {
 		return err
 	}
-	for _, w := range workers.FromEvents(stream).Workers {
+	for _, w := range state.Workers().Workers {
 		fleet.Expect(w.Name)
 		if w.Online {
 			if _, _, err := s.Propose(workers.Disconnected(w.Name)); err != nil {

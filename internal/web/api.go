@@ -24,22 +24,16 @@ import (
 var you = events.Actor{Kind: events.Human, ID: "you"}
 
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
-	ids, err := s.store.TaskIDs()
-	if err != nil {
-		failed(w, err)
-		return
-	}
 	roster, err := s.roster()
 	if err != nil {
 		failed(w, err)
 		return
 	}
-	var all []*tasks.Task
+	all := s.state.Tasks()
+	slices.Reverse(all) // newest first, which a tie keeps
 	done := map[string]bool{}
-	for i := len(ids) - 1; i >= 0; i-- { // newest first, which a tie keeps
-		if task, err := s.task(ids[i]); err == nil && task != nil {
-			all, done[task.ID] = append(all, task), task.IsDone
-		}
+	for _, task := range all {
+		done[task.ID] = task.IsDone
 	}
 	summaries := []taskSummary{}
 	for _, task := range all {
@@ -532,17 +526,10 @@ func (s *Server) propose(w http.ResponseWriter, p events.Proposal) {
 	}
 }
 
-func (s *Server) task(id string) (*tasks.Task, error) {
-	stream, err := s.store.Stream(id)
-	if err != nil {
-		return nil, err
-	}
-	return tasks.FromEvents(stream), nil
-}
+func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
 
 func (s *Server) roster() (agents.Roster, error) {
-	stream, err := s.store.Stream(events.AgentsStream)
-	return agents.FromEvents(stream), err
+	return s.state.Roster(), s.state.Broken(events.AgentsStream)
 }
 
 func decode(w http.ResponseWriter, r *http.Request, into any) bool {

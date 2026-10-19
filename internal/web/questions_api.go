@@ -37,14 +37,9 @@ type question struct {
 }
 
 func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
-	ids, err := s.store.TaskIDs()
-	if err != nil {
-		failed(w, err)
-		return
-	}
 	questions := []question{}
-	for _, id := range ids {
-		if task, err := s.task(id); err == nil && task != nil && !task.IsDone {
+	for _, task := range s.state.Tasks() {
+		if !task.IsDone {
 			questions = append(questions, questionsOf(task)...)
 		}
 	}

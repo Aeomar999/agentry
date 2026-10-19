@@ -145,9 +145,9 @@ func TestReopenKeepsTheLog(t *testing.T) {
 	first.Close()
 
 	second, model := openAt(t, path)
-	ids, _ := second.TaskIDs()
-	if len(ids) != 2 || ids[0] != "task-1" || ids[1] != "task-2" {
-		t.Errorf("task ids after reopening: %v", ids)
+	log, _ := second.After(0, 10)
+	if len(log) != 2 || log[0].Stream != "task-1" || log[1].Stream != "task-2" {
+		t.Errorf("the log after reopening: %v", log)
 	}
 	if !model.has("task-1") || !model.has("task-2") || model.loaded != 2 {
 		t.Errorf("the model wasn't loaded from the log: %v, loaded at %d", model.streams, model.loaded)

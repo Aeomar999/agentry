@@ -32,7 +32,7 @@ type State struct {
 	mu          sync.RWMutex
 	position    int64                  // of the last event applied, rejections included
 	tasks       map[string]*tasks.Task // by stream
-	taskIDs     []string               // oldest first, as Store.TaskIDs
+	taskIDs     []string               // every task.created applied, oldest first, as the log lists them
 	ideas       map[string]*ideas.Idea // by stream
 	created     []created              // the task.created events Load found, until Loaded puts them in order
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
@@ -183,6 +183,14 @@ func (s *State) Tasks() []*tasks.Task {
 		}
 	}
 	return all
+}
+
+// TaskIDs is the stream of every task.created applied, oldest first, in a
+// new slice: a broken task's too, so its length counts every task made.
+func (s *State) TaskIDs() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.taskIDs)
 }
 
 // Roster is every agent. If the agents stream is broken, it is the roster

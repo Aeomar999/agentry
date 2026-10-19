@@ -19,7 +19,7 @@ import (
 // the position. It returns the first difference, named by stream, or nil. A
 // stream the state holds as broken must fail to replay too.
 func Equal(s *store.Store, state *State) error {
-	ids, err := s.TaskIDs()
+	ids, err := taskIDsIn(s)
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func Equal(s *store.Store, state *State) error {
 			return err
 		}
 	}
-	if order := taskIDsOf(state); !slices.Equal(order, ids) {
+	if order := state.TaskIDs(); !slices.Equal(order, ids) {
 		return fmt.Errorf("task order: the state has %v, the log %v", order, ids)
 	}
 	if position, last := state.Position(), s.LastPosition(); position != last {
@@ -62,12 +62,18 @@ func Equal(s *store.Store, state *State) error {
 }
 
 // equalStream compares what the state holds for a stream with a replay of
-// the stream's accepted events.
+// the stream's accepted events in the log.
 func equalStream[T any](s *store.Store, stream string, replay func([]events.Event) T, held func() (any, error)) error {
 	accepted, err := s.Stream(stream)
 	if err != nil {
 		return err
 	}
+	return equalReplay(stream, accepted, replay, held)
+}
+
+// equalReplay compares what the state holds for a stream with a replay of
+// accepted, the stream's accepted events.
+func equalReplay[T any](stream string, accepted []events.Event, replay func([]events.Event) T, held func() (any, error)) error {
 	want, replayErr := replayed(replay, accepted)
 	got, heldErr := held()
 	switch {
@@ -110,10 +116,24 @@ func differingField(got, want any) string {
 	return "an unexported field"
 }
 
-// taskIDsOf is the state's task order, broken tasks included, as the log
-// lists them.
-func taskIDsOf(state *State) []string {
-	state.mu.RLock()
-	defer state.mu.RUnlock()
-	return slices.Clone(state.taskIDs)
+// taskIDsIn is the stream of every accepted task.created in the log,
+// oldest first, whatever the stream.
+func taskIDsIn(s *store.Store) ([]string, error) {
+	const page = 1000
+	var ids []string
+	for position := int64(0); ; {
+		batch, err := s.After(position, page)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range batch {
+			if e.Type == events.TaskCreated {
+				ids = append(ids, e.Stream)
+			}
+		}
+		if len(batch) < page {
+			return ids, nil
+		}
+		position = batch[len(batch)-1].Position
+	}
 }

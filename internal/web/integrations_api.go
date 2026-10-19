@@ -107,6 +107,5 @@ func (s *Server) carriesConnection(r *http.Request) bool {
 }
 
 func (s *Server) connections() (connections.Roster, error) {
-	stream, err := s.store.Stream(events.ConnectionsStream)
-	return connections.FromEvents(stream), err
+	return s.state.Connections(), s.state.Broken(events.ConnectionsStream)
 }

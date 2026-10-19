@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -22,7 +23,7 @@ import (
 // the coordinator gets exactly one turn to wrap up, whose summary is kept.
 // Nothing runs after it.
 func TestYouFinishATaskAndTheCoordinatorWrapsUpOnce(t *testing.T) {
-	s, id := taskWithTheEngineerWorking(t, "task-wrap-1")
+	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-1")
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone,
 		Data: map[string]any{"summary": "Moved.", "note": "Good enough for now.", "moved": true}})
 
@@ -51,7 +52,7 @@ func TestYouFinishATaskAndTheCoordinatorWrapsUpOnce(t *testing.T) {
 // A wrap-up that decides anything but its summary starts nothing: the
 // rules refuse it, and the task stays done.
 func TestAWrapUpCantStartMoreWork(t *testing.T) {
-	s, id := taskWithTheEngineerWorking(t, "task-wrap-2")
+	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-2")
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Finish src/b.go."}`)
@@ -71,12 +72,12 @@ func TestAWrapUpCantStartMoreWork(t *testing.T) {
 // A wrap-up turn whose engine crashes still ends: the watchdog watches a
 // finished task while its coordinator wraps up, and nothing runs after.
 func TestAWrapUpThatCrashesStillEnds(t *testing.T) {
-	s, id := taskWithTheEngineerWorking(t, "task-wrap-3")
+	s, state, id := taskWithTheEngineerWorking(t, "task-wrap-3")
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 
 	dead := func(string) bool { return false }
-	watch.New(s, watch.DefaultLimits, dead, func(string) {}).Check(time.Now().Add(time.Minute))
+	watch.New(s, state, watch.DefaultLimits, dead, func(string) {}).Check(time.Now().Add(time.Minute))
 	task := waitUntil(t, s, id, "the wrap-up to end", func(task *tasks.Task) bool { return task.WrapUp == nil })
 	if !task.IsDone || task.Turns[2].Issue == "" || !strings.Contains(task.Told.Text, "ended without a reply") {
 		t.Errorf("done %v, issue %q, told %q", task.IsDone, task.Turns[2].Issue, task.Told.Text)
@@ -88,7 +89,7 @@ func TestAWrapUpThatCrashesStillEnds(t *testing.T) {
 // wrap-up turn, whose late decision changes nothing, and carries on in the
 // same worktree.
 func TestReopeningStopsTheWrapUp(t *testing.T) {
-	s, id := taskWithTheEngineerWorking(t, "task-wrap-4")
+	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-4")
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	before := waitForTurn(t, s, id, "turn-3", "tech-lead").Worktree
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "Reopen this task. It needs more work."}})
@@ -116,7 +117,7 @@ func TestReopeningStopsTheWrapUp(t *testing.T) {
 // Moved from Done to To do once its coordinator has wrapped up, the task
 // has nothing new to wrap up: no turn starts.
 func TestNoSecondWrapUp(t *testing.T) {
-	s, id := taskWithTheEngineerWorking(t, "task-wrap-5")
+	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-5")
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "done", "summary": "Half done."}`)
@@ -179,23 +180,23 @@ func TestClosingAnEpicParksItsStories(t *testing.T) {
 
 // taskWithTheEngineerWorking runs the loop on a task until the engineer's
 // turn (turn-2) is open.
-func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, string) {
+func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, *current.State, string) {
 	fakeClaudeOnPath(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	t.Cleanup(func() { sessions.Stop(sessions.SocketFor(id)) })
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	go newLoop(s, t.TempDir()).Run(ctx)
+	go newLoop(s, state, t.TempDir()).Run(ctx)
 
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO."}`)
 	waitForTurn(t, s, id, "turn-2", "engineer")
-	return s, id
+	return s, state, id
 }
 
 // nothingMoreRuns wakes the loop for the task, and checks no turn starts.
@@ -218,7 +219,7 @@ func propose(t *testing.T, s *store.Store, p events.Proposal) {
 // A task you moved to Done keeps its port while its coordinator wraps up,
 // since reopening it then works in the same worktree; after that it is free.
 func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -232,7 +233,7 @@ func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
 	}
 	propose(t, s, events.Proposal{Stream: "task-3", Actor: watchdog, Type: events.TaskWrappedUp, Data: map[string]any{"reason": "no usable decision"}})
 
-	if ports := (&Loop{store: s}).portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
+	if ports := (&Loop{store: s, state: state}).portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
 		t.Errorf("ports in use %v: want the working task's and the one wrapping up", ports)
 	}
 }

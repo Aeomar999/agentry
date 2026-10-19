@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -34,7 +35,8 @@ var DefaultLimits = Limits{
 }
 
 type Watchdog struct {
-	store     *store.Store
+	store     *store.Store   // where it raises issues
+	state     *current.State // the tasks it watches
 	limits    Limits
 	isRunning func(task string) bool // is the task's agent process alive
 	stop      func(task string)      // end the task's session
@@ -42,8 +44,8 @@ type Watchdog struct {
 
 var dog = events.Actor{Kind: events.System, ID: "watchdog"}
 
-func New(s *store.Store, limits Limits, isRunning func(task string) bool, stop func(task string)) *Watchdog {
-	return &Watchdog{store: s, limits: limits, isRunning: isRunning, stop: stop}
+func New(s *store.Store, state *current.State, limits Limits, isRunning func(task string) bool, stop func(task string)) *Watchdog {
+	return &Watchdog{store: s, state: state, limits: limits, isRunning: isRunning, stop: stop}
 }
 
 // Run checks every second until ctx ends: a crash is flagged within about
@@ -64,18 +66,8 @@ func (w *Watchdog) Run(ctx context.Context) {
 // Check looks at every task with an open turn, once: a finished task's too
 // while its coordinator wraps up, so a wrap-up that crashes still ends.
 func (w *Watchdog) Check(now time.Time) {
-	ids, err := w.store.TaskIDs()
-	if err != nil {
-		slog.Error("watchdog: listing tasks", "err", err)
-		return
-	}
-	for _, id := range ids {
-		stream, err := w.store.Stream(id)
-		if err != nil {
-			continue
-		}
-		task := tasks.FromEvents(stream)
-		if task == nil || task.IsDone && task.WrapUp == nil || task.OpenTurn() == nil {
+	for _, task := range w.state.Tasks() {
+		if task.IsDone && task.WrapUp == nil || task.OpenTurn() == nil {
 			continue
 		}
 		w.checkTurn(now, task, task.OpenTurn())

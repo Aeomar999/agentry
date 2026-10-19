@@ -72,6 +72,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	var state replayed
 	var broken map[string]error
 	var read, fold time.Duration
+	ids := createdTasks(t, path)
 	whole := minOf3(func() {
 		start := time.Now()
 		s, err := store.Open(path, nil, nil)
@@ -79,10 +80,6 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 			t.Fatal(err)
 		}
 		defer s.Close()
-		ids, err := s.TaskIDs()
-		if err != nil {
-			t.Fatal(err)
-		}
 		streams := readStreams(t, s, append(slices.Clone(ids), events.AgentsStream, events.WorkersStream, events.ConnectionsStream))
 		readTook := time.Since(start)
 		start = time.Now()
@@ -134,6 +131,33 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	})
 	t.Logf("  heap held by the state alone: %d KB", held/1024)
 	return state
+}
+
+// createdTasks is every task's stream, oldest first, read with SQL now that
+// the store leaves the task order to the state.
+func createdTasks(t *testing.T, path string) []string {
+	raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	rows, err := raw.Query(`SELECT stream FROM events WHERE type = ? ORDER BY position`, events.TaskCreated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return ids
 }
 
 // foldTask replays one task's stream, turning a panic in the apply code into

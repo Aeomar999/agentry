@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
@@ -26,13 +27,14 @@ type Config struct {
 
 // Runner starts turns on the machine the task's work is on.
 type Runner struct {
-	store  *store.Store
+	store  *store.Store   // the log: where turns are recorded
+	state  *current.State // the tasks, for where their work is
 	fleet  *machines.Fleet
 	config Config
 }
 
-func NewRunner(s *store.Store, fleet *machines.Fleet, config Config) *Runner {
-	return &Runner{store: s, fleet: fleet, config: config}
+func NewRunner(s *store.Store, state *current.State, fleet *machines.Fleet, config Config) *Runner {
+	return &Runner{store: s, state: state, fleet: fleet, config: config}
 }
 
 // startTimeout is how long a machine has to set a turn up and start it.
@@ -95,8 +97,7 @@ func (r *Runner) IsRunning(task string) bool { return r.MachineOf(task).IsRunnin
 
 // MachineOf is the machine the task's work is on.
 func (r *Runner) MachineOf(id string) machines.Machine {
-	stream, err := r.store.Stream(id)
-	if task := tasks.FromEvents(stream); err == nil && task != nil && task.Worktree != nil {
+	if task, err := r.state.Task(id); err == nil && task != nil && task.Worktree != nil {
 		return r.fleet.Of(task.Worktree.Worker)
 	}
 	return r.fleet.Of(workers.Local)

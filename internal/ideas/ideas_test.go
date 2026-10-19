@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -21,17 +22,17 @@ var (
 	coordinator = events.Actor{Kind: events.Agent, ID: "tech-lead"}
 )
 
-// openSeeded is a store with the rules, the default agents and task-1, the
-// Visionaries session the ideas come from, in repo.
-func openSeeded(t *testing.T) (s *store.Store, repo string) {
+// openSeeded is a store and its state with the rules, the default agents
+// and task-1, the Visionaries session the ideas come from, in repo.
+func openSeeded(t *testing.T) (s *store.Store, state *current.State, repo string) {
 	t.Helper()
-	s, _ = storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state = storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	repo = gitRepo(t)
 	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "tech-lead"}}) {
 		mustPropose(t, s, p)
 	}
-	return s, repo
+	return s, state, repo
 }
 
 func gitRepo(t *testing.T) string {
@@ -86,17 +87,8 @@ func loadTask(t *testing.T, s *store.Store, id string) *tasks.Task {
 	return tasks.FromEvents(stream)
 }
 
-func taskCount(t *testing.T, s *store.Store) int {
-	t.Helper()
-	ids, err := s.TaskIDs()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return len(ids)
-}
-
 func TestASuggestedIdeaKeepsEveryField(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	idea := load(t, s, suggest(t, s, repo, map[string]any{"kind": "epic"}))
 
 	got := []string{idea.ID, idea.Title, idea.Problem, idea.Proposal, idea.WhyNow, idea.Size, idea.Risks,
@@ -109,7 +101,7 @@ func TestASuggestedIdeaKeepsEveryField(t *testing.T) {
 	if idea.CreatedAt.IsZero() || idea.Note != "" || idea.Became != "" {
 		t.Errorf("created %v, note %q, became %q", idea.CreatedAt, idea.Note, idea.Became)
 	}
-	if ids, _ := s.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) {
+	if ids := state.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) {
 		t.Errorf("an idea showed up as a task: %v", ids)
 	}
 }
@@ -128,10 +120,10 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			s, repo := openSeeded(t)
+			s, state, repo := openSeeded(t)
 			id := suggest(t, s, repo, map[string]any{"kind": c.suggested})
 
-			got, err := ideas.Accept(s, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Budget: 500})
+			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Budget: 500})
 			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
@@ -154,7 +146,7 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 }
 
 func TestDismissKeepsYourNote(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, _, repo := openSeeded(t)
 	kept, dropped := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})
 	other := suggest(t, s, gitRepo(t), map[string]any{"title": "Elsewhere"})
 	for _, id := range []string{dropped, other} {
@@ -177,15 +169,15 @@ func TestDismissKeepsYourNote(t *testing.T) {
 }
 
 func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	accepted, dismissed := suggest(t, s, repo, nil), suggest(t, s, repo, nil)
-	if got, err := ideas.Accept(s, accepted, ideas.Choice{}); err != nil || !got.Accepted {
+	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{}); err != nil || !got.Accepted {
 		t.Fatal(got, err)
 	}
 	mustPropose(t, s, events.Proposal{Stream: dismissed, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}})
 
 	for _, id := range []string{accepted, dismissed} {
-		if got, err := ideas.Accept(s, id, ideas.Choice{}); err != nil || got.Task != "" || got.Accepted || got.Refused == "" {
+		if got, err := ideas.Accept(s, state, id, ideas.Choice{}); err != nil || got.Task != "" || got.Accepted || got.Refused == "" {
 			t.Errorf("accepting %s again: %+v %v", id, got, err)
 		}
 	}
@@ -202,7 +194,7 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 			t.Errorf("%s on %s: %v %v", p.Type, p.Stream, rejection, err)
 		}
 	}
-	if n := taskCount(t, s); n != 2 {
+	if n := len(state.TaskIDs()); n != 2 {
 		t.Errorf("%d tasks, want task-1 and the one accepted", n)
 	}
 }
@@ -210,16 +202,16 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 // A task made from the idea but never marked, as after a crash between the
 // two writes, is the one Accept marks; no second task is made.
 func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}})
 
-	got, err := ideas.Accept(s, id, ideas.Choice{Note: "At last"})
+	got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "At last"})
 	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
 		t.Fatalf("accept: %+v %v", got, err)
 	}
-	if n := taskCount(t, s); n != 2 {
+	if n := len(state.TaskIDs()); n != 2 {
 		t.Errorf("%d tasks, want task-1 and task-2", n)
 	}
 	if idea := load(t, s, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
@@ -230,13 +222,13 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 // A kind that is neither a task nor an epic is refused, whether or not a
 // task was made from the idea already.
 func TestAcceptRefusesAnUnknownKind(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	fresh, made := suggest(t, s, repo, nil), suggest(t, s, repo, nil)
 	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": made}})
 
 	for _, id := range []string{fresh, made} {
-		got, err := ideas.Accept(s, id, ideas.Choice{Kind: "bogus"})
+		got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: "bogus"})
 		if err != nil || got != (ideas.Acceptance{Refused: "an idea becomes a task or an epic, not bogus"}) {
 			t.Errorf("accepting %s as bogus: %+v %v", id, got, err)
 		}
@@ -249,13 +241,13 @@ func TestAcceptRefusesAnUnknownKind(t *testing.T) {
 // You dismiss the idea after its task is made but before it is marked: the
 // task stays, and Acceptance says so.
 func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	ideas.BeforeMarking(t, func() {
 		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}})
 	})
 
-	got, err := ideas.Accept(s, id, ideas.Choice{})
+	got, err := ideas.Accept(s, state, id, ideas.Choice{})
 	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "wasn't marked accepted") {
 		t.Errorf("accept: %+v %v", got, err)
 	}
@@ -266,25 +258,25 @@ func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
 
 // Two Accepts at once, as from a double click, make one task.
 func TestAcceptsAtOnceMakeOneTask(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	results := make(chan ideas.Acceptance, 2)
 	for range 2 {
 		go func() {
-			got, _ := ideas.Accept(s, id, ideas.Choice{})
+			got, _ := ideas.Accept(s, state, id, ideas.Choice{})
 			results <- got
 		}()
 	}
 	if first, second := <-results, <-results; first.Accepted == second.Accepted {
 		t.Errorf("want one accepted: %+v, %+v", first, second)
 	}
-	if n := taskCount(t, s); n != 2 {
+	if n := len(state.TaskIDs()); n != 2 {
 		t.Errorf("%d tasks, want task-1 and one made from the idea", n)
 	}
 }
 
 func TestOnlyYouAcceptOrDismiss(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, _, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	for _, by := range []events.Actor{coordinator, agentry} {
 		for _, p := range []events.Proposal{
@@ -302,14 +294,14 @@ func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 }
 
 func TestAcceptRefusesAnUnknownRepo(t *testing.T) {
-	s, _ := openSeeded(t)
+	s, state, _ := openSeeded(t)
 	id := suggest(t, s, t.TempDir(), nil) // a folder, but no git repo
 
-	got, err := ideas.Accept(s, id, ideas.Choice{})
+	got, err := ideas.Accept(s, state, id, ideas.Choice{})
 	if err != nil || got.Task != "" || got.Accepted || !strings.Contains(got.Refused, "isn't a git repository") {
 		t.Errorf("accept: %+v %v", got, err)
 	}
-	if n := taskCount(t, s); n != 1 {
+	if n := len(state.TaskIDs()); n != 1 {
 		t.Errorf("%d tasks, want only task-1", n)
 	}
 	if idea := load(t, s, id); idea.State != ideas.Open {
@@ -318,7 +310,7 @@ func TestAcceptRefusesAnUnknownRepo(t *testing.T) {
 }
 
 func TestAnAcceptedIdeaPointsAtATaskMadeFromIt(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, _, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	for _, task := range []string{"task-1", "task-99"} { // not made from it; not made at all
 		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.IdeaAccepted, Data: map[string]any{"task": task}})
@@ -329,7 +321,7 @@ func TestAnAcceptedIdeaPointsAtATaskMadeFromIt(t *testing.T) {
 }
 
 func TestASuggestionComesFromATask(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, _, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	usual := map[string]any{"title": "x", "problem": "p", "proposal": "f", "size": "S", "repo": repo, "task": "task-1"}
 	with := func(field string, value any) map[string]any {
@@ -365,7 +357,7 @@ func TestASuggestionComesFromATask(t *testing.T) {
 // A log from before ideas has none: its tasks build as they did, and the
 // next task and the first idea are named as before.
 func TestALogWithNoIdeas(t *testing.T) {
-	s, repo := openSeeded(t)
+	s, _, repo := openSeeded(t)
 	before := loadTask(t, s, "task-1")
 	if list, err := ideas.List(s, ""); err != nil || list != nil {
 		t.Errorf("ideas: %v %v", list, err)

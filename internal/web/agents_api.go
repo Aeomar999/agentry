@@ -44,17 +44,11 @@ func (s *Server) renameAgent(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, agents.Agent{Name: name}.Renaming(you, to)) {
 		return
 	}
-	ids, err := s.store.TaskIDs()
-	if err != nil {
-		failed(w, err)
-		return
-	}
-	for _, id := range ids {
-		task, err := s.task(id)
-		if err != nil || task == nil || (task.Coordinator != name && (task.Handoff == nil || task.Handoff.To != name)) {
+	for _, task := range s.state.Tasks() {
+		if task.Coordinator != name && (task.Handoff == nil || task.Handoff.To != name) {
 			continue
 		}
-		if !s.proposeOrRefuse(w, events.Proposal{Stream: id, Actor: you, Type: events.AgentRenamedInTask,
+		if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.AgentRenamedInTask,
 			Data: map[string]any{"name": name, "to": to}}) {
 			return
 		}
@@ -128,14 +122,9 @@ func (s *Server) removeTeam(w http.ResponseWriter, r *http.Request) {
 // needing lists the unfinished tasks that one of the agents coordinates,
 // works on now, or is about to.
 func (s *Server) needing(names ...string) ([]string, error) {
-	ids, err := s.store.TaskIDs()
-	if err != nil {
-		return nil, err
-	}
 	var busy []string
-	for _, id := range ids {
-		task, err := s.task(id)
-		if err != nil || task == nil || task.IsDone {
+	for _, task := range s.state.Tasks() {
+		if task.IsDone {
 			continue
 		}
 		open := task.OpenTurn()

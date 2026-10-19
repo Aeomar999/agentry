@@ -20,7 +20,7 @@ import (
 // offline comes back to the coordinator, with why, to choose again.
 func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 	fakeClaudeOnPath(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -37,7 +37,7 @@ func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(id))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go newLoop(s, t.TempDir()).Run(ctx)
+	go newLoop(s, state, t.TempDir()).Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Fix it", "repo": gitRepo(t), "coordinator": "tech-lead"}})

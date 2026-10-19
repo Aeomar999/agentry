@@ -20,7 +20,7 @@ import (
 func TestTheCoordinatorMovesATaskToTheRepoYouNamed(t *testing.T) {
 	fakeClaudeOnPath(t)
 	root := t.TempDir()
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -28,7 +28,7 @@ func TestTheCoordinatorMovesATaskToTheRepoYouNamed(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(id))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	loop := newLoop(s, root)
+	loop := newLoop(s, state, root)
 	loop.Clones = filepath.Join(root, ".repos")
 	go loop.Run(ctx)
 

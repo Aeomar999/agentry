@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -24,7 +25,8 @@ import (
 // Next says. Its own proposals are events too, so each one wakes it again:
 // the task moves step by step, and a restart picks up where it was.
 type Loop struct {
-	store  *store.Store
+	store  *store.Store   // the log: what the loop reads and proposes
+	state  *current.State // every task and roster, as of the log's last event
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
@@ -73,8 +75,8 @@ const (
 	oldBudgetStop = "This task has used "
 )
 
-func NewLoop(s *store.Store, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, runner: runner, fleet: fleet}
+func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
+	return &Loop{store: s, state: state, runner: runner, fleet: fleet}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:
@@ -543,11 +545,9 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 // over: unfinished, or done by you and still wrapping up, since a reopen
 // then works in the same worktree.
 func (l *Loop) portsInUse(machine string) []int {
-	ids, _ := l.store.TaskIDs()
 	var ports []int
-	for _, id := range ids {
-		task, _, err := l.load(id)
-		if err == nil && task != nil && (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
+	for _, task := range l.state.Tasks() {
+		if (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
 			ports = append(ports, task.Worktree.Port)
 		}
 	}
@@ -555,15 +555,14 @@ func (l *Loop) portsInUse(machine string) []int {
 }
 
 func (l *Loop) load(id string) (*tasks.Task, agents.Roster, error) {
-	stream, err := l.store.Stream(id)
+	task, err := l.state.Task(id)
 	if err != nil {
 		return nil, nil, err
 	}
-	agentEvents, err := l.store.Stream(events.AgentsStream)
-	if err != nil {
+	if err := l.state.Broken(events.AgentsStream); err != nil {
 		return nil, nil, err
 	}
-	return tasks.FromEvents(stream), agents.FromEvents(agentEvents), nil
+	return task, l.state.Roster(), nil
 }
 
 // propose reports whether the event was accepted. A refusal is already in

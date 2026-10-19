@@ -17,11 +17,11 @@ import (
 const claudeToken = "workspace-claude-token-for-tests"
 
 func TestClaudeSendsWhatYouAskedAndNothingElse(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, HelperToken: claudeToken, DefaultRepo: "/src/app"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, HelperToken: claudeToken, DefaultRepo: "/src/app"}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	call(t, server, "POST", "/api/tasks", `{"title":"Add a cache"}`)
 	asClaude := func(method, path, body string) int {

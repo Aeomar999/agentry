@@ -25,12 +25,12 @@ type signinServer struct {
 
 func newSigninServer(t *testing.T) *signinServer {
 	t.Helper()
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	test := &signinServer{t: t, now: time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)}
-	server := NewServer(s, Config{UIToken: token, DeskToken: "desk-secret", NetworkURLs: []string{"http://192.168.1.5:7800"}}, http.NotFoundHandler(), nil)
+	server := NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret", NetworkURLs: []string{"http://192.168.1.5:7800"}}, http.NotFoundHandler(), nil)
 	server.signins = newSignins(func() time.Time { return test.now })
 	test.handler = server.Handler()
 	return test

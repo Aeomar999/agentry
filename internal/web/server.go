@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -49,7 +50,8 @@ type PolicySource interface {
 }
 
 type Server struct {
-	store    *store.Store
+	store    *store.Store   // the log: what to propose, and events to show
+	state    *current.State // every task and roster, as of the log's last event
 	config   Config
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
@@ -57,8 +59,8 @@ type Server struct {
 	signins *signins // the one-time codes that sign in another device
 }
 
-func NewServer(s *store.Store, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
+func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
+	return &Server{store: s, state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
 }
 
 func (s *Server) Handler() http.Handler {

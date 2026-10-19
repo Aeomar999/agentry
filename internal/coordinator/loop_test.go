@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
@@ -27,7 +28,7 @@ import (
 func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -36,7 +37,7 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	loop := newLoop(s, t.TempDir())
+	loop := newLoop(s, state, t.TempDir())
 	go loop.Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
@@ -118,7 +119,7 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 // task asks you, saying why, instead of waiting where nobody sees it.
 func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	fakeClaudeOnPath(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -135,7 +136,7 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(id))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go newLoop(s, t.TempDir()).Run(ctx)
+	go newLoop(s, state, t.TempDir()).Run(ctx)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
@@ -230,10 +231,10 @@ func readBrief(t *testing.T, task *tasks.Task, turn string) string {
 }
 
 // newLoop is a loop with this machine only, its worktrees in root.
-func newLoop(s *store.Store, root string) *Loop {
+func newLoop(s *store.Store, state *current.State, root string) *Loop {
 	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root,
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
-	return NewLoop(s, turns.NewRunner(s, fleet, turns.Config{}), fleet)
+	return NewLoop(s, state, turns.NewRunner(s, state, fleet, turns.Config{}), fleet)
 }
 
 // A handoff the coordinator decided on before you parked the task, or
@@ -244,7 +245,7 @@ func TestALateHandoffLeavesTheWrapUpOwed(t *testing.T) {
 		{Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}},
 		{Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}},
 	} {
-		s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 		for _, p := range agents.SeedProposals(nil) {
 			s.Propose(p)
 		}
@@ -254,11 +255,11 @@ func TestALateHandoffLeavesTheWrapUpOwed(t *testing.T) {
 		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
 		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.TurnEnded, Correlation: "turn-1",
 			Data: map[string]any{"agent": "tech-lead", "report": `{"action": "assign", "agent": "engineer", "instructions": "Build it."}`}})
-		task, roster, _ := (&Loop{store: s}).load(id)
+		task, roster, _ := (&Loop{store: s, state: state}).load(id)
 
 		move.Stream = id
 		propose(t, s, move)
-		(&Loop{store: s}).apply(task, roster, Next(task, roster).Decision)
+		(&Loop{store: s, state: state}).apply(task, roster, Next(task, roster).Decision)
 
 		task = load(t, s, id)
 		if next := Next(task, roster); next.Kind != StartTurn || next.Agent.Name != "tech-lead" || task.IssuesInARow != 0 {

@@ -201,7 +201,7 @@ func TestAPanicBreaksOnlyItsStream(t *testing.T) {
 		if ids := idsOf(s.Tasks()); !slices.Equal(ids, []string{"task-1", "task-2"}) {
 			t.Errorf("%s: Tasks should leave the broken task out, got %v", name, ids)
 		}
-		if order := taskIDsOf(s); !slices.Equal(order, []string{"task-1", "task-2", "task-3"}) {
+		if order := s.TaskIDs(); !slices.Equal(order, []string{"task-1", "task-2", "task-3"}) {
 			t.Errorf("%s: the task order should still list task-3, as the log does: %v", name, order)
 		}
 		if s.Position() != 201 {
@@ -210,8 +210,8 @@ func TestAPanicBreaksOnlyItsStream(t *testing.T) {
 	}
 }
 
-// Store.TaskIDs lists every task.created in the log, whatever its stream
-// and even on a broken one, so loading and applying count them all too.
+// The log lists every task.created, whatever its stream and even on a
+// broken one, so loading and applying count them all too.
 func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
 	log := everyStream()
 	for i, p := range []events.Proposal{
@@ -224,7 +224,7 @@ func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
 	}
 	want := []string{"task-1", "task-2", "task-3", events.PolicyStream, "task-3"}
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
-		if order := taskIDsOf(s); !slices.Equal(order, want) {
+		if order := s.TaskIDs(); !slices.Equal(order, want) {
 			t.Errorf("%s: task order %v, want %v", name, order, want)
 		}
 	}
@@ -241,7 +241,7 @@ func TestAnIdeaIsNoTask(t *testing.T) {
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
 			t.Errorf("%s: idea-1 is a task: %+v, %v", name, task, err)
 		}
-		if order := taskIDsOf(s); !slices.Equal(order, []string{"task-1", "task-2"}) {
+		if order := s.TaskIDs(); !slices.Equal(order, []string{"task-1", "task-2"}) {
 			t.Errorf("%s: task order %v, want task-1 and task-2 only", name, order)
 		}
 		if list := idsOf(s.Tasks()); !slices.Equal(list, []string{"task-1", "task-2"}) {

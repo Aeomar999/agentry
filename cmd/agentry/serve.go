@@ -32,7 +32,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
@@ -89,10 +88,10 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err
 	}
 	defer log.Close()
-	if err := seedAgents(log); err != nil {
+	if err := seedAgents(log, state); err != nil {
 		return err
 	}
-	if err := hooks.DenyOrphanedAsks(log); err != nil {
+	if err := hooks.DenyOrphanedAsks(log, state); err != nil {
 		return err
 	}
 	agentPolicy, err := openPolicy(o.dataDir, log)
@@ -139,16 +138,16 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
 		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
 	fleet := machines.NewFleet(here)
-	if err := workerlink.ForgetConnections(log, fleet); err != nil {
+	if err := workerlink.ForgetConnections(log, state, fleet); err != nil {
 		return err
 	}
 	links := workerlink.NewServer(log, fleet)
 
-	runner := turns.NewRunner(log, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
-	loop := coordinator.NewLoop(log, runner, fleet)
+	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
+	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
 	go loop.Run(ctx)
-	go watchdog.New(log, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
+	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Policy, refused error) { recordPolicy(log, agentPolicy, refused) })
 
 	// The desk starts when you first open it on the page, and stops with the server.
@@ -174,8 +173,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	// started when you first open it, and kept, so you come back to it.
 	helperTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("task")
-		stream, err := log.Stream(id)
-		task := tasks.FromEvents(stream)
+		task, err := state.Task(id)
 		if err != nil || task == nil || task.Worktree == nil {
 			http.Error(w, "the task has no worktree to open Claude in", http.StatusNotFound)
 			return
@@ -194,11 +192,11 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
-	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
+	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs},
-		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)
+		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
 		return err // `agentry mcp` and the status line find the server by it
@@ -268,12 +266,11 @@ func isBridge(name string) bool {
 	return false
 }
 
-func seedAgents(log *store.Store) error {
-	stream, err := log.Stream(events.AgentsStream)
-	if err != nil {
+func seedAgents(log *store.Store, state *current.State) error {
+	if err := state.Broken(events.AgentsStream); err != nil {
 		return err
 	}
-	roster := agents.FromEvents(stream)
+	roster := state.Roster()
 	for _, p := range append(agents.SeedProposals(roster), agents.Upgrades(roster)...) {
 		if _, rejection, err := log.Propose(p); err != nil || rejection != nil {
 			return fmt.Errorf("seeding the default agents: %v", errors.Join(err, rejectionError(rejection)))

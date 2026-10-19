@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -31,15 +32,16 @@ func judgeByCommand(_ string, call policy.Call) policy.Verdict {
 	return policy.Verdict{Decision: policy.Ask, Rule: "may reach outside the worktree"}
 }
 
-// engineerAtWork is a store with a task whose engineer turn (turn-2) is open.
-func engineerAtWork(t *testing.T) *store.Store {
+// engineerAtWork is a store and its state with a task whose engineer turn
+// (turn-2) is open.
+func engineerAtWork(t *testing.T) (*store.Store, *current.State) {
 	t.Helper()
 	return engineerAtWorkIn(t, "/w/task-1")
 }
 
-func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
+func engineerAtWorkIn(t *testing.T, worktree string) (*store.Store, *current.State) {
 	t.Helper()
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -58,7 +60,7 @@ func engineerAtWorkIn(t *testing.T, worktree string) *store.Store {
 			t.Fatal(p.Type, rejection, err)
 		}
 	}
-	return s
+	return s, state
 }
 
 var worker = events.Actor{Kind: events.Worker, ID: "local"}
@@ -85,8 +87,8 @@ func decisionOf(reply hookcall.Reply) string {
 }
 
 func TestReportsBecomeEvents(t *testing.T) {
-	s := engineerAtWork(t)
-	h := NewHandler(s, judgeByCommand)
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
 	h.Handle(context.Background(), hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Read .agentry/turn-2.md and do what it says."}`))
 	h.Handle(context.Background(), hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Removed 3 TODOs."}`))
 
@@ -98,8 +100,8 @@ func TestReportsBecomeEvents(t *testing.T) {
 }
 
 func TestTheGateFollowsThePolicy(t *testing.T) {
-	s := engineerAtWork(t)
-	h := NewHandler(s, judgeByCommand)
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
 	if reply := h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_1", "ls -la"))); decisionOf(reply) != "allow" {
 		t.Errorf("ls: %+v", reply)
 	}
@@ -113,8 +115,8 @@ func TestTheGateFollowsThePolicy(t *testing.T) {
 }
 
 func TestAnAskedActionWaitsForTheUser(t *testing.T) {
-	s := engineerAtWork(t)
-	h := NewHandler(s, judgeByCommand)
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
 
 	go func() {
 		for task := taskIn(t, s); len(task.WaitingForYou()) == 0; task = taskIn(t, s) {
@@ -135,10 +137,10 @@ func TestAnAskedActionWaitsForTheUser(t *testing.T) {
 }
 
 func TestAnAskThatTimesOutIsDenied(t *testing.T) {
-	s := engineerAtWork(t)
+	s, state := engineerAtWork(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	reply := NewHandler(s, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_4", "curl example.com")))
+	reply := NewHandler(s, state, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_4", "curl example.com")))
 	task := taskIn(t, s)
 	if decisionOf(reply) != "deny" || task.Action("toolu_4").Decision != tasks.Denied || task.Status() != tasks.Working {
 		t.Errorf("reply %+v, action %+v, status %s", reply, task.Action("toolu_4"), task.Status())
@@ -146,17 +148,17 @@ func TestAnAskThatTimesOutIsDenied(t *testing.T) {
 }
 
 func TestOnlyTheWorkingAgentPassesTheGate(t *testing.T) {
-	s := engineerAtWork(t)
+	s, state := engineerAtWork(t)
 	call := hookCall("PreToolUse", bash("toolu_5", "ls"))
 	call.Agent = "reviewer"
-	if reply := NewHandler(s, judgeByCommand).Handle(context.Background(), call); decisionOf(reply) != "deny" {
+	if reply := NewHandler(s, state, judgeByCommand).Handle(context.Background(), call); decisionOf(reply) != "deny" {
 		t.Errorf("a call from an agent that isn't working must be denied: %+v", reply)
 	}
 }
 
 func TestTheHTTPEndpointNeedsTheHookToken(t *testing.T) {
-	s := engineerAtWork(t)
-	server := httptest.NewServer(HTTP(NewHandler(s, judgeByCommand), "secret"))
+	s, state := engineerAtWork(t)
+	server := httptest.NewServer(HTTP(NewHandler(s, state, judgeByCommand), "secret"))
 	defer server.Close()
 	body, _ := json.Marshal(hookCall("PreToolUse", bash("toolu_6", "ls")))
 
@@ -175,7 +177,7 @@ func TestTheHTTPEndpointNeedsTheHookToken(t *testing.T) {
 }
 
 func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
-	s := engineerAtWork(t)
+	s, state := engineerAtWork(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		for len(taskIn(t, s).WaitingForYou()) == 0 {
@@ -183,7 +185,7 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 		}
 		cancel() // the hook call dies, as when the server stops
 	}()
-	NewHandler(s, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_7", "npm install left-pad")))
+	NewHandler(s, state, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_7", "npm install left-pad")))
 	if task := taskIn(t, s); task.Status() != tasks.Working {
 		t.Fatalf("a hook call that dies denies its own ask, got %s", task.Status())
 	}
@@ -193,7 +195,7 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 		Correlation: "toolu_8", Data: map[string]any{"tool": "Bash", "command": "curl x"}})
 	s.Propose(events.Proposal{Stream: "task-1", Actor: ruleset, Type: events.ActionAsked, Correlation: "toolu_8",
 		Data: map[string]any{"reason": "may reach outside"}})
-	if err := DenyOrphanedAsks(s); err != nil {
+	if err := DenyOrphanedAsks(s, state); err != nil {
 		t.Fatal(err)
 	}
 	if task := taskIn(t, s); task.Status() != tasks.Working || task.Action("toolu_8").Decision != tasks.Denied {
@@ -202,13 +204,13 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 }
 
 func TestTheGateUsesTheWorkingAgentsProfile(t *testing.T) {
-	s := engineerAtWork(t)
+	s, state := engineerAtWork(t)
 	var asked string
 	judge := func(profile string, call policy.Call) policy.Verdict {
 		asked = profile
 		return policy.Verdict{Decision: policy.Allow, Rule: "test"}
 	}
-	NewHandler(s, judge).Handle(context.Background(), hookCall("PreToolUse", bash("toolu_9", "ls")))
+	NewHandler(s, state, judge).Handle(context.Background(), hookCall("PreToolUse", bash("toolu_9", "ls")))
 	if asked != "developer" {
 		t.Errorf("the engineer's profile is developer, the judge got %q", asked)
 	}
@@ -217,8 +219,8 @@ func TestTheGateUsesTheWorkingAgentsProfile(t *testing.T) {
 // What the agent wrote in its knowledge file, which the hook sends with the
 // call that ends the turn, is kept, and so are the tokens the hook counted.
 func TestWhatTheAgentLearnedIsKept(t *testing.T) {
-	s := engineerAtWorkIn(t, t.TempDir())
-	h := NewHandler(s, judgeByCommand)
+	s, state := engineerAtWorkIn(t, t.TempDir())
+	h := NewHandler(s, state, judgeByCommand)
 	learnedText := "This repo formats with gofmt -s.\n"
 	stop := hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`)
 	stop.Ending = &hookcall.Ending{Tokens: 1234, Knowledge: &learnedText}
@@ -247,8 +249,8 @@ func TestWhatTheAgentLearnedIsKept(t *testing.T) {
 }
 
 func TestThePlanFollowsTheFile(t *testing.T) {
-	s := engineerAtWork(t)
-	h := NewHandler(s, judgeByCommand)
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
 	withPlan := func(call hookcall.Call, plan string) hookcall.Call {
 		call.Plan = &plan
 		return call

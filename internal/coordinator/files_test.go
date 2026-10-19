@@ -22,7 +22,7 @@ import (
 func TestSharedFilesFollowTheWork(t *testing.T) {
 	fakeClaudeOnPath(t)
 	root := t.TempDir()
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -30,7 +30,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(id))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go newLoop(s, root).Run(ctx)
+	go newLoop(s, state, root).Run(ctx)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,

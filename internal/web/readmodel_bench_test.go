@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -24,9 +25,10 @@ import (
 )
 
 // TestReadModelBench measures, on a copy of a real agentry.db, how long the
-// reads that replay the log take and where the time goes, for
-// docs/design/read-model.md. It is skipped unless AGENTRY_BENCH_DB names the
-// copy, which it copies again so the run never writes to it:
+// reads take now that they read the in-memory state, and where the time
+// went when they replayed the log, for docs/design/read-model.md. It is
+// skipped unless AGENTRY_BENCH_DB names the copy, which it copies again so
+// the run never writes to it:
 //
 //	AGENTRY_BENCH_DB=$PWD/.agentry/files/bench/agentry.db \
 //	  go test ./internal/web -run TestReadModelBench -v -count=1
@@ -37,6 +39,11 @@ func TestReadModelBench(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	copyFile(t, source, path)
+
+	t.Log("startup: open the log and load the state (median of 5):")
+	t.Logf("  store.Open:                  %8s", median(func() { openAndClose(t, path) }))
+	t.Logf("  heap held by the state:      %8d KB", heldBy(func() any { return openAndClose(t, path) })/1024)
+
 	s, state := storetest.Open(t, path)
 	raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
@@ -44,21 +51,18 @@ func TestReadModelBench(t *testing.T) {
 	}
 	defer raw.Close()
 
-	ids, err := s.TaskIDs()
-	if err != nil {
-		t.Fatal(err)
-	}
+	ids := state.TaskIDs()
 	biggest := biggestTask(t, raw)
 
 	t.Log("whole requests (median of 5):")
-	server := NewServer(s, Config{UIToken: token, Blobs: sharedfiles.Disk{Dir: t.TempDir()}}, http.NotFoundHandler(), nil).Handler()
+	server := NewServer(s, state, Config{UIToken: token, Blobs: sharedfiles.Disk{Dir: t.TempDir()}}, http.NotFoundHandler(), nil).Handler()
 	for _, url := range []string{"/api/tasks", "/api/questions", "/api/agents", "/api/tasks/" + biggest} {
 		var size int
 		took := median(func() { size = request(t, server, url) })
 		t.Logf("  %-22s %8s  %8d bytes", url, took, size)
 	}
 
-	t.Log("where /api/tasks goes, every task stream (median of 5):")
+	t.Log("where /api/tasks went when it replayed every task stream (median of 5):")
 	streams := append(slices.Clone(ids), events.AgentsStream)
 	var rows, bytes int
 	scan := median(func() { rows, bytes = scanStreams(t, raw, ids) })
@@ -103,7 +107,7 @@ func TestReadModelBench(t *testing.T) {
 		Correlation: "no-such-action", Data: map[string]any{}}
 	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state) }))
 
-	t.Log("what an in-memory projection would cost at startup:")
+	t.Log("what replaying everything costs, as Open does once:")
 	var logged int
 	all := median(func() { logged = readWholeLog(t, s) })
 	t.Logf("  store.After over the log:    %8s  %d events", all, logged)
@@ -123,10 +127,10 @@ func TestReadModelBench(t *testing.T) {
 	runtime.KeepAlive(decoded)
 
 	// The page refetches everything it shows on every event, and every
-	// read and Propose shares the store's one connection. Each event here
-	// also brings what the server does for one: the coordinator loop loads
-	// the task and the roster, a hook call reads the task, and the watchdog
-	// replays every task each second.
+	// Propose takes the store's one connection. Each event here also brings
+	// what the server does for one: the coordinator loop loads the task and
+	// the roster, a hook call reads the task, and the watchdog looks at
+	// every task each second, all from the state.
 	t.Log("the tasks page while agents work: an event every 600 ms (the log's busiest 10 minutes), each refetching the page:")
 	for _, background := range []bool{false, true} {
 		page := []string{"/api/tasks", "/api/tasks", "/api/questions", "/api/agents", "/api/agents", "/api/config"}
@@ -135,15 +139,15 @@ func TestReadModelBench(t *testing.T) {
 		var running sync.WaitGroup
 		stop := make(chan struct{})
 		if background {
-			running.Go(func() { watchdogLoad(t, s, stop) })
+			running.Go(func() { watchdogLoad(state, stop) })
 		}
 		for range 20 {
 			running.Go(func() {
 				s.Propose(proposal)
 				if background {
-					s.Stream(biggest)             // the hook reads the task
-					s.Stream(biggest)             // the loop loads it,
-					s.Stream(events.AgentsStream) // and the roster
+					state.Task(biggest) // the hook reads the task
+					state.Task(biggest) // the loop loads it,
+					state.Roster()      // and the roster
 				}
 			})
 			for _, url := range page {
@@ -172,7 +176,7 @@ func TestReadModelBench(t *testing.T) {
 }
 
 // watchdogLoad reads what watchdog.Check reads, once a second, until stop.
-func watchdogLoad(t *testing.T, s *store.Store, stop chan struct{}) {
+func watchdogLoad(state *current.State, stop chan struct{}) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -180,12 +184,24 @@ func watchdogLoad(t *testing.T, s *store.Store, stop chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			ids, _ := s.TaskIDs()
-			for _, stream := range readStreams(t, s, ids) {
-				tasks.FromEvents(stream)
+			for _, task := range state.Tasks() {
+				task.OpenTurn()
 			}
 		}
 	}
+}
+
+// openAndClose opens the log at path as serve does, loading the state from
+// it, and returns the state.
+func openAndClose(t *testing.T, path string) *current.State {
+	t.Helper()
+	state := current.New()
+	s, err := store.Open(path, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	return state
 }
 
 func copyFile(t *testing.T, from, to string) {

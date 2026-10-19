@@ -31,11 +31,10 @@ type machine struct {
 func (l *Loop) machines() []machine {
 	host, _ := os.Hostname()
 	list := []machine{{name: workers.Local, host: host, os: "this machine, where Agentry runs", online: true}}
-	stream, err := l.store.Stream(events.WorkersStream)
-	if err != nil {
+	if l.state.Broken(events.WorkersStream) != nil {
 		return list
 	}
-	for _, w := range workers.FromEvents(stream).Workers {
+	for _, w := range l.state.Workers().Workers {
 		list = append(list, machine{name: w.Name, host: w.Host, os: w.OS + "/" + w.Arch, online: w.Online, engines: w.Engines})
 	}
 	return list

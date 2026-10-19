@@ -29,6 +29,13 @@ type Acceptance struct {
 	Refused  string // why it stopped short, "" once Accepted
 }
 
+// Board is what Accept reads of every task and of the agents, as kept
+// from the log (current.State).
+type Board interface {
+	Tasks() []*tasks.Task
+	Roster() agents.Roster
+}
+
 // Accept makes an open idea a task in your Backlog, in the idea's repo, for
 // the first team's coordinator, then marks the idea accepted with it. The
 // task is made first, and the rules accept an idea only for a task made from
@@ -37,7 +44,7 @@ type Acceptance struct {
 // only marks the idea, and Accepts run one at a time, so a double click or
 // the UI and MCP at once still make one task. The error is for the log
 // failing, not for a refusal.
-func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
+func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
 	accepting.Lock()
 	defer accepting.Unlock()
 	idea, err := Load(log, id)
@@ -53,12 +60,9 @@ func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
 	if !known {
 		return Acceptance{Refused: "an idea becomes a task or an epic, not " + choice.Kind}, nil
 	}
-	made, err := madeFrom(log, idea.ID)
-	if err != nil {
-		return Acceptance{}, err
-	}
+	made := madeFrom(board, idea.ID)
 	if made.Task == "" {
-		if made, err = makeTask(log, idea, kind, choice); err != nil || made.Task == "" {
+		if made, err = makeTask(log, board, idea, kind, choice); err != nil || made.Task == "" {
 			return made, err
 		}
 	}
@@ -84,36 +88,23 @@ var accepting sync.Mutex
 var beforeMarking = func() {}
 
 // madeFrom finds a task an earlier Accept made from the idea but stopped
-// before marking it. It reads every task stream under the lock; the read
-// model (docs/design/read-model.md) will replace it with a lookup.
-func madeFrom(log *store.Store, id string) (Acceptance, error) {
-	ids, err := log.TaskIDs()
-	if err != nil {
-		return Acceptance{}, err
-	}
-	for _, taskID := range ids {
-		stream, err := log.Stream(taskID)
-		if err != nil {
-			return Acceptance{}, err
-		}
-		if task := tasks.FromEvents(stream); task != nil && task.Idea == id {
-			return Acceptance{Task: task.ID}, nil
+// before marking it.
+func madeFrom(board Board, id string) Acceptance {
+	for _, task := range board.Tasks() {
+		if task.Idea == id {
+			return Acceptance{Task: task.ID}
 		}
 	}
-	return Acceptance{}, nil
+	return Acceptance{}
 }
 
 // makeTask makes the idea's task, of the kind given, parked in the Backlog.
 // Task is "" and Refused says why when it can't.
-func makeTask(log *store.Store, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
+func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
 	if reason := worktrees.IsRepo(idea.Repo); reason != "" {
 		return Acceptance{Refused: "the idea's repo can't take a task: " + reason}, nil
 	}
-	agentEvents, err := log.Stream(events.AgentsStream)
-	if err != nil {
-		return Acceptance{}, err
-	}
-	coordinator, ok := agents.FromEvents(agentEvents).Coordinator("")
+	coordinator, ok := board.Roster().Coordinator("")
 	if !ok {
 		return Acceptance{Refused: "there is no coordinator in the first team"}, nil
 	}

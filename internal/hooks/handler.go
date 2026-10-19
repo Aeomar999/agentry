@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
@@ -23,12 +23,13 @@ import (
 type Judge func(profile string, call policy.Call) policy.Verdict
 
 type Handler struct {
-	store *store.Store
+	store *store.Store   // where it records what agents do
+	state *current.State // the tasks and agents it reads
 	judge Judge
 }
 
-func NewHandler(s *store.Store, judge Judge) *Handler {
-	return &Handler{store: s, judge: judge}
+func NewHandler(s *store.Store, state *current.State, judge Judge) *Handler {
+	return &Handler{store: s, state: state, judge: judge}
 }
 
 var ruleset = events.Actor{Kind: events.Policy, ID: "rules"}
@@ -119,11 +120,10 @@ func (h *Handler) machineOf(id string) events.Actor {
 // recordWhatWasLearned keeps what the agent wrote in its knowledge file this
 // turn, if it changed anything.
 func (h *Handler) recordWhatWasLearned(name, learned string) {
-	stream, err := h.store.Stream(events.AgentsStream)
-	if err != nil {
+	if h.state.Broken(events.AgentsStream) != nil {
 		return
 	}
-	agent, ok := agents.FromEvents(stream).Get(name)
+	agent, ok := h.state.Roster().Get(name)
 	if ok && learned != strings.TrimSpace(agent.Knowledge) {
 		h.store.Propose(agent.Learned(events.Actor{Kind: events.Agent, ID: agent.Name}, learned))
 	}
@@ -223,20 +223,18 @@ func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict p
 
 // profileOf is the agent's policy profile, "" (the default) if it has none.
 func (h *Handler) profileOf(name string) string {
-	stream, err := h.store.Stream(events.AgentsStream)
-	if err != nil {
+	if h.state.Broken(events.AgentsStream) != nil {
 		return ""
 	}
-	agent, _ := agents.FromEvents(stream).Get(name)
+	agent, _ := h.state.Roster().Get(name)
 	return agent.Profile
 }
 
 func (h *Handler) task(id string) (*tasks.Task, error) {
-	stream, err := h.store.Stream(id)
+	task, err := h.state.Task(id)
 	if err != nil {
 		return nil, err
 	}
-	task := tasks.FromEvents(stream)
 	if task == nil || task.Worktree == nil {
 		return nil, fmt.Errorf("task %s has no worktree", id)
 	}

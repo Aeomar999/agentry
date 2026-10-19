@@ -22,7 +22,7 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -33,7 +33,7 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 			t.Fatal(rejection, err)
 		}
 	}
-	loop := newLoop(s, t.TempDir())
+	loop := newLoop(s, state, t.TempDir())
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
@@ -47,8 +47,7 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 	t.Cleanup(func() {
 		cancel()
 		<-stopped
-		ids, _ := s.TaskIDs()
-		for _, id := range ids {
+		for _, id := range state.TaskIDs() {
 			sessions.Stop(sessions.SocketFor(id))
 		}
 	})

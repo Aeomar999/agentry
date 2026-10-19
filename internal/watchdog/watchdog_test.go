@@ -32,9 +32,9 @@ type world struct {
 }
 
 func newWorld(t *testing.T) *world {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	w := &world{t: t, store: s, alive: true}
-	w.dog = New(s, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true })
+	w.dog = New(s, state, DefaultLimits, func(string) bool { return w.alive }, func(string) { w.stopped = true })
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

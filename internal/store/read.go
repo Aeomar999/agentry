@@ -27,9 +27,6 @@ func (s *Store) After(position int64, limit int) ([]events.Event, error) {
 		WHERE position > ? AND position <= ? ORDER BY position LIMIT ?`, position, s.applied.Load(), limit)
 }
 
-// TaskIDs returns every task's stream name, oldest first.
-func (s *Store) TaskIDs() ([]string, error) { return s.streamsStartedBy(events.TaskCreated) }
-
 // IdeaIDs returns every idea's stream name, oldest first.
 func (s *Store) IdeaIDs() ([]string, error) { return s.streamsStartedBy(events.IdeaSuggested) }
 

@@ -55,12 +55,12 @@ func taskWithWorktree(t *testing.T, s *store.Store, id string) *tasks.Task {
 
 func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	record := fakeClaude(t)
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	task := taskWithWorktree(t, s, "task-turns-1")
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 
-	runner := NewRunner(s, here(), Config{HookToken: "secret"})
+	runner := NewRunner(s, state, here(), Config{HookToken: "secret"})
 	if err := runner.Start(task, coordinator, "# Brief\nDecide who works next."); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +93,9 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 }
 
 func TestAnEngineWithNoAdapterIsRefused(t *testing.T) {
-	s, _ := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	task := taskWithWorktree(t, s, "task-turns-2")
-	err := NewRunner(s, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
+	err := NewRunner(s, state, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {
 		t.Errorf("got %v", err)
 	}

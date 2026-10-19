@@ -121,9 +121,8 @@ func (s *Server) showWorker(w http.ResponseWriter, r *http.Request) {
 // tasksByMachine is every unfinished task with a worktree, by the machine it is on.
 func (s *Server) tasksByMachine() map[string][]string {
 	on := map[string][]string{}
-	ids, _ := s.store.TaskIDs()
-	for _, id := range ids {
-		if task, err := s.task(id); err == nil && task != nil && !task.IsDone && task.Worktree != nil {
+	for _, task := range s.state.Tasks() {
+		if !task.IsDone && task.Worktree != nil {
 			on[task.Worktree.Worker] = append(on[task.Worktree.Worker], task.ID)
 		}
 	}
@@ -331,8 +330,7 @@ func (s *Server) codeWorks(code string) bool {
 }
 
 func (s *Server) workers() (workers.Roster, error) {
-	stream, err := s.store.Stream(events.WorkersStream)
-	return workers.FromEvents(stream), err
+	return s.state.Workers(), s.state.Broken(events.WorkersStream)
 }
 
 // shellQuoted quotes a value for the install script. Codes and addresses
