@@ -53,6 +53,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   // A visionaries session is one plain task, never split; your kind comes back if you pick another team.
   const sentKind = asksVisionaries ? "story" : kind;
   // Asked for the Visionaries team by the template's name, and you don't have it yet.
+  // Only a ?newTeam=<template team> URL gets here: the Ideas button adds the team before opening New task.
   const visionariesMissing = visionaries.ready && preset !== "" && preset === visionaries.template?.team && !visionaries.team;
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");

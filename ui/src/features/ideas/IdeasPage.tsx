@@ -53,8 +53,11 @@ export function IdeasPage() {
   const decided = ideas.filter((idea) => idea.state !== "open");
   const ask = visionaries.has ? "Ask the visionaries" : "Add the Visionaries team";
   // Off waits for the ideas, so a slow or failed load never shows the
-  // explainer to someone who has ideas.
+  // explainer to someone who has ideas. Until it can tell, the page shows
+  // neither way of asking, nor the settings, so nothing turns into another.
+  const settled = (visionaries.ready && loaded) || !!error;
   const off = visionaries.ready && !visionaries.has && loaded && !error && ideas.length === 0;
+  const on = settled && !off;
 
   return (
     <>
@@ -62,7 +65,7 @@ export function IdeasPage() {
         title="Ideas"
         meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
         actions={
-          off
+          !on
             ? []
             : [
                 {
@@ -85,10 +88,10 @@ export function IdeasPage() {
             onAdd={visionaries.askAddingProfiles}
           />
         )}
-        {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
+        {visionaries.error && <Banner title="The Visionaries team isn't there">{visionaries.error}</Banner>}
         {off && <IdeasOff visionaries={visionaries} />}
-        {!off && <IdeaSettings />}
-        {!off && data && ideas.length === 0 && (
+        {on && <IdeaSettings />}
+        {on && data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
             <div className="flex flex-col items-center gap-3">
               <p>

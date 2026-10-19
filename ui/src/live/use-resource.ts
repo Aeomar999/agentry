@@ -5,7 +5,7 @@ import { nothing } from "./resource-cache";
 export interface Resource<T> {
   data: T | undefined;
   error: string;
-  reload: () => void;
+  reload: () => Promise<void>; // returns once a read started after it is shown
 }
 
 const unwatched = () => () => {};
@@ -17,6 +17,6 @@ export function useResource<T>(path: string | null): Resource<T> {
   const cache = useResourceCache();
   const watch = useCallback((changed: () => void) => cache.watch(path!, changed), [cache, path]);
   const snapshot = useSyncExternalStore(path ? watch : unwatched, () => (path ? cache.snapshot(path) : nothing));
-  const reload = useCallback(() => path && cache.reload(path), [cache, path]);
+  const reload = useCallback(() => (path ? cache.reload(path) : Promise.resolve()), [cache, path]);
   return { data: snapshot.data as T | undefined, error: snapshot.error, reload };
 }

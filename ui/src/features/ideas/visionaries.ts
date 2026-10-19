@@ -17,20 +17,27 @@ export interface AskVisionaries {
 // picked, its description the theme or question. The team is the one made
 // from the template that turns Ideas on, whatever you called it. With none
 // yet, it adds one from the template first, then opens New task once the
-// agents show it, by the name the server gave it.
+// agents show it, by the name the server gave it, or says it didn't show
+// if the agents read after adding it lack it (it was removed at once).
 export function useAskVisionaries(): AskVisionaries {
   const { ready, template, team, reload } = useTeamWith(IDEAS);
   const newTask = useNewTask();
   const [adding, setAdding] = useState(false);
   const [opening, setOpening] = useState(false); // added: New task opens when the team shows
+  const [reloaded, setReloaded] = useState(false); // the agents were read after adding it
   const [error, setError] = useState("");
   const [missingProfiles, setMissingProfiles] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!opening || !team) return;
-    setOpening(false);
-    newTask("task", "", team);
-  }, [opening, team, newTask]);
+    if (!opening) return;
+    if (team) {
+      setOpening(false);
+      newTask("task", "", team);
+    } else if (reloaded) {
+      setOpening(false);
+      setError("The team was added but didn't show up; try again.");
+    }
+  }, [opening, reloaded, team, newTask]);
 
   async function ask(addingProfiles = false) {
     if (team) {
@@ -44,8 +51,10 @@ export function useAskVisionaries(): AskVisionaries {
       // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
       await addTeam(template.team, addingProfiles ? "" : undefined);
       setMissingProfiles([]);
+      setReloaded(false);
       setOpening(true);
-      reload();
+      await reload();
+      setReloaded(true);
     } catch (failure) {
       const profiles = missingProfilesOf(failure);
       if (profiles && !addingProfiles) setMissingProfiles(profiles);

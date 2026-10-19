@@ -25,7 +25,7 @@ export interface TeamWith {
   ready: boolean; // the templates and the agents are read, so team says what you have
   template?: TeamTemplate; // the template that turns the feature on
   team?: string; // the team you have made from it, by its name now
-  reload: () => void; // reads the agents again
+  reload: () => Promise<void>; // reads the agents again, returning once they are shown
 }
 
 // useTeamWith finds the team that turns a feature on: the template that

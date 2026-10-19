@@ -164,6 +164,33 @@ describe("the cache", () => {
     expect(server.readsOf("/api/questions")).toBe(3);
   });
 
+  test("reload returns once a read started after it is shown, not the read in flight", async () => {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    cache.watch("/api/agents", ignore);
+    let shown = false;
+    void cache.reload("/api/agents").then(() => (shown = true));
+    await server.answer(40); // the first read, out before the reload
+    expect(shown).toBe(false);
+    expect(cache.snapshot("/api/agents").data).toBe("/api/agents@40");
+    await server.pending[0].answer(41, "with the team");
+    expect(shown).toBe(true);
+    expect(cache.snapshot("/api/agents").data).toBe("with the team");
+  });
+
+  test("reload returns when the path is given up before it is read again", async () => {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    const stop = cache.watch("/api/agents", ignore);
+    let shown = false;
+    void cache.reload("/api/agents").then(() => (shown = true));
+    stop();
+    await server.answer(40);
+    expect(shown).toBe(true);
+    expect(server.readsOf("/api/agents")).toBe(1);
+    await expect(cache.reload("/api/agents")).resolves.toBeUndefined(); // a path nobody shows
+  });
+
   test("a failed read shows its error, keeps the last data, and is tried again when the log moves", async () => {
     const server = fakeServer();
     const cache = new ResourceCache(server.fetch);
