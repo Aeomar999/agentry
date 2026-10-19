@@ -64,7 +64,7 @@ func workerNameIsFree(_ agents.Roster, machines workers.Roster, p events.Proposa
 // the trail and in the agents' settings the same way.
 func nameIsValidFor(what string) workerRule {
 	return func(_ agents.Roster, _ workers.Roster, p events.Proposal) string {
-		if !agentName.MatchString(p.Text("name")) {
+		if !agents.ValidName(p.Text("name")) {
 			return "a " + what + "'s name is lowercase letters, digits and dashes, starting with a letter: " + p.Text("name")
 		}
 		return ""

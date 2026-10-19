@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -13,9 +12,6 @@ import (
 // KnownEngines are the engines an agent may name. The engines package has a
 // test that keeps this list and its adapters the same.
 var KnownEngines = []string{"claude", "codex"}
-
-// An agent's name ends up in file names, environment variables and the trail.
-var agentName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 // rosterRule checks a proposal against the agents that exist.
 type rosterRule func(roster agents.Roster, p events.Proposal) string
@@ -51,7 +47,7 @@ func nameIsNew(roster agents.Roster, p events.Proposal) string {
 
 func newNameIsFree(roster agents.Roster, p events.Proposal) string {
 	to := p.Text("to")
-	if !agentName.MatchString(to) {
+	if !agents.ValidName(to) {
 		return "an agent's name is lowercase letters, digits and dashes, starting with a letter: " + to
 	}
 	if _, exists := roster.Get(to); exists {
@@ -61,7 +57,7 @@ func newNameIsFree(roster agents.Roster, p events.Proposal) string {
 }
 
 func nameIsValid(_ agents.Roster, p events.Proposal) string {
-	if !agentName.MatchString(p.Text("name")) {
+	if !agents.ValidName(p.Text("name")) {
 		return "an agent's name is lowercase letters, digits and dashes, starting with a letter: " + p.Text("name")
 	}
 	return ""

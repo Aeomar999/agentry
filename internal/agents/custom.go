@@ -71,6 +71,8 @@ func checkMember(team string, agent Agent, current Roster, seen map[string]bool)
 	switch {
 	case agent.Name == "":
 		return "every agent of the " + team + " team needs a name"
+	case !ValidName(agent.Name):
+		return "an agent's name is lowercase letters, digits and dashes, starting with a letter: " + agent.Name
 	case seen[agent.Name]:
 		return "the " + team + " team has two agents called " + agent.Name
 	case current.index(agent.Name) >= 0:
@@ -109,7 +111,7 @@ func CustomTeam(team string, members []Agent, by events.Actor) []events.Proposal
 }
 
 // trimmed is the team's name and a copy of its members with the spaces
-// around their names, descriptions and prompts gone.
+// around their text fields gone, as the agents API trims one agent.
 func trimmed(team string, members []Agent) (string, []Agent) {
 	members = slices.Clone(members)
 	for i := range members {
@@ -117,6 +119,11 @@ func trimmed(team string, members []Agent) (string, []Agent) {
 		agent.Name = strings.TrimSpace(agent.Name)
 		agent.Description = strings.TrimSpace(agent.Description)
 		agent.Prompt = strings.TrimSpace(agent.Prompt)
+		agent.Engine = strings.TrimSpace(agent.Engine)
+		agent.Model = strings.TrimSpace(agent.Model)
+		agent.Profile = strings.TrimSpace(agent.Profile)
+		agent.Color = strings.TrimSpace(agent.Color)
+		agent.Column = strings.TrimSpace(agent.Column)
 	}
 	return strings.TrimSpace(team), members
 }

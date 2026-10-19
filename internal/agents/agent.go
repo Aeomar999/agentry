@@ -5,10 +5,20 @@ package agents
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
+
+// ValidName says whether name may be an agent's name: lowercase letters,
+// digits and dashes, starting with a letter, at most 31 long. An agent's
+// name ends up in file names, environment variables and the trail.
+func ValidName(name string) bool {
+	return validName.MatchString(name)
+}
+
+var validName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}$`)
 
 type Agent struct {
 	Name        string `json:"name"`

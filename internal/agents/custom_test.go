@@ -53,6 +53,10 @@ func TestACustomTeamIsRefused(t *testing.T) {
 			"every agent of the Kitchen team needs a name"},
 		{"an agent with a blank name", "Kitchen", func(a []Agent) []Agent { a[1].Name = " \t"; return a },
 			"every agent of the Kitchen team needs a name"},
+		{"an uppercase name", "Kitchen", func(a []Agent) []Agent { a[2].Name = "Taster"; return a },
+			"an agent's name is lowercase letters, digits and dashes, starting with a letter: Taster"},
+		{"a 32-character name", "Kitchen", func(a []Agent) []Agent { a[1].Name = "c" + strings.Repeat("o", 31); return a },
+			"starting with a letter: c" + strings.Repeat("o", 31)},
 		{"a name repeated", "Kitchen", func(a []Agent) []Agent { a[2].Name = " cook "; return a },
 			"two agents called cook"},
 		{"a name in the roster", "Kitchen", func(a []Agent) []Agent { a[1].Name = "editor"; return a },
@@ -113,6 +117,23 @@ func TestACustomTeamIsMadeCoordinatorFirst(t *testing.T) {
 	}
 	if roster.TemplateOf("Kitchen") != "" {
 		t.Errorf("a custom team has no template, got %q", roster.TemplateOf("Kitchen"))
+	}
+}
+
+func TestACustomTeamIsTrimmed(t *testing.T) {
+	members := crew()
+	members[1].Engine, members[1].Model, members[1].Profile = " claude ", " opus\t", " developer "
+	members[1].Color, members[2].Column = " teal ", " review "
+	if problem := CheckCustomTeam("Kitchen", members, nil); problem != "" {
+		t.Fatalf("a padded column and colour were refused: %s", problem)
+	}
+	proposals := CustomTeam("Kitchen", members, you)
+	cook, taster := proposals[1], proposals[2]
+	if cook.Text("engine") != "claude" || cook.Text("model") != "opus" || cook.Text("profile") != "developer" || cook.Text("color") != "teal" {
+		t.Errorf("the cook's proposal wasn't trimmed: %v", cook.Data)
+	}
+	if taster.Text("column") != Reviews {
+		t.Errorf("the taster's column: %q", taster.Text("column"))
 	}
 }
 
