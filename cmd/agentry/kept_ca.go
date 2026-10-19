@@ -16,8 +16,9 @@ import (
 // so a server's CA they checked by fingerprint is kept, beside the saved
 // connection, and the next run trusts it with no request at all.
 
-// envTrustTimeout is how long the hooks and the status line wait for a
-// trust check: about what they give the server to answer them at all.
+// envTrustTimeout is how long the hooks, the status line and `agentry wait`
+// wait for a trust check: about what they give the server to answer them
+// at all.
 const envTrustTimeout = 3 * time.Second
 
 // keptCA is the CA kept for the server as it was given (AGENTRY_URL). The
