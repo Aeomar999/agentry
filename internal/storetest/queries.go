@@ -43,6 +43,8 @@ type sqliteConn interface {
 	driver.ConnPrepareContext
 	driver.ExecerContext
 	driver.QueryerContext
+	driver.SessionResetter
+	driver.Validator
 }
 
 func (d countingDriver) Open(name string) (driver.Conn, error) {
