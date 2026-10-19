@@ -558,7 +558,9 @@ func (l *Loop) portsInUse(machine string) []int {
 // lastPort is the port a task's stream last gave its worktree, if that
 // worktree is on the machine: the worker and port of its last
 // worktree.ready or worktree.moved, read as tasks' apply reads them. It
-// needs none of the task's other state, so it works on a broken task.
+// needs none of the task's other state, so it works on a broken task. A
+// reopen or a repo move that clears the worktree is ignored, so a broken
+// task may hold a stale port: one port at most, which is fine.
 func (l *Loop) lastPort(id, machine string) (int, bool) {
 	stream, err := l.store.Stream(id)
 	if err != nil {
