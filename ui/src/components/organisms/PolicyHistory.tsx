@@ -114,7 +114,7 @@ function RevertDialog({ version, onClose, onRevert }: { version: PolicyVersion; 
           </Banner>
         )}
         <div className="flex gap-2">
-          <Button variant="danger" disabled={!change?.diff} onClick={onRevert}>
+          <Button variant="danger" disabled={!change?.diff || !!error} onClick={onRevert}>
             Revert
           </Button>
           <Button variant="ghost" onClick={onClose}>
