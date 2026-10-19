@@ -119,23 +119,26 @@ func TestHTTPSWithoutAFingerprintIsRefusedWithIt(t *testing.T) {
 }
 
 // A worker that joined over plain HTTP, run again with the fingerprint (as
-// the install command will), moves to https without spending the code.
+// the install command will, at the server's http or https address), moves
+// to https without spending the code.
 func TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS(t *testing.T) {
 	ca, address, joins := joinable(t)
-	dir := t.TempDir()
-	if err := saveWorker(dir, workerConfig{Server: "http://" + address, Name: "laptop", Credential: "c1"}); err != nil {
-		t.Fatal(err)
-	}
-	code, out := join(dir, "-ca-fingerprint", ca.Fingerprint(), "http://"+address, "code")
-	if code != 0 || !strings.Contains(out, "joined https://"+address+" already") {
-		t.Fatalf("exit %d: %s", code, out)
-	}
-	if config := savedWorker(t, dir); config.Server != "https://"+address || config.CA != string(ca.PEM()) {
-		t.Errorf("saved %+v", config)
-	}
-	// Run again with no fingerprint, it keeps the CA it has.
-	if code, out := join(dir, "https://"+address, "code"); code != 0 || !strings.Contains(out, "already") {
-		t.Errorf("again: exit %d: %s", code, out)
+	for _, given := range []string{"http://" + address, "https://" + address} {
+		dir := t.TempDir()
+		if err := saveWorker(dir, workerConfig{Server: "http://" + address, Name: "laptop", Credential: "c1"}); err != nil {
+			t.Fatal(err)
+		}
+		code, out := join(dir, "-ca-fingerprint", ca.Fingerprint(), given, "code")
+		if code != 0 || !strings.Contains(out, "joined https://"+address+" already") {
+			t.Fatalf("%s: exit %d: %s", given, code, out)
+		}
+		if config := savedWorker(t, dir); config.Server != "https://"+address || config.CA != string(ca.PEM()) {
+			t.Errorf("%s: saved %+v", given, config)
+		}
+		// Run again with no fingerprint, it keeps the CA it has.
+		if code, out := join(dir, "https://"+address, "code"); code != 0 || !strings.Contains(out, "already") {
+			t.Errorf("%s again: exit %d: %s", given, code, out)
+		}
 	}
 	if joins.Load() != 0 {
 		t.Errorf("%d joins: the code was spent", joins.Load())

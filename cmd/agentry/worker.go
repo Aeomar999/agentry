@@ -145,7 +145,7 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 	} else if target, err = trustServer(given, w.caFingerprint, trustTimeout); err != nil {
 		return err
 	}
-	if joined && (config.Server == given || config.Server == target.server) {
+	if joined && sameServer(config.Server, given, target) {
 		config.Server, config.CA = target.server, string(target.ca)
 		if still, err := stillJoined(config); err != nil {
 			return err
@@ -158,6 +158,17 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 		}
 	}
 	return joinServer(w.dir, target, args[1], w.name, stdout)
+}
+
+// sameServer is whether a worker that joined joinedAt has joined the server
+// given, which is reached at target: the same address, or, once the CA is
+// checked, the https of the plain HTTP address it joined at.
+func sameServer(joinedAt, given string, target trustedServer) bool {
+	if joinedAt == given || joinedAt == target.server {
+		return true
+	}
+	secure, err := httpsOf(joinedAt)
+	return target.ca != nil && err == nil && secure == target.server
 }
 
 // stillJoined asks the server whether it takes the credential. A server
