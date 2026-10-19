@@ -13,16 +13,21 @@ import { browserReason, subscribe, thisDevice, unsubscribe } from "@/lib/push";
 // button, the server's first, as fixing it changes the address too.
 export function NotifyDeviceDialog({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<PushStatus | null>(null);
-  const [subscription, setSubscription] = useState<PushSubscription | null>(null);
+  const [subscription, setSubscription] = useState<PushSubscription | null | undefined>(); // undefined: not known yet
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const inBrowser = browserReason();
 
   useEffect(() => {
     api<PushStatus>("GET", "/api/push")
-      .then(setStatus)
-      .catch((failure: Error) => setError(failure.message));
-    if (!inBrowser) thisDevice().then(setSubscription, () => {}); // no subscription known is the button
+      .then(async (status) => {
+        setStatus(status);
+        if (status.available && !inBrowser) setSubscription(await thisDevice(status.publicKey!));
+      })
+      .catch((failure: Error) => {
+        setError(failure.message);
+        setSubscription(null); // the button, to try again
+      });
   }, [inBrowser]);
 
   function act(work: () => Promise<void>) {
@@ -38,7 +43,7 @@ export function NotifyDeviceDialog({ onClose }: { onClose: () => void }) {
     <Dialog title="Notifications on this device" onClose={onClose}>
       <div className="flex flex-col gap-4 text-[13px] text-ink-secondary">
         {error && <Banner title="Couldn't change notifications">{error}</Banner>}
-        {!status ? (
+        {!status || (!reason && subscription === undefined) ? (
           !error && <p className="text-ink-muted">Reading…</p>
         ) : reason ? (
           <p role="note">{reason}</p>
@@ -65,8 +70,7 @@ export function NotifyDeviceDialog({ onClose }: { onClose: () => void }) {
                 disabled={busy}
                 onClick={() =>
                   act(async () => {
-                    setStatus(await subscribe(status.publicKey!));
-                    setSubscription(await thisDevice());
+                    setSubscription(await subscribe(status.publicKey!));
                   })
                 }
               >
