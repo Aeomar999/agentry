@@ -32,6 +32,8 @@ type Issuer struct {
 	mu       sync.Mutex
 	listed   []string  // the normal hosts the CA permits, as last asked
 	listedAt time.Time // when they were asked
+	asks     uint64    // listings started, in order
+	listedBy uint64    // the listing listed came from
 	leftOut  []string  // the hosts last reported as outside the CA's constraints
 	cert     *tls.Certificate
 	issued   []string // the normal hosts cert names
@@ -59,6 +61,8 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 	if i.cert != nil && slices.Equal(i.issued, i.listed) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore)) {
 		return i.cert, nil
 	}
+	// Issued under the lock for the list kept, so a certificate for an
+	// older list never replaces one for a newer.
 	cert, err := i.ca.Issue(i.listed, now)
 	if err != nil {
 		return nil, err
@@ -68,18 +72,25 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 }
 
 // listHosts asks for the hosts again once the list is hostsFresh old, or
-// from a time after now, as after the clock went back.
+// from a time after now, as after the clock went back. When two listings
+// race, the one started last is kept, however slow it was.
 func (i *Issuer) listHosts(now time.Time) {
 	i.mu.Lock()
 	fresh := !i.listedAt.IsZero() && !now.Before(i.listedAt) && now.Sub(i.listedAt) < hostsFresh
-	i.mu.Unlock()
 	if fresh {
+		i.mu.Unlock()
 		return
 	}
+	i.asks++
+	ask := i.asks
+	i.mu.Unlock()
 	hosts, leftOut := i.split(normalHosts(i.hosts())) // outside the lock: hosts may be slow
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.listed, i.listedAt = hosts, now
+	if ask < i.listedBy {
+		return // a listing started after this one is already kept
+	}
+	i.listed, i.listedAt, i.listedBy = hosts, now, ask
 	if !slices.Equal(i.leftOut, leftOut) {
 		i.leftOut = leftOut
 		if len(leftOut) > 0 {

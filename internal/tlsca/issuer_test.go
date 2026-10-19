@@ -6,6 +6,7 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -134,6 +135,44 @@ func TestConcurrentHandshakes(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// A listing that started first but ends last holds the older addresses, and
+// is ignored.
+func TestTheNewestHostListWins(t *testing.T) {
+	ca, err := open(t.TempDir(), "box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	hosts := func() []string {
+		if calls.Add(1) == 1 {
+			close(asked)
+			<-release
+			return []string{"box", "192.168.1.20"} // as it was before the address came
+		}
+		return []string{"box", "192.168.1.20", "100.64.0.7"}
+	}
+	now := time.Now()
+	i := NewIssuer(ca, hosts, func() time.Time { return now })
+	slow := make(chan *tls.Certificate)
+	go func() {
+		cert, err := i.Certificate()
+		if err != nil {
+			t.Error(err)
+		}
+		slow <- cert
+	}()
+	<-asked
+	newer := certificate(t, i)
+	close(release)
+	older := <-slow
+	for name, cert := range map[string]*tls.Certificate{"the faster call": newer, "the slower call": older, "a later call": certificate(t, i)} {
+		if cert == nil || cert.Leaf.VerifyHostname("100.64.0.7") != nil {
+			t.Errorf("%s got a certificate for the older list", name)
+		}
+	}
 }
 
 // A client that trusts only the CA completes a handshake with a server the
