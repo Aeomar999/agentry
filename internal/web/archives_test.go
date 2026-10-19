@@ -21,6 +21,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
@@ -190,6 +191,30 @@ func TestASecondReadOfAnArchivedTaskIsCached(t *testing.T) {
 	}
 	if code := f.get(t, "/api/tasks/task-1", &read); code != http.StatusOK || f.blobs.opens.Load() != 2 {
 		t.Errorf("task-1: %d, %d blobs opened; want 200 and task-1's opened too", code, f.blobs.opens.Load())
+	}
+}
+
+// A second read of an archived task neither gunzips nor folds again: it
+// is handed the task the first read folded.
+func TestASecondReadOfAnArchivedTaskFoldsOnce(t *testing.T) {
+	f := newArchiveFixture(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
+	a := &archives{blobs: f.blobs}
+	read := func() *tasks.Task {
+		t.Helper()
+		history, err := a.history(f.log, "task-2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		marker, _ := store.MarkerOf(history)
+		task, err := a.task(marker, history)
+		if err != nil || task == nil {
+			t.Fatalf("task-2: %v, %v", task, err)
+		}
+		return task
+	}
+	if first, second := read(), read(); first != second {
+		t.Error("the second read folded task-2 again, want the first read's task")
 	}
 }
 
