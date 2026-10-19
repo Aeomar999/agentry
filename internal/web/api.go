@@ -33,7 +33,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	all := s.state.Tasks()
-	slices.Reverse(all) // newest first, which a tie keeps
+	slices.SortStableFunc(all, tasks.InPriorityOrder)
 	done := map[string]bool{}
 	for _, task := range all {
 		done[task.ID] = task.IsDone
@@ -44,14 +44,14 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		return s.isDone(id)
 	}
+	slots := s.slots()
 	summaries := []taskSummary{}
 	for _, task := range all {
 		summary := tasks.SummaryOf(task, roster)
 		summary.BlockedBy = blockedBy(task, isDone)
+		summary.Queued = slots.Queued(task.ID)
 		summaries = append(summaries, summary)
 	}
-	// In your priority order; a new task starts first.
-	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
@@ -376,8 +376,10 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
+	slots := s.slots()
 	detail := detailOf(task, roster)
 	detail.BlockedBy = blockedBy(task, s.isDone)
+	detail.Queued = slots.Queued(task.ID)
 	if epic, _ := s.task(task.Epic); epic != nil {
 		detail.EpicTitle = epic.Title
 	}
@@ -386,6 +388,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		if story, _ := s.task(id); story != nil {
 			summary := tasks.SummaryOf(story, roster)
 			summary.BlockedBy = blockedBy(story, s.isDone)
+			summary.Queued = slots.Queued(story.ID)
 			detail.StoryList = append(detail.StoryList, summary)
 		}
 	}

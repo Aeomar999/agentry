@@ -101,6 +101,12 @@ func TestTheTaskListKeepsItsJSON(t *testing.T) {
 		t.Fatalf("move to done: %d %s", code, reply)
 	}
 
+	// task-1 and task-3 have a turn open, so with a limit of two this one,
+	// ready for its first, waits for a slot.
+	create(`{"title":"Queued"}`) // task-15
+	propose(events.Proposal{Stream: "task-15", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-15", "branch": "agentry/task-15", "port": 7902}})
+	propose(events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{"maxRunningTasks": 2}})
+
 	var got bytes.Buffer
 	for _, path := range []string{"/api/tasks", "/api/tasks/task-10", "/api/tasks/task-1"} {
 		code, body := call(t, server, "GET", path, "")

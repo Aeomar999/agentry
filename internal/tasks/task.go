@@ -3,6 +3,7 @@
 package tasks
 
 import (
+	"cmp"
 	"strings"
 	"time"
 )
@@ -103,6 +104,13 @@ type Task struct {
 // DefaultMaxTurns is the limit of turns of a task made before each task had
 // its own: about 12 handoffs there and back, then you decide.
 const DefaultMaxTurns = 24
+
+// InPriorityOrder compares two tasks in your priority order: the lower rank
+// first, and on a tie the newer first, as a new task starts above the rest.
+// The board lists tasks and the loop gives them slots in this one order.
+func InPriorityOrder(a, b *Task) int {
+	return cmp.Or(cmp.Compare(a.Rank, b.Rank), b.CreatedAt.Compare(a.CreatedAt))
+}
 
 // AtBudget says whether the task has used all the tokens it may.
 func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget }

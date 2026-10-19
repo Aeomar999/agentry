@@ -7,6 +7,7 @@ import { timeAgo } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { waitingLine } from "@/lib/epics";
 import { EpicBadge, StoryProgress } from "./StoryProgress";
+import { QueuedBadge } from "./StatusBadges";
 
 interface TaskCardProps {
   task: TaskSummary;
@@ -65,6 +66,7 @@ export function TaskCard({
       <span className="flex items-start gap-1.5">
         {task.kind === "epic" && <EpicBadge />}
         <span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-ink-primary">{task.title}</span>
+        {task.queued && <QueuedBadge />}
       </span>
       <span className="line-clamp-2 text-[12px] leading-4">{nowLine(task, coordinator)}</span>
       {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} />}

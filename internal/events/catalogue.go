@@ -199,7 +199,7 @@ var coreTypes = map[Type]Spec{
 	PolicyLoaded:  {Fields: []string{"hash", "path"}, Writers: []ActorKind{System, Human}}, // "text", "change", "diff", "backup", "onDisk"; Human: a change made on the Policy page
 	PolicyRefused: {Fields: []string{"reason", "path"}, Writers: []ActorKind{System}},
 
-	SettingsChanged: {Writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule"
+	SettingsChanged: {Writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas", "autoAcceptRule", "maxRunningTasks" (0 is no limit)
 
 	ProposalRejected: {Writers: nil},
 }

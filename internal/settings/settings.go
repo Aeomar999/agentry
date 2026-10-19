@@ -15,6 +15,7 @@ type Settings struct {
 	AutoAcceptIdeas        bool   // Agentry accepts an idea the Visionaries agree on, by AutoAcceptRule, as you would
 	AutoStartIdeas         bool   // and starts the task it made; only with AutoAcceptIdeas
 	AutoAcceptRule         string // which ideas count as agreed: EveryoneBacked or NobodyDoubted
+	MaxRunningTasks        int    // the most tasks with a turn at once, across every repo; 0 is no limit
 }
 
 // The settings' names in settings.changed.
@@ -23,7 +24,13 @@ const (
 	AutoAcceptIdeas        = "autoAcceptIdeas"
 	AutoStartIdeas         = "autoStartIdeas"
 	AutoAcceptRule         = "autoAcceptRule"
+	MaxRunningTasks        = "maxRunningTasks"
 )
+
+// MostRunningTasks is the highest MaxRunningTasks you can set: far more
+// turns than one machine runs at once, so a typo is caught rather than read
+// as no limit.
+const MostRunningTasks = 100
 
 // The rules AutoAcceptRule can be.
 const (
@@ -64,6 +71,9 @@ func (s Settings) Next(e events.Event) Settings {
 	// a later version still replays.
 	if rule := e.Text(AutoAcceptRule); slices.Contains(AutoAcceptRules, rule) {
 		s.AutoAcceptRule = rule
+	}
+	if _, given := e.Data[MaxRunningTasks]; given && e.Number(MaxRunningTasks) >= 0 {
+		s.MaxRunningTasks = e.Number(MaxRunningTasks)
 	}
 	return s
 }

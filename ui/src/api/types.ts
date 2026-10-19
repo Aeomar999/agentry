@@ -36,6 +36,7 @@ export interface TaskSummary {
   madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
+  queued: boolean; // it wants a turn and waits for a slot, as the most tasks running at once are
   stories: number; // an epic's
   storiesDone: number;
   closing: string; // an epic with every story done: the summary you can close it with, "" otherwise
@@ -390,6 +391,8 @@ export interface Settings {
   autoAcceptIdeas: boolean; // Agentry accepts an idea the Visionaries agreed on, by autoAcceptRule, as you would
   autoStartIdeas: boolean; // and starts the task it made; only with autoAcceptIdeas
   autoAcceptRule: AutoAcceptRule; // which ideas the Visionaries agreed on
+  maxRunningTasks: number; // the most tasks with a turn at once, across every repo; 0 is no limit
+  runningTasks: number; // how many have one now: read only
 }
 
 // everyoneBacked: every viewpoint backed the idea and none doubted it.
