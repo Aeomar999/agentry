@@ -270,15 +270,16 @@ func TestTheBudgetYouChooseKeepsTheTasksTurns(t *testing.T) {
 		"title": "Improve Portside", "repo": repo, "coordinator": "tech-lead", "kind": "epic", "budget": 800, "maxTurns": 6}})
 	defaults := tasks.Limits{Budget: 5_000_000, MaxTurns: 24}
 	for _, c := range []struct {
+		title  string // each its own, so none looks like the task made before it
 		epic   string
 		budget int
 		want   tasks.Limits
 	}{
-		{"", 700, tasks.Limits{Budget: 700, MaxTurns: 24}},
-		{"", 0, tasks.Limits{Budget: 0, MaxTurns: 24}},
-		{"task-2", 700, tasks.Limits{Budget: 700, MaxTurns: 6}},
+		{"Retry webhooks", "", 700, tasks.Limits{Budget: 700, MaxTurns: 24}},
+		{"Dark sidebar", "", 0, tasks.Limits{Budget: 0, MaxTurns: 24}},
+		{"Faster boot", "task-2", 700, tasks.Limits{Budget: 700, MaxTurns: 6}},
 	} {
-		id := suggest(t, s, repo, map[string]any{"epic": c.epic, "title": "Follow " + c.epic})
+		id := suggest(t, s, repo, map[string]any{"epic": c.epic, "title": c.title})
 		got, err := ideas.Accept(s, state, id, ideas.Choice{Defaults: defaults, Budget: &c.budget, Start: true})
 		if err != nil || !got.Accepted {
 			t.Fatalf("accept: %+v %v", got, err)

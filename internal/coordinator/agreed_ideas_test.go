@@ -158,6 +158,42 @@ func TestWithTheSettingOffEveryIdeaStaysOpen(t *testing.T) {
 	}
 }
 
+// An idea every viewpoint agreed on that looks like an open task, here the
+// one an earlier agreed idea became, stays open for you: Agentry never
+// makes another of an open task, and doesn't try to.
+func TestAnAgreedIdeaLikeAnOpenTaskStaysOpen(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	runLoop(t, s, state)
+	byTitle := agreedDone(t, s, state, repo, map[string]any{settings.AutoAcceptIdeas: true})
+	if original := byTitle["Search the board"]; original.State != ideas.Accepted {
+		t.Fatalf("the first agreed idea: %s", original.State)
+	}
+	before := len(state.TaskIDs())
+
+	id := state.NextTask()
+	startTask(t, s, id, repo, "editor")
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the whole board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "backedBy": `+everyViewpoint+`}]}`)
+	waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	for _, idea := range ideas.List(state, repo) {
+		if idea.Task == id && idea.State != ideas.Open {
+			t.Errorf("%q looks like an open task, so it should be left open for you: %s", idea.Title, idea.State)
+		}
+	}
+	if got := len(state.TaskIDs()); got != before+1 { // the session only
+		t.Errorf("%d tasks were made, want only the session", got-before)
+	}
+	all, err := s.After(0, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range all {
+		if e.Type == events.ProposalRejected {
+			t.Errorf("Agentry tried something the rules refused, in %s: %s", e.Stream, e.Text("reason"))
+		}
+	}
+}
+
 // Agentry's accept gives the task the server's limits, unlimited ones too,
 // or, for an idea that follows up an epic, the epic's.
 func TestAnAgreedIdeaTakesTheServersLimitsOrItsEpics(t *testing.T) {
@@ -220,7 +256,8 @@ func TestUnderNobodyDoubtedADuplicateIsNeverAccepted(t *testing.T) {
 	const proposal = "Add a search box above the board that filters the cards by title as you type"
 	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": "Board search",
 		"problem": problem, "proposal": proposal, "size": "M", "task": "task-2", "repo": repo}})
-	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{}); err != nil || !got.Accepted {
+	// It looks like the task "Search the board" just made, so you make it anyway.
+	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{Anyway: true}); err != nil || !got.Accepted {
 		t.Fatalf("accepting the original: %+v %v", got, err)
 	}
 	id := state.NextTask()

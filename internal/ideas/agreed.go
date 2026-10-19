@@ -44,6 +44,20 @@ func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, rule string
 	return Disagreed(idea, roster, VisionariesTeam, rule)
 }
 
+// LeftForYou is NotAutoAccepted, and when that would accept the idea, the
+// open task in board it looks like (OpenTaskLike): Agentry never makes
+// another of an open task, as only you may choose to. The loop and the
+// Ideas page ask it.
+func LeftForYou(board Tasks, idea *Idea, list []*Idea, roster agents.Roster, rule string) string {
+	if why := NotAutoAccepted(idea, list, roster, rule); why != "" {
+		return why
+	}
+	if like := OpenTaskLike(board, idea); like != nil {
+		return "looks like the open task " + like.ID
+	}
+	return ""
+}
+
 // Disagreed says how the viewpoints of team fall short of agreeing on the
 // idea under rule, "" when they agree. The viewpoints are the team's agents
 // that don't coordinate, read from the roster, so a team with other

@@ -149,8 +149,8 @@ func autoAccepted(idea *Idea, roster agents.Roster, rule string) string {
 // acceptAgreed accepts for you, when you turned that on, each of the ideas
 // just suggested in repo that the Visionaries agreed on by your rule, as
 // your Accept does, and starts its task when you turned that on too. An
-// idea that repeats another (Duplicate) stays open for you, as does one
-// Agentry couldn't accept: the done goes on. The rule trusts backedBy and
+// idea that repeats another (Duplicate) or looks like an open task
+// (LeftForYou) stays open for you, as does one Agentry couldn't accept: the done goes on. The rule trusts backedBy and
 // doubtedBy as the Visionaries coordinator wrote them in its done; nothing
 // checks them against what each viewpoint said.
 func acceptAgreed(c features.Core, repo string, added []string) {
@@ -166,7 +166,7 @@ func acceptAgreed(c features.Core, repo string, added []string) {
 		if i < 0 {
 			continue
 		}
-		if why := NotAutoAccepted(list[i], list, roster, now.AutoAcceptRule); why != "" {
+		if why := LeftForYou(c.Read, list[i], list, roster, now.AutoAcceptRule); why != "" {
 			slog.Info("coordinator loop: an idea is left for you", "idea", id, "why", why)
 			continue
 		}

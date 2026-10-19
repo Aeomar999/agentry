@@ -293,6 +293,45 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 	}
 }
 
+// Two ideas with near-identical titles, as task-38 and task-41 were made:
+// the first becomes a task, and the second, which looks like it, makes
+// nothing and stays open until you say to make it anyway. Once that task is
+// done, a third like it is no duplicate. (A retry that finds the idea's own
+// task is no duplicate either: TestAcceptReusesATaskAlreadyMadeFromTheIdea.)
+func TestAnIdeaLikeAnOpenTaskWaitsForYouToSayAnyway(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	first := suggest(t, s, repo, map[string]any{"title": "Make a ship the user chose actually push, and count it shipped only after the push"})
+	second := suggest(t, s, repo, map[string]any{"title": "Make a ship the user chose push, and count it shipped only when it pushed"})
+	if got, err := ideas.Accept(s, state, first, ideas.Choice{}); err != nil || got.Task != "task-2" || !got.Accepted {
+		t.Fatalf("accept the first: %+v %v", got, err)
+	}
+
+	before := s.LastPosition()
+	got, err := ideas.Accept(s, state, second, ideas.Choice{})
+	if err != nil || got.Duplicate != "task-2" || got.Task != "" || got.Accepted || !strings.Contains(got.Refused, "looks like the open task task-2") {
+		t.Fatalf("accept the second: %+v %v, want task-2 as its duplicate", got, err)
+	}
+	if s.LastPosition() != before || load(t, state, second).State != ideas.Open {
+		t.Errorf("the refused accept wrote: log at %d from %d, idea %s", s.LastPosition(), before, load(t, state, second).State)
+	}
+
+	got, err = ideas.Accept(s, state, second, ideas.Choice{Anyway: true})
+	if err != nil || got != (ideas.Acceptance{Task: "task-3", Column: "backlog", Accepted: true}) {
+		t.Fatalf("accept anyway: %+v %v", got, err)
+	}
+	if idea := load(t, state, second); idea.State != ideas.Accepted || idea.Became != "task-3" {
+		t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+	}
+
+	for _, id := range []string{"task-2", "task-3"} {
+		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Shipped.", "moved": true}})
+	}
+	third := suggest(t, s, repo, map[string]any{"title": "Make a ship the user chose push, and count it shipped only after it pushed"})
+	if got, err := ideas.Accept(s, state, third, ideas.Choice{}); err != nil || !got.Accepted || got.Duplicate != "" {
+		t.Errorf("accept like a done task: %+v %v", got, err)
+	}
+}
+
 // A retry that asks the opposite of the Accept that made the task and
 // crashed reuses the task where it is, and says where that is, not where
 // the retry asked for it.

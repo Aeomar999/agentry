@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // Duplicate is the idea in list that the idea raises again, nil for none.
@@ -67,6 +69,71 @@ func sameTitle(a, b *Idea) bool {
 
 func titleWords(title string) []string {
 	return slices.DeleteFunc(words(title), func(word string) bool { return fillers[word] })
+}
+
+// Tasks are the tasks an idea's title is checked against: every task, as
+// kept from the log (current.State).
+type Tasks interface {
+	TaskIDs() []string
+	Task(id string) (*tasks.Task, error)
+}
+
+// OpenTaskLike is the open task the idea looks like, nil for none: one in
+// the same repo, out of Done (the Backlog counts as open), not made from
+// the idea itself, whose title is the same once normalised or close
+// (titleLikeness). The closest is the one, then the earliest made. A task
+// that can't be read is skipped.
+func OpenTaskLike(board Tasks, idea *Idea) *tasks.Task {
+	var like *tasks.Task
+	best := 0.0
+	for _, id := range board.TaskIDs() {
+		task, err := board.Task(id)
+		if err != nil || task == nil || task.IsDone || task.Repo != idea.Repo || task.MadeFrom == idea.ID {
+			continue
+		}
+		likeness := titleLikeness(task.Title, idea.Title)
+		switch {
+		case likeness <= SameTitleAbove:
+		case like == nil || likeness > best || likeness == best && madeEarlier(task, like):
+			like, best = task, likeness
+		}
+	}
+	return like
+}
+
+// madeEarlier says whether task a was made before b: by when, then by the
+// number in its id.
+func madeEarlier(a, b *tasks.Task) bool {
+	if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+		return c < 0
+	}
+	return cmp.Less(idNumber(a.ID), idNumber(b.ID))
+}
+
+// SameTitleAbove is the share of their title words (Jaccard: shared over
+// all, past the filler words) an idea and an open task must have in common
+// for the idea to look like the task. Tuned on the board's own repeats:
+// "Make a ship the user chose actually push, and count it shipped only
+// after the push" was made again as "Make a ship the user chose push, and
+// count it shipped only when it pushed", which share 0.70, while that and
+// "Word a waiting push plainly, and grey out Shipping for teams that can't
+// ship", about the same feature, share 0.13 (duplicate_test.go has them).
+const SameTitleAbove = 0.5
+
+// titleLikeness is the share of their title words two titles have in
+// common, 1 for titles the same once normalised.
+func titleLikeness(a, b string) float64 {
+	these, those := setOf(titleWords(a)), setOf(titleWords(b))
+	shared := 0
+	for word := range these {
+		if those[word] {
+			shared++
+		}
+	}
+	if all := len(these) + len(those) - shared; all > 0 {
+		return float64(shared) / float64(all)
+	}
+	return 0
 }
 
 // SameTextAbove is the share of their words (Jaccard: shared over all) two

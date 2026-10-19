@@ -2,6 +2,7 @@ package ideas
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -21,16 +22,18 @@ type Choice struct {
 	Budget   *int         // the token budget you chose for the new task, 0 for no limit; nil takes its limits' budget
 	Start    bool         // start the task now instead of leaving it in the Backlog; only you may
 	By       events.Actor // who accepts it: you when unset, or Agentry for an idea the Visionaries agreed on by your rule
+	Anyway   bool         // make the task even though the idea looks like an open one (OpenTaskLike); Agentry never does
 }
 
 // Acceptance says what Accept did. The task can be made and the idea still
 // not be marked accepted, as when you dismissed it a moment before: then
 // Task names the task and Refused says why.
 type Acceptance struct {
-	Task     string // the task made from the idea, "" when none was
-	Column   string // Task's column on the board once Accept is done (tasks.Task.BoardColumn), "" when it can't be read
-	Accepted bool   // the idea is marked accepted, pointing at Task
-	Refused  string // why it stopped short, "" once Accepted
+	Task      string // the task made from the idea, "" when none was
+	Column    string // Task's column on the board once Accept is done (tasks.Task.BoardColumn), "" when it can't be read
+	Accepted  bool   // the idea is marked accepted, pointing at Task
+	Refused   string // why it stopped short, "" once Accepted
+	Duplicate string // the open task the idea looks like, when that stopped it and nothing was written
 }
 
 // Board is what Accept reads of every idea, every task and the agents, as
@@ -57,7 +60,9 @@ type Log interface {
 // leaves a task and an idea still open, never an accepted idea that points
 // at no task. The next Accept finds that task and only marks the idea, so
 // the task stays where it was made, started or not, whatever that Accept
-// chose; Column says where it is. Accepts run one at a time, so a double
+// chose; Column says where it is. An idea that looks like an open task
+// (OpenTaskLike) makes none unless the choice says to anyway: Duplicate
+// names that task and nothing is written. Accepts run one at a time, so a double
 // click or the UI and MCP at once still make one task. The error is for the
 // log failing, not for a refusal.
 func Accept(log Log, board Board, id string, choice Choice) (Acceptance, error) {
@@ -90,6 +95,9 @@ func accept(log Log, board Board, id string, choice Choice) (Acceptance, error) 
 		return made, err
 	}
 	if made.Task == "" {
+		if like := OpenTaskLike(board, idea); like != nil && !choice.Anyway {
+			return Acceptance{Duplicate: like.ID, Refused: idea.ID + " looks like the open task " + like.ID + " " + strconv.Quote(like.Title)}, nil
+		}
 		if made, err = makeTask(log, board, idea, kind, choice); err != nil || made.Task == "" {
 			return made, err
 		}
