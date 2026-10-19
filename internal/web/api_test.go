@@ -588,8 +588,7 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 }
 
 // A limit is kept though its answer to the task's stop is refused, as when
-// the stop was answered as you saved: the reply says why, with a 200. On a
-// done task nothing is kept, and the reply is a 409.
+// the stop was answered as you saved: the reply says why, with a 200.
 func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
 	answeredFirst := func(p events.Proposal, history store.History) *events.Rejection {
 		if p.Type == events.TaskAnswered {
@@ -621,6 +620,7 @@ func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
 	}
 }
 
+// On a done task nothing is kept, and the reply is a 409.
 func TestADoneTasksLimitsStay(t *testing.T) {
 	server, _, ask := limitsServer(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Done","kind":"epic","budget":200000,"maxTurns":5}`)
