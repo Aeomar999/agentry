@@ -142,6 +142,32 @@ func TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS(t *testing.T) {
 	}
 }
 
+// After `agentry ca -regenerate`, running the install command again without
+// the new fingerprint says the CA changed, rather than that the worker has
+// joined already; with it, the worker moves to the new CA, keeping its
+// credential.
+func TestJoiningAgainAfterTheCAWasRegenerated(t *testing.T) {
+	ca, address, joins := joinable(t)
+	old, _ := testCA(t)
+	dir := t.TempDir()
+	if err := saveWorker(dir, workerConfig{Server: "https://" + address, Name: "laptop", Credential: "c1", CA: string(old.PEM())}); err != nil {
+		t.Fatal(err)
+	}
+	code, out := join(dir, "https://"+address, "code")
+	if code == 0 || !strings.Contains(out, "regenerated") || !strings.Contains(out, "-ca-fingerprint") {
+		t.Errorf("exit %d: %s", code, out)
+	}
+	if code, out := join(dir, "-ca-fingerprint", ca.Fingerprint(), "https://"+address, "code"); code != 0 || !strings.Contains(out, "already") {
+		t.Fatalf("with the new fingerprint: exit %d: %s", code, out)
+	}
+	if config := savedWorker(t, dir); config.CA != string(ca.PEM()) {
+		t.Error("it kept the old CA")
+	}
+	if joins.Load() != 0 {
+		t.Errorf("%d joins: the code was spent", joins.Load())
+	}
+}
+
 // Without -https, nothing changes: no fingerprint, no CA. A fingerprint
 // given for such a server is refused, as it has no CA to check.
 func TestAServerOverPlainHTTP(t *testing.T) {

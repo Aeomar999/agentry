@@ -152,7 +152,9 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 	}
 	if joined && (config.Server == given || config.Server == target.server) {
 		config.Server, config.CA = target.server, string(target.ca)
-		if stillJoined(config) {
+		if still, err := stillJoined(config); err != nil {
+			return err
+		} else if still {
 			if err := saveWorker(w.dir, config); err != nil {
 				return err
 			}
@@ -163,16 +165,22 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 	return joinServer(w.dir, target, args[1], w.name, stdout)
 }
 
-// stillJoined asks the server whether it takes the credential.
-func stillJoined(config workerConfig) bool {
+// stillJoined asks the server whether it takes the credential. A server
+// whose certificate the kept CA doesn't vouch for is an error: its CA was
+// regenerated, and only a new fingerprint can say to trust the new one.
+func stillJoined(config workerConfig) (bool, error) {
 	request, _ := http.NewRequest(http.MethodHead, config.Server+workerlink.UpdatePath, nil)
 	request.Header.Set("Authorization", "Bearer "+config.Credential)
 	response, err := config.client().Do(request)
+	if pinned.Untrusted(err) {
+		return false, fmt.Errorf("%s's CA isn't the one kept when this worker joined: it was regenerated, or this is another server. "+
+			"Join again with -ca-fingerprint from `agentry ca` on the server", config.Server)
+	}
 	if err != nil {
-		return true // can't tell: keep what it has rather than spend the code
+		return true, nil // can't tell: keep what it has rather than spend the code
 	}
 	response.Body.Close()
-	return response.StatusCode != http.StatusUnauthorized
+	return response.StatusCode != http.StatusUnauthorized, nil
 }
 
 func runForeground(w *workerSetup, _ []string, stdout io.Writer) error {
