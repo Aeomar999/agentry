@@ -68,7 +68,7 @@ It starts Agentry in the background, if it isn't already running, prints a link 
 - **Where things are:** the log, settings and the tasks' worktrees are in `.agentry` in your home folder; delete it to start afresh.
 - **Your work:** new tasks work in the git repo `Agentry` in your home folder (made the first time), unless you give a task another repo, or a new one.
 - **The address:** port 7800, or the next free one, on every network interface, so your other machines and your phone can open it too. The page's token keeps everyone else out; `agentry serve -addr 127.0.0.1:7800` keeps it to this computer.
-- **As an app:** Install app, in the page's top bar, installs Agentry as an app with its own window. Browsers install only from a secure page: open it at `http://localhost:7800` on the computer it runs on, or over https (`-public-url`), not at a plain `http://` network address.
+- **As an app:** Install app, in the page's top bar, installs Agentry as an app with its own window. Browsers install only from a secure page: open it at `http://localhost:7800` on the computer it runs on, or over https, not at a plain `http://` network address. To install it on your phone or another computer, start Agentry with `-https`: see [HTTPS and installing the app on other devices](#https-and-installing-the-app-on-other-devices).
 - **The other programs in the folder** (`agentry-linux-amd64` and so on) are what Agentry hands other computers that join as workers. Keep them next to `agentry`.
 
 ### Signing in the installed app, or another device
@@ -79,7 +79,7 @@ The printed link signs a browser in; the installed app opens without it, and so 
 - **Or use a one-time code.** On a device that is signed in, open the person button in the top bar and pick **Sign in another device**. It shows a code such as `ABCD-EFGH` and a QR code: type the code on the other device, or scan the QR code with its camera, which opens Agentry there and signs it in. Pick the address the other device reaches if the server has several. A code works once, for 5 minutes; **New code** makes another. Wrong codes are limited (five a minute from one address), so codes can't be guessed.
 - **Sign out**, in the same menu, signs that device out: it forgets its token and the server clears its cookie.
 
-The device keeps the token, and a cookie that lasts a year, so it stays signed in; an app that kept only the cookie, as on iOS, stays signed in too. Installing needs a secure page: `http://localhost` on the computer Agentry runs on, or https.
+The device keeps the token, and a cookie that lasts a year, so it stays signed in; an app that kept only the cookie, as on iOS, stays signed in too. Installing needs a secure page: `http://localhost` on the computer Agentry runs on, or https. With `-https`, Sign in another device also shows a QR code to the page that trusts Agentry's certificate, for a device's first time: see [HTTPS and installing the app on other devices](#https-and-installing-the-app-on-other-devices).
 
 ### From the source
 
@@ -98,6 +98,7 @@ go build -o bin/agentry ./cmd/agentry
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
 - **Turn limit:** `-max-turns` (default 24) is the turns a new task may have without your answer before it asks you; 0 for no limit.
 - **Address:** `-addr` (default `0.0.0.0:7800`, every interface; `127.0.0.1:7800` for this computer only); on every interface it prints a link for each of this machine's network addresses as well. `-public-url` is the address people and machines reach, for links and install commands; with it, it prints only that one, and the install commands start on it.
+- **HTTPS:** `-https` serves over https with Agentry's own CA; see [HTTPS and installing the app on other devices](#https-and-installing-the-app-on-other-devices). `agentry open` takes `-https`, `-budget` and `-max-turns` too, and passes them on to the server it starts; while one is running already, it says they take effect at the next start.
 
 ## First steps
 
@@ -154,6 +155,53 @@ Then, in any repo:
 - **Share files:** `attach_file` shares a file from your machine with a task; `get_file` downloads one.
 
 Each machine connected gets its own credential (the log keeps only its hash); the Integrations page lists them, and Revoke stops one at once. Everything it does is on the page at once.
+
+## HTTPS and installing the app on other devices
+
+Browsers install the app, and run the service worker it needs, only on a secure page: https with a certificate the device trusts, or `http://localhost`. So without https the app installs only on the computer Agentry runs on. A plain self-signed certificate doesn't help: the browser warns that the page isn't secure and still won't install it. Instead, Agentry has its own certificate authority (CA), as mkcert does: you trust it once on each device, and every certificate it signs for this server is trusted from then on.
+
+- **Turn it on:** `agentry serve -https`, or `agentry open -https` (from the zip: Stop Agentry, then run `./agentry open -https` in the Agentry folder, or `.\agentry.exe open -https` on Windows). The first start makes the CA. The printed links become https, followed by the CA's fingerprint and the trust page's address.
+- **One port:** https and plain http share the port. Plain http from another device is sent on to https (a 308 redirect), except the trust page, which a device must reach before it trusts the CA. An address the certificate doesn't cover, such as a name you set up yourself, gets the trust page with the addresses that work. On the computer Agentry runs on, `http://localhost:<port>` keeps working as it is.
+- **The certificate:** it names localhost, `127.0.0.1`, `::1`, this machine's hostname and `hostname.local`, and each of its network addresses (LAN, Hawser, Tailscale). It lasts about 13 months and is kept only in memory: Agentry issues a new one by itself, with no restart, when the machine's addresses change or it is within 30 days of its end.
+
+### Trust a device once
+
+1. Open `http://<address>:<port>/trust/` on the device, the address the server printed after "Trust it once on each device". On a phone, scan the QR code under **Sign in another device** in the person menu instead.
+2. Check the fingerprint on the page against the one `agentry ca` prints on the server. The device shows it too, in the certificate's details.
+3. Download the CA and trust it. The trust page has every step; in short:
+   - **Android:** download `agentry-ca.crt`, then Settings > Security > Encryption & credentials > Install a certificate > CA certificate.
+   - **iPhone and iPad:** in Safari, download `agentry.mobileconfig` and install the profile in Settings, then turn on full trust for it in Settings > General > About > Certificate Trust Settings. Without that last step, Safari still doesn't trust it.
+   - **macOS:** open `agentry-ca.crt` into the System keychain and set it to Always Trust.
+   - **Windows:** `certutil -addstore -f Root agentry-ca.crt` as administrator, or install it into Trusted Root Certification Authorities.
+   - **Linux:** add `agentry-ca.pem` to the system's CAs (`update-ca-certificates` or `trust anchor`); Chrome on Linux keeps its own list, so import it there too.
+   - **Firefox** keeps its own list on every system: import it under Settings > Privacy & Security > Certificates.
+4. Open the https address and sign in with the printed link or a code. Install app now works. If the page still isn't secure, restart the browser.
+
+### Workers and Claude Code over https
+
+The commands on the Workers and Integrations pages carry the CA's fingerprint. They fetch the CA first, check it, and send the code only to a server that has it, so they look longer than the plain `curl … | sh`. `agentry worker join` and `agentry mcp connect` take `-ca-fingerprint` for the same check. From then on each machine trusts only Agentry's CA for this server, not the system's list. Hooks, the status line and `agentry mcp` on the computer Agentry runs on find it by themselves.
+
+Machines that joined over plain http before you turned it on can't reach the server that way any more. Run a new command from the Workers page on each worker: it moves the worker to https and keeps its credential, leaving the code unused. For Claude Code, run a new command from the Integrations page on each machine, then restart its Claude Code sessions.
+
+### What the CA can sign
+
+The CA's name constraints let it sign only for localhost, this machine's hostname and `hostname.local`, loopback, and the private address ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10` for Hawser and Tailscale, and IPv6 `fd00::/8`). The constraints are critical, so a device refuses anything else it signs: even a leaked key can't pass as a site on the public web. Its key, `tls/ca.key` in Agentry's data folder (`0600` on macOS and Linux), never leaves the server: it is never served, shown or attached, and no agent may touch it, whatever the policy says. The CA lasts 10 years. It is made for the hostname the machine has then: after you rename the machine, the new name isn't in the certificate (its addresses still work) until you regenerate the CA.
+
+### Regenerate the CA
+
+`agentry ca -regenerate` replaces the CA. Do it if the key may have leaked, or after renaming the machine. Stop Agentry first; the command refuses while it runs. Then:
+
+- **Devices:** each one that trusted the old CA no longer trusts this server. Remove the old "Agentry local CA" from it (on iOS, delete the profile), and trust the new one from `/trust/`.
+- **Workers:** each loses its link, and `agentry worker logs` says the server's certificate isn't from the CA it kept. Join again with the new fingerprint: run a new command from the Workers page, or `agentry worker join -ca-fingerprint <F> <server> <code>`, with `F` from `agentry ca`.
+- **Claude Code:** run a new command from the Integrations page on each machine connected, then restart its Claude Code sessions.
+
+### Alternatives
+
+`-https` is the simple way on a home network. Others, not built in:
+
+- **Behind a reverse proxy that does TLS,** as in [Deploy it](#deploy-it): run Agentry without `-https` and give it `-public-url https://…`. The proxy's certificate is the one devices see.
+- **With Tailscale,** `tailscale cert` gives a real certificate for the machine's `*.ts.net` name. Put a proxy in front of Agentry with it, as above.
+- **With a public domain,** a proxy that gets its certificate by ACME, such as Let's Encrypt, does the same.
 
 ## How it works
 
