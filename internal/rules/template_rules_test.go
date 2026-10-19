@@ -71,6 +71,18 @@ func TestATemplateCantTakeABuiltInID(t *testing.T) {
 	refusedSaying(t, savingTemplate(agents.Templates[0].ID, "Research", research()), "built-in")
 }
 
+func TestATemplateCantTakeTheResearchTemplatesID(t *testing.T) {
+	refusedSaying(t, savingTemplate("research", "Research", research()), "the built-in research template has that id")
+}
+
+func TestATemplateIDIsLowercaseLettersDigitsAndDashes(t *testing.T) {
+	for _, id := range []string{" research", "My Team", "Papers", "a/b"} {
+		t.Run(id, func(t *testing.T) {
+			refusedSaying(t, savingTemplate(id, "Research", research()), "a template's id is lowercase letters, digits and dashes, starting with a letter: "+id)
+		})
+	}
+}
+
 func TestATemplatesAgentsAreAList(t *testing.T) {
 	p := savingTemplate("papers", "Research", nil)
 	p.Data["agents"] = "lead, reader"
