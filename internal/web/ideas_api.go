@@ -13,8 +13,9 @@ import (
 
 // listIdeas answers the ideas, of every repo or of ?repo=, newest session
 // first: by when the task they came from was made, then newest idea first.
-// An idea from a session after an epic closed names that epic, and an open
-// one why Agentry wouldn't accept it for you, under your rule.
+// An idea from a session after an epic closed names that epic, an open one
+// why Agentry wouldn't accept it for you, under your rule, and an accepted
+// one the column its task is in now.
 func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 	list := ideas.List(s.state, r.URL.Query().Get("repo"))
 	started, about := map[string]time.Time{}, map[string]*tasks.Task{}
@@ -36,7 +37,11 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 		if idea.State == ideas.Open {
 			why = ideas.NotAutoAccepted(idea, list, roster, rule)
 		}
-		views = append(views, viewOf(idea, about[idea.Task], why))
+		var became *tasks.Task
+		if idea.Became != "" {
+			became, _ = s.task(idea.Became) // one that can't be read shows with no column
+		}
+		views = append(views, viewOf(idea, about[idea.Task], became, roster, why))
 	}
 	reply(w, views)
 }

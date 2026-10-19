@@ -126,7 +126,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 		t.Errorf("dismissing an accepted idea: %d", code)
 	}
 	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) ||
-		!strings.Contains(body, `"autoAccepted":false`) {
+		!strings.Contains(body, `"becameColumn":"backlog"`) || !strings.Contains(body, `"autoAccepted":false`) {
 		t.Errorf("the accepted idea: %s", body)
 	}
 }
@@ -193,6 +193,17 @@ func TestYouAcceptAndStartAnIdea(t *testing.T) {
 		if err != nil || task.Parked != c.parked || task.Budget != c.budget || task.MaxTurns != 12 {
 			t.Errorf("%s: parked %q budget %d turns %d, want %q %d 12 (%v)", c.body, task.Parked, task.Budget, task.MaxTurns, c.parked, c.budget, err)
 		}
+	}
+
+	_, body := call(t, server, "GET", "/api/ideas", "")
+	var list []ideaView
+	json.Unmarshal([]byte(body), &list)
+	columns := map[string]string{}
+	for _, idea := range list {
+		columns[idea.Became] = idea.BecameColumn
+	}
+	if want := map[string]string{"": "", "task-2": "in-progress", "task-3": "in-progress", "task-4": "in-progress", "task-5": "backlog"}; !maps.Equal(columns, want) {
+		t.Errorf("the columns the ideas' tasks are in: %v, want %v", columns, want)
 	}
 }
 

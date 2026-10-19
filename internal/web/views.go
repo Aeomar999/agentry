@@ -236,28 +236,29 @@ func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
 }
 
 type ideaView struct {
-	ID         string      `json:"id"`
-	Title      string      `json:"title"`
-	Problem    string      `json:"problem"`
-	Proposal   string      `json:"proposal"`
-	WhyNow     string      `json:"whyNow"`
-	Size       string      `json:"size"` // S, M or L
-	Risks      string      `json:"risks"`
-	BackedBy   []string    `json:"backedBy"`
-	DoubtedBy  []string    `json:"doubtedBy"`
-	Task       string      `json:"task"` // the session it came from
-	Repo       string      `json:"repo"`
-	Epic       string      `json:"epic"`       // the epic it follows up, "" for none
-	About      string      `json:"about"`      // the epic whose close started the session it came from, "" for none
-	AboutTitle string      `json:"aboutTitle"` // that epic's title
-	Kind       tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
-	State      ideas.State `json:"state"`
-	Note       string      `json:"note"`               // what you said when you accepted or dismissed it
-	DecidedAt  time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
-	Became     string      `json:"became"`             // the task an accepted idea became
-	Auto       bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
-	Repeats    string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
-	CreatedAt  time.Time   `json:"createdAt"`
+	ID           string      `json:"id"`
+	Title        string      `json:"title"`
+	Problem      string      `json:"problem"`
+	Proposal     string      `json:"proposal"`
+	WhyNow       string      `json:"whyNow"`
+	Size         string      `json:"size"` // S, M or L
+	Risks        string      `json:"risks"`
+	BackedBy     []string    `json:"backedBy"`
+	DoubtedBy    []string    `json:"doubtedBy"`
+	Task         string      `json:"task"` // the session it came from
+	Repo         string      `json:"repo"`
+	Epic         string      `json:"epic"`       // the epic it follows up, "" for none
+	About        string      `json:"about"`      // the epic whose close started the session it came from, "" for none
+	AboutTitle   string      `json:"aboutTitle"` // that epic's title
+	Kind         tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
+	State        ideas.State `json:"state"`
+	Note         string      `json:"note"`               // what you said when you accepted or dismissed it
+	DecidedAt    time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
+	Became       string      `json:"became"`             // the task an accepted idea became
+	BecameColumn string      `json:"becameColumn"`       // that task's column on the board now, as a task summary's column; "" when it can't be read
+	Auto         bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
+	Repeats      string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
+	CreatedAt    time.Time   `json:"createdAt"`
 	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
 	// under your rule (ideas.NotAutoAccepted), even with that turned off;
 	// "" when it would, and for an idea that isn't open.
@@ -265,9 +266,9 @@ type ideaView struct {
 }
 
 // viewOf is the idea as the page shows it; about is the epic whose close
-// started its session, nil for none, and notAutoAccepted why Agentry
-// wouldn't accept it for you.
-func viewOf(idea *ideas.Idea, about *tasks.Task, notAutoAccepted string) ideaView {
+// started its session, nil for none, became the task it became, nil for
+// none, and notAutoAccepted why Agentry wouldn't accept it for you.
+func viewOf(idea *ideas.Idea, about, became *tasks.Task, roster agents.Roster, notAutoAccepted string) ideaView {
 	view := ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
 		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
 		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
@@ -275,6 +276,9 @@ func viewOf(idea *ideas.Idea, about *tasks.Task, notAutoAccepted string) ideaVie
 		NotAutoAccepted: notAutoAccepted}
 	if about != nil {
 		view.About, view.AboutTitle = about.ID, about.Title
+	}
+	if became != nil {
+		view.BecameColumn = became.BoardColumn(roster)
 	}
 	return view
 }
