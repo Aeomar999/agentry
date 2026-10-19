@@ -13,6 +13,7 @@ export interface TaskSummary {
   currentAgent: string;
   stage: string; // the agent the coordinator last handed it to
   column: BoardColumn; // its column on the board
+  canShip: boolean; // its team has an agent that ships work, so it may be moved to Shipping
   turns: number;
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer

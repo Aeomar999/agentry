@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Columns3, Inbox, List, Plus } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
@@ -94,9 +94,7 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
             {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} className="shrink-0" />}
             <LabelList labels={task.labels} onPick={pickLabel} />
           </p>
-          <p className="truncate text-[12px] text-ink-muted">
-            {task.status === "needs you" ? <span className="text-warning">{task.needsYou}</span> : describe(task)}
-          </p>
+          <p className="truncate text-[12px] text-ink-muted">{describe(task)}</p>
         </div>
       ),
     },
@@ -124,11 +122,19 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
   ];
 }
 
-function describe(task: TaskSummary): string {
+// describe is the line under a task's title: its stage first, when it is
+// past building, then what it is waiting for or who is working on it.
+function describe(task: TaskSummary): ReactNode {
   if (task.status === "done") return "Done";
-  if (waitingLine(task)) return waitingLine(task);
   const stage = stageOf(task) ? `${stageOf(task)} · ` : "";
-  return stage + (task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next");
+  if (task.status === "needs you")
+    return (
+      <>
+        {stage}
+        <span className="text-warning">{task.needsYou}</span>
+      </>
+    );
+  return stage + (waitingLine(task) || (task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next"));
 }
 
 type View = "list" | "board";
