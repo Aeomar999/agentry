@@ -48,13 +48,13 @@ func Client(caPEM []byte, timeout time.Duration) *http.Client {
 	return &http.Client{Transport: Transport(caPEM), Timeout: timeout}
 }
 
-// Untrusted says whether err is a server's certificate this client
-// doesn't trust, as after the server's CA was regenerated, rather than a
-// server it can't reach.
+// Untrusted says whether err is a server's certificate signed by a CA
+// this client doesn't trust, as after the server's CA was regenerated. A
+// server it can't reach, or a certificate for another name or out of date,
+// is not: those keep their own error.
 func Untrusted(err error) bool {
-	var verification *tls.CertificateVerificationError
 	var unknown x509.UnknownAuthorityError
-	return errors.As(err, &verification) || errors.As(err, &unknown)
+	return errors.As(err, &unknown)
 }
 
 // Check says whether caPEM is one CA certificate, as a CA kept to pin

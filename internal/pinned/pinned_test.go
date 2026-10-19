@@ -83,8 +83,9 @@ func TestAPinnedClientRefusesEverythingWhenItsCAIsUnreadable(t *testing.T) {
 	}
 }
 
-// A server another CA vouches for is untrusted; one that isn't there is
-// not, however the error is wrapped.
+// A server another CA vouches for is untrusted, however the error is
+// wrapped. One that isn't there is not, and nor is a certificate from our
+// CA for another name or out of date: the CA wasn't regenerated.
 func TestUntrusted(t *testing.T) {
 	ours, theirs := newCA(t), newCA(t)
 	server := agentryServer(t, tlsca.NewIssuer(theirs, func() []string { return nil }, time.Now))
@@ -96,6 +97,27 @@ func TestUntrusted(t *testing.T) {
 	gone.Close()
 	if unreachable := get(Client(ours.PEM(), 5*time.Second), "https://"+gone.Listener.Addr().String()); Untrusted(unreachable) {
 		t.Errorf("untrusted: %v", unreachable)
+	}
+
+	ourServer := agentryServer(t, tlsca.NewIssuer(ours, func() []string { return nil }, time.Now))
+	config := TLSConfig(ours.PEM())
+	config.ServerName = "elsewhere.test"
+	otherName := get(&http.Client{Transport: &http.Transport{TLSClientConfig: config}, Timeout: 5 * time.Second}, ourServer.URL)
+	if otherName == nil || Untrusted(otherName) {
+		t.Errorf("another name: %v", otherName)
+	}
+
+	old, err := ours.Issue(nil, time.Now().Add(-2*397*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredServer := httptest.NewUnstartedServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	expiredServer.TLS = &tls.Config{Certificates: []tls.Certificate{*old}}
+	expiredServer.StartTLS()
+	t.Cleanup(expiredServer.Close)
+	expired := get(Client(ours.PEM(), 5*time.Second), expiredServer.URL)
+	if expired == nil || Untrusted(expired) {
+		t.Errorf("expired: %v", expired)
 	}
 }
 
