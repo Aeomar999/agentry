@@ -65,6 +65,7 @@ var taskRules = map[events.Type]rule{
 	events.PlanUpdated:  all(isTheOpenTurn),
 	events.AgentWaiting: all(isTheOpenTurn),
 	events.TurnEnded:    all(isTheOpenTurn, sameAgentAsTheTurn),
+	events.TurnLimited:  all(isTheOpenTurn, sameAgentAsTheTurn),
 	events.IssueRaised:  all(),
 	events.TurnStopped:  all(isTheOpenTurn),
 

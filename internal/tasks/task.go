@@ -185,12 +185,14 @@ type Turn struct {
 	Plan          string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
 	PlanFrom      string // the turn whose unfinished plan this turn started with, "" for a fresh one
 	Ended         bool
-	Report        string // the agent's final message
-	Issue         string // why the turn was cut short, if it was
-	Stopped       bool   // you ended it, to tell the coordinator something
-	Shipped       bool   // it ships the work because you moved the task to Shipping: you took the work as it was
-	Tokens        int    // what it used, when the engine said
-	TokensUnknown string // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
+	Report        string    // the agent's final message
+	Issue         string    // why the turn was cut short, if it was
+	Limited       string    // what the engine said when it stopped at a usage limit, if it did
+	ResetsAt      time.Time // when that limit resets, zero when the engine didn't say
+	Stopped       bool      // you ended it, to tell the coordinator something
+	Shipped       bool      // it ships the work because you moved the task to Shipping: you took the work as it was
+	Tokens        int       // what it used, when the engine said
+	TokensUnknown string    // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
 }
 
 type Decision string

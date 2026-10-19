@@ -130,7 +130,7 @@ var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.Task
 // Agentry asking you for what the turn needs to start (a machine online).
 var duringWrapUp = []events.Type{events.TaskNeedsYou, events.TaskAnswered, events.TurnStarted, events.PromptAcknowledged, events.SessionStarted,
 	events.ActionRequested, events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult,
-	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
+	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
 	events.WorktreeMoved, events.FileAdded, events.FileRemoved, events.FilesCollected, events.FilesDelivered}
 
 func refuse(reason string) *events.Rejection {

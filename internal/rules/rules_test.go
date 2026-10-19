@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -165,11 +166,38 @@ func TestOnlyAskedActionsAndQuestionsNeedYou(t *testing.T) {
 	}
 }
 
+// A usage limit is said by the machine running the open turn's agent. It
+// isn't an issue: the turn stays open, and the count of issues is as it was.
+func TestAUsageLimitKeepsTheTurnOpenAndIsNoIssue(t *testing.T) {
+	limited := func(agent string) map[string]any {
+		return map[string]any{"agent": agent, "error": "rate_limit", "details": "You've hit your session limit · resets 3am (UTC)", "resetsAt": "2026-10-20T03:00:00Z"}
+	}
+	task := run(t, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+		turnStarted("turn-2", "engineer"),
+		{agentry, events.IssueRaised, "", map[string]any{"reason": "the agent's process exited"}, true},
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}, true},
+		{worker, events.TurnLimited, "turn-2", limited("engineer"), false}, // not the open turn
+		turnStarted("turn-3", "engineer"),
+		{worker, events.TurnLimited, "turn-3", limited("tech-lead"), false},  // not its agent
+		{engineer, events.TurnLimited, "turn-3", limited("engineer"), false}, // the machine says it, not the agent
+		{worker, events.TurnLimited, "turn-3", limited("engineer"), true},
+	})
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-3" || turn.Limited == "" || !turn.ResetsAt.Equal(time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)) {
+		t.Errorf("the limited turn should stay open with its reset time: %+v", turn)
+	}
+	if task.IssuesInARow != 1 || task.Status() != tasks.Working {
+		t.Errorf("issues in a row %d, status %s: a usage limit is no issue", task.IssuesInARow, task.Status())
+	}
+}
+
 func TestEveryTaskEventHasARule(t *testing.T) {
 	for _, kind := range []events.Type{events.WorktreeReady, events.TaskAssigned, events.TurnStarted,
 		events.PromptAcknowledged, events.SessionStarted, events.ActionRequested, events.ActionAsked,
 		events.ActionApproved, events.ActionDenied, events.ActionResult, events.AgentWaiting, events.TurnEnded,
-		events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
+		events.TurnLimited, events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
 		if taskRules[kind] == nil {
 			t.Errorf("%s has no rule", kind)
 		}

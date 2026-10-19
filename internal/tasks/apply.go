@@ -332,6 +332,16 @@ func (t *Task) Apply(e events.Event) {
 			t.step(e, turn.Agent, t.Coordinator, turn.Report)
 		}
 
+	case events.TurnLimited:
+		// Not an issue: nothing is wrong with the work, so it doesn't count
+		// towards asking you, and the turn stays open to go on after the
+		// reset. An old log's odd one (an ended turn, a time it can't read)
+		// changes what it can and nothing else.
+		if turn := t.Turn(e.Correlation); !turn.Ended {
+			turn.Limited = cmp.Or(e.Text("details"), e.Text("error"), "usage limit")
+			turn.ResetsAt, _ = time.Parse(time.RFC3339, e.Text("resetsAt"))
+		}
+
 	case events.IssueRaised:
 		t.Fetching = nil // a fetch that failed is told as an issue
 		if turn := t.OpenTurn(); turn != nil {
@@ -389,7 +399,7 @@ func (t *Task) orphaned(e events.Event) bool {
 		return t.OpenTurn() == nil
 	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult:
 		return t.Action(e.Correlation) == nil
-	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnStopped:
+	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
 	}
 	return false
