@@ -20,10 +20,33 @@ export interface ChatItem {
   viaArtifact?: boolean; // you acted on an artifact, when Agentry had them
 }
 
-export function chatOf(task: TaskDetail): ChatItem[] {
+// The types of event chatOf reads, so the chat reads only those: a type
+// chatOf reads must be here too, or a test fails.
+export const CHAT_TYPES = [
+  "task.created",
+  "task.transferred",
+  "task.requested",
+  "task.split",
+  "task.epic_waits",
+  "file.fetching",
+  "files.fetched",
+  "task.story_done",
+  "task.request_answered",
+  "task.directed",
+  "task.reopened",
+  "task.answered",
+  "task.assigned",
+  "task.needs_you",
+  "task.done",
+  "turn.ended",
+  "turn.stopped",
+  "issue.raised",
+] as const;
+
+export function chatOf(task: TaskDetail, events: LogEvent[]): ChatItem[] {
   const items: ChatItem[] = [];
   const agentOf = new Map((task.turnList ?? []).map((t) => [t.id, t.agent]));
-  for (const e of task.events ?? []) {
+  for (const e of events) {
     const key = String(e.position);
     const said = (kind: ChatKind, text: string, extra: Partial<ChatItem> = {}) =>
       text && items.push({ key: `${key}-${kind}`, at: e.at, kind, who: task.coordinator, text, ...extra });

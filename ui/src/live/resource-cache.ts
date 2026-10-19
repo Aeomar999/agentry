@@ -15,9 +15,10 @@ export type Fetch = (path: string) => Promise<Read>;
 export interface Snapshot {
   data: unknown;
   error: string;
+  position: number; // of the log, that the data is as fresh as; -1 before the first read
 }
 
-export const nothing: Snapshot = { data: undefined, error: "" };
+export const nothing: Snapshot = { data: undefined, error: "", position: -1 };
 
 interface Entry {
   snapshot: Snapshot;
@@ -89,11 +90,11 @@ export class ResourceCache {
       // log went backwards (restored from a backup), isn't read again until
       // the log moves, instead of in a loop.
       entry.position = Math.max(read.position ?? asked, asked);
-      this.show(entry, { data: read.data, error: "" });
+      this.show(entry, { data: read.data, error: "", position: entry.position });
     } catch (failure) {
       // Tried as of the position it was asked at: the next move tries again.
       entry.position = Math.max(entry.position, asked);
-      this.show(entry, { data: entry.snapshot.data, error: (failure as Error).message });
+      this.show(entry, { ...entry.snapshot, error: (failure as Error).message });
     }
     entry.reading = false;
     reloads.forEach((shown) => shown());
