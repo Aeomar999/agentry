@@ -120,12 +120,24 @@ func TestKeysThatPrintTheSameFail(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `print as "same"`) {
 		t.Errorf("two keys that print the same wrote as %v", err)
 	}
+	if written.Len() > 0 {
+		t.Errorf("a refused value wrote %d bytes", written.Len())
+	}
 }
 
-func TestAnInterfaceFieldFails(t *testing.T) {
-	var written bytes.Buffer
-	err := Encode(&written, struct{ Any any }{})
-	if err == nil || !strings.Contains(err.Error(), "interface") {
-		t.Errorf("an interface field wrote as %v", err)
+func TestAnInterfaceFails(t *testing.T) {
+	for name, v := range map[string]any{
+		"a field":     struct{ Any any }{},
+		"an element":  struct{ List []any }{List: []any{1}},
+		"a map value": map[string]any{"a": 1},
+	} {
+		var written bytes.Buffer
+		err := Encode(&written, v)
+		if err == nil || !strings.Contains(err.Error(), "interface") {
+			t.Errorf("an interface in %s wrote as %v", name, err)
+		}
+		if written.Len() > 0 {
+			t.Errorf("an interface in %s wrote %d bytes before failing", name, written.Len())
+		}
 	}
 }

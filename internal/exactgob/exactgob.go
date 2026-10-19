@@ -12,9 +12,11 @@
 // hand, so a field added later has its flag without anyone adding it.
 //
 // Like gob, it reads only exported fields, and fails on a nil pointer in a
-// slice or map, which gob can't write. It also fails on an interface field,
-// whose shape it can't know from the type, and on a map with two keys that
-// print the same, as entries are put in order by how their keys print.
+// slice or map, which gob can't write. It also fails on any interface in
+// the value, a field, an element or a map's value, whose shape it can't
+// know from the type, and on a map with two keys that print the same, as
+// entries are put in order by how their keys print. Encode finds those
+// before it writes anything.
 package exactgob
 
 import (
@@ -34,17 +36,18 @@ type shape struct {
 	N    int // how many bits there are
 }
 
-// Encode writes v, then its shape, to w as two gob values.
+// Encode writes v, then its shape, to w as two gob values. A value it
+// can't write exactly writes nothing.
 func Encode(w io.Writer, v any) error {
-	encoder := gob.NewEncoder(w)
-	if err := encoder.Encode(v); err != nil {
-		return err
-	}
 	var s shape
 	recording := &shaping{record: &s}
 	walk(reflect.ValueOf(v), recording)
 	if recording.err != nil {
 		return recording.err
+	}
+	encoder := gob.NewEncoder(w)
+	if err := encoder.Encode(v); err != nil {
+		return err
 	}
 	return encoder.Encode(s)
 }
