@@ -536,11 +536,11 @@ func (t *Task) startPasses(turn, agent string) {
 func clock(at time.Time) string { return at.UTC().Format("2006-01-02 15:04 UTC") }
 
 // hearApprovalNews hands the task back to its coordinator when you approved
-// a held action while it was deciding.
+// a held action after its brief was made.
 func (t *Task) hearApprovalNews(e events.Event) {
 	if t.approvalNews {
 		t.approvalNews = false
-		t.step(e, Agentry, t.Coordinator, "The user approved a held command while you were deciding: see above. Decide again with it in mind.")
+		t.step(e, Agentry, t.Coordinator, "The user approved a held command after your brief was made: see above. Decide again with it in mind.")
 	}
 }
 
