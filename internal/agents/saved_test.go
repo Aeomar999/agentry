@@ -55,3 +55,20 @@ func TestAReplayedRosterComesBackWhole(t *testing.T) {
 		}
 	}
 }
+
+// A snapshot's roster takes the events after it in place: restored at every
+// cut of the log and applied the rest, it is the roster FromEvents gives.
+func TestARestoredRosterTakesTheRestOfItsLog(t *testing.T) {
+	stream := seeded()
+	stream = append(stream, everyAgentEvent(FromEvents(stream))...)
+	want := FromEvents(stream)
+	for cut := range stream {
+		roster := Restore(FromEvents(stream[:cut]).Save())
+		for _, e := range stream[cut:] {
+			roster.Apply(e)
+		}
+		if !reflect.DeepEqual(roster, want) {
+			t.Errorf("restored after event %d, then applied the rest, the roster differs:\n%+v\n%+v", cut, roster, want)
+		}
+	}
+}

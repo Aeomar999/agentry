@@ -47,7 +47,7 @@ func TestARestoredTaskSharesNothing(t *testing.T) {
 }
 
 // A task replayed from a log, with its empty lists and unset pointers as
-// apply leaves them, comes back the same.
+// Apply leaves them, comes back the same.
 func TestAReplayedTaskComesBackWhole(t *testing.T) {
 	log := everyEvent()
 	for i := range log {
@@ -62,6 +62,22 @@ func TestAReplayedTaskComesBackWhole(t *testing.T) {
 		}
 		if restored := Restore(read); !reflect.DeepEqual(task, restored) {
 			t.Errorf("after event %d, %s, the task read back differs:\n%+v\n%+v", i+1, log[i].Type, task, restored)
+		}
+	}
+}
+
+// A snapshot's task takes the events after it in place: restored at every
+// cut of the log and applied the rest, it is the task FromEvents gives.
+func TestARestoredTaskTakesTheRestOfItsLog(t *testing.T) {
+	log := everyEvent()
+	want := FromEvents(log)
+	for cut := 1; cut < len(log); cut++ {
+		task := Restore(FromEvents(log[:cut]).Save())
+		for _, e := range log[cut:] {
+			task.Apply(e)
+		}
+		if !reflect.DeepEqual(task, want) {
+			t.Errorf("restored after event %d, then applied the rest, the task differs:\n%+v\n%+v", cut, task, want)
 		}
 	}
 }

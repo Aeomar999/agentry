@@ -38,13 +38,15 @@ func Replay(stream []events.Event) (t *Task, err error) {
 			t = &Task{ID: e.Stream, CreatedAt: e.At}
 		}
 		if t != nil {
-			t.apply(e)
+			t.Apply(e)
 		}
 	}
 	return t, nil
 }
 
-func (t *Task) apply(e events.Event) {
+// Apply changes the task in place by one accepted event of its stream. A
+// state loaded from a snapshot takes the events after it this way.
+func (t *Task) Apply(e events.Event) {
 	t.LastActiveAt = e.At
 	if turn := t.Turn(e.Correlation); turn != nil {
 		turn.LastEventAt = e.At
