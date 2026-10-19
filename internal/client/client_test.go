@@ -105,3 +105,22 @@ func TestACallGivesUpWhenItsContextEnds(t *testing.T) {
 		t.Errorf("err %v, want the context's end", err)
 	}
 }
+
+func TestARefusalIsAStatusErrorWithTheServersAnswer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		w.Write([]byte("  {\"error\":\"taken\"}\n"))
+	}))
+	t.Cleanup(server.Close)
+	err := Client{Where: Where{URL: server.URL}}.Call("POST", "/api/ideas/idea-1/accept", nil, nil)
+	var answer *StatusError
+	if !errors.As(err, &answer) {
+		t.Fatalf("err %v, want a StatusError", err)
+	}
+	if answer.Code != http.StatusConflict || string(answer.Body) != "  {\"error\":\"taken\"}\n" {
+		t.Errorf("got %d %q, want 409 and the body as written", answer.Code, answer.Body)
+	}
+	if err.Error() != `{"error":"taken"}` {
+		t.Errorf("text %q, want the body trimmed", err.Error())
+	}
+}

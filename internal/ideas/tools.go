@@ -3,11 +3,14 @@ package ideas
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -175,12 +178,15 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 // (routes.go duplicateView).
 type openTask struct{ ID, Title, Column string }
 
-// duplicateOf is the open task an accept was refused for looking like. The
-// client's error is the server's answer as written, and only that refusal
-// is JSON naming a duplicate.
+// duplicateOf is the open task an accept was refused for looking like: a
+// 409 whose body is JSON naming it.
 func duplicateOf(err error) (openTask, bool) {
+	var answer *client.StatusError
+	if !errors.As(err, &answer) || answer.Code != http.StatusConflict {
+		return openTask{}, false
+	}
 	var refusal struct{ Duplicate openTask }
-	if err == nil || json.Unmarshal([]byte(err.Error()), &refusal) != nil || refusal.Duplicate.ID == "" {
+	if json.Unmarshal(answer.Body, &refusal) != nil || refusal.Duplicate.ID == "" {
 		return openTask{}, false
 	}
 	return refusal.Duplicate, true

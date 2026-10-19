@@ -148,13 +148,22 @@ func (c Client) CallContext(ctx context.Context, method, path string, body, into
 	defer response.Body.Close()
 	content, _ := io.ReadAll(response.Body)
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s", strings.TrimSpace(string(content)))
+		return &StatusError{Code: response.StatusCode, Body: content}
 	}
 	if into == nil {
 		return nil
 	}
 	return json.Unmarshal(content, into)
 }
+
+// StatusError is the server's answer to a call it didn't answer 200: its
+// status code and its body as written. Its text is the body, trimmed.
+type StatusError struct {
+	Code int
+	Body []byte
+}
+
+func (e *StatusError) Error() string { return strings.TrimSpace(string(e.Body)) }
 
 // HTTP is an HTTP client for the server, trusting only its CA when it has
 // one. It gives up after timeout, or never for 0.

@@ -65,10 +65,11 @@ func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 // is no limit, and below that is a 400. Its turns are always NewLimits's.
 // It answers 404 for no such idea; 409 with the reason when it was refused
 // and nothing was written (the idea isn't open, the kind or the repo is
-// wrong); 409 with JSON {error, duplicate: {id, title, column}} when the idea
-// looks like an open task, which "anyway" makes it despite; otherwise 200 with what happened: the task made, the column it is
-// in, whether the idea is marked accepted, and if not, why. A task made and
-// the idea not marked is still a 200, so the page can show the task.
+// wrong); 409 with JSON {error, duplicate: {id, title, column}} when the
+// idea looks like an open task, which "anyway" makes it despite; otherwise
+// 200 with what happened: the task made, the column it is in, whether the
+// idea is marked accepted, and if not, why. A task made and the idea not
+// marked is still a 200, so the page can show the task.
 func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Kind, Note string

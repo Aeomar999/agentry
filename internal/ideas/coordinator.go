@@ -150,9 +150,10 @@ func autoAccepted(idea *Idea, roster agents.Roster, rule string) string {
 // just suggested in repo that the Visionaries agreed on by your rule, as
 // your Accept does, and starts its task when you turned that on too. An
 // idea that repeats another (Duplicate) or looks like an open task
-// (LeftForYou) stays open for you, as does one Agentry couldn't accept: the done goes on. The rule trusts backedBy and
-// doubtedBy as the Visionaries coordinator wrote them in its done; nothing
-// checks them against what each viewpoint said.
+// (LeftForYou) stays open for you, as does one Agentry couldn't accept:
+// the done goes on. The rule trusts backedBy and doubtedBy as the
+// Visionaries coordinator wrote them in its done; nothing checks them
+// against what each viewpoint said.
 func acceptAgreed(c features.Core, repo string, added []string) {
 	now := c.Read.Settings()
 	if !now.AutoAcceptIdeas || len(added) == 0 {
