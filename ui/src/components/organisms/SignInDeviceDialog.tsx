@@ -39,7 +39,8 @@ export function SignInDeviceDialog({ onClose }: { onClose: () => void }) {
   }, []);
   useEffect(newCode, [newCode]);
 
-  const secondsLeft = issued ? Math.max(0, Math.round((expires - now) / 1000)) : 0;
+  // Clamped, as `now` can still hold the last tick for a moment after a reply.
+  const secondsLeft = issued ? Math.min(issued.expiresIn, Math.max(0, Math.round((expires - now) / 1000))) : 0;
   const expired = issued !== null && secondsLeft === 0;
   return (
     <Dialog title="Sign in another device" onClose={onClose}>

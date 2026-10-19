@@ -5,9 +5,13 @@
 
 const codeLength = 8; // as internal/web/signin.go makes them; the token is far longer
 
+// Punctuation a pasted sentence leaves on the end, as in "(open http://…)." —
+// no token or code holds any of it, and the server would count it as a wrong try.
+const trailingPunctuation = /[.,;:!?)\]>"'’”]+$/;
+
 export function readSignIn(typed: string): { code: string } | { token: string } {
-  const text = typed.trim();
-  const link = text.match(/https?:\/\/\S+/i)?.[0];
+  const text = typed.trim().replace(trailingPunctuation, "");
+  const link = text.match(/https?:\/\/\S+/i)?.[0]?.replace(trailingPunctuation, "");
   if (link) {
     const query = queryOf(link);
     const token = query.get("token");
