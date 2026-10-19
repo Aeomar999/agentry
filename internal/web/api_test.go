@@ -105,7 +105,7 @@ func TestApproveOnlyWhatWasAsked(t *testing.T) {
 		}
 	}
 	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
-	if !strings.Contains(body, `"needsYou":"tech-lead asks to run: git push origin HEAD:dev"`) || !strings.Contains(body, `"approvals":[{`) {
+	if !strings.Contains(body, `"needsYou":"Waiting for you to approve the push to dev"`) || !strings.Contains(body, `"approvals":[{`) {
 		t.Errorf("the task should show the approval it needs:\n%s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/tasks/task-1/actions/toolu_1/approve", `{"reason":"looks right"}`); code != 200 {
@@ -1253,6 +1253,31 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 	after, _ := s.Stream("task-3")
 	if code != http.StatusConflict || !strings.Contains(body, "Research has no agent that ships work") || len(after) != len(before) {
 		t.Errorf("a team with no shipper: %d %q, %d events written", code, body, len(after)-len(before))
+	}
+}
+
+// A push held for you in Shipping says where it goes, not the command.
+func TestAHeldPushSaysWhereItGoes(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship the fix"}`)
+	worker, deployer := events.Actor{Kind: events.Worker, ID: "local"}, events.Actor{Kind: events.Agent, ID: "deployer"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskAssigned,
+			Data: map[string]any{"agent": "deployer", "instructions": "ship it", "ships": true}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "deployer", "hash": "h"}},
+		{Stream: "task-1", Actor: deployer, Type: events.ActionRequested, Correlation: "toolu_1",
+			Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Policy, ID: "rules"}, Type: events.ActionAsked, Correlation: "toolu_1",
+			Data: map[string]any{"reason": "every push"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	if !strings.Contains(body, `"column":"shipping"`) || !strings.Contains(body, `"needsYou":"Waiting for you to approve the push to dev"`) {
+		t.Errorf("the held push should read plainly in Shipping:\n%s", body)
 	}
 }
 

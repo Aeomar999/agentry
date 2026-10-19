@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -574,7 +575,7 @@ func (s *Server) waitingNote() string {
 func describe(q question) string {
 	switch q.Kind {
 	case "approval":
-		return fmt.Sprintf("%s: %s asks to run %s (review_approvals)", q.Task, q.Agent, oneLine(q.Text, 120))
+		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, oneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
 	case "waiting":
 		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, oneLine(q.Text, 120))
 	}

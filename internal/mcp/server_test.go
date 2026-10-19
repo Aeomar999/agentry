@@ -133,7 +133,7 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 
 	board := c.tool("status", map[string]any{})
-	for _, want := range []string{"Agentry board for /repo", "task-1: deployer asks to run git push origin dev", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
+	for _, want := range []string{"Agentry board for /repo", "task-1: Waiting for you to approve the push to dev (review_approvals)", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
 		"task-4 Release: deployer is working (Shipping)"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("the board is missing %q:\n%s", want, board)

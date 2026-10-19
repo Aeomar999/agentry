@@ -20,7 +20,7 @@ import (
 type Waiting struct {
 	Key  string // the same while it lasts: a new one has a new key
 	Task string
-	Line string // for a person: "task-4: deployer asks to run git push"
+	Line string // for a person: "task-4: Waiting for you to approve the push to dev"
 	Kind string // "needs you", "ideas" (open ones), "done" (a task finished), "said" (a coordinator told you) or "offline" (a machine)
 }
 

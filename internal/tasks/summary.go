@@ -56,7 +56,7 @@ type Said struct {
 func SummaryOf(t *Task, roster agents.Roster) Summary {
 	needsYou := t.Question
 	if waiting := t.WaitingForYou(); needsYou == "" && len(waiting) > 0 {
-		needsYou = waiting[0].Agent + " asks to run: " + waiting[0].Command
+		needsYou = WaitingLine(waiting[0].Agent, waiting[0].Command)
 	}
 	if open := t.OpenTurn(); needsYou == "" && open != nil {
 		needsYou = open.Waiting
