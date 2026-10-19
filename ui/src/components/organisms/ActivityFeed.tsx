@@ -1,4 +1,4 @@
-import { ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, ArrowUp, CircleAlert, CircleCheck, Hourglass, MessageSquare, TriangleAlert, Wrench, X } from "lucide-react";
 import type { Agent } from "@/api/types";
 import { Badge } from "@/components/atoms/Badge";
@@ -80,6 +80,7 @@ export function ActivityFeed(props: ActivityFeedProps) {
   // row you came to see in the middle. Once you have scrolled down, a
   // button takes you back up.
   const scroller = useRef<HTMLDivElement>(null);
+  const heading = useId();
   const [away, setAway] = useState(false);
   const view = `${turn}/${show}/${row}`;
   useLayoutEffect(() => {
@@ -104,7 +105,9 @@ export function ActivityFeed(props: ActivityFeedProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <h2 className="sr-only">Activity</h2>
+      <h2 id={heading} className="sr-only">
+        Activity
+      </h2>
       <div className="flex h-11 shrink-0 scrollbar-thin items-center gap-3 overflow-x-auto border-b border-divider px-4 md:px-6">
         <SegmentedControl
           active={show}
@@ -136,7 +139,9 @@ export function ActivityFeed(props: ActivityFeedProps) {
         )}
       </div>
 
-      <div className="relative min-h-0 flex-1">
+      {/* The scroller's focus line is drawn again on this box's ::after, above the stuck band
+          (z-10) that would cover its top and sides; this box doesn't scroll, so the line stays put. */}
+      <div className="relative min-h-0 flex-1 after:pointer-events-none after:absolute after:inset-0 after:z-20 after:border after:border-transparent after:content-[''] has-[>[role=region]:focus-visible]:after:border-brand">
         <div
           ref={scroller}
           onScroll={onScroll}
@@ -145,11 +150,12 @@ export function ActivityFeed(props: ActivityFeedProps) {
           // as anything focusable must be. One region for the feed, none per run.
           tabIndex={0}
           role="region"
-          aria-label="Activity"
+          aria-labelledby={heading}
           aria-busy={loading || undefined}
           // Focus and the row you came to see stop under the stuck band, and on a phone above Newest.
           // Positioned, so screen-reader-only text (absolute) is placed in it and scrolls with it, not the page.
-          // Its focus line sits inside its edge, where nothing around it clips it.
+          // Its own focus line (the global rule, which no utility can remove) sits inside its edge, under the
+          // line its wrapper draws, so the two are one.
           className="relative h-full scroll-pt-11 scrollbar-thin overflow-y-auto focus-visible:-outline-offset-1 max-md:scroll-pb-12"
         >
           {error ? (

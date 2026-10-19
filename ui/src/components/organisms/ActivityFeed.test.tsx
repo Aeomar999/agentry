@@ -153,6 +153,15 @@ describe("ActivityFeed", () => {
     expect(scroller.scrollTop).toBe(300); // focusing the scroller itself doesn't jump it
   });
 
+  test("names the scroller by the tab's heading, so the name has one source", () => {
+    feed();
+    const heading = screen.getByRole("heading", { level: 2, name: "Activity" });
+    const scroller = screen.getByRole("region", { name: "Activity" });
+    expect(heading.id).not.toBe("");
+    expect(scroller.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(scroller.hasAttribute("aria-label")).toBe(false);
+  });
+
   test("keeps screen-reader text in the tab's own scroller, its positioned box, so the page doesn't grow", () => {
     const { container } = feed();
     const said = [...container.querySelectorAll(".sr-only")].find((span) => span.textContent === " to ")!;
