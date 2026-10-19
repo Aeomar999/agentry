@@ -517,6 +517,21 @@ func (s *State) Summaries() []tasks.Summary {
 	return all
 }
 
+// Summary is a task's summary as Summaries has it: a whole task's, made
+// with the roster, or an archived one's, as its marker keeps it. It is
+// false for a broken task and for no such task.
+func (s *State) Summary(id string) (tasks.Summary, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if summary, archived := s.archived[id]; archived {
+		return summary, true
+	}
+	if task := s.tasks[id]; task != nil && s.broken[id] == nil {
+		return tasks.SummaryOf(task, s.roster), true
+	}
+	return tasks.Summary{}, false
+}
+
 // Roster is every agent. If the agents stream is broken, it is the roster
 // as it was before the event that broke it, or empty if it broke while
 // loading, and Broken says why.

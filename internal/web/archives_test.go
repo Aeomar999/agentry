@@ -105,9 +105,15 @@ func (f *archiveFixture) detail(t *testing.T, id string) (detail, archived map[s
 }
 
 // An archived task's detail is its detail before it was archived, saying
-// it is archived and when; its events are as before, then its marker.
+// it is archived and when; its events are as before, then its marker. An
+// epic archived after its story still lists it as before.
 func TestAnArchivedTaskReadsAsBeforeArchiving(t *testing.T) {
 	f := newArchiveFixture(t)
+	call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`)
+	epicBefore, _ := f.detail(t, "task-3")
+	if stories, _ := epicBefore["storyList"].([]any); len(stories) != 1 {
+		t.Fatalf("task-3 should list task-2 before archiving: %v", epicBefore["storyList"])
+	}
 	before, archived := f.detail(t, "task-2")
 	if archived["archived"] != nil || archived["archivedAt"] != nil {
 		t.Errorf("a live task says it is archived: %v", archived)
@@ -148,6 +154,25 @@ func TestAnArchivedTaskReadsAsBeforeArchiving(t *testing.T) {
 		if !reflect.DeepEqual(read, want) {
 			t.Errorf("events%s of the archived task:\n%+v\nwant\n%+v", page, read, want)
 		}
+	}
+
+	storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs.Disk)
+	epicAfter, archived := f.detail(t, "task-3")
+	if !reflect.DeepEqual(epicAfter, epicBefore) {
+		t.Errorf("the archived epic's detail:\n%v\nwant as before archiving:\n%v", epicAfter, epicBefore)
+	}
+	if archived["archived"] != true {
+		t.Errorf("the archived epic says %v, want archived", archived)
+	}
+}
+
+// A live story whose epic is archived still names its epic.
+func TestAStoryOfAnArchivedEpicKeepsItsTitle(t *testing.T) {
+	f := newArchiveFixture(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs.Disk)
+	story, _ := f.detail(t, "task-2")
+	if story["epicTitle"] != "Ship it" {
+		t.Errorf("the story's epicTitle is %q, want the archived epic's %q", story["epicTitle"], "Ship it")
 	}
 }
 

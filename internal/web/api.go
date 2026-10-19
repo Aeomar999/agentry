@@ -364,17 +364,21 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	detail := detailOf(task, roster)
 	detail.BlockedBy = blockedBy(task, s.isDone)
 	detail.Queued = slots.Queued(task.ID)
-	if epic, _ := s.task(task.Epic); epic != nil {
+	if epic, found := s.state.Summary(task.Epic); found {
 		detail.EpicTitle = epic.Title
 	}
 	detail.StoryList = []taskSummary{}
 	for _, id := range task.Stories {
+		summary, found := s.state.Summary(id)
+		if !found {
+			continue
+		}
+		// An archived story is done, so nothing blocks it and it waits for no slot.
 		if story, _ := s.task(id); story != nil {
-			summary := tasks.SummaryOf(story, roster)
 			summary.BlockedBy = blockedBy(story, s.isDone)
 			summary.Queued = slots.Queued(story.ID)
-			detail.StoryList = append(detail.StoryList, summary)
 		}
+		detail.StoryList = append(detail.StoryList, summary)
 	}
 	if archived != nil {
 		detail.Archived, detail.ArchivedAt = true, &archived.marker.At

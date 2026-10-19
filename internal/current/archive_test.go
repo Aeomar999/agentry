@@ -171,3 +171,34 @@ func TestTheSummariserGivesNilForATaskTheStateCantHandOut(t *testing.T) {
 		}
 	}
 }
+
+// Summary is a live task's summary as the list makes it, an archived
+// task's as its marker keeps it, and nothing for a broken task or one that
+// never was.
+func TestSummaryReadsALiveOrAnArchivedTask(t *testing.T) {
+	path, _ := seededLog(t, someProposals()...)
+	state := New(withIdeas, ideas.Streams())
+	s, err := store.Open(path, withIdeas, state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	kept := summarise(state, "task-1")().(tasks.Summary)
+	archiveTask(t, s, state, "task-1", sharedfiles.Disk{Dir: t.TempDir()})
+
+	if summary, found := state.Summary("task-1"); !found || summary.ID != "task-1" || summary.Title != kept.Title {
+		t.Errorf("the archived task-1: %+v, %v; want its marker's summary, titled %q", summary, found, kept.Title)
+	}
+	live, err := state.Task("task-2")
+	if err != nil || live == nil {
+		t.Fatal("task-2 should be live:", live, err)
+	}
+	if summary, found := state.Summary("task-2"); !found || !reflect.DeepEqual(summary, tasks.SummaryOf(live, state.Roster())) {
+		t.Errorf("the live task-2: %+v, %v; want its summary from the task", summary, found)
+	}
+	for _, id := range []string{"task-3", "task-99"} { // broken by its worktree.moved; never made
+		if summary, found := state.Summary(id); found {
+			t.Errorf("%s: %+v, want none", id, summary)
+		}
+	}
+}
