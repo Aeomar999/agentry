@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -261,6 +262,38 @@ func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	code, body = call(t, server.Server, "POST", "/api/agents", `{"name":"dreamer","engine":"claude","prompt":"Dream.","profile":"dreaming"}`)
 	if code != http.StatusBadRequest || !strings.Contains(body, "no profile called dreaming") || strings.Contains(body, server.path) {
 		t.Errorf("an agent with a profile nobody wrote: %d %s", code, body)
+	}
+}
+
+func TestAProfileDroppedOnDiskShowsWithTheAgentsThatNeedIt(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	if code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
+		t.Fatalf("adding the Visionaries: %d %s", code, body)
+	}
+	os.WriteFile(server.path, []byte(withoutReadMostly(t)), 0o600) // a hand edit, which nothing could refuse
+	if _, err := server.live.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	visionaries := []string{"product-strategist", "skeptic", "technologist", "user-advocate", "visionary-lead"}
+
+	_, body := call(t, server.Server, "GET", "/api/policy", "")
+	var shown struct {
+		Missing   map[string][]string
+		Effective map[string]effectiveView
+	}
+	json.Unmarshal([]byte(body), &shown)
+	if got := shown.Missing["read-mostly"]; len(shown.Missing) != 1 || !slices.Equal(got, visionaries) {
+		t.Errorf("the Policy page should name the agents needing read-mostly: %v", shown.Missing)
+	}
+	if e := shown.Effective["visionary-lead"]; !e.Missing || e.Text != "read-mostly (missing from policy.toml), overridden by allow-everything" {
+		t.Errorf("the lead's card: %+v", e)
+	}
+
+	_, body = call(t, server.Server, "GET", "/api/config", "")
+	var config struct{ MissingProfiles map[string][]string }
+	json.Unmarshal([]byte(body), &config)
+	if got := config.MissingProfiles["read-mostly"]; len(config.MissingProfiles) != 1 || !slices.Equal(got, visionaries) {
+		t.Errorf("the status bar should hear of it too: %s", body)
 	}
 }
 

@@ -76,7 +76,7 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
 		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
 		"profiles": current.Summary(), "text": current.Text(), "version": s.version(),
-		"defaults": defaults, "users": users, "effective": effective})
+		"defaults": defaults, "users": users, "effective": effective, "missing": current.MissingProfiles(agentProfiles(roster))})
 }
 
 func defaultsOf(current *policy.Policy) ([]defaultView, error) {

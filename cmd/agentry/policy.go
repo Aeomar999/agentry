@@ -49,7 +49,7 @@ func lastLoaded(history []events.Event) *events.Event {
 func recordAtStart(log *store.Store, live *policy.Live, last *events.Event) {
 	loaded, change := &policy.Change{Policy: live.Current()}, "first loaded"
 	if last != nil {
-		change = "changed on disk"
+		change = "noticed on disk"
 		if before := last.Text("text"); before != "" {
 			loaded.Diff = policy.LineDiff("before", "after", before, loaded.Policy.Text())
 		}
@@ -64,5 +64,5 @@ func recordOnDisk(log *store.Store, live *policy.Live, loaded *policy.Change, re
 		log.Propose(policy.Refused(live.Path(), live.Current(), refused))
 		return
 	}
-	log.Propose(policy.Loaded(live.Path(), loaded, "changed on disk", policy.Agentry))
+	log.Propose(policy.Loaded(live.Path(), loaded, "noticed on disk", policy.Agentry))
 }

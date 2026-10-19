@@ -12,14 +12,22 @@ type Effective struct {
 	Profile    string `json:"profile"`    // the profile in force
 	Own        string `json:"own"`        // the agent's own profile, default_profile if it names none
 	Overridden bool   `json:"overridden"` // use_for_everyone puts Profile in place of Own
+	// Missing is true when policy.toml has no profile Own, so the agent's
+	// calls are all denied unless use_for_everyone covers for it.
+	Missing bool `json:"missing"`
 }
 
-// String is how a card shows it: "read-mostly, overridden by allow-everything".
+// String is how a card shows it: "read-mostly, overridden by allow-everything",
+// or "read-mostly (missing from policy.toml)".
 func (e Effective) String() string {
-	if e.Overridden {
-		return e.Own + ", overridden by " + e.Profile
+	own := e.Own
+	if e.Missing {
+		own += " (missing from policy.toml)"
 	}
-	return e.Profile
+	if e.Overridden {
+		return own + ", overridden by " + e.Profile
+	}
+	return own
 }
 
 // EffectiveProfile is the profile in force for an agent whose own profile
@@ -28,10 +36,11 @@ func (p *Policy) EffectiveProfile(own string) Effective {
 	if own == "" {
 		own = p.defaultProfile
 	}
+	_, has := p.profiles[own]
 	if p.useForEveryone != "" && p.useForEveryone != own {
-		return Effective{Profile: p.useForEveryone, Own: own, Overridden: true}
+		return Effective{Profile: p.useForEveryone, Own: own, Overridden: true, Missing: !has}
 	}
-	return Effective{Profile: own, Own: own}
+	return Effective{Profile: own, Own: own, Missing: !has}
 }
 
 // AgentProfile is an agent and the profile it names ("" for the default).
@@ -52,6 +61,19 @@ func (p *Policy) ProfileUsers(agents []AgentProfile) map[string][]string {
 		slices.Sort(names)
 	}
 	return users
+}
+
+// MissingProfiles lists, for each profile agents have as their own that p
+// lacks, those agents, sorted: a hand edit of policy.toml can drop a
+// profile that a change from the page couldn't.
+func (p *Policy) MissingProfiles(agents []AgentProfile) map[string][]string {
+	missing := map[string][]string{}
+	for name, users := range p.ProfileUsers(agents) {
+		if _, has := p.profiles[name]; !has {
+			missing[name] = users
+		}
+	}
+	return missing
 }
 
 // ProfileInUseError refuses a policy that drops a profile agents still have.

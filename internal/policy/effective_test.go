@@ -3,6 +3,7 @@ package policy
 import (
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -13,6 +14,14 @@ func TestEffectiveProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	own := loadDefault(t)
+	lacking, err := Parse([]byte(cutProfile(t, own.Text(), "read-mostly")), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	everyoneLacking, err := Parse([]byte(cutProfile(t, everyone.Text(), "read-mostly")), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		policy  *Policy
 		profile string
@@ -24,13 +33,21 @@ func TestEffectiveProfile(t *testing.T) {
 		{everyone, "read-mostly", Effective{Profile: "allow-everything", Own: "read-mostly", Overridden: true}, "read-mostly, overridden by allow-everything"},
 		{everyone, "", Effective{Profile: "allow-everything", Own: "developer", Overridden: true}, "developer, overridden by allow-everything"},
 		{everyone, "allow-everything", Effective{Profile: "allow-everything", Own: "allow-everything"}, "allow-everything"},
+		{lacking, "read-mostly", Effective{Profile: "read-mostly", Own: "read-mostly", Missing: true}, "read-mostly (missing from policy.toml)"},
+		{everyoneLacking, "read-mostly", Effective{Profile: "allow-everything", Own: "read-mostly", Overridden: true, Missing: true},
+			"read-mostly (missing from policy.toml), overridden by allow-everything"},
 	}
 	for _, c := range cases {
 		got := c.policy.EffectiveProfile(c.profile)
 		if got != c.want || got.String() != c.shown {
 			t.Errorf("%q under use_for_everyone %q: got %+v (%s), want %+v (%s)", c.profile, c.policy.UseForEveryone(), got, got, c.want, c.shown)
 		}
-		if verdict := c.policy.Decide(c.profile, bash("ls")); verdict.Profile != c.want.Profile {
+		verdict := c.policy.Decide(c.profile, bash("ls"))
+		if c.want.Missing && !c.want.Overridden {
+			if verdict.Decision != Deny || verdict.Rule != "profile read-mostly isn't in policy.toml" {
+				t.Errorf("%q is missing, so every call is denied: got %+v", c.profile, verdict)
+			}
+		} else if verdict.Profile != c.want.Profile {
 			t.Errorf("%q: Decide used %s, not the effective %s", c.profile, verdict.Profile, c.want.Profile)
 		}
 	}
@@ -43,6 +60,21 @@ func TestProfileUsersCountsEachAgentsOwnProfile(t *testing.T) {
 	want := map[string][]string{"read-only": {"reviewer"}, "read-mostly": {"dreamer", "scout"}, "developer": {"engineer"}}
 	if got := everyone.ProfileUsers(team); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestMissingProfilesNamesTheAgentsThatNeedThem(t *testing.T) {
+	withoutReadMostly, err := Parse([]byte(cutProfile(t, loadDefault(t).Text(), "read-mostly")), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger := append(slices.Clone(team), AgentProfile{"ghost", "haunted"})
+	want := map[string][]string{"read-mostly": {"dreamer", "scout"}, "haunted": {"ghost"}}
+	if got := withoutReadMostly.MissingProfiles(stranger); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	if got := loadDefault(t).MissingProfiles(team); len(got) != 0 {
+		t.Errorf("the default policy has every profile the team uses, got %v", got)
 	}
 }
 
