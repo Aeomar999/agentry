@@ -45,21 +45,34 @@ type Roster struct {
 func FromEvents(stream []events.Event) Roster {
 	var r Roster
 	for _, e := range stream {
-		switch e.Type {
-		case events.ConnectionInvited:
-			expires, _ := time.Parse(time.RFC3339, e.Text("expires"))
-			r.invites = append(r.invites, invite{code: e.Text("code"), expires: expires})
-		case events.ConnectionMade:
-			if i := r.inviteIndex(e.Text("code")); i >= 0 {
-				r.invites[i].used = true
-			}
-			r.Connections = append(r.Connections, Connection{ID: e.Text("id"), Host: e.Text("host"), User: e.Text("user"),
-				OS: e.Text("os"), MadeAt: e.At, credential: e.Text("credential")})
-		case events.ConnectionRevoked:
-			r.Connections = slices.DeleteFunc(r.Connections, func(c Connection) bool { return c.ID == e.Text("id") })
-		}
+		apply(&r, e)
 	}
 	return r
+}
+
+// Next is the roster after e, built on a copy: r itself is left as it was.
+// Copying the slices is enough, as apply replaces whole any slice inside them.
+func (r Roster) Next(e events.Event) Roster {
+	r.Connections, r.invites = slices.Clone(r.Connections), slices.Clone(r.invites)
+	apply(&r, e)
+	return r
+}
+
+// apply changes the roster in place.
+func apply(r *Roster, e events.Event) {
+	switch e.Type {
+	case events.ConnectionInvited:
+		expires, _ := time.Parse(time.RFC3339, e.Text("expires"))
+		r.invites = append(r.invites, invite{code: e.Text("code"), expires: expires})
+	case events.ConnectionMade:
+		if i := r.inviteIndex(e.Text("code")); i >= 0 {
+			r.invites[i].used = true
+		}
+		r.Connections = append(r.Connections, Connection{ID: e.Text("id"), Host: e.Text("host"), User: e.Text("user"),
+			OS: e.Text("os"), MadeAt: e.At, credential: e.Text("credential")})
+	case events.ConnectionRevoked:
+		r.Connections = slices.DeleteFunc(r.Connections, func(c Connection) bool { return c.ID == e.Text("id") })
+	}
 }
 
 // WithCredential is the connection the credential belongs to.

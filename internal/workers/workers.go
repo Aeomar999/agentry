@@ -65,33 +65,46 @@ type Roster struct {
 func FromEvents(stream []events.Event) Roster {
 	var r Roster
 	for _, e := range stream {
-		switch e.Type {
-		case events.WorkerInvited:
-			expires, _ := time.Parse(time.RFC3339, e.Text("expires"))
-			r.invites = append(r.invites, invite{code: e.Text("code"), expires: expires})
-		case events.WorkerJoined:
-			if i := r.inviteIndex(e.Text("code")); i >= 0 {
-				r.invites[i].used = true
-			}
-			r.Workers = append(r.Workers, Worker{Name: e.Text("name"), Host: e.Text("host"), OS: e.Text("os"),
-				Arch: e.Text("arch"), JoinedAt: e.At, Since: e.At, credential: e.Text("credential")})
-		case events.WorkerConnected:
-			if w := r.find(e.Text("name")); w != nil {
-				w.Online, w.Since, w.Version = true, e.At, e.Text("version")
-				w.Engines, w.Missing = e.List("engines"), e.List("missing")
-				if host := e.Text("host"); host != "" {
-					w.Host, w.OS, w.Arch = host, e.Text("os"), e.Text("arch")
-				}
-			}
-		case events.WorkerDisconnected:
-			if w := r.find(e.Text("name")); w != nil {
-				w.Online, w.Since = false, e.At
-			}
-		case events.WorkerRemoved:
-			r.Workers = slices.DeleteFunc(r.Workers, func(w Worker) bool { return w.Name == e.Text("name") })
-		}
+		apply(&r, e)
 	}
 	return r
+}
+
+// Next is the roster after e, built on a copy: r itself is left as it was.
+// Copying the slices is enough, as apply replaces whole any slice inside them.
+func (r Roster) Next(e events.Event) Roster {
+	r.Workers, r.invites = slices.Clone(r.Workers), slices.Clone(r.invites)
+	apply(&r, e)
+	return r
+}
+
+// apply changes the roster in place.
+func apply(r *Roster, e events.Event) {
+	switch e.Type {
+	case events.WorkerInvited:
+		expires, _ := time.Parse(time.RFC3339, e.Text("expires"))
+		r.invites = append(r.invites, invite{code: e.Text("code"), expires: expires})
+	case events.WorkerJoined:
+		if i := r.inviteIndex(e.Text("code")); i >= 0 {
+			r.invites[i].used = true
+		}
+		r.Workers = append(r.Workers, Worker{Name: e.Text("name"), Host: e.Text("host"), OS: e.Text("os"),
+			Arch: e.Text("arch"), JoinedAt: e.At, Since: e.At, credential: e.Text("credential")})
+	case events.WorkerConnected:
+		if w := r.find(e.Text("name")); w != nil {
+			w.Online, w.Since, w.Version = true, e.At, e.Text("version")
+			w.Engines, w.Missing = e.List("engines"), e.List("missing")
+			if host := e.Text("host"); host != "" {
+				w.Host, w.OS, w.Arch = host, e.Text("os"), e.Text("arch")
+			}
+		}
+	case events.WorkerDisconnected:
+		if w := r.find(e.Text("name")); w != nil {
+			w.Online, w.Since = false, e.At
+		}
+	case events.WorkerRemoved:
+		r.Workers = slices.DeleteFunc(r.Workers, func(w Worker) bool { return w.Name == e.Text("name") })
+	}
 }
 
 func (r Roster) Get(name string) (Worker, bool) {

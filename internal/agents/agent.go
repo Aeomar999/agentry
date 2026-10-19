@@ -98,30 +98,45 @@ type Roster []Agent
 func FromEvents(stream []events.Event) Roster {
 	var roster Roster
 	for _, e := range stream {
-		switch e.Type {
-		case events.AgentCreated:
-			roster = append(roster, fromEvent(e))
-		case events.AgentChanged:
-			if i := roster.index(e.Text("name")); i >= 0 {
-				knowledge := roster[i].Knowledge
-				roster[i] = fromEvent(e)
-				roster[i].Knowledge = knowledge
-			}
-		case events.AgentRenamed:
-			if i := roster.index(e.Text("name")); i >= 0 {
-				roster[i].Name = e.Text("to")
-			}
-		case events.AgentLearned:
-			if i := roster.index(e.Text("name")); i >= 0 {
-				roster[i].Knowledge = e.Text("knowledge")
-			}
-		case events.AgentRemoved:
-			if i := roster.index(e.Text("name")); i >= 0 {
-				roster = slices.Delete(roster, i, i+1)
-			}
-		}
+		apply(&roster, e)
 	}
 	return roster
+}
+
+// Next is the roster after e, built on a copy: r itself is left as it was.
+// Copying the slice is enough, as apply replaces an agent's Workers whole.
+func (r Roster) Next(e events.Event) Roster {
+	r = slices.Clone(r)
+	apply(&r, e)
+	return r
+}
+
+// apply changes the roster in place.
+func apply(r *Roster, e events.Event) {
+	roster := *r
+	switch e.Type {
+	case events.AgentCreated:
+		roster = append(roster, fromEvent(e))
+	case events.AgentChanged:
+		if i := roster.index(e.Text("name")); i >= 0 {
+			knowledge := roster[i].Knowledge
+			roster[i] = fromEvent(e)
+			roster[i].Knowledge = knowledge
+		}
+	case events.AgentRenamed:
+		if i := roster.index(e.Text("name")); i >= 0 {
+			roster[i].Name = e.Text("to")
+		}
+	case events.AgentLearned:
+		if i := roster.index(e.Text("name")); i >= 0 {
+			roster[i].Knowledge = e.Text("knowledge")
+		}
+	case events.AgentRemoved:
+		if i := roster.index(e.Text("name")); i >= 0 {
+			roster = slices.Delete(roster, i, i+1)
+		}
+	}
+	*r = roster
 }
 
 func (r Roster) Get(name string) (Agent, bool) {
