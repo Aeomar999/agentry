@@ -392,6 +392,13 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 		{"a loop that hides a push to main", hiddenPush, Deny},
 		{"a later value of a variable", bash("c=status; c='push origin main'; git $c"), Deny},
 		{"a loop over reading commands", bash("for c in status log; do git $c; done"), Allow},
+		// $c is unknown, as an unset variable is: 'git push * main' needs main last
+		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
+		{"an empty loop before a push to main", bash("for c in; do :; done; git push origin $c main"), Deny},
+		{"one empty value", bash("c=''; git $c status"), Allow},
+	})
+	check(t, p, "autonomous", []decisionCase{
+		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
 	})
 	for _, profile := range []string{"read-only", "read-mostly"} {
 		check(t, p, profile, []decisionCase{
@@ -400,6 +407,9 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 			{"a variable set twice", bash("c=log; c=commit; git $c -m x"), Deny},
 			{"a loop over sort's options", bash("for a in -n -uo; do sort $a out.txt in.txt; done"), Deny},
 			{"a loop over files", bash("for f in a b; do cat $f; done"), Allow},
+			{"an empty loop before a commit", bash("for c in; do :; done; git commit -m x $c"), Deny},
+			{"an empty loop before rm", bash("for c in; do :; done; rm $c f"), Deny},
+			{"an empty loop before tee", bash("for c in; do :; done; git log | tee $c out.txt"), Deny},
 			{"a value split into options", bash("o='-n -o out.txt'; sort $o in.txt"), Deny},
 			{"a value split into paths", bash("f='a.go /etc/hosts'; cat $f"), Ask},
 			{"a quoted value isn't split", bash(`m='commit -m x'; git log --grep "$m"`), Allow},

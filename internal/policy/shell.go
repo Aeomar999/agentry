@@ -43,7 +43,8 @@ type shellInspector struct {
 
 // learnVariables records variables whose every possible value is written in
 // the command: NAME=literal, and the items of `for NAME in literal ...`. So
-// `S=out; ls $S` and `for f in a b; do cat $f; done` can still be judged.
+// `S=out; ls $S` and `for f in a b; do cat $f; done` can still be judged. A
+// loop with no items leaves its variable unset, so it isn't recorded.
 func (s *shellInspector) learnVariables(file *syntax.File) {
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
@@ -63,7 +64,9 @@ func (s *shellInspector) learnVariables(file *syntax.File) {
 					}
 					items = append(items, values...)
 				}
-				s.variables[iteration.Name.Value] = append(s.variables[iteration.Name.Value], items...)
+				if len(items) > 0 {
+					s.variables[iteration.Name.Value] = append(s.variables[iteration.Name.Value], items...)
+				}
 			}
 		}
 		return true
@@ -271,7 +274,7 @@ func (s *shellInspector) commandTexts(args []*syntax.Word) []string {
 	choices := make([][][]string, len(args))
 	for i, arg := range args {
 		fields, ok := s.fields(arg)
-		if !ok {
+		if !ok || len(fields) == 0 { // no value at all would hide the whole command
 			s.call.opaque = true
 			fields = [][]string{{"$?"}}
 		}
@@ -493,7 +496,7 @@ func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
 		return s.values(&syntax.Word{Parts: p.Parts})
 	case *syntax.ParamExp:
 		isPlain := p.Exp == nil && p.Repl == nil && p.Index == nil && p.Slice == nil && !p.Length && !p.Excl && !p.Width && p.Names == 0
-		if values, known := s.variables[p.Param.Value]; isPlain && known {
+		if values, known := s.variables[p.Param.Value]; isPlain && known && len(values) > 0 {
 			return values, true
 		}
 	}
