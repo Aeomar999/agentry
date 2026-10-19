@@ -216,9 +216,9 @@ The page is an admin console: Tasks, Plan and Ideas, then Agents, Workers, Integ
 
 ## Ideas
 
-An idea is a feature suggested for a repo: the problem, the proposal, why now, a size (S, M or L), the risks, and which agents backed or doubted it. Ideas come from a Visionaries team: its coordinator ends the session with the ideas it agreed on, on its done decision, and Agentry keeps each one in the log beside the task it came from. You accept an idea, as a task or an epic in your Backlog, in the idea's repo, whose description links back to it; or you dismiss it with a note. The next Visionaries session in that repo is told what you dismissed and why, so it doesn't suggest it again.
+An idea is a feature suggested for a repo: the problem, the proposal, why now, a size (S, M or L), the risks, and which agents backed or doubted it. Ideas come from a Visionaries team: its coordinator ends the session with the ideas it agreed on, on its done decision, and Agentry keeps each one in the log beside the task it came from. You accept an idea, as a task or an epic in your Backlog, in the idea's repo, whose description links back to it; or you dismiss it with a note. An idea that follows up an epic carries the epic's limits into the task's description: the epic's paragraph that names its limits, constraints or rules, with its bullets, or the whole epic description, cut short, when it has none. The next Visionaries session in that repo is told what you dismissed and why, so it doesn't suggest it again.
 
-- `GET /api/ideas` (`?repo=` for one repo's): newest session first.
+- `GET /api/ideas` (`?repo=` for one repo's): newest session first; `autoAccepted` is true for an idea Agentry accepted for you.
 - `POST /api/ideas/{idea}/accept` with `{"kind": "task" or "epic", "note": "..."}`: answers `{"task", "accepted", "refused"}`. A task made but the idea not marked accepted still answers 200, with the reason in `refused`.
 - `POST /api/ideas/{idea}/dismiss` with `{"note": "..."}`.
 
@@ -226,8 +226,10 @@ On the page, **Ideas** is in the sidebar under Work. Open ideas are grouped by t
 
 **Follow-ups after an epic:** when you close an epic, by answering its close question with Close the epic or with `close_epic` in Claude Code, Agentry starts one small Visionaries session about it: what the epic delivered, the follow-ups it left and the next steps it makes possible. Its brief names the epic, its closing summary and each story with its summary; its budget is 1M tokens and 12 turns, and its ideas show on the Ideas page linked to the epic. One close starts one session, even across a restart; a reopened epic closed again gets another. A move to Done on the board isn't a close and starts none. Nor do epics closed before the server started, or a close written while the server is stopping. With no Visionaries team, Agentry starts nothing and leaves a note on the epic saying how to add the team (Agents, Add a team, Visionaries). To turn these sessions off, untick **Ask the visionaries for follow-ups when you close an epic** at the top of the Ideas page; it is on until you do.
 
-- `GET /api/settings`: your settings, `{"visionariesOnEpicClose": true}`.
-- `PUT /api/settings` with the settings to change, such as `{"visionariesOnEpicClose": false}`: answers with all of them; 400 when it names none.
+**Auto-accept ideas all Visionaries agree on:** off until you turn it on. When it is on and a Visionaries session ends, Agentry accepts for you each idea that every viewpoint of the Visionaries team backed (each of its agents that doesn't coordinate is in backed-by) and none doubted, as your Accept does: the same task, in the idea's repo, for the same coordinator, with the epic's limits. The log shows Agentry, not you, with the note "auto-accepted: all Visionaries agreed", and an accepted idea isn't among what waits for you. With **and start them** on as well, Agentry also starts the task, as Start does; without it the task waits in your Backlog. An idea a viewpoint didn't weigh in on, or that one doubted, stays open for you, as does one under the title of an idea you dismissed in that repo or of one that is a task already.
+
+- `GET /api/settings`: your settings, `{"visionariesOnEpicClose": true, "autoAcceptIdeas": false, "autoStartIdeas": false}`.
+- `PUT /api/settings` with the settings to change, such as `{"visionariesOnEpicClose": false}` or `{"autoAcceptIdeas": true, "autoStartIdeas": true}`: answers with all of them; 400 when it names none. `autoStartIdeas` counts only while `autoAcceptIdeas` is on.
 
 **Ask the visionaries** on the Ideas page opens New task with the Visionaries team picked (`?new=task&newTeam=Visionaries`, so the address keeps it) and asks for a theme or a question; that is the session's task description. With no Visionaries team yet, the button adds it from its template first. New task's team picker is a row of teams, so picking the Visionaries there is one click too.
 
