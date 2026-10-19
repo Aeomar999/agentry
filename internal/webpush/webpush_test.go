@@ -147,6 +147,22 @@ func TestAFileThatCantBeReadIsAnErrorNotNewKeys(t *testing.T) {
 	}
 }
 
+func TestOpeningRemovesUnfinishedWritesOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), File)
+	open(t, path)
+	kept, _ := os.ReadFile(path)
+	leftover := path + ".tmp-123456"
+	os.WriteFile(leftover, []byte(`{"privateKey":"a half-written key"`), 0o600)
+
+	open(t, path)
+	if _, err := os.Stat(leftover); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the unfinished write is still there: %v", err)
+	}
+	if saved, _ := os.ReadFile(path); string(saved) != string(kept) {
+		t.Errorf("the file changed:\n%s\nwas\n%s", saved, kept)
+	}
+}
+
 func TestPushIsAvailableOnlyAtAnHTTPSAddress(t *testing.T) {
 	for _, c := range []struct {
 		publicURL string

@@ -63,7 +63,12 @@ type onDisk struct {
 // Open reads the file at path, or makes it with a new VAPID key pair when
 // there is none. A file that can't be read is an error, not a new key: a
 // new key would quietly end every subscription made with the old one.
+// Writes that never finished, as after a crash mid-write, are removed
+// first: each holds the private key.
 func Open(path string) (*Store, error) {
+	if err := removeLeftovers(path); err != nil {
+		return nil, fmt.Errorf("unfinished writes of %s can't be removed: %w", path, err)
+	}
 	saved, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return create(path)
@@ -85,6 +90,22 @@ func Open(path string) (*Store, error) {
 	}
 	return &Store{path: path, key: key, subscriptions: file.Subscriptions}, nil
 }
+
+// removeLeftovers deletes the temporary files of writes to path that never
+// finished. Nothing else is touched.
+func removeLeftovers(path string) error {
+	found, err := filepath.Glob(leftovers(path))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, file := range found {
+		errs = append(errs, os.Remove(file))
+	}
+	return errors.Join(errs...)
+}
+
+func leftovers(path string) string { return path + ".tmp-*" }
 
 func create(path string) (*Store, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -216,7 +237,7 @@ func Available(publicURL string) (bool, string) {
 // file or the whole new one: a temporary file beside it, mode 0600 as it
 // holds the private key, synced and renamed over it.
 func writeAtomically(path string, write func(io.Writer) error) (err error) {
-	temporary, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*") // mode 0600
+	temporary, err := os.CreateTemp(filepath.Dir(path), filepath.Base(leftovers(path))) // mode 0600
 	if err != nil {
 		return err
 	}
