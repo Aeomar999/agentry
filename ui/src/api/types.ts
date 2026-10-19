@@ -3,13 +3,16 @@ import type { SharedFile } from "@/lib/shared";
 
 export type TaskStatus = "working" | "needs you" | "done" | "held";
 
+export type BoardColumn = "backlog" | "todo" | "in-progress" | "review" | "done";
+
 export interface TaskSummary {
   id: string;
   title: string;
   repo: string;
   status: TaskStatus;
   currentAgent: string;
-  stage: string; // the agent the coordinator last handed it to: its column on the board
+  stage: string; // the agent the coordinator last handed it to
+  column: BoardColumn; // its column on the board
   turns: number;
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer

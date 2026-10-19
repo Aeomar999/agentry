@@ -6,7 +6,7 @@ import { Dialog } from "@/components/molecules/Dialog";
 import { TaskCard } from "@/components/molecules/TaskCard";
 import { AgentName } from "@/components/molecules/AgentName";
 import { api } from "@/api/client";
-import type { Agent, TaskSummary } from "@/api/types";
+import type { Agent, BoardColumn, TaskSummary } from "@/api/types";
 import { cn } from "@/lib/cn";
 import { useToast } from "./Toasts";
 import { rankAt } from "@/lib/rank";
@@ -15,15 +15,16 @@ import { DONE_DAYS, onBoard } from "@/lib/epics";
 
 // The board's columns are the stages of the work, the same whichever agents
 // you have: Backlog (shown when you ask), To do, In progress, Review, Done.
-// Agents jump in where their work belongs: one whose column is "review"
-// (a reviewer, a tester) puts the task in Review, any other in In progress.
-// A card goes onto any column, and that tells the coordinator what you want
-// (direct in internal/web/board_api.go): it still makes every move. Where in
+// The server says which column a task is in. Moving a card onto another
+// column is final and takes effect at once (direct in
+// internal/web/board_api.go): Done finishes it, To do and the Backlog park
+// it, In progress and Review send it to an agent that builds or checks it.
+// The card shows in its new column as soon as you send the move. Where in
 // the column you drop it is its place in your priority order. A task waiting
 // for you stays where it is, marked, and its question is in the dock.
 
 interface Column {
-  id: string; // also what a card dropped here asks for
+  id: BoardColumn; // also what a card dropped here asks for
   title: string;
 }
 
@@ -38,10 +39,10 @@ const COLUMNS: Column[] = [
   { id: DONE, title: "Done" },
 ];
 
-function columnOf(task: TaskSummary, agents: Agent[]): string {
-  if (task.status === "done") return DONE;
-  if (task.parked) return task.parked;
-  return agents.find((a) => a.name === task.stage)?.column === "review" ? "review" : "in-progress";
+// A move you sent, shown until fresh data for the task comes after it.
+interface Move {
+  to: BoardColumn;
+  sent: boolean; // the server has it
 }
 
 interface TaskBoardProps {
@@ -63,12 +64,20 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
   const coordinator = agents.find((a) => a.coordinates)?.name ?? "coordinator";
   const [dragged, setDragged] = useState<TaskSummary | null>(null);
   const [over, setOver] = useState("");
-  const [dropped, setDropped] = useState<{ task: TaskSummary; to: string; rank: number | null } | null>(null);
+  const [dropped, setDropped] = useState<{ task: TaskSummary; to: BoardColumn; rank: number | null } | null>(null);
   const [slot, setSlot] = useState<{ column: string; at: number } | null>(null); // where the card would land
+  const [moves, setMoves] = useState<Record<string, Move>>({});
+  const [seen, setSeen] = useState(everyTask);
+  if (seen !== everyTask) {
+    // Fresh data: it shows the moves the server has.
+    setSeen(everyTask);
+    setMoves((current) => Object.fromEntries(Object.entries(current).filter(([, move]) => !move.sent)));
+  }
+  const columnOf = (task: TaskSummary) => moves[task.id]?.to ?? task.column;
 
-  // Onto another column: an instruction to the coordinator, after the dialog.
+  // Onto another column: a move, after the dialog, shown at once.
   // Within its own column: a new place in your priority order, at once.
-  const isHome = (column: Column) => dragged !== null && column.id === columnOf(dragged, agents);
+  const isHome = (column: Column) => dragged !== null && column.id === columnOf(dragged);
   const canDrop = (column: Column) => dragged !== null && !(dragged.status === "done" && column.id === DONE);
 
   function onDragOver(event: DragEvent<HTMLElement>, column: Column) {
@@ -93,6 +102,29 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
     setSlot(null);
   }
 
+  async function move(task: TaskSummary, to: BoardColumn, rank: number | null, note: string) {
+    const settle = (keep: boolean) =>
+      setMoves(({ [task.id]: mine, ...others }) => (keep && mine ? { ...others, [task.id]: { ...mine, sent: true } } : others));
+    setMoves((current) => ({ ...current, [task.id]: { to, sent: false } }));
+    try {
+      await api("POST", `/api/tasks/${encodeURIComponent(task.id)}/direct`, { to, note });
+    } catch (failure) {
+      settle(false);
+      notify("danger", "That wasn't sent", (failure as Error).message);
+      return;
+    }
+    settle(true);
+    if (rank !== null) saveRank(task, rank);
+    const toasts: Record<BoardColumn, [string, string]> = {
+      backlog: [`Parked ${task.id} in the Backlog`, "It waits there until you move it on."],
+      todo: [`Parked ${task.id} in To do`, "It waits there until you move it on."],
+      "in-progress": [`Moved ${task.id} to In progress`, "The coordinator hands it to an agent that builds it."],
+      review: [`Moved ${task.id} to Review`, "The coordinator has it checked next."],
+      done: [`${task.id} is done`, "The coordinator writes its summary."],
+    };
+    notify("success", ...toasts[to]);
+  }
+
   async function saveRank(task: TaskSummary, rank: number) {
     try {
       await api("PUT", `/api/tasks/${encodeURIComponent(task.id)}/rank`, { rank });
@@ -105,7 +137,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
     <>
       <div className="flex min-h-0 min-w-0 flex-1 scrollbar-thin gap-3 overflow-x-auto p-4">
         {columns.map((column) => {
-          let cards = onTheBoard.filter((task) => columnOf(task, agents) === column.id);
+          let cards = onTheBoard.filter((task) => columnOf(task) === column.id);
           if (column.id === BACKLOG) cards = byEpic(cards, everyTask);
           const droppable = canDrop(column) && !isHome(column);
           return (
@@ -186,17 +218,10 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
           task={dropped.task}
           to={dropped.to}
           onClose={() => setDropped(null)}
-          onSent={() => {
-            if (dropped.rank !== null) saveRank(dropped.task, dropped.rank);
-            const parked = dropped.to === "todo" || dropped.to === "backlog";
-            notify(
-              "success",
-              parked ? `Parked ${dropped.task.id}` : `Told the coordinator about ${dropped.task.id}`,
-              parked ? "It waits there until you move it on." : "It acts on it at its next turn.",
-            );
+          onSend={(note) => {
+            move(dropped.task, dropped.to, dropped.rank, note);
             setDropped(null);
           }}
-          onFailed={(reason) => notify("danger", "That wasn't sent", reason)}
         />
       )}
     </>
@@ -229,53 +254,29 @@ function EpicHeading({ epic, count, onPick }: { epic?: TaskSummary; count: numbe
 
 interface DirectDialogProps {
   task: TaskSummary;
-  to: string; // an agent's name, or "done"
+  to: BoardColumn;
   onClose: () => void;
-  onSent: () => void;
-  onFailed: (reason: string) => void;
+  onSend: (note: string) => void;
 }
 
-// What a drop asks, before it is sent: you can add a note for the coordinator.
-function DirectDialog({ task, to, onClose, onSent, onFailed }: DirectDialogProps) {
+// What a move does, before you make it: you can add a note for the coordinator.
+function DirectDialog({ task, to, onClose, onSend }: DirectDialogProps) {
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
   const reopen = task.status === "done" ? "Reopen and " : "";
-  const titles: Record<string, string> = {
+  const titles: Record<BoardColumn, string> = {
     backlog: `${reopen}park ${task.id} in the Backlog?`,
     todo: `${reopen}park ${task.id} in To do?`,
     "in-progress": task.parked ? `Start ${task.id}?` : `${reopen}send ${task.id} back for more work?`,
     review: `${reopen}have ${task.id} reviewed next?`,
-    done: `Ask the coordinator to wrap up ${task.id}?`,
+    done: `Move ${task.id} to Done?`,
   };
   const title = titles[to].charAt(0).toUpperCase() + titles[to].slice(1);
-
-  async function send() {
-    setBusy(true);
-    try {
-      await api("POST", `/api/tasks/${encodeURIComponent(task.id)}/direct`, { to, note });
-      onSent();
-    } catch (failure) {
-      onFailed((failure as Error).message);
-      setBusy(false);
-    }
-  }
+  const send = () => onSend(note);
 
   return (
     <Dialog title={title} onClose={onClose}>
       <div className="flex flex-col gap-3">
-        <p className="text-[12px] text-ink-muted">
-          {to === "todo" || to === "backlog"
-            ? "The coordinator leaves a parked task alone until you move it on. A turn already running finishes first."
-            : task.status === "done"
-              ? "It goes back to work in its worktree, kept or made again, with your words to the coordinator."
-              : task.hasQuestion
-                ? "The coordinator asked you something, so this goes as your answer."
-                : task.parked && to === "in-progress"
-                  ? "The coordinator picks it up at once."
-                  : task.currentAgent && task.currentAgent !== "coordinator"
-                    ? `${task.currentAgent} finishes its turn first; the coordinator reads this next.`
-                    : "The coordinator reads this at its next turn."}
-        </p>
+        <p className="text-[12px] text-ink-muted">{whatItDoes(task, to)}</p>
         <TextArea
           autoFocus
           rows={3}
@@ -285,7 +286,7 @@ function DirectDialog({ task, to, onClose, onSent, onFailed }: DirectDialogProps
           placeholder="A note for the coordinator (optional)"
         />
         <div className="flex gap-2">
-          <Button variant="primary" icon={<Send />} disabled={busy} onClick={send}>
+          <Button variant="primary" icon={<Send />} onClick={send}>
             Send
           </Button>
           <Button variant="ghost" onClick={onClose}>
@@ -295,4 +296,18 @@ function DirectDialog({ task, to, onClose, onSent, onFailed }: DirectDialogProps
       </div>
     </Dialog>
   );
+}
+
+// whatItDoes says what moving the task to a column does, at once.
+function whatItDoes(task: TaskSummary, to: BoardColumn): string {
+  if (to === "done") return "It is done now. The coordinator gets one last turn to write its summary and tidy up; nothing else runs.";
+  if (to === "todo" || to === "backlog") {
+    return task.status === "done"
+      ? "It reopens, parked: nothing runs on it until you move it on."
+      : "It is parked now: a turn in progress stops and the coordinator gets a short wrap-up. Nothing more runs until you move it on.";
+  }
+  const agent = to === "review" ? "an agent that checks work, if its team has one" : "an agent that builds it";
+  if (task.status === "done") return `It reopens now, in its worktree kept or made again, and the coordinator must hand it to ${agent}.`;
+  const answer = task.hasQuestion ? " The coordinator asked you something, so your note goes as your answer." : "";
+  return `The card moves now, and the coordinator must hand it to ${agent}.${answer}`;
 }
