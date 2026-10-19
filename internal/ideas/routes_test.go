@@ -1,8 +1,9 @@
-package web
+package ideas_test
 
 import (
 	"cmp"
 	"encoding/json"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -12,17 +13,80 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
-	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/web"
 )
 
-var agentry = events.Actor{Kind: events.System, ID: "agentry"}
+// The ideas' routes, tested over HTTP through the server serve runs: web
+// mounts them from Feature, and they write through the proposer Checked
+// makes, as serve.go gives it.
+
+const token = "ui-secret"
+
+func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
+	t.Helper()
+	server, s, _ := newServer(t, tasks.Limits{})
+	return server, s
+}
+
+// newTestServerWith is newTestServer with the new tasks' limits in limits.
+func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	server, s, _ := newServer(t, limits)
+	return server, s
+}
+
+// newServer is the server with ideas, the default agents and new tasks'
+// limits in limits.
+func newServer(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store, *current.State) {
+	t.Helper()
+	return newServerLogging(t, limits, func(s *store.Store) features.Proposer {
+		return features.Checked(ideas.Feature(), ideas.Registration(), s)
+	})
+}
+
+// newServerLogging is newServer with the ideas' log made by logOf.
+func newServerLogging(t *testing.T, limits tasks.Limits, logOf func(*store.Store) features.Proposer) (*httptest.Server, *store.Store, *current.State) {
+	t.Helper()
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
+		Features: []features.Feature{ideas.Feature()}, Logs: map[string]features.Proposer{ideas.Name: logOf(s)}}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	return server, s, state
+}
+
+func call(t *testing.T, server *httptest.Server, method, path, body string) (int, string) {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	content, _ := io.ReadAll(response.Body)
+	return response.StatusCode, string(content)
+}
+
+// detailOfTask is the limits a task's page shows.
+func detailOfTask(t *testing.T, server *httptest.Server, id string) (detail struct{ Budget, MaxTurns int }) {
+	t.Helper()
+	_, body := call(t, server, "GET", "/api/tasks/"+id, "")
+	json.Unmarshal([]byte(body), &detail)
+	return detail
+}
 
 // suggestIdea keeps an idea from the session task about repo, as a
 // Visionaries done does.
@@ -38,7 +102,7 @@ func suggestIdea(t *testing.T, s *store.Store, task, repo, title string) string 
 
 func ideaIDs(t *testing.T, body string) []string {
 	t.Helper()
-	var list []ideaView
+	var list []ideas.View
 	if err := json.Unmarshal([]byte(body), &list); err != nil {
 		t.Fatal(err, body)
 	}
@@ -109,9 +173,9 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	id := suggestIdea(t, s, "task-1", repo, "Search the board")
 
 	code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{"kind":"epic","note":"Soon"}`)
-	var got acceptance
+	var got ideas.AcceptReply
 	json.Unmarshal([]byte(body), &got)
-	if code != 200 || got != (acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
+	if code != 200 || got != (ideas.AcceptReply{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
@@ -153,13 +217,7 @@ func TestATaskFromAnIdeaYouAcceptTakesTheServersLimits(t *testing.T) {
 // gave or the server's, and always the server's turns; a bad start or
 // budget is a 400 that makes nothing.
 func TestYouAcceptAndStartAnIdea(t *testing.T) {
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
-	for _, p := range agents.SeedProposals(nil) {
-		s.Propose(p)
-	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 12,
-		Features: []features.Feature{ideas.Feature()}}, http.NotFoundHandler(), nil).Handler())
-	t.Cleanup(server.Close)
+	server, s, state := newServer(t, tasks.Limits{Budget: 5_000_000, MaxTurns: 12})
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
 
@@ -186,9 +244,9 @@ func TestYouAcceptAndStartAnIdea(t *testing.T) {
 	} {
 		id := suggestIdea(t, s, "task-1", repo, "Idea for "+c.task)
 		code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", c.body)
-		var got acceptance
+		var got ideas.AcceptReply
 		json.Unmarshal([]byte(body), &got)
-		if code != 200 || got != (acceptance{Task: c.task, Column: cmp.Or(c.parked, "in-progress"), Accepted: true}) {
+		if code != 200 || got != (ideas.AcceptReply{Task: c.task, Column: cmp.Or(c.parked, "in-progress"), Accepted: true}) {
 			t.Fatalf("%s: %d %s", c.body, code, body)
 		}
 		task, err := state.Task(c.task)
@@ -198,7 +256,7 @@ func TestYouAcceptAndStartAnIdea(t *testing.T) {
 	}
 
 	_, body := call(t, server, "GET", "/api/ideas", "")
-	var list []ideaView
+	var list []ideas.View
 	json.Unmarshal([]byte(body), &list)
 	columns := map[string]string{}
 	for _, idea := range list {
@@ -221,8 +279,8 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 		t.Fatal(rejection, err)
 	}
 	id := created.Stream
-	for _, p := range append(agents.AddTeam(visionaries, nil, httpapi.You), []events.Proposal{
-		{Stream: events.SettingsStream, Actor: httpapi.You, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
+	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
+		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Search the board", "repo": repo,
 			"coordinator": "tech-lead", "parked": "backlog", "idea": id}},
 		{Stream: id, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
@@ -269,11 +327,11 @@ func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list", "repo": repo,
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list", "repo": repo,
 			"coordinator": "tech-lead", "kind": "epic"}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Follow-ups after Ideas list",
 			"repo": repo, "coordinator": "tech-lead", "about": "task-1", "close": 9}},
-		{Stream: "task-3", Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{"title": "Think", "repo": repo, "coordinator": "tech-lead"}},
+		{Stream: "task-3", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Think", "repo": repo, "coordinator": "tech-lead"}},
 	} {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
@@ -282,14 +340,14 @@ func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
 	after, plain := suggestIdea(t, s, "task-2", repo, "Search ideas"), suggestIdea(t, s, "task-3", repo, "Dark mode")
 
 	_, body := call(t, server, "GET", "/api/ideas", "")
-	var list []ideaView
+	var list []ideas.View
 	if err := json.Unmarshal([]byte(body), &list); err != nil {
 		t.Fatal(err, body)
 	}
 	for _, idea := range list {
-		want := ideaView{}
+		want := ideas.View{}
 		if idea.ID == after {
-			want = ideaView{About: "task-1", AboutTitle: "Ideas list"}
+			want = ideas.View{About: "task-1", AboutTitle: "Ideas list"}
 		}
 		if idea.ID != after && idea.ID != plain || idea.About != want.About || idea.AboutTitle != want.AboutTitle {
 			t.Errorf("%s: about %q %q, want %q %q", idea.ID, idea.About, idea.AboutTitle, want.About, want.AboutTitle)
@@ -304,7 +362,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
 	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
-	for _, p := range agents.AddTeam(visionaries, nil, httpapi.You) {
+	for _, p := range agents.AddTeam(visionaries, nil, you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
@@ -333,7 +391,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	reasons := func() map[string]string {
 		t.Helper()
 		_, body := call(t, server, "GET", "/api/ideas", "")
-		var list []ideaView
+		var list []ideas.View
 		if err := json.Unmarshal([]byte(body), &list); err != nil {
 			t.Fatal(err, body)
 		}
@@ -370,9 +428,105 @@ func TestATaskFromAnOldLogShowsTheIdeaItWasMadeFrom(t *testing.T) {
 	}
 	for task, want := range map[string]string{"task-2": id, "task-1": ""} {
 		_, body := call(t, server, "GET", "/api/tasks/"+task, "")
-		var detail taskDetail
+		var detail struct{ MadeFrom string }
 		if err := json.Unmarshal([]byte(body), &detail); err != nil || detail.MadeFrom != want {
 			t.Errorf("%s made from %q, want %q: %v", task, detail.MadeFrom, want, err)
 		}
+	}
+}
+
+// ideasLine is Ideas' line in GET /api/features.
+func ideasLine(t *testing.T, server *httptest.Server) features.Line {
+	t.Helper()
+	code, body := call(t, server, "GET", "/api/features", "")
+	var manifest struct{ Features []features.Line }
+	if err := json.Unmarshal([]byte(body), &manifest); code != 200 || err != nil {
+		t.Fatalf("features: %d %v %s", code, err, body)
+	}
+	for _, line := range manifest.Features {
+		if line.Name == "ideas" {
+			return line
+		}
+	}
+	t.Fatalf("no ideas in %s", body)
+	return features.Line{}
+}
+
+func TestIdeasHiddenWithNoTeamAndNoIdeas(t *testing.T) {
+	server, _ := newTestServer(t)
+	line := ideasLine(t, server)
+	if line.Enabled || line.Visible || line.Badge != 0 || !strings.Contains(line.Why, "add the Visionaries team") {
+		t.Errorf("no team, no ideas: %+v", line)
+	}
+}
+
+func TestIdeasOnWithTheVisionariesTeam(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
+		t.Fatalf("add Visionaries: %d %s", code, body)
+	}
+	line := ideasLine(t, server)
+	if !line.Enabled || !line.Visible || line.Why != "the Visionaries team suggests ideas" {
+		t.Errorf("with the team: %+v", line)
+	}
+}
+
+func TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	suggestIdea(t, s, "task-1", repo, "Search the board")
+	suggestIdea(t, s, "task-1", repo, "Theme the board")
+	if code, body := call(t, server, "DELETE", "/api/teams/Visionaries", ""); code != 200 {
+		t.Fatalf("remove Visionaries: %d %s", code, body)
+	}
+	line := ideasLine(t, server)
+	if line.Enabled || !line.Visible || line.Why != "kept while 2 ideas remain; the Visionaries team was removed" {
+		t.Errorf("team removed, ideas left: %+v", line)
+	}
+}
+
+func TestIdeasBadgeCountsOpenIdeas(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	suggestIdea(t, s, "task-1", repo, "Search the board")
+	accepted := suggestIdea(t, s, "task-1", repo, "Theme the board")
+	dismissed := suggestIdea(t, s, "task-1", repo, "Sound on done")
+	suggestIdea(t, s, "task-1", repo, "Export the board")
+	if code, body := call(t, server, "POST", "/api/ideas/"+accepted+"/accept", `{}`); code != 200 {
+		t.Fatalf("accept: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/ideas/"+dismissed+"/dismiss", `{"note":"No"}`); code != 200 {
+		t.Fatalf("dismiss: %d %s", code, body)
+	}
+	if line := ideasLine(t, server); line.Badge != 2 || !line.Visible {
+		t.Errorf("two of four ideas open: %+v", line)
+	}
+}
+
+// Accept writes through the ideas' checked proposer, never the store: given
+// one that doesn't let Ideas write task.created, accepting is refused with
+// the features check and makes no task, while a dismiss, of Ideas' own
+// type, still goes through.
+func TestAcceptWritesOnlyThroughTheCheckedLog(t *testing.T) {
+	server, s, state := newServerLogging(t, tasks.Limits{}, func(s *store.Store) features.Proposer {
+		return features.Checked(features.Feature{Name: ideas.Name}, ideas.Registration(), s)
+	})
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	accepted, dismissed := suggestIdea(t, s, "task-1", repo, "Search the board"), suggestIdea(t, s, "task-1", repo, "Dark mode")
+
+	before := s.LastPosition()
+	if code, body := call(t, server, "POST", "/api/ideas/"+accepted+"/accept", `{}`); code != http.StatusConflict ||
+		!strings.Contains(body, "the ideas feature may not write task.created") {
+		t.Errorf("accept: %d %s, want a 409 from the features check", code, body)
+	}
+	if ids := state.TaskIDs(); !slices.Equal(ids, []string{"task-1"}) || s.LastPosition() != before {
+		t.Errorf("a refused accept wrote: tasks %v, log at %d from %d", ids, s.LastPosition(), before)
+	}
+	if code, body := call(t, server, "POST", "/api/ideas/"+dismissed+"/dismiss", `{"note":"No"}`); code != 200 {
+		t.Errorf("dismiss: %d %s", code, body)
 	}
 }

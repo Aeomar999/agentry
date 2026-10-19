@@ -108,9 +108,6 @@ func (s *Server) Handler() http.Handler {
 	for _, f := range s.config.Features {
 		s.mount(f, api, deskToo)
 	}
-	api("GET /api/ideas", s.listIdeas)
-	api("POST /api/ideas/{idea}/accept", s.acceptIdea)
-	api("POST /api/ideas/{idea}/dismiss", s.dismissIdea)
 	api("GET /api/agents", s.listAgents)
 	api("GET /api/teams/templates", s.teamTemplates)
 	api("POST /api/teams", s.addTeam)

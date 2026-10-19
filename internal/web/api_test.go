@@ -21,9 +21,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -48,14 +46,13 @@ func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *st
 // newTestServerOn is newTestServerWith on the log at path.
 func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
+	s, state := storetest.Open(t, path)
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
-		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
-		Features: []features.Feature{ideas.Feature()}}, hooks, nil).Handler())
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }
@@ -182,7 +179,7 @@ func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
 		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
 	}
 	at := itoa(s.LastPosition())
-	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/features", "/api/tasks/task-9"} {
 		if got := positionOf(t, server, "GET", path); got != at {
 			t.Errorf("GET %s: position %q, want %s", path, got, at)
 		}

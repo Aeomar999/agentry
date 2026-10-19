@@ -20,3 +20,10 @@ func Similarity(a, b *Idea) float64 {
 	}
 	return float64(shared) / float64(len(these)+len(those)-shared)
 }
+
+// View is an idea as GET /api/ideas answers it, and AcceptReply what
+// accepting one answers.
+type (
+	View        = ideaView
+	AcceptReply = acceptance
+)

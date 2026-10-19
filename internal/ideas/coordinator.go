@@ -160,10 +160,7 @@ func acceptAgreed(c features.Core, repo string, added []string) {
 	}
 	list := List(c.Read, repo)
 	roster := c.Read.Roster()
-	log := struct {
-		features.Proposer
-		features.EventLog
-	}{c.Log, c.Events}
+	log := logOf(c)
 	for _, id := range added {
 		i := slices.IndexFunc(list, func(idea *Idea) bool { return idea.ID == id })
 		if i < 0 {

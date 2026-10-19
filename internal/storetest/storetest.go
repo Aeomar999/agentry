@@ -25,7 +25,7 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 // The state keeps the ideas' streams whenever the catalogue registers them.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
-	state := current.New(catalogue, ideas.Streams())
+	state := NewState(catalogue)
 	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
@@ -33,6 +33,12 @@ func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.St
 	t.Cleanup(func() { s.Close() })
 	t.Cleanup(func() { CheckEqual(t, s, state) }) // cleanups run last first: before the close
 	return s, state
+}
+
+// NewState is an empty state for a log opened with catalogue, as serve
+// makes it: it keeps the ideas' streams whenever the catalogue registers them.
+func NewState(catalogue *events.Catalogue) *current.State {
+	return current.New(catalogue, ideas.Streams())
 }
 
 // WithIdeas is the catalogue serve opens the log with: the core's event

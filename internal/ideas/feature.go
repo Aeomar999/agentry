@@ -16,7 +16,7 @@ import (
 // the task.held that starts one Agentry accepted (startIdea).
 func Feature() features.Feature {
 	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Writes: []events.Type{events.TaskCreated, events.TaskHeld},
-		Coordinator: coordinatorHook(), Manifest: manifest}
+		Coordinator: coordinatorHook(), Routes: routes, Manifest: manifest}
 }
 
 // Streams are the ideas' streams, for the state to build and keep: each

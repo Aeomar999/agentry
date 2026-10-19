@@ -8,11 +8,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
-
-var you = events.Actor{Kind: events.Human, ID: "you"}
 
 // Choice is what you said when you accepted an idea.
 type Choice struct {
@@ -111,7 +110,7 @@ func accept(log Log, board Board, id string, choice Choice) (Acceptance, error) 
 
 func (choice Choice) acceptor() events.Actor {
 	if choice.By.ID == "" {
-		return you
+		return httpapi.You
 	}
 	return choice.By
 }

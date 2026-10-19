@@ -1,6 +1,6 @@
 import type { BoardColumn } from "@/api/types";
 
-// A feature a Visionaries session suggested (internal/web/views.go ideaView).
+// A feature a Visionaries session suggested (internal/ideas/routes.go ideaView).
 export interface Idea {
   id: string;
   title: string;
