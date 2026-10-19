@@ -168,6 +168,24 @@ func TestABrokenFileAtTheStartIsNoSettings(t *testing.T) {
 	}
 }
 
+// A file that can't be read at the start, here a folder in its place, is no
+// settings, and the log says so.
+func TestAnUnreadableFileAtTheStartIsNoSettings(t *testing.T) {
+	logged := captureLog(t)
+	path := filepath.Join(t.TempDir(), "features.toml")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	live := Open(path)
+	if tables := live.Tables(); len(tables) != 0 {
+		t.Errorf("tables %v, want none", tables)
+	}
+	said := logged.String()
+	if !strings.Contains(said, "can't be read; features have no settings until it is fixed") || strings.Contains(said, "stays in force") {
+		t.Errorf("it logged\n%s\nwant the file can't be read and features have no settings until it is fixed", said)
+	}
+}
+
 // A file that comes back broken after it was gone is no settings too.
 func TestABrokenFileAfterItWasGoneIsNoSettings(t *testing.T) {
 	logged := captureLog(t)
