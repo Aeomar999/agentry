@@ -59,7 +59,7 @@ type OrderCheck func(p events.Proposal) *events.Rejection
 type Store struct {
 	db      *sql.DB // the one connection that writes
 	reads   *sql.DB // read-only connections for the reads in read.go
-	model   Model // nil when nothing keeps state from the log
+	model   Model   // nil when nothing keeps state from the log
 	check   OrderCheck
 	changes *changes
 
