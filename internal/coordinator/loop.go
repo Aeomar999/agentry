@@ -536,15 +536,46 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 
 // portsInUse are the ports of tasks whose work is on the machine and not
 // over: unfinished, or done by you and still wrapping up, since a reopen
-// then works in the same worktree.
+// then works in the same worktree. A broken task's port counts too, read
+// from its stream, since nothing says its worktree has gone.
 func (l *Loop) portsInUse(machine string) []int {
 	var ports []int
-	for _, task := range l.state.Tasks() {
-		if (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
+	for _, id := range l.state.TaskIDs() {
+		task, err := l.state.Task(id)
+		if err != nil {
+			if port, ok := l.lastPort(id, machine); ok {
+				ports = append(ports, port)
+			}
+			continue
+		}
+		if task != nil && (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
 			ports = append(ports, task.Worktree.Port)
 		}
 	}
 	return ports
+}
+
+// lastPort is the port a task's stream last gave its worktree, if that
+// worktree is on the machine: the worker and port of its last
+// worktree.ready or worktree.moved, read as tasks' apply reads them. It
+// needs none of the task's other state, so it works on a broken task.
+func (l *Loop) lastPort(id, machine string) (int, bool) {
+	stream, err := l.store.Stream(id)
+	if err != nil {
+		slog.Warn("coordinator loop: a broken task's port can't be read", "task", id, "err", err)
+		return 0, false
+	}
+	var worker string
+	var port int
+	for _, e := range stream {
+		switch e.Type {
+		case events.WorktreeReady:
+			worker, port = cmp.Or(e.Text("worker"), workers.Local), e.Number("port")
+		case events.WorktreeMoved:
+			worker, port = e.Text("worker"), e.Number("port")
+		}
+	}
+	return port, worker != "" && worker == machine
 }
 
 func (l *Loop) load(id string) (*tasks.Task, agents.Roster, error) {

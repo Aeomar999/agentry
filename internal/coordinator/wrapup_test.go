@@ -237,3 +237,38 @@ func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
 		t.Errorf("ports in use %v: want the working task's and the one wrapping up", ports)
 	}
 }
+
+// A task whose state can't be built still holds the port its stream last
+// gave it, on that machine only, so it isn't handed out again. The rules
+// never let a worktree.moved come first; with no check, it breaks the task.
+func TestABrokenTaskKeepsItsPort(t *testing.T) {
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	created := func(id string) events.Proposal {
+		return events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}}
+	}
+	for _, p := range []events.Proposal{
+		created("task-1"),
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}},
+		created("task-2"),
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": workers.Local, "path": "/w/task-2", "port": 7902}},
+		created("task-3"),
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "port": 7903}},
+	} {
+		propose(t, s, p)
+	}
+	if state.Broken("task-2") == nil || state.Broken("task-3") == nil {
+		t.Fatal("task-2 and task-3 should be broken")
+	}
+	loop := &Loop{store: s, state: state}
+	if ports := loop.portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
+		t.Errorf("ports in use here %v: want task-1's and broken task-2's", ports)
+	}
+	if ports := loop.portsInUse("laptop"); !slices.Equal(ports, []int{7903}) {
+		t.Errorf("ports in use on the laptop %v: want broken task-3's", ports)
+	}
+}
