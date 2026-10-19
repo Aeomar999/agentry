@@ -47,6 +47,7 @@ LIGHT = dict(
     agents={"coordinator": "#2563eb", "engineer": "#0d9488", "reviewer": "#7c3aed", "tech-lead": "#ea580c"},
     kw="#0000ff", str="#a31515", op="#6b7280", tint=0.18, dark=False)
 LIGHT["link"] = mix(LIGHT["info"], LIGHT["ink"], 0.85)
+LIGHT["oki"] = mix(LIGHT["ok"], LIGHT["ink"], 0.70)  # success-ink, #197d40: green text
 DARK = dict(
     page="#111317", s0="#1a1d23", s1="#16181d", s2="#21252d", s3="#2b2f38", div="#2b2f38", div2="#353a44",
     ink="#e4e6eb", ink2="#b3b7c0", muted="#8b919e", faint="#5e6471",
@@ -54,6 +55,7 @@ DARK = dict(
     agents={"coordinator": "#60a5fa", "engineer": "#2dd4bf", "reviewer": "#a78bfa", "tech-lead": "#fb923c"},
     kw="#569cd6", str="#ce9178", op="#8b919e", tint=0.22, dark=True)
 DARK["link"] = DARK["info"]
+DARK["oki"] = DARK["ok"]
 
 
 class Sheet:
@@ -158,24 +160,24 @@ class Sheet:
 
     def runs(self, x, y, parts, size=13):
         """One line of text in runs: (text, kind). Kinds: '' body, b bold, m mono, muted, code (inline code),
-        link, linkm (mono link), linkc (inline code that is a link), nt (new-tab icon), h heading, ok, plain-code."""
+        link, linkm (mono link), linkc (inline code that is a link: a mono link, no code background),
+        nt (new-tab icon), h heading."""
         t = self.t
         for s, kind in parts:
             if kind == "nt":
                 x = self.newtab(x + 1, y, t["link"]) + 1
-            elif kind in ("code", "linkc"):
+            elif kind == "code":
                 cs = size * 0.88
                 w = width(s, cs, True)
                 self.rect(x, y - size + 1, w + 8, size + 5, t["s3"], r=2)
-                link = kind == "linkc"
-                self.text(x + 4, y, s, cs, t["link"] if link else t["ink"], 400, True, underline=link)
+                self.text(x + 4, y, s, cs, t["ink"], 400, True)
                 x += w + 10
             else:
                 fill, weight, mono, u = {
                     "": (t["ink2"], 400, False, False), "b": (t["ink"], 700, False, False),
                     "m": (t["ink"], 400, True, False), "muted": (t["muted"], 400, False, False),
                     "link": (t["link"], 400, False, True), "linkm": (t["link"], 400, True, True),
-                    "h": (t["ink"], 700, False, False), "ok": (t["ok"], 700, False, False),
+                    "linkc": (t["link"], 400, True, True), "h": (t["ink"], 700, False, False),
                 }[kind]
                 sz = size * 0.92 if mono else size
                 x = self.text(x, y, s, sz, fill, weight, mono, underline=u)
@@ -241,16 +243,16 @@ class Feed:
     def cw(self):
         return self.R - self.cx - 12
 
-    def toolbar(self, rows="214 rows"):
+    def toolbar(self, rows="214 rows", on="Everything"):
         s, t, x = self.s, self.t, self.x
         s.rect(x, self.y, self.w, 44, t["s0"])
         s.line(x, self.y + 44, x + self.w, self.y + 44)
         bx = x + self.pad
         s.rect(bx, self.y + 9, 228, 26, t["s2"], t["div"], 3)
-        s.rect(bx + 2, self.y + 11, 84, 22, t["s0"], t["div2"], 2)
-        s.text(bx + 44, self.y + 26, "Everything", 11.5, t["ink"], 600, anchor="middle")
-        s.text(bx + 116, self.y + 26, "Actions", 11.5, t["muted"], 500, anchor="middle")
-        s.text(bx + 182, self.y + 26, "Messages", 11.5, t["muted"], 500, anchor="middle")
+        for label, mid, sw in (("Everything", 44, 84), ("Actions", 116, 60), ("Messages", 182, 70)):
+            if label == on:
+                s.rect(bx + mid - sw / 2, self.y + 11, sw, 22, t["s0"], t["div2"], 2)
+            s.text(bx + mid, self.y + 26, label, 11.5, t["ink"] if label == on else t["muted"], 600 if label == on else 500, anchor="middle")
         if not self.phone:
             s.text(x + self.w - self.pad, self.y + 27, rows, 11, t["muted"], 400, True, "end")
         self.y += 44
@@ -263,7 +265,7 @@ class Feed:
         s.rect(self.R + self.dot, y - 9, 9, 9, dot or (t["ok"] if live else t["faint"]), r=4.5)
         s.text(self.R + self.tx, y, time, 11, t["muted"], 400, True)
         if dur and not self.phone:
-            s.text(self.R + self.tx, y + 14, dur, 11, t["ok"] if live else t["muted"], 400, True)
+            s.text(self.R + self.tx, y + 14, dur, 11, t["oki"] if live else t["muted"], 400, True)
 
     def band(self, who, team="", turn="", status=None, tokens="", time="", dur="", live=False, continued=False, under=None):
         """An author band: chip, name, team and role, then the turn's facts. under: draw it as stuck."""
@@ -279,7 +281,7 @@ class Feed:
                 bx = nx + 2
                 bx += s.badge(bx, y + 13, *status) + 8
                 if dur:
-                    s.text(bx, y + 27, dur, 11, t["ok"] if live else t["muted"], 400, True)
+                    s.text(bx, y + 27, dur, 11, t["oki"] if live else t["muted"], 400, True)
         else:
             if team:
                 nx = s.text(nx, y + 27, team, 12, t["muted"]) + 14
@@ -421,7 +423,7 @@ REPORT = [
     ("li", [("Same fix as ", ""), ("task-21", "linkm"), (" did for the chat; upstream: ", ""), ("github.com/…/issues/88", "link"), ("nt", "nt")]),
     ("li", [("A ", ""), ("javascript:", "code"), (" link reads as text: Open the demo", "")]),
 ]
-REPORT_TABLE = ("table", [["Check", "Result"], ["npm run lint", [("pass", "ok")]], ["go test ./...", [("pass", "ok")]]], [180, 120])
+REPORT_TABLE = ("table", [["Check", "Result"], ["npm run lint", "pass"], ["go test ./...", "pass"]], [180, 120])
 BRIEF = [
     ("h", "Build the author bands"),
     ("p", [("Read ", ""), ("spec.md", "linkm"), ("nt", "nt"), (" and ", ""), ("the flows", "link"), ("nt", "nt"), (" first. Then:", "")]),
@@ -456,7 +458,7 @@ def desktop_feed(s, x, y, w, notes=True, length="long"):
     f.action(BASH_LONG[:1], ("done",), "06:16")
     below = f.y
     f.y = top
-    f.band("reviewer", "Software · reviewer", "turn-6", ("running", "info"), "18k tokens", "05:58", "18m…", live=True, continued=True)
+    f.band("reviewer", "Software", "turn-6", ("running", "info"), "18k tokens", "05:58", "18m…", live=True, continued=True)
     n(x + w - 150, f.y - 31, 1)
     f.y = below
     f.action(BASH_RUN, ("running", "info"), "06:15", "1m…", live=True)
@@ -472,7 +474,7 @@ def desktop_feed(s, x, y, w, notes=True, length="long"):
     f.stamp(f.y - 36, "06:02")
 
     # 3. The reviewer's turn where it started.
-    f.band("reviewer", "Software · reviewer", "turn-6", ("running", "info"), "", "05:58")
+    f.band("reviewer", "Software", "turn-6", ("running", "info"), "", "05:58")
     f.note_row("Read its brief", "05:58")
 
     # 4. Agentry's own rows between turns.
@@ -485,23 +487,35 @@ def desktop_feed(s, x, y, w, notes=True, length="long"):
     f.band("engineer", "Software", "turn-5", ("ended",), "41k tokens", "05:09", "48m")
     ry = f.y + 20
     f.icon(ry, "done")
-    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["ok"], 600)
+    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["oki"], 600)
     f.stamp(ry, "05:57")
     f.y = ry + 4
+    if length == "short":
+        f.body(REPORT)
+        n(x + w - 150, ry + 8, 5)
+        return f, top
+    # Folded at 240px (about 10 lines), the cut snapped up to the last whole line: here after
+    # the code box's first line. Everything below it is clipped.
+    cut = f.y
+    i = len(s.out)
     f.body(REPORT)
     n(x + w - 150, ry + 8, 5)
-    if length == "short":
-        return f, top
     f.body([REPORT_TABLE])
+    fence = f.y
     f.body([("code", FENCE_TS, "ts", False, 420)])
-    n(f.cx + 430, f.y - 60, 6)
+    h = fence + 6 + 30 - cut
+    s.out.insert(i, f'<clipPath id="fold5"><rect x="{x}" y="{cut}" width="{w}" height="{h}"/></clipPath><g clip-path="url(#fold5)">')
+    s.out.append("</g>")
+    n(f.cx + 430, fence + 8, 6)
+    f.y = cut + h
     f.fold_line("Show all · 38 lines")
     n(f.cx + 140, f.y - 28, 7)
     f.action(BASH_RUN, ("done",), "05:41", "2m")
 
     # 6. The coordinator's turn: a brief, opened.
-    f.band("coordinator", "Software · coordinator", "turn-4", ("ended",), "8k tokens", "05:00", "9m")
+    f.band("coordinator", "Software", "turn-4", ("ended",), "8k tokens", "05:00", "9m")
     my = f.message("coordinator", "engineer", "turn-5")
+    n(f.cx + 360, my - 13, 10)
     f.stamp(my, "05:08")
     f.body(BRIEF)
     f.body([("code", FENCE_SH, "bash", True, 420)])
@@ -514,7 +528,8 @@ def desktop_feed(s, x, y, w, notes=True, length="long"):
     f.band("you", time="04:58")
     my = f.message("you", "coordinator")
     f.stamp(my, "04:58")
-    f.body([("p", [("Make Activity and Handoffs readable. Unsafe: ", ""), ("click me", ""), ("  (was a javascript: link)", "muted")])])
+    end = f.body([("p", [("Make Activity and Handoffs readable. Unsafe: ", ""), ("click me", "")])])
+    n(f.cx + 400, end - 17, 11)
     f.end(8)
     return f, top
 
@@ -537,19 +552,21 @@ def activity_desktop():
     s.text(X + W - 12, Y + 772, "end of the screen: below, code is plain", 11, s.t["muted"], 400, anchor="end")
 
     s.notes(900, 130, [
-        (1, ["Stuck band: the reviewer's turn continues", "here, after your message. ‘continued’ says", "its true start is further down. Rows scroll", "under it; it is pushed out by the next band.", "Band: chip, name, team · role, turn, status,", "tokens. A button: narrows to this turn."]),
+        (1, ["Stuck band: the reviewer's turn continues", "here, after your message. ‘continued’ says", "its true start is further down. Rows scroll", "under it; it is pushed out by the next band.", "Band: chip, name, team · role (role dropped", "when it is the name), turn, status, tokens.", "An h3 holding a button: narrows to this turn.", "Always one line, 44px, stuck or not."]),
         (2, ["You, in the middle of a running turn: a", "short band of its own (neutral chip), the", "message ‘you → reviewer’, then the turn", "resumes below. Not a button (no turn)."]),
         (3, ["Agentry's own rows between turns (held,", "worktree ready, files fetched): a band", "with a neutral chip, no turn facts."]),
         (4, ["Commands: plain mono at once, coloured by", "Monaco once near the screen. Wrap at spaces,", "3 lines, then ‘Show all · 9 lines’. No", "sideways scroll. Badge right; under on a phone."]),
-        (5, ["Links: underlined always; ↗ = new tab.", "3f2a9c1 is a commit of the branch: link to", "the Workspace commit view. 9e1d04b isn't:", "plain code. task-21: same tab. Files: the", "Workspace preview. javascript: is text."]),
+        (5, ["Links: underlined always; ↗ = new tab.", "3f2a9c1 is a commit of the branch: a mono", "link with no code background (5.0:1). 9e1d04b", "isn't: plain code. task-21: same tab. Files:", "the Workspace preview."]),
         (6, ["Fenced code: same box, language and Copy", "top right (44px hit area), coloured by", "language. Long lines scroll inside the box."]),
-        (7, ["Folded at ~10 lines on a clean edge, no", "fade. ‘Show all · 38 lines’ is a button with", "aria-expanded; the hidden part is inert."]),
+        (7, ["Folded at 240px (about 10 lines), clip, clean", "edge, no fade; here the cut falls in a code box.", "Links below the cut leave the Tab order", "(tabindex -1) until Show all. 38 is about:", "measured height ÷ line height, not exact."]),
         (8, ["Below the screen's fold: the same box in", "plain mono. It colours when it comes within", "200px of view; nothing moves when it does."]),
         (9, ["Opened: ‘Show less’ under the last line,", "shown with keyboard focus (the global 1px", "brand outline). Closing scrolls the entry's", "top back under the band if it went above."]),
     ])
-    s.notes(900, 1200, [
-        (10, ["Rail: start time and duration in ink-muted", "(was ink-faint, 2.6:1). Live: green with …"]),
-        (11, ["scroll-padding-top: 44px on the scroller,", "so focus never hides under the band."]),
+    s.notes(900, 1280, [
+        (10, ["The leads-to turn-5 is a button with a 24 × 24", "hit box (padding overlaps the row's)."]),
+        (11, ["‘click me’ was [click me](javascript:…): an", "unsafe link reads as plain text, no hint."]),
+        (12, ["Rail: start time and duration in ink-muted", "(was ink-faint, 2.6:1). A live duration ends", "in … and is success-ink #197d40 (5.2:1)."]),
+        (13, ["scroll-padding-top: 44px on the scroller (the", "band's fixed height), so focus never hides", "under the band. Newest: bottom right."]),
     ], "Also")
     s.save("activity-desktop.svg")
 
@@ -597,29 +614,29 @@ def activity_mobile():
     f.band("Agentry", time="05:57")
     f.note_row("Held in Review", "05:57")
     f.note_row("Worktree ready", "05:57")
+    f.band("engineer", status=("ended",), time="05:09", dur="48m")
+    f.note_row("Read its brief", "05:09")
     f.rail_line(top, f.y)
-    s.note(40 + 300, f.y - 120, 3)
+    s.note(40 + 300, f.y - 180, 3)
+    # Newest, once scrolled 200px: bottom right of the scroller, clear of every band's name.
+    bw, bh = 92, 32
+    bx, by = 40 + 390 - 16 - bw, 130 + 780 - 16 - bh
+    s.rect(bx, by, bw, bh, t["s2"], t["div2"], 3)
+    s.path(f"M{bx + 16},{by + 21} V{by + 11} M{bx + 12},{by + 15} L{bx + 16},{by + 11} L{bx + 20},{by + 15}", t["ink"], 1.4)
+    s.text(bx + 28, by + 21, "Newest", 12, t["ink"], 500)
+    s.note(bx - 26, by + 7, 7)
 
     # Phone 2: a report opened, links, a table that scrolls in its box.
     y = phone_frame(s, 470, 130, "A REPORT, OPENED")
     f = Feed(s, 470, y, 390, phone=True)
     f.toolbar()
     top = f.y
-    # an unstuck band shows team and role on a second line
-    by = f.y
-    s.rect(471, by, 388, 60, t["s1"])
-    s.line(470, by, 860, by)
-    s.line(470, by + 60, 860, by + 60)
-    s.chip(486, by + 12, "engineer")
-    nx = s.name(514, by + 27, "engineer") + 12
-    s.badge(nx, by + 13, "ended")
-    s.text(514, by + 47, "Software · turn-5", 11.5, t["muted"])
-    f.stamp(by + 22, "05:09")
-    f.y += 60
-    s.note(470 + 300, by + 34, 4)
+    # a band that isn't stuck is the same one line: no second line to lose when it sticks
+    by = f.band("engineer", status=("ended",), time="05:09", dur="48m")
+    s.note(470 + 270, by + 13, 4)
     ry = f.y + 20
     f.icon(ry, "done")
-    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["ok"], 600)
+    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["oki"], 600)
     f.stamp(ry, "05:57")
     f.y = ry + 4
     f.body(REPORT_PHONE)
@@ -638,7 +655,7 @@ def activity_mobile():
         for c, cell in enumerate(row):
             if c:
                 s.line(cx, yy, cx, yy + 26)
-            s.text(cx + 8, yy + 17, cell, 12.5, t["ok"] if cell == "pass" else (t["ink"] if r == 0 else t["ink2"]), 700 if r == 0 or cell == "pass" else 400)
+            s.text(cx + 8, yy + 17, cell, 12.5, t["ink"] if r == 0 else t["ink2"], 700 if r == 0 else 400)
             cx += cols[c]
     s.out.append("</g>")
     s.rect(tx, ty + 82, clip, 3, t["s2"], r=1.5)
@@ -656,35 +673,43 @@ def activity_mobile():
     f.rail_line(top, f.y)
 
     s.notes(900, 130, [
-        (1, ["Stuck band on a phone: one line, 44px:", "chip, name, status badge, live duration.", "Team, role, turn id and tokens go."]),
+        (1, ["Every band on a phone is one line, 44px,", "stuck or not: chip, name, status badge,", "duration. Team, role, turn id and tokens", "stay in its accessible name and come back", "at md (768). Names past 120px truncate.", "scroll-padding-top: 44px, as on desktop."]),
         (2, ["Commands wrap to the column. The badge", "drops under the box, left; ‘Show all’ sits", "beside it. 44px hit area on both."]),
         (3, ["Rail: 56px, time only. Durations move into", "the band. Bands still name every author:", "you, Agentry, each agent."]),
-        (4, ["A band that isn't stuck has room for a", "second line: team · role and turn id.", "It shrinks to one line when it sticks."]),
+        (4, ["Not stuck, the same one line. Nothing", "changes when a band sticks, so no script", "and no jump between two heights."]),
         (5, ["Links wrap with the text; their underline", "and ↗ go with them. Inline links in", "sentences are exempt from target size."]),
         (6, ["A table wider than the column scrolls in", "its own box (thin scrollbar shown); the", "page never scrolls sideways. Fences too."]),
+        (7, ["Newest (after 200px of scroll) sits at the", "bottom right of the scroller, 16px in, 32px", "tall with a 44px hit area: it covers rail", "times passing under it, never a band's", "author. Was top centre, over the band."]),
     ])
     s.save("activity-mobile.svg")
 
 
 # ------------------------------------------------------------------ handoffs
-def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False, focused=False, you=False):
-    """A handoff card on the timeline; returns its bottom."""
+def card_header(s, x, y, w, frm, to, time, stuck=False):
+    """The card's author header: 40px, from → to and the time, a hairline under it. Sticky inside its card."""
     t = s.t
-    s.rect(x - 23, y + 13, 11, 11, t["warn"] if you else t["agents"].get(frm, t["faint"]), r=5.5)
-    pad = 12
-    cx = x + pad
-    hy = y + 24
+    s.rect(x + 1, y + 1, w - 2, 39, t["s0"])
+    s.line(x, y + 40, x + w, y + 40)
+    if stuck:
+        s.line(x, y, x + w, y)
+    cx, hy = x + 12, y + 25
     s.chip(cx, hy - 13, frm, 18)
     nx = s.name(cx + 24, hy, frm, 12.5) + 6
     s.arrow(nx, hy - 4)
     nx += 20
     s.chip(nx, hy - 13, to, 18)
     s.name(nx + 24, hy, to, 12.5)
-    if phone:
-        s.text(x + w - pad, hy, time, 11, t["muted"], 400, True, "end")
-    else:
-        s.text(x + w - pad, hy, time, 11, t["muted"], 400, True, "end")
-    yy = hy + 14
+    s.text(x + w - 12, hy, time, 11, t["muted"], 400, True, "end")
+
+
+def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False, focused=False, you=False):
+    """A handoff card on the timeline; returns its bottom."""
+    t = s.t
+    s.rect(x - 23, y + 13, 11, 11, t["muted"] if you else t["agents"].get(frm, t["faint"]), r=5.5)
+    pad = 12
+    cx = x + pad
+    card_header(s, x, y, w, frm, to, time)
+    yy = y + 44
     if title:
         s.text(cx, yy + 16, title, 14, t["ink"], 700)
         yy += 26
@@ -712,6 +737,8 @@ def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False,
         s.agent_dot(fx, fy - 4, footer[2])
         fx = s.text(fx + 12, fy, footer[2], 11, t["ink2"], 400, True) + 10
         if not phone:
+            if len(footer) > 4:
+                fx += s.badge(fx, fy - 13, *footer[4]) + 10
             s.text(fx, fy, footer[3], 11.5, t["muted"])
         ax = x + w - pad
         s.path(f"M{ax - 4},{fy - 8} l4,4 l-4,4", t["muted"], 1.3)
@@ -719,14 +746,16 @@ def card(s, x, y, w, frm, to, time, title, body, footer, fold=None, phone=False,
         if focused:
             s.focus(x + 1, yy + 1, w - 2, 34)
         yy += 36
-    else:
+    elif title or body:
         yy += 10
+    else:
+        yy = y + 40  # header only
     s.rect(x, y, w, yy - y, stroke=t["div"], r=3)
     return yy
 
 
 def handoffs():
-    s = Sheet(1280, 1050, "Handoffs · Author bands",
+    s = Sheet(1280, 1600, "Handoffs · Author bands",
               "Each handoff names both people in text with chips and an arrow; the brief is Markdown, folded; the footer, not the card, opens the turn.")
     t = s.t
     X, Y, W = 40, 130, 740
@@ -737,15 +766,15 @@ def handoffs():
     # working now
     s.rect(lx - 5, Y + 22, 11, 11, t["ok"], r=5.5)
     s.agent_dot(X + 48, Y + 28, "reviewer")
-    nx = s.text(X + 60, Y + 32, "reviewer", 12.5, t["ok"], 700, True)
-    s.text(nx + 6, Y + 32, "is working now · watch the terminal", 12.5, t["ok"])
+    nx = s.text(X + 60, Y + 32, "reviewer", 12.5, t["oki"], 700, True)
+    s.text(nx + 6, Y + 32, "is working now · watch the terminal", 12.5, t["oki"])
     cx, cw = X + 46, W - 46 - 20
     y = Y + 52
     y = card(s, cx, y, cw, "coordinator", "reviewer", "05:58", "Review the author bands",
              [("p", [("The engineer's report: ", ""), ("3f2a9c1", "linkc"), ("nt", "nt"), (". Check against ", ""), ("flows.md", "linkm"), ("nt", "nt")]),
               ("li", [("Links: none of ", ""), ("javascript:", "code"), (" or ", ""), ("data:", "code"), (" may link", "")]),
               ("li", [("Monaco loads only with code on screen", "")])],
-             ("Led to", "turn-6", "reviewer", "running · 18m · 6 actions"), focused=False) + 16
+             ("Led to", "turn-6", "reviewer", "6 actions", ("running", "info")), focused=False) + 16
     s.note(X + W + 8, Y + 62, 1)
     y0 = y
     y = card(s, cx, y, cw, "coordinator", "engineer", "05:08", "Build the author bands",
@@ -789,33 +818,74 @@ def handoffs():
     yy = card(s, pcx, yy, pcw, "you", "coordinator", "03:40", None,
               [("p", [("Like ", ""), ("task-21", "linkm"), (" did for the chat.", "")])], ("Led to", "turn-1", "coordinator", ""), phone=True, you=True)
 
-    ny = 950
-    s.text(40, ny, "Notes", 13, t["ink"], 700)
-    items = [
-        (1, "Header: from chip and name → to chip and name, both in text; the time in ink-muted mono (was faint)."),
-        (2, "The brief's first heading becomes the card's title and isn't repeated; the rest is compact Markdown."),
-        (3, "Folded at 8 lines: ‘Show all · 38 lines’. Links in the brief work: the card is an article, not a button."),
-        (4, "The footer is the button that opens the turn's Activity: 36px row, 44px hit area; shown focused."),
-        (5, "Said to the coordinator from a turn: ‘From turn-5’. 6: Said to you, no turn: no footer, nothing to open."),
-        (7, "Phone: from → to on one line (names truncate at 120px); the footer drops duration and counts."),
+    # Scrolled into a long brief, opened: the card's header is stuck at the top of the scroller.
+    SY, SH = 980, 300
+    s.label(X, SY - 10, "SCROLLED INTO AN OPENED BRIEF  ·  1280 wide")
+    s.rect(X, SY, W, SH, t["s0"], t["div2"], 2)
+    s.out.append(f'<clipPath id="stuck"><rect x="{X}" y="{SY}" width="{W}" height="{SH}"/></clipPath><g clip-path="url(#stuck)">')
+    s.line(lx, SY, lx, SY + SH)
+    by = SY + 40 + 6
+    for kind, runs in [
+        ("ol", ("4.", [("Fold long entries at about 10 lines; links below the cut leave the Tab order", "")])),
+        ("ol", ("5.", [("Link ", ""), ("task-21", "linkm"), (", commits like ", ""), ("3f2a9c1", "linkc"), ("nt", "nt"), (" and repo files", "")])),
+        ("ol", ("6.", [("Run the checks before you hand it back:", "")])),
+    ]:
+        s.text(cx + 14, by + 16, runs[0], 13, t["ink2"])
+        s.runs(cx + 30, by + 16, runs[1], 13)
+        by += 21
+    s.code_box(cx + 12, by + 6, 420, FENCE_SH, lang="bash", copy=True)
+    by += 16 + 40 + 12
+    s.text(cx + 12, by + 16, "Hand it back with a report, not a question.", 13, t["ink2"])
+    by += 21
+    s.fold(cx + 12, by + 24, "Show less")
+    by += 38
+    s.line(cx, by, cx + cw, by)
+    fy = by + 23
+    fx = s.text(cx + 12, fy, "Led to", 11.5, t["muted"]) + 8
+    fx = s.text(fx, fy, "turn-5", 11, t["ink2"], 400, True) + 8
+    s.agent_dot(fx, fy - 4, "engineer")
+    fx = s.text(fx + 12, fy, "engineer", 11, t["ink2"], 400, True) + 10
+    s.text(fx, fy, "48m · 14 actions · 41k tokens", 11.5, t["muted"])
+    s.path(f"M{cx + cw - 16},{fy - 8} l4,4 l-4,4", t["muted"], 1.3)
+    s.text(cx + cw - 22, fy, "Activity", 11.5, t["ink2"], 500, anchor="end")
+    by += 36
+    s.rect(cx, SY - 20, cw, by - SY + 20, stroke=t["div"], r=3)
+    nxt = by + 16
+    s.rect(cx - 23, nxt + 13, 11, 11, t["agents"]["engineer"], r=5.5)
+    card(s, cx, nxt, cw, "engineer", "coordinator", "05:57", None,
+         [("p", [("Done. Lint, build and tests pass.", "")])], None)
+    card_header(s, cx, SY, cw, "coordinator", "engineer", "05:08", stuck=True)
+    s.out.append("</g>")
+    s.note(X + W + 8, SY + 11, 8)
+    s.note(X + W + 8, SY + by - SY - 30, 9)
+
+    NY = SY + SH + 50
+    left = [
+        (1, ["Header: from chip and name → to chip and name, both", "in text; the time in ink-muted mono (was faint). 40px,", "a hairline under it. While a turn runs, the footer", "shows its badge and counts, no duration (copy.md)."]),
+        (2, ["The brief's first heading becomes the card's title", "and isn't repeated; the rest is compact Markdown."]),
+        (3, ["Folded at 8 lines: ‘Show all · 38 lines’. Links work:", "the card is an article, not a button."]),
+        (4, ["The footer is the button that opens the turn's", "Activity: 36px row, 44px hit area; shown focused."]),
+        (5, ["Said from a turn: ‘From turn-5’.", "6: said to you, no turn: no footer, nothing to open."]),
     ]
-    for i, (n, line) in enumerate(items):
-        col, row = i % 2, i // 2
-        nx, nyy = 40 + col * 620, ny + 24 + row * 26
-        s.note(nx, nyy - 13, n)
-        s.text(nx + 28, nyy, line, 12, t["ink2"])
+    right = [
+        (7, ["Phone: from → to and the time always on one line;", "names truncate at 96px each, full names in the", "card's accessible name. The footer keeps the agent:", "‘Led to turn-5 ● engineer · Activity ›’."]),
+        (8, ["Stuck: the header is position: sticky; top: 0 inside", "its own article, same push rule as Activity's bands.", "The text under it always has an author on screen.", "The scroller's scroll-padding-top is 40px."]),
+        (9, ["The card's end pushes its header out; the next", "card's header takes the top. They never overlap.", "You: a neutral slate dot and chip, never a colour."]),
+    ]
+    s.notes(40, NY, left)
+    s.notes(660, NY, right, "")
     s.save("handoffs.svg")
 
 
 # ------------------------------------------------------------------ states
 def states():
-    s = Sheet(1280, 1260, "Activity and Handoffs · every state",
+    s = Sheet(1280, 1630, "Activity and Handoffs · every state",
               "Empty, loading, failed, just started, Monaco missing, nothing to say. Flat: no shimmer, no fades; each state says what it is in words.")
     t = s.t
     PW, PH = 380, 300
     cols = [40, 450, 860]
 
-    def panel(i, j, title, handoffs=False):
+    def panel(i, j, title, handoffs=False, on="Everything"):
         x, y = cols[i], 130 + j * 370
         s.label(x, y - 10, title)
         s.rect(x, y, PW, PH, t["s0"], t["div2"], 2)
@@ -823,7 +893,7 @@ def states():
             return x, y
         f = Feed(s, x, y, PW, phone=True)
         f.oy = y  # the panel's top, for captions
-        f.toolbar()
+        f.toolbar(on=on)
         return f
 
     def empty_state(x, y, title, body):
@@ -833,9 +903,21 @@ def states():
         for k, line in enumerate(body):
             s.text(x + PW / 2, y + 78 + 18 * k, line, 12.5, t["muted"], anchor="middle")
 
+    def error(ex, ey, title):
+        """The inline load error: title, the server's words, the muted next step, Try again."""
+        s.rect(ex, ey, PW - 32, 160, t["s0"], t["div2"], 3)
+        s.rect(ex + 14, ey + 16, 16, 16, mix(t["danger"], t["s0"], 0.12), r=8)
+        s.text(ex + 22, ey + 28, "!", 12, t["danger"], 700, anchor="middle")
+        s.text(ex + 40, ey + 29, title, 13, t["ink"], 600)
+        s.text(ex + 40, ey + 50, "GET /api/tasks/task-40: 502 Bad Gateway", 11, t["muted"], 400, True)
+        s.text(ex + 40, ey + 72, "If it keeps failing, check that Agentry", 12, t["muted"])
+        s.text(ex + 40, ey + 89, "is still running.", 12, t["muted"])
+        s.rect(ex + 40, ey + 108, 84, 32, t["s0"], t["div2"], 3)
+        s.text(ex + 82, ey + 129, "Try again", 12, t["ink"], 500, anchor="middle")
+
     # 1. Empty
     f = panel(0, 0, "1 · ACTIVITY, EMPTY (A NEW TASK)")
-    empty_state(f.x, f.y + 60, "Nothing here yet", ["Every message, turn and tool call", "shows here as it happens."])
+    empty_state(f.x, f.y + 60, "Nothing here yet", ["Every message, turn and action shows", "here as it happens."])
 
     # 2. Loading
     f = panel(1, 0, "2 · ACTIVITY, LOADING")
@@ -853,16 +935,8 @@ def states():
 
     # 3. Error
     f = panel(2, 0, "3 · ACTIVITY, FAILED TO LOAD")
-    ex, ey = f.x + 16, f.y + 24
-    s.rect(ex, ey, PW - 32, 112, t["s0"], t["div2"], 3)
-    s.rect(ex + 14, ey + 16, 16, 16, mix(t["danger"], t["s0"], 0.12), r=8)
-    s.text(ex + 22, ey + 28, "!", 12, t["danger"], 700, anchor="middle")
-    s.text(ex + 40, ey + 29, "Couldn't load the activity.", 13, t["ink"], 600)
-    s.text(ex + 40, ey + 50, "GET /api/tasks/task-40: 502 Bad Gateway", 11, t["muted"], 400, True)
-    s.rect(ex + 40, ey + 66, 64, 28, t["s0"], t["div2"], 3)
-    s.text(ex + 72, ey + 85, "Retry", 12, t["ink"], 500, anchor="middle")
-    s.text(f.x + 16, f.oy + PH - 40, "The toolbar stays. Retry is a Button", 11.5, t["muted"])
-    s.text(f.x + 16, f.oy + PH - 22, "(secondary, 28px, 44px hit area).", 11.5, t["muted"])
+    error(f.x + 16, f.y + 20, "Couldn't load the activity")
+    s.text(f.x + 16, f.oy + PH - 22, "The toolbar stays. Try again: secondary Button.", 11.5, t["muted"])
 
     # 4. Running turn with no rows yet
     f = panel(0, 1, "4 · A TURN JUST STARTED, NO ROWS YET")
@@ -870,7 +944,7 @@ def states():
     f.band("engineer", status=("running", "info"), time="06:20", dur="8s…", live=True)
     ny = f.y + 24
     s.rect(f.cx, ny - 8, 8, 8, t["ok"], r=4)
-    s.text(f.cx + 16, ny, "engineer is starting…", 12.5, t["ok"], 500)
+    s.text(f.cx + 16, ny, "engineer is starting…", 12.5, t["oki"], 500)
     s.text(f.R + f.tx, ny, "now", 11, t["muted"], 400, True)
     f.y += 40
     f.band("coordinator", status=("ended",), time="06:11", dur="9m")
@@ -896,7 +970,7 @@ def states():
     f.band("engineer", status=("ended",), time="05:09", dur="48m")
     ry = f.y + 20
     f.icon(ry, "done")
-    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["ok"], 600)
+    s.text(f.cx, ry, "Finished, 41k tokens", 12, t["oki"], 600)
     f.stamp(ry, "05:57")
     f.y = ry + 10
     f.band("coordinator", status=("ended",), time="05:00", dur="9m")
@@ -910,7 +984,7 @@ def states():
 
     # 7-9. Handoffs
     x, y = panel(0, 2, "7 · HANDOFFS, EMPTY", True)
-    empty_state(x, y + 70, "No handoffs yet", ["When the coordinator hands the task", "to an agent, it shows here."])
+    empty_state(x, y + 70, "No handoffs yet", ["When the coordinator hands the task to", "an agent, the brief shows here."])
     x, y = panel(1, 2, "8 · HANDOFFS, LOADING", True)
     s.line(x + 21, y + 20, x + 21, y + 280)
     for k in range(3):
@@ -922,16 +996,14 @@ def states():
         s.rect(x + 52, cy + 54, 180, 10, t["s2"], r=2)
     s.text(x + PW / 2, y + PH - 8, "Loading handoffs…", 12, t["muted"], anchor="middle")
     x, y = panel(2, 2, "9 · HANDOFFS, FAILED TO LOAD", True)
-    ex, ey = x + 16, y + 24
-    s.rect(ex, ey, PW - 32, 112, t["s0"], t["div2"], 3)
-    s.rect(ex + 14, ey + 16, 16, 16, mix(t["danger"], t["s0"], 0.12), r=8)
-    s.text(ex + 22, ey + 28, "!", 12, t["danger"], 700, anchor="middle")
-    s.text(ex + 40, ey + 29, "Couldn't load the handoffs.", 13, t["ink"], 600)
-    s.text(ex + 40, ey + 50, "GET /api/tasks/task-40: 502 Bad Gateway", 11, t["muted"], 400, True)
-    s.rect(ex + 40, ey + 66, 64, 28, t["s0"], t["div2"], 3)
-    s.text(ex + 72, ey + 85, "Retry", 12, t["ink"], 500, anchor="middle")
+    error(x + 16, y + 24, "Couldn't load the handoffs")
     s.text(x + 16, y + PH - 40, "Commits not loaded or failed: SHAs stay", 11.5, t["muted"])
     s.text(x + 16, y + PH - 22, "plain code. No error: links are extra.", 11.5, t["muted"])
+
+    # 10. A filter that leaves nothing
+    f = panel(0, 3, "10 · ACTIVITY, A FILTER WITH NOTHING TO SHOW", on="Actions")
+    empty_state(f.x, f.y + 60, "No actions yet", ["Choose Everything to see every row."])
+    s.text(f.x + 16, f.oy + PH - 22, "Messages on, none yet: ‘No messages yet’.", 11.5, t["muted"])
     s.save("states.svg")
 
 
@@ -950,7 +1022,7 @@ def activity_dark():
         (1, ["Same tokens, dark values: surface-0", "#1a1d23, band surface-1 #16181d,", "hairlines divider #2b2f38."]),
         (2, ["Chips: the agent colour at 22% on", "surface-1, letter in the agent colour:", "4.3:1 or more for every colour."]),
         (3, ["You and Agentry: surface-3 chip,", "ink-secondary letter (6.7:1)."]),
-        (4, ["Links: info #38bdf8 (7.9:1), underlined.", "Muted text #8b919e: 5.3:1 on surface-0."]),
+        (4, ["Links: info #38bdf8 (7.9:1), underlined;", "a linked SHA has no code background.", "Muted text #8b919e: 5.3:1 on surface-0.", "Green text stays success #22c55e (7.4:1):", "success-ink is a light-theme fix only."]),
         (5, ["Code: Monaco's vs-dark colours on", "surface-1; plain until on screen."]),
         (6, ["No shadows or glows to separate the", "stuck band: its surface and hairlines do."]),
     ])
