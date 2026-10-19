@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -137,13 +138,20 @@ func TestUnarchivingAStreamNotArchivedIsRefused(t *testing.T) {
 func TestUnarchivingFromABadBlobWritesNothing(t *testing.T) {
 	s, model, disk, marker := archivedWith(t)
 	last, applied := s.LastPosition(), model.applied
-	// The blob's own rows, every count right, but one moved to task-2.
+	// The blob's own rows, every count right, but one moved to task-2; and
+	// the same rows with one more, past the marker's "through".
 	blob, err := disk.Open(marker.Text("archive"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	rows, err := decodeArchive(blob)
 	blob.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	past := append(slices.Clone(rows), rows[len(rows)-1])
+	past[len(past)-1].Position = marker.Position + 100
+	pastThrough, err := encodeArchive(past)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +164,9 @@ func TestUnarchivingFromABadBlobWritesNothing(t *testing.T) {
 		"missing":        sharedfiles.Disk{Dir: t.TempDir()},
 		"not an archive": openedAs(func(string) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("not gzip")), nil }),
 		"another's row":  openedAs(func(string) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(another)), nil }),
+		"row past through": openedAs(func(string) (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(pastThrough)), nil
+		}),
 		"torn part of the way": openedAs(func(string) (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(another[:len(another)/2])), nil
 		}),
