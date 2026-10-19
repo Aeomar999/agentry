@@ -6,6 +6,8 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 var (
@@ -79,5 +81,41 @@ func TestTemplatesHandedOutShareNothing(t *testing.T) {
 	s.Apply(events.Event{Position: 2, Proposal: saved("papers", "Again", chief)})
 	if want := agents.UserTemplatesFromEvents(log); !reflect.DeepEqual(before, want) {
 		t.Errorf("saving again changed what was handed out:\n%+v", before)
+	}
+}
+
+// Templates saved before a snapshot come back from it, and the events
+// after it, saving the first again and removing the other, apply on top:
+// the state equals a replay of the whole log.
+func TestTemplatesComeBackFromASnapshot(t *testing.T) {
+	path, log := seededLog(t, saved("papers", "First", chief, courier), saved("orders", "", chief))
+	cut := log[len(log)-1].Position
+	snapshot := snapshotted(t, path, cut, nil)
+	s, err := store.Open(path, withIdeas, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	propose(t, s, saved("papers", "Again", chief, redrafts))
+	propose(t, s, removed("orders"))
+	s.Close()
+
+	restored := Restore(snapshot, "build-1", withIdeas, ideas.Streams())
+	if want := agents.UserTemplatesFromEvents(log); !reflect.DeepEqual(restored.Templates(), want) {
+		t.Errorf("the snapshot holds the templates\n%+v\nwant %+v", restored.Templates(), want)
+	}
+	again, err := store.Open(path, withIdeas, restored, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	if restored.resumed != cut {
+		t.Fatalf("Open replayed the whole log instead of going on from the snapshot at %d", cut)
+	}
+	if err := Equal(again, restored); err != nil {
+		t.Error(err)
+	}
+	want := agents.UserTemplates{{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}}}
+	if got := restored.Templates(); !reflect.DeepEqual(got, want) {
+		t.Errorf("after the snapshot's tail:\n%+v\nwant %+v", got, want)
 	}
 }

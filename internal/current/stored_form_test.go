@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -29,6 +30,7 @@ func TestTheLiveStateEqualsARestart(t *testing.T) {
 		proposal("task-1", you, events.TaskLabeled, map[string]any{"labels": []string{"web", "api"}}),
 		proposal("task-1", you, events.TaskLabeled, map[string]any{"labels": []string{}}),
 		proposal("task-1", worker, events.WorktreeReady, map[string]any{"path": "/w", "branch": "agentry/task-1", "port": int64(7901)}),
+		saved("papers", "First", chief, agents.Agent{Name: "courier", Prompt: "Take the papers.", Engine: "claude", Workers: []string{}}),
 	} {
 		propose(t, s, p)
 	}
@@ -53,5 +55,8 @@ func TestTheLiveStateEqualsARestart(t *testing.T) {
 	}
 	if !reflect.DeepEqual(live.Roster(), restarted.Roster()) {
 		t.Errorf("agents live:\n%+v\nafter a restart:\n%+v", live.Roster(), restarted.Roster())
+	}
+	if !reflect.DeepEqual(live.Templates(), restarted.Templates()) {
+		t.Errorf("templates live:\n%+v\nafter a restart:\n%+v", live.Templates(), restarted.Templates())
 	}
 }

@@ -68,6 +68,8 @@ func someProposals() []events.Proposal {
 		proposal("task-1", you, "task.exploded", nil), // refused by the shape check
 		proposal("task-3", you, events.TaskCreated, map[string]any{"title": "Third", "repo": "/r", "coordinator": "tech-lead"}),
 		proposal("task-3", worker, events.WorktreeMoved, map[string]any{"worker": "laptop", "path": "/w", "port": 7901}),
+		saved("papers", "First", chief, courier),
+		saved("orders", "", chief),
 	)
 }
 
@@ -84,7 +86,7 @@ func TestEqualPassesOnAStateThatFollowedTheLog(t *testing.T) {
 	}
 
 	loadedState := New(withIdeas, ideas.Streams())
-	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1", events.SettingsStream} {
+	for _, stream := range []string{"task-3", events.AgentsStream, "task-1", events.WorkersStream, events.PolicyStream, "task-2", events.ConnectionsStream, "idea-1", events.SettingsStream, events.TemplatesStream} {
 		accepted, err := s.Stream(stream)
 		if err != nil {
 			t.Fatal(err)
@@ -108,6 +110,7 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 		{"new task", proposal("task-4", you, events.TaskCreated, map[string]any{"title": "Missed", "repo": "/r", "coordinator": "tech-lead"}), "task-4:"},
 		{"roster", proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Missed."}), "agents:"},
 		{"workers", proposal(events.WorkersStream, system, events.WorkerDisconnected, map[string]any{"name": "laptop"}), "workers: field Workers"},
+		{"templates", removed("papers"), "templates: "},
 		{"policy", proposal(events.PolicyStream, system, events.PolicyLoaded, map[string]any{"hash": "h2", "path": "/p"}), "policy: the state's last position is"},
 		{"rejection", proposal("task-1", you, "task.exploded", nil), "position: the state is at"},
 	}

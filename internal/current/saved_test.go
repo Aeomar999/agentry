@@ -48,6 +48,11 @@ func TestTheStoredStateComesBackFromItsSavedForms(t *testing.T) {
 	if restored := connections.Restore(linked); !reflect.DeepEqual(state.connections, restored) {
 		t.Errorf("the connections read back differ:\n%+v\n%+v", state.connections, restored)
 	}
+	var templates agents.UserTemplates
+	throughJSON(t, state.templates, &templates)
+	if len(state.templates) == 0 || !reflect.DeepEqual(state.templates, templates) {
+		t.Errorf("the templates read back differ:\n%+v\n%+v", state.templates, templates)
+	}
 }
 
 func throughJSON(t *testing.T, saved, read any) {

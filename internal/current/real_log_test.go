@@ -100,6 +100,8 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 		return equalReplay(stream, accepted, infallible(connections.FromEvents), held(state.Connections()))
 	case events.SettingsStream:
 		return equalReplay(stream, accepted, infallible(settings.FromEvents), held(state.Settings()))
+	case events.TemplatesStream:
+		return equalReplay(stream, accepted, infallible(agents.UserTemplatesFromEvents), held(state.Templates()))
 	case events.PolicyStream:
 		return nil
 	}
@@ -186,7 +188,7 @@ func throughSnapshots(t *testing.T, path string, every int64) {
 	if restored.resumed != last {
 		t.Fatalf("Open replayed the whole log instead of going on from the snapshot at %d", last)
 	}
-	for _, stream := range []string{events.AgentsStream, events.WorkersStream, events.ConnectionsStream, events.SettingsStream} {
+	for _, stream := range []string{events.AgentsStream, events.WorkersStream, events.ConnectionsStream, events.SettingsStream, events.TemplatesStream} {
 		if err := restored.Broken(stream); err != nil {
 			t.Errorf("%s is broken: %v", stream, err)
 		}

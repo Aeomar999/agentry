@@ -30,7 +30,7 @@ import (
 // stream, a task broken part way with events on it after the break, ideas,
 // every event a task applies, and a story that finishes while its epic's
 // coordinator decides, which only the task's unexported storyNews carries
-// to the event after it.
+// to the event after it, and templates saved again and removed.
 func fixtureLogs() map[string][]events.Proposal {
 	brokenThenMore := append(someProposals(),
 		proposal("task-1", lead, events.TaskRenamed, map[string]any{"title": "Still applied"}),
@@ -51,6 +51,10 @@ func fixtureLogs() map[string][]events.Proposal {
 		"ideas":            agreed,
 		"every task event": proposalsOf(taskstest.EveryEvent()),
 		"story news":       storyNews(),
+		"templates": append(proposalsOf(everyStream()),
+			saved("papers", "First", chief, courier),
+			saved("orders", "", chief, agents.Agent{Name: "clerk", Prompt: "File them.", Engine: "claude", Workers: []string{}}),
+			saved("papers", "Again", chief, redrafts), removed("orders")),
 	}
 }
 
