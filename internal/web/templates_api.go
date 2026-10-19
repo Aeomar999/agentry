@@ -31,7 +31,8 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(request.ID)
-	if id == "" {
+	derived := id == ""
+	if derived {
 		id = templateIDFor(team)
 	}
 	proposal, err := agents.SaveTemplate(roster, team, id, strings.TrimSpace(request.Description), httpapi.You)
@@ -44,7 +45,13 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusBadRequest)
+		reason := rejection.Reason
+		if derived {
+			// The id is ours, not theirs: say where it came from, or the
+			// refusal names an id they never typed.
+			reason += ` (made from the team's name "` + team + `"): give the template an id`
+		}
+		http.Error(w, reason, http.StatusBadRequest)
 		return
 	}
 	saved, _ := s.state.Templates().WithID(id)

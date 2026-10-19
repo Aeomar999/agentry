@@ -132,6 +132,29 @@ func TestATemplateCantTakeABuiltInTemplatesID(t *testing.T) {
 	}
 }
 
+func TestARefusedIDMadeFromTheTeamsNameSaysSo(t *testing.T) {
+	server, _ := newTestServer(t)
+	code, body := call(t, server, "POST", "/api/teams/Software/template", `{}`)
+	want := `the built-in software template has that id (made from the team's name "Software"): give the template an id`
+	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
+		t.Errorf("a built-in id from the team's name: %d %s", code, body)
+	}
+	madeAgent(t, server, "counter", "2025 Team", true)
+	code, body = call(t, server, "POST", "/api/teams/2025%20Team/template", `{}`)
+	want = `a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: 2025-team (made from the team's name "2025 Team"): give the template an id`
+	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
+		t.Errorf("an id from a team name starting with a digit: %d %s", code, body)
+	}
+}
+
+func TestARefusedIDYouGaveIsNamedAsItIs(t *testing.T) {
+	server, _ := newTestServer(t)
+	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"id":"software"}`)
+	if code != http.StatusBadRequest || strings.TrimSpace(body) != "the built-in software template has that id" {
+		t.Errorf("a built-in id you gave: %d %s", code, body)
+	}
+}
+
 func TestATemplateIsRemoved(t *testing.T) {
 	server, _ := newTestServer(t)
 	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software"}`)
