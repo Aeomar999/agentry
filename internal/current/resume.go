@@ -20,8 +20,12 @@ import (
 //	RemoveLeftovers(path)
 //	state := Restore(path, build, catalogue, owned...)
 //	log, err := store.Open(dbPath, catalogue, state, check) // calls state.Resume
+//	writer := NewSnapshotWriter(path, build, state, log)
+//	writer.Start()
+//	...
+//	writer.Close() // at a clean shutdown, before log.Close
 //
-// and a snapshot is written with WriteSnapshot(path, state, log, build).
+// The writer writes with WriteSnapshot, which a test may call itself.
 // Every way a snapshot can't be used ends in a whole replay, which is
 // logged with why.
 

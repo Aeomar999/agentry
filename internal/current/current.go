@@ -58,9 +58,10 @@ type State struct {
 	settings    settings.Settings
 	skipped     tally // foreign streams and unknown types
 
-	snapshot *snapshotAt // read from a snapshot, still to be checked against the log by Resume
-	tail     *tail       // set while Resume applies the events after a snapshot
-	resumed  int64       // the snapshot position Open went on from, 0 after a whole replay
+	snapshot *snapshotAt   // read from a snapshot, still to be checked against the log by Resume
+	tail     *tail         // set while Resume applies the events after a snapshot
+	resumed  int64         // the snapshot position Open went on from, 0 after a whole replay
+	moved    chan struct{} // sent on, if nothing waits in it, when the position moves: a SnapshotWriter's wake
 }
 
 var _ features.Reader = (*State)(nil)
@@ -92,7 +93,7 @@ func New(catalogue *events.Catalogue, owned ...*features.Streams) *State {
 		}
 		owners[streams.Prefix] = streams
 	}
-	s := &State{catalogue: catalogue, owners: owners}
+	s := &State{catalogue: catalogue, owners: owners, moved: make(chan struct{}, 1)}
 	s.empty()
 	return s
 }
@@ -191,6 +192,7 @@ func (s *State) fold(stream string, accepted []events.Event) {
 // clear it by mistake: rules.Check refuses every event on an archived task
 // today.
 func (s *State) Refold(stream string, before []events.Event, e events.Event) {
+	defer s.wake()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.position = e.Position
@@ -223,6 +225,15 @@ func (s *State) Loaded(position int64) {
 
 func byPosition(a, b created) int { return cmp.Compare(a.position, b.position) }
 
+// wake tells a SnapshotWriter the position moved. It never waits: a wake
+// not yet taken already says so.
+func (s *State) wake() {
+	select {
+	case s.moved <- struct{}{}:
+	default:
+	}
+}
+
 // Since is the last position the state holds, for the store to apply the
 // rest of the log from: 0 for a new state.
 func (s *State) Since() int64 { return s.Position() }
@@ -232,6 +243,7 @@ func (s *State) Since() int64 { return s.Position() }
 // A foreign stream's event is only counted. A broken stream takes no more
 // events, as a replay would fail before them.
 func (s *State) Apply(e events.Event) {
+	defer s.wake()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.position = e.Position
@@ -362,6 +374,14 @@ func (s *State) copy() *State {
 		settings:    s.settings,
 		skipped:     s.skipped.clone(),
 	}
+}
+
+// Resumed is the position of the snapshot Open went on from, or 0 when it
+// replayed the whole log.
+func (s *State) Resumed() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.resumed
 }
 
 // Position is the last event applied, rejections included.

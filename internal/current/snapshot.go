@@ -101,7 +101,12 @@ type snapshotAt struct {
 // state is kept from: its event at the state's position anchors the
 // snapshot. build names the code writing it.
 func writeSnapshot(w io.Writer, s *State, log *store.Store, build string) error {
-	held := s.copy()
+	return writeCopy(w, s.copy(), log, build)
+}
+
+// writeCopy is writeSnapshot of held, a copy of the state, which nothing
+// else changes, so it is read with no lock held.
+func writeCopy(w io.Writer, held *State, log *store.Store, build string) error {
 	if held.position == 0 {
 		return errors.New("an empty state has nothing to write")
 	}
