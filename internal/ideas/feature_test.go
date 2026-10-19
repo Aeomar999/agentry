@@ -4,11 +4,14 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
-// board is the state Ideas' manifest reads: a roster and the ideas.
+// board is the state Ideas' manifest reads: a roster and the ideas. The
+// rest of the Reader is left nil, so reading it fails the test.
 type board struct {
+	features.Reader
 	roster agents.Roster
 	ideas  []*ideas.Idea
 }
@@ -49,7 +52,7 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 	}
 	for _, c := range cases {
 		state := board{roster: agents.Roster{{Name: "tech-lead", Coordinates: true}, c.lead}}
-		entry := ideas.Feature(state).Manifest(state)
+		entry := ideas.Feature().Manifest(state)
 		if entry.Enabled != c.enabled || entry.Visible != c.enabled || entry.Why != c.why {
 			t.Errorf("%s: %+v", c.name, entry)
 		}
@@ -58,7 +61,7 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 
 func TestIdeasIsKeptForOneIdea(t *testing.T) {
 	state := board{ideas: []*ideas.Idea{{ID: "idea-1", State: ideas.Dismissed}}}
-	entry := ideas.Feature(state).Manifest(state)
+	entry := ideas.Feature().Manifest(state)
 	if entry.Enabled || !entry.Visible || entry.Badge != 0 || entry.Why != "kept while 1 idea remains; the Visionaries team was removed" {
 		t.Errorf("one dismissed idea: %+v", entry)
 	}

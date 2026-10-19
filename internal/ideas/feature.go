@@ -7,15 +7,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
 
-// Feature is Ideas as a feature, its ideas read from source. It is enabled
-// while some team's coordinator suggests ideas (Suggests), and visible while
-// it is enabled or any idea, of any state, is left: your open ideas still
-// need an answer and the rest are their history. Its badge is the number of
-// open ideas.
-func Feature(source Source) features.Feature {
-	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Manifest: func(state features.Reader) features.Entry {
-		return manifest(All(source), state)
-	}}
+// Feature is Ideas as a feature. It is enabled while some team's coordinator
+// suggests ideas (Suggests), and visible while it is enabled or any idea, of
+// any state, is left: your open ideas still need an answer and the rest are
+// their history. Its badge is the number of open ideas.
+func Feature() features.Feature {
+	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Manifest: manifest}
 }
 
 // Streams are the ideas' streams, for the state to build and keep: each
@@ -42,7 +39,9 @@ func next(prev any, e events.Event) any {
 	return nil
 }
 
-func manifest(list []*Idea, state features.Reader) features.Entry {
+// manifest is Ideas' entry, reading the ideas from the state's streams.
+func manifest(state features.Reader) features.Entry {
+	list := All(state)
 	entry := features.Entry{Badge: open(list)}
 	roster := state.Roster()
 	for _, team := range roster.Teams() {

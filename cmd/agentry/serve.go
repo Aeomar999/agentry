@@ -225,7 +225,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	// Every feature in this binary, written out here: no feature registers itself.
 	installed := []features.Feature{
-		ideas.Feature(state),
+		ideas.Feature(),
 	}
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
