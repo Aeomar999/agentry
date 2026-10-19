@@ -48,3 +48,29 @@ func TestATurnSaysWhyItsTokensAreUnknown(t *testing.T) {
 		t.Errorf("turns %s, want turn-1 with %s and turn-2 without a reason", body, want)
 	}
 }
+
+// The task page says on how many turns the tokens couldn't be counted, and
+// why, grouped by reason.
+func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
+	withReasons := func(reasons ...string) *tasks.Task {
+		task := &tasks.Task{}
+		for _, reason := range reasons {
+			task.Turns = append(task.Turns, &tasks.Turn{Ended: true, TokensUnknown: reason})
+		}
+		return task
+	}
+	for _, c := range []struct {
+		task *tasks.Task
+		want string
+	}{
+		{withReasons(), ""},
+		{withReasons("", ""), ""},
+		{withReasons("", "transcript not saved"), "Tokens unknown on 1 turn: transcript not saved"},
+		{withReasons("transcript not saved", "", "transcript not saved", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved"},
+		{withReasons("transcript not saved", "no tokens reported", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"},
+	} {
+		if got := detailOf(c.task, agents.Roster{}, nil).TokensUnknown; got != c.want {
+			t.Errorf("%d turns: %q, want %q", len(c.task.Turns), got, c.want)
+		}
+	}
+}

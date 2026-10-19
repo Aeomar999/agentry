@@ -39,7 +39,7 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4,"turns":7,"turnsSinceAnswer":2},
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
 		case "GET /api/tasks/task-3":
-			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished."}`)
+			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","tokensUnknown":"Tokens unknown on 2 turns: transcript not saved"}`)
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
 				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
@@ -270,27 +270,12 @@ func TestTheTaskSaysItsLimits(t *testing.T) {
 	}
 }
 
-// show_task says on how many turns the tokens couldn't be counted, and why.
+// show_task says on how many turns the tokens couldn't be counted, and why,
+// as the server words it.
 func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
-	withReasons := func(reasons ...string) detail {
-		var d detail
-		for _, reason := range reasons {
-			d.TurnList = append(d.TurnList, struct{ TokensUnknown string }{reason})
-		}
-		return d
-	}
-	for _, c := range []struct {
-		task detail
-		want string
-	}{
-		{withReasons("", ""), ""},
-		{withReasons("", "transcript not saved"), "Tokens unknown on 1 turn: transcript not saved"},
-		{withReasons("transcript not saved", "", "transcript not saved", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved"},
-		{withReasons("transcript not saved", "no tokens reported", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"},
-	} {
-		if got := tokensUnknownOf(c.task); got != c.want {
-			t.Errorf("%+v: %q, want %q", c.task.TurnList, got, c.want)
-		}
+	c, _ := start(t, false, nil)
+	if text := c.tool("show_task", map[string]any{"task": "task-3"}); !strings.Contains(text, "\nTokens unknown on 2 turns: transcript not saved\n") {
+		t.Errorf("show_task should say where the tokens are unknown:\n%s", text)
 	}
 }
 

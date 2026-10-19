@@ -34,10 +34,9 @@ type task struct {
 
 type detail struct {
 	task
-	Description, Summary, Coordinator string
-	Trail                             []struct{ From, To, Text string }
-	TurnList                          []struct{ TokensUnknown string }
-	Shared                            []struct {
+	Description, Summary, Coordinator, TokensUnknown string
+	Trail                                            []struct{ From, To, Text string }
+	Shared                                           []struct {
 		Name, By, From string
 		Size           int64
 	}
@@ -211,8 +210,8 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
 	}
 	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.task))
-	if unknown := tokensUnknownOf(t); unknown != "" {
-		fmt.Fprintf(&b, "%s\n", unknown)
+	if t.TokensUnknown != "" {
+		fmt.Fprintf(&b, "%s\n", t.TokensUnknown)
 	}
 	if t.Description != "" {
 		fmt.Fprintf(&b, "\n%s\n", t.Description)
@@ -268,41 +267,6 @@ func turnsOf(t task) string {
 		return fmt.Sprintf("%d turns (no limit)", t.Turns)
 	}
 	return fmt.Sprintf("%d of %d turns", t.TurnsSinceAnswer, t.MaxTurns)
-}
-
-// tokensUnknownOf says on how many turns the tokens couldn't be counted,
-// so the tokens used fall short of what was spent, and why: "Tokens unknown
-// on 3 turns: transcript not saved". "" when every turn was counted.
-func tokensUnknownOf(t detail) string {
-	var reasons []string
-	count := map[string]int{}
-	for _, turn := range t.TurnList {
-		if reason := turn.TokensUnknown; reason != "" {
-			if count[reason] == 0 {
-				reasons = append(reasons, reason)
-			}
-			count[reason]++
-		}
-	}
-	if len(reasons) == 1 {
-		return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(count[reasons[0]]), reasons[0])
-	}
-	total := 0
-	for i, reason := range reasons {
-		total += count[reason]
-		reasons[i] = fmt.Sprintf("%s (%d)", reason, count[reason])
-	}
-	if total == 0 {
-		return ""
-	}
-	return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(total), strings.Join(reasons, ", "))
-}
-
-func turnCount(n int) string {
-	if n == 1 {
-		return "1 turn"
-	}
-	return fmt.Sprintf("%d turns", n)
 }
 
 // ---- handing over work ---------------------------------------------------------

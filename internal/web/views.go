@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -20,23 +21,24 @@ type taskSummary = tasks.Summary
 
 type taskDetail struct {
 	taskSummary
-	Description string        `json:"description"`
-	FirstTitle  string        `json:"firstTitle"` // when the coordinator renamed the task
-	Options     []string      `json:"options"`    // answers the open question offers
-	Page        string        `json:"page"`       // the page the open question came with
-	Coordinator string        `json:"coordinator"`
-	TeamChosen  bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
-	EpicTitle   string        `json:"epicTitle"`  // a story's epic's
-	StoryList   []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
-	Shared      []sharedFile  `json:"shared"`     // its shared files
-	MovingTo    string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
-	Summary     string        `json:"summary"`
-	Worktree    *worktree     `json:"worktree"`
-	Trail       []step        `json:"trail"`
-	Turns       []turn        `json:"turnList"`
-	Approvals   []action      `json:"approvals"` // waiting for you
-	Actions     []action      `json:"actions"`
-	Events      []eventEntry  `json:"events"`
+	Description   string        `json:"description"`
+	FirstTitle    string        `json:"firstTitle"` // when the coordinator renamed the task
+	Options       []string      `json:"options"`    // answers the open question offers
+	Page          string        `json:"page"`       // the page the open question came with
+	Coordinator   string        `json:"coordinator"`
+	TeamChosen    bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
+	EpicTitle     string        `json:"epicTitle"`  // a story's epic's
+	StoryList     []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
+	Shared        []sharedFile  `json:"shared"`     // its shared files
+	MovingTo      string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
+	Summary       string        `json:"summary"`
+	Worktree      *worktree     `json:"worktree"`
+	Trail         []step        `json:"trail"`
+	Turns         []turn        `json:"turnList"`
+	TokensUnknown string        `json:"tokensUnknown"` // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+	Approvals     []action      `json:"approvals"`     // waiting for you
+	Actions       []action      `json:"actions"`
+	Events        []eventEntry  `json:"events"`
 }
 
 type worktree struct {
@@ -118,7 +120,7 @@ func listOf(items []string) []string {
 
 func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
 	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
-		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
+		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {
 		detail.Shared = append(detail.Shared, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})
@@ -151,6 +153,41 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 			Actor: e.Actor.String(), Correlation: e.Correlation, Data: data})
 	}
 	return detail
+}
+
+// tokensUnknownOf says on how many turns the tokens couldn't be counted,
+// so the tokens used fall short of what was spent, and why: "Tokens unknown
+// on 3 turns: transcript not saved". "" when every turn was counted.
+func tokensUnknownOf(t *tasks.Task) string {
+	var reasons []string
+	count := map[string]int{}
+	for _, turn := range t.Turns {
+		if reason := turn.TokensUnknown; reason != "" {
+			if count[reason] == 0 {
+				reasons = append(reasons, reason)
+			}
+			count[reason]++
+		}
+	}
+	if len(reasons) == 1 {
+		return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(count[reasons[0]]), reasons[0])
+	}
+	total := 0
+	for i, reason := range reasons {
+		total += count[reason]
+		reasons[i] = fmt.Sprintf("%s (%d)", reason, count[reason])
+	}
+	if total == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(total), strings.Join(reasons, ", "))
+}
+
+func turnCount(n int) string {
+	if n == 1 {
+		return "1 turn"
+	}
+	return fmt.Sprintf("%d turns", n)
 }
 
 // turnOf is the turn a trail step leads to: the next turn of the agent it
