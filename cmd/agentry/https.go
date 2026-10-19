@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/tlsca"
+	"gitlab.com/dev.chempa/agentry/internal/web"
 )
 
 // tlsConfig serves the certificate issuer hands out, which it issues anew
@@ -23,7 +24,7 @@ func tlsConfig(issuer *tlsca.Issuer) *tls.Config {
 // trustPrefix is where a device gets what it needs to trust the CA, over
 // plain HTTP too, and without the token: it can't open the https address
 // before it trusts the CA.
-const trustPrefix = "/trust/"
+const trustPrefix = web.TrustPath
 
 // frontDoor is the server with -https on. Over TLS it is next. Over plain
 // HTTP it is next only for this machine, whose hooks, `agentry mcp`, status

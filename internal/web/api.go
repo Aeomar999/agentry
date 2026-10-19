@@ -485,9 +485,13 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 // the Policy page, which says what to do.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
 	policyProblem := s.config.Policy != nil && s.config.Policy.Problem() != ""
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
+	config := map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
 		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil,
-		"policyProblem": policyProblem, "missingProfiles": s.missingProfilesInUse()})
+		"policyProblem": policyProblem, "missingProfiles": s.missingProfilesInUse()}
+	if trust := s.trustAt(r, requestURL(r)); trust != nil {
+		config["trust"] = trust // the page is served with the server's own CA
+	}
+	reply(w, config)
 }
 
 // missingProfilesInUse is policy.MissingProfiles for the roster: none while

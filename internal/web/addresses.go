@@ -159,6 +159,28 @@ func (s *Server) servedWithOwnCA(r *http.Request, url string) bool {
 	}
 }
 
+// TrustPath is the trust page, where a device gets the server's own CA to
+// trust it, without the token (cmd/agentry's frontDoor serves it).
+const TrustPath = "/trust/"
+
+// trustAt is where a device trusts the server's own CA before it opens
+// url, with the CA's fingerprint to check it by, or nil where url isn't
+// served with it. The trust page is served over plain HTTP too, so a link
+// with a port is http: a device that doesn't trust the CA yet opens it with
+// no warning. Without a port, https is on 443 and plain HTTP isn't.
+func (s *Server) trustAt(r *http.Request, url string) map[string]string {
+	if !s.servedWithOwnCA(r, url) {
+		return nil
+	}
+	page := url + TrustPath
+	if rest, ok := strings.CutPrefix(url, "https://"); ok {
+		if _, port, err := net.SplitHostPort(rest); err == nil && port != "" {
+			page = "http://" + rest + TrustPath
+		}
+	}
+	return map[string]string{"url": page, "fingerprint": s.caFingerprint()}
+}
+
 // caFingerprint is the SHA-256 of the server's own CA, as `agentry ca`
 // shows it.
 func (s *Server) caFingerprint() string {
