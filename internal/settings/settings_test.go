@@ -25,3 +25,17 @@ func TestAChangeKeepsTheSettingsItDoesntName(t *testing.T) {
 		t.Error("turned on again: it should be on")
 	}
 }
+
+func TestIdeasAreNeverAcceptedForYouUnlessYouSaySo(t *testing.T) {
+	s := FromEvents([]events.Event{changed(map[string]any{VisionariesOnEpicClose: false})})
+	if s.AutoAcceptIdeas || s.AutoStartIdeas {
+		t.Errorf("a log that never named them should leave both off: %+v", s)
+	}
+	s = s.Next(changed(map[string]any{AutoAcceptIdeas: true, AutoStartIdeas: true}))
+	if !s.AutoAcceptIdeas || !s.AutoStartIdeas || s.VisionariesOnEpicClose {
+		t.Errorf("turned both on: %+v", s)
+	}
+	if s = s.Next(changed(map[string]any{AutoStartIdeas: false})); !s.AutoAcceptIdeas || s.AutoStartIdeas {
+		t.Errorf("turned starting off: accepting should stay on: %+v", s)
+	}
+}

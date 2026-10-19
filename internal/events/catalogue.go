@@ -91,7 +91,7 @@ var catalogue = map[Type]spec{
 	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human}}, // "note" may be empty
 	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
 
-	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose"
+	SettingsChanged: {writers: []ActorKind{Human}}, // e.g. "visionariesOnEpicClose", "autoAcceptIdeas", "autoStartIdeas"
 
 	ProposalRejected: {writers: nil},
 }
