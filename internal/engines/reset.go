@@ -77,9 +77,11 @@ func resetIn(text string, now time.Time) time.Time {
 	return at
 }
 
-// A reset word, as in "resets at", "reset_at": or "resetsAt"=, so other
-// times in the text, such as when a request was sent, aren't taken for it.
-const resetsWord = `(?i)\bresets?\w*["':=\s]+(?:at\s+)?`
+// A reset word, as in "resets at", "reset_at": or "resetsAt"=, starting a
+// word or joined to the one before ("limit_resets_at", "rateLimitResetsAt"),
+// so other times in the text, such as when a request was sent, aren't taken
+// for it, and nor are words like "preset".
+const resetsWord = `(?i)(?:(?:\b|_)r|(?-i:[a-z]R))esets?\w*["':=\s]+(?:at\s+)?`
 
 var (
 	isoPattern   = regexp.MustCompile(resetsWord + `(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))`)
