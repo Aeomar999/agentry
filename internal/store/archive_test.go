@@ -231,8 +231,8 @@ func execOn(t *testing.T, path, statements string) {
 	}
 }
 
-// A log made before the migrations opens at version 1, with the gated
-// trigger and every event as it was; opening it again runs nothing.
+// A log made before the migrations opens at the latest version, with the
+// gated trigger and every event as it was; opening it again runs nothing.
 func TestAVersionZeroLogMigratesOnce(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	execOn(t, path, versionZero)
@@ -247,8 +247,8 @@ func TestAVersionZeroLogMigratesOnce(t *testing.T) {
 	}
 	s.Close()
 	version, _, trigger := schemaOf(t, path)
-	if version != 1 || !strings.Contains(trigger, "task.archived") {
-		t.Fatalf("version %d, trigger %s; want 1 and the gated trigger", version, trigger)
+	if version != len(migrations) || !strings.Contains(trigger, "task.archived") {
+		t.Fatalf("version %d, trigger %s; want %d and the gated trigger", version, trigger, len(migrations))
 	}
 
 	// Had the migration run again, it would have put back the gated trigger.
@@ -257,7 +257,7 @@ func TestAVersionZeroLogMigratesOnce(t *testing.T) {
 	execOn(t, path, `DROP TRIGGER events_no_delete; `+sentinel)
 	again, _ := openAt(t, path)
 	again.Close()
-	if version, _, trigger := schemaOf(t, path); version != 1 || trigger != sentinel {
+	if version, _, trigger := schemaOf(t, path); version != len(migrations) || trigger != sentinel {
 		t.Errorf("after a second open: version %d, trigger %s; the migration ran again", version, trigger)
 	}
 }
@@ -267,7 +267,7 @@ func TestANewLogStartsAtTheLatestSchema(t *testing.T) {
 	s, _ := openAt(t, path)
 	s.Close()
 	version, autoVacuum, trigger := schemaOf(t, path)
-	if version != len(migrations) || autoVacuum != 2 || !strings.Contains(trigger, "task.archived") {
+	if version != len(migrations) || autoVacuum != 2 || !strings.Contains(trigger, "task.archived") || !strings.Contains(trigger, "task.erased") {
 		t.Errorf("version %d, auto_vacuum %d, trigger %s; want %d, 2 (incremental) and the gated trigger", version, autoVacuum, trigger, len(migrations))
 	}
 }
@@ -550,7 +550,7 @@ func TestProposeRefusesTheMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []events.Proposal{marker("task-1", 1, 5, 4), unarchived("task-1", 6)} {
+	for _, p := range []events.Proposal{marker("task-1", 1, 5, 4), unarchived("task-1", 6), erasure("task-1", 1, 5, 4)} {
 		stored, rejection, err := s.Propose(p)
 		if err != nil || rejection == nil || rejection.Check != "who" || stored.Type != events.ProposalRejected {
 			t.Errorf("proposing %s as %s: %v, %v, stored %s, want refused by the who check", p.Type, p.Actor, rejection, err, stored.Type)

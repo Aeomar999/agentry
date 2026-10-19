@@ -1,0 +1,219 @@
+package storetest
+
+import (
+	"bytes"
+	"compress/gzip"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+)
+
+// Erasing, as the state and the files on disk see it
+// (docs/design/log-growth.md section 5, "Removing a whole task"). The
+// store's side, the trigger and the marker, is in store's erase_test.go.
+
+func erase(t testing.TB, s *store.Store, id string, blobs store.Remover) events.Event {
+	t.Helper()
+	event, rejection, err := s.Erase(id, you, "Asked to be forgotten.", blobs)
+	if rejection != nil || err != nil {
+		t.Fatalf("erasing %s: %v, %v", id, rejection, err)
+	}
+	return event
+}
+
+// planted is in the erased tasks' words, and nowhere else.
+const planted = "planted-7f3a9c2e"
+
+// filesHolding are the files under dir whose bytes hold text, a gzipped
+// file's, such as an archive's blob, read unzipped too.
+func filesHolding(t *testing.T, dir, text string) []string {
+	t.Helper()
+	var holding []string
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if unzipped, err := gzip.NewReader(bytes.NewReader(content)); err == nil {
+			if content, err = io.ReadAll(unzipped); err != nil {
+				return fmt.Errorf("unzipping %s: %w", path, err)
+			}
+		}
+		if bytes.Contains(content, []byte(text)) {
+			holding = append(holding, filepath.Base(path))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return holding
+}
+
+// Test 1: once a task is erased, a text planted in it is in no byte of
+// the log, its WAL, any blob or a snapshot written after. Two tasks hold
+// it: task-1 whole, with a direction long enough to need overflow pages,
+// and task-3 archived, so in a blob too. task-2's rows sit among theirs on
+// the same pages, so the deleted rows' bytes stay on them unless
+// secure_delete zeroes them; and it is still found, so the search reads
+// the live rows.
+func TestAnErasedTaskIsInNoByteOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	s, state := Open(t, filepath.Join(dir, "agentry.db"))
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	const kept = "kept-4b1d"
+	for _, p := range append(agents.SeedProposals(nil),
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One " + planted, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Two " + kept, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDirected, Data: map[string]any{"text": strings.Repeat("Mind the "+planted+". ", 400)}},
+		events.Proposal{Stream: "task-3", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Three " + planted, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Two, renamed " + kept}},
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "One, renamed " + planted}},
+	) {
+		mustPropose(t, s, p)
+	}
+	ArchiveIn(t, s, state, "task-3", blobs)
+	if holding := filesHolding(t, dir, planted); len(holding) < 2 {
+		t.Fatalf("before erasing, %q is in %v: want the log and the blob", planted, holding)
+	}
+
+	erase(t, s, "task-1", blobs)
+	erase(t, s, "task-3", blobs)
+	if err := current.WriteSnapshot(filepath.Join(dir, "state.snapshot"), state, s, "build-1"); err != nil {
+		t.Fatal(err)
+	}
+	if holding := filesHolding(t, dir, planted); len(holding) != 0 {
+		t.Errorf("after erasing, %q is still in %v", planted, holding)
+	}
+	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
+	}
+}
+
+// Test 2: an erased task takes no event, ever: not through Propose, not
+// an unarchiving, an archive or another erasure. Each says why.
+func TestAnErasedTaskTakesNoEvent(t *testing.T) {
+	s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	twoTasks(t, s)
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	erase(t, s, "task-1", blobs)
+	refused := rules.ErasedRefusal("task-1")
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Back"}},
+		{Stream: "task-1", Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "Once more."}},
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One again", "repo": "/r", "coordinator": "tech-lead"}},
+	} {
+		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != refused {
+			t.Errorf("%s on an erased task: %v, %v, want %q", p.Type, rejection, err, refused)
+		}
+	}
+	if _, rejection, err := s.Unarchive("task-1", blobs); err != nil || rejection == nil {
+		t.Errorf("unarchiving an erased task: %v, %v, want refused", rejection, err)
+	}
+	if _, rejection, err := s.Archive("task-1", summarise(state, "task-1"), blobs); err != nil || rejection == nil || rejection.Reason != refused {
+		t.Errorf("archiving an erased task: %v, %v, want %q", rejection, err, refused)
+	}
+	if _, rejection, err := s.Erase("task-1", you, "Again.", blobs); err != nil || rejection == nil || rejection.Reason != refused {
+		t.Errorf("erasing an erased task: %v, %v, want %q", rejection, err, refused)
+	}
+	if task, err := state.Task("task-1"); task != nil || !errors.Is(err, current.ErrErased) {
+		t.Errorf("task-1 in the state: %v, %v, want ErrErased", task, err)
+	}
+}
+
+// Test 3: erasing an archived task deletes the blob that held its rows,
+// and the state keeps it as the stub, not the summary.
+func TestErasingAnArchivedTaskDeletesItsBlob(t *testing.T) {
+	s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	twoTasks(t, s)
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	ArchiveIn(t, s, state, "task-1", blobs)
+	live, err := s.Log("task-1")
+	if err != nil || len(live) != 1 {
+		t.Fatalf("task-1 should be its marker alone: %v, %v", live, err)
+	}
+	hash := live[0].Text("archive")
+	if !blobs.Has(hash) {
+		t.Fatal("the archive's blob isn't there")
+	}
+	erased := erase(t, s, "task-1", blobs)
+	if blobs.Has(hash) {
+		t.Error("the archive's blob is still there")
+	}
+	if names := erased.List("archives"); len(names) != 1 || names[0] != hash {
+		t.Errorf("the marker names %v, want the archive's blob", names)
+	}
+	if _, archived := state.Summary("task-1"); archived {
+		t.Error("task-1 still has its summary")
+	}
+	if erasure, erased := state.Erased("task-1"); !erased || erasure.ID != "task-1" {
+		t.Errorf("task-1's erasure: %+v, %v", erasure, erased)
+	}
+}
+
+// Test 4: a restart replays the log after an erasure to the state the
+// store kept live, stub and all: a whole task and an archived one erased.
+// (Open's own cleanup checks the same of a replay and of a snapshot at
+// every position.)
+func TestAnErasureReplaysAsItWasLive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, live := Open(t, path)
+	twoTasks(t, s)
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	ArchiveIn(t, s, live, "task-2", blobs)
+	erase(t, s, "task-1", blobs)
+	erase(t, s, "task-2", blobs)
+
+	_, restarted := Open(t, path)
+	for _, id := range []string{"task-1", "task-2"} {
+		before, _ := live.Erased(id)
+		after, erased := restarted.Erased(id)
+		if !erased || !reflect.DeepEqual(after, before) {
+			t.Errorf("%s after a restart: %+v, %v, want %+v", id, after, erased, before)
+		}
+	}
+	if ids, again := live.TaskIDs(), restarted.TaskIDs(); !reflect.DeepEqual(ids, again) || len(ids) != 2 {
+		t.Errorf("the task ids live %v, after a restart %v", ids, again)
+	}
+	if next, again := live.NextTask(), restarted.NextTask(); next != "task-3" || again != next {
+		t.Errorf("the next task live %s, after a restart %s, want task-3", next, again)
+	}
+}
+
+// Test 5: an erased task's id is never taken again, before a restart or
+// after: the next task follows it, though its task.created is gone.
+func TestAnErasedTasksIDIsNeverTakenAgain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, state := Open(t, path)
+	twoTasks(t, s)
+	erase(t, s, "task-2", sharedfiles.Disk{Dir: t.TempDir()})
+	newTask := events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Next", "repo": "/r", "coordinator": "tech-lead"}}
+	if made, rejection, err := s.Create(events.TaskPrefix, newTask); err != nil || rejection != nil || made.Stream != "task-3" {
+		t.Errorf("Create after erasing task-2: %s, %v, %v, want task-3", made.Stream, rejection, err)
+	}
+	if next := state.NextTask(); next != "task-4" {
+		t.Errorf("the state names %s next, want task-4", next)
+	}
+	// The first store stays open, so the restart only reads: a write
+	// through it would leave the first state behind the log.
+	_, restarted := Open(t, path)
+	if next := restarted.NextTask(); next != "task-4" {
+		t.Errorf("the restarted state names %s next, want task-4", next)
+	}
+}

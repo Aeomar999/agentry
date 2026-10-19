@@ -1,10 +1,11 @@
 // Package store is the append-only event log, in SQLite.
 //
 // Triggers make UPDATE and DELETE fail in the database itself, so
-// "append-only" does not depend on the code remembering; the one delete
-// allowed is of a task's rows that its task.archived marker covers (see
-// migrations). Propose is the way in for every event but the markers, which
-// only Archive and Unarchive write: it runs the checks against the model,
+// "append-only" does not depend on the code remembering; the only deletes
+// allowed are of a task's rows that its task.archived or task.erased marker
+// covers (see migrations). Propose is the way in for every event but the
+// markers, which only Archive, Unarchive and Erase write: it runs the checks
+// against the model,
 // appends the event (or a proposal.rejected) and applies it to the model. A
 // mutex makes proposals strictly one at a time, from the check to the
 // apply, so two can never both pass the order check against the same state
@@ -66,6 +67,24 @@ WHEN NOT EXISTS (
 	  AND OLD.position <= json_extract(m.data, '$.through')
 	  AND NOT EXISTS (SELECT 1 FROM events u WHERE u.stream = m.stream
 	                  AND u.type = 'task.unarchived' AND u.position > m.position))
+BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;`,
+	// 2: erasing (docs/design/log-growth.md section 5). A delete is also
+	// allowed for rows a task.erased marker in the same stream covers, for
+	// good: no event undoes an erasure. Migration 1's case stays as it was,
+	// and the erasures have an index of their own, as the markers do.
+	`CREATE INDEX events_erased ON events (stream, position) WHERE type = 'task.erased';
+DROP TRIGGER events_no_delete;
+CREATE TRIGGER events_no_delete BEFORE DELETE ON events
+WHEN NOT EXISTS (
+	SELECT 1 FROM events m
+	WHERE m.stream = OLD.stream AND m.type = 'task.archived'
+	  AND OLD.position <= json_extract(m.data, '$.through')
+	  AND NOT EXISTS (SELECT 1 FROM events u WHERE u.stream = m.stream
+	                  AND u.type = 'task.unarchived' AND u.position > m.position))
+AND NOT EXISTS (
+	SELECT 1 FROM events e
+	WHERE e.stream = OLD.stream AND e.type = 'task.erased'
+	  AND OLD.position <= json_extract(e.data, '$.through'))
 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;`,
 }
 
@@ -234,11 +253,12 @@ func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.
 // next stream of its kind follows every one made, even one whose stream
 // can't be read.
 //
-// For tasks it counts task.created rows and task.archived markers
-// together, since archiving deletes a task's task.created row: each marker
-// at the task.created position it stands for (its "created"), so a task
-// counts once whether archived, unarchived (the row is back, at that
-// position) or archived twice (two markers, one "created"). The markers are
+// For tasks it counts task.created rows and task.archived and task.erased
+// markers together, since archiving and erasing delete a task's
+// task.created row: each marker at the task.created position it stands
+// for (its "created"), so a task counts once whether archived, unarchived
+// (the row is back, at that position), archived twice (two markers, one
+// "created") or erased, its id never taken again. The markers are
 // gated on that position, not their own: between the archive's commit and
 // applied moving past its marker, a gate on the marker would hide the task
 // from both halves (log-growth.md section 4, "How it fits").
@@ -249,8 +269,8 @@ func (s *Store) made(kind events.Type) (int, error) {
 			SELECT stream, position FROM events WHERE type = ?1 AND position <= ?2
 			UNION
 			SELECT stream, json_extract(data, '$.created') FROM events
-			WHERE type = ?3 AND json_extract(data, '$.created') <= ?2)`
-		args = append(args, events.TaskArchived)
+			WHERE type IN (?3, ?4) AND json_extract(data, '$.created') <= ?2)`
+		args = append(args, events.TaskArchived, events.TaskErased)
 	}
 	var made int
 	err := s.db.QueryRow(query, args...).Scan(&made)

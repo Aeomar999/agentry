@@ -79,3 +79,30 @@ func TestTheSameBytesMakeTheSameBlob(t *testing.T) {
 		t.Errorf("files kept %v, want the one blob", files)
 	}
 }
+
+// Remove deletes the blob and syncs its folder once it is gone; a blob
+// already gone is no error, and a name that isn't a hash is refused.
+func TestRemoveDeletesTheBlobAndSyncsItsFolder(t *testing.T) {
+	blobs := Disk{Dir: t.TempDir()}
+	hash, _, err := blobs.Put(strings.NewReader("an erased task's rows"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := blobs.path(hash)
+	seen := watchSyncs(t, func() string { return blob })
+	if err := blobs.Remove(hash); err != nil {
+		t.Fatal(err)
+	}
+	if blobs.Has(hash) {
+		t.Error("the blob is still there")
+	}
+	if !slices.Equal(seen.names, []string{filepath.Dir(blob)}) || !slices.Equal(seen.inPlace, []bool{false}) {
+		t.Errorf("synced %v, the blob in place %v; want its folder, with the blob gone", seen.names, seen.inPlace)
+	}
+	if err := blobs.Remove(hash); err != nil {
+		t.Errorf("removing it again: %v", err)
+	}
+	if err := blobs.Remove("../agentry"); err == nil {
+		t.Error("removing a name that isn't a hash should be refused")
+	}
+}

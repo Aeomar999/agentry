@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,6 +92,28 @@ func (d Disk) Put(r io.Reader) (string, int64, error) {
 	// Kept already, the same file shared again, may be a Put's that failed
 	// before its folders were synced: sync them either way.
 	return hash, size, d.syncFolders(hash)
+}
+
+// Remove deletes a blob for good, its folder synced so it stays gone after
+// a crash. Only erasing a task does, for a blob no event left in the log
+// names (docs/design/log-growth.md section 5). One already gone is no
+// error, so an erasure tried again finishes.
+func (d Disk) Remove(hash string) error {
+	if !isHash.MatchString(hash) {
+		return errors.New("not a file's hash")
+	}
+	if err := os.Remove(d.path(hash)); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	folder, err := os.Open(filepath.Dir(d.path(hash)))
+	if err != nil {
+		return err
+	}
+	defer folder.Close()
+	return syncFile(folder)
 }
 
 // syncFolders makes the file's name last: its own folder, the one holding

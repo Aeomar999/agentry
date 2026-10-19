@@ -66,7 +66,7 @@ func (s *Store) Archive(stream string, summarise func() any, blobs Blobs) (event
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if rejection, err := s.unmoved(stream, through); rejection != nil || err != nil {
+	if rejection, err := s.unmoved(stream, through, "archive", "it waits for the next round"); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	marker := events.Proposal{Stream: stream, Actor: archiver, Type: events.TaskArchived, Data: map[string]any{
@@ -88,14 +88,15 @@ func (s *Store) Archive(stream string, summarise func() any, blobs Blobs) (event
 }
 
 // unmoved checks, under the lock, that the stream's last row is still
-// through, since its rows were read without the lock.
-func (s *Store) unmoved(stream string, through int64) (*events.Rejection, error) {
+// through, 0 for a stream with none, since its rows were read without the
+// lock. A refusal is by check, and then says what comes of it.
+func (s *Store) unmoved(stream string, through int64, check, then string) (*events.Rejection, error) {
 	var last int64
-	if err := s.db.QueryRow(`SELECT MAX(position) FROM events WHERE stream = ?`, stream).Scan(&last); err != nil {
+	if err := s.db.QueryRow(`SELECT COALESCE(MAX(position), 0) FROM events WHERE stream = ?`, stream).Scan(&last); err != nil {
 		return nil, err
 	}
 	if last != through {
-		return &events.Rejection{Check: "archive", Reason: stream + " took an event since its rows were read: it waits for the next round"}, nil
+		return &events.Rejection{Check: check, Reason: stream + " took an event since its rows were read: " + then}, nil
 	}
 	return nil, nil
 }

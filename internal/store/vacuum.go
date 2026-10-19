@@ -17,11 +17,16 @@ const incremental = 2
 
 // GiveBackSpace gives the file's free pages back to the disk, and empties
 // the WAL into the file, so neither keeps the pages of the rows an
-// archiving round deleted. A reader in the middle of a read keeps the WAL
+// archiving round, or an erasure, deleted. A reader in the middle of a read keeps the WAL
 // from being emptied: the next round empties it.
 func (s *Store) GiveBackSpace() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.giveBackSpace()
+}
+
+// giveBackSpace is GiveBackSpace, under Store.mu.
+func (s *Store) giveBackSpace() error {
 	if err := incrementalVacuum(s.db); err != nil {
 		return fmt.Errorf("giving back free pages: %w", err)
 	}
