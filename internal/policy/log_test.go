@@ -23,22 +23,35 @@ func TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText(t *testing.T) {
 		// From before the text was recorded.
 		event(3, events.Proposal{Stream: events.PolicyStream, Actor: Agentry, Type: events.PolicyLoaded,
 			Data: map[string]any{"hash": "0ld", "path": "/p", "profiles": []any{"developer"}}}),
+		event(4, Loaded("/p", change, "first loaded", Agentry)),
+		// From before the onDisk flag.
+		event(5, Loaded("/p", change, "noticed on disk", Agentry)),
+		event(6, NoticedOnDisk("/p", change)),
 		event(7, Refused("/p", change.Before, aRefusal)),
 		event(9, Loaded("/p", change, "turned off use_for_everyone", you)),
 	}
 	history := History(stream)
-	if len(history) != 3 {
+	if len(history) != 6 {
 		t.Fatalf("history %+v", history)
 	}
-	newest, refused, old := history[0], history[1], history[2]
+	newest, refused, flagged, unflagged, first, old := history[0], history[1], history[2], history[3], history[4], history[5]
 	if newest.Position != 9 || newest.Actor != you || newest.Change != "turned off use_for_everyone" || !newest.CanRevert ||
-		newest.Backup != change.Backup || !strings.Contains(newest.Diff, "+# use_for_everyone") {
+		newest.Backup != change.Backup || !strings.Contains(newest.Diff, "+# use_for_everyone") || newest.OnDisk {
 		t.Errorf("newest: %+v", newest)
 	}
-	if !refused.Refused || refused.Change != aRefusal.Error() || refused.Hash != change.Before.Hash() || refused.CanRevert {
+	if !refused.Refused || refused.Change != aRefusal.Error() || refused.Hash != change.Before.Hash() || refused.CanRevert || !refused.OnDisk {
 		t.Errorf("refused: %+v", refused)
 	}
-	if old.Change != "loaded" || old.Hash != "0ld" || old.CanRevert {
+	if flagged.Position != 6 || !flagged.OnDisk || flagged.Actor != Agentry || flagged.Change != "noticed on disk" {
+		t.Errorf("a hand edit is on disk: %+v", flagged)
+	}
+	if unflagged.Position != 5 || !unflagged.OnDisk {
+		t.Errorf("an old hand edit, without the flag, is on disk too: %+v", unflagged)
+	}
+	if first.Position != 4 || first.OnDisk {
+		t.Errorf("the first version loaded isn't a hand edit: %+v", first)
+	}
+	if old.Change != "loaded" || old.Hash != "0ld" || old.CanRevert || old.OnDisk {
 		t.Errorf("an old event shows, without Revert: %+v", old)
 	}
 

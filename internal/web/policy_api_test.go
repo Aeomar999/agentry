@@ -336,6 +336,9 @@ func TestEveryVersionShowsInTheHistoryAndCanBeRestored(t *testing.T) {
 	if !history[0].CanRevert || !history[1].CanRevert || history[2].CanRevert {
 		t.Errorf("only versions with their text can be restored: %+v", history)
 	}
+	if history[0].OnDisk || history[1].OnDisk {
+		t.Errorf("a change on the page, or the first version, isn't a hand edit: %+v", history)
+	}
 
 	code, body := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[1].Position)+`,"hash":"`+server.hash()+`"}`)
 	if code != 200 {
