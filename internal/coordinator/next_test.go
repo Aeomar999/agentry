@@ -566,7 +566,7 @@ func TestTheBriefTellsOfAUsageLimit(t *testing.T) {
 		add(events.Actor{Kind: events.System, ID: "watchdog"}, events.IssueRaised, "", map[string]any{"reason": "silent"}).task()
 	roster := defaultRoster()
 	lead, _ := roster.Get("tech-lead")
-	brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil)
+	brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil)
 	if !strings.Contains(brief, "agentry → tech-lead: engineer's turn-2 hit a usage limit, reset time unknown\n\n4. agentry → tech-lead: silent") {
 		t.Errorf("the brief should tell of the limit before the issue:\n%s", brief)
 	}
