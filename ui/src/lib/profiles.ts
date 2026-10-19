@@ -32,3 +32,12 @@ export function deniedUntilBack(policy: Pick<Policy, "useForEveryone">): string 
     ? `${policy.useForEveryone} covers them while use_for_everyone is on; with it off, every call they make is denied until it's back.`
     : "Every call they make is denied until it's back.";
 }
+
+// shippedProfiles are the names of the profiles Agentry ships, the ones it
+// can add back to policy.toml when they go missing.
+export function shippedProfiles(policy: Pick<Policy, "defaults">): Set<string> {
+  return new Set(policy.defaults.map((profile) => profile.name));
+}
+
+// notShipped says what to do about a missing profile Agentry can't add back.
+export const notShipped = "Agentry doesn't ship it: write it in policy.toml, or give these agents another profile.";

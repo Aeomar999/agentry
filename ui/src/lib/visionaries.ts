@@ -30,13 +30,17 @@ export function useAskVisionaries(): AskVisionaries {
       setAdding(true);
       setError("");
       try {
+        // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
         await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
         setMissingProfiles([]);
         reload();
       } catch (failure) {
         const profiles = missingProfilesOf(failure);
         if (profiles && !addingProfiles) setMissingProfiles(profiles);
-        else setError((failure as Error).message);
+        else {
+          setMissingProfiles([]);
+          setError((failure as Error).message);
+        }
         return;
       } finally {
         setAdding(false);
@@ -49,8 +53,9 @@ export function useAskVisionaries(): AskVisionaries {
     ready: data !== undefined,
     has,
     adding,
-    error,
-    missingProfiles,
+    // the team may have been added elsewhere, so drop what adding it left
+    error: has ? "" : error,
+    missingProfiles: has ? [] : missingProfiles,
     ask: () => ask(),
     askAddingProfiles: () => ask(true),
   };

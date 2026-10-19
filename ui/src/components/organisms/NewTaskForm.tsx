@@ -112,6 +112,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
     setAdding(true);
     setAddError("");
     try {
+      // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
       await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
       setMissingProfiles([]);
       notify("success", "Added the Visionaries team", "It is picked: give it a theme or a question.");
@@ -119,7 +120,10 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
     } catch (failure) {
       const profiles = missingProfilesOf(failure);
       if (profiles && !addingProfiles) setMissingProfiles(profiles);
-      else setAddError((failure as Error).message);
+      else {
+        setMissingProfiles([]);
+        setAddError((failure as Error).message);
+      }
     }
     setAdding(false);
   }

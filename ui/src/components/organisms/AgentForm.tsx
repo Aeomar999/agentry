@@ -217,13 +217,15 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               label="Policy profile"
               htmlFor="agent-profile"
               hint={
-                inForce?.overridden
-                  ? `In force: ${inForce.text}. This picks its own profile, for when use_for_everyone is off.`
-                  : inForce?.missing
-                    ? `${inForce.text}: every call it makes is denied until it's back. Add it on the Policy page, or pick another.`
-                    : policy?.useForEveryone
-                      ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
-                      : "What it may do without asking you, from policy.toml."
+                inForce?.overridden && inForce.missing
+                  ? `In force: ${inForce.text}. Once use_for_everyone is off, every call it makes is denied until ${inForce.own} is back. Add it on the Policy page, or pick another.`
+                  : inForce?.overridden
+                    ? `In force: ${inForce.text}. This picks its own profile, for when use_for_everyone is off.`
+                    : inForce?.missing
+                      ? `${inForce.text}: every call it makes is denied until it's back. Add it on the Policy page, or pick another.`
+                      : policy?.useForEveryone
+                        ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
+                        : "What it may do without asking you, from policy.toml."
               }
             >
               <Select id="agent-profile" value={draft.profile} onChange={(e) => set({ profile: e.target.value })}>
