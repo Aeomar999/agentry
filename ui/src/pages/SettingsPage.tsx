@@ -1,19 +1,25 @@
+import { useRef } from "react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Banner } from "@/components/molecules/Banner";
-import { type FeatureUI, hiddenFeatures, unknownLine, useFeatures } from "@/features";
+import { type FeatureUI, FEATURES, hiddenFeatures, unknownLine, useFeatures } from "@/features";
 
 // Settings lists the features this build has that are off, so one that
 // doesn't show can still be found: each with the server's why line and its
 // own button that turns it on. Below them, the events the server skipped
 // because this build lacks the feature or the type that wrote them, so a
 // downgrade is explained rather than silent.
+//
+// A feature listed as off stays listed until the user leaves the page: its
+// turn-on button may still be at work when the manifest says it is on.
 
 export function SettingsPage() {
   useBreadcrumb({ label: "Settings" });
   const features = useFeatures();
-  const off = hiddenFeatures(features);
+  const listed = useRef(new Set<string>());
+  hiddenFeatures(features).forEach((feature) => listed.current.add(feature.name));
+  const off = FEATURES.filter((feature) => listed.current.has(feature.name));
 
   return (
     <>

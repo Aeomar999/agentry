@@ -79,9 +79,9 @@ export function visibleFeatures(features: Features): FeatureUI[] {
 }
 
 // hiddenFeatures is the FEATURES the manifest lists but doesn't show: those
-// installed and off, in FEATURES' order.
-export function hiddenFeatures(features: Features): FeatureUI[] {
-  return FEATURES.filter((feature) => features.line(feature.name)?.visible === false);
+// installed and off, in the list's order.
+export function hiddenFeatures(features: Features, list = FEATURES): FeatureUI[] {
+  return list.filter((feature) => features.line(feature.name)?.visible === false);
 }
 
 // unknownLine words one entry of the unknown tally.
