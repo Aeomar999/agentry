@@ -50,6 +50,14 @@ describe("teamMadeFrom", () => {
     expect(teamMadeFrom(agents, "visionaries")).toBeUndefined();
   });
 
+  test("takes the first of two teams made from the template", () => {
+    const agents = [
+      agent("visionary-lead", "Visionaries", "visionaries", true),
+      agent("visionary-lead-2", "Visionaries 2", "visionaries", true),
+    ];
+    expect(teamMadeFrom(agents, "visionaries")).toBe("Visionaries");
+  });
+
   test("finds none with no agents, or no template", () => {
     expect(teamMadeFrom([], "visionaries")).toBeUndefined();
     expect(teamMadeFrom([agent("my-lead", "Mine", "", true)], "")).toBeUndefined();
