@@ -137,27 +137,38 @@ func servedOnce(t *testing.T, dataDir string) string {
 // of loopback.
 func servedWith(t *testing.T, o serveOptions) string {
 	t.Helper()
+	return startServing(t, o)()
+}
+
+// startServing starts serve as servedWith does and waits until it is
+// running. Its stop stops it cleanly and returns what it logged.
+func startServing(t *testing.T, o serveOptions) (stop func() string) {
+	t.Helper()
 	var logged, out syncBuffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
-	defer slog.SetDefault(previous)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
 		o.address, o.repo = "127.0.0.1:0", t.TempDir()
 		done <- serve(ctx, o, &out)
 	}()
+	stop = func() string {
+		t.Helper()
+		defer slog.SetDefault(previous)
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("serve: %v", err)
+		}
+		return logged.String()
+	}
 	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(out.String(), "Agentry is running"); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
-			cancel()
+			stop()
 			t.Fatalf("serve printed:\n%s", out.String())
 		}
 	}
-	cancel()
-	if err := <-done; err != nil {
-		t.Fatalf("serve: %v", err)
-	}
-	return logged.String()
+	return stop
 }
 
 // serve keeps the state's snapshot in the data folder, readable by its
@@ -290,19 +301,58 @@ func TestServeOnABusyAddressLeavesTheDataFolderAlone(t *testing.T) {
 	if err := serve(context.Background(), o, io.Discard); !errors.As(err, &bind) || bind.Op != "listen" {
 		t.Fatalf("serve on a busy address returned %v, want its listen error", err)
 	}
+	unchangedSince(t, dataDir, before, "failing to bind")
+	if isArchived(t, dataDir, "task-1") {
+		t.Error("serve archived task-1 before failing to bind")
+	}
+}
+
+// A second serve on a data folder another serve is using, on another port,
+// fails before it touches the folder, and once the first stops the folder
+// serves again.
+func TestASecondServeOnTheSameFolderLeavesItAlone(t *testing.T) {
+	dataDir := t.TempDir()
+	withADoneTask(t, dataDir, "task-1")
+	stopFirst := startServing(t, serveOptions{dataDir: dataDir})
+	// What the second serve would clear or make, were it let in.
+	leftover := filepath.Join(dataDir, snapshotFile+".tmp-123")
+	if err := os.WriteFile(leftover, []byte("the first server's write under way"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "files", "task-1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	before := filesIn(t, dataDir)
+
+	o := serveOptions{address: "127.0.0.1:0", repo: t.TempDir(), dataDir: dataDir, archiveAfter: time.Nanosecond}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // were it let in, it would serve until stopped
+	defer cancel()
+	err := serve(ctx, o, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "another agentry serve is using "+dataDir) {
+		t.Errorf("a second serve on the folder returned %v, want that another serve is using it", err)
+	}
+	unchangedSince(t, dataDir, before, "finding the folder in use")
+	stopFirst()
+	if isArchived(t, dataDir, "task-1") {
+		t.Error("the second serve archived task-1")
+	}
+	servedOnce(t, dataDir) // the first serve let the folder go
+}
+
+// unchangedSince fails t for each file under dataDir that serve made,
+// changed or removed since before was taken, ahead of what it was doing.
+func unchangedSince(t *testing.T, dataDir string, before map[string]string, doing string) {
+	t.Helper()
 	after := filesIn(t, dataDir)
 	for name := range maps.Keys(before) {
 		if contents, ok := after[name]; !ok || contents != before[name] {
-			t.Errorf("serve changed or removed %s before failing to bind", name)
+			t.Errorf("serve changed or removed %s before %s", name, doing)
 		}
 	}
 	for name := range maps.Keys(after) {
 		if _, ok := before[name]; !ok {
-			t.Errorf("serve made %s before failing to bind", name)
+			t.Errorf("serve made %s before %s", name, doing)
 		}
-	}
-	if isArchived(t, dataDir, "task-1") {
-		t.Error("serve archived task-1 before failing to bind")
 	}
 }
 

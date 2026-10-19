@@ -137,14 +137,20 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
 	}
-	// Listen before the data folder is touched, so a busy port fails before
-	// a second serve on the same folder archives, seeds or snapshots under
-	// the first.
+	// Listen before the data folder is touched, so a second serve on a busy
+	// port fails having changed nothing.
 	listener, err := net.Listen("tcp", o.address)
 	if err != nil {
 		return err
 	}
 	defer listener.Close() // on an early return; serveUntilDone closes it otherwise
+	// Then lock the folder, so a second serve on it, on another port, fails
+	// before it archives, seeds or snapshots under the first.
+	release, err := lockDataDir(o.dataDir)
+	if err != nil {
+		return err
+	}
+	defer release()
 	installed := installedFeatures()
 	catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
 	if err != nil {
