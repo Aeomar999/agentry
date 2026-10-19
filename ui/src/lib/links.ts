@@ -47,7 +47,9 @@ function external(text: string): SafeHref | null {
 
 // repoPath is a path from the repo's root: a leading / or ./ dropped, and
 // . and .. resolved, as a browser would (%2e counts as a dot). A path that
-// climbs above the root isn't a link. A ?query or #anchor stays as written.
+// climbs above the root isn't a link, and nor is one whose first segment
+// holds a colon: rendered as a relative href, `/javascript:x` with its slash
+// dropped is javascript: again. A ?query or #anchor stays as written.
 function repoPath(text: string): string {
   const [, path, rest] = text.match(/^([^?#]*)(.*)$/)!;
   const segments: string[] = [];
@@ -58,7 +60,8 @@ function repoPath(text: string): string {
       segments.pop();
     } else if (segment && dots !== ".") segments.push(segment);
   }
-  return segments.length ? segments.join("/") + rest : "";
+  if (!segments.length || segments[0].includes(":")) return "";
+  return segments.join("/") + rest;
 }
 
 // Refs are what a task's text can name besides the web and its files: the

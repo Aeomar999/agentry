@@ -18,6 +18,15 @@ export const UNSAFE = [
   "file:///etc/passwd",
   "blob:https://x/1",
   "foo:bar",
+  // A scheme behind a prefix that a repo path drops: still the scheme.
+  "/javascript:alert(1)",
+  "/JaVaScRiPt:alert(1)",
+  "./data:text/html,x",
+  "\\javascript:alert(1)",
+  "/\tjavascript:alert(1)",
+  "a/../javascript:alert(1)",
+  "%2e/javascript:x",
+  "%2E/VBScript:msgbox(1)",
 ];
 
 // Hosts written without a scheme, as browsers read them: another site.
