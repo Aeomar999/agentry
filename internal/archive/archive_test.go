@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -23,11 +24,12 @@ const age = 30 * 24 * time.Hour
 var you = events.Actor{Kind: events.Human, ID: "you"}
 
 // counted is the store with its calls after a round counted, whose next
-// VacuumOnce fails when failVacuum is set.
+// VacuumOnce fails when failVacuum is set. vacuumRan counts the VACUUMs
+// that ran.
 type counted struct {
 	*store.Store
-	givenBack, vacuumed atomic.Int32
-	failVacuum          atomic.Bool
+	givenBack, vacuumed, vacuumRan atomic.Int32
+	failVacuum                     atomic.Bool
 }
 
 func (c *counted) GiveBackSpace() error {
@@ -40,7 +42,11 @@ func (c *counted) VacuumOnce() (bool, error) {
 	if c.failVacuum.CompareAndSwap(true, false) {
 		return false, errors.New("database or disk is full")
 	}
-	return c.Store.VacuumOnce()
+	ran, err := c.Store.VacuumOnce()
+	if ran {
+		c.vacuumRan.Add(1)
+	}
+	return ran, err
 }
 
 // stalling is the counted store whose first Archive tells entered and then
@@ -97,6 +103,22 @@ func newFixture(t *testing.T) *fixture {
 		f.propose(t, p)
 	}
 	return f
+}
+
+// oldFile is a log made before incremental mode: a table made before the
+// store opens it fixes the file's auto_vacuum at NONE.
+func oldFile(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	db, err := sql.Open(store.Driver, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE made_before (x)`); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // openFixture is the fixture of the log at path, as it is.
@@ -308,9 +330,12 @@ func TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots(t *testing.T) {
 }
 
 // A VACUUM that fails is tried again at the next round, even one that
-// archives nothing.
+// archives nothing, and runs then.
 func TestAFailedVacuumIsTriedAgainAtTheNextRound(t *testing.T) {
-	f := newFixture(t)
+	f := openFixture(t, oldFile(t))
+	for _, p := range agents.SeedProposals(nil) {
+		f.propose(t, p)
+	}
 	f.task(t, "task-1", tasks.Story)
 	f.clock = f.done(t, "task-1").Add(age)
 	f.log.failVacuum.Store(true)
@@ -318,8 +343,8 @@ func TestAFailedVacuumIsTriedAgainAtTheNextRound(t *testing.T) {
 	if archived := f.archiver.round(); archived != 1 || f.log.vacuumed.Load() != 1 || f.log.failVacuum.Load() {
 		t.Fatalf("archived %d, vacuumed %d, failed %v; want task-1 archived and the VACUUM tried and failed", archived, f.log.vacuumed.Load(), !f.log.failVacuum.Load())
 	}
-	if archived := f.archiver.round(); archived != 0 || f.log.vacuumed.Load() != 2 {
-		t.Errorf("the next round: archived %d, vacuumed %d; want nothing archived and the VACUUM tried again", archived, f.log.vacuumed.Load())
+	if archived := f.archiver.round(); archived != 0 || f.log.vacuumed.Load() != 2 || f.log.vacuumRan.Load() != 1 {
+		t.Errorf("the next round: archived %d, vacuumed %d, ran %d; want nothing archived and the VACUUM tried again and run", archived, f.log.vacuumed.Load(), f.log.vacuumRan.Load())
 	}
 }
 

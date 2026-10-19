@@ -138,8 +138,8 @@ func (a *Archiver) vacuumOnce() {
 }
 
 // chosen is every task done for at least the age and not archived yet,
-// in the order they were made, but no epic with a story still in the state: an epic goes
-// in a round after its last story's.
+// in the order they were made, but no epic with a story still in the
+// state: an epic goes in a round after its last story's.
 func (a *Archiver) chosen() []string {
 	now := a.now()
 	var chosen []string

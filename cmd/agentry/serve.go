@@ -95,7 +95,7 @@ func parseServe(args []string, stderr io.Writer) (serveOptions, bool) {
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
-	flags.DurationVar(&options.archiveAfter, "archive-after", 0, "archive tasks done for this long, such as 720h; 0 (the default) never archives, until opening and reopening an archived task are built")
+	flags.DurationVar(&options.archiveAfter, "archive-after", 0, "archive tasks done for this long, such as 720h; 0 (the default) never archives. An archived task opens, but can't be reopened yet")
 	if flags.Parse(args) != nil {
 		return options, false
 	}
@@ -159,9 +159,10 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	// Tasks' shared files, and the rows of archived tasks.
 	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")}
 	if o.archiveAfter > 0 {
+		slog.Info("agentry: archiving tasks done for " + o.archiveAfter.String())
 		archiver := archive.New(log, state, blobs, snapshots, o.archiveAfter)
 		archiver.Start()
-		defer archiver.Close() // a round under way finishes before the last snapshot
+		defer archiver.Close() // the task under way finishes before the last snapshot
 	}
 	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {

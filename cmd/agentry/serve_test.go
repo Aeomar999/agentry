@@ -235,15 +235,19 @@ func TestServeParsesArchiveAfter(t *testing.T) {
 	}
 }
 
-// serve archives a task done for -archive-after, at start; with the default
-// 0 it archives nothing, however long a task has been done.
+// serve archives a task done for -archive-after, at start, and logs that it
+// does; with the default 0 it archives nothing, however long a task has
+// been done.
 func TestServeArchivesOnlyWithArchiveAfter(t *testing.T) {
 	for _, after := range []time.Duration{0, time.Nanosecond} {
 		dataDir := t.TempDir()
 		withADoneTask(t, dataDir, "task-1")
-		servedWith(t, serveOptions{dataDir: dataDir, archiveAfter: after})
+		logged := servedWith(t, serveOptions{dataDir: dataDir, archiveAfter: after})
 		if archived := isArchived(t, dataDir, "task-1"); archived != (after > 0) {
 			t.Errorf("with -archive-after=%v, task-1 archived %v", after, archived)
+		}
+		if said := strings.Contains(logged, "archiving tasks done for "+after.String()); said != (after > 0) {
+			t.Errorf("with -archive-after=%v, logged that it archives: %v; log:\n%s", after, said, logged)
 		}
 	}
 }

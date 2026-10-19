@@ -1206,7 +1206,7 @@ proposals meanwhile) and free disk as big as what it copies (section 1).
 runs the first archiving round, and only then runs the one `VACUUM`:
 `VACUUM` copies only the live rows, so it is cheapest once the done tasks
 are gone. If the disk lacks room for the copy, it logs that and tries
-again at the next start. After each round: `PRAGMA incremental_vacuum`,
+again at the next round. After each round: `PRAGMA incremental_vacuum`,
 then `PRAGMA wal_checkpoint(TRUNCATE)`, so the WAL does not keep the old
 pages either. Step 5 sets the pragma on every open; the `VACUUM` is step
 7's.
