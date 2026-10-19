@@ -24,7 +24,8 @@ var always = []string{"localhost", "127.0.0.1", "::1"}
 
 // Issue makes a server certificate for hosts, DNS names and IP addresses,
 // signed by the CA and valid from now. It always names localhost,
-// 127.0.0.1 and ::1 too.
+// 127.0.0.1 and ::1 too, and leaves out hosts the CA's name constraints
+// don't permit, which clients would refuse the certificate for.
 func (ca *CA) Issue(hosts []string, now time.Time) (*tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -40,6 +41,9 @@ func (ca *CA) Issue(hosts []string, now time.Time) (*tls.Certificate, error) {
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 	for _, host := range normalHosts(hosts) {
+		if !ca.Permits(host) {
+			continue
+		}
 		if ip := net.ParseIP(host); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
 		} else {

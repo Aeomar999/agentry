@@ -8,7 +8,7 @@ import (
 )
 
 func TestTheCertificateNamesEveryHostAndVerifies(t *testing.T) {
-	ca, err := Open(t.TempDir())
+	ca, err := open(t.TempDir(), "Workbench")
 	if err != nil {
 		t.Fatal(err)
 	}

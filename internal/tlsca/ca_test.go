@@ -1,13 +1,22 @@
 package tlsca
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
+	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestTheCAIsMadeOnceAndReused(t *testing.T) {
@@ -185,5 +194,108 @@ func TestTheCertificateIsHandedOutInEachForm(t *testing.T) {
 	want := strings.ToUpper(hex.EncodeToString(sum[:]))
 	if got := strings.ReplaceAll(ca.Fingerprint(), ":", ""); got != want || len(ca.Fingerprint()) != 32*3-1 {
 		t.Errorf("Fingerprint = %s, want the SHA-256 %s", ca.Fingerprint(), want)
+	}
+}
+
+func TestTheCAIsNameConstrained(t *testing.T) {
+	ca, err := open(t.TempDir(), "Box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := ca.cert
+	if !cert.PermittedDNSDomainsCritical {
+		t.Error("the name constraints aren't critical")
+	}
+	if want := []string{"localhost", "box", "box.local"}; !slices.Equal(cert.PermittedDNSDomains, want) {
+		t.Errorf("DNS names %v, want %v", cert.PermittedDNSDomains, want)
+	}
+	var ranges []string
+	for _, r := range cert.PermittedIPRanges {
+		ranges = append(ranges, r.String())
+	}
+	if !slices.Equal(ranges, privateRanges) {
+		t.Errorf("IP ranges %v, want %v", ranges, privateRanges)
+	}
+	if dotted, _ := open(t.TempDir(), "box.lan"); !slices.Equal(dotted.cert.PermittedDNSDomains, []string{"localhost", "box.lan"}) {
+		t.Errorf("a dotted hostname: %v", dotted.cert.PermittedDNSDomains)
+	}
+}
+
+// Every host the machine prints a link for is one the CA may vouch for.
+func TestALeafForEveryHostVerifies(t *testing.T) {
+	ca, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosts := normalHosts(Hosts())
+	cert, err := ca.Issue(hosts, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range hosts {
+		if net.ParseIP(host) != nil && !ca.Permits(host) {
+			t.Logf("%s is outside the private ranges: left out", host)
+			continue
+		}
+		if _, err := cert.Leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: ca.Pool()}); err != nil {
+			t.Errorf("%s: %v", host, err)
+		}
+	}
+}
+
+// A leaf the CA key signs for a public name or address is refused by Go's
+// verifier, as by browsers: the constraints make a leaked key useless there.
+func TestALeafForThePublicWebIsRefused(t *testing.T) {
+	ca, err := open(t.TempDir(), "box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"example.com", "8.8.8.8", "box.example.com", "notbox", "2001:4860:4860::8888"} {
+		template := &x509.Certificate{
+			SerialNumber: randomSerial(),
+			NotBefore:    time.Now().Add(-time.Hour),
+			NotAfter:     time.Now().Add(time.Hour),
+			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		}
+		if ip := net.ParseIP(host); ip != nil {
+			template.IPAddresses = []net.IP{ip}
+		} else {
+			template.DNSNames = []string{host}
+		}
+		key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		der, err := x509.CreateCertificate(rand.Reader, template, ca.cert, &key.PublicKey, ca.key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaf, _ := x509.ParseCertificate(der)
+		_, err = leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: ca.Pool()})
+		if !errors.As(err, new(x509.CertificateInvalidError)) || err.(x509.CertificateInvalidError).Reason != x509.CANotAuthorizedForThisName {
+			t.Errorf("%s: %v, want a name constraint error", host, err)
+		}
+	}
+}
+
+func TestACAWithoutConstraintsIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := open(dir, "box")
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          randomSerial(),
+		Subject:               ca.cert.Subject,
+		NotBefore:             ca.cert.NotBefore,
+		NotAfter:              ca.cert.NotAfter,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		KeyUsage:              x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &ca.key.PublicKey, ca.key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, certFile), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
+	if _, err := Open(dir); err == nil || !strings.Contains(err.Error(), "no name constraints") || !strings.Contains(err.Error(), "regenerate") {
+		t.Errorf("a CA without constraints: %v", err)
 	}
 }

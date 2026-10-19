@@ -3,11 +3,20 @@
 // device, as with mkcert, and the server certificate it signs names every
 // address the server is reached on.
 //
-// The CA is not name constrained. Constraints are fixed when a device trusts
-// the CA, but the addresses are not: a new LAN, a new private network or a
-// renamed machine would then need every device to trust a new CA. The CA's
-// key instead never leaves the data folder (0600, in a 0700 folder agents
-// may not touch), and Regenerate replaces it in one step.
+// The CA is name constrained, and the constraints are critical: it may only
+// vouch for localhost, this machine's hostname (and hostname.local), loopback
+// and the private address ranges (LAN, Hawser and Tailscale). Its key lives
+// in the data folder (0600, in a 0700 folder agents are kept away from), but
+// an agent runs as the same user as the server, and no check of the commands
+// it runs can be complete. With the constraints, a key that leaks anyway
+// can't be used to pass as any site on the public web to the devices that
+// trust the CA.
+//
+// The trade-off: the hostname is fixed when the CA is made. After the machine
+// is renamed, the Issuer leaves the new name out of the server certificate
+// (addresses still work) until the CA is regenerated, and every device then
+// trusts the new CA once more. A public address, as on a VPS, is never named:
+// put a reverse proxy that does TLS in front instead.
 package tlsca
 
 import (
@@ -23,6 +32,7 @@ import (
 	"io"
 	"io/fs"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -51,10 +61,27 @@ func Dir(dataDir string) string {
 	return filepath.Join(dataDir, Folder)
 }
 
-// Open loads the CA from dir, or makes one there on first use. It refuses a
-// folder or key file that is a symbolic link, and a key that others than its
-// owner may read.
+// privateRanges are the addresses the CA may vouch for: loopback, the
+// private LAN ranges, the shared range Hawser and Tailscale give out, and
+// IPv6 unique local addresses (Tailscale's among them). hostaddrs.Network
+// leaves out link-local addresses, so they aren't here.
+var privateRanges = []string{
+	"127.0.0.0/8", "::1/128",
+	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+	"100.64.0.0/10",
+	"fd00::/8",
+}
+
+// Open loads the CA from dir, or makes one there on first use, for this
+// machine's hostname. It refuses a folder or key file that is a symbolic
+// link, a key that others than its owner may read, and a CA without name
+// constraints.
 func Open(dir string) (*CA, error) {
+	hostname, _ := os.Hostname()
+	return open(dir, hostname)
+}
+
+func open(dir, hostname string) (*CA, error) {
 	if err := checkFolder(dir); err != nil {
 		return nil, err
 	}
@@ -63,7 +90,7 @@ func Open(dir string) (*CA, error) {
 	_, certErr := os.Lstat(certPath)
 	switch {
 	case errors.Is(keyErr, fs.ErrNotExist) && errors.Is(certErr, fs.ErrNotExist):
-		return create(dir)
+		return create(dir, hostname)
 	case errors.Is(keyErr, fs.ErrNotExist) || errors.Is(certErr, fs.ErrNotExist):
 		return nil, fmt.Errorf("the CA in %s is incomplete: regenerate it", dir)
 	}
@@ -130,7 +157,53 @@ func (ca *CA) Pool() *x509.CertPool {
 	return pool
 }
 
-func create(dir string) (*CA, error) {
+// Permits is true when the CA's name constraints let it vouch for host, a
+// DNS name or an IP address written as normalHosts writes it.
+func (ca *CA) Permits(host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		for _, r := range ca.cert.PermittedIPRanges {
+			if r.Contains(ip) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, domain := range ca.cert.PermittedDNSDomains {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// constrained is true for a CA whose critical name constraints permit some
+// names and some addresses, and so nothing else.
+func constrained(cert *x509.Certificate) bool {
+	return cert.PermittedDNSDomainsCritical && len(cert.PermittedDNSDomains) > 0 && len(cert.PermittedIPRanges) > 0
+}
+
+// permittedDomains are the DNS names a CA made on hostname may vouch for,
+// each with its subdomains.
+func permittedDomains(hostname string) []string {
+	domains := []string{"localhost"}
+	if hostname = strings.ToLower(strings.TrimSuffix(hostname, ".")); hostname != "" && hostname != "localhost" {
+		domains = append(domains, hostname)
+		if !strings.Contains(hostname, ".") {
+			domains = append(domains, hostname+".local")
+		}
+	}
+	return domains
+}
+
+func permittedRanges() []*net.IPNet {
+	ranges := make([]*net.IPNet, len(privateRanges))
+	for i, cidr := range privateRanges {
+		_, ranges[i], _ = net.ParseCIDR(cidr)
+	}
+	return ranges
+}
+
+func create(dir, hostname string) (*CA, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -138,7 +211,6 @@ func create(dir string) (*CA, error) {
 	if err != nil {
 		return nil, err
 	}
-	hostname, _ := os.Hostname()
 	now := time.Now()
 	template := &x509.Certificate{
 		SerialNumber:          randomSerial(),
@@ -150,6 +222,10 @@ func create(dir string) (*CA, error) {
 		MaxPathLen:            0,
 		MaxPathLenZero:        true,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+
+		PermittedDNSDomainsCritical: true,
+		PermittedDNSDomains:         permittedDomains(hostname),
+		PermittedIPRanges:           permittedRanges(),
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	if err != nil {
@@ -211,6 +287,9 @@ func load(keyPath, certPath string) (*CA, error) {
 	}
 	if !cert.IsCA {
 		return nil, fmt.Errorf("%s: not a CA certificate", certPath)
+	}
+	if !constrained(cert) {
+		return nil, fmt.Errorf("%s has no name constraints, so a leaked key could pass as any site: regenerate the CA", certPath)
 	}
 	if !key.PublicKey.Equal(cert.PublicKey) {
 		return nil, fmt.Errorf("%s doesn't belong to %s: regenerate the CA", keyPath, certPath)

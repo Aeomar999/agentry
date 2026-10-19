@@ -2,7 +2,9 @@ package tlsca
 
 import (
 	"crypto/tls"
+	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,9 +25,10 @@ type Issuer struct {
 	hosts func() []string
 	now   func() time.Time
 
-	mu     sync.Mutex
-	cert   *tls.Certificate
-	issued []string // the normal hosts cert names
+	mu      sync.Mutex
+	cert    *tls.Certificate
+	issued  []string // the normal hosts cert names
+	leftOut []string // the hosts last reported as outside the CA's constraints
 }
 
 // NewIssuer issues for the hosts hosts returns, asked on each handshake, at
@@ -40,11 +43,20 @@ func (i *Issuer) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) 
 }
 
 // Certificate is the current server certificate, issued anew if it doesn't
-// name the hosts there are now or expires within renewBefore.
+// name the hosts there are now or expires within renewBefore. Hosts the CA
+// may not vouch for are left out, and reported once each time they change.
 func (i *Issuer) Certificate() (*tls.Certificate, error) {
-	hosts, now := normalHosts(i.hosts()), i.now() // outside the lock: hosts may be slow
+	all, now := normalHosts(i.hosts()), i.now() // outside the lock: hosts may be slow
+	hosts, leftOut := i.split(all)
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	if !slices.Equal(i.leftOut, leftOut) {
+		i.leftOut = leftOut
+		if len(leftOut) > 0 {
+			slog.Warn("the HTTPS certificate leaves out hosts the CA may not vouch for; `agentry ca regenerate` makes a CA for this machine's current hostname, and a public address needs a reverse proxy that does TLS",
+				"hosts", strings.Join(leftOut, ", "))
+		}
+	}
 	if i.cert != nil && slices.Equal(i.issued, hosts) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore)) {
 		return i.cert, nil
 	}
@@ -54,4 +66,16 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 	}
 	i.cert, i.issued = cert, hosts
 	return cert, nil
+}
+
+// split parts normal hosts into those the CA permits and those it doesn't.
+func (i *Issuer) split(hosts []string) (permitted, leftOut []string) {
+	for _, host := range hosts {
+		if i.ca.Permits(host) {
+			permitted = append(permitted, host)
+		} else {
+			leftOut = append(leftOut, host)
+		}
+	}
+	return permitted, leftOut
 }

@@ -36,7 +36,7 @@ func (w *world) set(now time.Time, hosts ...string) {
 }
 
 func newIssuer(t *testing.T) (*Issuer, *world) {
-	ca, err := Open(t.TempDir())
+	ca, err := open(t.TempDir(), "box")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,5 +145,27 @@ func TestAClientTrustingTheCAConnects(t *testing.T) {
 	if conn, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{ServerName: "localhost"}); err == nil {
 		conn.Close()
 		t.Error("a client trusting only the system's CAs connected")
+	}
+}
+
+func TestTheIssuerLeavesOutHostsOutsideTheCA(t *testing.T) {
+	i, w := newIssuer(t)
+	w.set(w.Now(), "box", "renamed", "192.168.1.20", "203.0.113.9")
+	cert := certificate(t, i)
+	if want := []string{"box", "localhost"}; !slices.Equal(sorted(cert.Leaf.DNSNames), want) {
+		t.Errorf("DNS names %v", cert.Leaf.DNSNames)
+	}
+	for _, host := range []string{"box", "192.168.1.20", "localhost"} {
+		if _, err := cert.Leaf.Verify(x509.VerifyOptions{DNSName: host, Roots: i.ca.Pool()}); err != nil {
+			t.Errorf("%s: %v", host, err)
+		}
+	}
+	for _, host := range []string{"renamed", "203.0.113.9"} {
+		if err := cert.Leaf.VerifyHostname(host); err == nil {
+			t.Errorf("the certificate names %s, which the CA may not vouch for", host)
+		}
+	}
+	if !slices.Equal(i.leftOut, []string{"203.0.113.9", "renamed"}) {
+		t.Errorf("left out %v", i.leftOut)
 	}
 }
