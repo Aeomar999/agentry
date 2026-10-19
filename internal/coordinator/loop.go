@@ -343,9 +343,13 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		summary := decision.Summary
-		if own, _ := roster.Get(task.Coordinator); isVisionaries(own) && len(decision.Ideas) > 0 {
-			if refused := l.suggest(task, decision.Ideas); refused != "" {
-				summary += "\n\n" + refused
+		if len(decision.Ideas) > 0 {
+			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
+			if own, _ := roster.Get(task.Coordinator); isVisionaries(own) {
+				note = l.suggest(task, decision.Ideas)
+			}
+			if note != "" {
+				summary += "\n\n" + note
 			}
 		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
