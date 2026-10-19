@@ -56,17 +56,16 @@ func madeAgent(t *testing.T, server *httptest.Server, name, team string, coordin
 
 func TestASavedTeamIsListedWithEveryAgent(t *testing.T) {
 	server, s := newTestServer(t)
-	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
+	team := planningTeam(t, server, s)
+	code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
 	if code != 200 || !strings.Contains(body, `"userMade":true`) {
 		t.Fatalf("save: %d %s", code, body)
 	}
 	_, list := call(t, server, "GET", "/api/teams/templates", "")
 	yours := userTemplates(t, list)
-	if len(yours) != 1 || yours[0].ID != "my-software" || yours[0].Team != "Software" || yours[0].Description != "Ours." {
+	if len(yours) != 1 || yours[0].ID != "my-planning" || yours[0].Team != "Planning" || yours[0].Description != "Ours." {
 		t.Fatalf("your templates: %+v", yours)
 	}
-	stream, _ := s.Stream(events.AgentsStream)
-	team := agents.FromEvents(stream)
 	if len(yours[0].Agents) != len(team) {
 		t.Errorf("the template has %d agents, the team %d", len(yours[0].Agents), len(team))
 	}
@@ -82,8 +81,9 @@ func TestASavedTeamIsListedWithEveryAgent(t *testing.T) {
 
 func TestSavingATemplateAgainUpdatesIt(t *testing.T) {
 	server, _ := newTestServer(t)
-	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
-	if code, body := call(t, server, "POST", "/api/teams/software/template", `{"id":"my-software","description":"Still ours."}`); code != 200 {
+	madeAgent(t, server, "planner", "Planning", true)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
+	if code, body := call(t, server, "POST", "/api/teams/planning/template", `{"id":"my-planning","description":"Still ours."}`); code != 200 {
 		t.Fatalf("save again: %d %s", code, body)
 	}
 	_, list := call(t, server, "GET", "/api/teams/templates", "")
@@ -155,7 +155,8 @@ func TestATemplateWithALongAgentNameIsRefused(t *testing.T) {
 
 func TestATemplateCantTakeABuiltInTemplatesID(t *testing.T) {
 	server, _ := newTestServer(t)
-	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"id":"research"}`)
+	madeAgent(t, server, "planner", "Planning", true)
+	code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"research"}`)
 	if code != http.StatusBadRequest || !strings.Contains(body, "the built-in research template has that id") {
 		t.Errorf("a built-in id: %d %s", code, body)
 	}
@@ -163,8 +164,9 @@ func TestATemplateCantTakeABuiltInTemplatesID(t *testing.T) {
 
 func TestARefusedIDMadeFromTheTeamsNameSaysSo(t *testing.T) {
 	server, _ := newTestServer(t)
-	code, body := call(t, server, "POST", "/api/teams/Software/template", `{}`)
-	want := `the built-in software template has that id (made from the team's name "Software"): give the template an id`
+	madeAgent(t, server, "reader", "Research!", true)
+	code, body := call(t, server, "POST", "/api/teams/Research%21/template", `{}`)
+	want := `the built-in research template has that id (made from the team's name "Research!"): give the template an id`
 	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
 		t.Errorf("a built-in id from the team's name: %d %s", code, body)
 	}
@@ -190,23 +192,44 @@ func TestARefusalNotOfTheIDMadeFromTheTeamsNameHasNoHint(t *testing.T) {
 
 func TestARefusedIDYouGaveIsNamedAsItIs(t *testing.T) {
 	server, _ := newTestServer(t)
-	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"id":"software"}`)
+	madeAgent(t, server, "planner", "Planning", true)
+	code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"software"}`)
 	if code != http.StatusBadRequest || strings.TrimSpace(body) != "the built-in software template has that id" {
 		t.Errorf("a built-in id you gave: %d %s", code, body)
 	}
 }
 
+// A team is never added under a built-in template's team name, so a
+// template of that name is refused however it comes: saved with an id or
+// without one, or imported.
+func TestATemplateOfABuiltInTeamIsRefused(t *testing.T) {
+	server, _ := newTestServer(t)
+	for _, refused := range []struct{ name, path, body, want string }{
+		{"saved with an id", "/api/teams/Software/template", `{"id":"my-software"}`,
+			"Software is the name of the Software template's team: rename the team before saving it as a template"},
+		{"saved without one", "/api/teams/Software/template", `{}`,
+			"Software is the name of the Software template's team: rename the team before saving it as a template"},
+		{"imported", "/api/teams/templates/import", importOf("my-writing", "writing", ""),
+			"writing is the name of the Writing template's team: rename the team before saving it as a template"},
+	} {
+		if code, body := call(t, server, "POST", refused.path, refused.body); code != http.StatusBadRequest || strings.TrimSpace(body) != refused.want {
+			t.Errorf("%s: %d %s", refused.name, code, body)
+		}
+	}
+}
+
 func TestATemplateIsRemoved(t *testing.T) {
 	server, _ := newTestServer(t)
-	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software"}`)
-	if code, body := call(t, server, "DELETE", "/api/teams/templates/my-software", ""); code != 200 {
+	madeAgent(t, server, "planner", "Planning", true)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning"}`)
+	if code, body := call(t, server, "DELETE", "/api/teams/templates/my-planning", ""); code != 200 {
 		t.Fatalf("remove: %d %s", code, body)
 	}
 	_, list := call(t, server, "GET", "/api/teams/templates", "")
 	if yours := userTemplates(t, list); len(yours) != 0 {
 		t.Errorf("the template should be gone: %+v", yours)
 	}
-	if code, body := call(t, server, "DELETE", "/api/teams/templates/my-software", ""); code != http.StatusNotFound {
+	if code, body := call(t, server, "DELETE", "/api/teams/templates/my-planning", ""); code != http.StatusNotFound {
 		t.Errorf("removing it again: %d %s", code, body)
 	}
 	if code, body := call(t, server, "DELETE", "/api/teams/templates/research", ""); code != http.StatusConflict || !strings.Contains(body, "comes with Agentry") {
@@ -225,10 +248,11 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range agents.SeedProposals(nil) {
+	members := []agents.Agent{{Name: "planner", Engine: "claude", Prompt: "Plan it.", Coordinates: true}}
+	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", members, httpapi.You)...) {
 		written.Propose(p)
 	}
-	saving, err := agents.SaveTemplate(state.Roster(), agents.DefaultTeam, "my-software", "Ours.", httpapi.You)
+	saving, err := agents.SaveTemplate(state.Roster(), "Planning", "my-planning", "Ours.", httpapi.You)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +263,7 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 
 	server, _ := newTestServerOn(t, path, tasks.Limits{})
 	_, list := call(t, server, "GET", "/api/teams/templates", "")
-	if yours := userTemplates(t, list); len(yours) != 1 || yours[0].ID != "my-software" || len(yours[0].Agents) != len(state.Roster()) {
+	if yours := userTemplates(t, list); len(yours) != 1 || yours[0].ID != "my-planning" || len(yours[0].Agents) != len(members) {
 		t.Errorf("after a restart: %+v", yours)
 	}
 }
@@ -248,10 +272,11 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 // same template, every agent and prompt in it.
 func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
 	server, s := newTestServer(t)
-	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
-	want, _ := savedTemplates(t, s).WithID("my-software")
+	planningTeam(t, server, s)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
+	want, _ := savedTemplates(t, s).WithID("my-planning")
 
-	request, _ := http.NewRequest("GET", server.URL+"/api/teams/templates/my-software/export", nil)
+	request, _ := http.NewRequest("GET", server.URL+"/api/teams/templates/my-planning/export", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -259,15 +284,15 @@ func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
 	}
 	defer response.Body.Close()
 	exported, _ := io.ReadAll(response.Body)
-	if response.StatusCode != 200 || response.Header.Get("Content-Disposition") != `attachment; filename="my-software.json"` {
+	if response.StatusCode != 200 || response.Header.Get("Content-Disposition") != `attachment; filename="my-planning.json"` {
 		t.Fatalf("export: %d %q %s", response.StatusCode, response.Header.Get("Content-Disposition"), exported)
 	}
 
-	call(t, server, "DELETE", "/api/teams/templates/my-software", "")
+	call(t, server, "DELETE", "/api/teams/templates/my-planning", "")
 	if code, body := call(t, server, "POST", "/api/teams/templates/import", string(exported)); code != 200 || !strings.Contains(body, `"userMade":true`) {
 		t.Fatalf("import: %d %s", code, body)
 	}
-	got, found := savedTemplates(t, s).WithID("my-software")
+	got, found := savedTemplates(t, s).WithID("my-planning")
 	if !found || !reflect.DeepEqual(got, want) {
 		t.Errorf("imported:\n%+v\nwant:\n%+v", got, want)
 	}
@@ -275,8 +300,9 @@ func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
 
 func TestImportingATemplateYouHaveReplacesIt(t *testing.T) {
 	server, s := newTestServer(t)
-	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
-	_, exported := call(t, server, "GET", "/api/teams/templates/my-software/export", "")
+	planningTeam(t, server, s)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
+	_, exported := call(t, server, "GET", "/api/teams/templates/my-planning/export", "")
 	changed := strings.Replace(exported, `"description":"Ours."`, `"description":"Imported."`, 1)
 	if code, body := call(t, server, "POST", "/api/teams/templates/import", changed); code != 200 {
 		t.Fatalf("import: %d %s", code, body)
@@ -289,10 +315,11 @@ func TestImportingATemplateYouHaveReplacesIt(t *testing.T) {
 // An imported team and description are trimmed, as a saved description is.
 func TestAPaddedImportIsSavedTrimmed(t *testing.T) {
 	server, s := newTestServer(t)
-	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
-	_, exported := call(t, server, "GET", "/api/teams/templates/my-software/export", "")
+	planningTeam(t, server, s)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
+	_, exported := call(t, server, "GET", "/api/teams/templates/my-planning/export", "")
 	padded := exported
-	for target, padding := range map[string]string{`"description":"Ours."`: `"description":"  Ours.  "`, `"team":"Software"`: `"team":"  Software  "`} {
+	for target, padding := range map[string]string{`"description":"Ours."`: `"description":"  Ours.  "`, `"team":"Planning"`: `"team":"  Planning  "`} {
 		if !strings.Contains(padded, target) {
 			t.Fatalf("nothing to pad: no %s in %s", target, exported)
 		}
@@ -301,10 +328,10 @@ func TestAPaddedImportIsSavedTrimmed(t *testing.T) {
 	if code, body := call(t, server, "POST", "/api/teams/templates/import", padded); code != 200 {
 		t.Fatalf("import: %d %s", code, body)
 	}
-	if saved, _ := savedTemplates(t, s).WithID("my-software"); saved.Team != "Software" || saved.Description != "Ours." {
+	if saved, _ := savedTemplates(t, s).WithID("my-planning"); saved.Team != "Planning" || saved.Description != "Ours." {
 		t.Errorf("saved team %q, description %q", saved.Team, saved.Description)
 	}
-	if _, reexported := call(t, server, "GET", "/api/teams/templates/my-software/export", ""); reexported != exported {
+	if _, reexported := call(t, server, "GET", "/api/teams/templates/my-planning/export", ""); reexported != exported {
 		t.Errorf("exported again:\n%s\nwant:\n%s", reexported, exported)
 	}
 }
@@ -337,7 +364,7 @@ func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
 		{"two coordinators", map[string]any{"id": "ours", "team": "Ours", "agents": []any{agent("lead", true), agent("other-lead", true)}}, "a template has exactly one coordinator"},
 		{"no agents", map[string]any{"id": "ours", "team": "Ours"}, "a template needs at least one agent"},
 		{"workers", map[string]any{"id": "ours", "team": "Ours", "agents": []any{withWorkers}}, "agent lead: a template's agents name no workers, as the machines may not be there when it is added"},
-		{"nothing", map[string]any{}, "a template needs an id"},
+		{"nothing", map[string]any{}, "a template needs a team name"},
 	} {
 		body, _ := json.Marshal(refused.template)
 		if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != http.StatusBadRequest || strings.TrimSpace(reply) != refused.reason {
@@ -483,8 +510,6 @@ func TestYourTemplateIsAddedOnlyAsACustomTeamWouldBe(t *testing.T) {
 	}{
 		{"a profile nobody ships", importOf("dreamers", "Dreamers", "dreaming"),
 			"lead's profile dreaming isn't in policy.toml, and Agentry doesn't ship it: write it in policy.toml, or pick another profile"},
-		{"a built-in template's team", importOf("my-writing", "Writing", ""),
-			"Writing is the name of the Writing template's team; choose another"},
 	} {
 		if code, body := call(t, server.Server, "POST", "/api/teams/templates/import", refused.template); code != 200 {
 			t.Fatalf("%s: import: %d %s", refused.name, code, body)

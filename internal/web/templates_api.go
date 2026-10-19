@@ -35,7 +35,10 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(request.ID)
 	if id == "" {
 		id = templateIDFor(team)
-		if reason := rules.CheckTemplateID(id); reason != "" {
+		// A built-in template's team is refused whatever its id, so the
+		// rules say so rather than this hint, which an id wouldn't fix.
+		_, builtInTeam := agents.TemplateNamed(team)
+		if reason := rules.CheckTemplateID(id); reason != "" && !builtInTeam {
 			// The id is ours, not theirs: say where it came from, or the
 			// refusal names an id they never typed.
 			http.Error(w, reason+` (made from the team's name "`+team+`"): give the template an id`, http.StatusBadRequest)

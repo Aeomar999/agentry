@@ -26,14 +26,19 @@ var asAnAgent = allOf(nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, colum
 const templateAgentNameLimit = 28
 
 func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
-	if reason := CheckTemplateID(p.Text("id")); reason != "" {
-		return reason
-	}
 	switch team := p.Text("team"); {
 	case strings.TrimSpace(team) == "":
 		return "a template needs a team name"
 	case strings.TrimSpace(team) != team:
 		return `a template's team name has no spaces at its ends: "` + team + `"`
+	}
+	// A team is never added under a built-in template's team name, so a
+	// template of that name could be saved but never added.
+	if t, ok := agents.TemplateNamed(p.Text("team")); ok {
+		return p.Text("team") + " is the name of the " + t.Team + " template's team: rename the team before saving it as a template"
+	}
+	if reason := CheckTemplateID(p.Text("id")); reason != "" {
+		return reason
 	}
 	members, err := agents.TemplateAgents(p.Data)
 	if err != nil {

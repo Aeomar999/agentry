@@ -44,7 +44,7 @@ func refusedSaying(t *testing.T, p events.Proposal, want string) {
 }
 
 func TestATemplateIsSaved(t *testing.T) {
-	if reason := proposeTemplate(t, savingTemplate("papers", "Research", research())); reason != "" {
+	if reason := proposeTemplate(t, savingTemplate("papers", "Readers", research())); reason != "" {
 		t.Errorf("a good template was refused: %s", reason)
 	}
 }
@@ -54,13 +54,13 @@ func TestATemplateReadBackFromTheLogIsChecked(t *testing.T) {
 		map[string]any{"name": "lead", "prompt": "Lead.", "engine": "claude", "coordinates": true},
 		map[string]any{"name": "lead", "prompt": "Lead again.", "engine": "claude"},
 	}
-	p := savingTemplate("papers", "Research", nil)
+	p := savingTemplate("papers", "Readers", nil)
 	p.Data["agents"] = logged
 	refusedSaying(t, p, "two agents called lead")
 }
 
 func TestATemplateNeedsAnID(t *testing.T) {
-	refusedSaying(t, savingTemplate(" ", "Research", research()), "needs an id")
+	refusedSaying(t, savingTemplate(" ", "Readers", research()), "needs an id")
 }
 
 func TestATemplateNeedsATeam(t *testing.T) {
@@ -70,13 +70,26 @@ func TestATemplateNeedsATeam(t *testing.T) {
 // AddTeam gives a template's team name to its agents as it is, so a padded
 // one is refused whichever way the template came.
 func TestATemplatesTeamNameIsTrimmed(t *testing.T) {
-	refusedSaying(t, savingTemplate("papers", " Research ", research()), `a template's team name has no spaces at its ends: " Research "`)
+	refusedSaying(t, savingTemplate("papers", " Readers ", research()), `a template's team name has no spaces at its ends: " Readers "`)
+}
+
+// A team is never added under a built-in template's team name, whatever
+// its case, so a template is not saved under one; a numbered one is fine.
+func TestATemplatesTeamIsNotABuiltInTeam(t *testing.T) {
+	for _, team := range []string{"Writing", "writing"} {
+		t.Run(team, func(t *testing.T) {
+			refusedSaying(t, savingTemplate("papers", team, research()), team+" is the name of the Writing template's team: rename the team before saving it as a template")
+		})
+	}
+	if reason := proposeTemplate(t, savingTemplate("papers", "Writing 2", research())); reason != "" {
+		t.Errorf("a numbered team was refused: %s", reason)
+	}
 }
 
 func TestATemplateCantTakeABuiltInID(t *testing.T) {
 	for _, template := range agents.Templates {
 		t.Run(template.ID, func(t *testing.T) {
-			refusedSaying(t, savingTemplate(template.ID, "Research", research()), "the built-in "+template.ID+" template has that id")
+			refusedSaying(t, savingTemplate(template.ID, "Readers", research()), "the built-in "+template.ID+" template has that id")
 		})
 	}
 }
@@ -84,55 +97,55 @@ func TestATemplateCantTakeABuiltInID(t *testing.T) {
 func TestATemplateIDIsLowercaseLettersDigitsAndDashes(t *testing.T) {
 	for _, id := range []string{" research", "My Team", "Papers", "a/b", "papers-" + strings.Repeat("a", 25)} {
 		t.Run(id, func(t *testing.T) {
-			refusedSaying(t, savingTemplate(id, "Research", research()), "a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: "+id)
+			refusedSaying(t, savingTemplate(id, "Readers", research()), "a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: "+id)
 		})
 	}
 }
 
 func TestATemplatesAgentsAreAList(t *testing.T) {
-	p := savingTemplate("papers", "Research", nil)
+	p := savingTemplate("papers", "Readers", nil)
 	p.Data["agents"] = "lead, reader"
 	refusedSaying(t, p, "a list of agents")
 }
 
 func TestATemplateNeedsAnAgent(t *testing.T) {
-	refusedSaying(t, savingTemplate("papers", "Research", nil), "at least one agent")
+	refusedSaying(t, savingTemplate("papers", "Readers", nil), "at least one agent")
 }
 
 func TestATemplateNeedsACoordinator(t *testing.T) {
 	members := research()
 	members[0].Coordinates = false
-	refusedSaying(t, savingTemplate("papers", "Research", members), "exactly one coordinator")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "exactly one coordinator")
 }
 
 func TestATemplateHasOnlyOneCoordinator(t *testing.T) {
 	members := research()
 	members[1].Coordinates = true
-	refusedSaying(t, savingTemplate("papers", "Research", members), "exactly one coordinator")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "exactly one coordinator")
 }
 
 func TestATemplatesAgentNamesDiffer(t *testing.T) {
 	members := research()
 	members[1].Name = "lead"
-	refusedSaying(t, savingTemplate("papers", "Research", members), "two agents called lead")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "two agents called lead")
 }
 
 func TestATemplatesAgentHasAValidName(t *testing.T) {
 	members := research()
 	members[1].Name = "Reader"
-	refusedSaying(t, savingTemplate("papers", "Research", members), "lowercase letters")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "lowercase letters")
 }
 
 func TestATemplatesAgentNameLeavesRoomForANumber(t *testing.T) {
 	members := research()
 	members[1].Name = "reader-" + strings.Repeat("a", 22) // 29 characters
-	refusedSaying(t, savingTemplate("papers", "Research", members), "agent "+members[1].Name+": a template's agent names are at most 28 characters")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "agent "+members[1].Name+": a template's agent names are at most 28 characters")
 }
 
 func TestATemplatesAgentNameMayBe28Characters(t *testing.T) {
 	members := research()
 	members[1].Name = "reader-" + strings.Repeat("a", 21)
-	if reason := proposeTemplate(t, savingTemplate("papers", "Research", members)); reason != "" {
+	if reason := proposeTemplate(t, savingTemplate("papers", "Readers", members)); reason != "" {
 		t.Errorf("a 28-character agent name was refused: %s", reason)
 	}
 }
@@ -171,13 +184,13 @@ func TestATemplatesAgentKeepsNothingOfAnInstall(t *testing.T) {
 	}{
 		{"workers", func(a *agents.Agent) { a.Workers = []string{"laptop"} }, "agent reader: a template's agents name no workers"},
 		{"knowledge", func(a *agents.Agent) { a.Knowledge = "Skim the abstract first." }, "agent reader: a template's agents carry no knowledge"},
-		{"team", func(a *agents.Agent) { a.Team = "Research" }, "agent reader: a template's agents name no team"},
+		{"team", func(a *agents.Agent) { a.Team = "Readers" }, "agent reader: a template's agents name no team"},
 		{"template", func(a *agents.Agent) { a.Template = "research" }, "agent reader: a template's agents name no template"},
 	} {
 		t.Run(test.field, func(t *testing.T) {
 			members := research()
 			test.set(&members[1])
-			refusedSaying(t, savingTemplate("papers", "Research", members), test.want)
+			refusedSaying(t, savingTemplate("papers", "Readers", members), test.want)
 		})
 	}
 }
@@ -185,25 +198,25 @@ func TestATemplatesAgentKeepsNothingOfAnInstall(t *testing.T) {
 func TestATemplatesAgentHasAKnownEngine(t *testing.T) {
 	members := research()
 	members[1].Engine = "gpt"
-	refusedSaying(t, savingTemplate("papers", "Research", members), "agent reader: unknown engine gpt")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "agent reader: unknown engine gpt")
 }
 
 func TestATemplatesAgentHasAKnownColour(t *testing.T) {
 	members := research()
 	members[1].Color = "mauve"
-	refusedSaying(t, savingTemplate("papers", "Research", members), "unknown colour mauve")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "unknown colour mauve")
 }
 
 func TestATemplatesAgentHasAKnownColumn(t *testing.T) {
 	members := research()
 	members[1].Column = "deploy"
-	refusedSaying(t, savingTemplate("papers", "Research", members), "not deploy")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "not deploy")
 }
 
 func TestATemplatesAgentHasAPrompt(t *testing.T) {
 	members := research()
 	members[1].Prompt = "  "
-	refusedSaying(t, savingTemplate("papers", "Research", members), "agent reader: an agent needs a prompt")
+	refusedSaying(t, savingTemplate("papers", "Readers", members), "agent reader: an agent needs a prompt")
 }
 
 func removingTemplate(id string) events.Proposal {
@@ -229,7 +242,7 @@ func reasonsFor(t *testing.T, ps ...events.Proposal) []string {
 }
 
 func TestASavedTemplateIsRemoved(t *testing.T) {
-	reasons := reasonsFor(t, savingTemplate("papers", "Research", research()), removingTemplate("papers"))
+	reasons := reasonsFor(t, savingTemplate("papers", "Readers", research()), removingTemplate("papers"))
 	if reasons[1] != "" {
 		t.Errorf("removing a saved template was refused: %s", reasons[1])
 	}
@@ -240,7 +253,7 @@ func TestATemplateNeverSavedIsNotRemoved(t *testing.T) {
 }
 
 func TestATemplateIsRemovedOnce(t *testing.T) {
-	reasons := reasonsFor(t, savingTemplate("papers", "Research", research()), removingTemplate("papers"), removingTemplate("papers"))
+	reasons := reasonsFor(t, savingTemplate("papers", "Readers", research()), removingTemplate("papers"), removingTemplate("papers"))
 	if reasons[1] != "" || !strings.Contains(reasons[2], "no saved template papers") {
 		t.Errorf("removing twice: %q, want the second refused", reasons)
 	}
@@ -252,12 +265,17 @@ func TestARemovalNeedsAnID(t *testing.T) {
 
 func TestASavedTeamIsAccepted(t *testing.T) {
 	s, state := openSeededState(t)
-	p, err := agents.SaveTemplate(state.Roster(), agents.DefaultTeam, "mine", "My software team.", you)
+	for _, p := range agents.CustomTeam("Readers", research(), you) {
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatalf("adding the Readers team: %v, %v", rejection, err)
+		}
+	}
+	p, err := agents.SaveTemplate(state.Roster(), "Readers", "mine", "My readers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
-		t.Errorf("saving the %s team: %v, %v", agents.DefaultTeam, rejection, err)
+		t.Errorf("saving the Readers team: %v, %v", rejection, err)
 	}
 	if saved, ok := state.Templates().WithID("mine"); !ok || len(saved.Agents) == 0 {
 		t.Errorf("the saved template: %+v", saved)
