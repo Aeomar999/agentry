@@ -49,6 +49,10 @@ export const signinCodeFromLink = takeFromAddress("signin");
 
 // Signed out is what the server said last: a 401 sets it, signing in clears it.
 let signedOut = false;
+// Each sign-in starts a new session. A 401 to a call sent in an earlier one,
+// such as the theme the page saves as it opens, can arrive after signing in
+// and says nothing about the new token, so it doesn't sign the page out.
+let session = 0;
 const listeners = new Set<() => void>();
 function setSignedOut(value: boolean) {
   if (signedOut === value) return;
@@ -73,22 +77,30 @@ export class SignedOutError extends Error {
 
 // authorization is the bearer header, when the page has the token; without
 // it, the cookie signs the call in, if the browser kept it.
-export function authorization(): Record<string, string> {
+function authorization(): Record<string, string> {
   return token ? { Authorization: "Bearer " + token } : {};
 }
 
-export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    signal,
-    headers: { "Content-Type": "application/json", ...authorization() },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+// send makes a call signed in, and throws what the server refused: a 401 as
+// SignedOutError, anything else with the server's reason.
+export async function send(path: string, init: RequestInit & { headers?: Record<string, string> }): Promise<Response> {
+  const sentIn = session;
+  const response = await fetch(path, { ...init, headers: { ...init.headers, ...authorization() } });
   if (response.status === 401) {
-    setSignedOut(true);
+    if (sentIn === session) setSignedOut(true);
     throw new SignedOutError();
   }
   if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  return response;
+}
+
+export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await send(path, {
+    method,
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   return response.json() as Promise<T>;
 }
 
@@ -104,6 +116,7 @@ export async function signIn(given: { code: string } | { token: string }): Promi
   if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
   token = ((await response.json()) as { token: string }).token;
   keep(token);
+  session++;
   setSignedOut(false);
 }
 

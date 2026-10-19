@@ -1,4 +1,4 @@
-import { authorization } from "@/api/client";
+import { send } from "@/api/client";
 
 // A task's shared files: what its agents, on any machine, and you hand each
 // other that isn't in git. They are in .agentry/files of whichever worktree
@@ -14,12 +14,7 @@ export interface SharedFile {
 
 // share uploads a file to the task, as name (its own name if not given).
 export async function share(task: string, file: File, name = file.name): Promise<void> {
-  const response = await fetch(`/api/tasks/${encodeURIComponent(task)}/shared?name=${encodeURIComponent(name)}`, {
-    method: "POST",
-    headers: authorization(),
-    body: file,
-  });
-  if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  await send(`/api/tasks/${encodeURIComponent(task)}/shared?name=${encodeURIComponent(name)}`, { method: "POST", body: file });
 }
 
 // downloadURL is where a shared file downloads from; the page's sign-in
