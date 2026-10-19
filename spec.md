@@ -31,4 +31,9 @@ Briefs, reports and commands in Activity and Handoffs are hard to read and hard 
 - Restyling other pages, the chat, or the Workspace.
 
 ## Decisions
-(Filled in as they are made.)
+1. **Direction A, Author bands** (2026-10-19, product-lead; the user was asleep and asked us not to wait). Every row in a turn belongs to that turn's agent and the turn band already sticks, so making the band the author header gives 100% attribution with the least new UI, keeps the time rail and today's density, and renders briefs in place. B (conversation) costs ~30% density; C (ledger) hides briefs behind a click. B's agent filter and C's compact mode are out of scope here; they may become later stories.
+2. Rows Agentry writes outside a turn (worktree ready, held, files fetched) go under an **Agentry** band with a neutral chip.
+3. A message from the user during a running turn gets its own short **you** band, then the turn's band resumes.
+4. Commit SHAs link to the existing Workspace commit view (`/tasks/:id/workspace?commit=<hash>`) only when the SHA is one of the task's commits from `/api/tasks/:id/commits`; one extra fetch on the task page is accepted. Other SHAs stay plain `code`.
+5. Raising rail durations and handoff times from `ink-faint` to `ink-muted` is an in-scope AA fix.
+6. Role comes only from existing data: "coordinator" when the agent coordinates a team, otherwise the board column's role if any, otherwise none. Blank team shows as Software.
