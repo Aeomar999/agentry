@@ -184,7 +184,9 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
               ))}
             </div>
           )}
-          {asked ? (
+          {task.archived ? (
+            <p className="py-2 text-center text-[12px] text-ink-muted">The task is archived: it takes no messages.</p>
+          ) : asked ? (
             <button
               type="button"
               onClick={() => openQuestion(`${task.id}/question/open`)}

@@ -25,6 +25,7 @@ import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
 import { LimitEditor, turnsLine } from "@/components/organisms/LimitEditor";
 import { OpenEpic } from "@/components/organisms/OpenEpic";
 import { LabelEditor } from "@/components/organisms/LabelEditor";
+import { LabelList } from "@/components/molecules/LabelChip";
 import { TerminalView } from "@/components/organisms/TerminalView";
 import { PlanRail } from "@/components/organisms/PlanRail";
 import { CoordinatorChat } from "@/components/organisms/CoordinatorChat";
@@ -169,6 +170,9 @@ export function TaskPage() {
 
   const asked = params.get("tab") as TabId | null;
   const isEpic = task.kind === "epic";
+  // An archived task is read back from its archive and takes no events, so
+  // nothing on the page offers to change it.
+  const archived = Boolean(task.archived);
   const tab: TabId = asked && TABS.includes(asked) && (isEpic || asked !== "stories") ? asked : isEpic ? "stories" : "coordinator";
   const turn = params.get("turn") ?? "";
   const row = params.get("row") ?? "";
@@ -228,6 +232,7 @@ export function TaskPage() {
             {isEpic && <EpicBadge />}
             <TaskStatusBadge status={task.status} />
             {stageOf(task) && <Badge>{stageOf(task)}</Badge>}
+            {archived && <Badge>Archived {task.archivedAt && dateTime(task.archivedAt)}</Badge>}
           </>
         }
         actions={[
@@ -324,7 +329,11 @@ export function TaskPage() {
           <span className="text-[12px]">{timeAgo(task.lastActiveAt, clock)}</span>
         </Fact>
         <div className="ml-auto flex items-center px-6 py-2">
-          <LabelEditor key={task.labels.join(",")} taskId={task.id} labels={task.labels} />
+          {archived ? (
+            <LabelList labels={task.labels} />
+          ) : (
+            <LabelEditor key={task.labels.join(",")} taskId={task.id} labels={task.labels} />
+          )}
         </div>
       </div>
 
@@ -405,7 +414,7 @@ export function TaskPage() {
               </Scroll>
             )}
             {tab === "stories" && <StoryTable epic={task} onChanged={reload} />}
-            {tab === "files" && <SharedFiles task={task.id} files={task.shared ?? []} onChanged={reload} />}
+            {tab === "files" && <SharedFiles task={task.id} files={task.shared ?? []} readOnly={archived} onChanged={reload} />}
             {tab === "coordinator" && <CoordinatorChat task={task} onSent={reload} />}
             {tab === "activity" && (
               <ActivityFeed
@@ -471,8 +480,26 @@ export function TaskPage() {
                         { label: "Id", value: <Mono>{task.id}</Mono> },
                         { label: "Status", value: <TaskStatusBadge status={task.status} /> },
                         ...(isEpic ? [] : [{ label: "Board column", value: COLUMN_TITLES[task.column] }]),
-                        { label: "Repo", value: <RepoEditor task={task} onChanged={reload} /> },
-                        ...(isEpic ? [] : [{ label: "Epic", value: <EpicPicker task={task} onChanged={reload} /> }]),
+                        {
+                          label: "Repo",
+                          value: archived ? <Mono className="break-all">{task.repo}</Mono> : <RepoEditor task={task} onChanged={reload} />,
+                        },
+                        ...(isEpic
+                          ? []
+                          : [
+                              {
+                                label: "Epic",
+                                value: archived ? (
+                                  task.epic ? (
+                                    <TaskLink id={task.epic} />
+                                  ) : (
+                                    <Mono className="text-ink-muted">none</Mono>
+                                  )
+                                ) : (
+                                  <EpicPicker task={task} onChanged={reload} />
+                                ),
+                              },
+                            ]),
                         { label: "Coordinator", value: <AgentName name={task.coordinator} /> },
                         { label: "Budget", value: <LimitEditor task={task} kind="budget" onChanged={reload} /> },
                         { label: "Turns", value: <Mono>{task.turns}</Mono> },

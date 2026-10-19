@@ -13,7 +13,18 @@ import { cn } from "@/lib/cn";
 // A task's shared files: drop files here (or choose them) to share them,
 // download any, take one away. Agents find them in .agentry/files of their
 // worktree, on whichever machine works next, and leave theirs there too.
-export function SharedFiles({ task, files, onChanged }: { task: string; files: SharedFile[]; onChanged: () => void }) {
+// An archived task's only show: it takes no events.
+export function SharedFiles({
+  task,
+  files,
+  readOnly,
+  onChanged,
+}: {
+  task: string;
+  files: SharedFile[];
+  readOnly?: boolean;
+  onChanged: () => void;
+}) {
   const notify = useToast();
   const picker = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -73,14 +84,16 @@ export function SharedFiles({ task, files, onChanged }: { task: string; files: S
           >
             <Download />
           </a>
-          <button
-            type="button"
-            title="Stop sharing it"
-            onClick={(e) => (e.stopPropagation(), remove(f))}
-            className="cursor-pointer text-ink-faint hover:text-danger [&>svg]:size-4"
-          >
-            <Trash2 />
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              title="Stop sharing it"
+              onClick={(e) => (e.stopPropagation(), remove(f))}
+              className="cursor-pointer text-ink-faint hover:text-danger [&>svg]:size-4"
+            >
+              <Trash2 />
+            </button>
+          )}
         </span>
       ),
     },
@@ -96,7 +109,7 @@ export function SharedFiles({ task, files, onChanged }: { task: string; files: S
     <div
       className="flex h-full flex-col"
       onDragOver={(event) => {
-        if (!event.dataTransfer.types.includes("Files")) return;
+        if (readOnly || !event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
         setOver(true);
       }}
@@ -107,11 +120,13 @@ export function SharedFiles({ task, files, onChanged }: { task: string; files: S
         <span>
           Shared with the task's agents, on whichever machine works on it: they're in <Mono>.agentry/files</Mono>.
         </span>
-        <span className="ml-auto">
-          <Button size="sm" icon={<FileUp />} disabled={sending > 0} onClick={() => picker.current?.click()}>
-            {sending ? `Sharing ${sending}…` : "Share files"}
-          </Button>
-        </span>
+        {!readOnly && (
+          <span className="ml-auto">
+            <Button size="sm" icon={<FileUp />} disabled={sending > 0} onClick={() => picker.current?.click()}>
+              {sending ? `Sharing ${sending}…` : "Share files"}
+            </Button>
+          </span>
+        )}
         <input ref={picker} type="file" multiple hidden onChange={(e) => e.target.files && send(e.target.files)} />
       </div>
       <div
@@ -121,7 +136,9 @@ export function SharedFiles({ task, files, onChanged }: { task: string; files: S
           <ResourceTable columns={columns} rows={files} rowKey={(f) => f.name} />
         ) : (
           <EmptyState icon={<Paperclip />} title="No shared files">
-            Drop files here to share them with the task's agents. What they leave in .agentry/files shows here too.
+            {readOnly
+              ? "The task had none when it was archived."
+              : "Drop files here to share them with the task's agents. What they leave in .agentry/files shows here too."}
           </EmptyState>
         )}
       </div>
