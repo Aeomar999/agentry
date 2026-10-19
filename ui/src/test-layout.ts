@@ -2,8 +2,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 // jsdom lays nothing out, so tests that need geometry say where things are:
 // an element with data-lines="0-20 20-40" has those line boxes (top-bottom,
-// in px), as does the text in it; any other element's box is the span of
-// the line boxes inside it. `layout.shift` moves everything up, as a scroll
+// in px), as does the text in it unless data-text-lines gives the text its
+// own (an inline-block box taller than its text); any other element's box is
+// the span of the line boxes inside it. `layout.shift` moves everything up, as a scroll
 // would, and `layout.lines` can give lines to elements a test can't mark,
 // such as the ones Markdown draws. ResizeObserver and IntersectionObserver
 // are stand-ins that never fire on their own: intersect() makes a watched
@@ -19,13 +20,16 @@ function rect(top: number, bottom: number): DOMRect {
   return new DOMRect(0, top - layout.shift, 100, bottom - top);
 }
 
+function rects(lines: string): DOMRect[] {
+  return lines.split(" ").map((line) => {
+    const [top, bottom] = line.split("-").map(Number);
+    return rect(top, bottom);
+  });
+}
+
 function linesOf(element: Element): DOMRect[] {
   const own = ownLines(element);
-  if (own)
-    return own.split(" ").map((line) => {
-      const [top, bottom] = line.split("-").map(Number);
-      return rect(top, bottom);
-    });
+  if (own) return rects(own);
   const inside = [...element.querySelectorAll("*")].filter(ownLines).flatMap(linesOf);
   if (!inside.length) return [];
   return [rect(Math.min(...inside.map((r) => r.top + layout.shift)), Math.max(...inside.map((r) => r.bottom + layout.shift)))];
@@ -85,7 +89,8 @@ export function layOut() {
     Range.prototype.getClientRects = function (this: Range) {
       let parent = this.startContainer.parentElement;
       while (parent && !ownLines(parent)) parent = parent.parentElement;
-      return (parent ? linesOf(parent) : []) as unknown as DOMRectList;
+      const text = parent?.getAttribute("data-text-lines");
+      return (text ? rects(text) : parent ? linesOf(parent) : []) as unknown as DOMRectList;
     };
     Element.prototype.scrollIntoView = vi.fn();
   });

@@ -97,6 +97,25 @@ describe("Fold", () => {
     expect(container.querySelector("[data-fold-cut]")!.className.split(" ")).toContain("relative");
   });
 
+  test("measures a link by its text, not by an inline-block box taller than it", () => {
+    // On the last line shown, a box ending a pixel past the cut at 80 with
+    // its text above it; on the next line, one whose text is below the cut.
+    render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <p data-lines={TEN_LINES}>
+          A long report.
+          <a href="#last" data-lines="61-81" data-text-lines="62-79">
+            last
+          </a>
+          <a href="#next" data-lines="79-101" data-text-lines="82-99">
+            next
+          </a>
+        </p>
+      </Fold>,
+    );
+    expect(tabOrder()).toEqual(["last", "Show all 10 lines of this report"]);
+  });
+
   test("takes a cut-off box that scrolls out of the Tab order, and gives it back", () => {
     render(
       <Fold lines={4} lineHeight={20} kind="report">

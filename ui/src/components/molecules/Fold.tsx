@@ -180,11 +180,14 @@ function scrolls(element: HTMLElement): boolean {
   return /(auto|scroll)/.test(style.overflowX + style.overflowY);
 }
 
-// cutOff says whether an element's first line box isn't wholly above the cut
-// of a folded fold around it. A link that starts above the cut and wraps
-// below it is still there to focus.
+// cutOff says whether an element's first line isn't wholly above the cut of
+// a folded fold around it. A link that starts above the cut and wraps below
+// it is still there to focus. The line is its text's, measured as sizeOf
+// measures the cut: an inline-block link's own box (a task id in mono) is
+// taller than its text and can end past the cut on the last line shown.
+// Only an element with no text (an icon button) is measured by its box.
 function cutOff(element: HTMLElement): boolean {
-  const line = element.getClientRects()[0];
+  const line = firstLine(element);
   if (!line) return false;
   for (
     let fold = element.parentElement?.closest<HTMLElement>("[data-fold-cut]");
@@ -193,6 +196,17 @@ function cutOff(element: HTMLElement): boolean {
   )
     if (line.bottom > fold.getBoundingClientRect().top + Number(fold.dataset.foldCut) + 0.5) return true;
   return false;
+}
+
+function firstLine(element: HTMLElement): DOMRect | undefined {
+  const range = document.createRange();
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    range.selectNodeContents(node);
+    const line = range.getClientRects?.()[0];
+    if (line) return line;
+  }
+  return element.getClientRects()[0];
 }
 
 // scrollBack brings a folded entry's first line back under the stuck band
