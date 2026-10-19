@@ -97,7 +97,7 @@ func (r readOnly) Stream(name string) ([]events.Event, error) { return r.log.Str
 // Core is all a feature's hooks and routes may use: it has no store. Events reads the
 // log and never writes to it. Defaults are the server's limits for a task
 // Agentry makes that comes from no other task. Settings are the feature's
-// own table in the settings file; only its jobs are given them so far.
+// own table in the settings file.
 type Core struct {
 	Log      Proposer // from Checked
 	Events   EventLog

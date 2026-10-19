@@ -41,6 +41,8 @@ type Loop struct {
 	Defaults tasks.Limits                 // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
 	Features []features.Feature           // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
 	Logs     map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its hooks may write through
+
+	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its hooks; nil for none
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}

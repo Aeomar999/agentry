@@ -215,6 +215,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	// The loop and the server are given the same features. Each writes
 	// through its own checked proposer, made here once, never the store.
 	installed := installedFeatures()
+	settings := openSettings(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second)
 	logs := map[string]features.Proposer{
 		ideas.Name: features.Checked(ideas.Feature(), ideas.Registration(), log),
 	}
@@ -225,10 +226,11 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
 	loop.Features = installed
 	loop.Logs = logs
+	loop.Settings = settings.For
 	go loop.Run(ctx)
 	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
-	startJobs(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second, installed, logs, log, state, loop.Defaults)
+	startJobs(ctx, settings.For, installed, logs, log, state, loop.Defaults)
 
 	// The desk starts when you first open it on the page, and stops with the server.
 	hub := terminal.NewHub()
@@ -276,7 +278,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed, Logs: logs, Worktrees: worktreeRoot, Push: push},
+		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
@@ -459,16 +461,21 @@ func rejectionError(rejection *events.Rejection) error {
 	return rejection
 }
 
-// startJobs watches the settings file every interval and starts the features' jobs, each
-// with the Core its routes get and its own settings. The file is never put
-// in the log: it holds secrets.
-func startJobs(ctx context.Context, settingsPath string, every time.Duration, installed []features.Feature, logs map[string]features.Proposer,
-	log *store.Store, state *current.State, defaults tasks.Limits) {
-	settings := settingsfile.Open(settingsPath)
+// openSettings loads the settings file and watches it every interval until
+// ctx ends. The file is never put in the log: it holds secrets.
+func openSettings(ctx context.Context, path string, every time.Duration) *settingsfile.Live {
+	settings := settingsfile.Open(path)
 	go settings.Watch(ctx, every)
+	return settings
+}
+
+// startJobs starts the features' jobs, each with the Core its routes get and
+// its own settings from settingsOf.
+func startJobs(ctx context.Context, settingsOf func(feature string) features.Settings, installed []features.Feature, logs map[string]features.Proposer,
+	log *store.Store, state *current.State, defaults tasks.Limits) {
 	readOnly := features.ReadOnly(log)
 	features.StartJobs(ctx, installed, func(f features.Feature) features.Core {
-		return features.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settings.For(f.Name)}
+		return features.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settingsOf(f.Name)}
 	})
 }
 

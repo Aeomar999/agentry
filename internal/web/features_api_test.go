@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,14 +10,17 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -399,5 +403,83 @@ func TestTheBoardShowsShippingOnlyWhileItMeansSomething(t *testing.T) {
 	must(shipped, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`)
 	if got := columns(shipped); got != noShipping {
 		t.Errorf("no agent ships and task-1 is done: %q, want %q", got, noShipping)
+	}
+}
+
+const probeSettings = `
+[probe]
+host = "first.example"
+
+[probe.secrets]
+token = "probe-token"
+
+[other.secrets]
+hook = "other-secret"
+`
+
+// probe is a feature whose route says what its settings hold: its host, its
+// token read as a setting and as a secret, and other's secret.
+func probe() features.Feature {
+	return features.Feature{Name: "probe", Routes: func(c features.Core) []features.Route {
+		return []features.Route{{Pattern: "GET /api/probe", Handler: func(w http.ResponseWriter, r *http.Request) {
+			host, _ := c.Settings.Setting("host")
+			asSetting, _ := c.Settings.Setting("token")
+			token, _ := c.Settings.Secret("token")
+			hook, _ := c.Settings.Secret("hook")
+			httpapi.Reply(w, map[string]string{"host": host, "tokenAsSetting": asSetting, "token": token, "hook": hook})
+		}}}
+	}}
+}
+
+// probeServer serves probe with settings, as serve gives them.
+func probeServer(t *testing.T, settings func(feature string) features.Settings) *httptest.Server {
+	t.Helper()
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Features: []features.Feature{probe()}, Settings: settings},
+		http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	return server
+}
+
+// A feature's route reads its own setting and secret in the settings file,
+// never another feature's or a secret as a setting, and sees an edit to the
+// file with no restart.
+func TestARouteReadsItsOwnSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "features.toml")
+	writeFile(t, path, probeSettings)
+	live := settingsfile.Open(path)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go live.Watch(ctx, 5*time.Millisecond)
+	server := probeServer(t, live.For)
+
+	want := `{"hook":"","host":"first.example","token":"probe-token","tokenAsSetting":""}`
+	if code, body := call(t, server, "GET", "/api/probe", ""); code != 200 || strings.TrimSpace(body) != want {
+		t.Errorf("probe: %d %s\nwant %s", code, body, want)
+	}
+	writeFile(t, path, strings.Replace(probeSettings, "first.example", "second.example", 1))
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if _, body := call(t, server, "GET", "/api/probe", ""); strings.Contains(body, `"host":"second.example"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the edit never reached the route")
+		}
+	}
+}
+
+// A server given no settings file gives the routes none.
+func TestARouteWithNoSettingsFileHasNone(t *testing.T) {
+	server := probeServer(t, nil)
+	want := `{"hook":"","host":"","token":"","tokenAsSetting":""}`
+	if code, body := call(t, server, "GET", "/api/probe", ""); code != 200 || strings.TrimSpace(body) != want {
+		t.Errorf("probe: %d %s\nwant %s", code, body, want)
+	}
+}
+
+func writeFile(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

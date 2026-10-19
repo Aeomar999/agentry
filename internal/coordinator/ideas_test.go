@@ -304,6 +304,35 @@ func TestAHooksEventsCantPropose(t *testing.T) {
 	}
 }
 
+// A hook reads its own feature's settings, not another feature's.
+func TestAHookReadsItsOwnSettings(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	file := map[string]features.Table{
+		"votes": {Values: map[string]string{"host": "votes.example"}},
+		"other": {Secrets: map[string]string{"hook": "other-secret"}},
+	}
+	loop.Settings = func(feature string) features.Settings {
+		return features.SettingsIn(func() map[string]features.Table { return file }, feature)
+	}
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
+		For: func(agents.Agent) bool { return true }, Field: "votes",
+		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
+			host, _ := c.Settings.Setting("host")
+			hook, _ := c.Settings.Secret("hook")
+			return fmt.Sprintf("host %q, other's hook %q", host, hook)
+		}}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	if want := "Built it.\n\n" + `host "votes.example", other's hook ""`; task.Summary != want {
+		t.Errorf("summary:\n got %q\nwant %q", task.Summary, want)
+	}
+}
+
 // A done from a coordinator the roster no longer has, here renamed while its
 // session ran, keeps no ideas and says so.
 func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) {

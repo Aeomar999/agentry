@@ -51,6 +51,8 @@ type Config struct {
 	Logs        map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its routes may write through
 	Worktrees   string                       // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
 	Push        *webpush.Store               // the VAPID keys and the browsers subscribed to pushes; nil for none
+
+	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its routes; nil for none
 }
 
 // PolicySource is the policy in force and any problem with the file on

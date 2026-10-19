@@ -58,11 +58,16 @@ func mountRoute(feature string, route features.Route, register func(pattern stri
 }
 
 // coreOf is what f's routes may use: its checked proposer, never the store,
-// or one that writes nothing when the server was given none for it.
+// or one that writes nothing when the server was given none for it, and its
+// own settings, none when the server was given no settings file.
 func (s *Server) coreOf(f features.Feature) features.Core {
 	log, found := s.config.Logs[f.Name]
 	if !found {
 		log = features.Unwritable(f.Name)
 	}
-	return features.Core{Log: log, Events: s.events, Read: s.state, Defaults: s.config.defaults()}
+	var settings features.Settings
+	if s.config.Settings != nil {
+		settings = s.config.Settings(f.Name)
+	}
+	return features.Core{Log: log, Events: s.events, Read: s.state, Defaults: s.config.defaults(), Settings: settings}
 }

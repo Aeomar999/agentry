@@ -65,7 +65,7 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 	}}
 	logs := map[string]features.Proposer{probe.Name: features.Checked(probe, events.Registration{}, log)}
 	ctx, cancel := context.WithCancel(context.Background())
-	startJobs(ctx, settings, 5*time.Millisecond, []features.Feature{probe}, logs, log, state, tasks.Limits{})
+	startJobs(ctx, openSettings(ctx, settings, 5*time.Millisecond).For, []features.Feature{probe}, logs, log, state, tasks.Limits{})
 	waitForRead := func(want seen) {
 		t.Helper()
 		for deadline := time.Now().Add(5 * time.Second); ; {

@@ -91,7 +91,7 @@ func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision)
 			continue
 		}
 		read = append(read, hook.Field)
-		core := features.Core{Log: l.logOf(f), Events: l.events, Read: l.state, Defaults: l.Defaults}
+		core := features.Core{Log: l.logOf(f), Events: l.events, Read: l.state, Defaults: l.Defaults, Settings: l.settingsOf(f)}
 		var note string
 		if failed := guarded(f, "OnDone", func() { note = hook.OnDone(core, task, field) }); failed != "" {
 			note = fmt.Sprintf("Agentry couldn't keep %q: %s", hook.Field, failed)
@@ -120,6 +120,15 @@ func (l *Loop) logOf(f features.Feature) features.Proposer {
 		return log
 	}
 	return features.Unwritable(f.Name)
+}
+
+// settingsOf is f's own settings, none when the loop was given no settings
+// file.
+func (l *Loop) settingsOf(f features.Feature) features.Settings {
+	if l.Settings == nil {
+		return features.Settings{}
+	}
+	return l.Settings(f.Name)
 }
 
 // guarded runs one of f's hooks, a panic in it turned into why it failed:
