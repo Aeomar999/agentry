@@ -1,10 +1,12 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -140,6 +142,9 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note string) bool {
 	for _, id := range epic.Stories {
 		story, err := s.task(id)
+		if errors.Is(err, current.ErrArchived) {
+			continue // done, and kept as done
+		}
 		if err != nil {
 			failed(w, err)
 			return false

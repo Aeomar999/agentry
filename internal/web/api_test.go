@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -1577,6 +1578,30 @@ func TestATeamIsRemovedWithItsAgents(t *testing.T) {
 	_, body := call(t, server, "GET", "/api/agents", "")
 	if strings.Contains(body, `"Research"`) || strings.Contains(body, "research-lead") {
 		t.Errorf("Research should be gone: %s", body)
+	}
+}
+
+// The templates say their ID and the features they turn on, so the page can
+// find the team made from one by template, whatever it is called.
+func TestTeamTemplatesSayTheirIDAndFeatures(t *testing.T) {
+	server, _ := newTestServer(t)
+	_, body := call(t, server, "GET", "/api/teams/templates", "")
+	var templates []struct {
+		ID       string
+		Team     string
+		Features []string
+	}
+	if err := json.Unmarshal([]byte(body), &templates); err != nil || len(templates) != len(agents.Templates) {
+		t.Fatalf("templates: %v %s", err, body)
+	}
+	for i, template := range templates {
+		want := agents.Templates[i]
+		if template.ID != want.ID || template.Team != want.Team || !slices.Equal(template.Features, want.Features) {
+			t.Errorf("template %d is %+v, not %s (%s) with %v", i, template, want.ID, want.Team, want.Features)
+		}
+	}
+	if !strings.Contains(body, `"id":"visionaries"`) || !strings.Contains(body, `"features":["ideas"]`) || !strings.Contains(body, `"features":[]`) {
+		t.Errorf("Visionaries should list ideas, and a template with none an empty list:\n%s", body)
 	}
 }
 

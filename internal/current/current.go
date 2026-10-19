@@ -12,6 +12,7 @@ package current
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -40,6 +41,7 @@ type State struct {
 	ideas       map[string]*ideas.Idea // by stream
 	suggested   []created              // every idea.suggested applied, in the order of their positions, as the log lists them
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
+	archived    map[string]bool        // tasks the state holds no full state for
 	roster      agents.Roster
 	workers     workers.Roster
 	connections connections.Roster
@@ -55,9 +57,14 @@ type created struct {
 	id       string
 }
 
+// ErrArchived is Task's error for an archived task: a done task the state
+// holds no full state for, which takes no more events. Its readers skip it
+// as they skip a done task, without reading its stream.
+var ErrArchived = errors.New("the task is archived")
+
 func New() *State {
 	return &State{streams: map[string]int64{}, tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{},
-		broken: map[string]error{}, settings: settings.Default()}
+		broken: map[string]error{}, archived: map[string]bool{}, settings: settings.Default()}
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -71,6 +78,12 @@ func (s *State) Load(stream string, accepted []events.Event) {
 	if len(accepted) > 0 {
 		s.streams[stream] = accepted[len(accepted)-1].Position
 	}
+	s.fold(stream, accepted)
+}
+
+// fold builds a stream's state from its accepted events, as a replay does,
+// and keeps it, or marks the stream broken if it can't be built.
+func (s *State) fold(stream string, accepted []events.Event) {
 	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
 		case events.AgentsStream:
@@ -94,6 +107,29 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			}
 		}
 	})
+}
+
+// Refold builds a stream's state again from its accepted events before e
+// and e, as Load does, for an event that changes what came before it
+// (events.Catalogue.Refolds). What the state held for the stream goes, even
+// a broken or archived task, and the position moves as Apply moves it.
+// Clearing the archived summary suits task.unarchived, which brings the task
+// back from its events. A future event.redacted on an archived stream can't
+// clear it by mistake: rules.Check refuses every event on an archived task
+// today.
+func (s *State) Refold(stream string, before []events.Event, e events.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.position = e.Position
+	s.streams[stream] = e.Position
+	if e.Type == events.TaskCreated {
+		s.created = append(s.created, created{e.Position, stream})
+	}
+	delete(s.tasks, stream)
+	delete(s.ideas, stream)
+	delete(s.broken, stream)
+	delete(s.archived, stream)
+	s.fold(stream, append(slices.Clip(before), e))
 }
 
 // Loaded ends the load: position is the log's last, rejections included.
@@ -198,6 +234,7 @@ func (s *State) copy() *State {
 		ideas:       maps.Clone(s.ideas),
 		suggested:   slices.Clone(s.suggested),
 		broken:      maps.Clone(s.broken),
+		archived:    maps.Clone(s.archived),
 		roster:      s.roster,
 		workers:     s.workers,
 		connections: s.connections,
@@ -220,11 +257,14 @@ func (s *State) StreamPosition(stream string) int64 {
 	return s.streams[stream]
 }
 
-// Task is a task's state: nil, nil when there is no such task, and the
-// error when its stream is broken.
+// Task is a task's state: nil, nil when there is no such task, ErrArchived
+// when it is archived, and the error when its stream is broken.
 func (s *State) Task(id string) (*tasks.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if s.archived[id] {
+		return nil, ErrArchived
+	}
 	if err := s.broken[id]; err != nil {
 		return nil, err
 	}
@@ -243,7 +283,8 @@ func (s *State) Idea(id string) (*ideas.Idea, error) {
 }
 
 // Tasks is every task, oldest first, in a new slice the caller may sort.
-// A broken task is left out, as the list skips a task it can't read.
+// A broken or archived task is left out, as the list skips a task it can't
+// read.
 func (s *State) Tasks() []*tasks.Task {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -257,7 +298,8 @@ func (s *State) Tasks() []*tasks.Task {
 }
 
 // TaskIDs is the stream of every task.created applied, oldest first, in a
-// new slice: a broken task's too, so its length counts every task made.
+// new slice: a broken or archived task's too, so its length counts every
+// task made.
 func (s *State) TaskIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -292,6 +334,17 @@ func (s *State) ideaIDs() []string {
 		ids[i] = c.id
 	}
 	return ids
+}
+
+// Archive drops a task's full state: Task then returns ErrArchived, Tasks
+// leaves the task out and TaskIDs still lists it. The archiver will do this
+// as it applies task.archived; no event archives a task yet, so for now
+// only tests call it, to see how each reader takes an archived task.
+func (s *State) Archive(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.tasks, id)
+	s.archived[id] = true
 }
 
 // Roster is every agent. If the agents stream is broken, it is the roster

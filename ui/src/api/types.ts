@@ -33,6 +33,7 @@ export interface TaskSummary {
   waitingOn: string; // another team's task this one waits for
   kind: "" | "epic"; // "" is a story
   epic: string; // a story's epic
+  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
   stories: number; // an epic's
@@ -130,6 +131,7 @@ export interface Agent {
   profile: string;
   coordinates: boolean;
   team: string; // the team it works in; "" for Software, the team agents had before there were teams
+  template: string; // the ID of the team template it was made from; "" for an agent you made
   workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
@@ -335,6 +337,15 @@ export interface InstallCommands {
 
 export interface Invite extends InstallCommands {
   code: string;
+}
+
+// A team Agentry offers to add (GET /api/teams/templates).
+export interface TeamTemplate {
+  id: string; // what Agent.template says
+  team: string; // the name a team made from it gets, with a number if it is taken
+  description: string;
+  features: string[]; // what a team made from it turns on, such as "ideas"
+  agents: { name: string; description: string; coordinates: boolean }[];
 }
 
 export interface CreatedEvent {

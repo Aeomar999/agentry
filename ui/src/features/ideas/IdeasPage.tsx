@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Lightbulb, Users } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";
@@ -13,11 +14,12 @@ import { Panel } from "@/components/molecules/Panel";
 import { changeSettings } from "@/api/client";
 import type { AutoAcceptRule, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { VISIONARIES } from "@/lib/teams";
+import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
 import type { Idea } from "./types";
-import { useAskVisionaries } from "./visionaries";
+import { canAsk, ideasView } from "./view";
+import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
 // here, grouped by the session that suggested them, newest first (the
@@ -28,7 +30,10 @@ import { useAskVisionaries } from "./visionaries";
 // whether closing an epic starts a session about its follow-ups, and whether
 // Agentry accepts, and starts, the ideas the Visionaries agreed on, by your
 // rule; those show in the history as Agentry's, and an open idea says why
-// Agentry didn't accept it.
+// Agentry didn't accept it. With no Visionaries team and no ideas, Ideas is
+// off: the page only says what it is and offers to ask the visionaries,
+// which adds the team; the settings wait until there is a team or an idea.
+// With no team template that turns Ideas on, it says so instead of offering.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -37,39 +42,55 @@ export function IdeasPage() {
   const titles = new Map((useResource<TaskSummary[]>("/api/tasks").data ?? []).map((task) => [task.id, task.title]));
   const visionaries = useAskVisionaries();
   const [acting, setActing] = useState<{ idea: Idea; action: "accept" | "dismiss" } | null>(null);
+  const { hash } = useLocation();
+  const loaded = data !== undefined;
+
+  // A link to one idea, as from the task it became, scrolls to its row once
+  // the list is in, and not again when the list reloads.
+  useEffect(() => {
+    if (loaded && hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  }, [loaded, hash]);
 
   const open = ideas.filter((idea) => idea.state === "open");
   const decided = ideas.filter((idea) => idea.state !== "open");
   const ask = visionaries.has ? "Ask the visionaries" : "Add the Visionaries team";
+  const view = ideasView({ loaded, failed: !!error, count: ideas.length }, visionaries);
+  const on = view === "on";
 
   return (
     <>
       <PageHeader
         title="Ideas"
         meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
-        actions={[
-          {
-            label: visionaries.adding ? "Adding the team…" : ask,
-            icon: visionaries.has ? <Lightbulb /> : <Users />,
-            onClick: visionaries.ask,
-            primary: true,
-            disabled: !visionaries.ready || visionaries.adding,
-          },
-        ]}
+        actions={
+          !on || !canAsk(visionaries)
+            ? []
+            : [
+                {
+                  label: visionaries.adding ? "Adding the team…" : ask,
+                  icon: visionaries.has ? <Lightbulb /> : <Users />,
+                  onClick: visionaries.ask,
+                  primary: true,
+                  disabled: !visionaries.ready || visionaries.adding,
+                },
+              ]
+        }
       />
       <div className="flex flex-col gap-8 p-6">
         {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
+        {visionaries.loadError && <Banner title="Couldn't read the teams">{visionaries.loadError}</Banner>}
         {visionaries.missingProfiles.length > 0 && (
           <MissingProfilesOffer
-            team={VISIONARIES}
+            team={visionaries.team}
             profiles={visionaries.missingProfiles}
             adding={visionaries.adding}
             onAdd={visionaries.askAddingProfiles}
           />
         )}
-        {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
-        <IdeaSettings />
-        {data && ideas.length === 0 && (
+        {visionaries.error && <Banner title="The Visionaries team isn't there">{visionaries.error}</Banner>}
+        {(view === "off" || view === "unavailable") && <IdeasOff visionaries={visionaries} />}
+        {on && <IdeaSettings />}
+        {on && data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
             <div className="flex flex-col items-center gap-3">
               <p>
@@ -130,6 +151,37 @@ export function IdeasPage() {
       {acting?.action === "accept" && <AcceptIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
       {acting?.action === "dismiss" && <DismissIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
     </>
+  );
+}
+
+// IdeasOff is the page with Ideas off: what Ideas is, and the one way to
+// turn it on, asking the visionaries, which adds the team first, or that
+// there is no way when no team template turns Ideas on.
+function IdeasOff({ visionaries }: { visionaries: AskVisionaries }) {
+  return (
+    <EmptyState icon={<Lightbulb />} title="Ideas: features the Visionaries suggest">
+      <div className="flex flex-col items-center gap-4">
+        <p>
+          The Visionaries are a team of agents that think about what to build next. Give them a theme or a question: they read what exists,
+          argue it out from several viewpoints, and change no code. The features they agree are worth it come here as ideas, for you to
+          accept into your Backlog as a task or an epic, or dismiss.
+        </p>
+        {visionaries.ready ? (
+          <>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="primary" icon={<Lightbulb />} disabled={visionaries.adding} onClick={visionaries.ask}>
+                {visionaries.adding ? "Adding the team…" : "Ask the visionaries"}
+              </Button>
+            </div>
+            <p className="text-ink-faint">
+              This adds the {visionaries.team} team from its template, then opens New task for your theme or question.
+            </p>
+          </>
+        ) : (
+          <p className="text-ink-faint">This Agentry has no team template that turns Ideas on, so there is no team to ask.</p>
+        )}
+      </div>
+    </EmptyState>
   );
 }
 
@@ -234,10 +286,10 @@ function IdeaSettings() {
 }
 
 // An idea decided on, by you or, when the Visionaries agreed, by Agentry:
-// what became of it, and what was said.
+// what became of it, when, and what was said.
 function HistoryRow({ idea }: { idea: Idea }) {
   return (
-    <li className="flex flex-col gap-1 px-4 py-3">
+    <li id={idea.id} className="flex flex-col gap-1 px-4 py-3">
       <span className="flex flex-wrap items-center gap-2">
         <Badge variant={idea.state === "accepted" ? "success" : "default"}>{idea.state}</Badge>
         {idea.autoAccepted && (
@@ -255,6 +307,7 @@ function HistoryRow({ idea }: { idea: Idea }) {
           <span>
             from <TaskLink id={idea.task} />
           </span>
+          {idea.decidedAt && <span>{dateTime(idea.decidedAt)}</span>}
         </span>
       </span>
       {idea.note && <p className="text-[12.5px] whitespace-pre-wrap text-ink-secondary">{idea.note}</p>}

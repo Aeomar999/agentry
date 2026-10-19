@@ -257,10 +257,11 @@ type ideaView struct {
 	AboutTitle string      `json:"aboutTitle"` // that epic's title
 	Kind       tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
 	State      ideas.State `json:"state"`
-	Note       string      `json:"note"`         // what you said when you accepted or dismissed it
-	Became     string      `json:"became"`       // the task an accepted idea became
-	Auto       bool        `json:"autoAccepted"` // Agentry accepted it, as the Visionaries agreed, not you
-	Repeats    string      `json:"repeats"`      // an idea the Visionaries said it raises again, "" for none
+	Note       string      `json:"note"`               // what you said when you accepted or dismissed it
+	DecidedAt  time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
+	Became     string      `json:"became"`             // the task an accepted idea became
+	Auto       bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
+	Repeats    string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
 	CreatedAt  time.Time   `json:"createdAt"`
 	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
 	// under your rule (ideas.NotAutoAccepted), even with that turned off;
@@ -275,7 +276,8 @@ func viewOf(idea *ideas.Idea, about *tasks.Task, notAutoAccepted string) ideaVie
 	view := ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
 		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
 		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
-		Auto: idea.AutoAccepted, Repeats: idea.Repeats, CreatedAt: idea.CreatedAt, NotAutoAccepted: notAutoAccepted}
+		DecidedAt: idea.DecidedAt, Auto: idea.AutoAccepted, Repeats: idea.Repeats, CreatedAt: idea.CreatedAt,
+		NotAutoAccepted: notAutoAccepted}
 	if about != nil {
 		view.About, view.AboutTitle = about.ID, about.Title
 	}

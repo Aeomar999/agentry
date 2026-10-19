@@ -1,15 +1,50 @@
 import { api, ApiError } from "@/api/client";
-import type { Agent } from "@/api/types";
+import type { Agent, TeamTemplate } from "@/api/types";
+import { useResource } from "@/live/use-resource";
 
 // Teams of agents (internal/agents): each has a coordinator, which hands its
 // tasks only to the team's own agents. An agent with no team is in Software.
 
 export const DEFAULT_TEAM = "Software";
 
-// The team whose sessions suggest features to the Ideas page.
-export const VISIONARIES = "Visionaries";
+// The feature of the team whose sessions suggest features to the Ideas page.
+export const IDEAS = "ideas";
 
 export const teamOf = (agent: Agent) => agent.team || DEFAULT_TEAM;
+
+// teamMadeFrom is the team made from the template, if you have one: the
+// team of a coordinator the template made, as the server decides, so a
+// second copy ("Visionaries 2") counts and a team you made and named as the
+// template doesn't. The first such team when you have several.
+export function teamMadeFrom(agents: Agent[], template: string): string | undefined {
+  const lead = agents.find((agent) => agent.coordinates && template !== "" && agent.template === template);
+  return lead && teamOf(lead);
+}
+
+export interface TeamWith {
+  ready: boolean; // the templates and the agents are read, so team says what you have
+  error: string; // why the templates or the agents couldn't be read, the last time they were
+  agentsError: string; // why the agents couldn't be read, the last time they were
+  template?: TeamTemplate; // the template that turns the feature on
+  team?: string; // the team you have made from it, by its name now
+  reload: () => Promise<void>; // reads the agents again, returning once they are shown
+}
+
+// useTeamWith finds the team that turns a feature on: the template that
+// lists it, and the team you made from that template, whatever it is called.
+export function useTeamWith(feature: string): TeamWith {
+  const templates = useResource<TeamTemplate[]>("/api/teams/templates");
+  const agents = useResource<Agent[]>("/api/agents");
+  const template = templates.data?.find((t) => t.features.includes(feature));
+  return {
+    ready: templates.data !== undefined && agents.data !== undefined,
+    error: templates.error || agents.error,
+    agentsError: agents.error,
+    template,
+    team: template && teamMadeFrom(agents.data ?? [], template.id),
+    reload: agents.reload,
+  };
+}
 
 // teamsOf groups agents by team, in the order the first agent of each was
 // made, the coordinator first in each.

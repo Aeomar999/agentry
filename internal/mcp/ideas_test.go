@@ -341,8 +341,8 @@ func TestAnIdeaWithoutSizeOrTask(t *testing.T) {
 }
 
 // What the user says is sent as it is: a kind of task, no note, and a kind
-// the server refuses, which comes back as its reason. A state no idea has
-// lists none.
+// the server refuses, which comes back as its reason. An unknown state is
+// refused, naming the ones there are, rather than listing nothing.
 func TestTheArgumentsAreSentAsGiven(t *testing.T) {
 	c, fake := startOnIdeas(t, false, nil)
 	c.tool("accept_idea", map[string]any{"id": "idea-1", "kind": "task"})
@@ -354,7 +354,7 @@ func TestTheArgumentsAreSentAsGiven(t *testing.T) {
 	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "kind": "bug"}); text != "error: idea-1 wasn't accepted: an idea becomes a task or an epic, not bug" {
 		t.Errorf("bad kind: %s", text)
 	}
-	if text := c.tool("list_ideas", map[string]any{"state": "bogus"}); !strings.HasPrefix(text, "No bogus ideas for /repo.") {
+	if text := c.tool("list_ideas", map[string]any{"state": "opne"}); text != `error: no state "opne": use open, accepted, dismissed or all` {
 		t.Errorf("unknown state:\n%s", text)
 	}
 }

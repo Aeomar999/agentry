@@ -5,10 +5,12 @@ package rules
 
 import (
 	"cmp"
+	"errors"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
@@ -66,7 +68,10 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	}
 
 	task, err := state.Task(p.Stream)
-	if err != nil {
+	switch {
+	case errors.Is(err, current.ErrArchived):
+		return refuse(p.Stream + " is archived: an archived task takes no events")
+	case err != nil:
 		return refuse("could not read the task: " + err.Error())
 	}
 	switch {
@@ -75,6 +80,9 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	case p.Type == events.TaskCreated:
 		if reason := CheckLabels(p.List("labels")); reason != "" {
 			return refuse(reason)
+		}
+		if from, idea := p.Text("from"), p.Text("idea"); from != "" && idea != "" && from != idea {
+			return refuse("a task is made from one stream: its \"from\" and \"idea\" differ")
 		}
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")

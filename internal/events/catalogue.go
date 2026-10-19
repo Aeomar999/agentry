@@ -8,12 +8,14 @@ import (
 )
 
 // Spec is what the catalogue knows about one event type: the data it must
-// carry, whether it needs a correlation, and who may write it. Rules that
-// depend on what happened before (order) live in package rules.
+// carry, whether it needs a correlation, who may write it, and whether it
+// refolds its stream. Rules that depend on what happened before (order) live
+// in package rules.
 type Spec struct {
 	Fields      []string
 	Correlation bool
 	Writers     []ActorKind
+	Refolds     bool
 }
 
 // A Registration is what a feature adds to the catalogue: its own streams,
@@ -128,7 +130,7 @@ var coreTypes = map[Type]Spec{
 	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {Fields: []string{"name", "to"}, Writers: []ActorKind{Human}},
 
-	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule
+	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)
 	TaskRenamed:        {Fields: []string{"title"}, Writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {Fields: []string{"text"}, Writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {Writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
@@ -269,3 +271,9 @@ func (c *Catalogue) CheckWriter(p Proposal) *Rejection {
 	}
 	return nil
 }
+
+// Refolds says whether an event changes what came before it in its stream,
+// as task.unarchived and event.redacted will: the stream's state is then
+// folded again from its earlier events and this one, not changed by this
+// one alone. No core type does yet.
+func (c *Catalogue) Refolds(kind Type) bool { return c.specs[kind].Refolds }

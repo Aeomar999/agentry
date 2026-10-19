@@ -537,8 +537,8 @@ code is turned down without decoding megabytes.
 The body holds everything `current.Equal` compares, so a loaded state can
 be equal to a replay: every task, the summaries, the rosters, and two
 more. `order` is `State.taskIDs` as it is, duplicates and broken tasks
-included, since `Store.TaskIDs` lists every `task.created` row and the
-state copies that. `broken` is the names of the streams whose apply
+included, since the state keeps every `task.created` row in its
+`created` list (`State.TaskIDs`). `broken` is the names of the streams whose apply
 panicked, without their state.
 
 A broken stream is **rebuilt at load by a full replay of that stream**
@@ -855,10 +855,12 @@ archived task's id: going back to an older release after archiving is not
 supported, and the release notes say so.
 
 Every reader that listed tasks by their `task.created` rows now has to
-see archived tasks too, or the next id collides with one. `Store.TaskIDs`
-(`internal/store/read.go`) is that reader. It lists `task.created` rows
-and `task.archived` markers together, each at the `task.created` position
-it stands for (the marker's `created`), oldest first:
+see archived tasks too, or the next id collides with one. `Store.made`
+(`internal/store/store.go`), which `Store.Create` calls to name the next
+task, is that reader. Today it counts `task.created` rows; it must count
+what this lists, `task.created` rows and `task.archived` markers
+together, each at the `task.created` position it stands for (the
+marker's `created`), oldest first:
 
 ```sql
 SELECT stream, position FROM events
@@ -1035,8 +1037,8 @@ created and last active, plus the done summary. About 630 bytes as JSON.
 `Task(id)` returns nil and `ErrArchived` for one; a new `Summaries()`
 serves the list. Task ids stay in creation order and are never reused:
 the marker's `created` is the `task.created` position the state orders by,
-and the next id counts archived tasks too, through `Store.TaskIDs`
-(section 4, "How it fits").
+and the next id counts archived tasks too, through `Store.made`, which
+`Store.Create` calls (section 4, "How it fits").
 
 At scale: a task is about 1.2 MB of file today, so 1 GB of history is
 about 900 tasks, and 100 GB about 90,000: some 60 MB of summaries in
@@ -1419,14 +1421,13 @@ since the steps cite section 2's equivalence tests and the task-21 items.
 5. **Schema version 1.** Depends on task-21.
    - Files: `internal/store/store.go` (the migration in one transaction:
      the gated delete trigger, `auto_vacuum = INCREMENTAL`,
-     `user_version = 1`), `internal/store/read.go` (`TaskIDs` lists
-     markers too), `internal/events/catalogue.go` (`task.archived`,
+     `user_version = 1`, `made` counts markers too), `internal/events/catalogue.go` (`task.archived`,
      `task.unarchived`), `internal/rules` (on an archived task, only
      `task.unarchived`; no `task.created` on a stream with a summary).
    - Proves: a stray `DELETE` is refused; a delete a marker covers is
      allowed in the marker's transaction, and refused once
      `task.unarchived` follows; the migration runs once; a version 0 file
-     opens and migrates; `TaskIDs` lists a task once when archived,
+     opens and migrates; `made` counts a task once when archived,
      unarchived and archived twice.
 6. **Summaries in the state.** Depends on task-21 (items 4 to 8 and 10).
    - Files: `internal/tasks` (`Summary` from `web.summaryOf`, `DoneAt`,
@@ -1526,11 +1527,12 @@ and privacy work add to it instead of reworking it:
 5. **Order tasks by their `task.created` position, held per task**, not
    only in the `created` list `Loaded` sorts, since an archived task
    keeps that position in its marker and has no `task.created` row left.
-6. **Keep every task id going through `Store.TaskIDs`**, which will list
-   archived tasks too (section 4). Its callers, and what each should see
-   for an archived task:
-   - `web/api.go` `createTask` and `coordinator/loop.go` `newTask`: the
-     next id, `len(ids)+1`, so archived tasks must be counted;
+6. **Count archived tasks in `Store.made`**, which `Store.Create` calls
+   to name the next task, and keep them in `State.TaskIDs` (section 4).
+   The readers, and what each should see for an archived task:
+   - `Store.Create`, from `web/api.go` `createTask` and
+     `coordinator/loop.go` `newTask`: the next id, `made + 1`, so
+     archived tasks must be counted;
    - `web/api.go` `listTasks`: the task's summary;
    - `watchdog/watchdog.go` `Check`, `hooks/orphans.go`
      `HoldOrphanedAsks`, `coordinator/loop.go` `portsInUse`,

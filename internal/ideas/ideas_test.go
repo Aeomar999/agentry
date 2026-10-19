@@ -129,9 +129,13 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 			}
 			task := loadTask(t, s, "task-2")
 			if task.Kind != c.want || !task.KindChosen || task.Parked != "backlog" || task.Status() != tasks.Held ||
-				task.Repo != repo || task.Coordinator != "tech-lead" || task.Budget != 500 || task.MaxTurns != 7 || task.Idea != id || task.Title != "Search the board" {
+				task.Repo != repo || task.Coordinator != "tech-lead" || task.Budget != 500 || task.MaxTurns != 7 || task.MadeFrom != id || task.Title != "Search the board" {
 				t.Errorf("task: kind %q chosen %v parked %q status %s repo %q coordinator %q budget %d turns %d idea %q title %q",
-					task.Kind, task.KindChosen, task.Parked, task.Status(), task.Repo, task.Coordinator, task.Budget, task.MaxTurns, task.Idea, task.Title)
+					task.Kind, task.KindChosen, task.Parked, task.Status(), task.Repo, task.Coordinator, task.Budget, task.MaxTurns, task.MadeFrom, task.Title)
+			}
+			// An older binary reads only "idea", so the task still shows as made from it there.
+			if stream, err := s.Stream("task-2"); err != nil || stream[0].Text("from") != id || stream[0].Text("idea") != id {
+				t.Errorf("task.created names %q from and %q idea, want %s for both: %v", stream[0].Text("from"), stream[0].Text("idea"), id, err)
 			}
 			for _, link := range []string{id, `"Search the board"`, "A search box", "Yes, soon"} {
 				if !strings.Contains(task.Description, link) {
@@ -200,22 +204,30 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 }
 
 // A task made from the idea but never marked, as after a crash between the
-// two writes, is the one Accept marks; no second task is made.
+// two writes, is the one Accept marks; no second task is made. An old log's
+// task names the idea only as "idea", a new one as "from" too.
 func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
-	s, state, repo := openSeeded(t)
-	id := suggest(t, s, repo, nil)
-	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}})
+	for name, from := range map[string]map[string]string{"old": {"idea": "idea-1"}, "new": {"from": "idea-1", "idea": "idea-1"}} {
+		t.Run(name, func(t *testing.T) {
+			s, state, repo := openSeeded(t)
+			id := suggest(t, s, repo, nil)
+			data := map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog"}
+			for k, v := range from {
+				data[k] = v
+			}
+			mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: data})
 
-	got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "At last"})
-	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
-		t.Fatalf("accept: %+v %v", got, err)
-	}
-	if n := len(state.TaskIDs()); n != 2 {
-		t.Errorf("%d tasks, want task-1 and task-2", n)
-	}
-	if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
-		t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+			got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "At last"})
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+				t.Fatalf("accept: %+v %v", got, err)
+			}
+			if n := len(state.TaskIDs()); n != 2 {
+				t.Errorf("%d tasks, want task-1 and task-2", n)
+			}
+			if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
+				t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+			}
+		})
 	}
 }
 
@@ -412,8 +424,8 @@ func TestALogWithNoIdeas(t *testing.T) {
 	if list := ideas.List(state, ""); list != nil {
 		t.Errorf("ideas: %v", list)
 	}
-	if before.Idea != "" || before.Parked != "" || before.Status() != tasks.Working {
-		t.Errorf("task-1: idea %q parked %q status %s", before.Idea, before.Parked, before.Status())
+	if before.MadeFrom != "" || before.Parked != "" || before.Status() != tasks.Working {
+		t.Errorf("task-1: made from %q parked %q status %s", before.MadeFrom, before.Parked, before.Status())
 	}
 	if id := suggest(t, s, repo, nil); id != "idea-1" {
 		t.Errorf("first idea is %s", id)
@@ -422,5 +434,23 @@ func TestALogWithNoIdeas(t *testing.T) {
 		Data: map[string]any{"title": "Next", "repo": repo, "coordinator": "tech-lead"}})
 	if err != nil || rejection != nil || created.Stream != "task-2" {
 		t.Errorf("next task: %s %v %v", created.Stream, rejection, err)
+	}
+}
+
+// A task is made from one stream: a task.created whose "from" and "idea"
+// differ is refused, since an older binary, reading only "idea", would show
+// it made from another.
+func TestATaskNamesOneStreamItIsMadeFrom(t *testing.T) {
+	s, _, repo := openSeeded(t)
+	first, second := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})
+	made := func(from, idea string) events.Proposal {
+		return events.Proposal{Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "from": from, "idea": idea}}
+	}
+	if _, rejection, err := s.Create("task-", made(first, second)); err != nil || rejection == nil {
+		t.Errorf("from %s, idea %s: want refused, got %v %v", first, second, rejection, err)
+	}
+	if created, rejection, err := s.Create("task-", made(first, first)); err != nil || rejection != nil || loadTask(t, s, created.Stream).MadeFrom != first {
+		t.Errorf("from and idea %s: %v %v", first, rejection, err)
 	}
 }

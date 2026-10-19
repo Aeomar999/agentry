@@ -32,6 +32,7 @@ var (
 type world struct {
 	t         *testing.T
 	store     *store.Store
+	state     *current.State
 	alive     bool
 	exited    string
 	stopped   bool
@@ -49,7 +50,7 @@ func newWorld(t *testing.T) *world {
 }
 
 func newWorldOn(t *testing.T, s *store.Store, state *current.State) *world {
-	w := &world{t: t, store: s, alive: true}
+	w := &world{t: t, store: s, state: state, alive: true}
 	typeLine := func(task, line string) error {
 		if w.held != nil {
 			if w.entered != nil {
@@ -124,6 +125,17 @@ func TestACrashIsFlaggedAfterTheGrace(t *testing.T) {
 	}
 	if w.task().OpenTurn() != nil {
 		t.Error("the issue should end the turn, so the coordinator gets it")
+	}
+}
+
+// An archived task is done, so the watchdog skips it as it skips a done
+// task, though this one's turn is still open and its process is gone.
+func TestAnArchivedTaskIsLeftAlone(t *testing.T) {
+	w := newWorld(t)
+	w.alive = false
+	w.state.Archive("task-1")
+	if issue := w.after(time.Hour); issue != "" || w.stopped {
+		t.Errorf("issue %q, stopped %v", issue, w.stopped)
 	}
 }
 

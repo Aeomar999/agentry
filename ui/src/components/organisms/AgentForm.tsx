@@ -36,6 +36,7 @@ const BLANK: Agent = {
   profile: "",
   coordinates: false,
   team: "",
+  template: "",
   workers: [],
   color: "",
   column: "",

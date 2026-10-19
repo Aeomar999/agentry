@@ -109,7 +109,7 @@ func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {
 	for _, taskID := range board.TaskIDs() {
 		task, err := board.Task(taskID)
 		if err == nil {
-			if task != nil && task.Idea == id {
+			if task != nil && task.MadeFrom == id {
 				return Acceptance{Task: taskID}, nil
 			}
 			continue
@@ -125,7 +125,7 @@ func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {
 	return Acceptance{}, nil
 }
 
-// ideaOf is the idea a task was made from, read from its task.created in
+// ideaOf is the stream a task was made from, read from its task.created in
 // the log, "" for none.
 func ideaOf(log *store.Store, taskID string) (string, error) {
 	stream, err := log.Stream(taskID)
@@ -134,7 +134,7 @@ func ideaOf(log *store.Store, taskID string) (string, error) {
 	}
 	for _, e := range stream {
 		if e.Type == events.TaskCreated {
-			return e.Text("idea"), nil
+			return tasks.MadeFromOf(e.Proposal), nil
 		}
 	}
 	return "", nil
@@ -160,7 +160,7 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 	limits := tasks.NewLimits(choice.Defaults, epic)
 	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: map[string]any{
 		"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo, "coordinator": coordinator.Name,
-		"budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true, "parked": "backlog", "idea": idea.ID}})
+		"budget": limits.Budget, "maxTurns": limits.MaxTurns, "kind": string(kind), "kindChosen": true, "parked": "backlog", "from": idea.ID, "idea": idea.ID}})
 	switch {
 	case err != nil:
 		return Acceptance{}, err
