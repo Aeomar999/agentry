@@ -212,6 +212,35 @@ func TestV070sReadOnlyProfilesAreOfferedV092s(t *testing.T) {
 	}
 }
 
+// v0.9.2's dev builds shipped read-only and read-mostly before the test
+// runner rule: those installs must be offered v0.9.2's.
+func TestV092DevsReadOnlyProfilesAreOfferedV092s(t *testing.T) {
+	text := shippedFile(t, "05-v0.9.2-dev.toml")
+	for _, name := range []string{"read-only", "read-mostly"} {
+		statuses, err := DefaultProfiles(text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range statuses {
+			if s.Name == name && (s.State != ProfileOutdated || s.ShippedIn != "v0.9.2-dev") {
+				t.Errorf("v0.9.2-dev's %s: %s %s, want outdated v0.9.2-dev", name, s.State, s.ShippedIn)
+			}
+		}
+		if text, err = UpdateProfile(text, name, "v0.9.2"); err != nil {
+			t.Fatalf("updating %s: %v", name, err)
+		}
+		if state := stateOf(t, text, name); state != ProfileCurrent {
+			t.Errorf("%s is %s after the update", name, state)
+		}
+	}
+	if _, err := Parse(text, "/home/dev", nil); err != nil {
+		t.Fatalf("the updated policy doesn't load: %v", err)
+	}
+	if n := bytes.Count(text, []byte("runs_outside")); n != 2 {
+		t.Errorf("both profiles should have v0.9.2's runner rule, found runs_outside %d times", n)
+	}
+}
+
 func TestAnUpdateMovesTheAddedByCommentToItsVersion(t *testing.T) {
 	added, err := AddProfile(shippedFile(t, "01-v0.1.0-dev.toml"), "read-mostly", "v0.8.2")
 	if err != nil {
