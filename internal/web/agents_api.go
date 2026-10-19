@@ -184,6 +184,12 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no team template called "+request.Template, http.StatusNotFound)
 		return
 	}
+	for _, a := range template.Agents {
+		if problem := s.unknownProfile(a.Profile); problem != "" {
+			http.Error(w, problem+". Copy [profiles."+a.Profile+"] from internal/policy/default.toml, or the README's Profiles section, into that file, then add the team.", http.StatusBadRequest)
+			return
+		}
+	}
 	roster, err := s.roster()
 	if err != nil {
 		failed(w, err)
@@ -208,11 +214,20 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	if agent.Team = strings.TrimSpace(agent.Team); strings.EqualFold(agent.Team, agents.DefaultTeam) {
 		agent.Team = "" // the default team, as agents from before teams have it
 	}
-	if agent.Profile != "" && s.config.Policy != nil && !slices.Contains(s.config.Policy.Current().ProfileNames(), agent.Profile) {
-		http.Error(w, "no profile called "+agent.Profile+" in "+s.config.Policy.Path(), http.StatusBadRequest)
+	if problem := s.unknownProfile(agent.Profile); problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
 		return agent, false
 	}
 	return agent, true
+}
+
+// unknownProfile says why an agent can't have profile, or "" when the policy
+// has it. A policy written before a profile was added doesn't have it.
+func (s *Server) unknownProfile(profile string) string {
+	if profile == "" || s.config.Policy == nil || slices.Contains(s.config.Policy.Current().ProfileNames(), profile) {
+		return ""
+	}
+	return "no profile called " + profile + " in " + s.config.Policy.Path()
 }
 
 // setKnowledge replaces the agent's knowledge with yours.
