@@ -1664,15 +1664,18 @@ since the steps cite section 2's equivalence tests and the task-21 items.
    shared files only show, and the chat takes no message. `POST
    /api/tasks/{id}/direct` refuses an archived task with 409 and the
    rules' own words (`rules.ArchivedRefusal`), as labels, answers and
-   ranks are refused; an unknown task is still 404. Target 7 is measured
-   in `internal/web/archived_bench_test.go`: `TestArchivedTaskOpensBench`
-   archives the copy's largest task and times its detail cold and warm
-   (skipped unless `AGENTRY_BENCH_DB` is set), and
-   `TestAnArchivedTaskOpensInTime`, a stand-in of about 4,000 events that
-   always runs, checks both bounds: 28 to 37 ms cold and about 2.5 ms
-   warm, and 70 ms and 4.3 ms at task-8's 8,000 events. Half of a cold
-   read is `tasks.(*Task).Action`'s scan, once per action event, so the
-   fold grows faster than the events.
+   ranks are refused; an unknown task is still 404. Target 7 has two
+   tests in `internal/web/archived_bench_test.go`. The stand-in,
+   `TestAnArchivedTaskOpensInTime`, is a task of about 4,000 events that
+   always runs and checks both bounds; it is measured. Since step 8c it
+   takes 16 to 18 ms cold and about 2.2 ms warm, and 33 to 35 ms cold and
+   4 to 5 ms warm at task-8's 8,000 events. Before 8c, half of a cold read
+   was `tasks.(*Task).Action` scanning the task's actions several times
+   per action event, so the fold grew faster than the events: 26 to 37 ms
+   cold at 4,000 and 70 ms at 8,000. The real measure,
+   `TestArchivedTaskOpensBench`, archives the copy's largest task and
+   times its detail cold and warm; it is skipped unless `AGENTRY_BENCH_DB`
+   is set, and is measured at the final run, against the copy.
 9. **Unarchiving and reopening.** Depends on steps 7 and 8.
    - Files: `internal/store` (`Store.Unarchive`: under `Store.mu`, the rows
      back with their positions and `task.unarchived` in one transaction,
