@@ -1598,6 +1598,76 @@ func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
 	}
 }
 
+// A team you define is added as you wrote it, its coordinator flagged, and
+// an agent you gave no prompt gets a default one.
+func TestACustomTeamIsAddedFromYourAgents(t *testing.T) {
+	server, _ := newTestServer(t)
+	request := `{"team":" Data ","agents":[
+		{"name":"analyst","description":"Analyse the numbers.","engine":"claude","column":"review","color":"teal"},
+		{"name":"data-lead","engine":"codex","model":"gpt-5","coordinates":true},
+		{"name":"charter","engine":"claude","prompt":"Draw the charts.","column":"ship"}]}`
+	if code, body := call(t, server, "POST", "/api/teams", request); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	_, body := call(t, server, "GET", "/api/agents", "")
+	var roster []agents.Agent
+	json.Unmarshal([]byte(body), &roster)
+	team := map[string]agents.Agent{}
+	for _, agent := range roster {
+		if agent.Team == "Data" {
+			team[agent.Name] = agent
+		}
+	}
+	lead, analyst, charter := team["data-lead"], team["analyst"], team["charter"]
+	if len(team) != 3 || lead.Template != "" || analyst.Template != "" || charter.Template != "" {
+		t.Fatalf("the Data team: %+v", team)
+	}
+	if !lead.Coordinates || analyst.Coordinates || lead.Engine != "codex" || lead.Model != "gpt-5" || !strings.Contains(lead.Prompt, "You are the coordinator") {
+		t.Errorf("the lead: %+v", lead)
+	}
+	if !strings.Contains(analyst.Prompt, "Analyse the numbers") || analyst.Column != agents.Reviews || analyst.Color != "teal" {
+		t.Errorf("the analyst: %+v", analyst)
+	}
+	if charter.Prompt != "Draw the charts." || charter.Column != agents.Ships {
+		t.Errorf("the charter keeps its own prompt: %+v", charter)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "data-lead" {
+		t.Errorf("a Data task goes to its lead, not %q", detail.Coordinator)
+	}
+}
+
+// A custom team that can't be added is refused whole: no agent of it is
+// made, even when only the last one is wrong.
+func TestACustomTeamIsRefusedWhole(t *testing.T) {
+	server, s := newTestServer(t)
+	lead := `{"name":"data-lead","engine":"claude","coordinates":true}`
+	for request, want := range map[string]string{
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"claude","coordinates":true}]}`: "exactly one coordinator",
+		`{"team":"writing","agents":[` + lead + `]}`:                                                      "Writing template",
+		`{"team":"software","agents":[` + lead + `]}`:                                                     "a team called software already",
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"gemini"}]}`:                    `analyst's engine must be one of claude, codex, not "gemini"`,
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst"}]}`:                                      `analyst's engine must be one of claude, codex, not ""`,
+		`{"template":"research","team":"Data","agents":[` + lead + `]}`:                                   "not both",
+		`{"template":"research","agents":[` + lead + `]}`:                                                 "not both",
+		`{}`:              "name a template, or a team and its agents",
+		`{"team":"Data"}`: "the Data team needs agents",
+	} {
+		before, _ := s.Stream(events.AgentsStream)
+		code, body := call(t, server, "POST", "/api/teams", request)
+		var refusal struct{ Error string }
+		if err := json.Unmarshal([]byte(body), &refusal); code != http.StatusBadRequest || err != nil || !strings.Contains(refusal.Error, want) {
+			t.Errorf("%s: want a 400 saying %q, got %d %s", request, want, code, body)
+		}
+		if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
+			t.Errorf("%s: %d agent events written", request, len(after)-len(before))
+		}
+	}
+}
+
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)

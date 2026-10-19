@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
 
 // Adding, changing and removing agents from the page. Each is an event, so
@@ -172,20 +174,35 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 	httpapi.Reply(w, list)
 }
 
-// addTeam adds a team made from a template: its coordinator first, so the
-// team always has one, then its agents, each with its own prompt. When the
-// policy lacks a profile the team needs, it refuses with the profiles
-// missing, unless asked to add them first (addMissingProfiles), which it
-// does in one change of the policy. hash is the version of the policy
-// the page saw, if it saw one. Every error is JSON {error, missingProfiles?}.
+// addTeam adds a team, made from a template ({template}) or from agents you
+// define ({team, agents}): its coordinator first, so the team always has
+// one, then its agents, each with its own prompt. When the policy lacks a
+// profile the team needs, it refuses with the profiles missing, unless asked
+// to add them first (addMissingProfiles), which it does in one change of the
+// policy. hash is the version of the policy the page saw, if it saw one.
+// Every error is JSON {error, missingProfiles?}.
 func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 	w := &jsonErrors{ResponseWriter: writer}
 	var request struct {
 		Template           string
+		Team               string
+		Agents             []agents.Agent
 		AddMissingProfiles bool
 		Hash               string
 	}
 	if !httpapi.Decode(w, r, &request) {
+		return
+	}
+	custom := strings.TrimSpace(request.Team) != "" || len(request.Agents) > 0
+	switch {
+	case request.Template != "" && custom:
+		http.Error(w, "a team comes from a template or from agents you define, not both", http.StatusBadRequest)
+		return
+	case custom:
+		s.addCustomTeam(w, strings.TrimSpace(request.Team), request.Agents, request.AddMissingProfiles, request.Hash)
+		return
+	case request.Template == "":
+		http.Error(w, "name a template, or a team and its agents", http.StatusBadRequest)
 		return
 	}
 	template, ok := agents.TemplateNamed(request.Template)
@@ -193,13 +210,7 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no team template called "+request.Template, http.StatusNotFound)
 		return
 	}
-	if missing := s.missingProfiles(template); len(missing) > 0 && !request.AddMissingProfiles {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]any{"missingProfiles": missing,
-			"error": "the " + template.Team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page"})
-		return
-	} else if len(missing) > 0 && !s.addProfilesFor(w, template.Team, missing, request.Hash) {
+	if !s.hasProfiles(w, template.Team, s.missingProfiles(template.Agents), request.AddMissingProfiles, request.Hash) {
 		return
 	}
 	roster, err := s.roster()
@@ -207,7 +218,76 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	proposals := agents.AddTeam(template, roster, httpapi.You)
+	s.proposeTeam(w, agents.AddTeam(template, roster, httpapi.You))
+}
+
+// addCustomTeam adds the team of the agents you define, once every agent
+// passes: nothing is proposed before then, so a team is never half made.
+func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []agents.Agent, addMissing bool, hash string) {
+	roster, err := s.roster()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	problem := agents.CheckCustomTeam(team, members, roster)
+	if problem == "" {
+		problem = unknownEngine(members)
+	}
+	missing := s.missingProfiles(members)
+	if problem == "" {
+		problem = unshippedProfile(members, missing)
+	}
+	if problem != "" {
+		http.Error(w, problem, http.StatusBadRequest)
+		return
+	}
+	if !s.hasProfiles(w, team, missing, addMissing, hash) {
+		return
+	}
+	s.proposeTeam(w, agents.CustomTeam(team, members, httpapi.You))
+}
+
+// unknownEngine says which agent names an engine Agentry can't run, or "".
+func unknownEngine(members []agents.Agent) string {
+	for _, a := range members {
+		if engine := strings.TrimSpace(a.Engine); !slices.Contains(rules.KnownEngines, engine) {
+			return a.Name + "'s engine must be one of " + strings.Join(rules.KnownEngines, ", ") + ", not " + strconv.Quote(engine)
+		}
+	}
+	return ""
+}
+
+// unshippedProfile says which agent needs a missing profile that Agentry
+// doesn't ship, so only you can write it, or "".
+func unshippedProfile(members []agents.Agent, missing []string) string {
+	for _, a := range members {
+		profile := strings.TrimSpace(a.Profile)
+		if _, shipped := policy.ShippedProfile(profile); slices.Contains(missing, profile) && !shipped {
+			return a.Name + "'s profile " + profile + " isn't in policy.toml, and Agentry doesn't ship it: write it in policy.toml, or pick another profile"
+		}
+	}
+	return ""
+}
+
+// hasProfiles says whether the policy has every profile the team needs,
+// adding the missing ones when asked; when it says no, it has replied.
+func (s *Server) hasProfiles(w http.ResponseWriter, team string, missing []string, addMissing bool, hash string) bool {
+	if len(missing) == 0 {
+		return true
+	}
+	if addMissing {
+		return s.addProfilesFor(w, team, missing, hash)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusConflict)
+	json.NewEncoder(w).Encode(map[string]any{"missingProfiles": missing,
+		"error": "the " + team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page"})
+	return false
+}
+
+// proposeTeam proposes the events that add a team, stopping at the first
+// one refused.
+func (s *Server) proposeTeam(w http.ResponseWriter, proposals []events.Proposal) {
 	for _, p := range proposals[:len(proposals)-1] {
 		if !httpapi.ProposeOrRefuse(w, s.store, p) {
 			return
@@ -257,13 +337,13 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	return agent, true
 }
 
-// missingProfiles are the profiles the team's agents need that the policy
-// lacks, in the template's order.
-func (s *Server) missingProfiles(template agents.Template) []string {
+// missingProfiles are the profiles these agents of a team need that the
+// policy lacks, in the agents' order.
+func (s *Server) missingProfiles(members []agents.Agent) []string {
 	var missing []string
-	for _, a := range template.Agents {
-		if s.unknownProfile(a.Profile) != "" && !slices.Contains(missing, a.Profile) {
-			missing = append(missing, a.Profile)
+	for _, a := range members {
+		if profile := strings.TrimSpace(a.Profile); s.unknownProfile(profile) != "" && !slices.Contains(missing, profile) {
+			missing = append(missing, profile)
 		}
 	}
 	return missing

@@ -90,3 +90,34 @@ func TestATaskWithNoTeamChosenGoesToTheRightOne(t *testing.T) {
 		t.Errorf("the editor's brief:\n%s", brief)
 	}
 }
+
+// A team you define takes tasks like a template's: the tech lead's brief
+// lists it under Other teams, and a task passed to it goes to its lead.
+func TestACustomTeamTakesTasksLikeAnyOther(t *testing.T) {
+	s, repo := twoTeams(t)
+	stream, _ := s.Stream(events.AgentsStream)
+	members := []agents.Agent{
+		{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true},
+		{Name: "analyst", Description: "Analyses the numbers.", Engine: "claude"},
+	}
+	if problem := agents.CheckCustomTeam("Data", members, agents.FromEvents(stream)); problem != "" {
+		t.Fatal(problem)
+	}
+	for _, p := range agents.CustomTeam("Data", members, you) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	const id = "task-1"
+	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Chart the sign-ups", "repo": repo, "coordinator": "tech-lead"}})
+
+	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
+	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, "- Data, coordinated by data-lead: Leads the data work.") {
+		t.Errorf("the tech lead's brief should list the Data team:\n%s", brief)
+	}
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "transfer", "team": "data", "reason": "It is data work."}`)
+	if task = waitForTurn(t, s, id, "turn-2", "data-lead"); task.Coordinator != "data-lead" {
+		t.Errorf("the Data team's lead takes it: coordinator %q", task.Coordinator)
+	}
+}

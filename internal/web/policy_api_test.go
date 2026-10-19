@@ -291,6 +291,45 @@ func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	}
 }
 
+// A custom team gets the same offer as a template team for a profile
+// Agentry ships, and a plain refusal for one only you can write.
+func TestACustomTeamNeedsItsProfilesInThePolicy(t *testing.T) {
+	server := servePolicy(t, withoutReadMostly(t))
+	team := func(profile string, more string) string {
+		return `{"team":"Data","agents":[{"name":"data-lead","engine":"claude","coordinates":true},` +
+			`{"name":"analyst","engine":"claude","profile":"` + profile + `"}]` + more + `}`
+	}
+	agentsBefore, _ := server.log.Stream(events.AgentsStream)
+	code, body := call(t, server.Server, "POST", "/api/teams", team("dreaming", `,"addMissingProfiles":true`))
+	if code != http.StatusBadRequest || !strings.Contains(body, "analyst's profile dreaming") || !strings.Contains(body, "doesn't ship") {
+		t.Errorf("a profile nobody ships: %d %s", code, body)
+	}
+
+	code, body = call(t, server.Server, "POST", "/api/teams", team(" read-mostly ", ""))
+	var refusal struct {
+		Error           string
+		MissingProfiles []string
+	}
+	json.Unmarshal([]byte(body), &refusal)
+	if code != http.StatusConflict || !slices.Equal(refusal.MissingProfiles, []string{"read-mostly"}) || !strings.Contains(refusal.Error, "the Data team needs profile read-mostly") {
+		t.Errorf("a shipped profile the policy lacks: %d %s", code, body)
+	}
+	if after, _ := server.log.Stream(events.AgentsStream); len(after) != len(agentsBefore) || len(server.policyEvents(t)) != 0 {
+		t.Errorf("nothing should be proposed: %d agent events, then %d", len(agentsBefore), len(after))
+	}
+
+	if code, body := call(t, server.Server, "POST", "/api/teams", team("read-mostly", `,"addMissingProfiles":true`)); code != 200 {
+		t.Fatalf("adding the Data team with its profile: %d %s", code, body)
+	}
+	if stream := server.policyEvents(t); len(stream) != 1 || stream[0].Text("change") != "added profile read-mostly for team Data" {
+		t.Errorf("one logged change of the policy: %d events", len(stream))
+	}
+	stream, _ := server.log.Stream(events.AgentsStream)
+	if analyst, ok := agents.FromEvents(stream).Get("analyst"); !ok || analyst.Profile != "read-mostly" || analyst.Team != "Data" {
+		t.Errorf("the analyst: %+v", analyst)
+	}
+}
+
 func TestAProfileDroppedOnDiskShowsWithTheAgentsThatNeedIt(t *testing.T) {
 	server := servePolicy(t, string(policy.Default()))
 	if code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
