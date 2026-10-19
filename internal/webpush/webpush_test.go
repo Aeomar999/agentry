@@ -1,8 +1,6 @@
 package webpush
 
 import (
-	"crypto/ecdh"
-	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"os"
@@ -17,14 +15,8 @@ var now = time.Date(2026, 10, 19, 10, 0, 0, 0, time.UTC)
 // browser is a subscription as a browser would make it, at endpoint.
 func browser(t *testing.T, endpoint string) Subscription {
 	t.Helper()
-	key, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secret := make([]byte, 16)
-	rand.Read(secret)
-	return Subscription{Endpoint: endpoint, Keys: Keys{P256dh: base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()),
-		Auth: base64.RawURLEncoding.EncodeToString(secret)}}
+	sub, _ := receiver(t, endpoint)
+	return sub
 }
 
 func open(t *testing.T, path string) *Store {
