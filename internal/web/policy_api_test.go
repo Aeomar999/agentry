@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -211,20 +212,35 @@ func TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice(t *testing.T) {
 
 // A change Agentry refuses is a 409; failing to write the file is a 500.
 func TestAChangeThatCantBeWrittenIsAFailureNotARefusal(t *testing.T) {
-	server := servePolicy(t, string(policy.Default()))
+	at := time.Date(2026, 10, 19, 8, 30, 0, 0, time.UTC)
+	server := servePolicy(t, string(policy.Default()), func(c *Config) { c.Policy = changedAt{c.Policy.(*policy.Live), at} })
 	if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-only/add", `{"hash":"`+server.hash()+`"}`); code != http.StatusConflict ||
 		!strings.Contains(body, "already has") {
 		t.Errorf("a refusal: %d %s", code, body)
 	}
-	dir := filepath.Dir(server.path)
-	os.Chmod(dir, 0o500)
-	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	// A folder where the backup goes, named as policy.WriteFile names a
+	// backup made at that time, can't be written over, by root either.
+	os.Mkdir(server.path+"-backup-20261019T083000.000000000Z", 0o700)
 	if code, body := call(t, server.Server, "POST", "/api/policy/use-for-everyone/off", `{"hash":"`+server.hash()+`"}`); code != http.StatusInternalServerError {
-		t.Errorf("a folder Agentry can't write to: %d %s", code, body)
+		t.Errorf("a backup Agentry can't write: %d %s", code, body)
+	}
+	if text, _ := os.ReadFile(server.path); string(text) != string(policy.Default()) || server.live.Current().UseForEveryone() == "" {
+		t.Error("the file and the policy in force should be as they were")
 	}
 	if len(server.policyEvents(t)) != 0 {
 		t.Error("nothing should be logged")
 	}
+}
+
+// changedAt makes every change to the policy at one time, so a test knows
+// what its backup will be called.
+type changedAt struct {
+	*policy.Live
+	at time.Time
+}
+
+func (p changedAt) Change(e policy.Edit, _ time.Time) (*policy.Change, error) {
+	return p.Live.Change(e, p.at)
 }
 
 // A policy from before a profile was added doesn't have it: a team whose
