@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,6 +39,7 @@ const (
 	timeToLive = 24 * time.Hour        // how long a push service keeps a push for a phone that's off
 	tokenLife  = 12 * time.Hour        // how long a VAPID token is good for; RFC 8292 allows 24 hours
 	errorShown = 200                   // how much of a push service's reply an error quotes
+	drained    = 4096                  // how much of a reply is read so its connection is reused
 )
 
 // Sender sends pushes to the browsers in a Store, signed with its VAPID key.
@@ -84,13 +86,19 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, message []byte) err
 	return s.answered(response, sub.Endpoint)
 }
 
+// drain reads what is left of a reply, up to a limit, so its connection
+// can carry the next push.
+func drain(body io.Reader) { io.CopyN(io.Discard, body, drained) }
+
 // answered is what the push service's response to a push to endpoint
 // means.
 func (s *Sender) answered(response *http.Response, endpoint string) error {
 	switch response.StatusCode {
 	case http.StatusOK, http.StatusCreated, http.StatusAccepted:
+		drain(response.Body)
 		return nil
 	case http.StatusNotFound, http.StatusGone:
+		drain(response.Body)
 		if _, err := s.store.Unsubscribe(endpoint); err != nil {
 			return fmt.Errorf("%w, and it can't be removed: %w", ErrGone, err)
 		}
@@ -142,10 +150,16 @@ func sign(key *ecdsa.PrivateKey, text string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return joined(r, s), nil
+}
+
+// joined is r and s as JWS wants an ES256 signature: each 32 bytes, big
+// endian, padded with leading zeros.
+func joined(r, s *big.Int) []byte {
 	signature := make([]byte, 64)
 	r.FillBytes(signature[:32])
 	s.FillBytes(signature[32:])
-	return signature, nil
+	return signature
 }
 
 func encode(data []byte) string { return base64.RawURLEncoding.EncodeToString(data) }

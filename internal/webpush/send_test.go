@@ -48,12 +48,24 @@ func TestEncryptionMatchesTheRFCExample(t *testing.T) {
 }
 
 func TestAMessageTooLongForAPushIsRefused(t *testing.T) {
+	if maxMessage != 3993 {
+		t.Errorf("maxMessage: got %d, want 3993", maxMessage)
+	}
 	phone, _ := receiver(t, "https://push.example/phone")
-	if _, err := seal(make([]byte, maxMessage), phone.Keys); err != nil {
-		t.Errorf("the longest message: %v", err)
+	if body, err := seal(make([]byte, maxMessage), phone.Keys); err != nil || len(body) != 4096 {
+		t.Errorf("the longest message: want a 4096-byte body, got %d bytes (%v)", len(body), err)
 	}
 	if _, err := seal(make([]byte, maxMessage+1), phone.Keys); !errors.Is(err, ErrTooLong) {
 		t.Errorf("a byte more: want ErrTooLong, got %v", err)
+	}
+}
+
+func TestASignatureKeepsRAndSAt32BytesEach(t *testing.T) {
+	got := joined(big.NewInt(1), big.NewInt(0x0203))
+	want := make([]byte, 64)
+	want[31], want[62], want[63] = 1, 2, 3
+	if string(got) != string(want) {
+		t.Errorf("got  %x\nwant %x", got, want)
 	}
 }
 
@@ -165,7 +177,9 @@ func TestAPushReachesThePushServiceAndOpensForTheBrowser(t *testing.T) {
 	service := newPushService(t, http.StatusCreated)
 	store := open(t, filepath.Join(t.TempDir(), File))
 	phone, key := receiver(t, service.URL+"/send/phone")
-	store.Subscribe(phone, now)
+	if err := store.Subscribe(phone, now); err != nil {
+		t.Fatal(err)
+	}
 	sender := NewSender(store, service.Client(), "https://agentry.example")
 
 	if err := sender.Send(context.Background(), phone, []byte(`{"task":"task-117"}`)); err != nil {
@@ -199,8 +213,12 @@ func TestASubscriptionThePushServiceNoLongerHasIsRemoved(t *testing.T) {
 		store := open(t, path)
 		phone, _ := receiver(t, service.URL+"/send/phone")
 		laptop, _ := receiver(t, service.URL+"/send/laptop")
-		store.Subscribe(phone, now)
-		store.Subscribe(laptop, now)
+		if err := store.Subscribe(phone, now); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Subscribe(laptop, now); err != nil {
+			t.Fatal(err)
+		}
 
 		err := NewSender(store, service.Client(), "https://agentry.example").Send(context.Background(), phone, []byte("hello"))
 		if !errors.Is(err, ErrGone) {
@@ -218,7 +236,9 @@ func TestAnyOtherRefusalIsAnErrorNamingTheStatus(t *testing.T) {
 	service := newPushService(t, http.StatusTooManyRequests)
 	store := open(t, filepath.Join(t.TempDir(), File))
 	phone, _ := receiver(t, service.URL+"/send/phone")
-	store.Subscribe(phone, now)
+	if err := store.Subscribe(phone, now); err != nil {
+		t.Fatal(err)
+	}
 
 	err := NewSender(store, service.Client(), "https://agentry.example").Send(context.Background(), phone, []byte("hello"))
 	if err == nil || errors.Is(err, ErrGone) || !strings.Contains(err.Error(), "429") || !strings.Contains(err.Error(), "a reason") {
