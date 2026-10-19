@@ -477,12 +477,12 @@ func combinations[T any](choices [][]T) (ways [][]T, complete bool) {
 
 // Tools whose short options cluster, getopt style, and that have one which
 // writes a file or runs a program: `sort -uo out` is `sort -u -o out`,
-// `git grep -nO'cmd'` opens its files with cmd, and `pytest -vo cache_dir=x`
-// sets where pytest writes. Their options are split apart so a rule for -o
+// `git grep -nO'cmd'` opens its files with cmd, `gh run view -vw` opens a
+// browser, and `pytest -vo cache_dir=x` sets where pytest writes. Their options are split apart so a rule for -o
 // sees it. Only these: find's -name and go's -run are single options, not
 // clusters.
 var clusteringTools = map[string]bool{
-	"sort": true, "tree": true, "file": true, "git grep": true, "npx jest": true, "npx vitest": true, "npx eslint": true,
+	"sort": true, "tree": true, "file": true, "git grep": true, "gh run view": true, "npx jest": true, "npx vitest": true, "npx eslint": true,
 	"pytest": true, "python -m pytest": true, "python3 -m pytest": true,
 }
 

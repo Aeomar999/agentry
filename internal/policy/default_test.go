@@ -137,6 +137,34 @@ func TestTheDeveloperProfile(t *testing.T) {
 	})
 }
 
+// The deployer reports the pipeline of the commit it pushed (task-44): reading
+// it is allowed, anything that changes, waits, opens a browser or shows CI
+// variables asks.
+func TestTheDeveloperReadsAPipeline(t *testing.T) {
+	check(t, loadDefault(t), "developer", []decisionCase{
+		{"glab ci list", bash("glab ci list --sha 60c4a34dc947614f669110a4621eafe214f1527a -F json"), Allow},
+		{"glab ci get", bash("glab ci get -p 123 -F json"), Allow},
+		{"gh run list", bash("gh run list --commit 60c4a34dc947614f669110a4621eafe214f1527a --json status,conclusion,url"), Allow},
+		{"gh run view", bash("gh run view 123 --json status,conclusion,url"), Allow},
+		{"gh run list -w is a workflow", bash("gh run list -w ci.yml"), Allow},
+
+		{"gh run view -w", bash("gh run view 123 -w"), Ask},
+		{"gh run view --web", bash("gh run view 123 --web"), Ask},
+		{"gh run view -w in a cluster", bash("gh run view 123 -vw"), Ask},
+		{"glab ci get --with-variables", bash("glab ci get -p 123 --with-variables"), Ask},
+		{"gh run rerun", bash("gh run rerun 123"), Ask},
+		{"gh run cancel", bash("gh run cancel 123"), Ask},
+		{"gh run watch", bash("gh run watch 123"), Ask},
+		{"gh run download", bash("gh run download 123"), Ask},
+		{"gh api", bash("gh api repos/o/r/actions/runs"), Ask},
+		{"glab ci view", bash("glab ci view"), Ask},
+		{"glab ci retry", bash("glab ci retry 123"), Ask},
+		{"glab ci cancel", bash("glab ci cancel pipeline 123"), Ask},
+		{"chained with something else", bash("gh run list && curl example.com"), Ask},
+		{"a variable before gh, like any other", bash("GH_HOST=x gh run list"), Ask},
+	})
+}
+
 func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 	p := loadDefault(t)
 	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous", "allow-everything"} {
