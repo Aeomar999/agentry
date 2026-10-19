@@ -35,12 +35,14 @@ server changes with this document.
   are events too, and the triggers allow exactly the rows they name;
   backups stay out of reach.
 - Together, for 20 open tasks and 30 busy days of done work, at 1, 10 and
-  100 GB of history: startup 0.22 to 0.24 s, heap 118 to 174 MB, a live
-  database of 0.20, 0.45 and 3.0 GB.
+  100 GB of history: startup 0.22 to 0.24 s on 8 cores (estimate; one
+  core: 0.52 to 0.68 s), heap 118 to 174 MB, a live database of 0.20, 0.45
+  and 3.0 GB.
 - What still grows is the `agents` and `workers` streams, so the full
   replay after an upgrade is 1.9 s at 1 GB and 27 s at 100 GB (a deferred
   fix, section 7).
-- Targets (section 6): startup with a snapshot under 0.5 s, the full
+- Targets (section 6): startup with a snapshot under 0.5 s (with
+  `GOMAXPROCS >= 2`; under 0.75 s on one core), the full
   replay under 2.5 s at 1 GB, heap under 135 MB and a live file under
   235 MB at that working set, an archived task open in under 100 ms.
 - Order: slimmer knowledge first (it needs nothing from task-21, and every
@@ -502,10 +504,18 @@ one, and costs 31 to 34 ms on every read and about 70 ms on every write.
 
 **Pick: JSON, not compressed.** Its decode is under 30 ms even with every
 done task in it, and it keeps `nil` and empty apart, which
-`reflect.DeepEqual`, and so the equivalence test, does not forgive. gob is
-the switch to make if the open work's state ever takes 100 ms to decode.
-Section 6 projects 0.36 s for a month of done work, so the body's entries
-are written one to a line and decoded in parallel (section 7).
+`reflect.DeepEqual`, and so the equivalence test, does not forgive.
+Section 6 projects 0.36 s of decode on one core for a month of done work,
+so the body's entries are written one to a line and decoded in parallel:
+0.22 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s) of startup
+(section 7). The one rule for leaving JSON: build step 2 times the
+one-entry-per-line JSON decode of a working-set-sized body on 1, 2 and 8
+goroutines; if 8 goroutines take more than 0.34 s (0.5 s minus the fixed
+0.16 s), the fallback is chosen there, before step 4 is built: gob over
+saved forms that record `nil` versus empty explicitly (a presence flag per
+slice or map), so equivalence test 1 still passes on a gob round trip. If
+even that misses Target 1, the one-core figure, ≤ 0.75 s, is the limit,
+and the build asks the user before going further.
 
 The file is one header line, then the body:
 
@@ -638,7 +648,11 @@ included) against a full replay is the judge, as in `read-model.md`.
 4. **Sabotage checks.** Leaving `StoryNews` out of `tasks.Saved` (with a
    fixture where a story finishes while the coordinator decides,
    `internal/tasks/apply.go` line 145), leaving out `Worker.credential`,
-   or decoding the body with gob, must each fail test 1.
+   or decoding the body with plain gob of the structs, must each fail
+   test 1. That case is plain gob, where `nil` and empty merge; it does not
+   apply to the fallback's saved forms, which record `nil` versus empty
+   with a presence flag per slice or map and must pass test 1 on a gob
+   round trip.
 5. **The forms are complete:** the reflection test in each package
    (above).
 
@@ -844,9 +858,16 @@ SELECT stream, position FROM events
 WHERE type = 'task.created' AND position <= ?applied
 UNION
 SELECT stream, json_extract(data, '$.created') FROM events
-WHERE type = 'task.archived' AND position <= ?applied
+WHERE type = 'task.archived' AND json_extract(data, '$.created') <= ?applied
 ORDER BY 2
 ```
+
+The marker half is gated on the `task.created` position it stands for,
+not on its own: the archive transaction deletes that row outright, so
+between its commit and `applied` moving past the marker, a gate on the
+marker's position would hide the task from both halves, and a
+`createTask` in that window would get a spurious 409 (the rules refuse
+it, so ids never collide, but the user sees the error).
 
 `UNION` drops a row that is the same in both halves, so a task appears
 once whether it is archived, unarchived (its `task.created` row is back,
@@ -1197,10 +1218,10 @@ Each cell is 1 GB / 10 GB / 100 GB of history, at the working set W.
 |---|---|---|---|---|---|---|
 | (a) Nothing done (the read model alone) | 7.8 / 78 / 780 s | the same | 0.35 / 3.5 / 35 GB | 1 / 10 / 100 GB | | |
 | (b) Snapshots only | 1.2 / 11 / 109 s | 7.8 / 78 / 780 s | 0.35 / 3.5 / 35 GB | 1 / 10 / 100 GB | | 0.39 / 3.9 / 39 GB |
-| (c) Slimmer knowledge only | 5.0 / 50 / 502 s | the same | 0.35 / 3.5 / 35 GB | 0.52 / 5.2 / 52 GB | | |
+| (c) Slimmer knowledge only | 5.0 / 50 / 500 s | the same | 0.35 / 3.5 / 35 GB | 0.52 / 5.2 / 52 GB | | |
 | (d) Archiving only | 4.7 / 32 / 306 s | the same | 118 / 123 / 174 MB | 0.67 / 5.2 / 51 GB | 0.06 / 0.93 / 9.6 GB | |
 | (e) All three | 0.52 / 0.54 / 0.68 s | 1.9 / 4.2 / 27 s | 118 / 123 / 174 MB | 0.20 / 0.45 / 3.0 GB | 0.06 / 0.93 / 9.6 GB | 129 / 134 / 185 MB |
-| (e), the body decoded on 8 cores (estimate) | **0.22 / 0.22 / 0.24 s** | 1.9 / 4.2 / 27 s | as (e) | as (e) | as (e) | as (e) |
+| (e), the body decoded on 8 cores (estimate; one core is row (e)) | **0.22 / 0.22 / 0.24 s** | 1.9 / 4.2 / 27 s | as (e) | as (e) | as (e) | as (e) |
 
 What it says:
 
@@ -1209,16 +1230,24 @@ What it says:
   not the events; archiving leaves knowledge in the live log in full.
   Together they leave startup to the working set: 0.16 s fixed, the
   working set's decode, and 0.57 MB of summaries per GB, the one part that
-  still grows (0.16 s more at 100 GB on one core, 20 ms on eight).
+  still grows (0.16 s more at 100 GB on one core, 20 ms on eight, an
+  estimate).
 - **One core of JSON misses 0.5 s.** The working set alone is 128 MB of
-  snapshot and 0.36 s to decode, which trips section 2's own switch at
-  100 ms. Decoding the tasks in parallel brings it to about 60 ms; gob
-  would too (0.21 s of startup at 1 GB). Section 7 picks the parallel
-  decode.
+  snapshot and 0.36 s to decode. Decoding the tasks in parallel brings it
+  to about 60 ms, so startup is 0.22 to 0.24 s on 8 cores (estimate; one
+  core: 0.52 to 0.68 s). Parallel decoding is not measured: build step 2
+  times the one-entry-per-line JSON decode of a working-set-sized body on
+  1, 2 and 8 goroutines; if 8 goroutines take more than 0.34 s (0.5 s
+  minus the fixed 0.16 s), the fallback is chosen there, before step 4 is
+  built: gob over saved forms that record `nil` versus empty explicitly (a
+  presence flag per slice or map), so equivalence test 1 still passes on a
+  gob round trip. If even that misses Target 1, the one-core figure,
+  ≤ 0.75 s, is the limit, and the build asks the user before going further.
+  Section 7 picks the parallel decode.
 - **Every upgrade replays the live log in full**, since the binary's hash
   changes. In (e) that is the working set (1.6 s) plus the streams nothing
   archives: `agents` (slimmed knowledge, 24 MB per GB) and `workers`
-  (20,200 events per GB). It passes 5 s at about 14 GB, 2 to 3.5 years of
+  (20,200 events per GB). It passes 5 s at about 13 GB, 2 to 3.5 years of
   busy use. Section 7 defers the fix.
 - **Heap** in (d) and (e) is the working set, 117 MB of it; summaries add
   0.57 MB per GB.
@@ -1236,7 +1265,7 @@ What it says:
 | | Startup | After an upgrade | Heap | Live database | Snapshot |
 |---|---|---|---|---|---|
 | (d) Archiving only | 6.3 / 34 / 307 s | the same | 234 / 239 / 290 MB | 0.84 / 5.4 / 51 GB | |
-| (e) All three, one core | 0.88 / 0.90 / 1.04 s | 3.5 / 5.8 / 29 s | 234 / 239 / 290 MB | 0.37 / 0.62 / 3.2 GB | 258 / 263 / 314 MB |
+| (e) All three, one core | 0.88 / 0.90 / 1.04 s | 3.5 / 5.8 / 29 s | 234 / 239 / 290 MB | 0.37 / 0.62 / 3.1 GB | 258 / 263 / 314 MB |
 | (e), 8 cores (estimate) | 0.26 / 0.26 / 0.28 s | 3.5 / 5.8 / 29 s | as above | as above | as above |
 
 What depends on the working set doubles, and nothing that depends on
@@ -1256,7 +1285,7 @@ W, or twice W with `AGENTRY_BENCH_WORKING=2`.
 
 | # | Target | Projected | How it is measured |
 |---|---|---|---|
-| 1 | Startup with a valid snapshot **≤ 0.5 s**, for any history up to 100 GB | 0.22 to 0.24 s on 8 cores | `TestStartupBench` at 1 and 10 GB: `current.Open` to `Loaded`, min of 3; the 100 GB term by adding 90,000 summaries |
+| 1 | Startup with a valid snapshot **≤ 0.5 s** with `GOMAXPROCS >= 2`, and **≤ 0.75 s** on one core, for any history up to 100 GB | 0.22 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s) | `TestStartupBench` at 1 and 10 GB: `current.Open` to `Loaded`, min of 3; the 100 GB term by adding 90,000 summaries |
 | 2 | Startup after an upgrade or a bad snapshot (full replay of the live log) **≤ 2.5 s** at 1 GB and **≤ 5 s** at 10 GB, with its reason logged | 1.9 s, 4.2 s | the same, with the snapshot deleted |
 | 3 | The snapshot is never more than **10,000 events or 10 minutes** behind; its tail replays in **≤ 0.1 s** | 90 ms | a test with a fake clock; the benchmark with a 10,000-event tail |
 | 4 | Live database **≤ 1 MB per open task + 6 MB per busy day of done work kept + 35 MB per GB of history**: ≤ 235 MB at 1 GB | 198 MB | the benchmark archives its synthetic log at the default age, runs `incremental_vacuum`, and reads the file's size |
@@ -1265,7 +1294,7 @@ W, or twice W with `AGENTRY_BENCH_WORKING=2`.
 | 7 | An archived task's history opens in **≤ 100 ms** for the largest task, **≤ 10 ms** from the cache | about 60 ms (17 ms gunzip, 40 ms fold) | `GET /api/tasks/task-8` on the archived copy, a benchmark in `internal/web` |
 | 8 | An archive blob **≤ 25%** of its rows' JSON | 22.3% | the archiver's benchmark on the copy |
 | 9 | Knowledge stored **≤ 6%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file | build step 1's test on the copy |
-| 10 | `Store.mu` held **≤ 200 ms** per task archived or unarchived, the largest included | not measured | a benchmark of `Store.Archive` and `Store.Unarchive` on `task-8` |
+| 10 | `Store.mu` held **≤ 200 ms** per task archived or unarchived, the largest included | not measured; roughly: unarchive holds it for about 40 ms of `Refold` plus the insert of about 4.8 MB of rows, archive for a delete through `events_by_stream`; step 7 measures it | a benchmark of `Store.Archive` and `Store.Unarchive` on `task-8` |
 
 Targets 1, 2, 4 and 5 grow only with the working set and, slowly, with
 history (summaries, the `agents` and `workers` streams); the rest don't
@@ -1290,9 +1319,17 @@ of history once archiving bounds the state, and they need only task-21's
 state. The projections add one thing to section 2: the body's `tasks` and
 `archived` arrays are written one entry to a line (still one JSON value,
 since JSON allows a newline between elements), and the loader splits on
-newlines and decodes the entries on up to 8 goroutines. JSON keeps `nil`
-and empty apart for the equivalence test; gob stays the fallback if the
-parallel decode misses Target 1.
+newlines and decodes the entries on up to 8 goroutines: 0.22 to 0.24 s on
+8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps `nil` and empty
+apart for the equivalence test. The rule for leaving it, as in section 2:
+build step 2 times the one-entry-per-line JSON decode of a
+working-set-sized body on 1, 2 and 8 goroutines; if 8 goroutines take more
+than 0.34 s (0.5 s minus the fixed 0.16 s), the fallback is chosen there,
+before step 4 is built: gob over saved forms that record `nil` versus
+empty explicitly (a presence flag per slice or map), so equivalence test 1
+still passes on a gob round trip. If even that misses Target 1, the
+one-core figure, ≤ 0.75 s, is the limit, and the build asks the user
+before going further.
 
 **Archiving third.** The biggest piece: a schema migration, store methods
 that delete and restore rows, summaries in the state, the archived view
@@ -1310,8 +1347,8 @@ size or startup.
 | Snapshots, JSON decoded in parallel | startup down to the working set | saved forms, a writer, a loader, the fallbacks | build, steps 3 and 4 |
 | Archiving behind a gated delete | heap, disk and the full replay down to the working set | a migration, two store methods, summaries, reopening | build, steps 5 to 9 |
 | Erasing and redacting | privacy | two gated triggers, a rewrite path | build, step 10 |
-| gob snapshots | decodes 6 times faster than JSON | `nil` and empty merge, so `Equal` can't judge a round trip | deferred: only if parallel JSON misses Target 1 |
-| Checkpoints of `agents` and `workers` | the replay after an upgrade at 100 GB, from 27 s to about 2 s | a checkpoint event, and archiving two more streams before it | deferred: when Target 2 fails, at about 14 GB |
+| gob snapshots over saved forms with a presence flag per slice or map | decodes 6 times faster than JSON | plain gob merges `nil` and empty, so the forms must record which for `Equal` to judge a round trip | the fallback: chosen at build step 2 if 8 goroutines of JSON take more than 0.34 s |
+| Checkpoints of `agents` and `workers` | the replay after an upgrade at 100 GB, from 27 s to about 2 s | a checkpoint event, and archiving two more streams before it | deferred: when Target 2 fails, at about 13 GB |
 | Paging archived tasks in the list | the list's JSON (57 MB at 100 GB) | API and page paging | deferred: at about 10,000 archived tasks, 11 GB |
 | Blob collection | nothing yet: only a crash leaves a blob unnamed | marking and sweeping | deferred |
 | A bound on a knowledge file's length | brief size, not disk | a check when learning | the user's call (open question) |
@@ -1328,9 +1365,14 @@ carries its own tests. Step 1 needs nothing from task-21; steps 2 to 10
 need task-21's read model (`internal/current`, the store's model) merged,
 with the items in "What task-21 should leave room for" below. Benchmarks
 run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
-"Rerun the measurements"), never the live file.
+"Rerun the measurements"), never the live file. The Backlog story copied
+from this plan must link [docs/design/log-growth.md](docs/design/log-growth.md),
+since the steps cite section 2's equivalence tests and the task-21 items.
 
-1. **Knowledge as one hunk per version.** No task-21 dependency.
+1. **Knowledge as one hunk per version.** No task-21 dependency. It edits
+   the same roster `apply` in `internal/agents/agent.go` and
+   `internal/rules/rules.go` that task-21 rewrites; it doesn't depend on
+   task-21, but whichever lands second rebases.
    - Files: `internal/agents` (a `Patch` with `head`, `tail`, `middle`,
      `sha256`; `Diff(old, new)` and `Apply(old)`; the roster's apply and
      `FromEvents` take both shapes), `internal/hooks/handler.go`
@@ -1353,6 +1395,14 @@ run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
      the working set W or 2W), `internal/current/startup_bench_test.go`.
    - Proves: the synthetic log has the copy's mix (events per GB and bytes
      by type within 5%); prints today's startup and heap, case (a).
+   - Also times the one-entry-per-line JSON decode of a working-set-sized
+     body (128 MB) on 1, 2 and 8 goroutines, using section 1's throwaway
+     mirror structs. If 8 goroutines take more than 0.34 s (0.5 s minus the
+     fixed 0.16 s), choose the fallback here, before step 4 is built: gob
+     over saved forms that record `nil` versus empty with a presence flag
+     per slice or map, which must pass equivalence test 1 on a gob round
+     trip. If even that misses Target 1, the one-core ≤ 0.75 s is the
+     limit, and the build asks the user before going further.
    - Measures Targets 1 to 5 from here on; none passes yet.
 3. **Saved forms.** Depends on task-21; skip whatever task-21 already
    built (its item 1).
@@ -1397,7 +1447,7 @@ run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
      archived tasks; each reader skips an archived task without reading
      its stream.
    - Target 5's per-summary term.
-7. **The archiver.**
+7. **The archiver.** Depends on steps 4, 5 and 6.
    - Files: `internal/sharedfiles/blobs.go` (a put that syncs the file and
      its folder), `internal/store` (`Store.Archive`: under `Store.mu`, the
      rules' check, the marker and the delete in one transaction, rolled
@@ -1415,7 +1465,7 @@ run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
      mismatch (a test trigger) rolls back; an epic with an open story is
      not chosen; a snapshot whose anchor was archived falls back.
    - Targets 1, 2, 4 and 5 at 1 and 10 GB; Targets 8 and 10.
-8. **Opening an archived task.**
+8. **Opening an archived task.** Depends on step 7.
    - Files: `internal/store` (one function for a stream's whole history:
      the blob's rows up to `through`, then the live rows; every reader of
      a task's events uses it), `internal/web` (`showTask` returns the
@@ -1425,7 +1475,7 @@ run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
    - Proves: an archived task's detail equals its detail before archiving,
      but for `archived`; a second open is a cache hit.
    - Target 7.
-9. **Unarchiving and reopening.**
+9. **Unarchiving and reopening.** Depends on steps 7 and 8.
    - Files: `internal/store` (`Store.Unarchive`: under `Store.mu`, the rows
      back with their positions and `task.unarchived` in one transaction,
      the count checked, then `Refold` with the events below it),
@@ -1438,7 +1488,7 @@ run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
      snapshot's tail; archiving twice and reopening; the archiver can't
      delete restored rows.
    - Targets 1, 2 and 10 still hold.
-10. **Erasing a task and redacting a secret.**
+10. **Erasing a task and redacting a secret.** Depends on steps 5 and 9.
     - Files: `internal/store` (`Store.Erase`, `Store.Redact`, the update
       trigger and the delete trigger's second case, `secure_delete`),
       `internal/rules`, `internal/tasks` and `internal/agents`
