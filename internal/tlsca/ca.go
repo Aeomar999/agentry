@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/big"
 	"os"
@@ -163,10 +164,7 @@ func writeNew(path string, data []byte, mode os.FileMode) error {
 }
 
 func load(keyPath, certPath string) (*CA, error) {
-	if err := checkKeyFile(keyPath); err != nil {
-		return nil, err
-	}
-	keyBlock, err := readPEM(keyPath, "PRIVATE KEY")
+	keyBlock, err := readKey(keyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -195,23 +193,34 @@ func load(keyPath, certPath string) (*CA, error) {
 	return &CA{cert: cert, key: key}, nil
 }
 
-// checkKeyFile refuses a key a link could point anywhere, or that others may
-// read. Windows doesn't keep Unix permissions, so there only the link counts.
-func checkKeyFile(path string) error {
-	info, err := os.Lstat(path)
+// readKey reads the CA key's PEM block from the file it checks, refusing a
+// key a link could point anywhere, or that others may read. Windows doesn't
+// keep Unix permissions, so there only the link counts.
+func readKey(path string) ([]byte, error) {
+	f, err := openKey(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("%s is a symbolic link: the CA key must be a plain file", path)
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a plain file", path)
+		return nil, fmt.Errorf("%s is not a plain file", path)
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		return fmt.Errorf("%s may be read by others (%v): only its owner may (chmod 600)", path, info.Mode().Perm())
+		return nil, fmt.Errorf("%s may be read by others (%v): only its owner may (chmod 600)", path, info.Mode().Perm())
 	}
-	return nil
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	return decodePEM(path, data, "PRIVATE KEY")
+}
+
+func linkedKeyError(path string) error {
+	return fmt.Errorf("%s is a symbolic link: the CA key must be a plain file", path)
 }
 
 func readPEM(path, kind string) ([]byte, error) {
@@ -219,6 +228,10 @@ func readPEM(path, kind string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodePEM(path, data, kind)
+}
+
+func decodePEM(path string, data []byte, kind string) ([]byte, error) {
 	block, _ := pem.Decode(data)
 	if block == nil || block.Type != kind {
 		return nil, fmt.Errorf("%s: no %s in it", path, kind)

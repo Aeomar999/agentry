@@ -82,6 +82,18 @@ func TestAKeyThatIsALinkIsRefused(t *testing.T) {
 	}
 }
 
+func TestAKeyThatIsNotAFileIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(dir, keyFile))
+	os.Mkdir(filepath.Join(dir, keyFile), 0o700)
+	if _, err := Open(dir); err == nil || !strings.Contains(err.Error(), "not a plain file") {
+		t.Errorf("a folder for a key: %v", err)
+	}
+}
+
 func TestAHalfMadeOrMismatchedCAIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Open(dir); err != nil {
