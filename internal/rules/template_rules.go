@@ -35,7 +35,7 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	case !agents.ValidName(id):
 		// A template's id goes in URLs, as an agent's name goes in file
 		// names, and the built-in templates' ids have the same shape.
-		return "a template's id is lowercase letters, digits and dashes, starting with a letter: " + id
+		return "a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: " + id
 	}
 	if _, builtIn := agents.TemplateWithID(id); builtIn {
 		return "the built-in " + id + " template has that id"

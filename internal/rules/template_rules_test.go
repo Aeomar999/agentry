@@ -68,17 +68,17 @@ func TestATemplateNeedsATeam(t *testing.T) {
 }
 
 func TestATemplateCantTakeABuiltInID(t *testing.T) {
-	refusedSaying(t, savingTemplate(agents.Templates[0].ID, "Research", research()), "built-in")
-}
-
-func TestATemplateCantTakeTheResearchTemplatesID(t *testing.T) {
-	refusedSaying(t, savingTemplate("research", "Research", research()), "the built-in research template has that id")
+	for _, template := range agents.Templates {
+		t.Run(template.ID, func(t *testing.T) {
+			refusedSaying(t, savingTemplate(template.ID, "Research", research()), "the built-in "+template.ID+" template has that id")
+		})
+	}
 }
 
 func TestATemplateIDIsLowercaseLettersDigitsAndDashes(t *testing.T) {
-	for _, id := range []string{" research", "My Team", "Papers", "a/b"} {
+	for _, id := range []string{" research", "My Team", "Papers", "a/b", "papers-" + strings.Repeat("a", 25)} {
 		t.Run(id, func(t *testing.T) {
-			refusedSaying(t, savingTemplate(id, "Research", research()), "a template's id is lowercase letters, digits and dashes, starting with a letter: "+id)
+			refusedSaying(t, savingTemplate(id, "Research", research()), "a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: "+id)
 		})
 	}
 }
@@ -128,6 +128,32 @@ func TestATemplatesAgentNameMayBe28Characters(t *testing.T) {
 	members[1].Name = "reader-" + strings.Repeat("a", 21)
 	if reason := proposeTemplate(t, savingTemplate("papers", "Research", members)); reason != "" {
 		t.Errorf("a 28-character agent name was refused: %s", reason)
+	}
+}
+
+// A template whose names are as long as its rules allow is added twice,
+// through the agent rules: the second team's agents take a number and still
+// have valid names.
+func TestATemplateWithTheLongestNamesIsAddedTwice(t *testing.T) {
+	members := research()
+	members[0].Name = "lead-" + strings.Repeat("a", 23) // 28 characters
+	s, state := openSeededState(t)
+	if _, rejection, err := s.Propose(savingTemplate("papers", "Papers", members)); err != nil || rejection != nil {
+		t.Fatalf("saving: %v, %v", rejection, err)
+	}
+	saved, _ := state.Templates().WithID("papers")
+	for range 2 {
+		for _, p := range agents.AddTeam(saved.Template(), state.Roster(), you) {
+			if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+				t.Fatalf("adding %s: %v, %v", p.Text("name"), rejection, err)
+			}
+		}
+	}
+	if lead, ok := state.Roster().Coordinator("Papers 2"); !ok || lead.Name != members[0].Name+"-2" {
+		t.Errorf("the second team's lead: %+v", lead)
+	}
+	if made := len(state.Roster().Assignees("Papers 2")) + 1; made != len(members) {
+		t.Errorf("the second Papers team has %d agents, want %d", made, len(members))
 	}
 }
 
