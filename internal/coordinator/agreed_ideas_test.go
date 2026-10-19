@@ -238,4 +238,14 @@ func TestUnderNobodyDoubtedADuplicateIsNeverAccepted(t *testing.T) {
 	if kept != 3 {
 		t.Errorf("want the three ideas kept, got %d", kept)
 	}
+	// The loop leaves a duplicate alone, not tries it for the rules to refuse.
+	all, err := s.After(0, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range all {
+		if e.Type == events.ProposalRejected {
+			t.Errorf("Agentry tried something the rules refused, in %s: %s", e.Stream, e.Text("reason"))
+		}
+	}
 }
