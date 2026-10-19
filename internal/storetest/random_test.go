@@ -2,9 +2,11 @@ package storetest
 
 import (
 	"fmt"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -24,23 +26,24 @@ var (
 )
 
 // The small worlds the steps draw from, so they keep running into each
-// other: the same few tasks, agents, turns, tool calls and machines.
+// other: the same few tasks, agents, turns and machines.
 var (
 	taskIDs      = []string{"task-1", "task-2", "task-3", "task-4", "task-5", "task-6"}
 	agentNames   = []string{"tech-lead", "engineer", "reviewer", "tester", "designer"}
 	turnIDs      = []string{"turn-1", "turn-2", "turn-3", "turn-4", "turn-5", "turn-6"}
-	toolUses     = []string{"toolu_1", "toolu_2", "toolu_3"}
 	machineNames = []string{"laptop", "desktop", workers.Local}
 )
 
-// generator makes random proposals. A task step aims at what the task
-// holds (its next turn, its agent) as often as at anything else, and its
+// generator makes random proposals. A task step aims at what the task or
+// the roster holds (its next turn, its agent, its last action, the
+// roster's coordinator) as often as at anything else, and its
 // actor is often the wrong one, so many steps are refused and some get
 // deep into a task.
 type generator struct {
-	rand  *rand.Rand
-	state *current.State
-	codes []string // join codes invited so far, and one nobody made
+	rand    *rand.Rand
+	state   *current.State
+	codes   []string // join codes invited so far, and one nobody made
+	actions int      // action requests made so far, each with its own id
 }
 
 func pick[T any](g *generator, list ...T) T { return list[g.rand.IntN(len(list))] }
@@ -75,12 +78,43 @@ func (g *generator) turn(task *tasks.Task) string {
 	return pick(g, candidates...)
 }
 
+// action is the task's last action, any of its actions, or an id any task
+// may have used.
+func (g *generator) action(task *tasks.Task) string {
+	candidates := []string{actionID(g.rand.IntN(g.actions + 1))}
+	if len(task.Actions) > 0 {
+		candidates = append(candidates, task.Actions[len(task.Actions)-1].ID, pick(g, task.Actions...).ID)
+	}
+	return pick(g, candidates...)
+}
+
+func actionID(n int) string { return "toolu_" + strconv.Itoa(n) }
+
 // agent is the task's coordinator, the agent it was handed to, the one in
-// its open turn, or any.
+// its open turn, or any. Never "": no rule gets past an empty actor.
 func (g *generator) agent(task *tasks.Task) string {
 	candidates := []string{task.Coordinator, task.CurrentAgent(), pick(g, agentNames...)}
 	if task.Handoff != nil {
 		candidates = append(candidates, task.Handoff.To)
+	}
+	candidates = slices.DeleteFunc(candidates, func(name string) bool { return name == "" })
+	return pick(g, candidates...)
+}
+
+// coordinator is the roster's coordinator, or any agent.
+func (g *generator) coordinator() string {
+	candidates := []string{pick(g, agentNames...)}
+	if coordinator, ok := g.state.Roster().Coordinator(""); ok {
+		candidates = append(candidates, coordinator.Name)
+	}
+	return pick(g, candidates...)
+}
+
+// assignee is an agent of the roster that takes work, or any.
+func (g *generator) assignee() string {
+	candidates := []string{pick(g, agentNames...)}
+	if assignees := g.state.Roster().Assignees(agents.DefaultTeam); len(assignees) > 0 {
+		candidates = append(candidates, pick(g, assignees...).Name)
 	}
 	return pick(g, candidates...)
 }
@@ -92,7 +126,7 @@ func (g *generator) agentOf(task *tasks.Task) events.Actor {
 func (g *generator) createTask() events.Proposal {
 	return g.onTask(func(*tasks.Task) events.Proposal {
 		return events.Proposal{Actor: pick(g, you, you, g.agentActor()), Type: events.TaskCreated,
-			Data: map[string]any{"title": "Random task", "repo": "/src/app", "coordinator": pick(g, agentNames...)}}
+			Data: map[string]any{"title": "Random task", "repo": "/src/app", "coordinator": g.coordinator()}}
 	})
 }
 
@@ -106,7 +140,7 @@ func (g *generator) worktreeReady() events.Proposal {
 func (g *generator) assign() events.Proposal {
 	return g.onTask(func(task *tasks.Task) events.Proposal {
 		return events.Proposal{Actor: g.agentOf(task), Type: events.TaskAssigned,
-			Data: map[string]any{"agent": pick(g, agentNames...), "instructions": "do it"}}
+			Data: map[string]any{"agent": g.assignee(), "instructions": "do it"}}
 	})
 }
 
@@ -127,21 +161,22 @@ func (g *generator) endTurn() events.Proposal {
 
 func (g *generator) requestAction() events.Proposal {
 	return g.onTask(func(task *tasks.Task) events.Proposal {
-		return events.Proposal{Actor: g.agentOf(task), Type: events.ActionRequested, Correlation: pick(g, toolUses...),
+		g.actions++
+		return events.Proposal{Actor: g.agentOf(task), Type: events.ActionRequested, Correlation: actionID(g.actions),
 			Data: map[string]any{"tool": "Bash", "command": "ls"}}
 	})
 }
 
 func (g *generator) decideAction() events.Proposal {
-	return g.onTask(func(*tasks.Task) events.Proposal {
-		return events.Proposal{Actor: pick(g, policy, you, g.anyActor()), Correlation: pick(g, toolUses...),
+	return g.onTask(func(task *tasks.Task) events.Proposal {
+		return events.Proposal{Actor: pick(g, policy, you, g.anyActor()), Correlation: g.action(task),
 			Type: pick(g, events.ActionApproved, events.ActionDenied, events.ActionAsked), Data: map[string]any{"reason": "random"}}
 	})
 }
 
 func (g *generator) finishAction() events.Proposal {
-	return g.onTask(func(*tasks.Task) events.Proposal {
-		return events.Proposal{Actor: pick(g, worker, g.anyActor()), Type: events.ActionResult, Correlation: pick(g, toolUses...)}
+	return g.onTask(func(task *tasks.Task) events.Proposal {
+		return events.Proposal{Actor: pick(g, worker, g.anyActor()), Type: events.ActionResult, Correlation: g.action(task)}
 	})
 }
 
@@ -215,7 +250,7 @@ func (g *generator) removeWorker() events.Proposal {
 func (g *generator) next() events.Proposal {
 	steps := []func() events.Proposal{
 		g.createTask, g.worktreeReady, g.assign, g.assign, g.startTurn, g.startTurn, g.endTurn, g.endTurn,
-		g.requestAction, g.decideAction, g.finishAction, g.ask, g.answer, g.finishTask,
+		g.requestAction, g.requestAction, g.decideAction, g.decideAction, g.finishAction, g.finishAction, g.ask, g.answer, g.finishTask,
 		g.learn, g.changeAgent, g.renameAgent, g.removeAgent,
 		g.inviteWorker, g.joinWorker, g.connectWorker, g.removeWorker,
 	}
@@ -249,14 +284,17 @@ func TestRandomProposalsKeepTheStateEqualToAReplay(t *testing.T) {
 	}
 	g := &generator{rand: rand.New(rand.NewPCG(seed, seed)), state: state, codes: []string{"a-code-nobody-made"}}
 	accepted, refused := 0, 0
+	proposedOf, acceptedOf := map[events.Type]int{}, map[events.Type]int{}
 	for i := range steps {
 		p := g.next()
+		proposedOf[p.Type]++
 		_, rejection, err := s.Propose(p)
 		if err != nil {
 			t.Fatalf("seed %d, step %d: %v", seed, i+1, err)
 		}
 		if rejection == nil {
 			accepted++
+			acceptedOf[p.Type]++
 		} else {
 			refused++
 		}
@@ -267,9 +305,15 @@ func TestRandomProposalsKeepTheStateEqualToAReplay(t *testing.T) {
 			t.Fatalf("seed %d, step %d (%s by %s, %s): %v", seed, i+1, p.Type, p.Actor, outcome(rejection), err)
 		}
 	}
-	t.Logf("seed %d: %d accepted, %d refused", seed, accepted, refused)
+	t.Logf("seed %d: %d accepted, %d refused; accepted by type %v", seed, accepted, refused, acceptedOf)
 	if accepted < steps/10 || refused < steps/10 {
 		t.Errorf("seed %d: %d accepted, %d refused; want at least %d of each", seed, accepted, refused, steps/10)
+	}
+	// The total hides a type that never gets past its rules: busy types fill it.
+	for _, kind := range slices.Sorted(maps.Keys(proposedOf)) {
+		if acceptedOf[kind] == 0 {
+			t.Errorf("seed %d: none of %d %s proposals accepted", seed, proposedOf[kind], kind)
+		}
 	}
 }
 

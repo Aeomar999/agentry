@@ -32,27 +32,33 @@ func TestReadersRacePropose(t *testing.T) {
 					return
 				default:
 				}
-				readEverything(t, s, state)
+				if !readEverything(t, s, state) {
+					return
+				}
 			}
 		})
 	}
+	// Before the store closes in cleanup, even when t.Fatal stops the test.
+	defer func() { close(done); readers.Wait() }()
 	g := &generator{rand: rand.New(rand.NewPCG(7, 7)), state: state, codes: []string{"a-code-nobody-made"}}
 	for range 300 {
 		if _, _, err := s.Propose(g.next()); err != nil {
 			t.Fatal(err)
 		}
 	}
-	close(done)
-	readers.Wait()
 }
 
-func readEverything(t *testing.T, s *store.Store, state *current.State) {
+// readEverything reports whether the reads passed: a reader that failed
+// once stops, so it doesn't log the same failure on every pass.
+func readEverything(t *testing.T, s *store.Store, state *current.State) bool {
 	logAt := s.LastPosition()
 	if position := state.Position(); position < logAt {
 		t.Errorf("the log is at %d but the state only at %d", logAt, position)
+		return false
 	}
 	if _, err := s.After(logAt-5, 10); err != nil {
 		t.Error(err)
+		return false
 	}
 	for _, task := range state.Tasks() {
 		_ = len(task.Trail) + len(task.Turns)
@@ -62,4 +68,5 @@ func readEverything(t *testing.T, s *store.Store, state *current.State) {
 	}
 	_ = len(state.Roster()) + len(state.Workers().Workers) + len(state.Connections().Connections)
 	_ = state.Broken(events.AgentsStream)
+	return true
 }
