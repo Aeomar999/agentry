@@ -2,46 +2,8 @@ import { describe, expect, test } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { BoardColumn, TaskSummary } from "@/api/types";
+import { task } from "@/api/tasks.fixtures";
 import { TaskBoard } from "./TaskBoard";
-
-const task = (id: string, column: BoardColumn): TaskSummary => ({
-  id,
-  title: `Title of ${id}`,
-  repo: "/src/app",
-  status: "working",
-  currentAgent: "",
-  stage: "",
-  column,
-  canShip: true,
-  pushed: false,
-  doneByYou: false,
-  turns: 1,
-  needsYou: "",
-  hasQuestion: false,
-  labels: [],
-  budget: 0,
-  tokensUsed: 0,
-  overBudget: false,
-  maxTurns: 0,
-  turnsSinceAnswer: 0,
-  atTurnLimit: false,
-  stoppedAt: "",
-  rank: 1,
-  parked: "",
-  parent: "",
-  waitingOn: "",
-  kind: "",
-  epic: "",
-  madeFrom: "",
-  after: [],
-  blockedBy: [],
-  queued: false,
-  stories: 0,
-  storiesDone: 0,
-  closing: "",
-  createdAt: new Date().toISOString(),
-  lastActiveAt: new Date().toISOString(),
-});
 
 function board(columns: BoardColumn[], tasks: TaskSummary[] = []) {
   render(

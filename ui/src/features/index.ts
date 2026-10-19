@@ -1,7 +1,7 @@
 import { ReactNode, useMemo } from "react";
 import type { NavigateFunction, RouteObject } from "react-router-dom";
 import type { PaletteItem } from "@/components/organisms/CommandPalette";
-import type { BoardColumn, FeaturesReply } from "@/api/types";
+import type { BoardColumn, FeaturesReply, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
 import { ideas } from "./ideas";
@@ -50,6 +50,13 @@ export function boardColumns(reply: FeaturesReply | undefined): BoardColumn[] {
   if (!reply) return EVERY_COLUMN.filter((column) => column !== "shipping");
   if (!reply.board) return EVERY_COLUMN;
   return reply.board.columns.filter((column) => column in COLUMN_TITLES);
+}
+
+// withTheirCards adds back, in the board's order, any column a task is in:
+// a manifest still loading, or listed before a task moved, never hides a
+// card.
+export function withTheirCards(columns: BoardColumn[], tasks: TaskSummary[]): BoardColumn[] {
+  return EVERY_COLUMN.filter((column) => columns.includes(column) || tasks.some((task) => task.column === column));
 }
 
 // visibleFeatures is the FEATURES the manifest says show, in FEATURES' order.
