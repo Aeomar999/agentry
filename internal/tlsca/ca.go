@@ -147,7 +147,13 @@ func (ca *CA) DER() []byte {
 // Fingerprint is the CA certificate's SHA-256, as browsers show it:
 // upper-case hex bytes joined by colons.
 func (ca *CA) Fingerprint() string {
-	sum := sha256.Sum256(ca.cert.Raw)
+	return FingerprintOf(ca.cert.Raw)
+}
+
+// FingerprintOf is a certificate's SHA-256 from its DER bytes, written as
+// Fingerprint writes it, for a client to check a CA it was handed.
+func FingerprintOf(der []byte) string {
+	sum := sha256.Sum256(der)
 	parts := make([]string, len(sum))
 	for i, b := range sum {
 		parts[i] = fmt.Sprintf("%02X", b)
