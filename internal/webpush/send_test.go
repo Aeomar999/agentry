@@ -260,3 +260,24 @@ func TestASendStopsWithItsContext(t *testing.T) {
 		t.Errorf("want context.Canceled and no push, got %v", err)
 	}
 }
+
+// The endpoint is the device's address at its push service, so an error
+// that may be logged must not quote it.
+func TestATransportErrorLeavesTheEndpointOut(t *testing.T) {
+	service := newPushService(t, http.StatusCreated)
+	service.Close()
+	store := open(t, filepath.Join(t.TempDir(), File))
+	phone, _ := receiver(t, service.URL+"/send/a-secret-device")
+	late, cancel := context.WithDeadline(context.Background(), now)
+	defer cancel()
+	sender := NewSender(store, service.Client(), "https://agentry.example")
+
+	err := sender.Send(context.Background(), phone, []byte("hello"))
+	if err == nil || strings.Contains(err.Error(), "a-secret-device") {
+		t.Errorf("an unreachable push service: want an error without the endpoint, got %v", err)
+	}
+	err = sender.Send(late, phone, []byte("hello"))
+	if !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "a-secret-device") {
+		t.Errorf("a passed deadline: want context.DeadlineExceeded without the endpoint, got %v", err)
+	}
+}

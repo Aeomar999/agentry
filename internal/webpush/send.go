@@ -80,10 +80,21 @@ func (s *Sender) Send(ctx context.Context, sub Subscription, message []byte) err
 	request.Header.Set("Authorization", authorization)
 	response, err := s.client.Do(request)
 	if err != nil {
-		return err
+		return unaddressed(err)
 	}
 	defer response.Body.Close()
 	return s.answered(response, sub.Endpoint)
+}
+
+// unaddressed is err from sending a push, without the endpoint that a
+// *url.Error quotes: it is the device's address at its push service, and
+// the error may be logged. What went wrong stays, for errors.Is.
+func unaddressed(err error) error {
+	var failed *url.Error
+	if errors.As(err, &failed) {
+		return fmt.Errorf("the push wasn't sent: %s: %w", failed.Op, failed.Err)
+	}
+	return err
 }
 
 // drain reads what is left of a reply, up to a limit, so its connection
