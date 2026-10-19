@@ -95,7 +95,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
             <Field
               label="Token budget"
               htmlFor="idea-budget"
-              hint="Started at once, it spends tokens straight away. At this many it stops and asks you to raise it or wrap up."
+              hint="Accept and start spends tokens straight away. At this many it stops and asks you to raise it or wrap up."
             >
               <LimitSelect
                 id="idea-budget"
