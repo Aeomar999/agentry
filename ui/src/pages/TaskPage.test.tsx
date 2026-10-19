@@ -93,6 +93,16 @@ describe("TaskPage for an archived task", () => {
     expect(button("Share files")).toBeNull();
     expect(screen.queryByTitle("Stop sharing it")).toBeNull();
   });
+
+  // Only a done task is archived, and LimitEditor shows a done task's
+  // limits without editing them.
+  test("shows its tokens and turns, and changes neither", () => {
+    page(detail({ archived: true, archivedAt: ARCHIVED_AT, budget: 5000, tokensUsed: 1200, maxTurns: 8 }));
+    expect(screen.getByText("Tokens")).toBeTruthy();
+    expect(screen.getByText("Turns since your answer")).toBeTruthy();
+    expect(button("Change the budget")).toBeNull();
+    expect(button("Change the max turns")).toBeNull();
+  });
 });
 
 describe("TaskPage for a live task", () => {
@@ -113,5 +123,11 @@ describe("TaskPage for a live task", () => {
     page(detail({ shared: [{ name: "notes.md", size: 1, by: "you", at: ARCHIVED_AT }] }), "files");
     expect(button("Share files")).toBeTruthy();
     expect(screen.getByTitle("Stop sharing it")).toBeTruthy();
+  });
+
+  test("can change its budget and max turns while it isn't done", () => {
+    page(detail({ status: "working", budget: 5000, tokensUsed: 1200, maxTurns: 8 }));
+    expect(button("Change the budget")).toBeTruthy();
+    expect(button("Change the max turns")).toBeTruthy();
   });
 });
