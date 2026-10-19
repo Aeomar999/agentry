@@ -217,6 +217,26 @@ func TestTheFrontDoorSendsNoOneWhereTheCertificateDoesNotReach(t *testing.T) {
 	}
 }
 
+// A Host whose port isn't a port number doesn't reach the redirect or the
+// trust page's links: they use the port the request arrived on instead.
+func TestTheFrontDoorTakesOnlyAPortNumberFromTheHost(t *testing.T) {
+	ca, _ := testCA(t)
+	handler := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), doorOf(ca, "192.168.1.160"))
+	for _, host := range []string{"192.168.1.160:1@evil.example", "192.168.1.160:80ab", "192.168.1.160:"} {
+		for _, path := range []string{"/tasks/task-1", "/trust/"} {
+			r := httptest.NewRequest("GET", path, nil)
+			r.Host, r.RemoteAddr = host, "192.168.1.20:5000"
+			r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, net.TCPAddrFromAddrPort(netip.MustParseAddrPort("192.168.1.160:7800"))))
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, r)
+			out := w.Header().Get("Location") + w.Body.String()
+			if !strings.Contains(out, "https://192.168.1.160:7800/") || strings.Contains(out, "evil") || strings.Contains(out, "80ab") || strings.Contains(out, "160:/") {
+				t.Errorf("at %s%s: %d, Location %q\n%s", host, path, w.Code, w.Header().Get("Location"), w.Body)
+			}
+		}
+	}
+}
+
 // downloadTypes are the trust page's downloads' content types, by extension.
 var downloadTypes = map[string]string{".crt": "application/x-x509-ca-cert", ".pem": "application/x-pem-file",
 	".mobileconfig": "application/x-apple-aspen-config"}

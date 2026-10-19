@@ -53,7 +53,7 @@ type trustView struct {
 // uncovered, a host the certificate doesn't name.
 func (door trust) page(w http.ResponseWriter, r *http.Request, status int, uncovered string) {
 	view := trustView{Name: door.ca.Name(), Fingerprint: door.ca.Fingerprint(),
-		Addresses: door.httpsAddresses(r.Host), Uncovered: uncovered, Downloads: trustPrefix, Profile: profileName}
+		Addresses: door.httpsAddresses(httpsHost(r)), Uncovered: uncovered, Downloads: trustPrefix, Profile: profileName}
 	var page bytes.Buffer
 	if err := trustPage.Execute(&page, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

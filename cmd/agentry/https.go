@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,7 +65,7 @@ func frontDoor(next http.Handler, door trust) http.Handler {
 			door.page(w, r, http.StatusMisdirectedRequest, r.Host)
 			return
 		}
-		http.Redirect(w, r, "https://"+r.Host+r.URL.RequestURI(), http.StatusPermanentRedirect)
+		http.Redirect(w, r, "https://"+httpsHost(r)+r.URL.RequestURI(), http.StatusPermanentRedirect)
 	})
 	return mux
 }
@@ -84,6 +85,36 @@ func hostOf(hostPort string) string {
 	return strings.Trim(hostPort, "[]")
 }
 
+// httpsHost is the host and port to send a request on to over https: the
+// host it asked at, and the port it asked at when that is a port number,
+// else the port it arrived on. Nothing else in Host reaches a link.
+func httpsHost(r *http.Request) string {
+	host := hostOf(r.Host)
+	_, port, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		port = "" // Host has none
+	} else if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+		port = ""
+		if local := arrivedOn(r); local != nil {
+			_, port, _ = net.SplitHostPort(local.String())
+		}
+	}
+	switch {
+	case port != "":
+		return net.JoinHostPort(host, port)
+	case strings.Contains(host, ":"):
+		return "[" + host + "]" // IPv6
+	default:
+		return host
+	}
+}
+
+// arrivedOn is the local address a request arrived on, or nil.
+func arrivedOn(r *http.Request) net.Addr {
+	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	return local
+}
+
 // fromThisMachine is a request this machine sent: from loopback, or from
 // the very address it arrived on.
 func fromThisMachine(r *http.Request) bool {
@@ -94,12 +125,12 @@ func fromThisMachine(r *http.Request) bool {
 	if remote.IsLoopback() {
 		return true
 	}
-	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	local := arrivedOn(r)
 	if local == nil {
 		return false
 	}
-	arrivedOn, ok := ipOf(local.String())
-	return ok && remote == arrivedOn
+	arrivedOnIP, ok := ipOf(local.String())
+	return ok && remote == arrivedOnIP
 }
 
 // ipOf is the IP of a host:port address, IPv4 in IPv6 unmapped.
