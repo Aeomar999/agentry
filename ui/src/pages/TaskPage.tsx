@@ -416,6 +416,8 @@ export function TaskPage() {
                 row={picked}
                 now={now}
                 loading={log.loading && !log.error}
+                // With no events read, the error is the tab's; once some are, it is the foot's line.
+                error={log.events.length ? undefined : log.error}
                 foot={logFoot}
                 onTurn={(id) => go({ tab: "activity", turn: id, show }, Boolean(id))}
                 onShow={(next) => go({ tab: "activity", turn, show: next })}

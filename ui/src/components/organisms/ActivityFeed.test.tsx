@@ -206,6 +206,15 @@ describe("ActivityFeed", () => {
       expect(retry).toHaveBeenCalledOnce();
     });
 
+    test("an error with no events read: the alert alone, with no empty state and no foot", () => {
+      const foot = <p>Couldn't read the events: 502 Bad Gateway</p>;
+      feed({ items: [], error: "GET /api/tasks/task-40/events: 502 Bad Gateway", foot });
+      expect(screen.getByRole("alert").textContent).toContain("Couldn't load the activity");
+      expect(screen.queryByText("Nothing here yet")).toBeNull();
+      expect(screen.queryByText(/Couldn't read the events/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    });
+
     test("a turn waiting for the usage limit: its band says so, and the row says until when", () => {
       const band = ITEMS[10];
       const items = [

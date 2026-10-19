@@ -43,7 +43,7 @@ interface ActivityFeedProps {
   show: Show;
   row: string; // the key of the row you came to see, picked out; "" for none
   now: Now | null; // null when nothing is happening
-  foot?: ReactNode; // under the oldest row: a way to read earlier ones
+  foot?: ReactNode; // under the oldest row: a way to read earlier ones; none with an error
   onTurn: (turn: string) => void;
   onShow: (show: Show) => void;
   loading?: boolean; // the task, or its newest events, aren't here yet
@@ -161,7 +161,7 @@ export function ActivityFeed(props: ActivityFeedProps) {
               ))}
             </ol>
           )}
-          {foot}
+          {!error && foot}
         </div>
         {away && (
           <button
