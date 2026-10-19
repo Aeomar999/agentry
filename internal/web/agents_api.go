@@ -269,6 +269,7 @@ func (s *Server) addProfilesFor(w http.ResponseWriter, team string, missing []st
 			return false
 		}
 	}
+	// "" means the policy in force; Live's text check still refuses a hand edit that isn't reloaded.
 	if seen == "" {
 		seen = s.config.Policy.Current().Hash()
 	}
