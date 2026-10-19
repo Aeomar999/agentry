@@ -248,6 +248,14 @@ export interface ServerConfig {
   canAddWorkers: boolean;
   policyProblem: boolean; // policy.toml has a mistake; the Policy page says what
   missingProfiles: Record<string, string[]>; // profiles agents have that policy.toml lacks, with those agents
+  trust?: Trust; // where to trust the server's own CA, when the page is served with it (-https)
+}
+
+// Where a device trusts the server's own CA before it opens an address the
+// server serves with it (-https), without the token (internal/web/addresses.go).
+export interface Trust {
+  url: string; // the trust page, <address>/trust/
+  fingerprint: string; // the CA's SHA-256, as AB:CD:…, as `agentry ca` shows it
 }
 
 // A machine, besides the one Agentry runs on, that agents can run on.
@@ -369,7 +377,7 @@ export interface SigninCode {
   code: string; // XXXX-XXXX
   expiresAt: string;
   expiresIn: number; // seconds, so a browser clock that's off doesn't matter
-  addresses: { url: string; label: string }[];
+  addresses: { url: string; label: string; trust?: Trust }[]; // trust: where the device trusts the server's own CA first
   address: string; // the address this page came from, the one to show first
 }
 
