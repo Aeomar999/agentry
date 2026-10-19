@@ -79,6 +79,7 @@ type savedState struct {
 	Workers     workers.Saved
 	Connections connections.Saved
 	Settings    settings.Settings
+	Templates   agents.UserTemplates
 	Prefixes    map[string]Unknown
 	Types       map[events.Type]Unknown
 	Erased      map[string]tasks.Erasure
@@ -200,7 +201,7 @@ func (s *State) saved() savedState {
 		Position: s.position, Streams: s.streams, Created: placesOf(s.created), TasksMade: s.tasksMade,
 		OwnedOrder: ownedOrder, Broken: slices.Sorted(maps.Keys(s.broken)), Archived: s.archived, Erased: s.erased,
 		Roster: s.roster.Save(), Workers: s.workers.Save(), Connections: s.connections.Save(), Settings: s.settings,
-		Prefixes: s.skipped.prefixes, Types: s.skipped.types,
+		Templates: s.templates, Prefixes: s.skipped.prefixes, Types: s.skipped.types,
 	}
 }
 
@@ -342,6 +343,9 @@ func (s *State) decode(body []byte) (broken []string, err error) {
 	}
 	if !isBroken[events.SettingsStream] {
 		s.settings = saved.Settings
+	}
+	if !isBroken[events.TemplatesStream] {
+		s.templates = saved.Templates
 	}
 	s.skipped = tally{prefixes: saved.Prefixes, types: saved.Types}
 	return saved.Broken, nil
