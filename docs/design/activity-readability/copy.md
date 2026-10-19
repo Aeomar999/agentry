@@ -201,6 +201,7 @@ The count can't be 1: commands fold at 3 lines and everything else later, so onl
 | Language label, top right | `{language}` as written after the fence, lowercase: `bash`, `ts`, `go` | | 10, then truncate | A fence with no language shows nothing |
 | Copy button | (icon) | `Copy code` | | *Changed* from `Copy`: verb and object. A tooltip shows the same |
 | After copying | (check icon, 1.5s) | `Copied`, also in a polite live region | | Today's word (`CodeFence`, `CommandLine`) |
+| Body | the code, coloured once on screen | | folded at 12 lines | `Show all · {n} lines` with `{kind}` `code` |
 | Copy fails (plain http, no clipboard) | (nothing changes) | | | As `CodeFence` today: the text can still be selected |
 | Monaco fails | (nothing: plain mono stays) | | | No message, by design |
 
@@ -210,12 +211,12 @@ Commands have no Copy button, by design.
 
 | Kind | Shows | Accessible name | Notes |
 |---|---|---|---|
-| External (`https://`, `http://`, `mailto:`) | its label, underlined, then ↗ | `{label} (opens in a new tab)` | The ↗ icon is `aria-hidden`; the words are sr-only text after the label |
+| External (`https://`, `http://`, `mailto:`, and a host written as `//host`) | its label, underlined, then ↗ | `{label} (opens in a new tab)` | The ↗ icon is `aria-hidden`; the words are sr-only text after the label |
 | Repo file | its label (mono when it's a path), ↗ | `{label} (opens in a new tab)` | Opens the Workspace |
 | Task id the board knows, with its title | `task-21`, mono, no ↗; `title` tooltip: the task's title, `Fix the chat links` | `task-21, {title}` → "task-21, Fix the chat links" | Same tab. The title comes from the live task list (no new fetch). Spec decision 8 |
 | Task id the board knows, no title yet | `task-21`, mono, no ↗, no tooltip | `task-21` | |
 | Commit of the task | `3f2a9c1`, mono, ↗ | `commit 3f2a9c1 (opens in a new tab)` | *Added* `commit`: a bare hash says nothing out of context, and screen readers read it letter by letter |
-| Any other SHA, unknown task id | plain code | | Not a link |
+| Any other SHA, unknown task id | as written: plain text, or code when in backticks | | Not a link |
 | In-page anchor (`#strings`) | its label, link colour, underlined, no ↗ | `{label}` | Same page, as today |
 | `javascript:`, `data:` and other unsafe links | the label as plain text | | No hint, no warning: it reads as a sentence |
 
@@ -262,7 +263,7 @@ The footer is the button that opens the turn.
 | A step that led to a turn | `Led to` | Today |
 | A step said from a turn | `From` | Today |
 | Turn | `{turn}` | Today |
-| Agent | `{agent}` | Today, after the turn id, at every width. Truncates at 72px on a phone (with an ellipsis), to leave room for the badge; the full name is in the footer's accessible name |
+| Agent | `{agent}` | Today, after the turn id, at every width. On a phone it shrinks to fit, at most 72px (with an ellipsis), so the badge and `Activity ›` keep their full width (spec decision 11); the full name is in the footer's accessible name |
 | Status | badge: `running`, `issue` | Today (no badge once ended). Kept on a phone too |
 | Duration | `{duration}`, only once ended (a running turn shows the badge and the action count instead) | Today |
 | Actions | `{n} actions` | `1 action`, `0 actions`. Today |
@@ -335,8 +336,8 @@ Checked against [activity-mobile.svg](activity-mobile.svg) and the phone half of
 | Code language label | yes, 10 characters max | truncate past 10 |
 | Handoffs top line | wraps to two lines for long names | none: wrapping is fine here; the whole line is the button |
 | Handoffs card header | yes: `product-designer → engineer  06:15`, one line, never wraps: 18 + 96 + 16 + 18 + 96 + 8 + 33 ≈ 285px of 334 | names truncate at 96px each; full names in the card's `aria-label` |
-| Handoffs footer, ended | yes: `Led to turn-12 · product-designer · Activity ›` ≈ 42 (`Led to `) + 46 (`turn-12`) + 13 + 72 (agent, truncated) + gap + 56 (`Activity ›`) ≈ 241px of the card's 310 inside its padding (334 card at 390, less the 24px timeline gutter, less 12px padding each side) | **Shortened**: `Led to {turn} · {agent} · Activity ›`; duration, counts and tokens go |
-| Handoffs footer, running | yes, just: `Led to turn-12 · product-designer · running · Activity ›` ≈ 42 + 46 + 13 + 72 (agent, truncated) + 13 + 58 (`RUNNING` badge) + 8 gap + 56 ≈ 308px of 310. With `turn-6` ≈ 301px, as drawn in handoffs.svg. Sizes from the wireframe: footer text 11.5px, mono 11px ≈ 6.6px a character | **Shortened**: `Led to {turn} · {agent} · {status} · Activity ›`; the badge stays, the agent truncates at 72px (was 96). `issue` is narrower than `running`. A three-digit turn id (`turn-100`) is about 5px over: see [Questions](#questions-for-the-designer) |
+| Handoffs footer, ended | yes: `Led to turn-12 · product-designer · Activity ›` ≈ 42 (`Led to `) + 46 (`turn-12`) + 13 + 72 (agent, at most) + gap + 56 (`Activity ›`) ≈ 241px of the card's 310 inside its padding (334 card at 390, less the 24px timeline gutter, less 12px padding each side) | **Shortened**: `Led to {turn} · {agent} · Activity ›`; duration, counts and tokens go; the agent shrinks to fit, at most 72px |
+| Handoffs footer, running | yes: `Led to turn-12 · product-designer · running · Activity ›` ≈ 42 + 46 + 13 + 72 (agent, at most) + 13 + 58 (`RUNNING` badge) + 8 gap + 56 ≈ 308px of 310. With `turn-6` ≈ 301px, as drawn in handoffs.svg. With `turn-100` and above the agent gives up the few pixels the longer id needs, so the line still fits. Sizes from the wireframe: footer text 11.5px, mono 11px ≈ 6.6px a character | **Shortened**: `Led to {turn} · {agent} · {status} · Activity ›`; the badge and `Activity ›` stay whole; the agent shrinks to fit, at most 72px (was 96; spec decision 11). `issue` is narrower than `running` |
 | Error next step | wraps to two lines in the centred message | none |
 | Error, empty and loading texts | yes, they wrap in the centred `EmptyState` | none |
 | Note rows | one line, truncated | none (as today) |
@@ -345,11 +346,12 @@ Shortened for the phone: only the Handoffs footer, which keeps the turn, the age
 
 ## Questions for the designer
 
-1. **The running phone footer at turn-100 and up.** `Led to turn-100 · {agent} · running · Activity ›` is about 5px wider than the 310px inside a 390 card when the agent fills its 72px. Suggest the agent shrinks to fit (`min-width: 0`, ellipsis, at most 72px) rather than a fixed 72px, so the line never wraps; the words stay the same. Your call; until then the build can use the fixed 72px, which fits up to `turn-99`.
+None open.
 
-Answered (turn 6, in spec decision 8, now in the tables above):
+Answered (turn 6, in spec decision 8, and turn 18, in spec decision 11, now in the tables above):
 
 1. ~~Role repeating the name~~: drop it; the team still shows. See [Roles](#roles).
 2. ~~Task-id links' titles~~: yes, tooltip and accessible name when the board has the title. See [Links](#links).
 3. ~~The error's next step~~: yes, one muted line. See [States](#states).
 4. ~~The you band on Handoffs~~: the card says `you`, lowercase. See [Card](#card).
+5. ~~The running phone footer at turn-100 and up~~: the agent's name shrinks to fit, at most 72px (`min-width: 0`, ellipsis); the badge and `Activity ›` never shrink, so `turn-100` and above fit. No words change. See [Card footer](#card-footer) and [Phone](#phone-390px).
