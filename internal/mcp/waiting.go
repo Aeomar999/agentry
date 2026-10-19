@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/waitlist"
 )
 
 // What waits for you, from any task, as one line each (a feature's lines as
@@ -26,25 +24,27 @@ import (
 // "offline" (a machine), or a feature's own.
 type Waiting = features.Waiting
 
-// WaitingFor is everything waiting for you now, oldest first, then what
-// waits of each feature in list.
-func WaitingFor(agentry client.Client, list []features.Feature) ([]Waiting, error) {
-	var questions []question
-	if err := agentry.Call("GET", "/api/questions", nil, &questions); err != nil {
+// WaitingFor is everything waiting for you now, as GET /api/waiting lists
+// it for a session outside any repo.
+func WaitingFor(agentry client.Client) ([]Waiting, error) {
+	return WaitingIn(agentry, "")
+}
+
+// WaitingIn is what GET /api/waiting lists for a session in repo ("" when
+// not known): the core's entries oldest first, then each feature's.
+func WaitingIn(agentry client.Client, repo string) ([]Waiting, error) {
+	var all []Waiting
+	if err := agentry.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all); err != nil {
 		return nil, err
 	}
-	var all []Waiting
-	for _, q := range questions {
-		all = append(all, waitlist.Entry(q.Question))
-	}
-	return append(all, featuresWaiting(agentry, "")...), nil
+	return all, nil
 }
 
 // News is everything a waiter compares with what it saw before: what waits
 // for you, every task that has finished, each task's coordinator's latest
 // word to you, and the machines offline.
-func News(agentry client.Client, list []features.Feature) ([]Waiting, error) {
-	all, err := WaitingFor(agentry, list)
+func News(agentry client.Client) ([]Waiting, error) {
+	all, err := WaitingFor(agentry)
 	if err != nil {
 		return nil, err
 	}
@@ -82,11 +82,11 @@ func News(agentry client.Client, list []features.Feature) ([]Waiting, error) {
 // WaitForNew returns once there is news that isn't in seen, with all that
 // is new; a finished task comes with its summary. It follows the log, so
 // it hears at once.
-func WaitForNew(ctx context.Context, agentry client.Client, list []features.Feature, seen map[string]bool) ([]Waiting, error) {
+func WaitForNew(ctx context.Context, agentry client.Client, seen map[string]bool) ([]Waiting, error) {
 	agentry.Timeout = 40 * time.Second // the server answers a wait within 25 seconds
 	var position int64
 	for {
-		all, err := News(agentry, list)
+		all, err := News(agentry)
 		if err != nil {
 			return nil, err
 		}
@@ -108,17 +108,6 @@ func WaitForNew(ctx context.Context, agentry client.Client, list []features.Feat
 			return nil, ctx.Err()
 		}
 	}
-}
-
-// featuresWaiting is what the features say waits for you, about repo (""
-// when not known), as GET /api/waiting lists it after the core's entries.
-// What can't be read is left out, not an error.
-func featuresWaiting(agentry client.Client, repo string) []Waiting {
-	var all []Waiting
-	if agentry.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all) != nil {
-		return nil
-	}
-	return slices.DeleteFunc(all, func(w Waiting) bool { return w.Kind == "needs you" })
 }
 
 // withSummary adds a finished task's summary to its line.

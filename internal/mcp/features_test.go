@@ -32,7 +32,7 @@ func votes() features.Feature {
 // votesAgentry is an Agentry whose votes feature is hidden until show is
 // called. Its log is at position 1 until then, and 2 after: a wait for a
 // change past 1 answers once show is called. One vote waits for you all
-// along, as GET /api/waiting says.
+// along, in the repo asked about, as GET /api/waiting says.
 func votesAgentry(t *testing.T) (agentry client.Client, show func()) {
 	var visible atomic.Bool
 	shown, done := make(chan struct{}), make(chan struct{})
@@ -55,7 +55,7 @@ func votesAgentry(t *testing.T) (agentry client.Client, show func()) {
 		case "/api/tasks", "/api/questions":
 			io.WriteString(w, `[]`)
 		case "/api/waiting":
-			io.WriteString(w, `[{"key":"votes/1","kind":"votes","line":"1 vote to count (cast_vote)"}]`)
+			fmt.Fprintf(w, `[{"key":"votes/1","kind":"votes","line":"1 vote to count in [%s] (cast_vote)"}]`, r.URL.Query().Get("repo"))
 		default:
 			io.WriteString(w, `{}`)
 		}
@@ -117,16 +117,17 @@ func TestAFeatureBringsItsToolsWhenItShows(t *testing.T) {
 	}
 }
 
-// Every reply ends with what each feature says waits for you, and so does
-// what waits for you outside a session.
-func TestRepliesEndWithWhatFeaturesSayWaits(t *testing.T) {
+// Every reply ends with what GET /api/waiting says waits for a session in
+// its repo, and what waits for you outside a session is what it says for
+// no repo.
+func TestRepliesEndWithWhatTheServerSaysWaits(t *testing.T) {
 	agentry, _ := votesAgentry(t)
 	c := startWith(t, agentry, []features.Feature{votes()}, false, nil)
-	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 1 vote to count (cast_vote)") {
+	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 1 vote to count in [/repo] (cast_vote)") {
 		t.Errorf("reply: %s", text)
 	}
-	waiting, err := WaitingFor(agentry, []features.Feature{votes()})
-	if err != nil || len(waiting) != 1 || waiting[0].Kind != "votes" {
+	waiting, err := WaitingFor(agentry)
+	if err != nil || len(waiting) != 1 || waiting[0].Kind != "votes" || waiting[0].Line != "1 vote to count in [] (cast_vote)" {
 		t.Errorf("waiting: %+v, %v", waiting, err)
 	}
 }

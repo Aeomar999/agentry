@@ -47,6 +47,9 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
 				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
+		case "GET /api/waiting":
+			io.WriteString(w, `[{"key":"task-1/approval/push-1/git push origin dev","task":"task-1","kind":"needs you","line":"task-1: Waiting for you to approve the push to dev (review_approvals)"},
+				{"key":"task-2/question//Every story of this epic is done. Close it?","task":"task-2","kind":"needs you","line":"task-2: the epic Ship it is ready to close (close_epic)"}]`)
 		case "POST /api/tasks":
 			io.WriteString(w, `{"stream":"task-10","notFiled":[]}`)
 		default:

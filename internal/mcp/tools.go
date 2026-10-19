@@ -575,14 +575,11 @@ func (s *Server) scope(everywhere bool) string {
 
 // waitingNote is what waits for you anywhere, for the end of every reply.
 func (s *Server) waitingNote() string {
-	_, waiting, err := s.board()
+	waiting, err := WaitingIn(s.agentry, s.repo)
 	if err != nil {
 		return ""
 	}
-	notes := lines(waiting, func(q question) (string, bool) { return waitlist.Line(q.Question), true })
-	for _, w := range featuresWaiting(s.agentry, s.repo) {
-		notes = append(notes, w.Line)
-	}
+	notes := lines(waiting, func(w Waiting) (string, bool) { return w.Line, true })
 	if len(notes) == 0 {
 		return ""
 	}

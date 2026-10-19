@@ -1,9 +1,12 @@
 package ideas_test
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
-	"slices"
 	"strings"
 	"testing"
 
@@ -20,10 +23,11 @@ import (
 
 // What waits for you, pinned on a log of every kind: the core's entries
 // oldest first, then the open ideas, for a session outside any repo and
-// for one in each repo, the same from agentry mcp and from GET
-// /api/waiting. A dismissed idea leaves the line but not the key.
+// for one in each repo, the same from GET /api/waiting and from agentry
+// mcp, in its lists and at the end of its replies. A dismissed idea leaves
+// the line but not the key.
 func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
-	server, s, state := newServer(t, tasks.Limits{})
+	server, s, _ := newServer(t, tasks.Limits{})
 	other := gitRepo(t)
 	api := client.Client{Where: client.Where{URL: server.URL}, Token: token}
 	worker, policy := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Policy, ID: "policy"}
@@ -79,19 +83,21 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	}
 	open := features.Waiting{Key: "ideas/3", Task: "task-8", Kind: "ideas",
 		Line: "3 open ideas from the Visionaries: Tag the repos, Sort the columns, Search the board (list_ideas all)"}
-	all, err := mcp.WaitingFor(api, nil)
+	all, err := mcp.WaitingFor(api)
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkWaiting(t, "agentry mcp, outside a repo", all, append(core, open))
 	both := func(where, repo string, want []features.Waiting) {
 		t.Helper()
-		checkWaiting(t, where, waitingIn(t, api, state, repo), want)
+		checkWaiting(t, where, waitingIn(t, api, repo), want)
 		checkWaiting(t, where+", from GET /api/waiting", served(t, api, repo), want)
 	}
 	for _, repo := range []string{"", "/src/app", other} {
 		both("in "+repo, repo, append(core, open))
 	}
+	checkNote(t, "a reply outside a repo", api, t.TempDir(), append(core, open))
+	checkNote(t, "a reply in "+other, api, other, append(core, open))
 
 	if code, body := call(t, server, "POST", "/api/ideas/"+tagRepos+"/dismiss", `{"note":"not now"}`); code != 200 {
 		t.Fatal(code, body)
@@ -104,16 +110,51 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	both("outside a repo, after the dismiss", "", append(core, here))
 }
 
-// waitingIn is what waits for a session in repo ("" outside one): the
-// core's entries agentry mcp reads, then what ideas says about repo.
-func waitingIn(t *testing.T, api client.Client, state features.Reader, repo string) []features.Waiting {
+// waitingIn is what agentry mcp says waits for a session in repo ("" outside one).
+func waitingIn(t *testing.T, api client.Client, repo string) []features.Waiting {
 	t.Helper()
-	all, err := mcp.WaitingFor(api, nil)
+	all, err := mcp.WaitingIn(api, repo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	core := slices.DeleteFunc(all, func(w features.Waiting) bool { return w.Kind != "needs you" })
-	return append(core, ideas.Feature().Waiting(state, repo)...)
+	return all
+}
+
+// checkNote checks that a reply of agentry mcp, run in dir, ends with the
+// count of want and its first five lines (here the core's, so the repo
+// isn't seen: the mcp tests check it is passed).
+func checkNote(t *testing.T, where string, api client.Client, dir string, want []features.Waiting) {
+	t.Helper()
+	note := fmt.Sprintf("\n\nWaiting for the user (%d):", len(want))
+	for _, w := range want[:min(5, len(want))] {
+		note += "\n- " + w.Line
+	}
+	if reply := replyIn(t, api, dir, "list_tasks"); !strings.HasSuffix(reply, note) {
+		t.Errorf("%s:\n%s\nwant it to end with:%s", where, reply, note)
+	}
+}
+
+// replyIn is the text agentry mcp, run in dir, replies to the tool.
+func replyIn(t *testing.T, api client.Client, dir, tool string) string {
+	t.Helper()
+	toServer, fromClaude := io.Pipe()
+	fromServer, toClaude := io.Pipe()
+	go mcp.New(api, dir, "test", []features.Feature{ideas.Feature()}).Serve(context.Background(), toServer, toClaude)
+	defer func() { fromClaude.Close(); toClaude.Close() }()
+	fmt.Fprintf(fromClaude, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":%q}}`+"\n", tool)
+	out := bufio.NewScanner(fromServer)
+	out.Buffer(nil, 1<<20)
+	for out.Scan() {
+		var m struct {
+			ID     int
+			Result struct{ Content []struct{ Text string } }
+		}
+		if json.Unmarshal(out.Bytes(), &m) == nil && m.ID == 1 && len(m.Result.Content) == 1 {
+			return m.Result.Content[0].Text
+		}
+	}
+	t.Fatal("the server stopped before it replied")
+	return ""
 }
 
 // served is what GET /api/waiting lists for a session in repo.

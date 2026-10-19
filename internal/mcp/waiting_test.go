@@ -19,7 +19,7 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	var mu sync.Mutex
 	board := map[string]any{
 		"/api/tasks":        []map[string]any{{"id": "task-1", "title": "Old", "status": "done"}},
-		"/api/questions":    []any{},
+		"/api/waiting":      []any{},
 		"/api/workers":      map[string]any{"workers": []map[string]any{{"name": "build-box", "online": true, "tasks": []string{"task-2"}}}},
 		"/api/tasks/task-2": map[string]any{"summary": "The game runs."},
 	}
@@ -36,13 +36,13 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	defer server.Close()
 	agentry := client.Client{Where: client.Where{URL: server.URL}, Token: "x"}
 
-	now, err := News(agentry, nil)
+	now, err := News(agentry)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result := make(chan []Waiting, 1)
 	go func() {
-		fresh, _ := WaitForNew(context.Background(), agentry, nil, Seen(now))
+		fresh, _ := WaitForNew(context.Background(), agentry, Seen(now))
 		result <- fresh
 	}()
 	time.Sleep(150 * time.Millisecond)
