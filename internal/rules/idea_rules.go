@@ -116,11 +116,14 @@ func forAnOpenIdea(p events.Proposal, state State) string {
 }
 
 // startingAnAcceptedIdea: Agentry moves a task on the board only to start
-// one it made from an idea it accepted for you: once, out of the Backlog
-// into In progress, before it has run. A task you parked again, or one you
-// made, stays where you put it.
+// one it made from an idea it accepted for you, while you have starting
+// them turned on: once, out of the Backlog into In progress, before it has
+// run. A task you parked again, or one you made, stays where you put it.
 func startingAnAcceptedIdea(task *tasks.Task, p events.Proposal, state State) string {
 	const only = "Agentry only starts, once, a task it made from an idea it accepted"
+	if now := state.Settings(); !now.AutoAcceptIdeas || !now.AutoStartIdeas {
+		return "Agentry starts a task from an idea it accepted only when you turn that on"
+	}
 	if p.Text("place") != "" || p.Text("column") != "in-progress" || p.Flag("sentBack") ||
 		task.Parked == "" || len(task.Turns) > 0 || !task.ByAgentry || task.Idea == "" {
 		return only

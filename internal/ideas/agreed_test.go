@@ -147,7 +147,7 @@ func TestATaskFromAnIdeaCarriesItsEpicsLimits(t *testing.T) {
 }
 
 // turnOn adds the default Visionaries team and turns on Agentry accepting,
-// for you, the ideas every Visionary agreed on.
+// for you, the ideas every Visionary agreed on, and starting them.
 func turnOn(t *testing.T, s *store.Store, state *current.State) {
 	t.Helper()
 	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
@@ -155,7 +155,7 @@ func turnOn(t *testing.T, s *store.Store, state *current.State) {
 		mustPropose(t, s, p)
 	}
 	mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
-		Data: map[string]any{settings.AutoAcceptIdeas: true}})
+		Data: map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true}})
 }
 
 // suggestAgreed makes an idea about repo every default Visionary backs and
@@ -286,6 +286,25 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	}
 	if _, rejection, err := s.Propose(start("task-2")); err != nil || rejection == nil {
 		t.Errorf("starting again a task you parked after it ran: want refused, got %v %v", rejection, err)
+	}
+}
+
+// Agentry starts the task of an idea it accepted only while you have both
+// accepting and starting them turned on.
+func TestAgentryStartsOnlyWhileTheSettingsSay(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+		t.Fatalf("accept: %+v", got)
+	}
+	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,
+		Data: map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}}
+	for _, off := range []string{settings.AutoStartIdeas, settings.AutoAcceptIdeas} {
+		mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
+			Data: map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true, off: false}})
+		if _, rejection, err := s.Propose(start); err != nil || rejection == nil {
+			t.Errorf("with %s off: want refused, got %v %v", off, rejection, err)
+		}
 	}
 }
 
