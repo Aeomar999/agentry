@@ -34,11 +34,11 @@ const STEPS: Step[] = [
   { at: at(51), from: "coordinator", to: "reviewer", text: "", turn: "turn-6" },
 ];
 
-function timeline(onOpen = vi.fn()) {
+function timeline(onOpen = vi.fn(), steps = STEPS) {
   entries.length = 0;
   render(
     <HandoffTimeline
-      steps={STEPS}
+      steps={steps}
       turns={TURNS}
       coordinator="coordinator"
       links={{}}
@@ -104,6 +104,16 @@ describe("HandoffTimeline", () => {
     const article = card("coordinator to engineer");
     expect(within(article).getByRole("heading", { level: 3 }).textContent).toBe("Build the cards");
     expect(entries.some((e) => e.text.includes("# Build"))).toBe(false);
+  });
+
+  test("draws a title's inline Markdown, not its markers", () => {
+    const brief = { ...STEPS[1], text: "# Fix `foo` in **bar** and [baz](https://example.com)\n\nThe rest." };
+    timeline(vi.fn(), [brief]);
+    const title = screen.getByRole("heading", { level: 3 });
+    expect(title.textContent).toBe("Fix foo in bar and baz (opens in a new tab)");
+    expect(within(title).getByText("foo").tagName).toBe("CODE");
+    expect(within(title).getByText("bar").tagName).toBe("STRONG");
+    expect(within(title).getByRole("link", { name: "baz (opens in a new tab)" }).getAttribute("href")).toBe("https://example.com/");
   });
 
   test("draws a card with no brief as its header and footer only", () => {

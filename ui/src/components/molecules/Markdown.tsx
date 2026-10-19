@@ -51,6 +51,12 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
+// InlineMarkdown draws one line's inline Markdown (code, emphasis, links)
+// with no block around it, for a title that is a heading of its own.
+export function InlineMarkdown(props: MarkdownProps) {
+  return <>{inline(props.text, props)}</>;
+}
+
 // headingsOf lists a document's headings, for its outline, with the same
 // ids the rendered headings get.
 export function headingsOf(text: string): Heading[] {

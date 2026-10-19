@@ -4,6 +4,7 @@ import type { Step, Turn } from "@/api/types";
 import { Badge } from "@/components/atoms/Badge";
 import { AgentName } from "@/components/molecules/AgentName";
 import { Avatar, isNeutral } from "@/components/molecules/Avatar";
+import { InlineMarkdown } from "@/components/molecules/Markdown";
 import { Mono } from "@/components/molecules/Mono";
 import { EntryText, TaskLinks } from "@/components/organisms/EntryText";
 import { clockMinutes, duration } from "@/lib/time";
@@ -100,7 +101,11 @@ function StepCard({ step, kind, links, children }: { step: Step; kind: string; l
       </div>
       {(title || body) && (
         <div className="px-3 pt-2 pb-3">
-          {title && <h3 className="mb-1 line-clamp-2 text-[14px] font-semibold text-ink-primary">{title}</h3>}
+          {title && (
+            <h3 className="mb-1 line-clamp-2 text-[14px] font-semibold text-ink-primary">
+              <InlineMarkdown text={title} marks {...links} />
+            </h3>
+          )}
           {body && <EntryText text={body} links={links} lines={kind === "brief" ? BRIEF_LINES : TEXT_LINES} kind={kind} />}
         </div>
       )}
@@ -119,7 +124,7 @@ function Author({ name }: { name: string }) {
 }
 
 // titled takes a brief's opening heading out as the card's title, so it
-// isn't said twice.
+// isn't said twice. The title keeps its inline Markdown, for the card to draw.
 function titled(text: string): { title: string; body: string } {
   const heading = /^\s*#{1,6}[ \t]+(.+?)[ \t#]*(?:\n|$)/.exec(text);
   if (!heading) return { title: "", body: text.trim() };
