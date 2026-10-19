@@ -12,14 +12,30 @@ A task's Activity and Handoffs tabs show agents' briefs and reports as raw text:
 
 ## Before and after
 
-Before: today's tabs, from a fresh demo server with an empty data dir (dark theme, the default). After: the wireframes (light; the dark one is [activity-dark.svg](activity-readability/activity-dark.svg)).
+Before: the tabs as they were, from a fresh demo server with an empty data dir (dark theme, the default). After: the build, from a fresh demo server on port 7910 with an empty data dir, seeded with two finished tasks (every turn closed, so no agent ran), in light and dark at 1280 wide and light at 390. The wireframes it was built from stay linked below.
 
 | Before | After |
 |---|---|
-| ![Activity today: raw Markdown, plain commands, faint authors](activity-readability/before/activity.png) | ![Activity with author bands](activity-readability/activity-desktop.svg) |
-| ![Handoffs today: raw Markdown, a brief cut mid-line](activity-readability/before/handoffs.png) | ![Handoffs with card headers and folded briefs](activity-readability/handoffs.svg) |
+| ![Activity before: raw Markdown, plain commands, faint authors](activity-readability/before/activity.png) | ![Activity after: author bands, Markdown, coloured commands, folded entries](activity-readability/after/activity-dark.png) |
+| ![Handoffs before: raw Markdown, a brief cut mid-line](activity-readability/before/handoffs.png) | ![Handoffs after: cards with author headers, titles, folded briefs and a footer that opens the turn](activity-readability/after/handoffs-dark.png) |
 
-Phone and states: [activity-mobile.svg](activity-readability/activity-mobile.svg), [states.svg](activity-readability/states.svg).
+Light: [Activity](activity-readability/after/activity-light.png), [Handoffs](activity-readability/after/handoffs-light.png). Scrolled with the wheel, a band or card header stuck at the top: [Activity](activity-readability/after/activity-scrolled.png) (the engineer's `continued` band), [Handoffs](activity-readability/after/handoffs-scrolled.png).
+
+Phone, 390 wide:
+
+| Activity | Handoffs |
+|---|---|
+| ![Activity on a phone](activity-readability/after/activity-phone.png) | ![Handoffs on a phone](activity-readability/after/handoffs-phone.png) |
+| ![Activity on a phone, scrolled](activity-readability/after/activity-phone-scrolled.png) | ![Handoffs on a phone, scrolled](activity-readability/after/handoffs-phone-scrolled.png) |
+
+Wireframes: [Activity, desktop](activity-readability/activity-desktop.svg), [Activity, dark](activity-readability/activity-dark.svg), [Activity, phone](activity-readability/activity-mobile.svg), [Handoffs](activity-readability/handoffs.svg), [states](activity-readability/states.svg).
+
+### Found while taking the after shots
+
+- **The page scrolls past Activity into blank space.** Screen-reader-only text in the rows (the ` to ` between names, "(opens in a new tab)") is positioned against a box outside the tab's own scroller, so it isn't clipped by it and makes the page's scroller as tall as the whole feed (2,629px for a 924px window). Scrolling the page, over the Plan column or past the end of the feed, shows empty space: [screenshot](activity-readability/after/found/activity-page-scrolls-into-blank.png). Handoffs doesn't have it: each card's list item is the positioned box.
+- **A code box's language and copy button draw over a stuck Handoffs header.** When a card's header is stuck and a folded code box passes under it, the box's `go` label and copy button show on top of the header's lower edge (both are `z-10`; the later one wins): [screenshot](activity-readability/after/found/codebox-controls-over-handoff-header.png).
+- **Activity's rail times wrap on a phone** (`01:09` over `AM`), where the wireframe has them on one line: [screenshot](activity-readability/after/activity-phone-scrolled.png).
+- **Small:** a link's underline runs under the space before ↗; a task id or branch name can break at its hyphen (`task-` / `2`); the fold cuts a code box through its middle with no edge under it; the task's Done banner above the tabs still shows its summary's raw `**Markdown**` (outside this design's scope).
 
 ## What changes
 
