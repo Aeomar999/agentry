@@ -8,7 +8,8 @@ import (
 
 // Summary is a task as the list on the page shows it. It is all an
 // archived task will keep, so it is made from the task and the roster
-// alone; BlockedBy, which needs the other tasks, is the caller's to fill.
+// alone; BlockedBy and Queued, which need the other tasks, are the caller's
+// to fill.
 type Summary struct {
 	ID               string    `json:"id"`
 	Title            string    `json:"title"`
@@ -40,6 +41,7 @@ type Summary struct {
 	MadeFrom         string    `json:"madeFrom"`         // the stream that made it, such as the idea you accepted, "" for none
 	After            []string  `json:"after"`            // the stories it builds on
 	BlockedBy        []string  `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
+	Queued           bool      `json:"queued"`           // it wants a turn and waits for a slot, as the most tasks running at once are (coordinator.Slots)
 	Stories          int       `json:"stories"`          // an epic's
 	StoriesDone      int       `json:"storiesDone"`
 	Closing          string    `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
