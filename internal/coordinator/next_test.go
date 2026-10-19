@@ -148,7 +148,7 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}).
 			turn(turnID(len(h)+1), "engineer", "still broken")
 	}
-	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "24 of its 24 turns") {
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || move.Limit != LimitTurns || !strings.Contains(move.Reason, "24 of its 24 turns") {
 		t.Errorf("after %d turns: %+v", DefaultMaxTurns, move)
 	}
 	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": "?"}).add(you, events.TaskAnswered, "", map[string]any{"answer": "try X"})
@@ -160,7 +160,7 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 	for range MaxIssuesRun {
 		issues = issues.add(watchdog, events.IssueRaised, "", map[string]any{"reason": "the engine is missing"})
 	}
-	if move := Next(issues.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "engine is missing") {
+	if move := Next(issues.task(), defaultRoster()); move.Kind != AskYou || move.Limit != "" || !strings.Contains(move.Reason, "engine is missing") {
 		t.Errorf("after %d issues in a row: %+v", MaxIssuesRun, move)
 	}
 }
@@ -216,11 +216,17 @@ func TestTheBudgetSendsTheTaskToYou(t *testing.T) {
 	h = h.add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
 		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "half done", "tokens": 50_000})
 	move := Next(h.task(), defaultRoster())
-	if move.Kind != AskYou || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
+	if move.Kind != AskYou || move.Limit != LimitBudget || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
 		t.Errorf("over budget: %+v", move)
 	}
-	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": move.Reason}).
-		add(you, events.TaskAnswered, "", map[string]any{"answer": "Wrap up."})
+	h = h.add(agentry, events.TaskNeedsYou, "", map[string]any{"question": move.Reason, "limit": move.Limit})
+	if task := h.task(); StoppedAt(task) != LimitBudget {
+		t.Errorf("the stop's limit: %q", StoppedAt(task))
+	}
+	h = h.add(you, events.TaskAnswered, "", map[string]any{"answer": "Wrap up."})
+	if task := h.task(); task.Asked.Limit != "" || StoppedAt(task) != "" {
+		t.Errorf("after your answer the limit is cleared: %q", task.Asked.Limit)
+	}
 	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn || move.Agent.Name != "tech-lead" {
 		t.Errorf("after your answer the coordinator gets one turn: %+v", move)
 	}

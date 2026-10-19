@@ -28,6 +28,7 @@ type Move struct {
 	Machine  string       // for StartTurn: where the coordinator wants it to work, "" for Agentry to choose
 	Decision Decision     // for ApplyDecision
 	Reason   string       // for RaiseIssue and AskYou
+	Limit    string       // for AskYou: the limit that stopped the task, LimitBudget or LimitTurns, "" for any other stop
 }
 
 type MoveKind string
@@ -54,12 +55,12 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 	case task.Handoff == nil:
 		return Move{Kind: Wait}
 	case task.AtTurnLimit():
-		return Move{Kind: AskYou, Reason: fmt.Sprintf(
+		return Move{Kind: AskYou, Limit: LimitTurns, Reason: fmt.Sprintf(
 			"This task has had %d of its %d turns without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on.",
 			task.TurnsSinceAnswer, task.MaxTurns)}
 	case task.AtBudget() && task.TurnsSinceAnswer > 0:
 		// Once you answer, one more turn runs, so "wrap up" can be done.
-		return Move{Kind: AskYou, Reason: fmt.Sprintf(
+		return Move{Kind: AskYou, Limit: LimitBudget, Reason: fmt.Sprintf(
 			"This task has used %s tokens of its %s budget. Raise the budget to go on, or tell the coordinator to wrap up.",
 			Tokens(task.TokensUsed), Tokens(task.Budget))}
 	case task.IssuesInARow >= MaxIssuesRun:

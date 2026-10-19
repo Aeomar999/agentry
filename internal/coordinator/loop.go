@@ -38,6 +38,34 @@ var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
 // of its stops, rather than one a coordinator asked.
 func AsksForItself(task *tasks.Task) bool { return task.Question != "" && task.Asked.By == agentry.ID }
 
+// The limits that stop a task, as its question says.
+const (
+	LimitBudget = "budget"
+	LimitTurns  = "turns"
+)
+
+// StoppedAt is the limit the task's open question is the loop's stop for,
+// LimitBudget or LimitTurns, or "" for any other question: raising that
+// limit answers it, and nothing else does.
+func StoppedAt(task *tasks.Task) string {
+	switch {
+	case !AsksForItself(task):
+		return ""
+	case task.Asked.Limit != "":
+		return task.Asked.Limit
+	case task.Asked.Fetch != nil:
+		return "" // the copy question
+	}
+	// Asked before the question said which: Next checks the turn limit first.
+	switch {
+	case task.AtTurnLimit():
+		return LimitTurns
+	case task.AtBudget() && task.TurnsSinceAnswer > 0:
+		return LimitBudget
+	}
+	return ""
+}
+
 func NewLoop(s *store.Store, runner *turns.Runner, fleet *machines.Fleet) *Loop {
 	return &Loop{store: s, runner: runner, fleet: fleet}
 }
@@ -121,7 +149,7 @@ func (l *Loop) act(id string) {
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
 	case AskYou:
-		l.askYou(task, move.Reason)
+		l.askAt(task, move.Reason, move.Limit)
 	}
 }
 
@@ -226,8 +254,15 @@ func (l *Loop) worktreeOf(task *tasks.Task) worktrees.Worktree {
 		Base: task.Worktree.Base, Port: task.Worktree.Port}
 }
 
-func (l *Loop) askYou(task *tasks.Task, question string) {
-	l.propose(task.ID, agentry, events.TaskNeedsYou, map[string]any{"question": question})
+func (l *Loop) askYou(task *tasks.Task, question string) { l.askAt(task, question, "") }
+
+// askAt asks you, saying which limit stopped the task, if one did.
+func (l *Loop) askAt(task *tasks.Task, question, limit string) {
+	data := map[string]any{"question": question}
+	if limit != "" {
+		data["limit"] = limit
+	}
+	l.propose(task.ID, agentry, events.TaskNeedsYou, data)
 }
 
 func workerActor(m machines.Machine) events.Actor {

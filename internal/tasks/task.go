@@ -237,4 +237,5 @@ type Asked struct {
 	Options []string // answers to pick from; you may still write your own
 	Page    string   // a small HTML page the coordinator wrote to ask it, shown in a sandbox
 	Fetch   *Fetch   // a file to copy from a machine, from outside its worktrees, which you approve
+	Limit   string   // the limit that stopped the task, "budget" or "turns", "" for any other question
 }

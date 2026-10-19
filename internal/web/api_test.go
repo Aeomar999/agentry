@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -416,8 +417,9 @@ func TestTasksCarryLabels(t *testing.T) {
 }
 
 // limitsServer is a server whose new tasks get a 5M budget and 2 turns, and
-// ways to give a task turns and to stop it with a question.
-func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor)) {
+// ways to give a task turns and to stop it with a question, with more of the
+// event's data: the loop's limit stops say "limit".
+func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
 	if err != nil {
@@ -444,8 +446,10 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 				Data: map[string]any{"agent": "tech-lead", "report": "r", "tokens": tokens / turns}})
 		}
 	}
-	ask = func(id string, by events.Actor) {
-		propose(events.Proposal{Stream: id, Actor: by, Type: events.TaskNeedsYou, Data: map[string]any{"question": "Go on?"}})
+	ask = func(id string, by events.Actor, more map[string]any) {
+		data := map[string]any{"question": "Go on?"}
+		maps.Copy(data, more)
+		propose(events.Proposal{Stream: id, Actor: by, Type: events.TaskNeedsYou, Data: data})
 	}
 	return server, work, ask
 }
@@ -453,7 +457,13 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 var (
 	theLoop  = events.Actor{Kind: events.System, ID: "coordinator-loop"}
 	techLead = events.Actor{Kind: events.Agent, ID: "tech-lead"}
+
+	// copyQuestion is the loop's question to copy a file from outside a worktree.
+	copyQuestion = map[string]any{"question": "Copy it?", "options": []string{"Copy it", "Don't copy it"},
+		"fetchMachine": "local", "fetchPath": "/etc/hosts", "fetchAs": "hosts"}
 )
+
+func atLimit(limit string) map[string]any { return map[string]any{"limit": limit} }
 
 func detailOfTask(t *testing.T, server *httptest.Server, id string) taskDetail {
 	t.Helper()
@@ -505,7 +515,7 @@ func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
 		work(id, 1, 210_000)
 	}
 
-	ask("task-1", theLoop)
+	ask("task-1", theLoop, atLimit("budget"))
 	if code, body := call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`); code != 200 {
 		t.Fatalf("raise: %d %s", code, body)
 	}
@@ -513,13 +523,13 @@ func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
 		t.Errorf("after raising: budget %d, status %s, said %q", d.Budget, d.Status, lastSaid(d))
 	}
 
-	ask("task-2", theLoop)
+	ask("task-2", theLoop, atLimit("budget"))
 	call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":0}`)
 	if d := detailOfTask(t, server, "task-2"); d.Budget != 0 || d.Status != "working" || lastSaid(d) != "I made the budget unlimited. Carry on." {
 		t.Errorf("after unlimiting: budget %d, status %s, said %q", d.Budget, d.Status, lastSaid(d))
 	}
 
-	ask("task-3", techLead)
+	ask("task-3", techLead, nil)
 	call(t, server, "PUT", "/api/tasks/task-3/budget", `{"budget":-1}`)
 	if d := detailOfTask(t, server, "task-3"); d.Budget != 0 || d.Status != "needs you" {
 		t.Errorf("the coordinator's question: budget %d, status %s", d.Budget, d.Status)
@@ -540,7 +550,7 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 		work(id, 2, 1000)
 	}
 
-	ask("task-1", theLoop)
+	ask("task-1", theLoop, atLimit("turns"))
 	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":2}`)
 	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" || d.TurnsSinceAnswer != 2 || !d.AtTurnLimit {
 		t.Errorf("not raised above the turns had: status %s, turns %d", d.Status, d.TurnsSinceAnswer)
@@ -552,19 +562,112 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 		t.Errorf("after raising: max turns %d, status %s, said %q", d.MaxTurns, d.Status, lastSaid(d))
 	}
 
-	ask("task-2", theLoop)
+	ask("task-2", theLoop, atLimit("turns"))
 	call(t, server, "PUT", "/api/tasks/task-2/turns", `{"maxTurns":-1}`)
 	if d := detailOfTask(t, server, "task-2"); d.MaxTurns != 0 || d.Status != "working" || lastSaid(d) != "I made the turns unlimited. Carry on." {
 		t.Errorf("after unlimiting: max turns %d, status %s, said %q", d.MaxTurns, d.Status, lastSaid(d))
 	}
 
-	ask("task-3", techLead)
+	ask("task-3", techLead, nil)
 	call(t, server, "PUT", "/api/tasks/task-3/turns", `{"maxTurns":0}`)
 	if d := detailOfTask(t, server, "task-3"); d.MaxTurns != 0 || d.Status != "needs you" {
 		t.Errorf("the coordinator's question: max turns %d, status %s", d.MaxTurns, d.Status)
 	}
 	if code, _ := call(t, server, "PUT", "/api/tasks/task-3/turns", `{"maxTurns":-2}`); code != http.StatusConflict {
 		t.Errorf("a limit of -2: %d", code)
+	}
+}
+
+// Raising a limit answers only the stop for that limit: not the other
+// limit's, though the task is at both, and not the loop's other questions,
+// such as copying a file, though the task is over that limit too.
+func TestALimitAnswersOnlyItsOwnStop(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"At both","budget":200000}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Copy, over budget","budget":200000,"maxTurns":-1}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Copy, past its turns","budget":-1}`)
+	work("task-1", 2, 210_000)
+	work("task-2", 1, 210_000)
+	work("task-3", 2, 1000)
+
+	ask("task-1", theLoop, atLimit("turns"))
+	call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`)
+	if d := detailOfTask(t, server, "task-1"); d.Budget != 1_000_000 || d.Status != "needs you" || d.TurnsSinceAnswer != 2 {
+		t.Errorf("the budget, at the turn stop: budget %d, status %s, turns %d", d.Budget, d.Status, d.TurnsSinceAnswer)
+	}
+	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":5}`)
+	if d := detailOfTask(t, server, "task-1"); d.Status != "working" || lastSaid(d) != "I raised the turn limit to 5. Carry on." {
+		t.Errorf("the turns, at the turn stop: status %s, said %q", d.Status, lastSaid(d))
+	}
+
+	for id, change := range map[string][2]string{
+		"task-2": {"budget", `{"budget":1000000}`},
+		"task-3": {"turns", `{"maxTurns":5}`},
+	} {
+		ask(id, theLoop, copyQuestion)
+		if code, body := call(t, server, "PUT", "/api/tasks/"+id+"/"+change[0], change[1]); code != 200 {
+			t.Fatalf("%s %s: %d %s", id, change[0], code, body)
+		}
+		if d := detailOfTask(t, server, id); d.Status != "needs you" || !strings.HasPrefix(d.NeedsYou, "Copy") {
+			t.Errorf("%s, the %s with the copy question open: status %s, needs you %q", id, change[0], d.Status, d.NeedsYou)
+		}
+	}
+}
+
+// A stop asked before stops said their limit is taken for the one Next
+// checks first: the turn limit, then the budget.
+func TestAnOlderStopIsReadInNextsOrder(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"At both","budget":200000}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Over budget","budget":200000,"maxTurns":-1}`)
+	work("task-1", 2, 210_000)
+	work("task-2", 1, 210_000)
+	ask("task-1", theLoop, nil)
+	ask("task-2", theLoop, nil)
+
+	call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`)
+	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" {
+		t.Errorf("the budget, at both: status %s", d.Status)
+	}
+	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":-1}`)
+	if d := detailOfTask(t, server, "task-1"); d.Status != "working" || lastSaid(d) != "I made the turns unlimited. Carry on." {
+		t.Errorf("the turns, at both: status %s, said %q", d.Status, lastSaid(d))
+	}
+	call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":1000000}`)
+	if d := detailOfTask(t, server, "task-2"); d.Status != "working" || lastSaid(d) != "I raised the budget to 1M tokens. Carry on." {
+		t.Errorf("the budget, over it: status %s, said %q", d.Status, lastSaid(d))
+	}
+}
+
+// The questions list marks a stop at the budget or the limit of turns, with
+// its numbers, and no other question, though the task is over a limit.
+func TestQuestionsShowWhichLimitStopped(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	call(t, server, "POST", "/api/tasks", `{"description":"Turns","budget":200000}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Copy","budget":200000,"maxTurns":-1}`)
+	work("task-1", 2, 210_000)
+	work("task-2", 1, 210_000)
+	work("task-3", 1, 210_000)
+	ask("task-1", theLoop, atLimit("turns"))
+	ask("task-2", theLoop, atLimit("budget"))
+	ask("task-3", theLoop, copyQuestion)
+
+	_, body := call(t, server, "GET", "/api/questions", "")
+	var questions []question
+	json.Unmarshal([]byte(body), &questions)
+	kinds := map[string]question{}
+	for _, q := range questions {
+		kinds[q.Task] = q
+	}
+	if q := kinds["task-1"]; q.Kind != "turns" || q.TurnsSinceAnswer != 2 || q.MaxTurns != 2 || q.Budget != 0 {
+		t.Errorf("the turn stop: %+v", q)
+	}
+	if q := kinds["task-2"]; q.Kind != "budget" || q.TokensUsed != 210_000 || q.Budget != 200_000 || q.MaxTurns != 0 {
+		t.Errorf("the budget stop: %+v", q)
+	}
+	if q := kinds["task-3"]; q.Kind != "question" || q.Budget != 0 {
+		t.Errorf("the copy question: %+v", q)
 	}
 }
 

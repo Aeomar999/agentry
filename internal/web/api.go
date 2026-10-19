@@ -243,7 +243,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
 		return
 	}
-	if coordinator.AsksForItself(task) && task.AtBudget() && (budget == 0 || task.TokensUsed < budget) {
+	if coordinator.StoppedAt(task) == coordinator.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
 		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
 		if budget == 0 {
 			answer = "I made the budget unlimited. Carry on."
@@ -271,7 +271,7 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
 		return
 	}
-	if coordinator.AsksForItself(task) && task.AtTurnLimit() && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
+	if coordinator.StoppedAt(task) == coordinator.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
 		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
 		if maxTurns == 0 {
 			answer = "I made the turns unlimited. Carry on."

@@ -6,15 +6,16 @@ import (
 	"slices"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // question is one thing waiting for you, from any task: an action the
-// policy held, a question the coordinator asked, the budget, or an agent
-// stuck on a prompt in its terminal. The Questions tab lists them.
+// policy held, a question the coordinator asked, the budget or the limit of
+// turns, or an agent stuck on a prompt in its terminal. The Questions tab lists them.
 type question struct {
 	ID        string    `json:"id"`   // unique on the page
-	Kind      string    `json:"kind"` // "approval", "question", "budget" or "waiting"
+	Kind      string    `json:"kind"` // "approval", "question", "budget", "turns" or "waiting"
 	Task      string    `json:"task"`
 	TaskTitle string    `json:"taskTitle"`
 	Agent     string    `json:"agent"` // who asks
@@ -30,6 +31,9 @@ type question struct {
 
 	TokensUsed int `json:"tokensUsed,omitempty"` // budget
 	Budget     int `json:"budget,omitempty"`
+
+	TurnsSinceAnswer int `json:"turnsSinceAnswer,omitempty"` // turns
+	MaxTurns         int `json:"maxTurns,omitempty"`
 }
 
 func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +65,11 @@ func questionsOf(t *tasks.Task) []question {
 	if t.Question != "" {
 		q := base("question", "open")
 		q.Agent, q.At, q.Text, q.Options, q.Page = t.Asked.By, t.Asked.At, t.Question, t.Asked.Options, t.Asked.Page
-		if t.AtBudget() {
+		switch coordinator.StoppedAt(t) {
+		case coordinator.LimitBudget:
 			q.Kind, q.TokensUsed, q.Budget = "budget", t.TokensUsed, t.Budget
+		case coordinator.LimitTurns:
+			q.Kind, q.TurnsSinceAnswer, q.MaxTurns = "turns", t.TurnsSinceAnswer, t.MaxTurns
 		}
 		questions = append(questions, q)
 	}

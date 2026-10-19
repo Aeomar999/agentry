@@ -68,7 +68,7 @@ var catalogue = map[Type]spec{
 	IssueRaised:  {fields: []string{"reason"}, writers: []ActorKind{Worker, System}},
 	TurnStopped:  {correlation: true, writers: []ActorKind{Human}},
 
-	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}},
+	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}}, // Agentry's: "limit" says which stopped the task
 	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},
 	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}}, // yours: an epic you approved closing
 
