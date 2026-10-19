@@ -13,11 +13,12 @@ import (
 // changed the work, every one of them that has checked it must approve it
 // again. So a change made after a review gets another round of review. You
 // can still finish a task as it is, from the board, or ship it: moved to
-// Shipping, the work as it was is yours, and once an agent has shipped it
+// Shipping, the work as it was is yours, and once an agent has pushed it
 // the task can be done; only a change after that needs checking again. A
-// ship turn that crashed or that you stopped hasn't shipped it, but your
-// choice stands for the next ship turn if nothing has changed or checked
-// the work in between.
+// ship turn that crashed, that you stopped or that ended without a push
+// (refused, a merge conflict, failed tests, a denied push) hasn't shipped
+// it, but your choice stands for the next ship turn if nothing has changed
+// or checked the work in between.
 
 type Verdict string
 
@@ -75,8 +76,8 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 	last := map[string]check{} // each checker's latest check
 	var order []string
 	change := -1   // the turn that last changed the work
-	shipped := -1  // the last turn that shipped the work because you moved it to Shipping
-	retry := false // your ship was cut short, and nothing has touched the work since
+	shipped := -1  // the last turn that pushed the work because you moved it to Shipping
+	retry := false // your ship didn't push, and nothing has touched the work since
 	for i, turn := range task.Turns {
 		agent, known := roster.Get(turn.Agent)
 		switch {
@@ -93,7 +94,7 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 			last[turn.Agent] = check{turn, i, verdict}
 		case known && agent.Column == agents.Ships: // ships the checked work; doesn't change it
 			yours := turn.Shipped || retry
-			retry = yours && (turn.Issue != "" || turn.Stopped)
+			retry = yours && !task.Pushed(turn.ID)
 			if yours && !retry {
 				shipped = i
 			}

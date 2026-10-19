@@ -21,12 +21,14 @@ import (
 //     team has one
 //   - Shipping: ship it now, by an agent of its team that ships work; a
 //     team with none refuses the move. Checked or not: your move stands, so
-//     work not yet reviewed or tested ships as you chose, and the agent that
-//     ships it still runs its usual checks before it pushes. Once it has
-//     shipped, the coordinator can finish the task without another round of
-//     checks; only a change after that needs checking again. A ship turn
-//     that crashed or was stopped hasn't shipped it: the next one ships it,
-//     as you chose, if nothing changed or checked the work in between
+//     work not yet reviewed or tested ships as you chose, with no earlier
+//     review needed; the agent that ships it still runs the tests and build
+//     after bringing it up to date, and a failure stops the push. Once it
+//     has pushed, the coordinator can finish the task without another round
+//     of checks; only a change after that needs checking again. A ship turn
+//     that crashed, was stopped or ended without a push hasn't shipped it:
+//     the next one ships it, as you chose, if nothing changed or checked the
+//     work in between
 //   - Done: it is done at once, as it is; a turn in progress stops, and the
 //     coordinator only wraps up (an epic closes, and its open stories are
 //     parked in the Backlog)
@@ -97,7 +99,8 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case request.To == "shipping":
 		text = "Ship this task now: hand it to " + strings.Join(shippers, " or ") + ", to land the work as it is. " +
-			"The user chose to ship it now, maybe before it was reviewed or tested; the agent that ships it still runs its usual checks before it pushes."
+			"The user chose to ship it now, maybe before it was reviewed or tested, so it needs no earlier review; " +
+			"the agent that ships it still runs the tests and build after bringing it up to date, and a failure stops the push."
 	case request.To == "review":
 		text = "Have this task reviewed next."
 	case sentBack:

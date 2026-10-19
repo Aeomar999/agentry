@@ -1188,7 +1188,7 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 		t.Errorf("onto Shipping: first event %s by %s with column %q, board column %s", first.Type, first.Actor.Kind, first.Text("column"), column("task-2"))
 	}
 	if text := load("task-2").Trail[len(load("task-2").Trail)-1].Text; !strings.Contains(text, "hand it to deployer") ||
-		!strings.Contains(text, "maybe before it was reviewed or tested") || !strings.Contains(text, "still runs its usual checks") {
+		!strings.Contains(text, "maybe before it was reviewed or tested") || !strings.Contains(text, "needs no earlier review") || !strings.Contains(text, "a failure stops the push") {
 		t.Errorf("the coordinator is told: %q", text)
 	}
 	if rejection := handOn("task-2", "turn-2", "engineer"); rejection == nil ||

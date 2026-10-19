@@ -79,11 +79,19 @@ func wrapUpText(task *tasks.Task) string {
 		"it. Agentry keeps your summary and refuses any other decision."
 }
 
+// YouChoseToShip tells an agent that ships work that the user moved the task
+// to Shipping, so it lands as it is, checked or not.
+const YouChoseToShip = "The user chose to ship this as it is, so no earlier review or test is needed. " +
+	"The checks you run after bringing it up to date still stand: if they fail, don't push; report why."
+
 func workerBrief(task *tasks.Task, agent agents.Agent, instructions string, shared []sharedfiles.File) string {
 	var b strings.Builder
 	header(&b, agent, task)
 	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
+	if agent.Column == agents.Ships && task.Handoff != nil && task.Handoff.Ships {
+		instructions += "\n\n" + YouChoseToShip
+	}
 	section(&b, "Your instructions from the coordinator", instructions)
 	section(&b, "Where the work is", whereText(task))
 	section(&b, "Shared files", sharedText(task, shared, false))

@@ -2,7 +2,10 @@
 // stored, so it can never disagree with what happened.
 package tasks
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Status is the one word the page shows for a task.
 type Status string
@@ -232,6 +235,21 @@ func (t *Task) Action(id string) *Action {
 		}
 	}
 	return nil
+}
+
+// Pushed says whether the turn pushed the work: it made an approved git push
+// that finished. Only a tool call that succeeded gets a result (PostToolUse),
+// so a denied or failed push never counts. The prefix match relies on
+// deployer.md giving the exact command, git push origin HEAD:dev, to run on
+// its own: a push wrapped in timeout or chained after cd isn't seen.
+func (t *Task) Pushed(turn string) bool {
+	for _, action := range t.Actions {
+		if action.Turn == turn && action.Decision == Approved && action.HasResult &&
+			strings.HasPrefix(strings.TrimSpace(action.Command), "git push") {
+			return true
+		}
+	}
+	return false
 }
 
 // WaitingForYou are the actions the policy asked the user about, not yet decided.
