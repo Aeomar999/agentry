@@ -89,13 +89,25 @@ const (
 	PolicyRefused Type = "policy.refused" // the file had an error; the policy before it stays
 )
 
+// An idea's stream, named by its ID (idea-N): a feature a Visionaries
+// session suggested for a repo, which you accept as a task or dismiss.
+const (
+	IdeaSuggested Type = "idea.suggested"
+	IdeaAccepted  Type = "idea.accepted"  // you took it on: it became the task in "task", made just before
+	IdeaDismissed Type = "idea.dismissed" // you turned it down, saying why in "note"
+)
+
 // ProposalRejected is written by the store, never proposed.
 const ProposalRejected Type = "proposal.rejected"
 
-// Streams that aren't tasks. Every other stream is one task's, named by its ID.
+// Streams that aren't tasks. Every other stream is one task's, named by its
+// ID, or one idea's (IdeaPrefix).
 const (
 	AgentsStream      = "agents"      // every agent event
 	PolicyStream      = "policy"      // every policy event
 	WorkersStream     = "workers"     // every worker event
 	ConnectionsStream = "connections" // every Claude Code connection's event
 )
+
+// IdeaPrefix starts every idea's stream name, so ideas never show up as tasks.
+const IdeaPrefix = "idea-"

@@ -115,17 +115,23 @@ func TestReopenKeepsTheLog(t *testing.T) {
 	}
 }
 
-func TestCreateNamesTheNextStream(t *testing.T) {
+func TestCreateNamesTheNextStreamOfItsKind(t *testing.T) {
 	s := openTestStore(t)
+	idea := events.Proposal{Actor: events.Actor{Kind: events.System, ID: "agentry"}, Type: events.IdeaSuggested,
+		Data: map[string]any{"title": "x", "problem": "p", "proposal": "f", "size": "S", "repo": "/src/app", "task": "task-1"}}
 	var names []string
-	for range 2 {
-		created, rejection, err := s.Create("task-", newTask(""))
+	for _, p := range []events.Proposal{newTask(""), idea, newTask(""), idea} {
+		prefix := "task-"
+		if p.Type == events.IdeaSuggested {
+			prefix = "idea-"
+		}
+		created, rejection, err := s.Create(prefix, p)
 		if rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
 		names = append(names, created.Stream)
 	}
-	if want := []string{"task-1", "task-2"}; !slices.Equal(names, want) {
+	if want := []string{"task-1", "idea-1", "task-2", "idea-2"}; !slices.Equal(names, want) {
 		t.Errorf("made %v, want %v", names, want)
 	}
 }

@@ -40,6 +40,14 @@ func TestCheckShapeAndWriter(t *testing.T) {
 			Data: map[string]any{"code": "ab12", "expires": "2026-10-17T12:00:00Z"}}, "who"},
 		{"a worker event in a task", Proposal{Stream: "task-1", Actor: Actor{System, "workers"}, Type: WorkerConnected,
 			Data: map[string]any{"name": "laptop"}}, "shape"},
+		{"an idea", Proposal{Stream: "idea-1", Actor: Actor{System, "agentry"}, Type: IdeaSuggested,
+			Data: map[string]any{"title": "x", "problem": "p", "proposal": "f", "size": "S", "repo": "/src/app", "task": "task-1"}}, ""},
+		{"an idea event in a task", Proposal{Stream: "task-1", Actor: human, Type: IdeaDismissed,
+			Data: map[string]any{"note": "no"}}, "shape"},
+		{"a task event in an idea", Proposal{Stream: "idea-1", Actor: human, Type: TaskCreated,
+			Data: map[string]any{"title": "x", "repo": "y", "coordinator": "c"}}, "shape"},
+		{"only you accept an idea", Proposal{Stream: "idea-1", Actor: coordinator, Type: IdeaAccepted,
+			Data: map[string]any{"task": "task-2"}}, "who"},
 		{"the policy asks", Proposal{Stream: "task-1", Actor: Actor{Policy, "rules"}, Type: ActionAsked, Correlation: "toolu_1",
 			Data: map[string]any{"reason": "may reach outside the worktree"}}, ""},
 	}
@@ -63,7 +71,8 @@ func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
 		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
-		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved}
+		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved,
+		IdeaSuggested, IdeaAccepted, IdeaDismissed}
 	for _, kind := range all {
 		if _, ok := catalogue[kind]; !ok {
 			t.Errorf("%s is not in the catalogue", kind)

@@ -47,6 +47,7 @@ type Task struct {
 	WaitingOn   string  // another team's task this one asked for and waits for, "" for none
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
+	Idea        string  // the idea you accepted as this task, "" for none
 
 	Kind        Kind
 	KindChosen  bool     // you chose story or epic; otherwise the coordinator may split a story that is too big

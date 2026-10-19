@@ -1,0 +1,75 @@
+// Package ideas computes an idea's state from its events, as package tasks
+// does for a task. An idea is a feature a Visionaries session suggested for
+// a repo; you accept it, and it becomes a task in your Backlog, or dismiss it.
+package ideas
+
+import (
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
+)
+
+// State is where an idea stands with you.
+type State string
+
+const (
+	Open      State = "open"
+	Accepted  State = "accepted"
+	Dismissed State = "dismissed"
+)
+
+// Sizes an idea can be: small, medium or large.
+var Sizes = []string{"S", "M", "L"}
+
+type Idea struct {
+	ID        string
+	Title     string
+	Problem   string
+	Proposal  string // the feature
+	WhyNow    string
+	Size      string // S, M or L
+	Risks     string
+	BackedBy  []string   // the agents for it
+	DoubtedBy []string   // the agents against it
+	Task      string     // the Visionaries task it came from
+	Repo      string     // the repo it is about
+	Epic      string     // an epic it follows up, "" for none
+	Kind      tasks.Kind // what it suggests making of it: a story or an epic
+	CreatedAt time.Time
+
+	State  State
+	Note   string // what you said when you accepted or dismissed it
+	Became string // for an accepted idea: the task made from it
+}
+
+// FromEvents builds an idea by applying its accepted events in order.
+// It returns nil if the events don't include idea.suggested.
+func FromEvents(stream []events.Event) *Idea {
+	var idea *Idea
+	for _, e := range stream {
+		if e.Type == events.IdeaSuggested {
+			idea = &Idea{ID: e.Stream, CreatedAt: e.At}
+		}
+		if idea != nil {
+			idea.apply(e)
+		}
+	}
+	return idea
+}
+
+func (idea *Idea) apply(e events.Event) {
+	switch e.Type {
+	case events.IdeaSuggested:
+		idea.Title, idea.Problem, idea.Proposal = e.Text("title"), e.Text("problem"), e.Text("proposal")
+		idea.WhyNow, idea.Size, idea.Risks = e.Text("whyNow"), e.Text("size"), e.Text("risks")
+		idea.BackedBy, idea.DoubtedBy = e.List("backedBy"), e.List("doubtedBy")
+		idea.Task, idea.Repo, idea.Epic = e.Text("task"), e.Text("repo"), e.Text("epic")
+		idea.Kind = tasks.Kind(e.Text("kind"))
+		idea.State = Open
+	case events.IdeaAccepted:
+		idea.State, idea.Note, idea.Became = Accepted, e.Text("note"), e.Text("task")
+	case events.IdeaDismissed:
+		idea.State, idea.Note = Dismissed, e.Text("note")
+	}
+}

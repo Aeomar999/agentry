@@ -51,7 +51,8 @@ func (t *Task) apply(e events.Event) {
 		t.Coordinator = e.Text("coordinator")
 		t.TeamChosen, t.Parent, t.Depth = e.Flag("teamChosen"), e.Text("parent"), e.Number("depth")
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
-		t.Parked = e.Text("parked") // an epic's story starts in your Backlog
+		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
+		t.Idea = e.Text("idea")
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
 	case events.TaskDirected:

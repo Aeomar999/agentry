@@ -25,8 +25,13 @@ func (s *Store) After(position int64, limit int) ([]events.Event, error) {
 }
 
 // TaskIDs returns every task's stream name, oldest first.
-func (s *Store) TaskIDs() ([]string, error) {
-	rows, err := s.db.Query(`SELECT stream FROM events WHERE type = ? ORDER BY position`, events.TaskCreated)
+func (s *Store) TaskIDs() ([]string, error) { return s.streamsStartedBy(events.TaskCreated) }
+
+// IdeaIDs returns every idea's stream name, oldest first.
+func (s *Store) IdeaIDs() ([]string, error) { return s.streamsStartedBy(events.IdeaSuggested) }
+
+func (s *Store) streamsStartedBy(kind events.Type) ([]string, error) {
+	rows, err := s.db.Query(`SELECT stream FROM events WHERE type = ? ORDER BY position`, kind)
 	if err != nil {
 		return nil, err
 	}

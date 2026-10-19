@@ -3,6 +3,7 @@ package events
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // spec is what the catalogue knows about one event type: the data it must
@@ -21,7 +22,7 @@ var catalogue = map[Type]spec{
 	AgentLearned: {fields: []string{"name"}, writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
 	AgentRenamed: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
 
-	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent}}, // an agent's: with "parent", for another team, or "epic", a story
+	TaskCreated:        {fields: []string{"title", "repo", "coordinator"}, writers: []ActorKind{Human, Agent}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is
 	TaskRenamed:        {fields: []string{"title"}, writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
 	TaskLabeled:        {writers: []ActorKind{Human}},                           // "labels" may be empty: that removes them all
@@ -85,6 +86,10 @@ var catalogue = map[Type]spec{
 	PolicyLoaded:  {fields: []string{"hash", "path"}, writers: []ActorKind{System}},
 	PolicyRefused: {fields: []string{"reason", "path"}, writers: []ActorKind{System}},
 
+	IdeaSuggested: {fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, writers: []ActorKind{Agent, System}},
+	IdeaAccepted:  {fields: []string{"task"}, writers: []ActorKind{Human}}, // "note" may be empty
+	IdeaDismissed: {fields: []string{"note"}, writers: []ActorKind{Human}},
+
 	ProposalRejected: {writers: nil},
 }
 
@@ -97,10 +102,17 @@ var streamOf = map[Type]string{
 	ConnectionInvited: ConnectionsStream, ConnectionMade: ConnectionsStream, ConnectionRevoked: ConnectionsStream,
 }
 
-// IsTaskStream is false for the agents, policy, workers and connections streams.
+// ideaTypes go in an idea's stream.
+var ideaTypes = []Type{IdeaSuggested, IdeaAccepted, IdeaDismissed}
+
+// IsTaskStream is false for the agents, policy, workers and connections
+// streams, and for ideas.
 func IsTaskStream(stream string) bool {
-	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream && stream != ConnectionsStream
+	return stream != AgentsStream && stream != PolicyStream && stream != WorkersStream && stream != ConnectionsStream &&
+		!IsIdeaStream(stream)
 }
+
+func IsIdeaStream(stream string) bool { return strings.HasPrefix(stream, IdeaPrefix) }
 
 // CheckShape is check 1: the type is known and the proposal carries what it must.
 func CheckShape(p Proposal) *Rejection {
@@ -119,10 +131,25 @@ func CheckShape(p Proposal) *Rejection {
 	if kind.correlation && p.Correlation == "" {
 		return &Rejection{"shape", fmt.Sprintf("%s needs a correlation", p.Type)}
 	}
-	if want, fixed := streamOf[p.Type]; (fixed && p.Stream != want) || (!fixed && p.Type != ProposalRejected && !IsTaskStream(p.Stream)) {
+	if !belongsIn(p.Type, p.Stream) {
 		return &Rejection{"shape", fmt.Sprintf("%s does not belong in stream %q", p.Type, p.Stream)}
 	}
 	return nil
+}
+
+// belongsIn says whether a type may be written to a stream. A rejection
+// goes in the stream of what it refused.
+func belongsIn(kind Type, stream string) bool {
+	if want, fixed := streamOf[kind]; fixed {
+		return stream == want
+	}
+	switch {
+	case kind == ProposalRejected:
+		return true
+	case slices.Contains(ideaTypes, kind):
+		return IsIdeaStream(stream)
+	}
+	return IsTaskStream(stream)
 }
 
 // CheckWriter is check 2: this kind of actor may write this type at all.

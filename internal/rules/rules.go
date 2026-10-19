@@ -44,6 +44,9 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 			return refuse(reason)
 		}
 	}
+	if events.IsIdeaStream(p.Stream) {
+		return checkIdea(p, history)
+	}
 	if !events.IsTaskStream(p.Stream) {
 		return nil
 	}
