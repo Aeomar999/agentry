@@ -18,7 +18,7 @@ import (
 // Backlog, or dismiss it.
 
 // instructions are ideas' line in agentry mcp's instructions to Claude.
-const instructions = `- Ideas: the Visionaries suggest features as ideas (list_ideas). Relay them to the user; the user accepts or dismisses each (accept_idea, dismiss_idea). Never accept or dismiss an idea on your own.`
+const instructions = `- Ideas: the Visionaries suggest features as ideas (list_ideas). Relay them to the user; the user accepts or dismisses each (accept_idea, dismiss_idea). Never accept or dismiss an idea on your own. When accept_idea says an idea looks like an open task, show the user that task; only they choose to make another (anyway).`
 
 // session is the Agentry server and the repo a Claude Code session is in
 // ("" outside one), which the tools act on.
@@ -33,10 +33,11 @@ func tools(agentry features.API, repo string) []features.Tool {
 	return []features.Tool{
 		{Name: "list_ideas", Description: "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
 			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "state": schema.Enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), Run: s.listIdeas},
-		{Name: "accept_idea", Description: "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
+		{Name: "accept_idea", Description: "Make an idea a task in the user's Backlog, or with start, a task that starts now. An idea that looks like an open task makes none until the user sees that task and chooses to make another (anyway). Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			Input: schema.Object(schema.Props{"id": schema.Text("the idea's id, such as idea-3"), "kind": schema.Enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
-				"note":  schema.Text("optional: what the user said, for the task's coordinator"),
-				"start": schema.Boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), Run: s.acceptIdea},
+				"note":   schema.Text("optional: what the user said, for the task's coordinator"),
+				"start":  schema.Boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away"),
+				"anyway": schema.Boolean("make the task even though the idea looks like an open task; only once the user has seen that task and chosen to")}, "id"), Run: s.acceptIdea},
 		{Name: "dismiss_idea", Description: "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			Input: schema.Object(schema.Props{"id": schema.Text("the idea's id"), "note": schema.Text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), Run: s.dismissIdea},
 	}
@@ -106,11 +107,13 @@ func (s session) listIdeas(_ context.Context, arguments json.RawMessage) (string
 
 // acceptIdea makes an idea a task in your Backlog, or started with start.
 // With elicitation Claude Code asks you first, and you can change the kind,
-// the note and whether it starts.
+// the note and whether it starts. An idea that looks like an open task
+// makes none unless anyway: with elicitation Claude Code shows you that
+// task and asks whether to make another; without, the reply names it.
 func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct {
 		ID, Kind, Note string
-		Start          bool
+		Start, Anyway  bool
 	}
 	json.Unmarshal(arguments, &a)
 	i, err := s.find(a.ID)
@@ -146,7 +149,19 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 	if a.Start {
 		body["start"] = true // left out otherwise, so an accept that doesn't start sends what it always did
 	}
-	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got); err != nil {
+	if a.Anyway {
+		body["anyway"] = true // as start: left out unless chosen
+	}
+	err = s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got)
+	if like, found := duplicateOf(err); found {
+		again, why, askErr := s.makeAnyway(ctx, i, like)
+		if askErr != nil || !again {
+			return why, askErr
+		}
+		body["anyway"] = true
+		err = s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got)
+	}
+	if err != nil {
 		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
 	}
 	text := fmt.Sprintf("%s became %s%s: %s", i.ID, got.Task, placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
@@ -154,6 +169,43 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		text += "\nThe idea isn't marked accepted: " + got.Refused
 	}
 	return text, nil
+}
+
+// openTask is the open task an idea looks like, as accepting it answers
+// (routes.go duplicateView).
+type openTask struct{ ID, Title, Column string }
+
+// duplicateOf is the open task an accept was refused for looking like. The
+// client's error is the server's answer as written, and only that refusal
+// is JSON naming a duplicate.
+func duplicateOf(err error) (openTask, bool) {
+	var refusal struct{ Duplicate openTask }
+	if err == nil || json.Unmarshal([]byte(err.Error()), &refusal) != nil || refusal.Duplicate.ID == "" {
+		return openTask{}, false
+	}
+	return refusal.Duplicate, true
+}
+
+// makeAnyway asks you, with elicitation, whether to make the idea a task
+// though it looks like the open task like; why is the reply when it
+// doesn't, and without elicitation it never does: the reply names the task
+// for you to decide.
+func (s session) makeAnyway(ctx context.Context, i listed, like openTask) (again bool, why string, err error) {
+	task := fmt.Sprintf("%s %q%s: %s", like.ID, like.Title, placeOf(like.Column), s.agentry.PageURL("/tasks/"+like.ID))
+	ask := features.AskOf(ctx)
+	if ask == nil {
+		return false, i.ID + " looks like the open task " + task + "\nNothing was written. If the user wants another task anyway, call accept_idea again with anyway.", nil
+	}
+	answer, ok, err := ask(ctx, "The idea "+i.ID+", "+i.Title+", looks like the open task "+task+"\n\nMake another task anyway?", schema.Object(schema.Props{
+		"decision": schema.Enum("Make another task anyway, or leave the idea open", "make another anyway", "leave open"),
+	}, "decision"))
+	if err != nil {
+		return false, "", err
+	}
+	if !ok || answer["decision"] != "make another anyway" {
+		return false, "The user left " + i.ID + " open, as it looks like " + task + "\nNothing was written.", nil
+	}
+	return true, "", nil
 }
 
 // dismissIdea dismisses an idea. With elicitation Claude Code asks you

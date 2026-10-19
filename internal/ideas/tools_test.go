@@ -18,13 +18,15 @@ import (
 // A fake Agentry with ideas in every state and nothing else waiting. It
 // records what the tools ask of it, and refuses as the server does: an idea
 // that isn't open can't be accepted or dismissed. An accepted idea's task
-// is in the column asked for, In progress with start, unless column is set.
+// is in the column asked for, In progress with start, unless column is set;
+// with like, an idea isn't accepted without anyway, as it looks like task-30.
 type ideasAgentry struct {
 	mu     sync.Mutex
 	ideas  []map[string]any
 	calls  []string
 	fail   bool    // GET /api/ideas fails
 	column *string // the column an accept answers, when set
+	like   bool    // an accept without anyway is refused as looking like task-30
 }
 
 func newIdeasAgentry(t *testing.T) (*ideasAgentry, client.Client) {
@@ -73,11 +75,17 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			if action == "accept" {
 				var choice struct {
-					Kind  string
-					Start bool
+					Kind          string
+					Start, Anyway bool
 				}
 				if json.Unmarshal(body, &choice); choice.Kind == "bug" {
 					http.Error(w, "an idea becomes a task or an epic, not bug", http.StatusConflict)
+					return
+				}
+				if f.like && !choice.Anyway {
+					w.WriteHeader(http.StatusConflict)
+					json.NewEncoder(w).Encode(map[string]any{"error": id + ` looks like the open task task-30 "Retry failed webhooks"`,
+						"duplicate": map[string]string{"id": "task-30", "title": "Retry failed webhooks", "column": "backlog"}})
 					return
 				}
 				column := map[bool]string{false: "backlog", true: "in-progress"}[choice.Start]
@@ -280,6 +288,62 @@ func TestWithoutElicitationTheArgumentsAreTheDecision(t *testing.T) {
 	}
 	if text := c.tool("accept_idea", map[string]any{"id": "idea-2"}); !strings.Contains(text, "idea idea-2 was dismissed already") {
 		t.Errorf("refused: %s", text)
+	}
+}
+
+// An idea that looks like an open task: with elicitation the user sees that
+// task and chooses to make another or leave the idea open; without, the
+// reply names the task and says how to make another, and nothing is sent
+// with anyway until the tool is called with it.
+func TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway(t *testing.T) {
+	var asked []string
+	var again string // the user's answer to the second question
+	c, fake := startOnIdeas(t, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = append(asked, p.Message)
+		if len(asked)%2 == 1 {
+			return map[string]any{"action": "accept", "content": map[string]any{"decision": "accept", "kind": "task"}}
+		}
+		return map[string]any{"action": "accept", "content": map[string]any{"decision": again}}
+	})
+	fake.like = true
+
+	again = "leave open"
+	text := c.tool("accept_idea", map[string]any{"id": "idea-1"})
+	if !strings.Contains(text, "The user left idea-1 open") || !strings.Contains(text, "task-30") || !strings.Contains(text, "Nothing was written.") {
+		t.Errorf("left open: %s", text)
+	}
+	if len(asked) != 2 || !strings.Contains(asked[1], `looks like the open task task-30 "Retry failed webhooks", in the user's Backlog`) ||
+		!strings.Contains(asked[1], "https://agentry.example/tasks/task-30") || !strings.Contains(asked[1], "Make another task anyway?") {
+		t.Errorf("asked: %q", asked)
+	}
+	if posts := fake.posts(); len(posts) != 1 || posts[0] != `POST /api/ideas/idea-1/accept {"kind":"task","note":""}` {
+		t.Errorf("only the refused accept should be sent: %v", posts)
+	}
+
+	again = "make another anyway"
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1"}); !strings.Contains(text, "idea-1 became task-31") {
+		t.Errorf("made anyway: %s", text)
+	}
+	want := []string{`POST /api/ideas/idea-1/accept {"kind":"task","note":""}`, `POST /api/ideas/idea-1/accept {"anyway":true,"kind":"task","note":""}`}
+	if posts := fake.posts(); strings.Join(posts, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent %v, want %v", posts, want)
+	}
+
+	plain, fake := startOnIdeas(t, false, nil)
+	fake.like = true
+	text = plain.tool("accept_idea", map[string]any{"id": "idea-1"})
+	if !strings.Contains(text, `idea-1 looks like the open task task-30 "Retry failed webhooks"`) || !strings.Contains(text, "Nothing was written.") ||
+		!strings.Contains(text, "call accept_idea again with anyway") {
+		t.Errorf("without elicitation: %s", text)
+	}
+	if text := plain.tool("accept_idea", map[string]any{"id": "idea-1", "anyway": true}); !strings.Contains(text, "idea-1 became task-31") {
+		t.Errorf("with anyway: %s", text)
+	}
+	want = []string{`POST /api/ideas/idea-1/accept {"kind":"epic","note":""}`, `POST /api/ideas/idea-1/accept {"anyway":true,"kind":"epic","note":""}`}
+	if posts := fake.posts(); strings.Join(posts, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sent %v, want %v", posts, want)
 	}
 }
 
