@@ -1,7 +1,9 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -87,5 +89,19 @@ func TestAConnectionWithoutACAIsPlain(t *testing.T) {
 	connected, ok := Connected()
 	if !ok || connected.CA != "" || connected.URL != "http://box:7800" {
 		t.Errorf("connected %+v, %v", connected, ok)
+	}
+}
+
+// A call given a context gives up when it ends, while the server still waits.
+func TestACallGivesUpWhenItsContextEnds(t *testing.T) {
+	done := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-done }))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(done) }) // before Close, which waits for the handler
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(100*time.Millisecond, cancel)
+	c := Client{Where: Where{URL: server.URL}, Timeout: 2 * time.Second}
+	if err := c.CallContext(ctx, "GET", "/api/changes", nil, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("err %v, want the context's end", err)
 	}
 }

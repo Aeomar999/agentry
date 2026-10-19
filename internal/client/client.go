@@ -5,6 +5,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -116,12 +117,17 @@ func Local(dataDir string) (Client, error) {
 // Call sends body as JSON and reads the reply into into, when into isn't
 // nil. A refusal is an error with the server's reason.
 func (c Client) Call(method, path string, body, into any) error {
+	return c.CallContext(context.Background(), method, path, body, into)
+}
+
+// CallContext is Call that gives up when ctx ends.
+func (c Client) CallContext(ctx context.Context, method, path string, body, into any) error {
 	var payload io.Reader
 	if body != nil {
 		encoded, _ := json.Marshal(body)
 		payload = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequest(method, strings.TrimSuffix(c.URL, "/")+path, payload)
+	request, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(c.URL, "/")+path, payload)
 	if err != nil {
 		return err
 	}

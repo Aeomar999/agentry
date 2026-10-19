@@ -57,7 +57,7 @@ func (s *Server) followFeatures(ctx context.Context) {
 	var position int64
 	for ctx.Err() == nil {
 		var changes struct{ Position int64 }
-		if err := agentry.Call("GET", fmt.Sprintf("/api/changes?after=%d", position), nil, &changes); err != nil {
+		if err := agentry.CallContext(ctx, "GET", fmt.Sprintf("/api/changes?after=%d", position), nil, &changes); err != nil {
 			select { // the server may be restarting
 			case <-ctx.Done():
 			case <-time.After(notifyEvery):
