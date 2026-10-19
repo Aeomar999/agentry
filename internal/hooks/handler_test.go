@@ -247,7 +247,7 @@ func TestTheHTTPEndpointNeedsTheHookToken(t *testing.T) {
 	}
 }
 
-func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
+func TestARestartHoldsAsksNoHookIsWaitingFor(t *testing.T) {
 	s, state := engineerAtWork(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -261,16 +261,16 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 		t.Fatalf("a hook call that dies holds its own ask for you: %+v", task.Action("toolu_7"))
 	}
 
-	// An ask left open (the server was killed outright) is denied at the next start.
+	// An ask left open (the server was killed outright) is held at the next start.
 	s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "engineer"}, Type: events.ActionRequested,
 		Correlation: "toolu_8", Data: map[string]any{"tool": "Bash", "command": "curl x"}})
 	s.Propose(events.Proposal{Stream: "task-1", Actor: ruleset, Type: events.ActionAsked, Correlation: "toolu_8",
 		Data: map[string]any{"reason": "may reach outside"}})
-	if err := DenyOrphanedAsks(s, state); err != nil {
+	if err := HoldOrphanedAsks(s, state); err != nil {
 		t.Fatal(err)
 	}
-	if task := taskIn(t, s); task.Action("toolu_8").Decision != tasks.Denied || task.Action("toolu_7").Decision != tasks.Undecided {
-		t.Errorf("the open ask %+v should be denied, the held one %+v kept", task.Action("toolu_8"), task.Action("toolu_7"))
+	if task := taskIn(t, s); !task.Action("toolu_8").Held || task.Action("toolu_8").Decision != tasks.Undecided || len(task.HooksWaiting()) != 0 {
+		t.Errorf("the open ask %+v should be held for you, hooks waiting %+v", task.Action("toolu_8"), task.HooksWaiting())
 	}
 }
 

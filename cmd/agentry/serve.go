@@ -109,7 +109,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := seedAgents(log, state); err != nil {
 		return err
 	}
-	if err := hooks.DenyOrphanedAsks(log, state); err != nil {
+	if err := hooks.HoldOrphanedAsks(log, state); err != nil {
 		return err
 	}
 	agentPolicy, err := openPolicy(o.dataDir, log)

@@ -211,7 +211,7 @@ means once per event, per open tab for the page.
 | `watchdog.Check` | `TaskIDs`, every task stream | tasks with an open turn | within a second | every second |
 | `turns.Runner.MachineOf` | the task | where its worktree is | last event | per stop, liveness check (the watchdog, per open turn) and terminal attach |
 | `hooks.Handler` | the task (`machineOf`, `gate`, `recordPlan`); the agents stream (`profileOf`, `recordWhatWasLearned`) | worktree, turn, agent profile and knowledge | last event | every hook call: each tool call and turn event |
-| `hooks.DenyOrphanedAsks` | every task stream | actions waiting on you | at startup | once |
+| `hooks.HoldOrphanedAsks` | every task stream | actions waiting on you | at startup | once |
 | `workerlink.ForgetConnections`, `serve.seedAgents`, `policy` setup | workers, agents, policy streams | the roster | at startup | once |
 | `serve` helper terminal | the task | its worktree | last event | per helper opened |
 
@@ -509,7 +509,7 @@ Each site in section 2 swaps `Stream` plus `FromEvents` for a lookup:
 | `web.Server.task`, `roster`, `listTasks`, `listQuestions`, `needing`, `tasksByMachine`, `listConnections`, the workers list | `s.current.Task(id)`, `Tasks()`, `Roster()`, `Workers()`, `Connections()` |
 | `coordinator.Loop.load`, `portsInUse`, `machines`, `newTask` | the same; `newTask` counts `len(Tasks())` |
 | `watchdog.Watchdog.Check` | `Tasks()` |
-| `turns.Runner.MachineOf`, `hooks.Handler`, `DenyOrphanedAsks`, `ForgetConnections`, `seedAgents`, the helper terminal | the same |
+| `turns.Runner.MachineOf`, `hooks.Handler`, `HoldOrphanedAsks`, `ForgetConnections`, `seedAgents`, the helper terminal | the same |
 
 They get a `*current.State` where they get the `*store.Store` today. A
 handler that both reads the state and then proposes keeps working as now:
