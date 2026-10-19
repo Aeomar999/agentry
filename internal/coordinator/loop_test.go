@@ -236,6 +236,7 @@ func newLoop(s *store.Store, state *current.State, root string) *Loop {
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
 	loop := NewLoop(s, state, turns.NewRunner(s, state, fleet, turns.Config{}), fleet)
 	loop.Features = []features.Feature{ideas.Feature()}
+	loop.Logs = map[string]features.Proposer{ideas.Name: features.Checked(ideas.Feature(), ideas.Registration(), s)}
 	return loop
 }
 

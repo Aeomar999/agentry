@@ -3,6 +3,7 @@ package coordinator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -250,6 +251,33 @@ func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
 	if task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone }); task.Summary != "Built it." {
 		t.Errorf("summary %q", task.Summary)
+	}
+}
+
+// A feature the loop has no checked proposer for writes nothing: what its
+// OnDone proposes is refused with the rule "features", and the log keeps no
+// task of it.
+func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated},
+		Coordinator: &features.Coordinator{For: func(agents.Agent) bool { return true }, Field: "votes",
+			OnDone: func(c features.Core, task *tasks.Task, _ json.RawMessage) string {
+				_, rejection, err := c.Log.Create("task-", events.Proposal{Actor: agentry, Type: events.TaskCreated,
+					Data: map[string]any{"title": "Count", "repo": task.Repo, "coordinator": "tech-lead", "about": task.ID}})
+				return fmt.Sprintf("%v %v", rejection, err)
+			}}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	if !strings.Contains(task.Summary, "features: the votes feature may not write task.created") {
+		t.Errorf("the hook should be refused by the features rule:\n%s", task.Summary)
+	}
+	if ids := state.TaskIDs(); len(ids) != 1 {
+		t.Errorf("tasks %v, want only %s", ids, id)
 	}
 }
 

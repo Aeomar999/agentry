@@ -196,9 +196,13 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	links := workerlink.NewServer(log, fleet)
 
 	// Every feature in this binary, written out here: no feature registers
-	// itself. The loop and the server are given the same list.
+	// itself. The loop and the server are given the same list. Each writes
+	// through its own checked proposer, made here once, never the store.
 	installed := []features.Feature{
 		ideas.Feature(),
+	}
+	logs := map[string]features.Proposer{
+		ideas.Name: features.Checked(ideas.Feature(), ideas.Registration(), log),
 	}
 
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
@@ -206,6 +210,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
 	loop.Features = installed
+	loop.Logs = logs
 	go loop.Run(ctx)
 	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })

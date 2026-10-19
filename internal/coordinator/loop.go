@@ -36,9 +36,10 @@ type Loop struct {
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
-	Clones   string             // where repos the user names by a git address are cloned, for a "move"
-	Defaults tasks.Limits       // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
-	Features []features.Feature // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
+	Clones   string                       // where repos the user names by a git address are cloned, for a "move"
+	Defaults tasks.Limits                 // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Features []features.Feature           // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
+	Logs     map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its hooks may write through
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -83,7 +84,6 @@ func (l *Loop) unreadable(task *tasks.Task, roster agents.Roster, decision Decis
 func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision) string {
 	own, _ := roster.Get(task.Coordinator)
 	hooks := hooksFor(l.Features, own)
-	core := features.Core{Log: l.store, Events: l.store, Read: l.state, Defaults: l.Defaults}
 	var notes, read, unread []string
 	for _, f := range hooks {
 		hook := f.Coordinator
@@ -92,6 +92,7 @@ func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision)
 			continue
 		}
 		read = append(read, hook.Field)
+		core := features.Core{Log: l.logOf(f), Events: l.store, Read: l.state, Defaults: l.Defaults}
 		var note string
 		if failed := guarded(f, "OnDone", func() { note = hook.OnDone(core, task, field) }); failed != "" {
 			note = fmt.Sprintf("Agentry couldn't keep %q: %s", hook.Field, failed)
@@ -111,6 +112,15 @@ func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision)
 		}
 	}
 	return strings.Join(notes, "\n\n")
+}
+
+// logOf is f's checked proposer. A feature the loop was given none for
+// writes nothing: everything it proposes is refused.
+func (l *Loop) logOf(f features.Feature) features.Proposer {
+	if log, found := l.Logs[f.Name]; found {
+		return log
+	}
+	return features.Checked(features.Feature{Name: f.Name}, events.Registration{}, nil)
 }
 
 // guarded runs one of f's hooks, a panic in it turned into why it failed:
