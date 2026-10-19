@@ -95,9 +95,14 @@ func TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted(t *testing.T) {
 		{good + "\ntoken = \"" + secret + "\" oops\n", "line 12, column 34"},
 		{good + "\n[" + secret + "\n", "line 12, column 24"},
 		{good + "\n[ideas]\nhost = \"" + secret + "\"\n", "it isn't valid TOML"}, // a table defined twice: go-toml gives no position
-		{strings.Replace(good, `host = "gitlab.com"`, `host = 3`, 1), "ideas.host should be a string"},
-		{strings.Replace(good, "[ideas.secrets]\ntoken", "[ideas.secrets.token]\nvalue", 1), "ideas.secrets.token should be a string"},
-		{"loose = \"" + secret + "\"\n", "loose should be a table"},
+		{strings.Replace(good, `host = "gitlab.com"`, `host = 3`, 1), "a setting in [ideas] should be a string"},
+		{strings.Replace(good, "[ideas.secrets]\ntoken", "[ideas.secrets.token]\nvalue", 1), "a secret in [ideas.secrets] should be a string"},
+		{"[ideas]\nsecrets = \"" + secret + "\"\n", "[ideas.secrets] should be a table"},
+		// a token pasted where a name goes
+		{strings.Replace(good, `host = "gitlab.com"`, secret+` = 3`, 1), "a setting in [ideas] should be a string"},
+		{strings.Replace(good, "token = ", secret+" = 3\n#", 1), "a secret in [ideas.secrets] should be a string"},
+		{good + "\n[ideas." + secret + "]\nhost = \"x\"\n", "a setting in [ideas] should be a string"},
+		{secret + " = \"x\"\n" + good, "the top of the file should hold only tables"},
 	}
 	for _, c := range cases {
 		logged.Reset()

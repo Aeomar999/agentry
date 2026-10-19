@@ -109,7 +109,8 @@ func (l *Live) reload() {
 }
 
 // parse reads the file's tables. Its errors never quote the file: go-toml's
-// can, so only their position is kept.
+// can, so only their position is kept. They name a feature's table, never a
+// key, where a token pasted in the wrong place would be.
 func parse(text []byte) (map[string]features.Table, error) {
 	var file map[string]any
 	if err := toml.NewDecoder(bytes.NewReader(text)).Decode(&file); err != nil {
@@ -124,7 +125,7 @@ func parse(text []byte) (map[string]features.Table, error) {
 	for feature, value := range file {
 		table, ok := value.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("%s should be a table, [%s]", feature, feature)
+			return nil, errors.New("the top of the file should hold only tables, one per feature")
 		}
 		parsed, err := parseTable(feature, table)
 		if err != nil {
@@ -142,12 +143,12 @@ func parseTable(feature string, table map[string]any) (features.Table, error) {
 		if key == "secrets" {
 			secrets, ok := value.(map[string]any)
 			if !ok {
-				return parsed, fmt.Errorf("%s.secrets should be a table, [%s.secrets]", feature, feature)
+				return parsed, fmt.Errorf("[%s.secrets] should be a table", feature)
 			}
 			for name, secret := range secrets {
 				text, ok := secret.(string)
 				if !ok {
-					return parsed, fmt.Errorf("%s.secrets.%s should be a string", feature, name)
+					return parsed, fmt.Errorf("a secret in [%s.secrets] should be a string", feature)
 				}
 				parsed.Secrets[name] = text
 			}
@@ -155,7 +156,7 @@ func parseTable(feature string, table map[string]any) (features.Table, error) {
 		}
 		text, ok := value.(string)
 		if !ok {
-			return parsed, fmt.Errorf("%s.%s should be a string", feature, key)
+			return parsed, fmt.Errorf("a setting in [%s] should be a string", feature)
 		}
 		parsed.Values[key] = text
 	}
