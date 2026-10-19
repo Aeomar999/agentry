@@ -53,11 +53,9 @@ func New() *State {
 func (s *State) Load(stream string, accepted []events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if events.IsTaskStream(stream) {
-		for _, e := range accepted {
-			if e.Type == events.TaskCreated {
-				s.created = append(s.created, created{e.Position, stream})
-			}
+	for _, e := range accepted {
+		if e.Type == events.TaskCreated {
+			s.created = append(s.created, created{e.Position, stream})
 		}
 	}
 	s.guard(stream, "building", func() {
@@ -96,11 +94,14 @@ func (s *State) Apply(e events.Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.position = e.Position
-	if e.Type == events.ProposalRejected || s.broken[e.Stream] != nil {
+	if e.Type == events.ProposalRejected {
 		return
 	}
 	if e.Type == events.TaskCreated {
 		s.taskIDs = append(s.taskIDs, e.Stream)
+	}
+	if s.broken[e.Stream] != nil {
+		return
 	}
 	s.guard(e.Stream, "applying "+string(e.Type)+" to", func() {
 		switch e.Stream {
@@ -163,7 +164,8 @@ func (s *State) Tasks() []*tasks.Task {
 }
 
 // Roster is every agent. If the agents stream is broken, it is the roster
-// as it was before the event that broke it, and Broken says why.
+// as it was before the event that broke it, or empty if it broke while
+// loading, and Broken says why.
 func (s *State) Roster() agents.Roster {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

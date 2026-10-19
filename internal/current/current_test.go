@@ -200,6 +200,26 @@ func TestAPanicBreaksOnlyItsStream(t *testing.T) {
 	}
 }
 
+// Store.TaskIDs lists every task.created in the log, whatever its stream
+// and even on a broken one, so loading and applying count them all too.
+func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
+	log := everyStream()
+	for i, p := range []events.Proposal{
+		proposal("task-3", you, events.TaskCreated, map[string]any{"title": "Third", "repo": "/r", "coordinator": "tech-lead"}),
+		proposal("task-3", worker, events.WorktreeMoved, map[string]any{"worker": "laptop", "path": "/w", "port": float64(7901)}),
+		proposal(events.PolicyStream, you, events.TaskCreated, map[string]any{"title": "Odd", "repo": "/r", "coordinator": "tech-lead"}),
+		proposal("task-3", you, events.TaskCreated, map[string]any{"title": "Again", "repo": "/r", "coordinator": "tech-lead"}),
+	} {
+		log = append(log, events.Event{Position: int64(100 + i), Proposal: p})
+	}
+	want := []string{"task-1", "task-2", "task-3", events.PolicyStream, "task-3"}
+	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
+		if order := taskIDsOf(s); !slices.Equal(order, want) {
+			t.Errorf("%s: task order %v, want %v", name, order, want)
+		}
+	}
+}
+
 // No roster event can make its apply panic, so a broken roster stream is
 // made by running a panic through the same guard Apply uses. The roster
 // stays as it was before, takes no more events, and says why; every other
