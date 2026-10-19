@@ -343,8 +343,9 @@ function words(text: string, props: MarkdownProps): ReactNode {
 
 // whole keeps a short one-word ref or bit of code (a task id, a commit, a
 // branch) whole, moving it to the next line rather than breaking at its
-// hyphen. A longer one, such as a path, wraps inline as text does, so a phone
-// doesn't give it a line of its own and push the words after it down.
+// hyphen. A longer one, such as a path, a full hash or a long branch, wraps
+// inline as text does, so a phone doesn't give it a line of its own and push
+// the words after it down.
 function whole(text: ReactNode): string | false {
   return typeof text === "string" && /^\S{1,24}$/.test(text) && "inline-block max-w-full";
 }
