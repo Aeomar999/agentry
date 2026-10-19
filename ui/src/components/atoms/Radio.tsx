@@ -18,7 +18,7 @@ export function Radio({ name, checked, onChange, label, hint, disabled }: RadioP
       <span
         className={cn(
           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-(--dur-fast)",
-          "peer-focus-visible:border-brand",
+          "peer-focus-visible:border-focus",
           checked ? "border-brand bg-surface-1" : "border-divider-2 bg-surface-1",
         )}
         aria-hidden

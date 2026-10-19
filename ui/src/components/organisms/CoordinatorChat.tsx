@@ -202,7 +202,7 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
               </span>
             </button>
           ) : (
-            <div className="flex flex-col rounded-lg border border-divider-2 bg-surface-1 transition-colors duration-(--dur-fast) focus-within:border-brand">
+            <div className="flex flex-col rounded-lg border border-divider-2 bg-surface-1 transition-colors duration-(--dur-fast) focus-within:border-focus">
               <textarea
                 ref={field}
                 value={draft}

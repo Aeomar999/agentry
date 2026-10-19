@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 // itself needs no focus ring of its own.
 const FIELD =
   "flex w-full items-center gap-2 rounded-md border border-divider bg-surface-1 px-2.5 text-[13px] text-ink-primary " +
-  "transition-colors duration-(--dur-fast) focus-within:border-brand hover:not-focus-within:border-divider-2";
+  "transition-colors duration-(--dur-fast) focus-within:border-focus hover:not-focus-within:border-divider-2";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   icon?: ReactNode;

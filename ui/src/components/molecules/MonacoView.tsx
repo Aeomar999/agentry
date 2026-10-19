@@ -58,5 +58,5 @@ export default function MonacoView({ text, language, maxHeight = 640, minHeight 
     if (editor.current && editor.current.getValue() !== text) editor.current.setValue(text);
   }, [text]);
 
-  return <div ref={host} className={editable ? "rounded-md border border-divider focus-within:border-brand" : undefined} />;
+  return <div ref={host} className={editable ? "rounded-md border border-divider focus-within:border-focus" : undefined} />;
 }

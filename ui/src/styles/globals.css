@@ -48,9 +48,20 @@
 
   /* Links in text: info, made darker in light so it reads at 4.5:1. */
   --color-link: var(--color-info);
-  /* Green words (a live duration, Finished): success, darker in light so
-     they read at 4.5:1. Dots, icons and badges keep success. */
+  /* Words in a state's colour (a live duration, Finished, a badge's text):
+     the state, darker in light so they read at 4.5:1 on any surface, under
+     a badge's soft fill too. Dots, icons and toasts keep the state itself.
+     Danger and brand are too dark for dark surfaces, so they are lightened
+     there. */
   --color-success-ink: var(--color-success);
+  --color-danger-ink: color-mix(in srgb, var(--color-danger) 60%, var(--color-ink-primary));
+  --color-warning-ink: var(--color-warning);
+  --color-info-ink: var(--color-info);
+  --color-brand-ink: color-mix(in srgb, var(--color-brand) 85%, var(--color-ink-primary));
+
+  /* The keyboard focus line: brand, darker in light so it shows at 3:1 on
+     every surface. */
+  --color-focus: var(--color-brand);
 
   /* The terminals' screen. It follows the theme, and Agentry starts each
      Claude session in the page's theme so its colours suit it. */
@@ -103,7 +114,11 @@ html.light {
   --color-warning: #b45309;
   --color-info: #0284c7;
   --color-link: color-mix(in srgb, var(--color-info) 85%, var(--color-ink-primary));
-  --color-success-ink: color-mix(in srgb, var(--color-success) 70%, var(--color-ink-primary));
+  --color-success-ink: color-mix(in srgb, var(--color-success) 55%, var(--color-ink-primary));
+  --color-warning-ink: color-mix(in srgb, var(--color-warning) 80%, var(--color-ink-primary));
+  --color-info-ink: color-mix(in srgb, var(--color-info) 70%, var(--color-ink-primary));
+  --color-brand-ink: color-mix(in srgb, var(--color-brand) 55%, var(--color-ink-primary));
+  --color-focus: color-mix(in srgb, var(--color-brand) 80%, var(--color-ink-primary));
 
   --color-terminal: #ffffff;
 }
@@ -168,12 +183,13 @@ body {
   scrollbar-color: var(--color-divider-2) transparent;
 }
 
-/* Focus: one 1px orange line on the element's own edge, only when the
-   keyboard moved focus there. Not on form fields: their wrapper's border
-   turns orange instead, and two lines look like a rendering bug. */
+/* Focus: one 2px orange line around the element, only when the keyboard
+   moved focus there. It shows at 3:1 on every surface. No offset here, so
+   an element can set its own: inside where a scroller would clip it, off
+   the orange primary button. Not on form fields: their wrapper's border
+   turns the same orange instead, and two lines look like a rendering bug. */
 *:focus-visible {
-  outline: 1px solid var(--color-brand);
-  outline-offset: 0;
+  outline: 2px solid var(--color-focus);
   transition-property: color, background-color, border-color; /* the line appears at once, never fades in */
 }
 input:focus-visible,

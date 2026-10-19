@@ -24,7 +24,7 @@ export function Checkbox({ checked, onChange, label, hint, disabled }: CheckboxP
       <span
         className={cn(
           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border transition-colors duration-(--dur-fast)",
-          "peer-focus-visible:border-brand",
+          "peer-focus-visible:border-focus",
           checked ? "border-brand bg-brand text-white" : "border-divider-2 bg-surface-1",
         )}
         aria-hidden

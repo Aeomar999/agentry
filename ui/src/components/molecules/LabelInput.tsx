@@ -30,7 +30,7 @@ export function LabelInput({ labels, onChange, known, autoFocus }: LabelInputPro
   }
 
   return (
-    <div className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-md border border-divider bg-surface-1 px-2 py-1 transition-colors duration-(--dur-fast) focus-within:border-brand hover:not-focus-within:border-divider-2">
+    <div className="flex min-h-8 w-full flex-wrap items-center gap-1 rounded-md border border-divider bg-surface-1 px-2 py-1 transition-colors duration-(--dur-fast) focus-within:border-focus hover:not-focus-within:border-divider-2">
       {labels.map((label) => (
         <LabelChip key={label} label={label} onRemove={() => onChange(labels.filter((l) => l !== label))} />
       ))}
