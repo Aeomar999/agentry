@@ -111,6 +111,9 @@ func TestADoneWrapUpReplaysWithTheStoppedTurnsLaterEvents(t *testing.T) {
 	)...)
 
 	task := FromEvents(log)
+	if task == nil {
+		t.Fatal("no task")
+	}
 	if turn := task.OpenTurn(); turn != nil {
 		t.Errorf("%s is still running", turn.ID)
 	}
