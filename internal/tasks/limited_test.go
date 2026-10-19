@@ -100,6 +100,22 @@ func TestAUsageLimitIsNotedInTheTrail(t *testing.T) {
 	}
 }
 
+// A limit on a turn already limited updates when it resets, with no second
+// note in the trail.
+func TestALimitAgainIsNotedOnce(t *testing.T) {
+	log := limitedLog(map[string]any{"agent": "engineer", "resetsAt": "2026-10-20T03:00:00Z"})
+	again := log[len(log)-1]
+	again.Data = map[string]any{"agent": "engineer", "resetsAt": "2026-10-20T08:00:00Z"}
+	before := FromEvents(log)
+	task := FromEvents(append(log, again))
+	if turn := task.OpenTurn(); !turn.ResetsAt.Equal(time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)) {
+		t.Errorf("resets at %v, want the later time", turn.ResetsAt)
+	}
+	if len(task.Trail) != len(before.Trail) {
+		t.Errorf("trail %d steps, want %d: %+v", len(task.Trail), len(before.Trail), task.Trail[len(task.Trail)-1])
+	}
+}
+
 func TestLimitText(t *testing.T) {
 	hit := time.Date(2026, 10, 19, 22, 30, 0, 0, time.Local)
 	cases := map[string]struct {

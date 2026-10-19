@@ -339,8 +339,12 @@ func (t *Task) Apply(e events.Event) {
 		// reset. An old log's odd one (an ended turn, a time it can't read)
 		// changes what it can and nothing else.
 		if turn := t.Turn(e.Correlation); !turn.Ended {
+			again := turn.Limited != "" // the engine said so twice: the new reset time stands, noted once
 			turn.Limited = cmp.Or(e.Text("details"), e.Text("error"), "usage limit")
 			turn.ResetsAt, _ = time.Parse(time.RFC3339, e.Text("resetsAt"))
+			if again {
+				break
+			}
 			// Only noted in the trail: the turn goes on after the reset.
 			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
 				Text: turn.Agent + "'s " + turn.ID + " hit a " + LimitText(turn.ResetsAt, e.At)})
