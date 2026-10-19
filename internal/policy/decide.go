@@ -62,13 +62,18 @@ func (p *Policy) ProfileNames() []string {
 // Decide judges a call made by an agent with the given profile ("" for the
 // default). use_for_everyone, when set, wins over the agent's own profile.
 func (p *Policy) Decide(agentProfile string, call Call) Verdict {
-	verdict := p.decide(agentProfile, call)
+	return p.DecideAs(p.EffectiveProfile(agentProfile).Profile, call)
+}
+
+// DecideAs judges a call as the named profile would, whatever
+// use_for_everyone says: what an agent with it would get once that is off.
+func (p *Policy) DecideAs(profile string, call Call) Verdict {
+	verdict := p.decide(profile, call)
 	verdict.Policy = p.hash
 	return verdict
 }
 
-func (p *Policy) decide(agentProfile string, call Call) Verdict {
-	name := p.EffectiveProfile(agentProfile).Profile
+func (p *Policy) decide(name string, call Call) Verdict {
 	prof, ok := p.profiles[name]
 	if !ok {
 		return Verdict{Decision: Deny, Rule: "profile " + name + " isn't in policy.toml"}

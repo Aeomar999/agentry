@@ -114,3 +114,26 @@ func cutProfile(t *testing.T, text, name string) string {
 	}
 	return text[:b.start] + text[b.end:]
 }
+
+func TestDecideAsSkipsUseForEveryone(t *testing.T) {
+	everyone, err := Parse(Default(), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := bash("git push origin feature")
+	if got := everyone.Decide("developer", push); got.Decision != Allow || got.Profile != "allow-everything" {
+		t.Errorf("Decide follows use_for_everyone: got %+v", got)
+	}
+	got := everyone.DecideAs("developer", push)
+	if got.Decision != Ask || got.Profile != "developer" || got.Rule != "every push leaves this machine: you approve it" || got.Policy != everyone.Hash() {
+		t.Errorf("DecideAs judges as developer: got %+v", got)
+	}
+	if got := everyone.DecideAs("haunted", push); got.Decision != Deny || got.Rule != "profile haunted isn't in policy.toml" {
+		t.Errorf("an unknown profile denies: got %+v", got)
+	}
+	for _, profile := range []string{"developer", "allow-everything"} {
+		if got := everyone.DecideAs(profile, file("Read", "/home/dev/.agentry/policy.toml")); got.Decision != Deny || got.Rule != "Agentry's own files are off limits" {
+			t.Errorf("Agentry's own files stay off limits for %q: got %+v", profile, got)
+		}
+	}
+}
