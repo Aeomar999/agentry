@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
@@ -55,8 +54,7 @@ type Server struct {
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
 
-	creating sync.Mutex // one task created at a time, so IDs never collide
-	signins  *signins   // the one-time codes that sign in another device
+	signins *signins // the one-time codes that sign in another device
 }
 
 func NewServer(s *store.Store, config Config, hooks, terminal http.Handler) *Server {

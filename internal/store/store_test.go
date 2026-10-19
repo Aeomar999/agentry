@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -111,5 +112,20 @@ func TestReopenKeepsTheLog(t *testing.T) {
 	ids, _ := second.TaskIDs()
 	if len(ids) != 2 || ids[0] != "task-1" || ids[1] != "task-2" {
 		t.Errorf("task ids after reopening: %v", ids)
+	}
+}
+
+func TestCreateNamesTheNextStream(t *testing.T) {
+	s := openTestStore(t)
+	var names []string
+	for range 2 {
+		created, rejection, err := s.Create("task-", newTask(""))
+		if rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		names = append(names, created.Stream)
+	}
+	if want := []string{"task-1", "task-2"}; !slices.Equal(names, want) {
+		t.Errorf("made %v, want %v", names, want)
 	}
 }

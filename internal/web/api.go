@@ -174,19 +174,11 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.creating.Lock()
-	defer s.creating.Unlock()
-	ids, err := s.store.TaskIDs()
-	if err != nil {
-		failed(w, err)
-		return
-	}
-	id := fmt.Sprintf("task-%d", len(ids)+1)
 	parked := ""
 	if request.Epic != "" {
 		parked = "backlog" // with the epic's other stories, until you start it
 	}
-	created, rejection, err := s.store.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
+	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
 		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
 		"budget": limitOf(request.Budget, s.config.Budget), "maxTurns": limitOf(request.MaxTurns, s.config.MaxTurns),
@@ -201,6 +193,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	// The task is made: filing it is a second step, and what fails there
 	// is said, with the task kept.
+	id := created.Stream
 	var refused []string
 	for _, story := range request.Stories {
 		if why := s.fileUnder(story, id); why != "" {

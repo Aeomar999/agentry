@@ -70,12 +70,31 @@ func (s *Store) Close() error { return s.db.Close() }
 // event and, when the proposal was refused, the rejection (the stored event is
 // then the proposal.rejected). The error is for the database failing, not for a refusal.
 func (s *Store) Propose(p events.Proposal) (events.Event, *events.Rejection, error) {
+	return s.propose(p, "")
+}
+
+// Create is Propose for the event that starts a new stream, such as
+// task.created or idea.suggested. The stream is named prefix and the next
+// number, counted in the same transaction, so two made at once never take
+// the same name.
+func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error) {
+	return s.propose(p, prefix)
+}
+
+func (s *Store) propose(p events.Proposal, prefix string) (events.Event, *events.Rejection, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return events.Event{}, nil, err
 	}
 	defer tx.Rollback()
 
+	if prefix != "" {
+		var made int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ?`, p.Type).Scan(&made); err != nil {
+			return events.Event{}, nil, err
+		}
+		p.Stream = fmt.Sprintf("%s%d", prefix, made+1)
+	}
 	rejection, err := s.validate(p, txHistory{tx})
 	if err != nil {
 		return events.Event{}, nil, err

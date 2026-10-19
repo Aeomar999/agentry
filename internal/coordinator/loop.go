@@ -437,27 +437,16 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 }
 
 // newTask makes a task with the next free id, and returns the id, or why it
-// wasn't made. Another task made at the same moment can take the id: then
-// it tries the one after.
+// wasn't made.
 func (l *Loop) newTask(by events.Actor, data map[string]any) (string, string) {
-	for attempt := 0; attempt < 5; attempt++ {
-		ids, err := l.store.TaskIDs()
-		if err != nil {
-			return "", "Agentry couldn't list the tasks: " + err.Error()
-		}
-		id := fmt.Sprintf("task-%d", len(ids)+1)
-		_, rejection, err := l.store.Propose(events.Proposal{Stream: id, Actor: by, Type: events.TaskCreated, Data: data})
-		switch {
-		case err != nil:
-			return "", "Agentry couldn't write it: " + err.Error()
-		case rejection != nil && strings.Contains(rejection.Reason, "already exists"):
-			continue // taken a moment ago: the next id
-		case rejection != nil:
-			return "", rejection.Reason
-		}
-		return id, ""
+	created, rejection, err := l.store.Create("task-", events.Proposal{Actor: by, Type: events.TaskCreated, Data: data})
+	switch {
+	case err != nil:
+		return "", "Agentry couldn't write it: " + err.Error()
+	case rejection != nil:
+		return "", rejection.Reason
 	}
-	return "", "no task id was free"
+	return created.Stream, ""
 }
 
 // storyDone gives a finished story's summary to its epic, if the epic
