@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
@@ -46,6 +47,42 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
+	s.proposeTemplate(w, proposal, id)
+}
+
+// exportTemplate is your template id as a file to keep or to import into
+// another Agentry. Only your own templates are exported: a built-in one
+// comes with every Agentry already.
+func (s *Server) exportTemplate(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, builtIn := agents.TemplateWithID(id); builtIn {
+		http.Error(w, "the "+id+" template comes with Agentry, so it isn't exported: only your own templates are", http.StatusBadRequest)
+		return
+	}
+	saved, found := s.state.Templates().WithID(id)
+	if !found {
+		http.Error(w, "there is no saved template "+id, http.StatusNotFound)
+		return
+	}
+	// The rules held the id to letters, digits and dashes, so it is safe
+	// in the header as it is.
+	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`.json"`)
+	httpapi.Reply(w, saved)
+}
+
+// importTemplate saves a template exported as a file, under the rules a
+// template you save from a team has. Importing an id you have replaces it.
+func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
+	var template agents.UserTemplate
+	if !httpapi.Decode(w, r, &template) {
+		return
+	}
+	s.proposeTemplate(w, template.Save(httpapi.You), template.ID)
+}
+
+// proposeTemplate writes a template.saved and replies with the template
+// saved, or with the rules' refusal as a 400.
+func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal, id string) {
 	switch _, rejection, err := s.store.Propose(proposal); {
 	case err != nil:
 		httpapi.Failed(w, err)

@@ -42,9 +42,15 @@ func SaveTemplate(roster Roster, team, id, description string, by events.Actor) 
 	if len(members) == 0 {
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
+	return UserTemplate{ID: id, Team: team, Description: description, Agents: members}.Save(by), nil
+}
+
+// Save is the event that saves u, as SaveTemplate's does: the rules check
+// it as one, wherever u came from.
+func (u UserTemplate) Save(by events.Actor) events.Proposal {
 	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateSaved, Data: map[string]any{
-		"id": id, "team": team, "description": description, "agents": members,
-	}}, nil
+		"id": u.ID, "team": u.Team, "description": u.Description, "agents": u.Agents,
+	}}
 }
 
 // RemoveTemplate is the event that removes the template id. The teams made
