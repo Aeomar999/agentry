@@ -148,11 +148,13 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
           let cards = onTheBoard.filter((task) => columnOf(task) === column.id);
           if (column.id === BACKLOG) cards = byEpic(cards, everyTask);
           const droppable = canDrop(column) && !isHome(column);
+          // browsers hide title tooltips during a drag, so the note is shown too
+          const cantShip = dragged && !dragged.canShip && column.id === SHIPPING ? "No agent in this team ships work" : undefined;
           return (
             <section
               key={column.id}
               aria-label={column.title}
-              title={dragged && !dragged.canShip && column.id === SHIPPING ? "No agent in this team ships work" : undefined}
+              title={cantShip}
               onDragOver={(event) => onDragOver(event, column)}
               onDragLeave={(event) => {
                 if (event.currentTarget.contains(event.relatedTarget as Node)) return;
@@ -177,6 +179,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
                   ))}
                 </span>
               </h2>
+              {cantShip && <p className="border-b border-divider px-3 py-1.5 text-[11px] text-ink-muted">{cantShip}</p>}
               <div className="flex min-h-24 scrollbar-thin flex-col gap-2 overflow-y-auto p-2">
                 {cards.map((task, index) => (
                   <Fragment key={task.id}>
