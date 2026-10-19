@@ -2,7 +2,10 @@
 // only on a secure page, http://localhost or https, that has the manifest
 // and a service worker (public/sw.js). The page keeps the offer for its
 // Install app button. Opened over plain http at a network address it can't
-// be installed, and the button says where it can.
+// be installed, and the button says where it can. Opened over https with a
+// certificate the device doesn't trust (the warning clicked through), the
+// page is secure but the browser refuses the service worker, so no offer
+// comes: that is untrusted.
 
 import { useSyncExternalStore } from "react";
 
@@ -10,11 +13,12 @@ interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
 }
 
-export type InstallState = "installed" | "ready" | "insecure" | "unavailable";
+export type InstallState = "installed" | "ready" | "insecure" | "untrusted" | "unavailable";
 
 const standalone = matchMedia("(display-mode: standalone)");
 let offer: InstallPromptEvent | null = null;
 let installed = standalone.matches;
+let workerRefused = false;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());
 
@@ -22,7 +26,11 @@ const changed = () => listeners.forEach((listener) => listener());
 // the start: the browser may make it before the page renders.
 export function watchInstall(): void {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {}); // the page works without it, only not as an app
+    // The page works without it, only not as an app.
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      workerRefused = true;
+      changed();
+    });
   }
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault(); // the page's own button offers it
@@ -40,10 +48,11 @@ export function watchInstall(): void {
   });
 }
 
-function installState(): InstallState {
+export function installState(): InstallState {
   if (installed) return "installed";
   if (!window.isSecureContext) return "insecure";
-  return offer ? "ready" : "unavailable";
+  if (offer) return "ready";
+  return workerRefused ? "untrusted" : "unavailable";
 }
 
 export function useInstall(): InstallState {

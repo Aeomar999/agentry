@@ -9,7 +9,9 @@ import { httpsAddress } from "@/lib/trust";
 // offers it. Opened over plain http at a network address, where browsers
 // don't install pages, it says where you can instead: with trust, the
 // server's own CA, at its https address, once the device trusts the CA.
-// Hidden in the app itself, and where the browser offers nothing.
+// Opened over https on a device that doesn't trust the CA yet, where the
+// browser refuses to install, it sends you to trust it first. Hidden in the
+// app itself, and where the browser offers nothing.
 export function InstallAppButton({ trust }: { trust?: Trust }) {
   const state = useInstall();
   const [noteOpen, setNoteOpen] = useState(false);
@@ -30,6 +32,7 @@ export function InstallAppButton({ trust }: { trust?: Trust }) {
   }, [noteOpen]);
 
   if (state === "installed" || state === "unavailable") return null;
+  if (state === "untrusted" && !trust) return null;
   const port = location.port ? ":" + location.port : "";
   return (
     <div ref={box} className="relative">
@@ -37,7 +40,7 @@ export function InstallAppButton({ trust }: { trust?: Trust }) {
         size="sm"
         icon={<Download />}
         aria-label="Install app"
-        aria-expanded={state === "insecure" ? noteOpen : undefined}
+        aria-expanded={state === "ready" ? undefined : noteOpen}
         onClick={() => (state === "ready" ? install() : setNoteOpen((open) => !open))}
       >
         <span className="max-sm:hidden">Install app</span>
@@ -47,7 +50,15 @@ export function InstallAppButton({ trust }: { trust?: Trust }) {
           role="note"
           className="absolute top-full right-0 mt-2 w-72 rounded-md border border-divider-2 bg-surface-2 p-3 text-[12.5px] text-ink-secondary"
         >
-          {trust ? (
+          {state === "untrusted" && trust ? (
+            <>
+              This device doesn't trust Agentry's certificate yet, so the browser won't install the app. Trust it on{" "}
+              <a href={trust.url} className="text-info underline-offset-2 hover:underline">
+                the trust page
+              </a>
+              , then reload this page.
+            </>
+          ) : trust ? (
             <>
               Browsers install apps only from secure pages. Open Agentry at{" "}
               <a href={httpsAddress(location)} className="font-mono break-all text-info underline-offset-2 hover:underline">
