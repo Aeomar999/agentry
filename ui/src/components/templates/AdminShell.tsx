@@ -136,8 +136,8 @@ export function AdminShell() {
       { id: "new-task", group: "Commands", label: "New task", icon: <Plus />, run: () => newTask() },
       { id: "new-epic", group: "Commands", label: "New epic", icon: <Plus />, run: () => newTask("epic") },
       { id: "go-plan", group: "Go to", label: "Plan", icon: <MapIcon />, run: () => navigate("/plan") },
-      { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
       ...visibleFeatures(features).flatMap((feature) => feature.commands?.(navigate) ?? []),
+      { id: "go-integrations", group: "Go to", label: "Integrations", icon: <Plug />, run: () => navigate("/integrations") },
       { id: "desk", group: "Commands", label: "Ask Claude to start a task", icon: <Sparkles />, run: () => openDock(DESK) },
       ...tasks
         .filter((task) => task.status === "working" && task.currentAgent)
