@@ -109,6 +109,20 @@ func TestATeamNameWithSpacesAndPunctuationGivesAValidID(t *testing.T) {
 	}
 }
 
+// A team named in another case is that team, as everywhere else, and the
+// template keeps the team's name as the roster has it.
+func TestATeamNamedInAnotherCaseIsSaved(t *testing.T) {
+	server, s := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	if code, body := call(t, server, "POST", "/api/teams/PLANNING/template", `{"id":"my-planning"}`); code != 200 {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	saved, _ := savedTemplates(t, s).WithID("my-planning")
+	if saved.Team != "Planning" || len(saved.Agents) != 1 || saved.Agents[0].Name != "planner" {
+		t.Errorf("saved %+v", saved)
+	}
+}
+
 func TestSavingATeamThereIsntIsNotFound(t *testing.T) {
 	server, _ := newTestServer(t)
 	if code, body := call(t, server, "POST", "/api/teams/Nobody/template", `{"id":"nobody"}`); code != http.StatusNotFound {
