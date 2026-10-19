@@ -20,7 +20,8 @@ export function Tabs({ tabs, active, onChange }: { tabs: Tab[]; active: string; 
           onClick={() => onChange(tab.id)}
           className={cn(
             // The focus line goes inside: the strip scrolls, so it would clip one outside.
-            "-mb-px inline-flex h-10 cursor-pointer items-center gap-2 border-b-2 px-2 text-[13px] whitespace-nowrap focus-visible:-outline-offset-2",
+            // Inset 3px, not 2: -mb-px hangs the button 1px past the strip, which clips that much.
+            "-mb-px inline-flex h-10 cursor-pointer items-center gap-2 border-b-2 px-2 text-[13px] whitespace-nowrap focus-visible:-outline-offset-3",
             "transition-colors duration-(--dur-fast)",
             tab.id === active ? "border-brand font-medium text-ink-primary" : "border-transparent text-ink-muted hover:text-ink-primary",
           )}
