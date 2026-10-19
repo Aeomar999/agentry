@@ -1,11 +1,13 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -209,4 +211,41 @@ func TestAReopenDuringAnArchiveRefusesTheArchive(t *testing.T) {
 	if task, err := f.state.Task("task-2"); err != nil || task == nil || task.IsDone {
 		t.Errorf("task-2 should be whole and reopened: %+v, %v", task, err)
 	}
+}
+
+// A done epic takes no stories, archived or not, so a story made under an
+// archived one is made but not filed, with the words a done epic gives,
+// and the epic stays archived: unarchiving it would change nothing. Once
+// you reopen it, which unarchives it, it takes the story. An archived task
+// that isn't an epic says so.
+func TestAStoryUnderAnArchivedEpicWaitsForItsReopening(t *testing.T) {
+	f := newArchiveFixture(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
+	storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs.Disk)
+
+	var made struct{ NotFiled []string }
+	code, body := call(t, f.server, "POST", "/api/tasks", `{"title":"Three more","epic":"task-3"}`)
+	if code != http.StatusOK {
+		t.Fatalf("a story under the archived task-3: %d %s", code, body)
+	}
+	if err := json.Unmarshal([]byte(body), &made); err != nil || !slices.Equal(made.NotFiled, []string{"task-3 is done; reopen it to add stories"}) {
+		t.Errorf("not filed: %q, %v", made.NotFiled, err)
+	}
+	stillArchived(t, f, "task-3")
+	if code, body := call(t, f.server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-2"}`); code != http.StatusConflict || body != "task-2 isn't an epic\n" {
+		t.Errorf("filing under the archived story task-2: %d %q", code, body)
+	}
+
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"in-progress"}`); code != http.StatusOK {
+		t.Fatalf("reopening the archived task-3: %d %s", code, body)
+	}
+	if code, body := call(t, f.server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-3"}`); code != http.StatusOK {
+		t.Fatalf("filing task-4 under the reopened task-3: %d %s", code, body)
+	}
+	epic, err := f.state.Task("task-3")
+	if err != nil || epic == nil || !slices.Equal(epic.Stories, []string{"task-2", "task-4"}) {
+		t.Errorf("task-3 should list task-2 and task-4: %+v, %v", epic, err)
+	}
+	stillArchived(t, f, "task-2")
+	storetest.CheckEqual(t, f.log, f.state)
 }
