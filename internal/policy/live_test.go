@@ -172,3 +172,21 @@ func TestAgentryKeepsItsNewestBackups(t *testing.T) {
 		t.Errorf("only backups go: %v", names)
 	}
 }
+
+// The backup a start-up error names is one Agentry itself wrote, the
+// newest: the file from before its last change.
+func TestAFileThatDoesntLoadAtStartNamesTheBackupOfAgentrysLastChange(t *testing.T) {
+	live, path := openTestLive(t)
+	older, _ := live.Change(Edit{Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone}, at)
+	newer, _ := live.Change(Edit{Seen: live.Current().Hash(), Apply: func(text []byte) ([]byte, error) {
+		return append(text, "# mine\n"...), nil
+	}}, at.Add(time.Minute))
+	if older == nil || newer == nil || older.Backup == "" || newer.Backup == older.Backup {
+		t.Fatalf("two changes, two backups: %+v %+v", older, newer)
+	}
+	os.WriteFile(path, []byte("version = "), 0o600)
+	_, err := OpenLive(path, home, nil)
+	if err == nil || !strings.Contains(err.Error(), "cp '"+newer.Backup+"'") || strings.Contains(err.Error(), older.Backup) {
+		t.Errorf("names the newest backup, %s: %v", newer.Backup, err)
+	}
+}
