@@ -8,7 +8,7 @@ import { Field } from "@/components/molecules/Field";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
-import type { ServerConfig } from "@/api/types";
+import type { ServerConfig, TaskSummary } from "@/api/types";
 import { LimitChoice, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
@@ -25,9 +25,11 @@ const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeU
 export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () => void }) {
   const notify = useToast();
   const config = useResource<ServerConfig>("/api/config").data;
+  const epic = useResource<TaskSummary>(idea.epic ? `/api/tasks/${encodeURIComponent(idea.epic)}` : null);
+  const untouched = untouchedBudget(idea, config, epic.data, epic.error);
   const [kind, setKind] = useState<"task" | "epic">(idea.kind === "epic" ? "epic" : "task");
   const [note, setNote] = useState("");
-  const [budget, setBudget] = useState<LimitChoice | null>(null); // null: the server's default
+  const [budget, setBudget] = useState<LimitChoice | null>(null); // null: the server's rule, untouched
   const [busy, setBusy] = useState<"" | "accept" | "start">("");
   const [refused, setRefused] = useState("");
   const [made, setMade] = useState<IdeaAcceptance | null>(null);
@@ -85,18 +87,18 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
           <Field label="Note" htmlFor="idea-note" hint="Optional. Kept with the idea, in its history.">
             <TextArea id="idea-note" autoFocus rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
-          {config && (
+          {untouched && (
             <Field
               label="Token budget"
               htmlFor="idea-budget"
-              hint="Accept and start spends tokens straight away. At this many it stops and asks you to raise it or wrap up."
+              hint={`${untouched.from}Accept and start spends tokens straight away. At this many it stops and asks you to raise it or wrap up.`}
             >
               <LimitSelect
                 id="idea-budget"
                 scale={SCALES.budget}
-                choice={budget ?? choiceOf(SCALES.budget, config.budget)}
+                choice={budget ?? choiceOf(SCALES.budget, untouched.shown)}
                 onChange={setBudget}
-                defaultLimit={config.budget}
+                defaultLimit={untouched.limit}
               />
             </Field>
           )}
@@ -116,6 +118,29 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       )}
     </Dialog>
   );
+}
+
+// untouchedBudget is what the budget field shows before you pick one: the
+// budget the server gives the task when none is sent, the epic's for an idea
+// that follows one up (tasks.NewLimits), else the server's default; from
+// says which, ahead of the field's hint. While the epic loads it is null;
+// when the epic can't be read, the field shows the server's default but
+// marks none, since the task still takes the epic's.
+function untouchedBudget(
+  idea: Idea,
+  config: ServerConfig | undefined,
+  epic: TaskSummary | undefined,
+  epicError: string,
+): { shown: number; limit?: number; from: string } | null {
+  if (!config) return null;
+  if (!idea.epic) return { shown: config.budget, limit: config.budget, from: "" };
+  if (epic) return { shown: epic.budget, limit: epic.budget, from: `From epic ${idea.epic}. ` };
+  if (epicError)
+    return {
+      shown: config.budget,
+      from: `The epic's budget couldn't be read; left alone, the task takes the epic's. `,
+    };
+  return null;
 }
 
 // placeOf says where the idea's task is, from the column the server
