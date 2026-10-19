@@ -177,3 +177,44 @@ func TestCreateNamesTheNextStreamOfItsKind(t *testing.T) {
 		t.Errorf("made %v, want %v", names, want)
 	}
 }
+
+// Creates racing each other each take a name of their own.
+func TestRacingCreatesTakeDistinctNames(t *testing.T) {
+	s := openTestStore(t)
+	var wait sync.WaitGroup
+	var mu sync.Mutex
+	var names []string
+	for range 20 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			created, rejection, err := s.Create("task-", newTask(""))
+			if rejection != nil || err != nil {
+				t.Error(rejection, err)
+				return
+			}
+			mu.Lock()
+			names = append(names, created.Stream)
+			mu.Unlock()
+		}()
+	}
+	wait.Wait()
+	slices.Sort(names)
+	if distinct := len(slices.Compact(names)); distinct != 20 {
+		t.Errorf("20 Creates made %d distinct names", distinct)
+	}
+}
+
+// A refused Create leaves its name for the next one.
+func TestARefusedCreateTakesNoName(t *testing.T) {
+	s := openTestStore(t)
+	untitled := newTask("")
+	delete(untitled.Data, "title")
+	refused, rejection, err := s.Create("task-", untitled)
+	if err != nil || rejection == nil || refused.Stream != "task-1" {
+		t.Fatalf("a task.created without a title should be refused in task-1: %+v %v %v", refused, rejection, err)
+	}
+	if created, rejection, err := s.Create("task-", newTask("")); err != nil || rejection != nil || created.Stream != "task-1" {
+		t.Errorf("the next Create should take task-1: %+v %v %v", created, rejection, err)
+	}
+}
