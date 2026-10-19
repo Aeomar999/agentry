@@ -280,9 +280,10 @@ func equalStreamPositions(state *State, inLog map[string]int64) error {
 // EqualThroughSnapshots checks snapshots as Equal checks the state: for
 // each cut, the state of the log at path up to it is written to a snapshot
 // in dir, restored and opened as serve opens it, and must equal a replay.
-// It must have gone on from the snapshot, unless a stream breaks after the
-// cut: Resume then replays the whole log, as it can't tell a stream the log
-// breaks from one the snapshot does. The log is opened with catalogue and
+// It must have gone on from the snapshot, at the last event up to the cut
+// (an archived task's rows are gone from the log), unless a stream breaks
+// after the cut: Resume then replays the whole log, as it can't tell a
+// stream the log breaks from one the snapshot does. The log is opened with catalogue and
 // the state keeps owned, as the store being checked does. It returns the
 // first difference, with its cut.
 func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string, cuts []int64, owned ...*features.Streams) error {
@@ -313,7 +314,7 @@ func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string,
 		switch {
 		case err != nil:
 			return fmt.Errorf("at %d: %w", cut, err)
-		case restored.resumed != cut && !breaksAfter(state, restored):
+		case restored.resumed != state.position && !breaksAfter(state, restored):
 			return fmt.Errorf("at %d: Open replayed the whole log instead of going on from the snapshot", cut)
 		}
 	}

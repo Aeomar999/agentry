@@ -5,17 +5,16 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
 )
 
-// Archive archives a task as the archiver will (docs/design/log-growth.md
-// section 4), with a marker the rules check and the state folds: the
-// task's summary as the list showed it. Only a done task is archived, so
-// a task that isn't done is moved to Done first. The rows the marker
-// covers stay in the log, which the state folds the same way: deleting
-// them is the archiver's (build step 7).
+// Archive archives a task through Store.Archive, as the archiver does
+// (docs/design/log-growth.md section 4): its rows moved to a blob in a
+// folder of the test's, and a marker that keeps the task's summary as the
+// list showed it. Only a done task is archived, so a task that isn't done
+// is moved to Done first.
 func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 	t.Helper()
 	task, err := state.Task(id)
@@ -27,11 +26,10 @@ func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 			Data: map[string]any{"summary": "Done, to archive.", "moved": true}})
 		task, _ = state.Task(id)
 	}
-	accepted, err := s.Stream(id)
-	if err != nil {
-		t.Fatal(err)
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	if _, rejection, err := s.Archive(id, tasks.SummaryOf(task, state.Roster()), blobs); rejection != nil || err != nil {
+		t.Fatalf("archiving %s: %v, %v", id, rejection, err)
 	}
-	mustPropose(t, s, taskstest.Marker(accepted, tasks.SummaryOf(task, state.Roster())))
 }
 
 func mustPropose(t testing.TB, s *store.Store, p events.Proposal) {

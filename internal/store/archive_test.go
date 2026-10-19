@@ -1,21 +1,25 @@
 package store
 
 import (
+	"bytes"
 	"database/sql"
+	"errors"
+	"io"
+	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 )
 
-// No archiver exists yet (build step 7), so these tests write the markers
-// and run the deletes themselves, as Store.Archive and Store.Unarchive
-// will: the marker and the delete, or the rows and the unarchiving, in one
-// transaction.
-
-var archiver = events.Actor{Kind: events.System, ID: "archiver"}
+// The schema's tests write the markers and run the deletes themselves, as
+// Store.Archive does and Store.Unarchive will: the marker and the delete,
+// or the rows and the unarchiving, in one transaction. Archive's own
+// follow them.
 
 const blob = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -333,4 +337,185 @@ func TestCreateCountsArchivedTasksOnce(t *testing.T) {
 
 	archive() // its second marker names the same task.created
 	create("task-5")
+}
+
+// putThen is blobs whose Put does something more once it has kept the
+// blob: what happens between the blob and Archive's commit.
+type putThen struct {
+	sharedfiles.Disk
+	then func() error
+}
+
+func (b putThen) Put(r io.Reader) (string, int64, error) {
+	hash, size, err := b.Disk.Put(r)
+	if err == nil {
+		err = b.then()
+	}
+	return hash, size, err
+}
+
+var summary = map[string]any{"title": "Remove every TODO"}
+
+// archivable is a store filled as fill fills it.
+func archivable(t *testing.T) *Store {
+	t.Helper()
+	s := openTestStore(t)
+	fill(t, s)
+	return s
+}
+
+// fill gives task-1 rows at 1, 2, 3 (a rejection) and 5, around task-2's
+// at 4.
+func fill(t *testing.T, s *Store) {
+	t.Helper()
+	acceptAll(t, s, newTask("task-1"), renamed("task-1"))
+	if _, rejection, err := s.Propose(newTask("task-1")); rejection == nil || err != nil {
+		t.Fatal("a second task.created should be refused:", rejection, err)
+	}
+	acceptAll(t, s, newTask("task-2"), renamed("task-1"))
+}
+
+// rowCount is how many rows a stream has in the database.
+func rowCount(t *testing.T, s *Store, stream string) int {
+	t.Helper()
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE stream = ?`, stream).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+// Archive moves every row of the stream, rejections included, into the
+// blob as it was, and leaves the marker alone in the stream, saying where
+// they went. Other streams keep theirs.
+func TestArchiveMovesTheRowsIntoTheBlob(t *testing.T) {
+	s := archivable(t)
+	log, err := s.Log("task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	marker, rejection, err := s.Archive("task-1", summary, blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if marker.Type != events.TaskArchived || marker.Actor != archiver || marker.Number("through") != 5 || marker.Number("count") != 4 ||
+		marker.Number("created") != 1 || marker.Data["summary"].(map[string]any)["title"] != "Remove every TODO" {
+		t.Errorf("the marker: %+v", marker)
+	}
+	if left, err := s.Log("task-1"); err != nil || len(left) != 1 || left[0].Position != marker.Position {
+		t.Errorf("task-1 should be its marker alone: %v, %v", left, err)
+	}
+	if rowCount(t, s, "task-2") != 1 || s.LastPosition() != marker.Position {
+		t.Errorf("task-2 should keep its row and the store be at the marker, %d: at %d", marker.Position, s.LastPosition())
+	}
+	blob, err := blobs.Open(marker.Text("archive"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blob.Close()
+	if archived, err := ReadArchive(blob); err != nil || !reflect.DeepEqual(archived, log) {
+		t.Errorf("the blob holds %+v, %v\nwant the rows as Log read them: %+v", archived, err, log)
+	}
+}
+
+// A proposal that lands on the stream between the blob and the commit
+// refuses the marker, and nothing is written: the task stays whole for the
+// next round, which archives it with the new row too.
+func TestAnEventAfterTheBlobLeavesTheTaskForTheNextRound(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, model := openAt(t, path)
+	fill(t, s)
+	disk := sharedfiles.Disk{Dir: t.TempDir()}
+	late := putThen{disk, func() error {
+		_, _, err := s.Propose(renamed("task-1"))
+		return err
+	}}
+	_, rejection, err := s.Archive("task-1", summary, late)
+	if err != nil || rejection == nil || rejection.Check != "archive" || !strings.Contains(rejection.Reason, "next round") {
+		t.Fatalf("archiving as task-1 changed: %v, %v, want refused for the next round", rejection, err)
+	}
+	if rowCount(t, s, "task-1") != 5 || s.LastPosition() != 6 || model.applied != 6 {
+		t.Errorf("task-1 should keep its 5 rows and nothing more be written or applied: %d rows, at %d, the model given %d events",
+			rowCount(t, s, "task-1"), s.LastPosition(), model.applied)
+	}
+	marker, rejection, err := s.Archive("task-1", summary, disk)
+	if rejection != nil || err != nil || marker.Number("through") != 6 || marker.Number("count") != 5 {
+		t.Errorf("the next round: %+v, %v, %v", marker, rejection, err)
+	}
+}
+
+// A crash after the blob leaves it named by nothing: the next round makes
+// the same bytes, so the same blob, and archives the task with it.
+func TestTheRoundAfterACrashMakesTheSameBlob(t *testing.T) {
+	s := archivable(t)
+	disk := sharedfiles.Disk{Dir: t.TempDir()}
+	var first []string
+	crash := putThen{disk, func() error {
+		first, _ = filepath.Glob(filepath.Join(disk.Dir, "*", "*"))
+		return errors.New("the power went")
+	}}
+	if _, rejection, err := s.Archive("task-1", summary, crash); err == nil || rejection != nil {
+		t.Fatalf("archiving through the crash: %v, %v", rejection, err)
+	}
+	if rowCount(t, s, "task-1") != 4 || len(first) != 1 {
+		t.Fatalf("the crash should leave task-1's rows and one blob: %d rows, blobs %v", rowCount(t, s, "task-1"), first)
+	}
+	written, _ := os.ReadFile(first[0])
+
+	marker, rejection, err := s.Archive("task-1", summary, disk)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	again, _ := filepath.Glob(filepath.Join(disk.Dir, "*", "*"))
+	if !slices.Equal(again, first) || filepath.Base(first[0]) != marker.Text("archive") {
+		t.Errorf("blobs after the next round %v, the marker names %s; want the one from before the crash, %v", again, marker.Text("archive"), first)
+	}
+	if now, _ := os.ReadFile(again[0]); !bytes.Equal(now, written) {
+		t.Error("the blob's bytes changed")
+	}
+}
+
+// Unless the delete takes exactly the marker's count of rows, nothing is
+// archived: no marker, every row still there, the model not told. A test
+// trigger keeps one row back, as a row the archiver didn't read would.
+func TestADeleteOfTheWrongCountUndoesTheArchive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, model := openAt(t, path)
+	acceptAll(t, s, newTask("task-1"), renamed("task-1"), renamed("task-1"))
+	if _, err := s.db.Exec(`CREATE TRIGGER keep_one BEFORE DELETE ON events WHEN OLD.position = 2 BEGIN SELECT RAISE(IGNORE); END`); err != nil {
+		t.Fatal(err)
+	}
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	if _, rejection, err := s.Archive("task-1", summary, blobs); err == nil || rejection != nil || !strings.Contains(err.Error(), "deleted 2 rows, not the marker's 3") {
+		t.Fatalf("archiving with a row kept back: %v, %v", rejection, err)
+	}
+	if rowCount(t, s, "task-1") != 3 || s.LastPosition() != 3 || model.applied != 3 {
+		t.Errorf("the archive should be undone: %d rows, the store at %d, the model given %d events; want 3 of each",
+			rowCount(t, s, "task-1"), s.LastPosition(), model.applied)
+	}
+
+	if _, err := s.db.Exec(`DROP TRIGGER keep_one`); err != nil {
+		t.Fatal(err)
+	}
+	if marker, rejection, err := s.Archive("task-1", summary, blobs); rejection != nil || err != nil || model.applied != 4 || rowCount(t, s, "task-1") != 1 {
+		t.Errorf("archiving with the trigger gone: %+v, %v, %v", marker, rejection, err)
+	}
+}
+
+// A blob gone between the put and the commit refuses the marker: it
+// would name nothing.
+func TestAMarkerNamesABlobThatIsThere(t *testing.T) {
+	s := archivable(t)
+	disk := sharedfiles.Disk{Dir: t.TempDir()}
+	lost := putThen{disk, func() error {
+		blobs, _ := filepath.Glob(filepath.Join(disk.Dir, "*", "*"))
+		return os.Remove(blobs[0])
+	}}
+	if _, rejection, err := s.Archive("task-1", summary, lost); err != nil || rejection == nil || rejection.Check != "archive" {
+		t.Errorf("archiving to a lost blob: %v, %v, want refused", rejection, err)
+	}
+	if rowCount(t, s, "task-1") != 4 {
+		t.Error("task-1 should keep its rows")
+	}
 }

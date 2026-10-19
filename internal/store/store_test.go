@@ -21,6 +21,7 @@ type created struct {
 	mu      sync.Mutex
 	streams map[string]bool
 	loaded  int64 // the position Loaded was given
+	applied int   // how many events it was given
 }
 
 func newCreated() *created { return &created{streams: map[string]bool{}} }
@@ -38,6 +39,7 @@ func (c *created) Loaded(position int64) { c.loaded = position }
 func (c *created) Apply(e events.Event) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.applied++
 	if e.Type == events.TaskCreated {
 		c.streams[e.Stream] = true
 	}

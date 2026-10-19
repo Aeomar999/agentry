@@ -8,9 +8,10 @@ import (
 // Archiving moves a done task's rows out of the live log into a blob and
 // back (docs/design/log-growth.md section 4). Only the store writes the two
 // events, and the catalogue lets no one else. What these rules can't see
-// yet is left to the store methods that write them: the task done for the
-// age, its stream unchanged since the blob, the blob present (Store.Archive),
-// and the marker undone being the stream's last (Store.Unarchive).
+// is left to the store methods that write them: the task's stream
+// unchanged since the blob and the blob present (Store.Archive), and the
+// marker undone being the stream's last (Store.Unarchive). The age is the
+// archiver's to choose by: a task reopened since changes its stream.
 
 // doneToArchive: only a done task is archived.
 func doneToArchive(t *tasks.Task, _ events.Proposal) string {
