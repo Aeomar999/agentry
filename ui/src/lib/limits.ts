@@ -15,20 +15,25 @@ export interface LimitScale {
   example: string; // for the error under a custom value
 }
 
+// The most a custom limit may be: far past any real task, and well inside
+// what the server reads as a number.
+const MAX_BUDGET = 1_000_000_000_000;
+const MAX_TURNS = 100_000;
+
 export const SCALES: Record<LimitKind, LimitScale> = {
   budget: {
     name: "Budget",
     presets: [500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000],
     show: tokens,
-    parse: (text) => positive(parseTokens(text)),
-    example: "A number of tokens, such as 2M or 500k.",
+    parse: (text) => upTo(MAX_BUDGET, parseTokens(text)),
+    example: "A number of tokens up to 1,000,000M, such as 2M or 500k.",
   },
   turns: {
     name: "Max turns",
     presets: [12, 24, 50, 100],
     show: String,
-    parse: (text) => positive(/^\s*\d+\s*$/.test(text) ? Number(text) : NaN),
-    example: "A whole number of turns, such as 30.",
+    parse: (text) => upTo(MAX_TURNS, /^\s*\d+\s*$/.test(text) ? Number(text) : NaN),
+    example: "A whole number of turns up to 100,000, such as 30.",
   },
 };
 
@@ -65,6 +70,7 @@ export function described(scale: LimitScale, limit: number): string {
   return limit > 0 ? scale.show(limit) : "unlimited";
 }
 
-function positive(n: number): number {
-  return Number.isInteger(n) && n > 0 ? n : NaN;
+// n when it is a whole number from 1 to max, or NaN.
+function upTo(max: number, n: number): number {
+  return Number.isInteger(n) && n > 0 && n <= max ? n : NaN;
 }
