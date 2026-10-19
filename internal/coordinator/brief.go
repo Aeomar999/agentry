@@ -3,6 +3,7 @@ package coordinator
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
@@ -282,9 +283,15 @@ func refusedActions(task *tasks.Task) string {
 	return refused.String()
 }
 
+// shorten cuts text to at most limit bytes, backing off to the start of a
+// character so none is split.
 func shorten(text string, limit int) string {
 	if len(text) <= limit {
 		return text
 	}
-	return text[:limit] + " [...]"
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut] + " [...]"
 }
