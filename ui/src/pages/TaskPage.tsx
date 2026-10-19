@@ -549,13 +549,13 @@ function Scroll({ children }: { children: ReactNode }) {
 }
 
 // MadeFromLink goes to the page of the stream a task was made from: an idea
-// links to the Ideas page; a stream no page here shows is its name alone.
+// links to it on the Ideas page; a stream no page here shows is its name alone.
 function MadeFromLink({ stream }: { stream: string }) {
   if (!stream.startsWith("idea-")) {
     return <Mono>{stream}</Mono>;
   }
   return (
-    <Link to="/ideas" className="font-mono text-info hover:underline">
+    <Link to={`/ideas#${stream}`} className="font-mono text-info hover:underline">
       {stream}
     </Link>
   );

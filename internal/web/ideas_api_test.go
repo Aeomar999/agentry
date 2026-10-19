@@ -113,6 +113,9 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 		!strings.Contains(body, `"madeFrom":"`+id+`"`) {
 		t.Errorf("the task made from it: %s", body)
 	}
+	if _, body := call(t, server, "GET", "/api/tasks", ""); !strings.Contains(body, `"id":"task-2"`) || !strings.Contains(body, `"madeFrom":"`+id+`"`) {
+		t.Errorf("the task list: %s", body)
+	}
 	if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != http.StatusConflict || !strings.Contains(body, "accepted already") {
 		t.Errorf("a second accept: %d %s", code, body)
 	}

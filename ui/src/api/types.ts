@@ -33,7 +33,7 @@ export interface TaskSummary {
   waitingOn: string; // another team's task this one waits for
   kind: "" | "epic"; // "" is a story
   epic: string; // a story's epic
-  idea: string; // the idea it was accepted as, "" for none
+  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
   stories: number; // an epic's
@@ -51,7 +51,6 @@ export interface TaskDetail extends TaskSummary {
   coordinator: string;
   teamChosen: boolean; // false: its coordinator may still pass it to the right team
   epicTitle: string; // a story's epic's
-  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   storyList: TaskSummary[]; // an epic's stories, in the order they were planned
   shared: SharedFile[]; // its shared files
   movingTo: string; // the repo it moves to when the turn in progress ends
