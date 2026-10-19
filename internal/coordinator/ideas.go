@@ -46,14 +46,16 @@ const IdeasFormat = `Your "done" decision carries the ideas the session agreed o
 
 // suggest keeps the decision's ideas, each an idea from the task about its
 // repo, and says which were refused and why. An idea already kept from the
-// task under the same title isn't kept again, so a done applied twice
-// suggests each once.
+// task under the same title isn't kept again, so a done applied twice, or
+// one naming an idea twice, suggests each once.
 func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
+	list, err := ideas.List(l.store, task.Repo)
+	if err != nil {
+		return "Agentry couldn't keep these ideas, as it couldn't read the ones it has: " + sentence(err)
+	}
 	kept := map[string]bool{}
-	if list, err := ideas.List(l.store, task.Repo); err == nil {
-		for _, idea := range list {
-			kept[idea.Title] = kept[idea.Title] || idea.Task == task.ID
-		}
+	for _, idea := range list {
+		kept[idea.Title] = kept[idea.Title] || idea.Task == task.ID
 	}
 	var refused []string
 	for _, idea := range suggested {
@@ -69,6 +71,8 @@ func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
 			refused = append(refused, fmt.Sprintf("%q: Agentry couldn't write it: %v", idea.Title, err))
 		case rejection != nil:
 			refused = append(refused, fmt.Sprintf("%q: %s", idea.Title, rejection.Reason))
+		default:
+			kept[idea.Title] = true
 		}
 	}
 	if len(refused) == 0 {

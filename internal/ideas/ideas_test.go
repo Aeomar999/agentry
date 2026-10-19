@@ -231,6 +231,25 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 	}
 }
 
+// A kind that is neither a task nor an epic is refused, whether or not a
+// task was made from the idea already.
+func TestAcceptRefusesAnUnknownKind(t *testing.T) {
+	s, repo := openSeeded(t)
+	fresh, made := suggest(t, s, repo, nil), suggest(t, s, repo, nil)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": made}})
+
+	for _, id := range []string{fresh, made} {
+		got, err := ideas.Accept(s, id, ideas.Choice{Kind: "bogus"})
+		if err != nil || got != (ideas.Acceptance{Refused: "an idea becomes a task or an epic, not bogus"}) {
+			t.Errorf("accepting %s as bogus: %+v %v", id, got, err)
+		}
+		if idea := load(t, s, id); idea.State != ideas.Open {
+			t.Errorf("%s is %s", id, idea.State)
+		}
+	}
+}
+
 // You dismiss the idea after its task is made but before it is marked: the
 // task stays, and Acceptance says so.
 func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {

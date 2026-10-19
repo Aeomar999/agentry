@@ -97,6 +97,24 @@ func TestARefusedIdeaDoesntStopTheDone(t *testing.T) {
 	}
 }
 
+// Only a Visionaries session suggests ideas: a Software done carrying some
+// goes through and keeps none.
+func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
+	s, repo := withVisionaries(t)
+	const id = "task-vision-6"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"}]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	if task.Summary != "Built it." {
+		t.Errorf("summary %q", task.Summary)
+	}
+	if list, err := ideas.List(s, repo); err != nil || len(list) != 0 {
+		t.Errorf("ideas: %v %v", list, err)
+	}
+}
+
 // The story's "dismissals reach a Visionaries brief": a Visionaries
 // coordinator reads what you dismissed in its repo, and a Software one
 // doesn't, nor how to suggest ideas.

@@ -343,8 +343,10 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		summary := decision.Summary
-		if refused := l.suggest(task, decision.Ideas); refused != "" {
-			summary += "\n\n" + refused
+		if own, _ := roster.Get(task.Coordinator); isVisionaries(own) && len(decision.Ideas) > 0 {
+			if refused := l.suggest(task, decision.Ideas); refused != "" {
+				summary += "\n\n" + refused
+			}
 		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)

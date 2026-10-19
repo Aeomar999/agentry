@@ -49,12 +49,16 @@ func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
 	case idea.State != Open:
 		return Acceptance{Refused: "idea " + id + " was " + string(idea.State) + " already"}, nil
 	}
+	kind, known := kindOf(choice.Kind, idea)
+	if !known {
+		return Acceptance{Refused: "an idea becomes a task or an epic, not " + choice.Kind}, nil
+	}
 	made, err := madeFrom(log, idea.ID)
 	if err != nil {
 		return Acceptance{}, err
 	}
 	if made.Task == "" {
-		if made, err = makeTask(log, idea, choice); err != nil || made.Task == "" {
+		if made, err = makeTask(log, idea, kind, choice); err != nil || made.Task == "" {
 			return made, err
 		}
 	}
@@ -80,7 +84,8 @@ var accepting sync.Mutex
 var beforeMarking = func() {}
 
 // madeFrom finds a task an earlier Accept made from the idea but stopped
-// before marking it.
+// before marking it. It reads every task stream under the lock; the read
+// model (docs/design/read-model.md) will replace it with a lookup.
 func madeFrom(log *store.Store, id string) (Acceptance, error) {
 	ids, err := log.TaskIDs()
 	if err != nil {
@@ -98,13 +103,9 @@ func madeFrom(log *store.Store, id string) (Acceptance, error) {
 	return Acceptance{}, nil
 }
 
-// makeTask makes the idea's task, parked in the Backlog. Task is "" and
-// Refused says why when it can't.
-func makeTask(log *store.Store, idea *Idea, choice Choice) (Acceptance, error) {
-	kind, known := kindOf(choice.Kind, idea)
-	if !known {
-		return Acceptance{Refused: "an idea becomes a task or an epic, not " + choice.Kind}, nil
-	}
+// makeTask makes the idea's task, of the kind given, parked in the Backlog.
+// Task is "" and Refused says why when it can't.
+func makeTask(log *store.Store, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
 	if reason := worktrees.IsRepo(idea.Repo); reason != "" {
 		return Acceptance{Refused: "the idea's repo can't take a task: " + reason}, nil
 	}
