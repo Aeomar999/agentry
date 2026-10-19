@@ -1,3 +1,16 @@
+// Package events is what the log holds: the event types, the catalogue of
+// what each one must carry, and a JSON Schema of each.
+//
+// The schemas live in internal/events/schemas, one <type>.json per type
+// the catalogue serve opens the log with knows. They come from the Specs, by
+// Schema, and aren't edited by hand: after a Spec changes, write them again
+// with
+//
+//	go test ./internal/events -run TestTheSchemaFilesAreUpToDate -update
+//
+// and that test fails until they are. TestEveryFixtureEventFitsItsSchema
+// checks every event of every .jsonl and .ndjson file under a testdata
+// folder of the module against the committed file of its type, by Validate.
 package events
 
 import (
