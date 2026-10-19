@@ -1285,7 +1285,7 @@ func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	before, _ := s.Stream(events.AgentsStream)
 	code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`)
 	if code != http.StatusBadRequest || !strings.Contains(body, "[profiles.read-mostly]") || !strings.Contains(body, path) ||
-		!strings.Contains(body, "https://github.com/francischempa/agentry/blob/dev/internal/policy/default.toml") {
+		!strings.Contains(body, "The latest default policy is at https://github.com/francischempa/agentry/blob/dev/internal/policy/default.toml") {
 		t.Errorf("a team whose profile the policy lacks: %d %s", code, body)
 	}
 	if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
