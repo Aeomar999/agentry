@@ -96,7 +96,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
               <LimitSelect
                 id="idea-budget"
                 scale={SCALES.budget}
-                choice={budget ?? choiceOf(SCALES.budget, untouched.shown, untouched.limit)}
+                choice={budget ?? choiceOf(SCALES.budget, untouched.limit, untouched.limit)}
                 onChange={setBudget}
                 defaultLimit={untouched.limit}
               />
@@ -120,26 +120,22 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
   );
 }
 
-// untouchedBudget is what the budget field shows before you pick one: the
-// budget the server gives the task when none is sent, the epic's for an idea
-// that follows one up (tasks.NewLimits), else the server's default; from
-// says which, ahead of the field's hint. While the epic loads it is null;
-// when the epic can't be read, the field shows the server's default but
-// marks none, since the task still takes the epic's.
+// untouchedBudget is what the budget field shows, marked as the default,
+// before you pick one: the budget the server gives the task when none is
+// sent, the epic's for an idea that follows one up (tasks.NewLimits), else
+// the server's default; from says which, ahead of the field's hint. While
+// the epic loads it is null. When the epic can't be read it is most likely
+// gone, and then the task takes the server's default.
 function untouchedBudget(
   idea: Idea,
   config: ServerConfig | undefined,
   epic: TaskSummary | undefined,
   epicError: string,
-): { shown: number; limit?: number; from: string } | null {
+): { limit: number; from: string } | null {
   if (!config) return null;
-  if (!idea.epic) return { shown: config.budget, limit: config.budget, from: "" };
-  if (epic) return { shown: epic.budget, limit: epic.budget, from: `From epic ${idea.epic}. ` };
-  if (epicError)
-    return {
-      shown: config.budget,
-      from: `The epic's budget couldn't be read; left alone, the task takes the epic's. `,
-    };
+  if (!idea.epic) return { limit: config.budget, from: "" };
+  if (epic) return { limit: epic.budget, from: `From epic ${idea.epic}. ` };
+  if (epicError) return { limit: config.budget, from: `Epic ${idea.epic} wasn't found, so the server's default applies. ` };
   return null;
 }
 
