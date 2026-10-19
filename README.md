@@ -177,7 +177,7 @@ The coordinator is an ordinary agent. It never starts anyone itself: it ends eac
 
 ### What happens to one action
 
-Before an agent runs a command, edits a file or fetches a page, its engine calls `agentry hook`. Anything short of a clear yes blocks the action, including the server being down or slow: the gate fails closed. An action that asks you waits up to 30 minutes; with no answer by then, the agent is told no, and the action stays in Needs you. Approve it later and its coordinator hands it back, and that exact command goes through once without asking again. A denial stays a denial.
+Before an agent runs a command, edits a file or fetches a page, its engine calls `agentry hook`. Anything short of a clear yes blocks the action, including the server being down or slow: the gate fails closed. An action that asks you waits up to 30 minutes; with no answer by then, the agent is told no, and the action stays in Needs you. Approve it later and its coordinator hands it back, and that exact command goes through once without asking again, if the agent that asked runs it in its next turn and the policy still asks rather than denies. A denial stays a denial.
 
 <p align="center">
   <img src="docs/diagrams/one-action.svg" alt="What happens to one action: the hook, the log, the built-in protection, the agent's profile, then allow, ask you or deny" width="100%">
