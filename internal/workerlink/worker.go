@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -52,6 +53,7 @@ var ErrRemoved = errors.New("the server no longer knows this worker; join it aga
 // the new one.
 func (w *Worker) Run(ctx context.Context) error {
 	wait := time.Second
+	toldUntrusted := false
 	for {
 		if w.SelfUpdate {
 			if updated, err := w.Update(ctx); updated {
@@ -70,6 +72,12 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.linked(false, err)
 		if connected {
 			wait = time.Second // it was up: this is a new problem, so dial back at once
+			toldUntrusted = false
+		}
+		if pinned.Untrusted(err) && !toldUntrusted {
+			w.Log("the server's certificate isn't from the CA kept when this worker joined: was its CA regenerated? " +
+				"Join again with `agentry worker join -ca-fingerprint <F> " + w.Server + " <code>`, F from `agentry ca` on the server and the code from its Workers page")
+			toldUntrusted = true
 		}
 		w.Log("link down (%v); dialing again in %s", err, wait)
 		select {

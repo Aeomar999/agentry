@@ -43,6 +43,8 @@ func runCA(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 	if *regenerate {
 		fmt.Fprintln(stdout, "Made a new CA. Devices that trusted the old one no longer trust this server: on each, remove the old Agentry local CA and trust the new one from /trust/ca.crt.")
+		fmt.Fprintln(stdout, "Workers and connected Claude Code machines must join again with the new fingerprint below: run the install command again, "+
+			"with -ca-fingerprint. Sessions open now keep the old CA until they restart.")
 	}
 	fmt.Fprintf(stdout, "Agentry's CA in %s, SHA-256 %s\n", dir, ca.Fingerprint())
 	return 0
