@@ -213,6 +213,16 @@ The page is an admin console: Tasks and Plan, then Agents, Workers, Integrations
 - **Budgets and turn limits:** every task has a token budget (`-budget`, 5M by default) and a limit of turns without your answer (`-max-turns`, 24 by default), its own to change at any time, or to make unlimited: on the new-task form, in its Details, or with the pencil beside its tokens and turns under the header, each a list of presets, Unlimited, or a number of your own. At its budget a task stops and asks you to raise it or wrap up; at its turn limit it stops and asks for guidance. Raising either, or making it unlimited, while the task is stopped at that limit is your answer, and the coordinator carries on; it never answers any other question, such as the other limit's stop, a request to copy a file or a stop for issues in a row, even after you lower the limit below what the task has used. Stops asked before Agentry recorded their limit are known by their words. In the Questions list such a stop has kind `budget` or `turns`, with the numbers it stopped at, and a task's `stoppedAt` names it. Through the API: `PUT /api/tasks/{task}/budget` `{"budget": N}` and `PUT /api/tasks/{task}/turns` `{"maxTurns": N}`, 0 or -1 for no limit, each replying with the new limit and `answered`, whether it answered the stop, and `refused`, why not if the rules refused that answer; the limit is kept either way, and a 409 means nothing was saved, as on a done task; a new task (`POST /api/tasks`) takes `budget` and `maxTurns`, left out or 0 for the server's default, -1 for no limit. Tasks made before turn limits were each task's own keep 24.
 - **Keys:** `Ctrl+K` searches everything, and `?` lists every shortcut.
 
+## Ideas
+
+An idea is a feature suggested for a repo: the problem, the proposal, why now, a size (S, M or L), the risks, and which agents backed or doubted it. Ideas come from a Visionaries team: its coordinator ends the session with the ideas it agreed on, on its done decision, and Agentry keeps each one in the log beside the task it came from. You accept an idea, as a task or an epic in your Backlog, in the idea's repo, whose description links back to it; or you dismiss it with a note. The next Visionaries session in that repo is told what you dismissed and why, so it doesn't suggest it again.
+
+- `GET /api/ideas` (`?repo=` for one repo's): newest session first.
+- `POST /api/ideas/{idea}/accept` with `{"kind": "task" or "epic", "note": "..."}`: answers `{"task", "accepted", "refused"}`. A task made but the idea not marked accepted still answers 200, with the reason in `refused`.
+- `POST /api/ideas/{idea}/dismiss` with `{"note": "..."}`.
+
+The page's Ideas list comes in a later story.
+
 ## The policy
 
 What agents may do is in `~/.agentry/policy.toml`, written on first start from [`internal/policy/default.toml`](internal/policy/default.toml), which documents every field. Save the file and it takes effect within two seconds. A file with a mistake is refused, the policy before it stays in force, and the page says what's wrong.
