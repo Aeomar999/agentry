@@ -12,7 +12,7 @@ import (
 // When you close an epic, Agentry starts one short Visionaries session
 // about it: what it delivered, and what could follow. Its ideas land in
 // Ideas like any session's, each from a task that is "about" the epic. You
-// turn it off in the settings; without a Visionaries team, the epic says
+// turn it off on the Ideas page; without a Visionaries team, the epic says
 // how to add one.
 
 // A session after an epic closes is a short one.
@@ -50,7 +50,7 @@ func (l *Loop) followUp(id string, close int64) {
 	if team == "" || !ok {
 		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as there is no Visionaries team. "+
 			"To have one after the next epic you close, add the team: on the Agents page, Add a team, Visionaries. "+
-			"Or turn these sessions off in the settings.")
+			"Or turn these sessions off on the Ideas page.")
 		return
 	}
 	_, refused := l.newTask(agentry, map[string]any{
