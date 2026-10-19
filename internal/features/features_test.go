@@ -1,7 +1,10 @@
 package features
 
 import (
+	"errors"
+	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -32,7 +35,29 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 // A Route that names no Auth is the page's only, never unguarded.
 func TestTheZeroAuthIsUI(t *testing.T) {
 	var route Route
-	if route.Auth != UI || UI == Desk {
-		t.Errorf("the zero Auth %+v should be UI %+v, and UI not Desk %+v", route.Auth, UI, Desk)
+	if route.Auth.DeskToo() || route.Auth.Verify() != nil || UI.DeskToo() || UI.Verify() != nil {
+		t.Errorf("the zero Auth and UI should let in neither the desk nor a signature")
 	}
+	if !Desk.DeskToo() || Desk.Verify() != nil {
+		t.Errorf("Desk should let in the desk, and check no signature")
+	}
+}
+
+// A signed route is opened by its signature alone, never by the desk.
+func TestSignedKeepsItsVerify(t *testing.T) {
+	refused := errors.New("refused")
+	auth := Signed(func(*http.Request, []byte) error { return refused })
+	if auth.DeskToo() || auth.Verify() == nil || auth.Verify()(nil, nil) != refused {
+		t.Errorf("Signed should keep its verify and not let in the desk")
+	}
+}
+
+// Signed with no verify fails closed: it panics, so no route checks nothing.
+func TestSignedWithNoVerifyPanics(t *testing.T) {
+	defer func() {
+		if message, _ := recover().(string); !strings.Contains(message, "needs a verify") {
+			t.Errorf("Signed(nil) panicked with %q, want it to say it needs a verify", message)
+		}
+	}()
+	Signed(nil)
 }

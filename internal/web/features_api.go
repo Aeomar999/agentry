@@ -15,19 +15,28 @@ func (s *Server) listFeatures(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, map[string]any{"features": features.Manifest(s.config.Features, s.state), "unknown": s.state.Unknown()})
 }
 
-// mount puts f's routes on the API, each behind the wrapper its Auth names:
-// deskToo for features.Desk, api for features.UI and any other.
-func (s *Server) mount(f features.Feature, api, deskToo func(pattern string, handler http.HandlerFunc)) {
+// mount puts f's routes on mux, each behind the wrapper its Auth names.
+func (s *Server) mount(f features.Feature, mux *http.ServeMux) {
 	if f.Routes == nil {
 		return
 	}
 	for _, route := range f.Routes(s.coreOf(f)) {
-		register := api
-		if route.Auth == features.Desk {
-			register = deskToo
-		}
-		mountRoute(f.Name, route, register)
+		wrap := s.wrapperOf(route.Auth)
+		mountRoute(f.Name, route, func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, wrap(handler)) })
 	}
+}
+
+// wrapperOf is the wrapper auth names: signed for features.Signed,
+// requireUIOrDesk for features.Desk, and requireUI for features.UI and any
+// other. None is requireRealUIToken, which hands out the token.
+func (s *Server) wrapperOf(auth features.Auth) func(http.HandlerFunc) http.Handler {
+	switch {
+	case auth.Verify() != nil:
+		return func(next http.HandlerFunc) http.Handler { return signed(auth.Verify(), next) }
+	case auth.DeskToo():
+		return s.requireUIOrDesk
+	}
+	return s.requireUI
 }
 
 // mountRoute registers one of feature's routes. A pattern that clashes with
