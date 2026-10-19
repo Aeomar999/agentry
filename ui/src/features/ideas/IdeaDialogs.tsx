@@ -101,7 +101,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
             </Field>
           )}
           {refused && <Banner title="It wasn't accepted">{refused}</Banner>}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="primary" icon={<Check />} disabled={busy !== ""} onClick={() => accept(false)}>
               {busy === "accept" ? "Accepting…" : kind === "epic" ? "Accept as an epic" : "Accept as a task"}
             </Button>
