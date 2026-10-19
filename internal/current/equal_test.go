@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -116,5 +117,20 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	state.taskIDs[0], state.taskIDs[1] = state.taskIDs[1], state.taskIDs[0]
 	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "task order:") {
 		t.Errorf("Equal with task-1 and task-2 swapped: %v", err)
+	}
+}
+
+// Equal compares every field of a task, so it sees a DoneAt the state got
+// wrong though every other field is right.
+func TestEqualSeesAWrongDoneAt(t *testing.T) {
+	s := openStore(t, someProposals()...)
+	state := New()
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	wrong := state.tasks["task-1"].Clone()
+	wrong.DoneAt = time.Unix(1, 0).UTC()
+	state.tasks["task-1"] = wrong
+	if err := Equal(s, state); err == nil || err.Error() != "task-1: field DoneAt differs from a replay" {
+		t.Errorf("Equal with task-1's DoneAt wrong: %v", err)
 	}
 }

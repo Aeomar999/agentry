@@ -76,7 +76,8 @@ type Task struct {
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
 	Summary      string // the coordinator's summary, once done
 	IsDone       bool
-	DoneByYou    bool // you moved it to Done on the board, rather than its coordinator finishing it
+	DoneAt       time.Time // when it was last done, zero while it isn't
+	DoneByYou    bool      // you moved it to Done on the board, rather than its coordinator finishing it
 	LastActiveAt time.Time
 
 	// What is waiting to happen. The coordinator loop acts on these.

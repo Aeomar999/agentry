@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -140,7 +141,7 @@ func (t *Task) Apply(e events.Event) {
 		} else {
 			t.Worktree = nil
 		}
-		t.IsDone, t.DoneByYou, t.Summary, t.WrapUp = false, false, "", nil
+		t.IsDone, t.DoneAt, t.DoneByYou, t.Summary, t.WrapUp = false, time.Time{}, false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("text"))
 		t.moveColumn(e)
@@ -359,7 +360,7 @@ func (t *Task) Apply(e events.Event) {
 		t.moveColumn(e)
 
 	case events.TaskDone:
-		t.IsDone, t.Summary = true, e.Text("summary")
+		t.IsDone, t.DoneAt, t.Summary = true, e.At, e.Text("summary")
 		t.Question, t.Asked, t.Closing = "", Asked{}, "" // an epic you closed: that was your answer
 		t.Column, t.SentBack = "", false
 		// You moved it to Done on the board: it is done, whatever was in hand.
