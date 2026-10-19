@@ -1,4 +1,4 @@
-import { Fragment, ReactNode } from "react";
+import { Fragment, MouseEvent, ReactNode } from "react";
 import { ArrowUpRight, Square, SquareCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { LinkTo, safeHref } from "@/lib/links";
@@ -340,7 +340,15 @@ function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false
   return (
     <a
       href={to.href}
-      onClick={to.onClick ? (event) => (event.preventDefault(), to.onClick!()) : undefined}
+      onClick={
+        to.onClick
+          ? (event) => {
+              if (!plainClick(event)) return; // a new tab or window, as the browser does
+              event.preventDefault();
+              to.onClick!();
+            }
+          : undefined
+      }
       target={to.external ? "_blank" : undefined}
       rel={to.external ? "noopener noreferrer" : undefined}
       title={to.title}
@@ -356,6 +364,12 @@ function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false
       {marked && !to.name && <span className="sr-only">(opens in a new tab)</span>}
     </a>
   );
+}
+
+// plainClick says whether a click is a plain left click, with no key that
+// asks the browser for a new tab, a new window or a download.
+function plainClick(event: MouseEvent): boolean {
+  return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 function plain(text: string): string {

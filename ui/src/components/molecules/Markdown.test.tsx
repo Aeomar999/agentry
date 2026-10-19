@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
+import { fireEvent, render } from "@testing-library/react";
 import { Markdown, MarkdownProps } from "./Markdown";
 import { linkInto, refTo, Refs } from "@/lib/links";
 import { OTHER_SITES, UNSAFE } from "@/lib/links.fixtures";
@@ -153,6 +153,34 @@ describe("Markdown refs", () => {
     const { container } = render(<Markdown text="before task-21 and task-21, after" {...withRefs} />);
     expect(container.textContent).toBe("before task-21 and task-21, after");
     expect(container.querySelectorAll("a")).toHaveLength(2);
+  });
+
+  // navigating links tasks as the task page does: in the app, by go.
+  const navigating = (go: () => void): Partial<MarkdownProps> => ({
+    refs: (word) => {
+      const to = refTo("task-75", word, refs);
+      return to && { ...to, onClick: go };
+    },
+  });
+
+  test.each([
+    ["a Ctrl-click", { ctrlKey: true }],
+    ["a Cmd-click", { metaKey: true }],
+    ["a Shift-click", { shiftKey: true }],
+    ["an Alt-click", { altKey: true }],
+    ["a middle click", { button: 1 }],
+  ])("leaves %s on a task link to the browser, for a new tab or window", (_, click) => {
+    const go = vi.fn();
+    const [a] = links("see task-21", navigating(go));
+    expect(fireEvent.click(a, click)).toBe(true); // not prevented
+    expect(go).not.toHaveBeenCalled();
+  });
+
+  test("goes to a task in the app on a plain left click", () => {
+    const go = vi.fn();
+    const [a] = links("see task-21", navigating(go));
+    expect(fireEvent.click(a)).toBe(false); // prevented
+    expect(go).toHaveBeenCalledOnce();
   });
 
   test("puts no link inside a link's label", () => {
