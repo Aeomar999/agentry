@@ -31,7 +31,8 @@
 # Patterns
 #   commands   * matches anything, spaces included: 'git push *'. A trailing
 #              " *" may match nothing, so 'git push *' also matches 'git push'.
-#              # matches a number: 'sed -n #,#p *'.
+#              # matches a number: 'sed -n #,#p *'. \ before a character
+#              matches that character as it is: '\#' is a #, '\*' a *.
 #   paths      * stays inside one folder, ** crosses folders, ~ is your home.
 #              A pattern with no / matches that name in any folder: '.env'.
 #   git        git's options before its subcommand are left out, so 'git commit *'
