@@ -193,6 +193,8 @@ const DEFAULTS: Settings = {
   autoAcceptIdeas: false,
   autoStartIdeas: false,
   autoAcceptRule: "everyoneBacked",
+  maxRunningTasks: 0,
+  runningTasks: 0,
 };
 
 // The rules for which ideas Agentry accepts for you, the strict one first.

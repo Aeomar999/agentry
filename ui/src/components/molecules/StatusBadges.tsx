@@ -11,6 +11,12 @@ export function TaskStatusBadge({ status }: { status: TaskStatus }) {
   return <Badge variant={TASK[status]}>{status}</Badge>;
 }
 
+// A task that wants a turn and waits for a slot, as the most tasks running
+// at once are.
+export function QueuedBadge() {
+  return <Badge>queued</Badge>;
+}
+
 const DECISION: Record<Decision, BadgeVariant> = { allow: "success", ask: "warning", deny: "danger" };
 
 export function DecisionBadge({ decision }: { decision: Decision }) {

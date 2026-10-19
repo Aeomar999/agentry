@@ -77,6 +77,26 @@ export function described(scale: LimitScale, limit: number): string {
   return limit > 0 ? scale.show(limit) : "unlimited";
 }
 
+// The most tasks Agentry gives a turn at once, across every repo: a board
+// setting, not a task's, but picked the same way. 0 is no limit, on the wire
+// too. The most matches the server's (settings.MostRunningTasks).
+const MOST_RUNNING = 100;
+
+export const RUNNING: LimitScale = {
+  name: "Most running at once",
+  presets: [1, 2, 3, 4, 5, 8, 10],
+  show: String,
+  parse: (text) => upTo(MOST_RUNNING, /^\s*\d+\s*$/.test(text) ? Number(text) : NaN),
+  example: "A whole number of tasks from 1 to 100.",
+};
+
+// "2 of 2 running", and how many wait for a slot first: "Queued: 3 · 2 of
+// 2 running". "" with no limit, when nothing waits.
+export function runningLine(limit: number, running: number, queued: number): string {
+  if (limit <= 0) return "";
+  return (queued > 0 ? `Queued: ${queued} · ` : "") + `${running} of ${limit} running`;
+}
+
 // n when it is a whole number from 1 to max, or NaN.
 function upTo(max: number, n: number): number {
   return Number.isInteger(n) && n > 0 && n <= max ? n : NaN;
