@@ -34,6 +34,10 @@ var DefaultLimits = Limits{
 	Repeats:     5,
 }
 
+// UnknownReset is how long a usage limit is taken to last when the engine
+// didn't say when it resets.
+const UnknownReset = time.Hour
+
 type Watchdog struct {
 	store     *store.Store   // where it raises issues
 	state     *current.State // the tasks it watches
@@ -80,7 +84,7 @@ func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) 
 		w.propose(task.ID, events.IssueRaised, "", map[string]any{"reason": problem})
 		return
 	}
-	if !turn.Acknowledged && turn.Waiting == "" && now.Sub(turn.StartedAt) > w.limits.Acknowledge {
+	if turn.Limited == "" && !turn.Acknowledged && turn.Waiting == "" && now.Sub(turn.StartedAt) > w.limits.Acknowledge {
 		w.propose(task.ID, events.AgentWaiting, turn.ID, map[string]any{"question": fmt.Sprintf(
 			"%s hasn't received its prompt after %s. It may be showing a question on screen, such as whether to trust "+
 				"this repository: open its terminal and answer it.", turn.Agent, w.limits.Acknowledge)})
@@ -91,6 +95,9 @@ func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) 
 func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn) string {
 	if now.Sub(turn.StartedAt) > w.limits.StartGrace && !w.isRunning(task.ID) {
 		return fmt.Sprintf("%s's process exited in %s (crashed or was killed)", turn.Agent, turn.ID)
+	}
+	if turn.Limited != "" {
+		return w.limitedProblem(now, turn)
 	}
 	if command, times := repeatedCommand(task, turn); times >= w.limits.Repeats {
 		return fmt.Sprintf("%s requested the same command %d times in a row, so it may be stuck in a loop: %s", turn.Agent, times, command)
@@ -104,6 +111,22 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 	isWaitingForYou := len(task.WaitingForYou()) > 0 || turn.Waiting != ""
 	if !isWaitingForYou && now.Sub(turn.LastEventAt) > w.limits.Silence {
 		return fmt.Sprintf("%s has been silent for over %s (stalled: a hung network call or a stuck tool)", turn.Agent, w.limits.Silence)
+	}
+	return ""
+}
+
+// limitedProblem is what is wrong with a turn stopped at a usage limit: the
+// engine is quiet on purpose until the reset, so only silence after it counts.
+func (w *Watchdog) limitedProblem(now time.Time, turn *tasks.Turn) string {
+	quietFrom := turn.ResetsAt
+	if quietFrom.IsZero() {
+		quietFrom = turn.LastEventAt.Add(UnknownReset)
+	}
+	if turn.LastEventAt.After(quietFrom) {
+		quietFrom = turn.LastEventAt
+	}
+	if now.Sub(quietFrom) > w.limits.Silence {
+		return fmt.Sprintf("%s has been silent for over %s since its usage limit was due to reset", turn.Agent, w.limits.Silence)
 	}
 	return ""
 }

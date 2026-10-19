@@ -150,3 +150,69 @@ func TestAPromptThatNeverArrivesWaitsForYou(t *testing.T) {
 		t.Errorf("once the prompt arrives the task is working again, got %s", task.Status())
 	}
 }
+
+// limit stops turn-1 at a usage limit that resets at resetsAt ("" when the
+// engine didn't say).
+func (w *world) limit(resetsAt string) {
+	w.t.Helper()
+	w.propose(worker, events.TurnLimited, "turn-1", map[string]any{"agent": "tech-lead", "error": "rate_limit", "details": "limit reached", "resetsAt": resetsAt})
+}
+
+func TestALimitedTurnIsQuietUntilTheResetPlusSilence(t *testing.T) {
+	w := newWorld(t)
+	w.limit(time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339))
+	if issue := w.after(39 * time.Minute); issue != "" || w.stopped {
+		t.Errorf("quiet before the reset plus the silence limit is waiting, not a stall: %q", issue)
+	}
+	if issue := w.after(41 * time.Minute); !strings.Contains(issue, "usage limit") || !w.stopped {
+		t.Errorf("a turn that never goes on after the reset is a stall: issue %q, stopped %v", issue, w.stopped)
+	}
+}
+
+func TestALimitWithNoResetTimeWaitsAnHour(t *testing.T) {
+	w := newWorld(t)
+	w.limit("")
+	if issue := w.after(UnknownReset + 9*time.Minute); issue != "" {
+		t.Errorf("issue %q", issue)
+	}
+	if issue := w.after(UnknownReset + 11*time.Minute); !strings.Contains(issue, "usage limit") {
+		t.Errorf("issue %q", issue)
+	}
+}
+
+func TestALimitedTurnWhoseProcessExitedIsACrash(t *testing.T) {
+	w := newWorld(t)
+	w.limit(time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	w.alive = false
+	if issue := w.after(4 * time.Second); !strings.Contains(issue, "process exited") {
+		t.Errorf("issue %q", issue)
+	}
+}
+
+func TestALimitedTurnIsNeverAskedAboutItsPrompt(t *testing.T) {
+	w := newWorld(t)
+	w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
+	w.propose(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
+	w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2"})
+	w.propose(worker, events.TurnLimited, "turn-2", map[string]any{"agent": "engineer", "error": "rate_limit", "details": "", "resetsAt": ""})
+
+	w.after(2 * time.Minute)
+	if waiting := w.task().OpenTurn().Waiting; waiting != "" {
+		t.Errorf("a limited engine echoes no prompt until the reset, so nobody should be asked: %q", waiting)
+	}
+}
+
+func TestALimitedTurnSkipsTheRepeatCheck(t *testing.T) {
+	w := newWorld(t)
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	for i := range DefaultLimits.Repeats {
+		id := fmt.Sprintf("toolu_%d", i)
+		w.propose(coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "go test ./..."})
+		w.propose(policy, events.ActionApproved, id, map[string]any{"reason": "ok"})
+		w.propose(worker, events.ActionResult, id, nil)
+	}
+	w.limit("")
+	if issue := w.after(time.Second); issue != "" {
+		t.Errorf("issue %q", issue)
+	}
+}
