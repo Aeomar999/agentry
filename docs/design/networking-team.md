@@ -121,7 +121,7 @@ scratch = ['/tmp/claude-*/**']
   ]
   why = "These look at addresses, routes, sockets, firewall rules and paths across the network, and change nothing."
 
-  # read-only's rules from "runs no command a flag names" on, unchanged
+  # read-only's rules from "runs nothing that changes files" on, unchanged
 ```
 
 The allow has no `where`: its arguments are hosts and addresses, not files.
@@ -172,4 +172,21 @@ Every prompt carries these, and the lead's carries them as its rules for decidin
 
 ## Probe results
 
-To be filled by the probe test (part B).
+The profile above, with its placeholders filled from read-only, was appended to the shipped policy and run through `Decide` in a throwaway test: 91 cases, all as expected (16 allow, 69 ask, 6 deny). No rule changed and no form was dropped.
+
+| Probe | Cases | Decision | Deciding rule |
+|---|---|---|---|
+| Allowed form | 16 | allow | diagnoses the network |
+| `--extra` after the fixed part | 16 | ask | network commands take no other options (9); changes live network state (2, `iptables`, by `ip*tables *--*`); otherwise (5, exact forms) |
+| `--extra` at the end | 16 | ask | the same split as above |
+| Wrapped in `timeout 5` | 16 | ask | otherwise |
+| Chained with `&& echo hi` | 16 | ask | otherwise |
+| Key printers (`wg show wg0 dump`, also behind `sudo`; `timeout 5 wg showconf wg0`) | 3 | deny | never prints a private key |
+| `ss -tK` (clustered options) | 1 | ask | otherwise |
+| `nft list ruleset \; list tables` | 1 | ask | network commands take no other options |
+| Pipe (`ss -tlnp \| grep :443`) | 1 | ask | otherwise |
+| Redirect (`ping ... > out.txt`) | 1 | deny | writes no files from the shell |
+| Live changes (`ufw allow 443`, `ip route add ...`, `systemctl restart nginx`) | 3 | ask | changes live network state |
+| Secret path (Read `/etc/wireguard/wg0.conf`) | 1 | deny | never touch secrets |
+
+A wrapped, chained or piped form asks because the wrapper or the other command is not on any list. The full output, one line per case with its deciding rule, is in the task's shared files: `.agentry/files/networking-profile-results.md`, beside the full profile in `.agentry/files/network-diagnosis.toml`.
