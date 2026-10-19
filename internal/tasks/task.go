@@ -51,6 +51,7 @@ type Task struct {
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
 	Idea        string  // the idea you accepted as this task, "" for none
+	ByAgentry   bool    // Agentry made it, as for an idea it accepted for you, rather than you or an agent
 	About       string  // for a Visionaries session Agentry started after you closed an epic: the epic, "" for any other task
 	AboutClose  int64   // and the log position of that close: a reopened epic closed again is a new close
 

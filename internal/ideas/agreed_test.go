@@ -228,9 +228,9 @@ func TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow(t *testing.T) {
 	}
 }
 
-// Agentry makes a task from an idea only while it is open, starts only a
-// task it made from an idea it accepted, and only starts it; no agent
-// accepts an idea.
+// Agentry makes a task from an idea only while it is open, and starts only
+// a task it made from an idea it accepted, once, out of the Backlog into
+// In progress, before it has run; no agent accepts an idea.
 func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	turnOn(t, s, state)
@@ -241,10 +241,11 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	if got, _ := ideas.Accept(s, state, yours, ideas.Choice{}); !got.Accepted {
 		t.Fatalf("accept: %+v", got)
 	}
-	start := func(task string) events.Proposal {
+	held := func(task, column string, sentBack bool) events.Proposal {
 		return events.Proposal{Stream: task, Actor: agentry, Type: events.TaskHeld,
-			Data: map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}}
+			Data: map[string]any{"place": "", "note": "", "column": column, "sentBack": sentBack}}
 	}
+	start := func(task string) events.Proposal { return held(task, "in-progress", false) }
 	refused := []struct {
 		name string
 		p    events.Proposal
@@ -258,6 +259,9 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 		{"starting the task you accepted", start("task-3")},
 		{"starting the Visionaries' task", start("task-1")},
 		{"parking its own", events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}}},
+		{"moving its own to Shipping", held("task-2", "shipping", false)},
+		{"moving its own to Review", held("task-2", "review", false)},
+		{"sending its own back", held("task-2", "in-progress", true)},
 		{"an agent accepting", events.Proposal{Stream: suggest(t, s, repo, map[string]any{"title": "Third"}), Actor: coordinator,
 			Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}}},
 	}
@@ -269,5 +273,36 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	mustPropose(t, s, start("task-2"))
 	if task := loadTask(t, s, "task-2"); task.Parked != "" || task.Column != "in-progress" {
 		t.Errorf("started: parked %q column %q", task.Parked, task.Column)
+	}
+
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "agentry/task-2", "port": 7901}},
+		{Stream: "task-2", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-2", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "report": "x"}},
+		{Stream: "task-2", Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": ""}},
+	} {
+		mustPropose(t, s, p)
+	}
+	if _, rejection, err := s.Propose(start("task-2")); err != nil || rejection == nil {
+		t.Errorf("starting again a task you parked after it ran: want refused, got %v %v", rejection, err)
+	}
+}
+
+// A task you made from an idea is yours: Agentry doesn't start it, even
+// when it marked the idea accepted.
+func TestAgentryStartsNoTaskYouMade(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	id := suggestAgreed(t, s, repo, nil)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "idea": id, "parked": "backlog"}})
+	if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+		t.Fatalf("accept: %+v", got)
+	}
+	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,
+		Data: map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}}
+	if _, rejection, err := s.Propose(start); err != nil || rejection == nil {
+		t.Errorf("want refused, got %v %v", rejection, err)
 	}
 }
