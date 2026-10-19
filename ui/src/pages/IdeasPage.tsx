@@ -149,12 +149,12 @@ const RULES: { rule: AutoAcceptRule; label: string; hint: string }[] = [
 // IdeaSettings are the settings about ideas: whether closing an epic starts
 // a Visionaries session about its follow-ups, and whether Agentry accepts,
 // and starts, the ideas the Visionaries agreed on, and by which rule. Each
-// change names only its setting. They wait for the settings before you can change them, show
-// what you chose while the server saves it and what it saved until the
-// settings load again (they only reload when the event log moves), and the
-// defaults when the settings can't be read. Starting them counts only with
-// accepting them, so it reads as off and can't be changed while that is off;
-// the rule can't be changed then either.
+// change names only its setting. They wait for the settings before you can
+// change them, show what you chose while the server saves it and what it
+// saved until the settings load again (they only reload when the event log
+// moves), and the defaults when the settings can't be read. Starting them
+// counts only with accepting them, so it reads as off and can't be changed
+// while that is off; the rule can't be changed then either.
 function IdeaSettings() {
   const { data, error } = useResource<Settings>("/api/settings");
   const [saving, setSaving] = useState<Partial<Settings> | null>(null);

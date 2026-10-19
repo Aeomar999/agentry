@@ -19,7 +19,7 @@ type Choice struct {
 	Kind     string // "task" (or "story") or "epic"; "" takes the one the idea suggests
 	Note     string
 	Defaults tasks.Limits // the server's budget and turns for the new task, unless it follows up an epic, which gives its own
-	By       events.Actor // who accepts it: you when unset, or Agentry for an idea every Visionary agreed on
+	By       events.Actor // who accepts it: you when unset, or Agentry for an idea the Visionaries agreed on by your rule
 }
 
 // Acceptance says what Accept did. The task can be made and the idea still
