@@ -132,7 +132,7 @@ No form was dropped. Each one with arguments is closed by its option asks, and t
 
 - **curl, openssl, nc and tcpdump are not allowed forms.** They ask through read-only's `otherwise = "ask"`. Safe fixed forms for them are a follow-up.
 - **A command wrapped in `timeout` asks.** `timeout` isn't one of the wrappers Agentry looks through (`internal/policy/shell.go`), so `timeout 5 ping ...` matches no allowed form. The key-printer denies start with `*`, so `timeout`, `sudo` or anything else in front can't get past them. The prompts tell agents to use each tool's own limits instead: `ping -c # -W #`, `dig +time= +tries=`, `mtr -c #`.
-- **`ss` joins `clusteringTools`** in `internal/policy/shell.go`, with a test, and default.toml's clusters comment lists it. Then a rule naming one of ss's short options matches it inside a cluster (`-tlnpK`), as it already does for sort.
+- **`ss` stays out of `clusteringTools`.** `withShortOptionsApart` (`internal/policy/shell.go`) would rewrite `ss -tlnp` into `ss -t -l -n -p` before rules match, so the exact allows `ss -tlnp` and `ss -tunap` would never match and both would ask. The exact forms already make `ss -tK` ask.
 - **Pipes ask.** `ss -tlnp | grep :443` asks: `runs_only` needs every command in the call to match one rule's list, and `grep` is in read-only's list, not this one. Agents run the form alone and read the output. The probe test confirms it.
 
 ### Deferred follow-ups
@@ -163,7 +163,7 @@ Every prompt carries these, and the lead's carries them as its rules for decidin
 
 - `internal/agents/teams.go`: the Networking template after Visionaries, which adds no feature.
 - `internal/agents/defaults/networking/{network-lead,network-engineer,network-verifier,network-security}.md`: about 250 to 400 words each, in the voice of `writing/` and `visionaries/`: "You are the ...", a "How to ..." list, the checkers ending on their verdict line.
-- `internal/policy/default.toml`: the `network-diagnosis` profile, copied to a new `shipped/07-<next version>.toml` (TestEveryShippedProfileIsKept). Adding a profile also changes `policy/file_test.go` (TestTheDefaultHasTheFiveProfiles), the profile loops in `policy/default_test.go`, and the profile count in `web/api_test.go` TestThePolicyShowsWithItsProblem. A new `default_test.go` test checks the rules above: each allowed form allows, an option before or after its arguments asks, the live changes ask, and the key printers deny, also behind `sudo` or `timeout`. The same step adds `ss` to `clusteringTools`.
+- `internal/policy/default.toml`: the `network-diagnosis` profile, copied to a new `shipped/07-<next version>.toml` (TestEveryShippedProfileIsKept). Adding a profile also changes `policy/file_test.go` (TestTheDefaultHasTheFiveProfiles), the profile loops in `policy/default_test.go`, and the profile count in `web/api_test.go` TestThePolicyShowsWithItsProblem. A new `default_test.go` test checks the rules above: each allowed form allows, an option before or after its arguments asks, the live changes ask, and the key printers deny, also behind `sudo` or `timeout`.
 - The missing-profiles offer needs no change: an existing install's policy.toml lacks `network-diagnosis`, `POST /api/teams` answers 409 `{missingProfiles}`, and Add the profiles and the team calls `policy.AddProfile` with the shipped text. The UI reads templates from the API, so Teams shows the new one with no UI change.
 - `README.md`, lines 109 and 256: add Networking to the teams you can add.
 - Tests:
