@@ -66,7 +66,7 @@ export function HandoffPath({ turns, coordinator, done, onOpenTurn }: HandoffPat
                 aria-hidden
               />
               {stage.agent}
-              {stage.turns.length > 1 && <span className="text-[11px] text-ink-faint">×{stage.turns.length}</span>}
+              {stage.turns.length > 1 && <span className="text-[11px] text-ink-muted">×{stage.turns.length}</span>}
             </button>
           </span>
         );
