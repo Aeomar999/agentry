@@ -172,3 +172,17 @@ func TestATemplateIsRemovedOnce(t *testing.T) {
 func TestARemovalNeedsAnID(t *testing.T) {
 	refusedSaying(t, removingTemplate(""), "needs an id")
 }
+
+func TestASavedTeamIsAccepted(t *testing.T) {
+	s, state := openSeededState(t)
+	p, err := agents.SaveTemplate(state.Roster(), agents.DefaultTeam, "mine", "My software team.", you)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+		t.Errorf("saving the %s team: %v, %v", agents.DefaultTeam, rejection, err)
+	}
+	if saved, ok := state.Templates().WithID("mine"); !ok || len(saved.Agents) == 0 {
+		t.Errorf("the saved template: %+v", saved)
+	}
+}

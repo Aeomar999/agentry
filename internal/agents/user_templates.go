@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -22,6 +23,28 @@ type UserTemplate struct {
 // the built-in templates.
 func (u UserTemplate) Template() Template {
 	return Template{ID: u.ID, Team: u.Team, Description: u.Description, Agents: u.Agents, Given: true}
+}
+
+// SaveTemplate is the event that saves team's agents, as they are now, as
+// the template id. It keeps what makes each agent and drops what is this
+// install's or this team's alone: its knowledge, the machines it runs on
+// (which another install, or this one later, may not have) and its team
+// and template, which adding the template sets again.
+func SaveTemplate(roster Roster, team, id, description string, by events.Actor) (events.Proposal, error) {
+	var members []Agent
+	for _, a := range roster {
+		if a.TeamName() == team {
+			members = append(members, Agent{Name: a.Name, Description: a.Description, Prompt: a.Prompt,
+				Engine: a.Engine, Model: a.Model, Profile: a.Profile, Coordinates: a.Coordinates,
+				Color: a.Color, Column: a.Column})
+		}
+	}
+	if len(members) == 0 {
+		return events.Proposal{}, errors.New("there is no team " + team)
+	}
+	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateSaved, Data: map[string]any{
+		"id": id, "team": team, "description": description, "agents": members,
+	}}, nil
 }
 
 // UserTemplates are the templates you saved and haven't removed, in the
