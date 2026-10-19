@@ -17,9 +17,9 @@ import (
 )
 
 // The schema's tests write the markers and run the deletes themselves, as
-// Store.Archive does and Store.Unarchive will: the marker and the delete,
-// or the rows and the unarchiving, in one transaction. Archive's own
-// follow them.
+// Store.Archive and Store.Unarchive do: the marker and the delete, or the
+// rows and the unarchiving, in one transaction. Archive's own follow them;
+// Unarchive's are in unarchive_test.go.
 
 const blob = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
@@ -319,8 +319,8 @@ func TestCreateCountsArchivedTasksOnce(t *testing.T) {
 	archive()
 	create("task-3")
 
-	// The rows back with their own positions, as Store.Unarchive will put
-	// them: task.created at 1 again.
+	// The rows back with their own positions, as Store.Unarchive puts them:
+	// task.created at 1 again.
 	inTransaction(t, s, func(tx *sql.Tx) {
 		var at int64
 		if err := tx.QueryRow(`SELECT position FROM events WHERE type = 'task.archived'`).Scan(&at); err != nil {

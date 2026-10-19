@@ -64,8 +64,7 @@ func archive(t *testing.T, s *store.Store, state *current.State, id string) {
 
 // An archived task takes its unarchiving and nothing else. Only the store
 // writes the markers, so the rules' own refusals of them are read from
-// Check. (Store.Unarchive, in step 9 of log-growth.md section 8, takes it
-// on from there.)
+// Check. (Store.Unarchive takes it on from there.)
 func TestAnArchivedTaskTakesOnlyItsUnarchiving(t *testing.T) {
 	s, state := openArchived(t)
 	if rejection := Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived, Data: archivedData(nil)}, state, withIdeas); rejection == nil ||

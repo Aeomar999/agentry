@@ -112,7 +112,7 @@ func Marker(accepted []events.Event, summary any) events.Proposal {
 			"created": accepted[0].Position, "summary": summary}}
 }
 
-// Unarchived undoes the marker at position marker, as Store.Unarchive will.
+// Unarchived undoes the marker at position marker, as Store.Unarchive does.
 func Unarchived(stream string, marker int64) events.Proposal {
 	return events.Proposal{Stream: stream, Actor: events.Actor{Kind: events.System, ID: "archiver"}, Type: events.TaskUnarchived,
 		Data: map[string]any{"marker": marker, "archive": Blob}}

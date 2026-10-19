@@ -203,25 +203,39 @@ func encodeArchive(rows []row) ([]byte, error) {
 // ReadArchive is the events in an archive blob, rejections included, in
 // order, as Log reads them: what an archived task's history starts with.
 func ReadArchive(blob io.Reader) ([]events.Event, error) {
-	unzipped, err := gzip.NewReader(blob)
+	rows, err := decodeArchive(blob)
 	if err != nil {
 		return nil, err
 	}
-	lines := json.NewDecoder(unzipped)
-	var found []events.Event
-	for {
-		var r row
-		switch err := lines.Decode(&r); {
-		case errors.Is(err, io.EOF):
-			return found, unzipped.Close()
-		case err != nil:
-			return nil, err
-		}
+	found := make([]events.Event, 0, len(rows))
+	for _, r := range rows {
 		e := events.Event{Position: r.Position, Proposal: events.Proposal{Stream: r.Stream, Type: events.Type(r.Type), Correlation: r.Correlation,
 			Actor: events.Actor{Kind: events.ActorKind(r.ActorKind), ID: r.ActorID}}}
 		if err := decode(&e, r.At, r.Data); err != nil {
 			return nil, err
 		}
 		found = append(found, e)
+	}
+	return found, nil
+}
+
+// decodeArchive is the rows in an archive blob, as encodeArchive wrote
+// them.
+func decodeArchive(blob io.Reader) ([]row, error) {
+	unzipped, err := gzip.NewReader(blob)
+	if err != nil {
+		return nil, err
+	}
+	lines := json.NewDecoder(unzipped)
+	var rows []row
+	for {
+		var r row
+		switch err := lines.Decode(&r); {
+		case errors.Is(err, io.EOF):
+			return rows, unzipped.Close()
+		case err != nil:
+			return nil, err
+		}
+		rows = append(rows, r)
 	}
 }

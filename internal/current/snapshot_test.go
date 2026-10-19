@@ -200,9 +200,9 @@ func streamAt(t *testing.T, path, stream string) []events.Event {
 }
 
 // appendRow appends p to the closed log at path as the store writes a row,
-// past Propose, which refuses the markers, and returns its position. Until
-// Store.Unarchive (log-growth.md section 8, step 9) it is how a test keeps
-// a marker beside the rows it names, and unarchives it.
+// past Propose, which refuses the markers, and returns its position: how a
+// test keeps a marker beside the rows it names, and unarchives it, without
+// Store.Archive moving them.
 func appendRow(t *testing.T, path string, p events.Proposal) int64 {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)

@@ -4,7 +4,7 @@
 // "append-only" does not depend on the code remembering; the one delete
 // allowed is of a task's rows that its task.archived marker covers (see
 // migrations). Propose is the way in for every event but the markers,
-// which only Archive writes: it runs the checks against the model, appends
+// which only Archive and Unarchive write: it runs the checks against the model, appends
 // the event (or a proposal.rejected) and applies it to the model. A mutex
 // makes proposals strictly one at a time, from the check to the apply, so
 // two can never both pass the order check against the same state (proof
@@ -257,8 +257,8 @@ func (s *Store) made(kind events.Type) (int, error) {
 	return made, err
 }
 
-// byTheStore are the types the store writes itself, through Archive (and
-// Unarchive): Propose refuses them from anyone, so no marker goes into the
+// byTheStore are the types the store writes itself, through Archive and
+// Unarchive: Propose refuses them from anyone, so no marker goes into the
 // log without its rows moving with it.
 var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived}
 
