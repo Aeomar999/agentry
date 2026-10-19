@@ -69,10 +69,12 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 	waitForRead := func(want seen) {
 		t.Helper()
 		for deadline := time.Now().Add(5 * time.Second); ; {
-			if got := <-reads; got == want {
-				return
-			}
-			if time.Now().After(deadline) {
+			select {
+			case got := <-reads:
+				if got == want {
+					return
+				}
+			case <-time.After(time.Until(deadline)):
 				t.Fatalf("the job never read %+v", want)
 			}
 		}
