@@ -705,7 +705,12 @@ func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 			{"vitest --dir", bash("npx vitest run --dir " + scratch), Ask},
 			{"vitest --reporter=", bash("npx vitest run --reporter=" + scratch + "/r.js"), Ask},
 			{"vitest a path", bash("npx vitest run " + scratch), Ask},
+			{"vitest a nested =", bash("npx vitest run --execArgv=--require=" + scratch + "/x.js"), Deny},
 			{"jest a nested =", bash("npx jest --testEnvironmentOptions=--require=" + scratch + "/x.js"), Ask},
+			// --execArgv hands vitest's workers node options, which run code with no file
+			{"vitest --execArgv", bash("npx vitest run --execArgv --import=data:text/javascript,globalThis.x=1"), Deny},
+			{"vitest --execArgv=", bash("npx vitest run --execArgv=--import=data:text/javascript,globalThis.x=1"), Deny},
+			{"vitest --poolOptions execArgv", bash("npx vitest run --poolOptions.forks.execArgv=--import=data:text/javascript,1"), Deny},
 
 			// eslint
 			{"eslint -c", bash("npx eslint -c " + scratch + "/e.js ."), Ask},
@@ -803,6 +808,7 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"go test a scratch package", bash("go test " + scratch + "/..."), Allow},
 		{"jest with a scratch reporter", bash("npx jest --reporters " + scratch + "/r.js"), Allow},
 		{"go test elsewhere", bash("go test /elsewhere/..."), Ask},
+		{"vitest --execArgv", bash("npx vitest run --execArgv=--import=data:text/javascript,1"), Allow},
 		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {

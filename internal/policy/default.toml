@@ -265,8 +265,8 @@ scratch = ['/tmp/claude-*/**']
   [[profiles.read-only.rules]]
   name = "runs no command a flag names"
   decision = "deny"
-  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*']
-  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program. Search with plain git grep, rg or grep -r."
+  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*', 'npx vitest *execArgv*']
+  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program, and vitest --execArgv, whose node options can run code with no file at all. Search with plain git grep, rg or grep -r, and run vitest without --execArgv."
 
   [[profiles.read-only.rules]]
   name = "reading is always allowed"
@@ -400,8 +400,8 @@ scratch = ['/tmp/claude-*/**']
   [[profiles.read-mostly.rules]]
   name = "runs no command a flag names"
   decision = "deny"
-  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*']
-  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program. Search with plain git grep, rg or grep -r."
+  runs_any = ['git grep *-O*', 'git grep *--op*', 'rg *--pre*', 'rg *--hostname-bin*', 'sort *--co*', 'npx vitest *execArgv*']
+  why = "These flags run a program of the agent's choosing: git grep -O, rg --pre, rg --hostname-bin, sort --compress-program, and vitest --execArgv, whose node options can run code with no file at all. Search with plain git grep, rg or grep -r, and run vitest without --execArgv."
 
   [[profiles.read-mostly.rules]]
   name = "reading is always allowed"
