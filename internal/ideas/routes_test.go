@@ -520,7 +520,7 @@ func TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved(t *testing.T) {
 		t.Fatalf("remove Visionaries: %d %s", code, body)
 	}
 	line := ideasLine(t, server)
-	if line.Enabled || !line.Visible || line.Why != "kept while 2 ideas remain; the Visionaries team was removed" {
+	if line.Enabled || !line.Visible || line.Why != "kept while 2 ideas remain; no team from the Visionaries template now" {
 		t.Errorf("team removed, ideas left: %+v", line)
 	}
 }

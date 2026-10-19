@@ -58,9 +58,9 @@ func manifest(state features.Reader) features.Entry {
 	case 0:
 		entry.Why = "add a team from the Visionaries template to get ideas"
 	case 1:
-		entry.Visible, entry.Why = true, "kept while 1 idea remains; the Visionaries team was removed"
+		entry.Visible, entry.Why = true, "kept while 1 idea remains; no team from the Visionaries template now"
 	default:
-		entry.Visible, entry.Why = true, fmt.Sprintf("kept while %d ideas remain; the Visionaries team was removed", kept)
+		entry.Visible, entry.Why = true, fmt.Sprintf("kept while %d ideas remain; no team from the Visionaries template now", kept)
 	}
 	return entry
 }

@@ -62,7 +62,7 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 func TestIdeasIsKeptForOneIdea(t *testing.T) {
 	state := board{ideas: []*ideas.Idea{{ID: "idea-1", State: ideas.Dismissed}}}
 	entry := ideas.Feature().Manifest(state)
-	if entry.Enabled || !entry.Visible || entry.Badge != 0 || entry.Why != "kept while 1 idea remains; the Visionaries team was removed" {
+	if entry.Enabled || !entry.Visible || entry.Badge != 0 || entry.Why != "kept while 1 idea remains; no team from the Visionaries template now" {
 		t.Errorf("one dismissed idea: %+v", entry)
 	}
 }
