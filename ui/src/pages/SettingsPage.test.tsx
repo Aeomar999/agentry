@@ -34,7 +34,7 @@ const FRESH: AskVisionaries = {
 let useAskVisionaries = (): AskVisionaries => FRESH;
 vi.mock("@/features/ideas/visionaries", () => ({ useAskVisionaries: () => useAskVisionaries() }));
 
-const IDEAS_OFF = { name: "ideas", enabled: false, visible: false, why: "add the Visionaries team to get ideas" };
+const IDEAS_OFF = { name: "ideas", enabled: false, visible: false, why: "add a team from the Visionaries template to get ideas" };
 const IDEAS_ON = { name: "ideas", enabled: true, visible: true, why: "the Visionaries team suggests ideas", badge: 3 };
 
 const render = (page: ReactElement) => renderIn(<MemoryRouter>{page}</MemoryRouter>);
@@ -49,7 +49,7 @@ describe("SettingsPage", () => {
     manifest = { features: [IDEAS_OFF], unknown: [] };
     render(<SettingsPage />);
     expect(screen.getByText("Ideas")).toBeTruthy();
-    expect(screen.getByText("add the Visionaries team to get ideas")).toBeTruthy();
+    expect(screen.getByText("add a team from the Visionaries template to get ideas")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Ask the visionaries" })).toBeTruthy();
     expect(screen.queryByText("Every feature is on.")).toBeNull();
   });
