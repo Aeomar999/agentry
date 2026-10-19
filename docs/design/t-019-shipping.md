@@ -53,7 +53,7 @@ and a type whose shape must change gets a new name (extensions section 8).
 | Type | Written by | Required fields | Optional fields |
 |---|---|---|---|
 | `git.pr_opened` | System, the job (`{System, "git"}`) | `host` (`github` or `gitlab`), `number`, `url`, `branch`, `base`, `sha` | `found`: true when the job found the request already open and recorded it, rather than opening it |
-| `git.pr_changed` | System, a webhook (`httpapi.System`) | `number`, `state` (`open`, `closed` or `merged`) | `sha` (a new head), `delivery`, `at` (the host's time) |
+| `git.pr_changed` | System, a webhook (`httpapi.System`), or the job when it asks the host | `number`, `state` (`open`, `closed` or `merged`) | `sha` (a new head), `delivery`, `at` (the host's time), `push`: when the job wrote it, the log position of the push it was checking for (section 3) |
 | `git.pipeline` | System, a webhook | `id`, `status` (`pending`, `running`, `success`, `failed`, `canceled`, `skipped`), `url`, `sha` | `ref`, `attempt`, `jobs` (each `{name, status, url}`), `delivery`, `at` |
 | `git.refused` | System, the job | `action` (`open` or `reopen`), `status` (the host's HTTP status), `reason` | `sha` |
 | `git.retry` | Human, the tab's "Try again" | none | none |
@@ -113,11 +113,19 @@ feature by it.
 
 How the parts change:
 
-- **Passing it in.** `Feature` gains `TaskSlice *TaskSlice`.
-  `current.New`, `Restore` and `EqualThroughSnapshots` take
-  `...features.Feature` instead of `...*features.Streams`, and keep each
-  feature's `Streams` and `TaskSlice`. `serve.go` passes its installed list,
-  and `storetest.OpenWith` passes `ideas.Feature()`.
+- **Passing it in.** `Feature` gains `TaskSlice *TaskSlice`. `current`
+  gains `NewFor`, `RestoreFor` and `EqualThroughSnapshotsFor`, which take
+  `...features.Feature` and keep each feature's `Streams` and `TaskSlice`.
+  `New`, `Restore` and `EqualThroughSnapshots` keep their
+  `...*features.Streams` and become one-line wrappers that make a
+  `Feature` of each. They are called as `current.New` and the like 23
+  times in 15 files (in `cmd/agentry`, `coordinator`, `hooks`, `rules`,
+  `storetest`, `tasks`, `watchdog`, `web` and three of `current`'s
+  benchmarks), more often inside `current`, with 56 `ideas.Streams()`
+  arguments. None of them needs a slice, so they stay
+  as they are and story 1 stays a change you can review. `serve.go` calls
+  `RestoreFor` with its installed list (story 2), and `storetest.OpenWith`
+  calls `NewFor` with `ideas.Feature()`.
 - **Load and Apply.** `fold` and `Apply` pass an event of a feature's task
   type to its `Next`, beside `tasks.apply`, which is unchanged. The slices
   sit in `slices map[string]map[string]any` (by task, then feature).
@@ -154,7 +162,13 @@ How the parts change:
   store's write lock, like every other order check. For a proposal of a
   feature's task type, `rules.Check` refuses a foreign or archived task and
   a task that doesn't exist, as now, then runs the feature's `Rule` (none:
-  allowed) and returns, before the core's task rules. It lets the type into
+  allowed) and returns, before the core's task rules. It reads the slice
+  with `TaskSlice` first. A broken slice refuses the proposal with "could
+  not read the git slice: ...", as a broken agents or workers stream
+  refuses today, so a `Rule` never sees nil for a slice that may hold an
+  open request. It calls the `Rule` under `recover`: a panic refuses with
+  "its rule failed: ...", as `entryOf` does for a manifest, and never
+  reaches whoever called `Propose`. It lets the type into
   a done task: the coordinator finishes a task once the push shows, so
   `git.pr_opened` and every pipeline and merge after it arrive on a done
   task. The `afterDone` list stays the core's. `taskRules[p.Type]` gains a
@@ -187,7 +201,7 @@ stream, and `Store.Create` names a new stream by a count, not after a task.
   including those the older build only counted.
 - Each `git.*` event wakes the coordinator loop for its task
   (`touchedTasks` takes any event in a task stream). `Loop.act` works from
-  state, so it starts nothing, but story 2 tests that: a pipeline event on
+  state, so it starts nothing, but story 3 tests that: a pipeline event on
   a done task and on a working one starts no turn. The event does move the
   task's `LastActiveAt`, which is right: a pipeline result is news on the
   task.
@@ -219,8 +233,8 @@ and `deployer.md` talk about the exact command. So the feature reads the
 target with `tasks.plainPush` (`internal/tasks/waiting.go`), the parser the
 waiting line already uses, and the push qualifies only when the branch it
 returns equals the task's `Worktree.Branch`. Story 7 exports that as
-`Task.PushedTo(turn, branch string) bool`; `Pushed` stays as it is for the
-coordinator. A push `plainPush` can't read (a quote, an unknown option, a
+`Task.PushTo(turn, branch string) *Action`: the turn's approved, finished
+push to the branch, or nil. `Pushed` stays as it is for the coordinator. A push `plainPush` can't read (a quote, an unknown option, a
 bare `git push`) doesn't qualify: the deployer's instructions give the
 exact command, `git push origin HEAD:agentry/task-N`.
 
@@ -253,19 +267,45 @@ What it does:
    token or no project it does nothing that pass.
 2. It looks at every task once (`Read.TaskIDs()`), then follows the log
    from `Head()`, and looks again at each task a batch touched.
-3. A task is due when it is in the project (its `Worktree.Repo`'s origin
-   names the project; the job reads `git remote get-url origin` there once
-   per repo and keeps it), its slice holds no open request, and its latest
-   qualifying push (section 2) comes later in the log than the slice's
-   last mark. The marks are a `git.pr_opened`, a `git.pr_changed` to
-   `closed` or `merged`, and a `git.refused` that no `git.retry` followed;
-   a `git.retry` clears a refusal, so the push before it counts again. The
-   slice keeps the position of its last mark, and the push's position is
-   its `action.result`'s. So a request you close or merge on the host is
-   left alone until the deployer pushes again, and a new push onto an open
-   request only updates it on the host.
-4. For a due task it asks the host for the most recent request from the
-   branch, in any state (GitHub
+3. A task has a new push when it is in the project (its
+   `Worktree.Repo`'s origin names the project; the job reads
+   `git remote get-url origin` there once per repo and keeps it), and its
+   latest qualifying push (section 2) comes later in the log than the
+   slice's last mark. The marks are a `git.pr_opened`, a `git.pr_changed`
+   to `closed` or `merged`, and a `git.refused` that no `git.retry`
+   followed; a `git.retry` clears a refusal, so the push before it counts
+   again. The slice keeps the position of its last mark, and the push's
+   position is its `action.result`'s. So a request you close or merge on
+   the host is left alone until the deployer pushes again.
+   The job finds the push's position and time in the task's stream.
+   `Task.PushTo` gives the push from state, and the job reads
+   `Core.Events.Stream(task)` for the `action.result` whose `Correlation`
+   is that action's `ID`; the event carries both `Position` and `At`. It
+   reads the stream only for a task in the project with a push to its
+   branch, which no task shipped to dev has, and keeps what it found by
+   action, so it reads each push once. The other way was to add
+   `ResultPosition` and `ResultAt` to `tasks.Action`, set in
+   `tasks.apply`. That changes replay for every task to serve one
+   feature, and needs the real-log replay test, for a read the job can
+   make by itself, so the job reads the stream and the core stays as it
+   is.
+4. A new push onto a request the slice holds open may be onto one the host
+   has merged or closed since: without the webhook (section 9) nothing
+   told the log. So the job asks the host for that request (GitHub
+   `GET /repos/{owner}/{repo}/pulls/{number}`, GitLab
+   `GET /projects/{id}/merge_requests/{iid}`). Still open: the push only
+   updated it, and the job writes nothing and remembers, in memory, that
+   it checked that push; after a restart it asks once more. Merged or
+   closed: it writes `git.pr_changed` with that state, the host's `at`,
+   and `push` set to the push's position, and goes on to step 5 in the
+   same pass. The slice counts that change as a mark just before `push`
+   (at `push` - 1), not at its own position, so the push still comes
+   after it: if the job stops
+   between the two, the next pass goes on from step 5. With the webhook
+   on, this is one more request per push, and it also covers a delivery
+   the host never made.
+5. For a task with a new push and no open request, it asks the host for
+   the most recent request from the branch, in any state (GitHub
    `GET /repos/{owner}/{repo}/pulls?head={owner}:{branch}&state=all&sort=created&direction=desc`,
    GitLab
    `GET /projects/{id}/merge_requests?source_branch={branch}&state=all&order_by=created_at&sort=desc`).
@@ -274,25 +314,27 @@ What it does:
    and the write): it writes `git.pr_opened` with `found: true`, then a
    `git.pr_changed` with its state if it is closed or merged, and opens
    nothing.
-5. Otherwise, if the slice's last request is closed and not merged, it
+6. Otherwise, if the slice's last request is closed and not merged, it
    reopens that one (GitHub `PATCH .../pulls/{n}` with `state: open`,
    GitLab `PUT .../merge_requests/{iid}` with `state_event: reopen`) and
    writes `git.pr_opened` for it.
-6. Otherwise it opens one from the branch into `base` (dev by default),
+7. Otherwise it opens one from the branch into `base` (dev by default),
    titled with the task's title, its body the task's link and its summary
    when it has one, and writes `git.pr_opened`.
 
 Never two requests for one task:
 
 - The slice's check refuses a second `git.pr_opened` while one is open.
-- The job asks the host first (step 4), in every state, so a crash after
+- The job asks the host first (step 5), in every state, so a crash after
   the host opened the request and before `git.pr_opened` was written finds
   it on restart and records it, even if it was merged or closed meanwhile.
 - There is one job, which handles one task at a time.
 - A host that says the request exists (GitHub 422 "A pull request already
-  exists", GitLab 409) is treated as step 4: look it up and record it.
+  exists", GitLab 409) is treated as step 5: look it up and record it.
 - A merged request stays merged. If the task is reopened and shipped
   again, the new push opens a new request: one open at a time, never two.
+  This holds without the webhook too: step 4 finds the merge on the host
+  and records it before step 7 opens the new one.
 
 When the host says no:
 
@@ -510,7 +552,12 @@ webhook = "..."            # the hook's secret: GitHub's signing secret, GitLab'
 ```
 
 - On: `host`, `project` and `token` are set. The webhook is optional to
-  open requests; without it the tab shows the request but no pipeline.
+  open requests; without it the tab shows the request but no pipeline,
+  and the request's state only as the job last saw it. The job asks the
+  host for that state on each new push (section 3, step 4), so a request
+  merged or closed on the host never stops the next ship from opening
+  one. Making the webhook secret part of "on" was the other way; it would
+  keep the feature off for an Agentry the host can't reach (question 4).
 - The job, the routes' `verify`, the manifest and the coordinator brief
   read the table in force on every call, so an edit applies without a
   restart.
@@ -519,7 +566,7 @@ webhook = "..."            # the hook's secret: GitHub's signing secret, GitLab'
   so neither can reach them that way. The design: the feature is built
   with its settings, `githost.Feature(settings features.Settings)`, and its
   `Manifest`, `Brief`, routes' `verify` and job read them from the
-  closure. Story 3 makes that possible for any feature:
+  closure. Story 2 makes that possible for any feature:
   `installedFeatures(settings func(feature string) features.Settings)`.
   `serve.go` opens `features.toml` once (`settingsfile.Open`, moved out of
   `startJobs`) and passes its `For`; `cmd/agentry/mcp.go` and
@@ -557,100 +604,153 @@ webhook = "..."            # the hook's secret: GitHub's signing secret, GitLab'
 
 ## 11. Build stories
 
-In build order. Each is one reviewable change.
+In build order. Each is one reviewable change. Three of them change replay
+or apply (1, 3 and 5); each of those, before it lands, runs the real-log
+replay test (`internal/current/real_log_test.go`) on a fresh read-only
+`VACUUM INTO` copy of the live log. The file lists come from grepping the
+real callers.
 
 1. **Task slices in current and the snapshot.** `features.TaskSlice`,
    `features.Rule` (the type only), `Feature.TaskSlice`,
-   `events.Namespace`; `current.New`, `Restore` and
-   `EqualThroughSnapshots` take `...features.Feature`; `fold`, `Apply`,
-   `archive` and `Equal` keep a slice per task and feature, with
-   `brokenSlices`; `savedState.Sliced` and Resume's `foldSlices`;
-   `Reader.TaskSlice` and `TasksWith`; `slices` on `GET /api/tasks/{task}`.
+   `events.Namespace`; `current.NewFor`, `RestoreFor` and
+   `EqualThroughSnapshotsFor` take `...features.Feature`, and `New`,
+   `Restore` and `EqualThroughSnapshots` become wrappers over them, so
+   their callers don't change (section 1); `fold`, `Apply`, `archive` and
+   `Equal` keep a slice per task and feature, with `brokenSlices`;
+   `savedState.Sliced` and Resume's `foldSlices`; `Reader.TaskSlice` and
+   `TasksWith`; `slices` on `GET /api/tasks/{task}`.
    Files: `internal/features/features.go`, `internal/events/catalogue.go`,
    `internal/current` (`current.go`, `equal.go`, `snapshot.go`,
-   `resume.go`, `startup_bench_test.go`), `internal/store/storetest`,
-   `cmd/agentry/serve.go`, `internal/web/api.go`, `ui/src/api/types.ts`.
+   `resume.go`, `startup_bench_test.go`, and a new `slices_test.go`),
+   `internal/storetest/storetest.go` (`OpenWith` calls `NewFor` with
+   `ideas.Feature()`), `internal/web/api.go` and `views.go` (`showTask`'s
+   view), `ui/src/api/types.ts`. `current.State` is the only `Reader`
+   outside tests; the test fakes (`ideas/feature_test.go`'s `board`) embed
+   the interface and still build. `serve.go` doesn't change here: it moves
+   to `RestoreFor` in story 2.
    Done: a test feature's task types replay to the same slices as `Apply`
-   (the equivalence test, and `EqualThroughSnapshots` through every cut);
-   a state resumed from a snapshot holds the same slices as a whole
+   (the equivalence test, and `EqualThroughSnapshotsFor` through every
+   cut); a state resumed from a snapshot holds the same slices as a whole
    replay; without the feature, the task is the same and the tally counts
    them; a panic in its `Next` breaks only that slice, and the task still
    reads; archiving drops the slices from `TasksWith` and unarchiving
-   brings them back; the startup benchmark runs with slices. It changes
-   replay and apply, so before it lands it runs the real-log replay test
-   on a fresh read-only `VACUUM INTO` copy. After: none.
-2. **Feature task rules in rules.Check.** `rules.Check` takes the
-   installed features, runs a feature's `Rule` for its task types before
-   the core's task rules, and lets them into a done task, never an
-   archived one; the nil check on `taskRules`. Files:
-   `internal/rules/rules.go`, `cmd/agentry/serve.go`,
-   `internal/store/storetest`. Done: tests that a test feature's `Rule`
-   refuses with its reason, runs under `Store.Propose`'s lock, allows when
-   it is nil, lets its type into a done task, and refuses it in an
-   archived one and in a task that doesn't exist; a core task type with no
+   brings them back; the startup benchmark runs with slices; the existing
+   callers of `New`, `Restore` and `EqualThroughSnapshots` build and pass
+   unchanged. It changes replay and apply, so it runs the real-log replay
+   test first. After: none.
+2. **Settings reach the features list.** `installedFeatures(settings)`,
+   and `serve.go` reordered so the features exist before the state: it
+   opens `features.toml` once (`settingsfile.Open`, moved out of
+   `startJobs`) and starts its `Watch`, builds
+   `installedFeatures(settings.For)` before the state, calls
+   `current.RestoreFor(snapshot, build, catalogue, installed...)` in place
+   of `Restore(..., ideas.Streams())`, and gives `startJobs` that same
+   `*settingsfile.Live` instead of a path. `agentry mcp` and Claude Code's
+   hooks pass a `settings` that gives the zero `Settings`. Files:
+   `cmd/agentry/serve.go` (the `Restore` call, `installedFeatures`,
+   `startJobs`), `cmd/agentry/jobs_test.go` (calls `startJobs` with a
+   path), `cmd/agentry/mcp.go`, `cmd/agentry/claudecode.go` (five calls),
+   `internal/features/settings.go`. Done: a test feature's manifest and
+   route read a value from the file and see an edit without a restart;
+   the job and the manifest read the same `Live` (one file watcher, not
+   two); a secret in the file is not in `GET /api/features`;
+   `agentry mcp` starts with no settings file. It doesn't change replay or
+   apply: the features `RestoreFor` gets hold the same `Streams` as before
+   and no slice yet, so it needs no replay test. After: 1.
+3. **Feature task rules in rules.Check.** `rules.Check(p, state,
+   catalogue, installed)` runs a feature's `Rule` for its task types
+   before the core's task rules, and lets them into a done task, never an
+   archived one; a broken slice refuses with "could not read the git
+   slice: ..."; a panic in a `Rule` refuses with "its rule failed: ...";
+   the nil check on `taskRules`. Files: `internal/rules/rules.go` and its
+   tests; the callers: `cmd/agentry/serve.go` (passes the `installed`
+   that story 2 builds before `store.Open`), `internal/storetest/storetest.go`,
+   `internal/coordinator/epics_test.go`, `internal/watchdog/watchdog_test.go`,
+   `internal/web/api_test.go`, `internal/web/readmodel_bench_test.go`.
+   Two of those pass `rules.Check` as a value, and the new parameter
+   changes its type: `splittingWith(t, rules.Check, ...)` in
+   `epics_test.go` and `limitsServerChecked(t, rules.Check)` in
+   `api_test.go`, so both helpers' parameter types change with it. Done:
+   tests that a test feature's `Rule` refuses with its reason, runs under
+   `Store.Propose`'s lock, allows when it is nil, lets its type into a
+   done task, and refuses it in an archived one and in a task that doesn't
+   exist; a `Rule` that panics refuses with "its rule failed: ..." and
+   `Propose` returns; a broken slice refuses with "could not read the git
+   slice: ..." and never calls the `Rule`; a core task type with no
    `taskRules` entry no longer panics; a test event on a done task and on
    a working one starts no turn. It changes which events the log accepts
-   and so what replay and apply meet, so before it lands it runs the
-   real-log replay test on a fresh read-only `VACUUM INTO` copy. After: 1.
-3. **Settings reach the features list.** `installedFeatures(settings)`;
-   `serve.go` opens `features.toml` once and passes its `For` to the list
-   and to `startJobs`; `agentry mcp` and Claude Code's hooks pass the zero
-   `Settings`. Files: `cmd/agentry/serve.go`, `cmd/agentry/mcp.go`,
-   `cmd/agentry/claudecode.go`, `internal/features/settings.go`. Done: a
-   test feature's manifest and route read a value from the file and see
-   an edit without a restart; a secret in the file is not in
-   `GET /api/features`; `agentry mcp` starts with no settings file. After:
-   none.
-4. **Jobs follow the log.** `features.EventLog` gains `Follow` and `Head`;
-   `ReadOnly` wraps them. Files: `internal/features`, `cmd/agentry/serve.go`.
-   Done: a job sees events written after it started, and a type assertion on
-   its `Follower` gets no store. After: none.
+   and so what replay and apply meet, so it runs the real-log replay test
+   first. After: 1, 2.
+4. **Jobs follow the log.** `features.EventLog` gains `Follow` and `Head`.
+   `ReadOnly` takes the `*store.Store` and makes them from
+   `Store.NewReader` and `LastPosition`, so the store gains no method and
+   doesn't import `features` (`features` imports `store`, which imports
+   only `events`: no cycle). Files: `internal/features/features.go`, and
+   the three callers of `ReadOnly`, which already pass the store:
+   `cmd/agentry/serve.go`, `internal/coordinator/loop.go`,
+   `internal/web/server.go`. The fakes in `internal/ideas`
+   (`accept.go`, `routes.go`, `ideas_test.go`) embed `EventLog` and still
+   build. Done: a job sees events written after it started, and a type
+   assertion on its `Follower` gets no store. After: none.
 5. **The git feature: types, slice, rule and manifest.** `internal/githost`
-   with the five types, the slice, its `Rule` (one open request), the
-   manifest, and `ui/src/features/git` with `turnOn`; the schemas in
-   `internal/events/schemas`; a fixture log under `testdata`. The wiring in
+   with the five types (their `Spec`s in `events.go`, as
+   `internal/ideas/events.go` has Ideas'), the slice with its `push`
+   marks, its `Rule` (one open request), the manifest, and
+   `ui/src/features/git` with `turnOn`, listed in `FEATURES`
+   (`ui/src/features/index.ts`), then the UI rebuilt into
+   `internal/web/dist`; a fixture log under `testdata`. The wiring in
    `cmd/agentry/serve.go`: `githost.Registration()` in `NewCatalogue`,
    `githost.Feature(settings("git"))` in `installedFeatures`, and its
    `features.Checked(feature, githost.Registration(), log)` proposer in the
    `logs` map (without it, the feature gets `features.Unwritable`). Done:
    the catalogue builds with the feature; the rule refuses a second
-   `git.pr_opened`; a build without the feature replays the fixture with
-   the tally counting it; the Settings page shows Git with its `turnOn`
-   while off; the no-secrets test (section 10). It registers new types
-   that apply reads, so it runs the real-log replay test on a fresh
-   read-only `VACUUM INTO` copy before landing. After: 2, 3.
+   `git.pr_opened`, and allows one after a `git.pr_changed` to `merged`;
+   a job-written `git.pr_changed` marks just before its `push`; a build without
+   the feature replays the fixture with the tally counting it; the
+   Settings page shows Git with its `turnOn` while off; the no-secrets
+   test (section 10). It registers new types that apply reads, so it runs
+   the real-log replay test first. After: 2, 3.
 6. **Host clients.** GitLab and GitHub over `net/http`: find the most
-   recent request by branch in any state, open, reopen. Files:
-   `internal/githost/gitlab.go`, `github.go`. Done: tests against
-   `httptest` fakes for opened, found (open, merged and closed), "already
-   exists" (GitHub 422, GitLab 409) as found, 401, 404, 429 with
-   `Retry-After`, and 5xx. After: none (host order is question 2).
-7. **The job.** `Task.PushedTo` over `plainPush`; `due` by log position,
-   look up, record, reopen or open, refusals, backoff. Files:
-   `internal/tasks/task.go`, `internal/githost/job.go`. Done: tests with a
-   fake host: one request per task across a restart between the host's
-   reply and the write, also when the request was merged or closed before
-   the restart; a request closed on the host isn't reopened until a new
-   push; a push onto an open request opens nothing; a push to dev, and a
-   push `plainPush` can't read, open nothing; an old log opens nothing; no
-   token writes nothing; a 401 writes one `git.refused` and no more until
-   `git.retry`; an edit to the settings file reaches the next pass. After:
-   4, 5, 6.
+   recent request by branch in any state, get one by number, open,
+   reopen. Files: `internal/githost/gitlab.go`, `github.go`. Done: tests
+   against `httptest` fakes for opened, found (open, merged and closed),
+   one got by number in each state, "already exists" (GitHub 422, GitLab
+   409) as found, 401, 404, 429 with `Retry-After`, and 5xx. After: none
+   (host order is question 2).
+7. **The job.** `Task.PushTo` over `plainPush`; the push's position and
+   time read from `Core.Events.Stream`; the check of an open request on a
+   new push; `due` by log position, look up, record, reopen or open,
+   refusals, backoff. Files: `internal/tasks/task.go` (`PushTo`, a read
+   of state: `apply` doesn't change), `internal/githost/job.go`. Done:
+   tests with a fake host: one request per task across a restart between
+   the host's reply and the write, also when the request was merged or
+   closed before the restart; a request closed on the host isn't reopened
+   until a new push; a push onto an open request opens nothing; with no
+   webhook, a request merged on the host and a task shipped again writes
+   `git.pr_changed` merged and opens a new request, also across a restart
+   between the two; a push to dev, and a push `plainPush` can't read,
+   open nothing; an old log opens nothing; no token writes nothing; a 401
+   writes one `git.refused` and no more until `git.retry`; an edit to the
+   settings file reaches the next pass; each push's stream is read once.
+   It changes no replay or apply, so it needs no replay test. After: 4,
+   5, 6.
 8. **The deployer ships through the request.** The feature's
    `Coordinator.Brief` section and the paragraph in `deployer.md`. Files:
    `internal/githost/coordinator.go`, `internal/agents/defaults/deployer.md`.
    Done: a ship brief for a repo the feature is on for says to push the
-   task branch, and one for any other repo doesn't; `Task.Pushed` counts the
-   branch push; the prompt test passes. After: 7.
+   task branch, and one for any other repo doesn't; `Task.Pushed` counts
+   the branch push; `internal/agents/prompts_policy_test.go` passes with
+   the new command. After: 7.
 9. **The webhooks.** Both routes, their `verify`, the project and task
    checks, duplicates and refusals; the core's `signed` answers 202 for a
    body over 1 MB. Files: `internal/githost/hooks.go`,
-   `internal/web/server.go`. Done: tests for a good GitHub signature, a
-   bad one, a missing one, GitLab's token right and wrong, no secret set
-   (all refused); another project with the same branch name, a branch that
-   is no task's, an archived task, a body that isn't JSON and one over
-   1 MB (each 202, nothing written); the same delivery twice (written
-   once); an older status after a newer (the newer stays). After: 5.
+   `internal/web/server.go` (`signed`) and its tests. Done: tests for a
+   good GitHub signature, a bad one, a missing one, GitLab's token right
+   and wrong, no secret set (all refused); another project with the same
+   branch name, a branch that is no task's, an archived task, a body that
+   isn't JSON and one over 1 MB (each 202, nothing written); the same
+   delivery twice (written once); an older status after a newer (the
+   newer stays). After: 5.
 10. **Read route, show_pipeline and the waiting entry.**
     `GET /api/git/tasks/{task}`, `GET /api/git/waiting`, the retry route,
     the tool and `Waiting`. Files: `internal/githost/routes.go`, `tools.go`.
@@ -658,12 +758,14 @@ In build order. Each is one reviewable change.
     request, feature off); a failed pipeline makes one entry, a retry that
     fails again makes a new one, and a later success clears it. After: 5.
 11. **The taskTabs slot and the Merge request tab.** `TaskTab`,
-    `FeatureUI.taskTabs`, `TaskPage.tsx`, the tab component. Done:
-    `npm run lint` and `npm run build` clean; render tests for a merged
-    request with a passed pipeline, a failed one, a refusal with "Try
-    again", and a task with no git slice (no tab); the feature's tab comes
-    after Details; a feature tab id equal to a core one fails a test.
-    After: 1, 10.
+    `FeatureUI.taskTabs`, `TaskPage.tsx`, the tab component. Files:
+    `ui/src/features/index.ts`, `ui/src/pages/TaskPage.tsx` (`TABS`,
+    `TabId`), `ui/src/features/git/`, and `internal/web/dist` rebuilt.
+    Done: `npm run lint` and `npm run build` clean; render tests for a
+    merged request with a passed pipeline, a failed one, a refusal with
+    "Try again", and a task with no git slice (no tab); the feature's tab
+    comes after Details; a feature tab id equal to a core one fails a
+    test. After: 1, 10.
 
 ## 12. Open questions for the user
 
