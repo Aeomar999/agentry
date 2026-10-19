@@ -204,3 +204,14 @@ func TestTurnOffUseForEveryoneCommentsOutItsLine(t *testing.T) {
 		t.Errorf("turning it off twice: %v", err)
 	}
 }
+
+// The last guard of every edit: whatever it does, no other profile changes.
+func TestAnEditMayChangeOnlyItsOwnProfile(t *testing.T) {
+	after := replaceOnce(t, Default(), `why = "Its job is to judge the work, not to change it."`, `why = "Changed."`)
+	if _, err := checkEdit(Default(), after, "developer"); err == nil || !strings.Contains(err.Error(), `also change profile "read-only"`) {
+		t.Errorf("an edit of developer that changes read-only: %v", err)
+	}
+	if _, err := checkEdit(Default(), after, "read-only"); err != nil {
+		t.Errorf("an edit of read-only itself: %v", err)
+	}
+}
