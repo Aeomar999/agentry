@@ -21,7 +21,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/procs"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 
@@ -43,10 +42,6 @@ func (c workerConfig) client() *http.Client { return pinned.Client([]byte(c.CA),
 func (c workerConfig) link() *workerlink.Worker {
 	return &workerlink.Worker{Server: c.Server, Credential: c.Credential, HTTP: c.client()}
 }
-
-// caFile is where the worker keeps the server's CA for git, which reads it
-// from a file.
-func caFile(dir string) string { return filepath.Join(dir, "server-ca.pem") }
 
 // workerCommand is one of `agentry worker`'s subcommands. run gets the
 // worker's folder and the arguments after the subcommand's flags.
@@ -249,20 +244,13 @@ func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
 	logger := log.New(out, "", log.LstdFlags)
 	logger.Printf("%s, working for %s", config.Name, config.Server)
 	dropParentSession(logger.Writer())
-	hub := &machines.Hub{URL: workerlink.HubURL(config.Server), Credential: config.Credential,
-		MirrorRoot: filepath.Join(dir, "repos"), HTTP: config.client()}
-	if config.CA != "" { // git reads the CA from a file; worker.json is where it is kept
-		if err := os.WriteFile(caFile(dir), []byte(config.CA), 0o600); err != nil {
-			return err
-		}
-		hub.CAFile = caFile(dir)
+	worker, err := workerlink.Setup{Server: config.Server, Name: config.Name, Credential: config.Credential, CA: config.CA,
+		Dir: dir, HookCommand: shellQuote(self) + " hook"}.Worker()
+	if err != nil {
+		return err
 	}
-	worker := config.link()
-	worker.About, worker.Log, worker.SelfUpdate = machines.Describe(), logger.Printf, true
+	worker.Log, worker.SelfUpdate = logger.Printf, true
 	worker.OnLink = func(up bool, err error) { saveLinkState(dir, up, err) }
-	worker.Machine = &machines.Local{Label: config.Name, ServerURL: config.Server, ServerCA: config.CA, HookCommand: shellQuote(self) + " hook",
-		Blobs:        sharedfiles.Hub{Server: config.Server, Credential: config.Credential, HTTP: config.client()},
-		WorktreeRoot: filepath.Join(dir, "worktrees"), Hub: hub}
 	err = worker.Run(ctx)
 	if errors.Is(err, workerlink.ErrUpdated) {
 		logger.Print("agentry was updated to the server's; restarting")

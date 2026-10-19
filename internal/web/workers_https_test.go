@@ -92,14 +92,12 @@ func TestAWorkerWorksOverHTTPSPinnedToTheCA(t *testing.T) {
 
 	// With it, everything goes over https.
 	fakeClaudeOnPath(t)
-	root := t.TempDir()
-	caFile := filepath.Join(root, "server-ca.pem")
-	os.WriteFile(caFile, ca.PEM(), 0o600)
-	worker := &workerlink.Worker{Server: url, Credential: credential.Credential, HTTP: pinned.Client(ca.PEM(), 0), Log: t.Logf,
-		Machine: &machines.Local{Label: "laptop", ServerURL: url, ServerCA: string(ca.PEM()), HookCommand: "agentry hook",
-			WorktreeRoot: filepath.Join(root, "worktrees"),
-			Hub: &machines.Hub{URL: workerlink.HubURL(url), Credential: credential.Credential, MirrorRoot: filepath.Join(root, "repos"),
-				HTTP: pinned.Client(ca.PEM(), 0), CAFile: caFile}}}
+	worker, err := workerlink.Setup{Server: url, Name: "laptop", Credential: credential.Credential, CA: string(ca.PEM()),
+		Dir: t.TempDir(), HookCommand: "agentry hook"}.Worker() // as `agentry worker run` makes it
+	if err != nil {
+		t.Fatal(err)
+	}
+	worker.Log = t.Logf
 	go worker.Run(ctx)
 	laptop := waitFor(t, "the pinned worker to come online", func() (machines.Machine, bool) { return fleet.Get("laptop") })
 
@@ -120,7 +118,8 @@ func TestAWorkerWorksOverHTTPSPinnedToTheCA(t *testing.T) {
 	if err := here.HandOff(ctx, w, "Agentry: moving"); err != nil {
 		t.Fatal(err)
 	}
-	there, err := laptop.Prepare(ctx, machines.WorktreeRequest{Task: "task-1", Repo: hub, Base: w.Base, RepoKey: worktrees.RepoKey(hub)})
+	prepare := machines.WorktreeRequest{Task: "task-1", Repo: hub, Base: w.Base, RepoKey: worktrees.RepoKey(hub)}
+	there, err := laptop.Prepare(ctx, prepare)
 	if err != nil {
 		t.Fatalf("git on the worker, over https: %v", err)
 	}
