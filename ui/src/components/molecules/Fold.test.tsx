@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Fold } from "./Fold";
 import { layout, layOut } from "@/test-layout";
@@ -10,7 +10,11 @@ layOut();
 const TEN_LINES = Array.from({ length: 10 }, (_, n) => `${n * 20}-${n * 20 + 20}`).join(" ");
 
 function report() {
-  return render(
+  return render(reportFold());
+}
+
+function reportFold() {
+  return (
     <Fold lines={4} lineHeight={20} kind="report">
       <p data-lines={TEN_LINES}>
         A long report.
@@ -33,7 +37,7 @@ function report() {
           skipped
         </span>
       </p>
-    </Fold>,
+    </Fold>
   );
 }
 
@@ -111,6 +115,32 @@ describe("Fold", () => {
     );
     expect(screen.queryByRole("button")).toBeNull();
     expect(container.querySelector("[data-fold-cut]")).toBeNull();
+  });
+
+  test("measures once, not again on a render that changes nothing", () => {
+    const measures = vi.spyOn(document, "createRange");
+    const { rerender } = report();
+    const once = measures.mock.calls.length;
+    rerender(reportFold());
+    rerender(reportFold());
+    expect(once).toBeGreaterThan(0);
+    expect(measures.mock.calls.length).toBe(once);
+    measures.mockRestore();
+  });
+
+  test("measures again when the text changes", async () => {
+    const { rerender } = render(
+      <Fold lines={4} lineHeight={20} kind="note">
+        <p data-lines="0-20">One line.</p>
+      </Fold>,
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    rerender(
+      <Fold lines={4} lineHeight={20} kind="note">
+        <p data-lines={TEN_LINES}>Ten lines now.</p>
+      </Fold>,
+    );
+    expect((await screen.findByRole("button")).textContent).toBe("Show all · 10 lines");
   });
 
   test("Show less scrolls back only when the entry's top went above the band", () => {

@@ -37,13 +37,18 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
     const next = sizeOf(text.current!, limit);
     setSize((size) => (size && size.full === next.full && size.cut === next.cut ? size : next));
   }, [limit]);
-  // Again on every render, as the text may have changed, and when the width does.
-  useLayoutEffect(measure);
+  // Measuring forces a layout, so only once, then when the width changes and
+  // when the text does, never on a render that changed neither.
   useLayoutEffect(() => {
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => measure());
-    observer.observe(text.current!);
-    return () => observer.disconnect();
+    measure();
+    const edits = new MutationObserver(() => measure());
+    edits.observe(text.current!, { childList: true, subtree: true, characterData: true });
+    const resizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure());
+    resizes?.observe(text.current!);
+    return () => {
+      edits.disconnect();
+      resizes?.disconnect();
+    };
   }, [measure]);
 
   const long = size === null || size.full > limit; // folded until measured, so nothing jumps
