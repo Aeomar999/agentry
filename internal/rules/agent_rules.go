@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -23,7 +24,7 @@ var rosterRules = map[events.Type]rosterRule{
 	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown),
 	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator),
 	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
-	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge),
+	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge, patchFits),
 	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
 	events.TaskCreated:     allOf(coordinatorExists),
 	events.TaskAssigned:    allOf(assigneeExists),
@@ -130,6 +131,30 @@ func columnIsKnown(_ agents.Roster, p events.Proposal) string {
 func onlyItsOwnKnowledge(_ agents.Roster, p events.Proposal) string {
 	if p.Actor.Kind == events.Agent && p.Actor.ID != p.Text("name") {
 		return p.Actor.ID + " can't change what " + p.Text("name") + " knows"
+	}
+	return ""
+}
+
+// patchFits: a patch makes, from the knowledge the agent has now, the text
+// whose hash it carries. One made from a version since replaced doesn't, and
+// its writer sends a full copy instead.
+func patchFits(roster agents.Roster, p events.Proposal) string {
+	if !agents.IsPatch(p) {
+		return ""
+	}
+	patch, err := agents.PatchOf(p)
+	if err != nil {
+		return err.Error()
+	}
+	// The state applies the patch after a JSON round trip, which would
+	// change a middle that isn't UTF-8, so the text verified here wouldn't
+	// be the one it rebuilds.
+	if !utf8.ValidString(patch.Middle) {
+		return "a patch's middle must be UTF-8"
+	}
+	agent, _ := roster.Get(p.Text("name"))
+	if _, err := patch.Verify(agent.Knowledge); err != nil {
+		return "this patch doesn't fit what " + agent.Name + " knows now: " + err.Error()
 	}
 	return ""
 }

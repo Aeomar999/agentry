@@ -11,10 +11,14 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
 	"github.com/charmbracelet/x/vt"
+
+	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
 // The host is the process that keeps one session: Start runs this same
@@ -76,6 +80,9 @@ func runHost(name, encodedSpec string) int {
 		os.Remove(socketPath(name))
 		return 1
 	}
+	if testing.Testing() {
+		go h.endWithTheTests(os.Getppid())
+	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -115,6 +122,18 @@ func (h *host) start(spec Spec) error {
 		h.broadcast(frameDead, nil)
 	}()
 	return nil
+}
+
+// endWithTheTests stops a host that a test started once the test run is
+// gone, even one killed or timed out. Only there: a server's hosts outlive
+// it by design.
+func (h *host) endWithTheTests(parent int) {
+	for range time.Tick(time.Second) {
+		if os.Getppid() != parent || !procs.Alive(parent) {
+			h.stop()
+			return
+		}
+	}
 }
 
 // relay passes what the program prints to the screen and every client.
@@ -301,8 +320,9 @@ func encodeFrame(kind byte, payload []byte) []byte {
 	return []byte(b.String())
 }
 
-// childEnv is this environment, without what made this process a host,
-// with the session's own, and a terminal the program knows how to draw on.
+// childEnv is this environment, without what made this process a host or
+// tied it to an engine session of its own, with the session's own, and a
+// terminal the program knows how to draw on.
 func childEnv(extra map[string]string) []string {
 	set := map[string]string{"TERM": "xterm-256color", "COLORTERM": "truecolor"}
 	for name, value := range extra {
@@ -312,7 +332,7 @@ func childEnv(extra map[string]string) []string {
 	for _, kv := range os.Environ() {
 		name, _, _ := strings.Cut(kv, "=")
 		_, replaced := set[envKey(name)]
-		if !replaced && name != hostEnv && name != specEnv && !strings.HasPrefix(name, "TMUX") {
+		if !replaced && name != hostEnv && name != specEnv && !strings.HasPrefix(name, "TMUX") && !engines.IsParentSessionVar(name) {
 			env = append(env, kv)
 		}
 	}

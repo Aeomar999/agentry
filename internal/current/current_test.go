@@ -1,6 +1,7 @@
 package current
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -59,13 +61,16 @@ func everyStream() []events.Event {
 		proposal(events.ConnectionsStream, you, events.ConnectionInvited, map[string]any{"code": "c2", "expires": "2026-10-18T10:00:00Z"}),
 		proposal("task-1", lead, events.TaskAssigned, map[string]any{"agent": "engineer", "instructions": "Profile it."}),
 		proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Measure first."}),
+		agents.Agent{Name: "engineer"}.Patching(you, agents.Diff("Measure first.", "Measure first, then cut.")),
 		proposal(events.ConnectionsStream, system, events.ConnectionMade, map[string]any{"id": "m1", "code": "c2", "credential": "k2"}),
 		proposal(events.WorkersStream, system, events.WorkerConnected, map[string]any{"name": "laptop", "engines": []any{"claude 2"}}),
 		proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Second, renamed"}),
 		proposal(events.AgentsStream, you, events.AgentRemoved, map[string]any{"name": "tech-lead"}),
 		proposal("task-1", worker, events.TurnStarted, map[string]any{"agent": "engineer", "hash": "h"}),
-		proposal("idea-1", system, events.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
-		proposal("idea-1", you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
+		proposal("idea-1", system, ideas.IdeaSuggested, map[string]any{"title": "Faster", "problem": "Slow", "proposal": "Cache", "size": "S", "repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
+		proposal("idea-1", you, ideas.IdeaAccepted, map[string]any{"task": "task-2", "note": "Yes"}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.VisionariesOnEpicClose: false}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptRule: settings.NobodyDoubted}),
 	)
 }
 
@@ -92,8 +97,15 @@ func streamsOf(log []events.Event) []string {
 }
 
 // loaded is a state loaded from the log, as the store does at Open.
-func loaded(log []events.Event) *State {
-	s := New()
+func loaded(log []events.Event) *State { return loadedWith(withIdeas, log) }
+
+// loadedWith is loaded, reading the streams as catalogue says.
+func loadedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	return loadInto(New(catalogue, ideas.Streams()), log)
+}
+
+// loadInto loads the log into s, as the store does at Open.
+func loadInto(s *State, log []events.Event) *State {
 	for _, stream := range streamsOf(log) {
 		s.Load(stream, accepted(log, stream))
 	}
@@ -110,14 +122,14 @@ func loaded(log []events.Event) *State {
 func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	t.Helper()
 	for _, stream := range streamsOf(log) {
-		if events.IsIdeaStream(stream) {
-			idea, err := s.Idea(stream)
+		if ideas.IsStream(stream) {
+			idea, err := ideas.Get(s, stream)
 			if want := ideas.FromEvents(accepted(log, stream)); err != nil || !reflect.DeepEqual(idea, want) {
 				t.Errorf("%s: %+v, %v\nreplay: %+v", stream, idea, err, want)
 			}
 			continue
 		}
-		if !events.IsTaskStream(stream) {
+		if !withIdeas.IsTaskStream(stream) {
 			continue
 		}
 		task, err := s.Task(stream)
@@ -133,6 +145,19 @@ func sameAsReplay(t *testing.T, s *State, log []events.Event) {
 	}
 	if want := connections.FromEvents(accepted(log, events.ConnectionsStream)); !reflect.DeepEqual(s.Connections(), want) {
 		t.Errorf("connections: %+v\nreplay: %+v", s.Connections(), want)
+	}
+	if want := settings.FromEvents(accepted(log, events.SettingsStream)); s.Settings() != want || want.VisionariesOnEpicClose ||
+		want.AutoAcceptRule != settings.NobodyDoubted {
+		t.Errorf("settings: %+v\nreplay: %+v", s.Settings(), want)
+	}
+	for _, stream := range streamsOf(log) {
+		var want int64
+		if own := accepted(log, stream); len(own) > 0 {
+			want = own[len(own)-1].Position
+		}
+		if position := s.StreamPosition(stream); position != want {
+			t.Errorf("%s: last position %d, want %d", stream, position, want)
+		}
 	}
 	if want := log[len(log)-1].Position; s.Position() != want {
 		t.Errorf("position %d, want %d", s.Position(), want)
@@ -239,12 +264,32 @@ func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
 	}
 }
 
+// An archived task says so, leaves the list and still counts in the task
+// order; a broken task keeps its own error.
+func TestAnArchivedTaskIsCountedButNotHandedOut(t *testing.T) {
+	s := loaded(everyStream())
+	s.Archive("task-1")
+	if task, err := s.Task("task-1"); task != nil || !errors.Is(err, ErrArchived) {
+		t.Errorf("archived task-1: %v, %v", task, err)
+	}
+	if ids := idsOf(s.Tasks()); !slices.Equal(ids, []string{"task-2"}) {
+		t.Errorf("the tasks are %v, want only task-2", ids)
+	}
+	if order := s.TaskIDs(); !slices.Equal(order, []string{"task-1", "task-2"}) {
+		t.Errorf("the task order is %v, want both tasks", order)
+	}
+	s.Apply(events.Event{Position: 100, Proposal: proposal("task-2", worker, events.WorktreeMoved, map[string]any{"worker": "laptop", "path": "/w", "port": float64(7901)})})
+	if _, err := s.Task("task-2"); err == nil || errors.Is(err, ErrArchived) {
+		t.Errorf("a broken task's error: %v", err)
+	}
+}
+
 // An idea's stream is an idea, never a task: it stays out of the tasks, the
 // list and the task order, so the next task's number doesn't move.
 func TestAnIdeaIsNoTask(t *testing.T) {
 	log := everyStream()
 	for name, s := range map[string]*State{"applied": applied(log), "loaded": loaded(log)} {
-		if idea, err := s.Idea("idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
+		if idea, err := ideas.Get(s, "idea-1"); err != nil || idea == nil || idea.State != ideas.Accepted {
 			t.Errorf("%s: idea-1 is %+v, %v; want it accepted", name, idea, err)
 		}
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
@@ -330,7 +375,7 @@ func TestTasksAreOldestFirstInANewSlice(t *testing.T) {
 // Readers call every getter while events are applied (run with -race).
 func TestReadersRaceApply(t *testing.T) {
 	log := everyStream()
-	s := New()
+	s := New(withIdeas, ideas.Streams())
 	s.Loaded(0)
 	var readers sync.WaitGroup
 	done := make(chan struct{})
@@ -363,8 +408,15 @@ func TestReadersRaceApply(t *testing.T) {
 }
 
 // applied is a state built by applying every event, from nothing.
-func applied(log []events.Event) *State {
-	s := New()
+func applied(log []events.Event) *State { return appliedWith(withIdeas, log) }
+
+// appliedWith is applied, reading the streams as catalogue says.
+func appliedWith(catalogue *events.Catalogue, log []events.Event) *State {
+	return applyInto(New(catalogue, ideas.Streams()), log)
+}
+
+// applyInto applies every event of the log to s, a new state.
+func applyInto(s *State, log []events.Event) *State {
 	s.Loaded(0)
 	for _, e := range log {
 		s.Apply(e)
@@ -382,4 +434,37 @@ func idsOf(list []*tasks.Task) []string {
 		}
 	}
 	return ids
+}
+
+// An idea Agentry accepted, the task it made and started, and the settings
+// that turn it on, loaded at any point, give what a replay gives.
+func TestAnIdeaAgentryAcceptedEqualsAReplay(t *testing.T) {
+	log := append(everyStream(), logOf(
+		proposal("idea-2", system, ideas.IdeaSuggested, map[string]any{"title": "Agreed", "problem": "p", "proposal": "f", "size": "S",
+			"repo": "/r", "task": "task-1", "backedBy": []any{"engineer"}}),
+		proposal("task-3", system, events.TaskCreated, map[string]any{"title": "Agreed", "repo": "/r", "coordinator": "tech-lead",
+			"parked": "backlog", "idea": "idea-2"}),
+		proposal("idea-2", system, ideas.IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"}),
+		proposal("task-3", system, events.TaskHeld, map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}),
+		proposal(events.SettingsStream, you, events.SettingsChanged, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true}),
+	)...)
+	for i := range log {
+		log[i].Position = int64(i + 1)
+	}
+	for split := range len(log) + 1 {
+		s := loaded(log[:split])
+		for _, e := range log[split:] {
+			s.Apply(e)
+		}
+		sameAsReplay(t, s, log)
+		if t.Failed() {
+			t.Fatalf("loading the first %d events", split)
+		}
+	}
+	s := loaded(log)
+	idea, _ := ideas.Get(s, "idea-2")
+	task, _ := s.Task("task-3")
+	if !idea.AutoAccepted || task.Parked != "" || !s.Settings().AutoAcceptIdeas || !s.Settings().AutoStartIdeas {
+		t.Errorf("idea %+v, task parked %q, settings %+v", idea, task.Parked, s.Settings())
+	}
 }

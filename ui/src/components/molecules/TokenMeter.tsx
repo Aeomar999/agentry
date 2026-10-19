@@ -4,7 +4,12 @@ import { tokens } from "@/lib/tokens";
 // Tokens used against the budget: a thin bar that turns amber near the end
 // and red at it.
 export function TokenMeter({ used, budget }: { used: number; budget: number }) {
-  if (budget <= 0) return <span className="font-mono text-[12px]">{tokens(used)} (no limit)</span>;
+  if (budget <= 0)
+    return (
+      <span className="font-mono text-[12px]">
+        {tokens(used)} <span className="text-ink-muted">(no limit)</span>
+      </span>
+    );
   const share = Math.min(1, used / budget);
   return (
     <span className="flex flex-col gap-1">

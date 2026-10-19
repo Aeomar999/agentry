@@ -2,13 +2,17 @@ package coordinator
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -17,23 +21,47 @@ import (
 )
 
 // Software and a Visionaries team on a real loop. The Visionaries team is
-// Writing's agents by another name, so its coordinator is editor.
-func withVisionaries(t *testing.T) (*store.Store, string) {
+// Writing's agents made as the Visionaries' template, so its coordinator is
+// editor.
+func withVisionaries(t *testing.T) (*store.Store, *current.State, string) {
+	t.Helper()
+	s, state, repo := withTeams(t, true)
+	runLoop(t, s, state)
+	return s, state, repo
+}
+
+// withTeams is a store with the Software team, and the Visionaries if
+// visionaries, and a repo, with no loop running yet.
+func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, string) {
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	visionaries, _ := agents.TemplateNamed("Writing")
-	visionaries.Team = "visionaries" // in any case
-	for _, p := range agents.AddTeam(visionaries, agents.FromEvents(mustStream(t, s, events.AgentsStream)), you) {
+	if !visionaries {
+		return s, state, repo
+	}
+	team, _ := agents.TemplateNamed("Writing")
+	team.ID, team.Team = "visionaries", "visionaries" // its name in any case
+	for _, p := range agents.AddTeam(team, agents.FromEvents(mustStream(t, s, events.AgentsStream)), you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
 	}
-	loop := newLoop(s, state, t.TempDir())
+	return s, state, repo
+}
+
+// runLoop runs a loop on the store until the test ends.
+func runLoop(t *testing.T, s *store.Store, state *current.State) {
+	t.Helper()
+	run(t, newLoop(s, state, t.TempDir()), state)
+}
+
+// run runs the loop until the test ends.
+func run(t *testing.T, loop *Loop, state *current.State) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
@@ -51,7 +79,6 @@ func withVisionaries(t *testing.T) (*store.Store, string) {
 			sessions.Stop(sessions.SocketFor(id))
 		}
 	})
-	return s, repo
 }
 
 func startTask(t *testing.T, s *store.Store, id, repo, coordinator string) *tasks.Task {
@@ -62,10 +89,10 @@ func startTask(t *testing.T, s *store.Store, id, repo, coordinator string) *task
 }
 
 func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
-	const id = "task-vision-1"
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
 	task := startTask(t, s, id, repo, "editor")
-	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, IdeasFormat) {
+	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, ideas.Feature().Coordinator.Decision) {
 		t.Errorf("the editor's brief should say how to give ideas:\n%s", brief)
 	}
 
@@ -76,9 +103,9 @@ func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
 	if task.Summary != "Two ideas." {
 		t.Errorf("summary %q", task.Summary)
 	}
-	list, err := ideas.List(s, repo)
-	if err != nil || len(list) != 2 {
-		t.Fatalf("ideas: %v %v", list, err)
+	list := ideas.List(state, repo)
+	if len(list) != 2 {
+		t.Fatalf("ideas: %v", list)
 	}
 	for _, idea := range list {
 		if idea.State != ideas.Open || idea.Task != id || idea.Repo != repo {
@@ -91,8 +118,8 @@ func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
 }
 
 func TestARefusedIdeaDoesntStopTheDone(t *testing.T) {
-	s, repo := withVisionaries(t)
-	const id = "task-vision-2"
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
 	startTask(t, s, id, repo, "editor")
 
 	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One good idea.", "ideas": [
@@ -102,48 +129,135 @@ func TestARefusedIdeaDoesntStopTheDone(t *testing.T) {
 	if !strings.HasPrefix(task.Summary, "One good idea.") || !strings.Contains(task.Summary, `"Huge": an idea's size is S, M or L, not XL`) {
 		t.Errorf("the summary should say which idea was refused:\n%s", task.Summary)
 	}
-	if list, _ := ideas.List(s, repo); len(list) != 1 || list[0].Title != "Search the board" {
+	if list := ideas.List(state, repo); len(list) != 1 || list[0].Title != "Search the board" {
 		t.Errorf("ideas: %v", list)
 	}
 }
 
 func TestADoneNamingOneTitleTwiceKeepsOneIdea(t *testing.T) {
-	s, repo := withVisionaries(t)
-	const id = "task-vision-7"
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
 	startTask(t, s, id, repo, "editor")
 
 	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea, twice.", "ideas": [
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"},
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"}]}`)
 	waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 1 {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, repo); len(list) != 1 {
+		t.Errorf("ideas: %v", list)
 	}
 }
+
+// An idea that says it repeats an idea the repo doesn't have, here a title
+// in place of the id, is kept as a new idea, and the summary says so.
+func TestAnIdeaRepeatingNoIdeaIsKeptAsANewOne(t *testing.T) {
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
+	startTask(t, s, id, repo, "editor")
+
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "repeats": "Board search"}]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	const note = `"Search the board" repeats Board search, which doesn't exist; kept as a new idea.`
+	if task.Summary != "One idea.\n\n"+note {
+		t.Errorf("the summary should say the idea was kept as a new one:\n%s", task.Summary)
+	}
+	list := ideas.List(state, repo)
+	if len(list) != 1 {
+		t.Fatalf("ideas: %v", list)
+	}
+	if idea := list[0]; idea.Title != "Search the board" || idea.Repeats != "" || idea.State != ideas.Open {
+		t.Errorf("want the idea kept, open, repeating nothing: %+v", idea)
+	}
+}
+
+// unclaimedIdeas is the note on a done carrying ideas from a coordinator
+// whose features don't read them.
+const unclaimedIdeas = `Agentry couldn't keep "ideas", as no feature of this coordinator reads it.`
 
 // Only a Visionaries session suggests ideas: a Software done carrying some
 // goes through, keeps none and says so.
 func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
-	const id = "task-vision-6"
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
 	startTask(t, s, id, repo, "tech-lead")
 
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "ideas": [
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"}]}`)
 	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
-	if !strings.HasPrefix(task.Summary, "Built it.\n\n") || !strings.Contains(task.Summary, "couldn't keep these ideas") {
+	if task.Summary != "Built it.\n\n"+unclaimedIdeas {
 		t.Errorf("the summary should say the ideas weren't kept:\n%s", task.Summary)
 	}
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 0 {
-		t.Errorf("ideas: %v %v", list, err)
+	if kept := state.OwnedIDs(ideas.Prefix); len(kept) != 0 {
+		t.Errorf("no idea should be written: %v", kept)
+	}
+}
+
+// A feature whose OnDone panics costs the done only its own note: the task
+// is done, and the summary says the field wasn't kept and why.
+func TestAPanickingOnDoneIsANoteAndTheDoneGoesThrough(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
+		For: func(agents.Agent) bool { return true }, Field: "votes",
+		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { panic("a bad hook") }}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	if want := "Built it.\n\n" + `Agentry couldn't keep "votes": the votes feature's OnDone failed: a bad hook`; task.Summary != want {
+		t.Errorf("summary:\n got %q\nwant %q", task.Summary, want)
+	}
+}
+
+// A Visionaries done whose ideas Agentry can't read, here "backedBy" a name
+// rather than a list, isn't applied: the coordinator is told why and asked
+// again, and nothing is written, so the session's ideas aren't lost.
+func TestADoneWithUnreadableIdeasIsSentBack(t *testing.T) {
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
+	startTask(t, s, id, repo, "editor")
+
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "backedBy": "dreamer"}]}`)
+	task := waitForTurn(t, s, id, "turn-2", "editor")
+	if task.IsDone {
+		t.Error("the done should not be applied")
+	}
+	if reason := lastIssue(t, s, id); !strings.Contains(reason, `no usable decision: Agentry couldn't read its "ideas": json: `) {
+		t.Errorf("the issue should name the field and why: %q", reason)
+	}
+	if kept := state.OwnedIDs(ideas.Prefix); len(kept) != 0 {
+		t.Errorf("no idea should be written: %v", kept)
+	}
+}
+
+// A feature whose Check panics doesn't hold up the done: it goes through,
+// as if the Check had passed.
+func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
+		For: func(agents.Agent) bool { return true }, Field: "votes",
+		Check:  func(json.RawMessage) error { panic("a bad hook") },
+		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { return "" }}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	if task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone }); task.Summary != "Built it." {
+		t.Errorf("summary %q", task.Summary)
 	}
 }
 
 // A done from a coordinator the roster no longer has, here renamed while its
 // session ran, keeps no ideas and says so.
 func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) {
-	s, repo := withVisionaries(t)
-	const id = "task-vision-8"
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
 	startTask(t, s, id, repo, "editor")
 	if _, rejection, err := s.Propose(agents.Agent{Name: "editor"}.Renaming(you, "chief-editor")); rejection != nil || err != nil {
 		t.Fatal(rejection, err)
@@ -152,34 +266,148 @@ func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) 
 	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"}]}`)
 	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
-	if !strings.Contains(task.Summary, "couldn't keep these ideas") {
+	if task.Summary != "One idea.\n\n"+unclaimedIdeas {
 		t.Errorf("the summary should say the ideas weren't kept:\n%s", task.Summary)
 	}
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 0 {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, repo); len(list) != 0 {
+		t.Errorf("ideas: %v", list)
 	}
 }
 
 // The story's "dismissals reach a Visionaries brief": a Visionaries
-// coordinator reads what you dismissed in its repo, and a Software one
+// coordinator reads what you dismissed and accepted in its repo, and a Software one
 // doesn't, nor how to suggest ideas.
 func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
-	startTask(t, s, "task-vision-3", repo, "editor")
-	endTurn(t, s, "task-vision-3", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+	s, state, repo := withVisionaries(t)
+	startTask(t, s, "task-1", repo, "editor")
+	endTurn(t, s, "task-1", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Dark mode", "problem": "Bright at night", "proposal": "A dark theme", "size": "S"}]}`)
-	waitUntil(t, s, "task-vision-3", "done", func(task *tasks.Task) bool { return task.IsDone })
-	if _, rejection, err := s.Propose(events.Proposal{Stream: "idea-1", Actor: you, Type: events.IdeaDismissed,
+	waitUntil(t, s, "task-1", "done", func(task *tasks.Task) bool { return task.IsDone })
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "idea-1", Actor: you, Type: ideas.IdeaDismissed,
 		Data: map[string]any{"note": "The OS does it"}}); rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
 
-	vision := startTask(t, s, "task-vision-4", repo, "editor")
-	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode: The OS does it") {
+	vision := startTask(t, s, "task-2", repo, "editor")
+	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode (idea-1): The OS does it") {
 		t.Errorf("the editor's brief should name the dismissed idea:\n%s", brief)
 	}
-	software := startTask(t, s, "task-vision-5", repo, "tech-lead")
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": "Search",
+		"problem": "p", "proposal": "f", "size": "S", "task": "task-1", "repo": repo}})
+	got, err := ideas.Accept(s, state, accepted, ideas.Choice{})
+	if err != nil || !got.Accepted {
+		t.Fatalf("accepting: %+v %v", got, err)
+	}
+	again := startTask(t, s, "task-4", repo, "editor")
+	if brief := readBrief(t, again, "turn-1"); !strings.Contains(brief, "## Ideas already accepted\n\n- Search (idea-2): became "+got.Task) ||
+		!strings.Contains(brief, `"repeats"`) {
+		t.Errorf("the editor's brief should name the accepted idea and how to repeat one:\n%s", brief)
+	}
+	software := startTask(t, s, "task-5", repo, "tech-lead")
 	if brief := readBrief(t, software, "turn-1"); strings.Contains(brief, "Dark mode") || strings.Contains(brief, `"ideas"`) {
 		t.Errorf("a Software brief has no ideas:\n%s", brief)
 	}
+}
+
+// A team suggests ideas because of the template it was made from, not its
+// name: a second Visionaries team does, a team you made and called
+// Visionaries doesn't, and a log from before agents recorded their template
+// still has its Visionaries teams.
+func TestATeamSuggestsIdeasByItsTemplate(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	var log []events.Event
+	add := func(p events.Proposal) { log = append(log, events.Event{Proposal: p}) }
+	for _, p := range agents.SeedProposals(nil) {
+		add(p)
+	}
+	for range 2 {
+		for _, p := range agents.AddTeam(visionaries, agents.FromEvents(log), you) {
+			add(p)
+		}
+	}
+	add(agents.Agent{Name: "lead", Team: "visionaries", Coordinates: true, Engine: "claude", Prompt: "Think."}.Proposal(you, false))
+	for _, team := range []string{"Old Visionaries", "Old Visionaries 2"} {
+		p := agents.Agent{Name: team, Team: strings.TrimPrefix(team, "Old "), Coordinates: true, Engine: "claude", Prompt: "Think."}.Proposal(you, false)
+		delete(p.Data, "template") // as Agentry wrote it before the field
+		add(p)
+	}
+	roster := agents.FromEvents(log)
+	for name, want := range map[string]bool{"tech-lead": false, "visionary-lead": true, "visionary-lead-2": true, "lead": false,
+		"Old Visionaries": true, "Old Visionaries 2": true} {
+		if coordinator, _ := roster.Get(name); ideas.Suggests(coordinator) != want {
+			t.Errorf("%s of team %q (template %q): suggests ideas %v, want %v", name, coordinator.TeamName(), coordinator.Template, !want, want)
+		}
+	}
+}
+
+// A Visionaries coordinator's brief through the ideas hook is the brief it
+// had before the hook: the same sections, in the same place, and the same
+// decision text. testdata/visionaries-brief.md was written by the code from
+// before the hook, with the repo's path as <repo>.
+func TestAVisionariesBriefIsAsItWasBeforeTheHook(t *testing.T) {
+	brief, repo := visionariesBrief(t)
+	want, err := os.ReadFile(filepath.Join("testdata", "visionaries-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.ReplaceAll(brief, repo, "<repo>"); got != string(want) {
+		t.Errorf("the brief changed:\n got %q\nwant %q", got, want)
+	}
+}
+
+// A feature whose For or Brief panics costs the brief only its own part:
+// the brief is the one the other features make.
+func TestAPanickingHookLeavesTheBriefToTheOthers(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("testdata", "visionaries-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, broken := range map[string]*features.Coordinator{
+		"For":   {For: func(agents.Agent) bool { panic("a bad hook") }},
+		"Brief": {For: func(agents.Agent) bool { return true }, Brief: func(features.Reader, *tasks.Task) []features.Section { panic("a bad hook") }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			brief, repo := visionariesBriefWith(t, features.Feature{Name: "votes", Coordinator: broken}, ideas.Feature())
+			if got := strings.ReplaceAll(brief, repo, "<repo>"); got != string(want) {
+				t.Errorf("the brief changed:\n got %q\nwant %q", got, want)
+			}
+		})
+	}
+}
+
+// visionariesBrief is the brief of editor, the Visionaries coordinator, on
+// a task in a repo where one idea was dismissed and one accepted, and an
+// open one is left out.
+func visionariesBrief(t *testing.T) (string, string) {
+	t.Helper()
+	return visionariesBriefWith(t, ideas.Feature())
+}
+
+// visionariesBriefWith is visionariesBrief, made with list's features.
+func visionariesBriefWith(t *testing.T, list ...features.Feature) (string, string) {
+	t.Helper()
+	s, state, repo := withTeams(t, true)
+	mustCreateTask(t, s, events.Proposal{Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Think up features", "repo": repo, "coordinator": "editor", "teamChosen": true}})
+	suggested := func(title string) string {
+		return mustCreate(t, s, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{"title": title,
+			"problem": "p", "proposal": "f", "size": "S", "task": "task-1", "repo": repo}})
+	}
+	dismissed := suggested("Dark mode")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: dismissed, Actor: you, Type: ideas.IdeaDismissed,
+		Data: map[string]any{"note": "The OS does it"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if got, err := ideas.Accept(s, state, suggested("Search"), ideas.Choice{}); err != nil || !got.Accepted {
+		t.Fatalf("accepting: %+v %v", got, err)
+	}
+	suggested("Still open")
+	held, err := state.Task("task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := *held // the state's own stays as the log made it
+	task.Worktree = &tasks.Worktree{Repo: repo, Worker: "local", Path: repo + "/task-1", Branch: "agentry/task-1", Base: "abc123"}
+	editor, _ := state.Roster().Get("editor")
+	return coordinatorBrief(&task, editor, state.Roster(), family{}, nil, nil, state, list), repo
 }

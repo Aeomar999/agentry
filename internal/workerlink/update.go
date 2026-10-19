@@ -61,7 +61,7 @@ func (w *Worker) askForUpdate(ctx context.Context, method, self string) (*http.R
 	}
 	request.Header = w.header()
 	request.Header.Set("If-None-Match", `"`+have+`"`)
-	return http.DefaultClient.Do(request)
+	return w.client().Do(request)
 }
 
 // replace swaps the agentry at self for the server's, if they differ.

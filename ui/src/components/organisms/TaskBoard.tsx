@@ -20,7 +20,8 @@ import { COLUMN_TITLES } from "@/lib/columns";
 // onto another column is final and takes effect at once (direct in
 // internal/web/board_api.go): Done finishes it, To do and the Backlog park
 // it, In progress, Review and Shipping send it to an agent that builds,
-// checks or ships it; a team with no agent that ships work refuses Shipping.
+// checks or ships it; a team with no agent that ships work refuses Shipping,
+// so its cards can't be dropped there.
 // The card shows in its new column as soon as you send the move. Where in
 // the column you drop it is its place in your priority order. A task waiting
 // for you stays where it is, marked, and its question is in the dock.
@@ -31,6 +32,7 @@ interface Column {
 }
 
 const BACKLOG = "backlog";
+const SHIPPING = "shipping";
 const DONE = "done";
 
 const COLUMNS: Column[] = (Object.keys(COLUMN_TITLES) as BoardColumn[]).map((id) => ({ id, title: COLUMN_TITLES[id] }));
@@ -74,7 +76,8 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
   // Onto another column: a move, after the dialog, shown at once.
   // Within its own column: a new place in your priority order, at once.
   const isHome = (column: Column) => dragged !== null && column.id === columnOf(dragged);
-  const canDrop = (column: Column) => dragged !== null && !(dragged.status === "done" && column.id === DONE);
+  const canDrop = (column: Column) =>
+    dragged !== null && !(dragged.status === "done" && column.id === DONE) && !(!dragged.canShip && column.id === SHIPPING);
 
   function onDragOver(event: DragEvent<HTMLElement>, column: Column) {
     if (!canDrop(column)) return;
@@ -145,10 +148,13 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
           let cards = onTheBoard.filter((task) => columnOf(task) === column.id);
           if (column.id === BACKLOG) cards = byEpic(cards, everyTask);
           const droppable = canDrop(column) && !isHome(column);
+          // browsers hide title tooltips during a drag, so the note is shown too
+          const cantShip = dragged && !dragged.canShip && column.id === SHIPPING ? "No agent in this team ships work" : undefined;
           return (
             <section
               key={column.id}
               aria-label={column.title}
+              title={cantShip}
               onDragOver={(event) => onDragOver(event, column)}
               onDragLeave={(event) => {
                 if (event.currentTarget.contains(event.relatedTarget as Node)) return;
@@ -157,7 +163,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
               }}
               onDrop={(event) => onDrop(event, column, cards)}
               className={cn(
-                "flex min-w-56 flex-1 flex-col rounded-lg border bg-surface-1 transition-colors duration-(--dur-fast)",
+                "flex min-w-76 flex-1 flex-col rounded-lg border bg-surface-1 transition-colors duration-(--dur-fast)",
                 over === column.id ? "border-dashed border-brand" : droppable ? "border-dashed border-divider-2" : "border-divider",
               )}
             >
@@ -173,6 +179,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
                   ))}
                 </span>
               </h2>
+              {cantShip && <p className="border-b border-divider px-3 py-1.5 text-[11px] text-ink-muted">{cantShip}</p>}
               <div className="flex min-h-24 scrollbar-thin flex-col gap-2 overflow-y-auto p-2">
                 {cards.map((task, index) => (
                   <Fragment key={task.id}>

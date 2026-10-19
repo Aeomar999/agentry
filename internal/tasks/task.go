@@ -2,7 +2,11 @@
 // stored, so it can never disagree with what happened.
 package tasks
 
-import "time"
+import (
+	"cmp"
+	"strings"
+	"time"
+)
 
 // Status is the one word the page shows for a task.
 type Status string
@@ -47,7 +51,11 @@ type Task struct {
 	WaitingOn   string  // another team's task this one asked for and waits for, "" for none
 	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 	wrappedUp   int     // its number of turns when its coordinator last wrapped up: only later ones need another
-	Idea        string  // the idea you accepted as this task, "" for none
+	MadeFrom    string  // the stream of whatever made the task, such as the idea you accepted, "" for none
+	ByAgentry   bool    // Agentry made it, as for an idea it accepted for you, rather than you or an agent
+	AutoStarted bool    // Agentry moved it out of the Backlog once already, to start it
+	About       string  // for a Visionaries session Agentry started after you closed an epic: the epic, "" for any other task
+	AboutClose  int64   // and the log position of that close: a reopened epic closed again is a new close
 
 	Kind        Kind
 	KindChosen  bool     // you chose story or epic; otherwise the coordinator may split a story that is too big
@@ -56,6 +64,7 @@ type Task struct {
 	Stories     []string // for an epic: its stories, in the order they were planned
 	StoriesDone []string // for an epic: the stories whose summary came back
 	Closing     string   // for an epic whose stories are all done: the summary it closes with, once you approve; kept while you leave it open
+	Skipped     int64    // for an epic you closed: the close Agentry last said it started no Visionaries session for
 
 	// Shared files (files.go).
 	Files        map[string]SharedFile
@@ -64,6 +73,7 @@ type Task struct {
 	Fetching     *Fetch          // a fetch the coordinator asked for, on its way
 	collected    map[string]bool // the turns whose folder was read back
 	storyNews    bool            // a story finished while the coordinator was busy deciding: it hears it next
+	approvalNews bool            // you approved a held action while an agent's turn was open: the coordinator hears it next
 	CreatedAt    time.Time
 
 	Worktree *Worktree // nil until the worktree is ready
@@ -76,8 +86,11 @@ type Task struct {
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
 	Summary      string // the coordinator's summary, once done
 	IsDone       bool
-	DoneByYou    bool // you moved it to Done on the board, rather than its coordinator finishing it
+	DoneAt       time.Time // when it was last done, zero while it isn't
+	DoneByYou    bool      // you moved it to Done on the board, rather than its coordinator finishing it
 	LastActiveAt time.Time
+
+	TurnsBeforeReopen int // its number of turns when it was last reopened: only pushes in later ones count
 
 	// What is waiting to happen. The coordinator loop acts on these.
 	Handoff         *Step  // the latest step to an agent, until that agent's turn starts
@@ -92,11 +105,57 @@ type Task struct {
 // its own: about 12 handoffs there and back, then you decide.
 const DefaultMaxTurns = 24
 
+// InPriorityOrder compares two tasks in your priority order: the lower rank
+// first, and on a tie the newer first, as a new task starts above the rest.
+// The board lists tasks and the loop gives them slots in this one order.
+func InPriorityOrder(a, b *Task) int {
+	return cmp.Or(cmp.Compare(a.Rank, b.Rank), b.CreatedAt.Compare(a.CreatedAt))
+}
+
 // AtBudget says whether the task has used all the tokens it may.
 func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget }
 
 // AtTurnLimit says whether the task has had all the turns it may without your answer.
 func (t *Task) AtTurnLimit() bool { return t.MaxTurns > 0 && t.TurnsSinceAnswer >= t.MaxTurns }
+
+// Loop is the coordinator loop's actor ID: a question it asks is one of its
+// stops, not a coordinator's.
+const Loop = "coordinator-loop"
+
+// The limits that stop a task, as its question says.
+const (
+	LimitBudget = "budget"
+	LimitTurns  = "turns"
+)
+
+// StoppedAt is the limit the task's open question is the loop's stop for,
+// LimitBudget or LimitTurns, or "" for any other question: raising that
+// limit answers it, and nothing else does.
+func (t *Task) StoppedAt() string {
+	switch {
+	case t.Question == "" || t.Asked.By != Loop:
+		return ""
+	case t.Asked.Limit != "":
+		return t.Asked.Limit
+	case t.Asked.Fetch != nil:
+		return "" // the copy question
+	}
+	// Asked before the question said which: the stops' fixed words tell, and
+	// the loop's other questions, which carry no limit, never match them.
+	switch {
+	case strings.HasPrefix(t.Question, oldTurnStop):
+		return LimitTurns
+	case strings.HasPrefix(t.Question, oldBudgetStop):
+		return LimitBudget
+	}
+	return ""
+}
+
+// How the loop's stops at the limits began before they said their limit.
+const (
+	oldTurnStop   = "This task has had "
+	oldBudgetStop = "This task has used "
+)
 
 // WrapUp is the one turn a coordinator has after you move its task to Done,
 // To do or the Backlog yourself: to write its summary, commit or tidy the
@@ -126,22 +185,28 @@ type Worktree struct {
 
 // Turn is one agent working once, in its own session, from one prompt.
 type Turn struct {
-	ID           string // also the correlation of its events
-	Agent        string
-	Worker       string // the machine it ran on
-	Hash         string // of the prompt line it was started with
-	StartedAt    time.Time
-	LastEventAt  time.Time
-	Acknowledged bool   // the engine echoed the prompt's hash (proof 02)
-	Waiting      string // what the agent is waiting on, until it does something
-	Plan         string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
-	PlanFrom     string // the turn whose unfinished plan this turn started with, "" for a fresh one
-	Ended        bool
-	Report       string // the agent's final message
-	Issue        string // why the turn was cut short, if it was
-	Stopped      bool   // you ended it, to tell the coordinator something
-	Shipped      bool   // it ships the work because you moved the task to Shipping: you took the work as it was
-	Tokens       int    // what it used, when the engine said
+	ID            string // also the correlation of its events
+	Agent         string
+	Worker        string // the machine it ran on
+	Hash          string // of the prompt line it was started with
+	StartedAt     time.Time
+	LastEventAt   time.Time
+	Acknowledged  bool   // the engine echoed the prompt's hash (proof 02)
+	Waiting       string // what the agent is waiting on, until it does something
+	Plan          string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
+	PlanFrom      string // the turn whose unfinished plan this turn started with, "" for a fresh one
+	Ended         bool
+	Report        string    // the agent's final message
+	Issue         string    // why the turn was cut short, if it was
+	Limited       string    // what the engine said when it stopped at a usage limit, if it did
+	ResetsAt      time.Time // when that limit resets, zero when the engine didn't say
+	Resumes       int       // how many times it went on after a usage limit
+	ResumedAt     time.Time // when it last went on after a usage limit
+	RetriedAt     time.Time // when Agentry retried it at its limit's reset, until it next calls a tool
+	Stopped       bool      // you ended it, to tell the coordinator something
+	Shipped       bool      // it ships the work because you moved the task to Shipping: you took the work as it was
+	Tokens        int       // what it used, when the engine said
+	TokensUnknown string    // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
 }
 
 type Decision string
@@ -161,9 +226,15 @@ type Action struct {
 	Command     string
 	RequestedAt time.Time
 	Asked       bool // the policy handed it to the user
+	Held        bool // no answer came before the hook gave up: it waited for you after its turn moved on
+	HeldAt      time.Time
 	Decision    Decision
 	Reason      string // the rule that asked, then the reason for the decision
 	HasResult   bool
+	PassUsed    bool   // held and approved, its one pass was used: the same command asked for again went through
+	HandBack    int    // held and approved, the place in the trail of the step that handed it back
+	Heard       bool   // held and approved, a coordinator turn has started whose brief had its hand-back: only then can its pass start
+	PassTurn    string // held and approved, its agent's first turn once heard: the only one its pass works in
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
@@ -234,16 +305,68 @@ func (t *Task) Action(id string) *Action {
 	return nil
 }
 
+// Pushed says whether the turn pushed the work: it made an approved git push
+// that finished. A result comes from PostToolUse, which Claude fires only for
+// a tool call that succeeded, so with Claude a denied or failed push never
+// counts. Codex fires it for a command that exited non-zero too, with no exit
+// code in the payload (codex-cli 0.163.0), so with Codex a push that failed
+// may still count; a denied one never does. The prefix match relies on
+// deployer.md giving the exact command, git push origin HEAD:dev, to run on
+// its own: a push wrapped in timeout or chained after cd isn't seen.
+func (t *Task) Pushed(turn string) bool {
+	for _, action := range t.Actions {
+		if action.Turn == turn && action.Decision == Approved && action.HasResult &&
+			strings.HasPrefix(strings.TrimSpace(action.Command), "git push") {
+			return true
+		}
+	}
+	return false
+}
+
 // WaitingForYou are the actions the policy asked the user about, not yet decided.
 // action.asked is the only way an action puts a task in Needs you (proof 05).
+// A held action waits only while the task is at work: one done, or parked in
+// To do or the Backlog, can't take a decision on it until it is moved back.
 func (t *Task) WaitingForYou() []*Action {
 	var waiting []*Action
 	for _, action := range t.Actions {
-		if action.Asked && action.Decision == Undecided {
+		if action.Asked && action.Decision == Undecided && (!action.Held || t.AtWork()) {
 			waiting = append(waiting, action)
 		}
 	}
 	return waiting
+}
+
+// HooksWaiting are the asked actions a hook call is still waiting on: not
+// decided, and not held.
+func (t *Task) HooksWaiting() []*Action {
+	var waiting []*Action
+	for _, action := range t.Actions {
+		if action.Asked && action.Decision == Undecided && !action.Held {
+			waiting = append(waiting, action)
+		}
+	}
+	return waiting
+}
+
+// AtWork is a task that is neither done nor parked.
+func (t *Task) AtWork() bool { return !t.IsDone && t.Parked == "" }
+
+// ApprovalUnheard says you approved a held action while the coordinator was
+// deciding, and it hasn't heard yet.
+func (t *Task) ApprovalUnheard() bool { return t.approvalNews }
+
+// PassFor is the held action you approved whose pass lets this request
+// through once without asking, or nil: the same agent asks for the same
+// tool and command in its first turn after its coordinator heard your approval.
+func (t *Task) PassFor(request *Action) *Action {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved && !action.PassUsed && action.PassTurn == request.Turn &&
+			action.Agent == request.Agent && action.Tool == request.Tool && action.Command == request.Command {
+			return action
+		}
+	}
+	return nil
 }
 
 // CurrentAgent is who has the task right now: the agent in the open turn, or "".

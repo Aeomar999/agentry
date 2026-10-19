@@ -25,17 +25,22 @@ import (
 // Agentry's tools, for the repo Claude Code runs in. It reaches the server
 // this machine was connected to (`agentry mcp connect`, which the install
 // command from the Integrations page runs), or else the one running here;
-// --server and --token (or AGENTRY_URL and AGENTRY_TOKEN) name another.
+// --server and --token (or AGENTRY_URL and AGENTRY_TOKEN) name another,
+// with --ca-fingerprint (or AGENTRY_CA_FINGERPRINT) when it is served over
+// https with Agentry's own CA.
 // `agentry mcp install` adds it to Claude Code for every repo, with the
 // status line.
 
 const mcpUsage = `Usage:
-  agentry mcp [--server URL --token TOKEN] [--data DIR] [--quiet]
+  agentry mcp [--server URL --token TOKEN [--ca-fingerprint F]] [--data DIR] [--quiet]
                  run as Claude Code's MCP server (Claude Code starts it)
-  agentry mcp install [--server URL --token TOKEN]
+  agentry mcp install [--server URL --token TOKEN [--ca-fingerprint F]]
                  add it to Claude Code for every repo, and the status line
-  agentry mcp connect SERVER CODE
-                 connect this machine with a code from the Integrations page`
+  agentry mcp connect [--ca-fingerprint F] SERVER CODE
+                 connect this machine with a code from the Integrations page
+
+A server served over https with Agentry's own CA is trusted by that CA's
+SHA-256 fingerprint F, which ` + "`agentry ca`" + ` shows on the server.`
 
 func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "connect" {
@@ -49,19 +54,20 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags.SetOutput(io.Discard)
 	server := flags.String("server", os.Getenv("AGENTRY_URL"), "")
 	token := flags.String("token", os.Getenv("AGENTRY_TOKEN"), "")
+	fingerprint := flags.String("ca-fingerprint", os.Getenv("AGENTRY_CA_FINGERPRINT"), "")
 	dataDir := flags.String("data", defaultDataDir(), "")
 	quiet := flags.Bool("quiet", false, "") // no notifications on this computer
 	if err := flags.Parse(args); err != nil {
 		fmt.Fprintf(stderr, "%v\n%s\n", err, mcpUsage)
 		return 2
 	}
-	agentry, err := connect(*server, *token, *dataDir)
+	agentry, err := connect(*server, *token, *fingerprint, *dataDir)
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry mcp:", err)
 		return 1
 	}
 	if install {
-		return installMCP(*server, *token, stdout, stderr)
+		return installMCP(*server, *token, *fingerprint, stdout, stderr)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -78,37 +84,85 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// connect is the server given, the one this machine was connected to, or
-// the one running on it.
-func connect(server, token, dataDir string) (client.Client, error) {
+// connect is the server given, its CA checked by fingerprint, the one this
+// machine was connected to, or the one running on it.
+func connect(server, token, fingerprint, dataDir string) (client.Client, error) {
 	if server != "" || token != "" {
 		if server == "" || token == "" {
 			return client.Client{}, errors.New("give both --server and --token (the page's token, from its link)")
 		}
-		return client.Client{Where: client.Where{URL: server}, Token: token}, nil
+		trusted, err := trustServer(server, fingerprint, trustTimeout)
+		if err != nil {
+			return client.Client{}, err
+		}
+		return client.Client{Where: client.Where{URL: trusted.server, CA: string(trusted.ca)}, Token: token}, nil
 	}
 	if connected, ok := client.Connected(); ok {
+		if connected.CA != "" {
+			connected.Untrusted = connectionCAChanged(connected.URL)
+		}
 		return connected, nil
 	}
 	return client.Local(dataDir)
 }
 
+// connectionCAChanged says, before err, that the server this machine was
+// connected to no longer has the CA kept then, and how to connect again.
+func connectionCAChanged(server string) func(error) error {
+	return func(err error) error {
+		return fmt.Errorf("%s's CA isn't the one kept when this machine was connected: it was regenerated, or this is another server. "+
+			"Connect again with `agentry mcp connect -ca-fingerprint <fingerprint from `agentry ca` on the server> %s <code from the Integrations page>`: %w",
+			server, server, err)
+	}
+}
+
+// connectFromEnv is connect for the hooks and the status line, which Claude
+// Code starts with no flags: AGENTRY_URL, AGENTRY_TOKEN and
+// AGENTRY_CA_FINGERPRINT name a server, or else they find one as connect
+// does. A server's CA checked by fingerprint is kept for the next run, and
+// dropped when the server no longer answers with a certificate it issued.
+func connectFromEnv() (client.Client, error) {
+	server, token := os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN")
+	if server == "" || token == "" {
+		return connect(server, token, "", defaultDataDir())
+	}
+	trusted, err := trustServerOnce(server, os.Getenv("AGENTRY_CA_FINGERPRINT"))
+	if err != nil {
+		return client.Client{}, err
+	}
+	agentry := client.Client{Where: client.Where{URL: trusted.server, CA: string(trusted.ca)}, Token: token}
+	if trusted.ca != nil {
+		agentry.Untrusted = forgetKeptCA
+	}
+	return agentry, nil
+}
+
 // connectMachine swaps a code from the Integrations page for this machine's
-// credential, and keeps it.
+// credential, and keeps it, with the server's CA when it has one, checked
+// by fingerprint before the code is sent.
 func connectMachine(args []string, stdout, stderr io.Writer) int {
-	if len(args) != 2 {
+	flags := flag.NewFlagSet("mcp connect", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	fingerprint := flags.String("ca-fingerprint", "", "")
+	if flags.Parse(args) != nil || flags.NArg() != 2 {
 		fmt.Fprintln(stderr, mcpUsage)
 		return 2
 	}
-	server := strings.TrimSuffix(args[0], "/")
-	host, _ := os.Hostname()
-	var made struct{ Credential, Page string }
-	request := map[string]string{"code": args[1], "host": host, "user": os.Getenv("USER"), "os": runtime.GOOS}
-	if err := (client.Client{Where: client.Where{URL: server}}).Call("POST", "/api/integrations/connect", request, &made); err != nil {
+	trusted, err := trustServer(flags.Arg(0), *fingerprint, trustTimeout)
+	if err != nil {
 		fmt.Fprintln(stderr, "agentry mcp connect:", err)
 		return 1
 	}
-	if err := client.SaveConnection(client.Connection{URL: server, Credential: made.Credential}); err != nil {
+	server := trusted.server
+	host, _ := os.Hostname()
+	var made struct{ Credential, Page string }
+	request := map[string]string{"code": flags.Arg(1), "host": host, "user": os.Getenv("USER"), "os": runtime.GOOS}
+	where := client.Where{URL: server, CA: string(trusted.ca)}
+	if err := (client.Client{Where: where}).Call("POST", "/api/integrations/connect", request, &made); err != nil {
+		fmt.Fprintln(stderr, "agentry mcp connect:", err)
+		return 1
+	}
+	if err := client.SaveConnection(client.Connection{URL: server, Credential: made.Credential, CA: where.CA}); err != nil {
 		fmt.Fprintln(stderr, "agentry mcp connect:", err)
 		return 1
 	}
@@ -123,7 +177,7 @@ func defaultDataDir() string {
 
 // installMCP adds this binary to Claude Code as the "agentry" MCP server
 // for every repo, and sets the status line unless you have one.
-func installMCP(server, token string, stdout, stderr io.Writer) int {
+func installMCP(server, token, fingerprint string, stdout, stderr io.Writer) int {
 	self, err := os.Executable()
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry mcp install:", err)
@@ -132,6 +186,9 @@ func installMCP(server, token string, stdout, stderr io.Writer) int {
 	add := []string{"mcp", "add", "--scope", "user", "agentry", "--", self, "mcp"}
 	if server != "" {
 		add = append(add, "--server", server, "--token", token)
+		if fingerprint != "" {
+			add = append(add, "--ca-fingerprint", fingerprint)
+		}
 	}
 	exec.Command("claude", "mcp", "remove", "--scope", "user", "agentry").Run() // so it can be installed again
 	if out, err := exec.Command("claude", add...).CombinedOutput(); err != nil {
@@ -226,7 +283,7 @@ func addStatusLine(path string, statusLine map[string]any) (bool, error) {
 // stopped Agentry doesn't clutter it.
 func runStatusLine(args []string, stdin io.Reader, stdout, _ io.Writer) int {
 	io.Copy(io.Discard, stdin) // Claude Code sends its session as JSON; the line is the same for every repo
-	agentry, err := connect(os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN"), defaultDataDir())
+	agentry, err := connectFromEnv()
 	if err != nil {
 		return 0
 	}

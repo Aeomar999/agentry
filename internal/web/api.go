@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -13,8 +14,10 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -30,19 +33,25 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	all := s.state.Tasks()
-	slices.Reverse(all) // newest first, which a tie keeps
+	slices.SortStableFunc(all, tasks.InPriorityOrder)
 	done := map[string]bool{}
 	for _, task := range all {
 		done[task.ID] = task.IsDone
 	}
+	isDone := func(id string) bool {
+		if isDone, listed := done[id]; listed {
+			return isDone
+		}
+		return s.isDone(id)
+	}
+	slots := s.slots()
 	summaries := []taskSummary{}
 	for _, task := range all {
-		summary := summaryOf(task, roster)
-		summary.BlockedBy = blockedBy(task, func(id string) bool { return done[id] })
+		summary := tasks.SummaryOf(task, roster)
+		summary.BlockedBy = blockedBy(task, isDone)
+		summary.Queued = slots.Queued(task.ID)
 		summaries = append(summaries, summary)
 	}
-	// In your priority order; a new task starts first.
-	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
@@ -168,6 +177,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defaults := s.config.defaults()
 	parked := ""
 	if request.Epic != "" {
 		parked = "backlog" // with the epic's other stories, until you start it
@@ -175,7 +185,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
 		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
-		"budget": limitOf(request.Budget, s.config.Budget), "maxTurns": limitOf(request.MaxTurns, s.config.MaxTurns),
+		"budget": limitOf(request.Budget, defaults.Budget), "maxTurns": limitOf(request.MaxTurns, defaults.MaxTurns),
 		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
 	switch {
 	case err != nil:
@@ -205,6 +215,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 // noLimit is what a request sends for no limit. At creation 0 takes the
 // server's default, so a task made without one is unlimited only when asked.
 const noLimit = -1
+
+// defaults are the limits a new task gets when it names none.
+func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
 
 // limitOf is a budget or limit of turns as the task keeps it, 0 for no
 // limit, from a request's: 0 takes byDefault (the server's for a new task, no
@@ -236,7 +249,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	answered, refused := false, ""
-	if coordinator.StoppedAt(task) == coordinator.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
+	if task.StoppedAt() == tasks.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
 		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
 		if budget == 0 {
 			answer = "I made the budget unlimited. Carry on."
@@ -267,7 +280,7 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	answered, refused := false, ""
-	if coordinator.StoppedAt(task) == coordinator.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
+	if task.StoppedAt() == tasks.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
 		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
 		if maxTurns == 0 {
 			answer = "I made the turns unlimited. Carry on."
@@ -352,15 +365,10 @@ func titleFrom(description string) string {
 	return strings.TrimRight(line[:cut], ",.;:") + "..."
 }
 
+// showTask is a task's detail.
 func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
-		return
-	}
-	log, err := s.store.Log(task.ID)
-	if err != nil {
-		failed(w, err)
+	task := s.shownTask(w, r)
+	if task == nil {
 		return
 	}
 	roster, err := s.roster()
@@ -368,17 +376,19 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	detail := detailOf(task, roster, log)
-	isDone := func(id string) bool { other, _ := s.task(id); return other != nil && other.IsDone }
-	detail.BlockedBy = blockedBy(task, isDone)
+	slots := s.slots()
+	detail := detailOf(task, roster)
+	detail.BlockedBy = blockedBy(task, s.isDone)
+	detail.Queued = slots.Queued(task.ID)
 	if epic, _ := s.task(task.Epic); epic != nil {
 		detail.EpicTitle = epic.Title
 	}
 	detail.StoryList = []taskSummary{}
 	for _, id := range task.Stories {
 		if story, _ := s.task(id); story != nil {
-			summary := summaryOf(story, roster)
-			summary.BlockedBy = blockedBy(story, isDone)
+			summary := tasks.SummaryOf(story, roster)
+			summary.BlockedBy = blockedBy(story, s.isDone)
+			summary.Queued = slots.Queued(story.ID)
 			detail.StoryList = append(detail.StoryList, summary)
 		}
 	}
@@ -454,13 +464,36 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		failed(w, err)
 		return
 	}
-	reply(w, agentsOf(roster))
+	var inForce *policy.Policy
+	if s.config.Policy != nil {
+		inForce = s.config.Policy.Current()
+	}
+	reply(w, agentsOf(roster, inForce))
 }
 
-// showConfig is what the page needs to know about the server.
+// showConfig is what the page needs to know about the server. policyProblem
+// says policy.toml has a mistake, and missingProfiles names the profiles
+// agents have that it lacks, with those agents, so every page can point to
+// the Policy page, which says what to do.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
-		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil})
+	policyProblem := s.config.Policy != nil && s.config.Policy.Problem() != ""
+	config := map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
+		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil,
+		"policyProblem": policyProblem, "missingProfiles": s.missingProfilesInUse()}
+	if trust := s.trustAt(r, requestURL(r)); trust != nil {
+		config["trust"] = trust // the page is served with the server's own CA
+	}
+	reply(w, config)
+}
+
+// missingProfilesInUse is policy.MissingProfiles for the roster: none while
+// the policy or the roster can't be read.
+func (s *Server) missingProfilesInUse() map[string][]string {
+	roster, err := s.roster()
+	if s.config.Policy == nil || err != nil {
+		return map[string][]string{}
+	}
+	return s.config.Policy.Current().MissingProfiles(agentProfiles(roster))
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started
@@ -485,18 +518,6 @@ func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 func (s *Server) workerChoices() []string {
 	roster, _ := s.workers()
 	return append([]string{workers.Local}, roster.Names()...)
-}
-
-// showPolicy is the policy in force, and why the file on disk isn't, if it isn't.
-func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
-	if s.config.Policy == nil {
-		http.Error(w, "no policy", http.StatusNotFound)
-		return
-	}
-	current := s.config.Policy.Current()
-	reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
-		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
-		"profiles": current.Summary(), "text": current.Text()})
 }
 
 // waitForChanges answers when the log has moved past ?after=, or after 25 s,
@@ -527,6 +548,32 @@ func (s *Server) propose(w http.ResponseWriter, p events.Proposal) {
 }
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
+
+// shownTask is the task a read of its own is about, or nil once it has
+// answered that there is none. An archived task's detail isn't kept: it
+// answers 410 Gone, so you can tell it from a task that never was.
+func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) *tasks.Task {
+	task, err := s.task(r.PathValue("task"))
+	if errors.Is(err, current.ErrArchived) {
+		http.Error(w, r.PathValue("task")+" is archived", http.StatusGone)
+		return nil
+	}
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return nil
+	}
+	return task
+}
+
+// isDone says whether a task is done. An archived task is: only a done task
+// is archived. A broken or unknown one isn't.
+func (s *Server) isDone(id string) bool {
+	task, err := s.task(id)
+	if errors.Is(err, current.ErrArchived) {
+		return true
+	}
+	return task != nil && task.IsDone
+}
 
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)

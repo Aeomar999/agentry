@@ -33,14 +33,16 @@ type profileFile struct {
 }
 
 type ruleFile struct {
-	Name     string   `toml:"name"`
-	Decision Decision `toml:"decision"`
-	Why      string   `toml:"why"`
-	Tools    []string `toml:"tools"`
-	RunsAny  []string `toml:"runs_any"`
-	RunsOnly []string `toml:"runs_only"`
-	Paths    []string `toml:"paths"`
-	Where    string   `toml:"where"`
+	Name            string   `toml:"name"`
+	Decision        Decision `toml:"decision"`
+	Why             string   `toml:"why"`
+	Tools           []string `toml:"tools"`
+	RunsAny         []string `toml:"runs_any"`
+	RunsOnly        []string `toml:"runs_only"`
+	Paths           []string `toml:"paths"`
+	Where           string   `toml:"where"`
+	RedirectsToFile bool     `toml:"redirects_to_file"`
+	RunsOutside     []string `toml:"runs_outside"`
 }
 
 //go:embed default.toml
@@ -74,18 +76,8 @@ func Load(path, home string, protected []string) (*Policy, error) {
 // Parse checks a policy and compiles its globs. Anything it doesn't
 // understand is an error, never a guess: a typo must not open the gate.
 func Parse(text []byte, home string, protected []string) (*Policy, error) {
-	var f policyFile
-	decoder := toml.NewDecoder(bytes.NewReader(text)).DisallowUnknownFields()
-	if err := decoder.Decode(&f); err != nil {
-		var strict *toml.StrictMissingError
-		if errors.As(err, &strict) {
-			return nil, errors.New(strict.String())
-		}
-		var syntax *toml.DecodeError
-		if errors.As(err, &syntax) {
-			row, column := syntax.Position()
-			return nil, fmt.Errorf("line %d, column %d: %s", row, column, syntax.Error())
-		}
+	f, err := decode(text)
+	if err != nil {
 		return nil, err
 	}
 	if err := f.check(); err != nil {
@@ -103,6 +95,38 @@ func Parse(text []byte, home string, protected []string) (*Policy, error) {
 		policy.profiles[name] = compiled
 	}
 	return policy, nil
+}
+
+// decode reads a policy's TOML, refusing any key it doesn't know.
+func decode(text []byte) (policyFile, error) {
+	var f policyFile
+	decoder := toml.NewDecoder(bytes.NewReader(text)).DisallowUnknownFields()
+	if err := decoder.Decode(&f); err != nil {
+		var strict *toml.StrictMissingError
+		if errors.As(err, &strict) {
+			first := strict.Errors[0]
+			row, column := first.Position()
+			return f, fmt.Errorf("line %d, column %d: unknown key %s\n%s", row, column, strings.Join(first.Key(), "."), strict.String())
+		}
+		var syntax *toml.DecodeError
+		if errors.As(err, &syntax) {
+			row, column := syntax.Position()
+			return f, fmt.Errorf("line %d, column %d: %s", row, column, syntax.Error())
+		}
+		return f, err
+	}
+	return f, nil
+}
+
+// UseForEveryoneOf is the profile a policy's text puts every agent under,
+// "" when use_for_everyone isn't set. It only reads the TOML: it doesn't
+// check the policy as Parse does.
+func UseForEveryoneOf(text []byte) (string, error) {
+	f, err := decode(text)
+	if err != nil {
+		return "", err
+	}
+	return f.UseForEveryone, nil
 }
 
 func (f policyFile) check() error {
@@ -167,10 +191,14 @@ func compileProfile(name string, p profileFile, home string) (*profile, error) {
 		return nil, fmt.Errorf("profile %q scratch: %w", name, err)
 	}
 	for _, r := range p.Rules {
-		rule := rule{name: r.Name, why: r.Why, decision: r.Decision, tools: r.Tools, where: r.Where}
-		if rule.runsAny, err = compileAll(r.RunsAny, home, ignoreHome(commandGlob)); err == nil {
-			if rule.runsOnly, err = compileAll(r.RunsOnly, home, ignoreHome(commandGlob)); err == nil {
-				rule.paths, err = compileAll(r.Paths, home, pathGlob)
+		rule := rule{name: r.Name, why: r.Why, decision: r.Decision, tools: r.Tools, where: r.Where,
+			redirectsToFile: r.RedirectsToFile}
+		commands := ignoreHome(commandGlob)
+		if rule.runsAny, err = compileAll(r.RunsAny, home, commands); err == nil {
+			if rule.runsOnly, err = compileAll(r.RunsOnly, home, commands); err == nil {
+				if rule.runsOutside, err = compileAll(r.RunsOutside, home, commands); err == nil {
+					rule.paths, err = compileAll(r.Paths, home, pathGlob)
+				}
 			}
 		}
 		if err != nil {

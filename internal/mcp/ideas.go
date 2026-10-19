@@ -17,7 +17,9 @@ import (
 // The parts of the API's ideas the tools read.
 type idea struct {
 	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
+	About, AboutTitle                                                         string // the epic whose close started its session
 	BackedBy, DoubtedBy                                                       []string
+	AutoAccepted                                                              bool // Agentry accepted it for you
 }
 
 func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
@@ -26,8 +28,12 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 		State string
 	}
 	json.Unmarshal(arguments, &a)
-	if a.State == "" {
+	switch a.State {
+	case "":
 		a.State = "open"
+	case "open", "accepted", "dismissed", "all":
+	default:
+		return "", fmt.Errorf("no state %q: use open, accepted, dismissed or all", a.State)
 	}
 	repo := s.repo
 	if a.All {
@@ -70,10 +76,14 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 	return b.String(), nil
 }
 
-// acceptIdea makes an idea a task in your Backlog. With elicitation Claude
-// Code asks you first, and you can change the kind and the note.
+// acceptIdea makes an idea a task in your Backlog, or started with start.
+// With elicitation Claude Code asks you first, and you can change the kind,
+// the note and whether it starts.
 func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (string, error) {
-	var a struct{ ID, Kind, Note string }
+	var a struct {
+		ID, Kind, Note string
+		Start          bool
+	}
 	json.Unmarshal(arguments, &a)
 	i, err := s.idea(a.ID)
 	if err != nil {
@@ -83,10 +93,11 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		a.Kind = kindOf(i)
 	}
 	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog.\n\n"+aboutIdea(i), object(props{
+		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), object(props{
 			"decision": enum("Make it a task, or leave the idea open", "accept", "leave open"),
 			"kind":     withDefault(enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
 			"note":     withDefault(text("Optional: what to tell its coordinator"), a.Note),
+			"start":    withDefault(enum("Leave it in the Backlog, or start it now (it spends tokens straight away)", "backlog", "start"), startOf(a.Start)),
 		}, "decision"))
 		if err != nil {
 			return "", err
@@ -96,16 +107,21 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		}
 		a.Kind, _ = answer["kind"].(string)
 		a.Note, _ = answer["note"].(string)
+		a.Start = answer["start"] == "start"
 	}
 	var got struct {
-		Task     string
-		Accepted bool
-		Refused  string
+		Task, Column string
+		Accepted     bool
+		Refused      string
 	}
-	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", map[string]string{"kind": a.Kind, "note": a.Note}, &got); err != nil {
+	body := map[string]any{"kind": a.Kind, "note": a.Note}
+	if a.Start {
+		body["start"] = true // left out otherwise, so an accept that doesn't start sends what it always did
+	}
+	if err := s.agentry.Call("POST", "/api/ideas/"+i.ID+"/accept", body, &got); err != nil {
 		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
 	}
-	text := fmt.Sprintf("%s became %s, in the user's Backlog until they start it: %s", i.ID, got.Task, s.agentry.PageURL("/tasks/"+got.Task))
+	text := fmt.Sprintf("%s became %s%s: %s", i.ID, got.Task, placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
 	if !got.Accepted {
 		text += "\nThe idea isn't marked accepted: " + got.Refused
 	}
@@ -140,6 +156,31 @@ func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (st
 	return "The user dismissed " + i.ID + ", " + i.Title + ".", nil
 }
 
+// placeOf says where an accepted idea's task is, from the column Agentry
+// answers, not from start: a retry reuses a task made before, started or
+// not. "" when the column can't be read.
+func placeOf(column string) string {
+	switch column {
+	case "":
+		return ""
+	case "backlog":
+		return ", in the user's Backlog until they start it"
+	case "in-progress", "review", "shipping":
+		return ", started (" + boardName(column) + ")"
+	case "done":
+		return ", " + boardName(column)
+	}
+	return ", in " + boardName(column)
+}
+
+// startOf is the elicitation's answer for start.
+func startOf(start bool) string {
+	if start {
+		return "start"
+	}
+	return "backlog"
+}
+
 // idea is one idea, of any repo.
 func (s *Server) idea(id string) (idea, error) {
 	list, err := ideasOf(s.agentry, "")
@@ -169,18 +210,23 @@ func ideasOf(agentry client.Client, repo string) ([]idea, error) {
 // the newest titles. It points at list_ideas with all when some are in
 // another repo than repo, or when repo is "" (not known). Its key is the
 // number of ideas ever suggested, so a new idea is news and one you accept or
-// dismiss isn't. ok is false with none open.
+// dismiss isn't; one Agentry accepted for you was never yours to decide, so
+// it isn't counted. ok is false with none open.
 func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	all, err := ideasOf(agentry, "")
 	if err != nil {
 		return Waiting{}, false
 	}
 	var open []idea
+	yours := 0
 	pointer := "list_ideas"
 	if repo == "" {
 		pointer = "list_ideas all"
 	}
 	for _, i := range all {
+		if !i.AutoAccepted {
+			yours++
+		}
 		if i.State != "open" {
 			continue
 		}
@@ -203,7 +249,7 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	if len(open) == 1 {
 		what = "open idea"
 	}
-	return Waiting{Key: "ideas/" + strconv.Itoa(len(all)), Task: open[0].Task, Kind: "ideas",
+	return Waiting{Key: "ideas/" + strconv.Itoa(yours), Task: open[0].Task, Kind: "ideas",
 		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}, true
 }
 
@@ -224,6 +270,9 @@ func headerOf(i idea) string {
 	parts = append(parts, kindOf(i))
 	if i.Task != "" {
 		parts = append(parts, "suggested in "+i.Task)
+	}
+	if i.About != "" {
+		parts = append(parts, "after the epic "+i.About+" "+strconv.Quote(i.AboutTitle)+" closed")
 	}
 	return strings.Join(parts, ", ")
 }

@@ -97,6 +97,7 @@ type Mirror struct {
 	Dir    string
 	Hub    string // the hub's URL for git
 	Header string // what git sends the hub to be let in, as "Authorization: Bearer ..."
+	CAFile string // the hub's CA, PEM, which git trusts alone for it; "" for the system's store
 	Origin string // the repo's own remote, where agents push; "" for none
 }
 
@@ -118,8 +119,8 @@ func (m Mirror) Worktree(root, task, base string, port int) (Worktree, error) {
 	if err := w.Discard(); err != nil {
 		return Worktree{}, err
 	}
-	if _, err := git(m.Dir, "-c", "http.extraHeader="+m.Header, "fetch", "--quiet", "--no-tags", m.Hub,
-		"+refs/heads/"+w.Branch+":refs/heads/"+w.Branch); err != nil {
+	fetch := append(m.hubConfig(), "fetch", "--quiet", "--no-tags", m.Hub, "+refs/heads/"+w.Branch+":refs/heads/"+w.Branch)
+	if _, err := git(m.Dir, fetch...); err != nil {
 		return Worktree{}, err
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -129,6 +130,17 @@ func (m Mirror) Worktree(root, task, base string, port int) (Worktree, error) {
 		return Worktree{}, err
 	}
 	return w, w.ignoreAgentryFiles()
+}
+
+// hubConfig is what git is given to reach the hub: the header that lets it
+// in, and the CA it trusts alone, if the hub has one. Git for Windows' own
+// TLS (schannel) ignores a CA file unless told to use it.
+func (m Mirror) hubConfig() []string {
+	config := []string{"-c", "http.extraHeader=" + m.Header}
+	if m.CAFile != "" {
+		config = append(config, "-c", "http.sslCAInfo="+m.CAFile, "-c", "http.schannelUseSSLCAInfo=true")
+	}
+	return config
 }
 
 // open makes the mirror if there is none yet, and points its origin at the

@@ -12,6 +12,7 @@ import (
 type Hub struct {
 	Server     string
 	Credential string
+	HTTP       *http.Client // pinned to the server's CA when it has one; nil is the default
 }
 
 // BlobsPath is where a worker reaches the server's blobs.
@@ -23,7 +24,10 @@ func (h Hub) request(method, path string, body io.Reader) (*http.Response, error
 		return nil, err
 	}
 	request.Header.Set("Authorization", "Bearer "+h.Credential)
-	return http.DefaultClient.Do(request)
+	if h.HTTP == nil {
+		return http.DefaultClient.Do(request)
+	}
+	return h.HTTP.Do(request)
 }
 
 func (h Hub) Has(hash string) bool {

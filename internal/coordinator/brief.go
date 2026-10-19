@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -19,7 +19,8 @@ import (
 const longestStep = 4000
 
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
-	dismissed []*ideas.Idea) string {
+	state features.Reader, list []features.Feature) string {
+	hooks := hooksFor(list, coordinator)
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
@@ -38,13 +39,13 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	otherTeams(&b, task, coordinator, roster)
 	epicSection(&b, task, f)
-	if len(dismissed) > 0 {
-		section(&b, "Ideas the user dismissed", dismissedText(dismissed))
+	for _, more := range briefSections(hooks, state, task) {
+		section(&b, more.Heading, more.Text)
 	}
 
 	var trail strings.Builder
 	for i, step := range task.Trail {
-		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", i+1, step.From, step.To, shorten(step.Text, longestStep))
+		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", i+1, step.From, step.To, tasks.Shorten(step.Text, longestStep))
 	}
 	section(&b, "What has happened so far", trail.String()+"The last step is the newest. Decide what happens next.")
 
@@ -58,8 +59,10 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	checks(&b, task, roster)
 	decision := DecisionFormat
-	if isVisionaries(coordinator) {
-		decision += "\n" + IdeasFormat
+	for _, hook := range hooks {
+		if hook.Coordinator.Decision != "" {
+			decision += "\n" + hook.Coordinator.Decision
+		}
 	}
 	section(&b, "Your decision", decision)
 	return b.String()
@@ -79,11 +82,19 @@ func wrapUpText(task *tasks.Task) string {
 		"it. Agentry keeps your summary and refuses any other decision."
 }
 
-func workerBrief(task *tasks.Task, agent agents.Agent, instructions string, shared []sharedfiles.File) string {
+// YouChoseToShip tells an agent that ships work that the user moved the task
+// to Shipping, so it lands as it is, checked or not.
+const YouChoseToShip = "The user chose to ship this as it is, so no earlier review or test is needed. " +
+	"The checks you run after bringing it up to date still stand: if they fail, don't push; report why."
+
+func workerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, shared []sharedfiles.File) string {
 	var b strings.Builder
 	header(&b, agent, task)
 	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
+	if agent.Column == agents.Ships && yourShip(task, roster) {
+		instructions += "\n\n" + YouChoseToShip
+	}
 	section(&b, "Your instructions from the coordinator", instructions)
 	section(&b, "Where the work is", whereText(task))
 	section(&b, "Shared files", sharedText(task, shared, false))
@@ -268,15 +279,8 @@ func refusedActions(task *tasks.Task) string {
 	var refused strings.Builder
 	for _, action := range task.Actions {
 		if action.Decision == tasks.Denied {
-			fmt.Fprintf(&refused, "- %s (%s, %s): `%s`: %s\n", action.Agent, action.Turn, action.Tool, shorten(action.Command, 200), action.Reason)
+			fmt.Fprintf(&refused, "- %s (%s, %s): `%s`: %s\n", action.Agent, action.Turn, action.Tool, tasks.Shorten(action.Command, 200), action.Reason)
 		}
 	}
 	return refused.String()
-}
-
-func shorten(text string, limit int) string {
-	if len(text) <= limit {
-		return text
-	}
-	return text[:limit] + " [...]"
 }

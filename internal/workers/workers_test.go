@@ -7,11 +7,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
-// stored turns proposals into events, as the log would give them back.
+// stored turns proposals into events, as the log would give them back: at
+// in UTC, with no monotonic reading.
 func stored(at time.Time, proposals ...events.Proposal) []events.Event {
 	var stream []events.Event
 	for i, p := range proposals {
-		stream = append(stream, events.Event{Position: int64(i + 1), At: at, Proposal: p})
+		stream = append(stream, events.Event{Position: int64(i + 1), At: at.UTC().Round(0), Proposal: p})
 	}
 	return stream
 }

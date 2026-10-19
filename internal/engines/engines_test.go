@@ -45,7 +45,7 @@ var recorded = []struct {
 	{"claude", "Notification", `{"hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt"}`,
 		engines.Signal{Kind: engines.Waiting, Question: "Claude needs your permission"}},
 	{"claude", "Stop", `{"hook_event_name":"Stop","last_assistant_message":"Removed 3 TODOs.","stop_hook_active":false}`,
-		engines.Signal{Kind: engines.TurnEnded, Report: "Removed 3 TODOs."}},
+		engines.Signal{Kind: engines.TurnEnded, Report: "Removed 3 TODOs.", TokensUnknown: engines.TranscriptNotSaved}},
 
 	{"codex", "SessionStart", `{"hook_event_name":"SessionStart","session_id":"01a14257","model":"gpt-6-luna","source":"startup"}`,
 		engines.Signal{Kind: engines.SessionStarted, EngineSession: "01a14257"}},
@@ -56,7 +56,7 @@ var recorded = []struct {
 	{"codex", "PermissionRequest", `{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"touch x.txt","description":"May I run..."}}`,
 		engines.Signal{Kind: engines.ActionRequested, Tool: "Bash", Command: "touch x.txt"}},
 	{"codex", "Stop", `{"hook_event_name":"Stop","last_assistant_message":"FIRST-OK","turn_id":"t1"}`,
-		engines.Signal{Kind: engines.TurnEnded, Report: "FIRST-OK"}},
+		engines.Signal{Kind: engines.TurnEnded, Report: "FIRST-OK", TokensUnknown: engines.CodexTokensNotRead}},
 }
 
 func TestParseHookGivesTheSameSignalsOnBothEngines(t *testing.T) {
@@ -173,8 +173,71 @@ not json
 `), 0o644)
 	claude, _ := engines.Get("claude")
 	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`))
-	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 {
+	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 || signals[0].TokensUnknown != "" {
 		t.Errorf("signals %+v, err %v", signals, err)
+	}
+}
+
+// With nothing to count, the turn says why rather than a silent 0: Claude
+// Code saves no transcript in a session it takes for another's child.
+func TestClaudeSaysWhyATurnsTokensAreUnknown(t *testing.T) {
+	dir := t.TempDir()
+	noUsage := filepath.Join(dir, "no-usage.jsonl")
+	os.WriteFile(noUsage, []byte(`{"type":"user","message":{"role":"user","content":"go"}}
+{"type":"assistant","message":{"id":"msg_1","content":[{"type":"text","text":"Done."}]}}
+`), 0o644)
+	claude, _ := engines.Get("claude")
+	for transcript, want := range map[string]string{
+		"":                               engines.TranscriptNotSaved,
+		filepath.Join(dir, "gone.jsonl"): engines.TranscriptNotSaved,
+		noUsage:                          engines.NoUsageInTranscript,
+	} {
+		path, _ := json.Marshal(transcript)
+		signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":`+string(path)+`}`))
+		if err != nil || len(signals) != 1 || signals[0].Tokens != 0 || signals[0].TokensUnknown != want {
+			t.Errorf("transcript %q: signals %+v, err %v, want the reason %q", transcript, signals, err, want)
+		}
+	}
+}
+
+// Claude Code sends StopFailure instead of Stop when a turn ends at an API
+// error. A usage limit says so, with when it resets; a rate_limit that
+// isn't one, and every other error, fails the turn with what it said.
+func TestClaudesStopFailureIsAUsageLimitOrAFailedTurn(t *testing.T) {
+	claude, _ := engines.Get("claude")
+	worktree := t.TempDir()
+	claude.Prepare(engines.Session{Worktree: worktree, StateDir: filepath.Join(worktree, ".agentry"), HookCommand: "/bin/agentry hook"})
+	if settings, _ := os.ReadFile(filepath.Join(worktree, ".agentry/claude-settings.json")); !strings.Contains(string(settings), `/bin/agentry hook StopFailure || true`) {
+		t.Errorf("Claude's settings don't report StopFailure:\n%s", settings)
+	}
+	cases := []struct {
+		payload string
+		kind    engines.SignalKind
+		error   string
+		resets  bool
+		details string
+	}{
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You've hit your session limit · resets 3am (Europe/London)"}`,
+			engines.UsageLimited, "rate_limit", true, "You've hit your session limit · resets 3am (Europe/London)"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","last_assistant_message":"You’ve hit your weekly limit"}`,
+			engines.UsageLimited, "rate_limit", false, "You’ve hit your weekly limit"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"limit resets 2:30pm (UTC)"}`,
+			engines.UsageLimited, "rate_limit", true, "limit resets 2:30pm (UTC)"},
+		{`{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 Too Many Requests"}`,
+			engines.TurnFailed, "rate_limit", false, "429 Too Many Requests"},
+		{`{"hook_event_name":"StopFailure","error":"overloaded","last_assistant_message":"API Error: Overloaded"}`,
+			engines.TurnFailed, "overloaded", false, "API Error: Overloaded"},
+		{`{"hook_event_name":"StopFailure"}`, engines.TurnFailed, "unknown", false, ""},
+	}
+	for _, c := range cases {
+		signals, err := claude.ParseHook("StopFailure", []byte(c.payload))
+		if err != nil || len(signals) != 1 {
+			t.Fatalf("%s: signals %+v, err %v", c.payload, signals, err)
+		}
+		s := signals[0]
+		if s.Kind != c.kind || s.Error != c.error || s.ResetsAt.IsZero() == c.resets || s.Details != c.details {
+			t.Errorf("%s: got %+v", c.payload, s)
+		}
 	}
 }
 

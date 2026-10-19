@@ -5,7 +5,7 @@ import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
 import { useToast } from "@/components/organisms/Toasts";
 import { api } from "@/api/client";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -44,6 +44,8 @@ import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { keepFocusInView } from "@/lib/focus-in-view";
 import { useResource } from "@/live/use-resource";
+import { useEvents } from "@/live/use-events";
+import { LoadEarlier } from "@/components/molecules/LoadEarlier";
 import { useNow } from "@/live/use-now";
 import { useTaskCommits, useTaskLinks } from "@/live/refs";
 import { COLUMN_TITLES, stageOf } from "@/lib/columns";
@@ -109,7 +111,16 @@ const TURN_COLUMNS: Column<Turn>[] = [
   { header: "Machine", className: "w-28", render: (t) => <Mono className="text-ink-muted">{machineName(t.worker || LOCAL)}</Mono> },
   { header: "Started", className: "w-24", render: (t) => <Mono className="text-ink-muted">{clockTime(t.startedAt)}</Mono> },
   { header: "Took", className: "w-24", render: (t) => <Mono>{t.ended ? duration(t.startedAt, t.lastEventAt) : "running"}</Mono> },
-  { header: "Tokens", className: "w-20 text-right", render: (t) => <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono> },
+  {
+    header: "Tokens",
+    className: "w-20 text-right",
+    render: (t) =>
+      t.tokensUnknown ? (
+        <Mono className="whitespace-nowrap text-warning">{t.tokensUnknown}</Mono>
+      ) : (
+        <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
+      ),
+  },
   {
     header: "Outcome",
     className: "w-full max-w-0",
@@ -137,10 +148,14 @@ export function TaskPage() {
   const { taskId = "" } = useParams();
   useBreadcrumb({ label: "Tasks", to: "/tasks" }, { label: taskId });
   const [params, setParams] = useSearchParams();
-  const { data: task, error, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
+  const { data: task, error, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
   const links = useTaskLinks(taskId, useTaskCommits(taskId));
+  // The Activity and Events tabs share the task's events, newest first from
+  // where the detail was read, and the rest of the page never waits on them.
+  const showsLog = ["activity", "events"].includes(params.get("tab") ?? "");
+  const log = useEvents(task && showsLog ? { task: taskId, newestBefore: position + 1 } : null);
 
   if (error && !task) {
     return (
@@ -167,16 +182,24 @@ export function TaskPage() {
   };
   const openTurn = (id: string) => go({ tab: "activity", turn: id }, true);
   // An action or event opens its turn's activity with its own row picked
-  // out, and every kind of row shown, so the row is there to see.
+  // out, and every kind of row shown, so the row is there to see. An
+  // action's row is found once the activity has read its events.
   const openRow = (target: { action?: string; event?: LogEvent }, turn = "") =>
-    go({ tab: "activity", turn, row: rowFor(items, target) }, true);
+    go({ tab: "activity", turn, row: target.action ? `action:${target.action}` : rowFor(items, target) }, true);
   const watch = () => go({ tab: "terminal" });
 
   const working = task.status !== "done" && task.currentAgent ? task.currentAgent : "";
   const actions = task.actions ?? [];
   const turns = task.turnList ?? [];
   const approvals = task.approvals?.length ?? 0;
-  const items = activityOf(task);
+  const items = activityOf(task, log.events);
+  const picked = row.startsWith("action:") ? rowFor(items, { action: row.slice("action:".length) }) : row;
+  const logFoot = (
+    <>
+      {log.error && <p className="px-6 py-3 text-center text-[12px] text-warning">Couldn't read the events: {log.error}</p>}
+      <LoadEarlier earlier={log.earlier} loadingEarlier={log.loadingEarlier} onLoad={log.loadEarlier} />
+    </>
+  );
   const now: Now | null =
     task.status === "needs you"
       ? { label: "Waiting for you", tone: "warning" }
@@ -228,6 +251,14 @@ export function TaskPage() {
                 </span>
               </>
             )}
+            {task.madeFrom && (
+              <>
+                <span>·</span>
+                <span>
+                  made from <MadeFromLink stream={task.madeFrom} />
+                </span>
+              </>
+            )}
             {task.parent && (
               <>
                 <span>·</span>
@@ -270,14 +301,15 @@ export function TaskPage() {
         </Fact>
         <Fact label="Tokens" className="min-w-56">
           <LimitEditor task={task} kind="budget" compact onChanged={reload}>
-            <TokenMeter used={task.tokensUsed} budget={task.budget} />
+            <span className="flex flex-col gap-1">
+              <TokenMeter used={task.tokensUsed} budget={task.budget} />
+              {task.tokensUnknown && <span className="text-[11px] leading-4 text-warning">{task.tokensUnknown}</span>}
+            </span>
           </LimitEditor>
         </Fact>
-        <Fact label="Turns since your answer">
+        <Fact label={task.maxTurns > 0 ? "Turns since your answer" : "Turns"}>
           <LimitEditor task={task} kind="turns" compact onChanged={reload}>
-            <Mono className={cn("whitespace-nowrap", task.atTurnLimit && "text-danger")}>
-              {turnsLine(task.turnsSinceAnswer, task.maxTurns)}
-            </Mono>
+            <Mono className={cn("whitespace-nowrap", task.atTurnLimit && "text-danger")}>{turnsLine(task)}</Mono>
           </LimitEditor>
         </Fact>
         <Fact label="Actions">
@@ -308,7 +340,8 @@ export function TaskPage() {
             <div className="flex gap-3 rounded-lg border border-success/40 px-4 py-3">
               <span className="flex shrink-0 items-center gap-1.5 self-start text-[13px] font-semibold text-success">
                 <CircleCheck className="size-4" />
-                Done
+                {task.pushed ? "Shipped" : "Done"}
+                {task.doneByYou && <span className="font-normal text-ink-muted">· Moved to Done by you</span>}
               </span>
               <Clamp text={task.summary} lines={2} className="min-w-0 flex-1" />
             </div>
@@ -336,12 +369,12 @@ export function TaskPage() {
                   label: task.hasQuestion ? "Coordinator · asks you" : "Coordinator",
                   live: turns.some((t) => !t.ended && t.agent === task.coordinator),
                 },
-                { id: "activity", label: "Activity", count: items.length, live: Boolean(now) },
+                { id: "activity", label: "Activity", live: Boolean(now) },
                 { id: "terminal", label: "Terminal", live: Boolean(working) },
                 { id: "files", label: "Files", count: task.shared?.length ?? 0 },
                 { id: "handoffs", label: "Handoffs", count: task.trail?.length ?? 0 },
                 { id: "actions", label: "Actions", count: actions.length },
-                { id: "events", label: "Events", count: task.events?.length ?? 0 },
+                { id: "events", label: "Events" },
                 { id: "details", label: "Details" },
               ]}
             />
@@ -380,8 +413,10 @@ export function TaskPage() {
                 links={links}
                 turn={turn}
                 show={show}
-                row={row}
+                row={picked}
                 now={now}
+                loading={log.loading && !log.error}
+                foot={logFoot}
                 onTurn={(id) => go({ tab: "activity", turn: id, show }, Boolean(id))}
                 onShow={(next) => go({ tab: "activity", turn, show: next })}
               />
@@ -410,12 +445,17 @@ export function TaskPage() {
             )}
             {tab === "events" && (
               <Scroll>
-                <ResourceTable
-                  columns={EVENT_COLUMNS}
-                  rows={[...(task.events ?? [])].reverse()}
-                  rowKey={(e) => String(e.position)}
-                  onOpen={(e) => openRow({ event: e }, turnOfEvent(e))}
-                />
+                {log.loading && !log.error ? (
+                  <p className="px-6 py-6 text-center text-[12px] text-ink-faint">Loading the events…</p>
+                ) : (
+                  <ResourceTable
+                    columns={EVENT_COLUMNS}
+                    rows={[...log.events].reverse()}
+                    rowKey={(e) => String(e.position)}
+                    onOpen={(e) => openRow({ event: e }, turnOfEvent(e))}
+                  />
+                )}
+                {logFoot}
               </Scroll>
             )}
             {tab === "details" && (
@@ -547,6 +587,19 @@ function Scroll({
     <div onFocus={onFocus} className={cn("h-full scrollbar-thin overflow-y-auto", className)}>
       {children}
     </div>
+  );
+}
+
+// MadeFromLink goes to the page of the stream a task was made from: an idea
+// links to it on the Ideas page; a stream no page here shows is its name alone.
+function MadeFromLink({ stream }: { stream: string }) {
+  if (!stream.startsWith("idea-")) {
+    return <Mono>{stream}</Mono>;
+  }
+  return (
+    <Link to={`/ideas#${stream}`} className="font-mono text-info hover:underline">
+      {stream}
+    </Link>
   );
 }
 

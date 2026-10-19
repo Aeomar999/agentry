@@ -14,6 +14,7 @@ import { api } from "@/api/client";
 import type { Agent, Policy, ServerConfig } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
+import { effectiveProfile } from "@/lib/profiles";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { cn } from "@/lib/cn";
 import { LOCAL, machineName } from "@/lib/machines";
@@ -35,6 +36,7 @@ const BLANK: Agent = {
   profile: "",
   coordinates: false,
   team: "",
+  template: "",
   workers: [],
   color: "",
   column: "",
@@ -54,6 +56,8 @@ export function AgentForm({ agent }: { agent?: Agent }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const isNew = agent === undefined;
   const set = (change: Partial<Agent>) => setDraft((current) => ({ ...current, ...change }));
+  // For the profile being picked, not the one saved.
+  const inForce = policy && effectiveProfile(draft.profile, policy);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -214,13 +218,20 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               label="Policy profile"
               htmlFor="agent-profile"
               hint={
-                policy?.useForEveryone
-                  ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
-                  : "What it may do without asking you, from policy.toml."
+                inForce?.overridden && inForce.missing
+                  ? `In force: ${inForce.text}. Once use_for_everyone is off, every call it makes is denied until ${inForce.own} is back. Add it on the Policy page, or pick another.`
+                  : inForce?.overridden
+                    ? `In force: ${inForce.text}. This picks its own profile, for when use_for_everyone is off.`
+                    : inForce?.missing
+                      ? `${inForce.text}: every call it makes is denied until it's back. Add it on the Policy page, or pick another.`
+                      : policy?.useForEveryone
+                        ? `The policy file sets every agent to ${policy.useForEveryone} for now.`
+                        : "What it may do without asking you, from policy.toml."
               }
             >
               <Select id="agent-profile" value={draft.profile} onChange={(e) => set({ profile: e.target.value })}>
                 <option value="">default ({policy?.defaultProfile ?? "developer"})</option>
+                {inForce?.missing && draft.profile && <option value={draft.profile}>{draft.profile} (missing from policy.toml)</option>}
                 {(policy?.profiles ?? []).map((profile) => (
                   <option key={profile.name} value={profile.name}>
                     {profile.name}

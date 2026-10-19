@@ -44,8 +44,15 @@ func (codex) ParseHook(event string, payload []byte) ([]Signal, error) {
 	if p.HookEventName == "PermissionRequest" {
 		return []Signal{{Kind: ActionRequested, ToolUseID: p.ToolUseID, Tool: p.ToolName, Command: commandOf(p.ToolInput)}}, nil
 	}
-	return sharedSignals(p), nil
+	signals := sharedSignals(p)
+	if p.HookEventName == "Stop" && len(signals) == 1 {
+		signals[0].TokensUnknown = CodexTokensNotRead
+	}
+	return signals, nil
 }
+
+// CodexTokensNotRead: Agentry doesn't read what a Codex turn used yet.
+const CodexTokensNotRead = "Codex's token use isn't read"
 
 // GateReply: Codex's PreToolUse rejects "allow" as unsupported and needs a
 // reason with "deny", so allow prints nothing and the call proceeds in

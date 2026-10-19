@@ -6,10 +6,12 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -35,18 +37,23 @@ type Config struct {
 	Fleet       *machines.Fleet    // where tasks' work is: for their Workspace page
 	Workers     *workerlink.Server // the server's end of the workers' links; nil for none
 	PublicURL   string             // the address people and workers reach; "" for the one a request came to
+	CA          string             // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
 	NetworkURLs []string           // the server on each of this machine's network addresses, when it listens on every one
 	LocalURL    string             // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
 	Binary      string             // this agentry, which a joining machine can download
 	Local       workers.Machine    // what this machine is, as a worker would say it, for the Workers page
 	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
+	Features    []features.Feature // what teams and settings can turn on, for GET /api/features
+	Worktrees   string             // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
 }
 
-// PolicySource is the policy in force and any problem with the file on disk.
+// PolicySource is the policy in force and any problem with the file on
+// disk, and the one way to change it.
 type PolicySource interface {
 	Current() *policy.Policy
 	Problem() string
 	Path() string
+	Change(e policy.Edit, now time.Time) (*policy.Change, error)
 }
 
 type Server struct {
@@ -74,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	deskToo("GET /api/tasks", s.listTasks)
 	deskToo("POST /api/tasks", s.createTask)
 	deskToo("GET /api/tasks/{task}", s.showTask)
+	deskToo("GET /api/tasks/{task}/events", s.listEvents)
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)
@@ -94,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
+	api("GET /api/features", s.listFeatures)
 	api("GET /api/ideas", s.listIdeas)
 	api("POST /api/ideas/{idea}/accept", s.acceptIdea)
 	api("POST /api/ideas/{idea}/dismiss", s.dismissIdea)
@@ -108,7 +117,17 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("GET /api/config", s.showConfig)
+	api("GET /api/settings", s.showSettings)
+	api("PUT /api/settings", s.changeSettings)
 	api("GET /api/policy", s.showPolicy)
+	api("GET /api/policy/history", s.policyHistory)
+	api("GET /api/policy/history/{position}", s.policyVersion)
+	api("POST /api/policy/profiles/{name}/add", s.addDefaultProfile)
+	api("POST /api/policy/profiles/{name}/update", s.updateDefaultProfile)
+	api("POST /api/policy/profiles/{name}/use-default", s.useDefaultProfile)
+	api("POST /api/policy/use-for-everyone/off", s.turnOffUseForEveryone)
+	api("POST /api/policy/revert", s.revertPolicy)
+	api("POST /api/policy/try", s.tryPolicy)
 	api("GET /api/workers", s.listWorkers)
 	api("POST /api/workers/invite", s.invite)
 	api("GET /api/workers/{name}", s.showWorker)
@@ -157,7 +176,27 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
-	return mux
+	return s.atPosition(mux)
+}
+
+// positionHeader is the log position an API read saw everything up to.
+const positionHeader = "X-Agentry-Position"
+
+// atPosition tells each API read the log position it was read at, so the
+// page refetches a path only when the log has moved past it. The position
+// is taken before the handler reads: an event that lands in between makes
+// the reply newer than its header says, which costs the page one extra
+// refetch and never a stale screen. It is the store's applied position,
+// the one /api/changes reports: the state has every event up to it, and
+// so do the log's reads, which the state's own position can be one ahead
+// of while an event is being applied.
+func (s *Server) atPosition(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set(positionHeader, strconv.FormatInt(s.store.LastPosition(), 10))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 const uiCookie = "agentry_ui"

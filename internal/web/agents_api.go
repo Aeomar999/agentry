@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 )
 
 // Adding, changing and removing agents from the page. Each is an event, so
@@ -29,6 +31,9 @@ func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agent.Name = r.PathValue("name") // the name is who the agent is; it doesn't change
+	if had, found := s.state.Roster().Get(agent.Name); found {
+		agent.Template = had.Template // what it was made from stays, so its team keeps its features
+	}
 	s.propose(w, agent.Proposal(you, true))
 }
 
@@ -146,13 +151,18 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 		Coordinates bool   `json:"coordinates"`
 	}
 	type template struct {
+		ID          string   `json:"id"` // what GET /api/agents says an agent was made from
 		Team        string   `json:"team"`
 		Description string   `json:"description"`
+		Features    []string `json:"features"` // what a team made from it turns on, so the page can find that team
 		Agents      []member `json:"agents"`
 	}
 	list := []template{}
 	for _, t := range agents.Templates {
-		view := template{Team: t.Team, Description: t.Description}
+		view := template{ID: t.ID, Team: t.Team, Description: t.Description, Features: t.Features}
+		if view.Features == nil {
+			view.Features = []string{}
+		}
 		for _, a := range t.Agents {
 			view.Agents = append(view.Agents, member{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
 		}
@@ -162,9 +172,18 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 }
 
 // addTeam adds a team made from a template: its coordinator first, so the
-// team always has one, then its agents, each with its own prompt.
-func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Template string }
+// team always has one, then its agents, each with its own prompt. When the
+// policy lacks a profile the team needs, it refuses with the profiles
+// missing, unless asked to add them first (addMissingProfiles), which it
+// does in one change of the policy. hash is the version of the policy
+// the page saw, if it saw one. Every error is JSON {error, missingProfiles?}.
+func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
+	w := &jsonErrors{ResponseWriter: writer}
+	var request struct {
+		Template           string
+		AddMissingProfiles bool
+		Hash               string
+	}
 	if !decode(w, r, &request) {
 		return
 	}
@@ -173,11 +192,14 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no team template called "+request.Template, http.StatusNotFound)
 		return
 	}
-	for _, a := range template.Agents {
-		if problem := s.unknownProfile(a.Profile); problem != "" {
-			http.Error(w, problem+". Copy [profiles."+a.Profile+"] from internal/policy/default.toml, or the README's Profiles section, into that file, then add the team.", http.StatusBadRequest)
-			return
-		}
+	if missing := s.missingProfiles(template); len(missing) > 0 && !request.AddMissingProfiles {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]any{"missingProfiles": missing,
+			"error": "the " + template.Team + " team needs " + profilesNamed(missing) + ", which policy.toml doesn't have: add it on the Policy page"})
+		return
+	} else if len(missing) > 0 && !s.addProfilesFor(w, template.Team, missing, request.Hash) {
+		return
 	}
 	roster, err := s.roster()
 	if err != nil {
@@ -193,12 +215,36 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 	s.propose(w, proposals[len(proposals)-1])
 }
 
+// jsonErrors writes the plain-text errors of http.Error as {"error": ...},
+// so a handler built from the shared helpers replies in one shape.
+type jsonErrors struct {
+	http.ResponseWriter
+	failing bool
+}
+
+func (w *jsonErrors) WriteHeader(status int) {
+	if status >= http.StatusBadRequest && strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+		w.failing = true
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *jsonErrors) Write(text []byte) (int, error) {
+	if !w.failing {
+		return w.ResponseWriter.Write(text)
+	}
+	err := json.NewEncoder(w.ResponseWriter).Encode(map[string]string{"error": strings.TrimSpace(string(text))})
+	return len(text), err
+}
+
 func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent, bool) {
 	var agent agents.Agent
 	if !decode(w, r, &agent) {
 		return agent, false
 	}
 	agent.Name, agent.Model = strings.TrimSpace(agent.Name), strings.TrimSpace(agent.Model)
+	agent.Template = "" // only AddTeam makes an agent from a template
 	agent.Description, agent.Prompt = strings.TrimSpace(agent.Description), strings.TrimSpace(agent.Prompt)
 	if agent.Team = strings.TrimSpace(agent.Team); strings.EqualFold(agent.Team, agents.DefaultTeam) {
 		agent.Team = "" // the default team, as agents from before teams have it
@@ -210,13 +256,62 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	return agent, true
 }
 
+// missingProfiles are the profiles the team's agents need that the policy
+// lacks, in the template's order.
+func (s *Server) missingProfiles(template agents.Template) []string {
+	var missing []string
+	for _, a := range template.Agents {
+		if s.unknownProfile(a.Profile) != "" && !slices.Contains(missing, a.Profile) {
+			missing = append(missing, a.Profile)
+		}
+	}
+	return missing
+}
+
+// addProfilesFor adds the default profiles a team needs in one change of
+// the policy, or replies why it can't: a profile Agentry doesn't ship is
+// yours to write.
+func (s *Server) addProfilesFor(w http.ResponseWriter, team string, missing []string, seen string) bool {
+	for _, name := range missing {
+		if _, shipped := policy.ShippedProfile(name); !shipped {
+			http.Error(w, "the "+team+" team needs profile "+name+", which Agentry doesn't ship: write it in policy.toml yourself, then add the team", http.StatusConflict)
+			return false
+		}
+	}
+	// "" means the policy in force; Live's text check still refuses a hand edit that isn't reloaded.
+	if seen == "" {
+		seen = s.config.Policy.Current().Hash()
+	}
+	_, ok := s.applyPolicy(w, seen, "added "+profilesNamed(missing)+" for team "+team, func(text []byte) ([]byte, error) {
+		var err error
+		for _, name := range missing {
+			if text, err = policy.AddProfile(text, name, s.version()); err != nil {
+				return nil, err
+			}
+		}
+		return text, nil
+	})
+	return ok
+}
+
+// profilesNamed is "profile read-mostly", or "profiles a, b".
+func profilesNamed(names []string) string {
+	if len(names) == 1 {
+		return "profile " + names[0]
+	}
+	return "profiles " + strings.Join(names, ", ")
+}
+
 // unknownProfile says why an agent can't have profile, or "" when the policy
 // has it. A policy written before a profile was added doesn't have it.
 func (s *Server) unknownProfile(profile string) string {
 	if profile == "" || s.config.Policy == nil || slices.Contains(s.config.Policy.Current().ProfileNames(), profile) {
 		return ""
 	}
-	return "no profile called " + profile + " in " + s.config.Policy.Path()
+	if _, shipped := policy.ShippedProfile(profile); shipped {
+		return "policy.toml has no profile called " + profile + ": Agentry ships one, so add it on the Policy page, then try again"
+	}
+	return "policy.toml has no profile called " + profile + ": write it in policy.toml, or pick another profile"
 }
 
 // setKnowledge replaces the agent's knowledge with yours.
@@ -229,8 +324,13 @@ func (s *Server) setKnowledge(w http.ResponseWriter, r *http.Request) {
 }
 
 // knowledgeHistory is every change to the agent's knowledge, newest first:
-// by the agent as it worked, or by you.
+// by the agent as it worked, or by you. A change may be a patch on the
+// version before, so each version is rebuilt walking forward from the start.
 func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.roster(); err != nil { // the walk would fail as the state's did
+		failed(w, err)
+		return
+	}
 	stream, err := s.store.Stream(events.AgentsStream)
 	if err != nil {
 		failed(w, err)
@@ -242,10 +342,15 @@ func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
 		Knowledge string    `json:"knowledge"`
 	}
 	history := []change{}
-	for i := len(stream) - 1; i >= 0; i-- {
-		if e := stream[i]; e.Type == events.AgentLearned && e.Text("name") == r.PathValue("name") {
-			history = append(history, change{By: e.Actor.ID, At: e.At, Knowledge: e.Text("knowledge")})
+	var roster agents.Roster
+	name := r.PathValue("name")
+	for _, e := range stream {
+		roster.Apply(e)
+		if e.Type == events.AgentLearned && e.Text("name") == name {
+			agent, _ := roster.Get(name)
+			history = append(history, change{By: e.Actor.ID, At: e.At, Knowledge: agent.Knowledge})
 		}
 	}
+	slices.Reverse(history)
 	reply(w, history)
 }

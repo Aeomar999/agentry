@@ -13,6 +13,9 @@ export interface TaskSummary {
   currentAgent: string;
   stage: string; // the agent the coordinator last handed it to
   column: BoardColumn; // its column on the board
+  canShip: boolean; // its team has an agent that ships work, so it may be moved to Shipping
+  pushed: boolean; // an agent pushed its work since it was last reopened: a done one says Shipped
+  doneByYou: boolean; // you moved it to Done, rather than its coordinator finishing it
   turns: number;
   needsYou: string;
   hasQuestion: boolean; // the coordinator asked you something: what you send next is the answer
@@ -30,8 +33,10 @@ export interface TaskSummary {
   waitingOn: string; // another team's task this one waits for
   kind: "" | "epic"; // "" is a story
   epic: string; // a story's epic
+  madeFrom: string; // the stream that made it, such as the idea you accepted; "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
+  queued: boolean; // it wants a turn and waits for a slot, as the most tasks running at once are
   stories: number; // an epic's
   storiesDone: number;
   closing: string; // an epic with every story done: the summary you can close it with, "" otherwise
@@ -54,9 +59,9 @@ export interface TaskDetail extends TaskSummary {
   worktree: Worktree | null;
   trail: Step[] | null;
   turnList: Turn[] | null;
+  tokensUnknown: string; // on how many turns the tokens couldn't be counted, and why; "" when every turn was
   approvals: Action[] | null;
   actions: Action[] | null;
-  events: LogEvent[] | null;
 }
 
 export interface Worktree {
@@ -85,9 +90,12 @@ export interface Turn {
   ended: boolean;
   issue: string;
   tokens: number;
+  tokensUnknown?: string; // why tokens is 0, when the engine couldn't say
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something
+  limited?: string; // what the engine said when it stopped at a usage limit
+  resetsAt?: string; // when that limit resets, when the engine said
 }
 
 export interface Action {
@@ -98,6 +106,8 @@ export interface Action {
   command: string;
   requestedAt: string;
   asked: boolean;
+  held: boolean; // no answer came in time: the agent was told no, and it waits for you still
+  heldAt?: string;
   decision: string;
   reason: string;
   finished: boolean; // the tool ran and returned
@@ -121,10 +131,12 @@ export interface Agent {
   profile: string;
   coordinates: boolean;
   team: string; // the team it works in; "" for Software, the team agents had before there were teams
+  template: string; // the ID of the team template it was made from; "" for an agent you made
   workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
+  effective?: EffectiveProfile; // the profile in force; none while the policy isn't loaded
 }
 
 export type Decision = "allow" | "ask" | "deny";
@@ -137,6 +149,88 @@ export interface Policy {
   useForEveryone: string;
   profiles: PolicyProfile[];
   text: string;
+  version: string; // this Agentry's, as the defaults it ships are
+  defaults: DefaultProfile[];
+  users: Record<string, ProfileUser[]>; // by each agent's own profile
+  effective: Record<string, EffectiveProfile>; // by agent
+  missing: Record<string, string[]>; // profiles agents have that the file lacks, with those agents
+}
+
+// A profile Agentry ships, as your file has it: missing, the default of
+// this version, the default of an older one you never touched, or changed by you.
+export interface DefaultProfile {
+  name: string;
+  state: "missing" | "current" | "outdated" | "edited";
+  shippedIn?: string; // the version an outdated profile is the default of
+  text: string; // as this version ships it
+  diff?: string; // yours against it, when outdated or edited
+}
+
+// An agent with a profile. One that follows default_profile names none of its own.
+export interface ProfileUser {
+  agent: string;
+  followsDefault: boolean;
+}
+
+// The profile that judges an agent's calls: its own, unless use_for_everyone overrides it.
+export interface EffectiveProfile {
+  profile: string;
+  own: string;
+  overridden: boolean;
+  missing: boolean; // the file has no profile own, so the agent's calls are denied unless overridden
+  text: string; // "read-mostly, overridden by allow-everything", "read-mostly (missing from policy.toml)"
+}
+
+// One entry of the policy's history, newest first.
+export interface PolicyVersion {
+  position: number;
+  at: string;
+  actor: { kind: string; id: string };
+  change: string; // what changed; for a refused file, why it was refused
+  refused?: boolean;
+  onDisk?: boolean; // a hand edit of the file, or a file refused: Agentry only read it
+  hash: string;
+  diff?: string;
+  backup?: string;
+  canRevert: boolean; // the log holds its text
+}
+
+// What reverting to a version would change: the diff from the text in
+// force to its text ("" for the version in force), and the profile each
+// puts every agent under ("" when use_for_everyone isn't set).
+export interface PolicyVersionChange {
+  position: number;
+  at: string;
+  diff: string;
+  useForEveryone: string;
+  inForceUseForEveryone: string;
+}
+
+// A change made to the policy from the page.
+export interface PolicyChange {
+  hash: string;
+  change: string;
+  diff: string;
+  backup: string;
+}
+
+// What a profile decides about a call, and the rule that decided it:
+// "otherwise" when none matched.
+export interface Verdict {
+  decision: Decision;
+  profile: string;
+  rule: string;
+  why: string;
+  policy: string; // the hash of the version that decided
+  order?: number; // the deciding rule's place in its profile, from 1; absent for built-in verdicts
+}
+
+// A call tried against a profile, run in workspace. override is what
+// decides today, when use_for_everyone names another profile.
+export interface TriedCall {
+  verdict: Verdict;
+  workspace: string;
+  override?: { profile: string; verdict: Verdict };
 }
 
 export interface PolicyProfile {
@@ -155,6 +249,16 @@ export interface ServerConfig {
   engines: string[];
   workers: string[]; // the machines agents can be given: "local" first, then every worker
   canAddWorkers: boolean;
+  policyProblem: boolean; // policy.toml has a mistake; the Policy page says what
+  missingProfiles: Record<string, string[]>; // profiles agents have that policy.toml lacks, with those agents
+  trust?: Trust; // where to trust the server's own CA, when the page is served with it (-https)
+}
+
+// Where a device trusts the server's own CA before it opens an address the
+// server serves with it (-https), without the token (internal/web/addresses.go).
+export interface Trust {
+  url: string; // the trust page, <address>/trust/
+  fingerprint: string; // the CA's SHA-256, as AB:CD:…, as `agentry ca` shows it
 }
 
 // A machine, besides the one Agentry runs on, that agents can run on.
@@ -243,6 +347,15 @@ export interface Invite extends InstallCommands {
   code: string;
 }
 
+// A team Agentry offers to add (GET /api/teams/templates).
+export interface TeamTemplate {
+  id: string; // what Agent.template says
+  team: string; // the name a team made from it gets, with a number if it is taken
+  description: string;
+  features: string[]; // what a team made from it turns on, such as "ideas"
+  agents: { name: string; description: string; coordinates: boolean }[];
+}
+
 export interface CreatedEvent {
   stream: string;
 }
@@ -260,6 +373,8 @@ export interface Question {
   action?: string;
   tool?: string;
   reason?: string;
+  held?: boolean; // approval: no answer came in time, so the agent was told no
+  heldAt?: string;
   options?: string[];
   page?: string;
   tokensUsed?: number;
@@ -274,35 +389,30 @@ export interface SigninCode {
   code: string; // XXXX-XXXX
   expiresAt: string;
   expiresIn: number; // seconds, so a browser clock that's off doesn't matter
-  addresses: { url: string; label: string }[];
+  addresses: { url: string; label: string; trust?: Trust }[]; // trust: where the device trusts the server's own CA first
   address: string; // the address this page came from, the one to show first
 }
 
-// A feature a Visionaries session suggested (internal/web/views.go ideaView).
-export interface Idea {
-  id: string;
-  title: string;
-  problem: string;
-  proposal: string;
-  whyNow: string;
-  size: "S" | "M" | "L";
-  risks: string;
-  backedBy: string[];
-  doubtedBy: string[];
-  task: string; // the session it came from
-  repo: string;
-  epic: string; // the epic it follows up, "" for none
-  kind: "" | "epic"; // what it suggests making of it: "" is a story
-  state: "open" | "accepted" | "dismissed";
-  note: string; // what you said when you accepted or dismissed it
-  became: string; // the task an accepted idea became
-  createdAt: string;
+// Your settings for how Agentry works (internal/web/settings_api.go).
+export interface Settings {
+  visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
+  autoAcceptIdeas: boolean; // Agentry accepts an idea the Visionaries agreed on, by autoAcceptRule, as you would
+  autoStartIdeas: boolean; // and starts the task it made; only with autoAcceptIdeas
+  autoAcceptRule: AutoAcceptRule; // which ideas the Visionaries agreed on
+  maxRunningTasks: number; // the most tasks with a turn at once, across every repo; 0 is no limit
+  runningTasks: number; // how many have one now: read only
 }
 
-// What accepting an idea did: a task can be made and the idea still not be
-// marked accepted, and then refused says why.
-export interface IdeaAcceptance {
-  task: string;
-  accepted: boolean;
-  refused: string;
+// everyoneBacked: every viewpoint backed the idea and none doubted it.
+// nobodyDoubted: none doubted it and at least two viewpoints backed it.
+export type AutoAcceptRule = "everyoneBacked" | "nobodyDoubted";
+
+// Whether the page shows one feature, and why (internal/features Line), in
+// GET /api/features.
+export interface FeatureLine {
+  name: string; // the feature's name in the page's registry (features/index.ts)
+  enabled: boolean; // its trigger is present, so it can make new data
+  visible: boolean; // the page shows it: enabled, or it has data to look at
+  why?: string; // one line saying why it is on, kept or off
+  badge?: number; // a count for the sidebar, such as open ideas
 }

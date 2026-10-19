@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 )
 
 // `agentry send "message"` is how Claude, in a task's Workspace
@@ -39,7 +40,7 @@ func runSend(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	request, _ := http.NewRequest(http.MethodPost, server+"/api/tasks/"+task+"/claude/message", bytes.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+token)
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Do(request)
+	response, err := pinned.Client([]byte(os.Getenv(hookcall.EnvCA)), 15*time.Second).Do(request)
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry send: no answer from the Agentry server:", err)
 		return 1

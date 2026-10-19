@@ -13,8 +13,9 @@ import (
 
 // The loop's safety stops: without them a coordinator that keeps sending work
 // back, or an agent that keeps failing, would loop forever. Each task has its
-// own limit of turns, tasks.Task.MaxTurns; a new one gets DefaultMaxTurns
-// unless the server or you say otherwise.
+// own limit of turns, tasks.Task.MaxTurns, set when it is made
+// (tasks.NewLimits). DefaultMaxTurns is the server's default unless you start
+// it with another, and the limit of a task made before each had its own.
 const (
 	DefaultMaxTurns = tasks.DefaultMaxTurns
 	MaxIssuesRun    = 3 // issues in a row with no turn ending normally
@@ -28,7 +29,7 @@ type Move struct {
 	Machine  string       // for StartTurn: where the coordinator wants it to work, "" for Agentry to choose
 	Decision Decision     // for ApplyDecision, and EndWrapUp with a summary
 	Reason   string       // for RaiseIssue and AskYou, and EndWrapUp without a summary
-	Limit    string       // for AskYou: the limit that stopped the task, LimitBudget or LimitTurns, "" for any other stop
+	Limit    string       // for AskYou: the limit that stopped the task, tasks.LimitBudget or tasks.LimitTurns, "" for any other stop
 }
 
 type MoveKind string
@@ -60,12 +61,12 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 	case task.Handoff == nil:
 		return Move{Kind: Wait}
 	case task.AtTurnLimit():
-		return Move{Kind: AskYou, Limit: LimitTurns, Reason: fmt.Sprintf(
+		return Move{Kind: AskYou, Limit: tasks.LimitTurns, Reason: fmt.Sprintf(
 			"This task has had %d of its %d turns without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on.",
 			task.TurnsSinceAnswer, task.MaxTurns)}
 	case task.AtBudget() && task.TurnsSinceAnswer > 0:
 		// Once you answer, one more turn runs, so "wrap up" can be done.
-		return Move{Kind: AskYou, Limit: LimitBudget, Reason: fmt.Sprintf(
+		return Move{Kind: AskYou, Limit: tasks.LimitBudget, Reason: fmt.Sprintf(
 			"This task has used %s tokens of its %s budget. Raise the budget to go on, or tell the coordinator to wrap up.",
 			Tokens(task.TokensUsed), Tokens(task.Budget))}
 	case task.IssuesInARow >= MaxIssuesRun:
@@ -231,6 +232,10 @@ func decide(task *tasks.Task, roster agents.Roster) Move {
 		}
 	}
 	if decision.Action == Finish {
+		if task.ApprovalUnheard() {
+			return Move{Kind: RaiseIssue, Reason: "the user approved a held command after your brief was made: see above. " +
+				"Hand it back to be run, or say why it isn't needed, before you finish"}
+		}
 		if task.Column == "shipping" && tasks.TeamHas(roster, task.Coordinator, agents.Ships) {
 			return Move{Kind: RaiseIssue, Reason: "the user moved this task to Shipping; hand it to an agent that ships work before you finish"}
 		}

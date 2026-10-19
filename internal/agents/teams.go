@@ -2,6 +2,7 @@ package agents
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -12,18 +13,20 @@ import (
 // work (defaults/<folder>/<name>.md). Adding one makes ordinary agents you
 // can then change; the template itself changes nothing afterwards.
 type Template struct {
-	Team        string  `json:"team"`
-	Description string  `json:"description"` // what the team is for, on the page
-	Folder      string  `json:"-"`           // where its prompts are, under defaults/
-	Agents      []Agent `json:"agents"`
+	ID          string   `json:"id"`          // stable, recorded on the agents it makes
+	Team        string   `json:"team"`        // the team's name, which you may change
+	Description string   `json:"description"` // what the team is for, on the page
+	Folder      string   `json:"-"`           // where its prompts are, under defaults/
+	Agents      []Agent  `json:"agents"`
+	Features    []string `json:"features"` // what a team made from it turns on, such as "ideas"
 }
 
 // Templates are the teams Agentry offers. Software is what a new install
 // starts with.
 var Templates = []Template{
-	{Team: DefaultTeam, Agents: defaults,
+	{ID: "software", Team: DefaultTeam, Agents: defaults,
 		Description: "Builds and changes software: writes the code with tests, reviews it, tries it for real and ships it."},
-	{Team: "Writing", Folder: "writing",
+	{ID: "writing", Team: "Writing", Folder: "writing",
 		Description: "Writes articles, documentation, reports and proposals: researched, drafted for the reader, fact-checked and edited.",
 		Agents: []Agent{
 			{Name: "editor", Coordinates: true, Engine: "claude", Profile: "read-only", Color: "orange",
@@ -35,7 +38,7 @@ var Templates = []Template{
 			{Name: "fact-checker", Engine: "claude", Profile: "developer", Color: "violet", Column: Reviews,
 				Description: "Checks every claim in a draft against its sources and lists what must change"},
 		}},
-	{Team: "Research", Folder: "research",
+	{ID: "research", Team: "Research", Folder: "research",
 		Description: "Answers questions with evidence: frames the question, gathers sources and data, analyses it reproducibly with charts, and challenges the conclusions.",
 		Agents: []Agent{
 			{Name: "research-lead", Coordinates: true, Engine: "claude", Profile: "read-only", Color: "orange",
@@ -47,7 +50,7 @@ var Templates = []Template{
 			{Name: "critic", Engine: "claude", Profile: "developer", Color: "violet", Column: Reviews,
 				Description: "Challenges the study's evidence and reasoning, reruns the analysis, and lists what must be fixed"},
 		}},
-	{Team: "Design", Folder: "design",
+	{ID: "design", Team: "Design", Folder: "design",
 		Description: "Designs products and features: frames the problem, maps the flows, draws wireframes for every state, writes the words, and critiques it all.",
 		Agents: []Agent{
 			{Name: "product-lead", Coordinates: true, Engine: "claude", Profile: "read-only", Color: "orange",
@@ -59,7 +62,7 @@ var Templates = []Template{
 			{Name: "design-critic", Engine: "claude", Profile: "developer", Color: "violet", Column: Reviews,
 				Description: "Reviews the designs against the spec, usability heuristics and WCAG 2.2 AA, with a severity for each finding"},
 		}},
-	{Team: "Visionaries", Folder: "visionaries",
+	{ID: "visionaries", Team: "Visionaries", Folder: "visionaries", Features: []string{"ideas"},
 		Description: "Thinks together about what to build next: reads what exists, argues it out from several viewpoints, and suggests features as ideas. Changes no code.",
 		Agents: []Agent{
 			{Name: "visionary-lead", Coordinates: true, Engine: "claude", Profile: "read-mostly", Color: "orange",
@@ -75,7 +78,7 @@ var Templates = []Template{
 		}},
 }
 
-// prompted is the template's agents with their prompts and its team.
+// prompted is the template's agents with their prompts, its team and its ID.
 func (t Template) prompted() []Agent {
 	agents := make([]Agent, len(t.Agents))
 	for i, agent := range t.Agents {
@@ -89,6 +92,7 @@ func (t Template) prompted() []Agent {
 			panic("missing default prompt: " + err.Error()) // caught by the tests
 		}
 		agent.Prompt = strings.TrimSpace(string(prompt))
+		agent.Template = t.ID
 		agents[i] = agent
 	}
 	return agents
@@ -102,6 +106,39 @@ func TemplateNamed(team string) (Template, bool) {
 		}
 	}
 	return Template{}, false
+}
+
+// TemplateWithID is the template with this ID, if there is one.
+func TemplateWithID(id string) (Template, bool) {
+	for _, t := range Templates {
+		if id != "" && t.ID == id {
+			return t, true
+		}
+	}
+	return Template{}, false
+}
+
+// Lists says whether the template turns the feature on.
+func (t Template) Lists(feature string) bool {
+	return slices.Contains(t.Features, feature)
+}
+
+// templateByName is the template a team of this name was made from, as
+// AddTeam names them: the template's team, or that with a number after it
+// ("Visionaries 2"). The zero Template when none is. Only for agents from
+// before they recorded their template.
+func templateByName(team string) Template {
+	for _, t := range Templates {
+		number, numbered := strings.CutPrefix(strings.ToLower(team), strings.ToLower(t.Team)+" ")
+		if strings.EqualFold(team, t.Team) || numbered && isNumber(number) {
+			return t
+		}
+	}
+	return Template{}
+}
+
+func isNumber(text string) bool {
+	return text != "" && strings.Trim(text, "0123456789") == ""
 }
 
 // AddTeam is the events that add a team made from t to the roster. A name

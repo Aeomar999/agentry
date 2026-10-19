@@ -4,12 +4,13 @@ import { Button } from "@/components/atoms/Button";
 import { Input, TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
 import { Field } from "@/components/molecules/Field";
+import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
 import type { Agent, CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { FilterChip } from "@/components/molecules/FilterChip";
-import { VISIONARIES, addTeam, teamsOf } from "@/lib/teams";
+import { IDEAS, addTeam, missingProfilesOf, teamsOf, useTeamWith } from "@/lib/teams";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
@@ -46,13 +47,22 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   const [kind, setKind] = useState<"" | "story" | "epic">(epic ? "story" : start === "epic" ? "epic" : "");
   const chosen = teams.find((t) => t.team === team); // none: the coordinators decide
   const lead = chosen?.agents.find((a) => a.coordinates);
-  const asksVisionaries = chosen?.team === VISIONARIES;
+  // The Visionaries are the team made from the template that turns Ideas on, whatever you called it.
+  const visionaries = useTeamWith(IDEAS);
+  const asksVisionaries = lead !== undefined && lead.template !== "" && lead.template === visionaries.template?.id;
   // A visionaries session is one plain task, never split; your kind comes back if you pick another team.
   const sentKind = asksVisionaries ? "story" : kind;
-  // Asked for the Visionaries team, and you don't have it yet.
-  const visionariesMissing = preset === VISIONARIES && agents.data !== undefined && !teams.some((t) => t.team === VISIONARIES);
+  // Asked for the Visionaries team by the template's name, and you don't have it yet.
+  // Only a ?newTeam=<template team> URL gets here: the Ideas button adds the team before opening New task.
+  const visionariesMissing = visionaries.ready && preset !== "" && preset === visionaries.template?.team && !visionaries.team;
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
+  const [missingProfiles, setMissingProfiles] = useState<string[]>([]); // policy.toml lacks them, so the team was refused
+  const [added, setAdded] = useState(false); // you added the team here: pick it once it shows, by the name it got
+  if (added && visionaries.team) {
+    setAdded(false);
+    setTeam(visionaries.team);
+  }
   const [repo, setRepo] = useState("");
   const config = useResource<ServerConfig>("/api/config").data;
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
@@ -106,15 +116,24 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
     }
   }
 
-  async function addVisionaries() {
+  async function addVisionaries(addingProfiles = false) {
+    if (!visionaries.template) return;
     setAdding(true);
     setAddError("");
     try {
-      await addTeam(VISIONARIES);
+      // "" is deliberate: the server uses the policy in force, and still refuses a hand edit that isn't reloaded.
+      await addTeam(visionaries.template.team, addingProfiles ? "" : undefined);
+      setMissingProfiles([]);
+      setAdded(true);
       notify("success", "Added the Visionaries team", "It is picked: give it a theme or a question.");
       agents.reload();
     } catch (failure) {
-      setAddError((failure as Error).message);
+      const profiles = missingProfilesOf(failure);
+      if (profiles && !addingProfiles) setMissingProfiles(profiles);
+      else {
+        setMissingProfiles([]);
+        setAddError((failure as Error).message);
+      }
     }
     setAdding(false);
   }
@@ -143,11 +162,19 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
         <Banner tone="info" title="You have no Visionaries team yet">
           <div className="flex flex-col items-start gap-2">
             <span>Add it from its template: a lead and four viewpoints that argue out what to build next, and change no code.</span>
-            <Button size="sm" icon={<Users />} disabled={adding} onClick={addVisionaries}>
+            <Button size="sm" icon={<Users />} disabled={adding} onClick={() => addVisionaries()}>
               {adding ? "Adding…" : "Add the Visionaries team"}
             </Button>
           </div>
         </Banner>
+      )}
+      {visionariesMissing && missingProfiles.length > 0 && (
+        <MissingProfilesOffer
+          team={visionaries.template?.team ?? ""}
+          profiles={missingProfiles}
+          adding={adding}
+          onAdd={() => addVisionaries(true)}
+        />
       )}
       {visionariesMissing && addError && <Banner title="The Visionaries team wasn't added">{addError}</Banner>}
       {asksVisionaries ? (
@@ -293,7 +320,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
             <LimitSelect
               id="task-budget"
               scale={SCALES.budget}
-              choice={limits.budget ?? choiceOf(SCALES.budget, config.budget)}
+              choice={limits.budget ?? choiceOf(SCALES.budget, config.budget, config.budget)}
               onChange={(choice) => setLimits({ ...limits, budget: choice })}
               defaultLimit={config.budget}
             />
@@ -302,7 +329,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
             <LimitSelect
               id="task-turns"
               scale={SCALES.turns}
-              choice={limits.turns ?? choiceOf(SCALES.turns, config.maxTurns)}
+              choice={limits.turns ?? choiceOf(SCALES.turns, config.maxTurns, config.maxTurns)}
               onChange={(choice) => setLimits({ ...limits, turns: choice })}
               defaultLimit={config.maxTurns}
             />

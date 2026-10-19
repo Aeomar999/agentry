@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,6 +21,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -32,13 +35,26 @@ const token = "ui-secret"
 
 func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	return newTestServerWith(t, tasks.Limits{})
+}
+
+// newTestServerWith is newTestServer with the new tasks' limits in limits.
+func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	return newTestServerOn(t, filepath.Join(t.TempDir(), "agentry.db"), limits)
+}
+
+// newTestServerOn is newTestServerWith on the log at path.
+func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
-		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, hooks, nil).Handler())
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
+		Features: []features.Feature{ideas.Feature()}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }
@@ -80,7 +96,7 @@ func TestCreateListAndShowATask(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" || len(detail.Events) != 1 {
+	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" {
 		t.Errorf("detail: %+v", detail)
 	}
 	if code, _ := call(t, server, "GET", "/api/tasks/task-9", ""); code != http.StatusNotFound {
@@ -105,7 +121,7 @@ func TestApproveOnlyWhatWasAsked(t *testing.T) {
 		}
 	}
 	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
-	if !strings.Contains(body, `"needsYou":"tech-lead asks to run: git push origin HEAD:dev"`) || !strings.Contains(body, `"approvals":[{`) {
+	if !strings.Contains(body, `"needsYou":"Waiting for you to approve the push to dev"`) || !strings.Contains(body, `"approvals":[{`) {
 		t.Errorf("the task should show the approval it needs:\n%s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/tasks/task-1/actions/toolu_1/approve", `{"reason":"looks right"}`); code != 200 {
@@ -159,6 +175,54 @@ func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	}
 }
 
+func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
+	server, s := newTestServer(t)
+	for _, title := range []string{"one", "two"} {
+		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
+	}
+	at := itoa(s.LastPosition())
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/tasks/task-1/events", "/api/questions", "/api/agents", "/api/config", "/api/policy", "/api/settings", "/api/ideas", "/api/features", "/api/tasks/task-9"} {
+		if got := positionOf(t, server, "GET", path); got != at {
+			t.Errorf("GET %s: position %q, want %s", path, got, at)
+		}
+	}
+	for _, request := range [][2]string{{"POST", "/api/tasks"}, {"GET", "/"}} {
+		if got := positionOf(t, server, request[0], request[1]); got != "" {
+			t.Errorf("%s %s: position %q, want none", request[0], request[1], got)
+		}
+	}
+}
+
+func TestThePositionIsTakenBeforeTheRead(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	server := NewServer(s, state, Config{UIToken: token}, http.NotFoundHandler(), nil)
+	before := s.LastPosition()
+	read := server.atPosition(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
+	}))
+	recorder := httptest.NewRecorder()
+	read.ServeHTTP(recorder, httptest.NewRequest("GET", "/api/tasks", nil))
+	if s.LastPosition() == before {
+		t.Fatal("the read proposed nothing")
+	}
+	if got := recorder.Header().Get(positionHeader); got != itoa(before) {
+		t.Errorf("position %q, want %d, the one before the read", got, before)
+	}
+}
+
+func positionOf(t *testing.T, server *httptest.Server, method, path string) string {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(`{"title":"x"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	return response.Header.Get(positionHeader)
+}
+
 func TestHookCallsGoToTheHookHandler(t *testing.T) {
 	server, _ := newTestServer(t)
 	response, err := http.Post(server.URL+"/hooks", "application/json", bytes.NewReader([]byte("{}")))
@@ -194,6 +258,14 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 	if shown.Path != path || shown.Hash != live.Current().Hash() || !strings.Contains(shown.Problem, "version must be 1") ||
 		len(shown.Profiles) != 5 || shown.UseForEveryone != "allow-everything" {
 		t.Errorf("policy: %+v", shown)
+	}
+	if _, body := call(t, server, "GET", "/api/config", ""); !strings.Contains(body, `"policyProblem":true`) {
+		t.Errorf("config: %s", body)
+	}
+	os.WriteFile(path, policy.Default(), 0o600)
+	live.Reload()
+	if _, body := call(t, server, "GET", "/api/config", ""); !strings.Contains(body, `"policyProblem":false`) {
+		t.Errorf("config once the file is fixed: %s", body)
 	}
 }
 
@@ -417,10 +489,11 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 
 // limitsServerChecked is limitsServer with its own rules, to refuse what the
 // real rules would refuse only in a race.
-func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
+func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	catalogue := events.Core()
+	state := current.New(catalogue)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,11 +656,11 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 // A limit is kept though its answer to the task's stop is refused, as when
 // the stop was answered as you saved: the reply says why, with a 200.
 func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
-	answeredFirst := func(p events.Proposal, state rules.State) *events.Rejection {
+	answeredFirst := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
 		if p.Type == events.TaskAnswered {
 			return &events.Rejection{Check: "order", Reason: "there's no open question"}
 		}
-		return rules.Check(p, state)
+		return rules.Check(p, state, catalogue)
 	}
 	server, work, ask := limitsServerChecked(t, answeredFirst)
 	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)
@@ -834,6 +907,41 @@ func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
 	}
 	if push.Kind != "approval" || push.Action != "push-1" || push.Text != "git push" || push.Reason != "every push asks" {
 		t.Errorf("the approval: %+v", push)
+	}
+}
+
+// A held action says so, and when, on the task and in Questions: its
+// agent was told no long ago, and the command may no longer fit.
+func TestAHeldActionSaysItWasHeld(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Deploy"}`)
+	worker, policy := events.Actor{Kind: events.Worker, ID: "local"}, events.Actor{Kind: events.Policy, ID: "rules"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.ActionRequested, Correlation: "toolu_1",
+			Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}},
+		{Stream: "task-1", Actor: policy, Type: events.ActionAsked, Correlation: "toolu_1", Data: map[string]any{"reason": "every push"}},
+		{Stream: "task-1", Actor: policy, Type: events.ActionHeld, Correlation: "toolu_1"},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if len(detail.Approvals) != 1 || !detail.Approvals[0].Held || detail.Approvals[0].HeldAt.IsZero() {
+		t.Fatalf("the task should show the held approval:\n%s", body)
+	}
+	heldAt := detail.Approvals[0].HeldAt
+
+	_, body = call(t, server, "GET", "/api/questions", "")
+	var questions []question
+	json.Unmarshal([]byte(body), &questions)
+	if len(questions) != 1 || !questions[0].Held || !questions[0].HeldAt.Equal(heldAt) || questions[0].Text != "git push origin HEAD:dev" {
+		t.Errorf("Questions should show the held approval with its full command:\n%s", body)
 	}
 }
 
@@ -1156,17 +1264,18 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 		stream, _ := s.Stream(id)
 		return tasks.FromEvents(stream)
 	}
-	column := func(id string) string {
+	summary := func(id string) taskSummary {
 		_, body := call(t, server, "GET", "/api/tasks", "")
 		var list []taskSummary
 		json.Unmarshal([]byte(body), &list)
 		for _, summary := range list {
 			if summary.ID == id {
-				return summary.Column
+				return summary
 			}
 		}
-		return "missing"
+		return taskSummary{Column: "missing"}
 	}
+	column := func(id string) string { return summary(id).Column }
 
 	// The coordinator hands it to the deployer: Shipping, with no move of yours.
 	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
@@ -1174,6 +1283,9 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 	handOn("task-1", "turn-1", "deployer")
 	if c, task := column("task-1"), load("task-1"); c != "shipping" || task.Column != "" {
 		t.Errorf("with the deployer: column %s, your column %q", c, task.Column)
+	}
+	if !summary("task-1").CanShip {
+		t.Error("a team with a deployer can ship")
 	}
 
 	// Shipped now, from In progress: your move, written at once.
@@ -1188,7 +1300,7 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 		t.Errorf("onto Shipping: first event %s by %s with column %q, board column %s", first.Type, first.Actor.Kind, first.Text("column"), column("task-2"))
 	}
 	if text := load("task-2").Trail[len(load("task-2").Trail)-1].Text; !strings.Contains(text, "hand it to deployer") ||
-		!strings.Contains(text, "maybe before it was reviewed or tested") || !strings.Contains(text, "still runs its usual checks") {
+		!strings.Contains(text, "maybe before it was reviewed or tested") || !strings.Contains(text, "needs no earlier review") || !strings.Contains(text, "a failure stops the push") {
 		t.Errorf("the coordinator is told: %q", text)
 	}
 	if rejection := handOn("task-2", "turn-2", "engineer"); rejection == nil ||
@@ -1253,6 +1365,34 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 	after, _ := s.Stream("task-3")
 	if code != http.StatusConflict || !strings.Contains(body, "Research has no agent that ships work") || len(after) != len(before) {
 		t.Errorf("a team with no shipper: %d %q, %d events written", code, body, len(after)-len(before))
+	}
+	if _, body := call(t, server, "GET", "/api/tasks", ""); summary("task-3").CanShip || !strings.Contains(body, `"canShip":false`) {
+		t.Errorf("a team with no shipper says so, so the board offers no Shipping:\n%s", body)
+	}
+}
+
+// A push held for you in Shipping says where it goes, not the command.
+func TestAHeldPushSaysWhereItGoes(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship the fix"}`)
+	worker, deployer := events.Actor{Kind: events.Worker, ID: "local"}, events.Actor{Kind: events.Agent, ID: "deployer"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskAssigned,
+			Data: map[string]any{"agent": "deployer", "instructions": "ship it", "ships": true}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "deployer", "hash": "h"}},
+		{Stream: "task-1", Actor: deployer, Type: events.ActionRequested, Correlation: "toolu_1",
+			Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Policy, ID: "rules"}, Type: events.ActionAsked, Correlation: "toolu_1",
+			Data: map[string]any{"reason": "every push"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	if !strings.Contains(body, `"column":"shipping"`) || !strings.Contains(body, `"needsYou":"Waiting for you to approve the push to dev"`) {
+		t.Errorf("the held push should read plainly in Shipping:\n%s", body)
 	}
 }
 
@@ -1319,6 +1459,46 @@ func TestYouEditWhatAnAgentKnows(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/agents/engineer/knowledge", "")
 	if !strings.Contains(body, `"by":"you"`) || !strings.Contains(body, "Prefer table tests.") {
 		t.Errorf("history: %s", body)
+	}
+}
+
+// The history lists the same versions with the same texts whether the log
+// keeps each as a full copy or as a patch on the one before, across a rename.
+func TestTheKnowledgeHistoryIsTheSameFromPatches(t *testing.T) {
+	versions := []string{"Use gofmt.", "Use gofmt.\nRun go vet.", "Use gofmt -s.\nRun go vet.", "Use gofmt -s.\nRun go vet ./..."}
+	history := func(patches bool) string {
+		server, s := newTestServer(t)
+		engineer := agents.Agent{Name: "engineer"}
+		by, before := events.Actor{Kind: events.Agent, ID: "engineer"}, ""
+		for i, text := range versions {
+			if i == 2 {
+				s.Propose(engineer.Renaming(you, "builder"))
+				engineer.Name, by.ID = "builder", "builder"
+			}
+			p := engineer.Learned(by, text)
+			if patches && i > 0 {
+				p = engineer.Patching(by, agents.Diff(before, text))
+			}
+			if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+				t.Fatal(err, rejection)
+			}
+			before = text
+		}
+		_, body := call(t, server, "GET", "/api/agents/builder/knowledge", "")
+		var changes []map[string]any
+		json.Unmarshal([]byte(body), &changes)
+		for _, change := range changes {
+			delete(change, "at") // each log was written at its own time
+		}
+		listed, _ := json.Marshal(changes)
+		return string(listed)
+	}
+	copies, patches := history(false), history(true)
+	if want := `[{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet ./..."},{"by":"builder","knowledge":"Use gofmt -s.\nRun go vet."}]`; copies != want {
+		t.Errorf("from full copies: %s\nwant %s", copies, want)
+	}
+	if patches != copies {
+		t.Errorf("from patches: %s\nfrom full copies: %s", patches, copies)
 	}
 }
 
@@ -1392,51 +1572,6 @@ func TestATeamIsAddedFromATemplateAndTakesTasks(t *testing.T) {
 	}
 }
 
-// A policy from before a profile was added doesn't have it: a team whose
-// agents need it is refused, not added with agents that can do nothing.
-func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
-	serve := func(policyText string) (*httptest.Server, *store.Store, string) {
-		s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-		for _, p := range agents.SeedProposals(nil) {
-			s.Propose(p)
-		}
-		path := filepath.Join(t.TempDir(), "policy.toml")
-		os.WriteFile(path, []byte(policyText), 0o600)
-		live, err := policy.OpenLive(path, "/home/dev", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, Policy: live}, http.NotFoundHandler(), nil).Handler())
-		t.Cleanup(server.Close)
-		return server, s, path
-	}
-	shipped := string(policy.Default())
-	start, end := strings.Index(shipped, "[profiles.read-mostly]"), strings.Index(shipped, "[profiles.autonomous]")
-	if start < 0 || end < start {
-		t.Fatal("the default policy should have read-mostly before autonomous")
-	}
-
-	server, s, path := serve(shipped[:start] + shipped[end:])
-	before, _ := s.Stream(events.AgentsStream)
-	code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`)
-	if code != http.StatusBadRequest || !strings.Contains(body, "read-mostly") || !strings.Contains(body, path) || !strings.Contains(body, "default.toml") {
-		t.Errorf("a team whose profile the policy lacks: %d %s", code, body)
-	}
-	if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
-		t.Errorf("nothing should be proposed: %d agent events, then %d", len(before), len(after))
-	}
-
-	server, s, _ = serve(shipped)
-	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
-		t.Fatalf("adding the Visionaries with the default policy: %d %s", code, body)
-	}
-	stream, _ := s.Stream(events.AgentsStream)
-	roster := agents.FromEvents(stream)
-	if lead, ok := roster.Coordinator("Visionaries"); !ok || lead.Name != "visionary-lead" || len(roster.Assignees("Visionaries")) != 4 {
-		t.Errorf("the Visionaries team: %v", roster.Teams())
-	}
-}
-
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)
@@ -1490,6 +1625,76 @@ func TestATeamIsRemovedWithItsAgents(t *testing.T) {
 	_, body := call(t, server, "GET", "/api/agents", "")
 	if strings.Contains(body, `"Research"`) || strings.Contains(body, "research-lead") {
 		t.Errorf("Research should be gone: %s", body)
+	}
+}
+
+// The templates say their ID and the features they turn on, so the page can
+// find the team made from one by template, whatever it is called.
+func TestTeamTemplatesSayTheirIDAndFeatures(t *testing.T) {
+	server, _ := newTestServer(t)
+	_, body := call(t, server, "GET", "/api/teams/templates", "")
+	var templates []struct {
+		ID       string
+		Team     string
+		Features []string
+	}
+	if err := json.Unmarshal([]byte(body), &templates); err != nil || len(templates) != len(agents.Templates) {
+		t.Fatalf("templates: %v %s", err, body)
+	}
+	for i, template := range templates {
+		want := agents.Templates[i]
+		if template.ID != want.ID || template.Team != want.Team || !slices.Equal(template.Features, want.Features) {
+			t.Errorf("template %d is %+v, not %s (%s) with %v", i, template, want.ID, want.Team, want.Features)
+		}
+	}
+	if !strings.Contains(body, `"id":"visionaries"`) || !strings.Contains(body, `"features":["ideas"]`) || !strings.Contains(body, `"features":[]`) {
+		t.Errorf("Visionaries should list ideas, and a template with none an empty list:\n%s", body)
+	}
+}
+
+// Editing an agent keeps the template it came from, whatever the page sends,
+// so its team keeps the features the template turns on.
+func TestEditingAnAgentKeepsItsTemplate(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"Visionaries"}`); code != 200 {
+		t.Fatalf("add Visionaries: %d %s", code, body)
+	}
+	for _, change := range []string{
+		`{"engine":"claude","profile":"read-mostly","prompt":"Lead.","coordinates":true,"team":"Visionaries"}`,
+		`{"engine":"claude","profile":"read-mostly","prompt":"Lead.","coordinates":true,"team":"Visionaries","template":"software"}`,
+	} {
+		if code, body := call(t, server, "PUT", "/api/agents/visionary-lead", change); code != 200 {
+			t.Fatalf("change: %d %s", code, body)
+		}
+		stream, _ := s.Stream(events.AgentsStream)
+		if template := agents.FromEvents(stream).TemplateOf("Visionaries"); template != "visionaries" {
+			t.Errorf("%s: the team's template is %q, not visionaries", change, template)
+		}
+	}
+	_, body := call(t, server, "GET", "/api/agents", "")
+	var roster []agents.Agent
+	json.Unmarshal([]byte(body), &roster)
+	for _, agent := range roster {
+		if agent.Name == "visionary-lead" && agent.Template != "visionaries" {
+			t.Errorf("the page should show the lead's template: %+v", agent)
+		}
+	}
+	if !strings.Contains(body, `"template":"visionaries"`) {
+		t.Errorf("GET /api/agents should show template: %s", body)
+	}
+}
+
+// Only adding a team makes agents from a template: one you make yourself has
+// none, even if the page sends one.
+func TestAnAgentYouMakeHasNoTemplate(t *testing.T) {
+	server, s := newTestServer(t)
+	agent := `{"name":"thinker","engine":"claude","prompt":"Think.","coordinates":true,"team":"Thinkers","template":"visionaries"}`
+	if code, body := call(t, server, "POST", "/api/agents", agent); code != 200 {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	if template := agents.FromEvents(stream).TemplateOf("Thinkers"); template != "" {
+		t.Errorf("a team you made has template %q", template)
 	}
 }
 

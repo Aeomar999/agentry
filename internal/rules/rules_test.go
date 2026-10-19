@@ -3,13 +3,16 @@ package rules
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -33,13 +36,22 @@ type step struct {
 	accepted    bool
 }
 
+// withIdeas is the catalogue serve opens the log with.
+var withIdeas = func() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(ideas.Registration())
+	if err != nil {
+		panic(err)
+	}
+	return catalogue
+}()
+
 // openSeeded is a store with the rules and the five default agents. It
 // wires the state as storetest.Open does (which imports rules, so it can't
 // be used here), the replay check included.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return Check(p, state) })
+	state := current.New(withIdeas, ideas.Streams())
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,14 +177,194 @@ func TestOnlyAskedActionsAndQuestionsNeedYou(t *testing.T) {
 	}
 }
 
+// A usage limit is said by the machine running the open turn's agent. It
+// isn't an issue: the turn stays open, and the count of issues is as it was.
+func TestAUsageLimitKeepsTheTurnOpenAndIsNoIssue(t *testing.T) {
+	limited := func(agent string) map[string]any {
+		return map[string]any{"agent": agent, "error": "rate_limit", "details": "You've hit your session limit · resets 3am (UTC)", "resetsAt": "2026-10-20T03:00:00Z"}
+	}
+	task := run(t, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+		turnStarted("turn-2", "engineer"),
+		{agentry, events.IssueRaised, "", map[string]any{"reason": "the agent's process exited"}, true},
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}, true},
+		{worker, events.TurnLimited, "turn-2", limited("engineer"), false}, // not the open turn
+		turnStarted("turn-3", "engineer"),
+		{worker, events.TurnLimited, "turn-3", limited("tech-lead"), false},  // not its agent
+		{engineer, events.TurnLimited, "turn-3", limited("engineer"), false}, // the machine says it, not the agent
+		{worker, events.TurnLimited, "turn-3", limited("engineer"), true},
+	})
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-3" || turn.Limited == "" || !turn.ResetsAt.Equal(time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)) {
+		t.Errorf("the limited turn should stay open with its reset time: %+v", turn)
+	}
+	if task.IssuesInARow != 1 || task.Status() != tasks.Working {
+		t.Errorf("issues in a row %d, status %s: a usage limit is no issue", task.IssuesInARow, task.Status())
+	}
+}
+
+// A limited turn resumes, said by its machine or by Agentry at the reset,
+// only while it is the open turn, its agent's, and limited. It stays open,
+// and the count of issues is as it was.
+func TestALimitedTurnResumes(t *testing.T) {
+	limited := map[string]any{"agent": "engineer", "error": "rate_limit", "details": "You've hit your session limit", "resetsAt": ""}
+	resumed := func(agent, reason string) map[string]any { return map[string]any{"agent": agent, "reason": reason} }
+	task := run(t, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+		turnStarted("turn-2", "engineer"),
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // not limited
+		{worker, events.TurnLimited, "turn-2", limited, true},
+		{worker, events.TurnResumed, "turn-1", resumed("engineer", "engine"), false},   // not the open turn
+		{worker, events.TurnResumed, "turn-2", resumed("tech-lead", "engine"), false},  // not its agent
+		{engineer, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // the agent can't say it
+		{agentry, events.TurnResumed, "turn-2", resumed("engineer", "reset"), true},
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // no longer limited
+		{worker, events.TurnLimited, "turn-2", limited, true},
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), true},
+	})
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-2" || turn.Limited != "" || turn.Resumes != 2 {
+		t.Errorf("the turn should be open, no longer limited, resumed twice: %+v", turn)
+	}
+	if task.IssuesInARow != 0 || task.Status() != tasks.Working {
+		t.Errorf("issues in a row %d, status %s", task.IssuesInARow, task.Status())
+	}
+}
+
 func TestEveryTaskEventHasARule(t *testing.T) {
 	for _, kind := range []events.Type{events.WorktreeReady, events.TaskAssigned, events.TurnStarted,
 		events.PromptAcknowledged, events.SessionStarted, events.ActionRequested, events.ActionAsked,
-		events.ActionApproved, events.ActionDenied, events.ActionResult, events.AgentWaiting, events.TurnEnded,
-		events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
+		events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult, events.AgentWaiting, events.TurnEnded,
+		events.TurnLimited, events.TurnResumed, events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
 		if taskRules[kind] == nil {
 			t.Errorf("%s has no rule", kind)
 		}
+	}
+}
+
+// An engineer's turn whose git push was asked about: toolu_1.
+var askedPush = []step{
+	created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+	{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+	turnStarted("turn-2", "engineer"),
+	{engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push"}, true},
+	{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+}
+
+func TestOnlyYouDecideAHeldAction(t *testing.T) {
+	approve := func(actor events.Actor, id, pass string, accepted bool) step {
+		data := map[string]any{"reason": "approved"}
+		if pass != "" {
+			data["pass"] = pass
+		}
+		return step{actor, events.ActionApproved, id, data, accepted}
+	}
+	request := func(id, command string) step {
+		return step{engineer, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": command}, true}
+	}
+	task := run(t, append(append([]step{}, askedPush...),
+		step{you, events.ActionHeld, "toolu_1", nil, false}, // only the policy holds one
+		step{policy, events.ActionHeld, "toolu_1", nil, true},
+		step{policy, events.ActionHeld, "toolu_1", nil, false}, // held once
+		approve(policy, "toolu_1", "", false),                  // no hook waits: only you decide it
+		request("toolu_2", "ls"),
+		step{policy, events.ActionHeld, "toolu_2", nil, false}, // never asked
+		approve(policy, "toolu_2", "toolu_1", false),           // not approved yet
+		approve(policy, "toolu_2", "", true),
+		turnEnded("turn-2", "engineer", "Pushed? No, it was held."),
+		approve(you, "toolu_1", "", true),
+		turnStarted("turn-3", "tech-lead"), turnEnded("turn-3", "tech-lead", "assign"),
+		step{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "push again"}, true},
+		turnStarted("turn-4", "engineer"),
+		request("toolu_3", "git push --force"),
+		approve(policy, "toolu_3", "toolu_1", false), // another command
+		approve(policy, "toolu_3", "toolu_2", false), // not a held action
+		request("toolu_4", "git push"),
+		approve(policy, "toolu_4", "toolu_1", true),
+		request("toolu_5", "git push"),
+		approve(policy, "toolu_5", "toolu_1", false), // its pass is used
+	))
+	if held := task.Action("toolu_1"); !held.Held || held.Decision != tasks.Approved || !held.PassUsed {
+		t.Errorf("toolu_1: %+v, want held, approved, its pass used", held)
+	}
+}
+
+// A pass works for the agent that asked, in its first turn after your
+// approval, and in no other.
+func TestAPassFitsItsAgentAndTurn(t *testing.T) {
+	reviewer := events.Actor{Kind: events.Agent, ID: "reviewer"}
+	request := func(actor events.Actor, id string) step {
+		return step{actor, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push"}, true}
+	}
+	usePass := func(id string, accepted bool) step {
+		return step{policy, events.ActionApproved, id, map[string]any{"reason": "approved", "pass": "toolu_1"}, accepted}
+	}
+	handTo := func(agent, decide, next string) []step {
+		return []step{turnStarted(decide, "tech-lead"), turnEnded(decide, "tech-lead", "assign"),
+			{coordinator, events.TaskAssigned, "", map[string]any{"agent": agent, "instructions": "go"}, true},
+			turnStarted(next, agent)}
+	}
+	log := append(append([]step{}, askedPush...),
+		step{policy, events.ActionHeld, "toolu_1", nil, true},
+		step{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, true},
+		request(engineer, "toolu_2"),
+		usePass("toolu_2", false), // the turn it was asked in, not the next one
+		turnEnded("turn-2", "engineer", "held"))
+	log = append(log, handTo("reviewer", "turn-3", "turn-4")...)
+	log = append(log, request(reviewer, "toolu_3"), usePass("toolu_3", false), // another agent
+		turnEnded("turn-4", "reviewer", "reviewed"))
+	log = append(log, handTo("engineer", "turn-5", "turn-6")...)
+	log = append(log, turnEnded("turn-6", "engineer", "didn't push"))
+	log = append(log, handTo("engineer", "turn-7", "turn-8")...)
+	task := run(t, append(log, request(engineer, "toolu_4"), usePass("toolu_4", false))) // turn-6 was its turn
+	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-6" || pass.PassUsed {
+		t.Errorf("toolu_1: %+v, want its pass for turn-6, unused", pass)
+	}
+}
+
+// When the coordinator itself asked, its next turn hears your approval and
+// its pass works there.
+func TestACoordinatorsPassWorksInItsNextTurn(t *testing.T) {
+	push := func(id string) step {
+		return step{coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push"}, true}
+	}
+	task := run(t, []step{created, worktree, turnStarted("turn-1", "tech-lead"),
+		push("toolu_1"),
+		{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+		{policy, events.ActionHeld, "toolu_1", nil, true},
+		turnEnded("turn-1", "tech-lead", "held"),
+		{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, true},
+		turnStarted("turn-2", "tech-lead"),
+		push("toolu_2"),
+		{policy, events.ActionApproved, "toolu_2", map[string]any{"reason": "approved", "pass": "toolu_1"}, true},
+	})
+	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-2" || !pass.PassUsed {
+		t.Errorf("toolu_1: %+v, want its pass used in turn-2", pass)
+	}
+	handBack := slices.IndexFunc(task.Trail, func(s tasks.Step) bool { return strings.Contains(s.Text, "Run it again yourself in this turn") })
+	if handBack < 0 || !strings.HasSuffix(task.Trail[handBack].Text, "in this turn only.") {
+		t.Errorf("the hand-back should tell the coordinator to run it in this turn: %+v", task.Trail)
+	}
+}
+
+func TestAHeldActionWaitsWhileTheTaskIsParkedOrDone(t *testing.T) {
+	for name, move := range map[string]step{
+		"to do": {you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},
+		"done":  {you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := run(t, append(append([]step{}, askedPush...),
+				step{policy, events.ActionHeld, "toolu_1", nil, true},
+				move,
+				step{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, false},
+				step{you, events.ActionDenied, "toolu_1", map[string]any{"reason": "late"}, false},
+			))
+			if len(task.WaitingForYou()) != 0 {
+				t.Errorf("waiting for you: %+v, want none while the task is %s", task.WaitingForYou(), name)
+			}
+		})
 	}
 }
 
@@ -199,6 +391,15 @@ func TestAgentRules(t *testing.T) {
 		{"an agent keeps its own notes", agent("engineer", "", "", false).Learned(engineer, "Use gofmt."), true},
 		{"not another's", agent("reviewer", "", "", false).Learned(engineer, "x"), false},
 		{"you can edit anyone's", agent("reviewer", "", "", false).Learned(you, "Be strict."), true},
+		{"a patch on what it knows", agent("engineer", "", "", false).Patching(engineer, agents.Diff("Use gofmt.", "Use gofmt -s.")), true},
+		{"a patch on a version since replaced", agent("engineer", "", "", false).Patching(engineer, agents.Diff("Use gofmt.", "Run go vet.\nUse gofmt.")), false},
+		{"a patch keeping more than there is", agent("engineer", "", "", false).Patching(engineer, agents.Patch{Head: 10, Tail: 10, SHA256: "x"}), false},
+		{"a patch with another text's hash", agent("engineer", "", "", false).Patching(engineer, agents.Patch{Head: 13, Middle: "!", SHA256: agents.Diff("", "x").SHA256}), false},
+		{"a patch whose middle isn't UTF-8", agent("engineer", "", "", false).Patching(engineer, agents.Diff("Use gofmt -s.", "Use gofmt -s.\xff")), false},
+		{"a patch with no head", events.Proposal{Stream: events.AgentsStream, Actor: engineer, Type: events.AgentLearned,
+			Data: map[string]any{"name": "engineer", "tail": 0, "middle": "x", "sha256": agents.Diff("", "x").SHA256}}, false},
+		{"a patch for an agent that doesn't exist", agent("ghost", "", "", false).Patching(you, agents.Diff("", "x")), false},
+		{"a full copy over any version", agent("engineer", "", "", false).Learned(engineer, "Use gofmt only."), true},
 		{"remove an agent", agent("designer", "codex", "x", false).Removal(you), true},
 		{"remove it twice", agent("designer", "codex", "x", false).Removal(you), false},
 		{"remove the only coordinator", agent("tech-lead", "claude", "x", true).Removal(you), false},
@@ -208,9 +409,9 @@ func TestAgentRules(t *testing.T) {
 		{"or go while the team has agents", agents.Agent{Name: "editor"}.Removal(you), false},
 		{"a coordinator hands work only to its own team", events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
 			Type: events.TaskAssigned, Data: map[string]any{"agent": "writer", "instructions": "x"}}, false},
-		{"an agent makes a task only for another, as a request", events.Proposal{Stream: "task-9", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
+		{"an agent makes a task only for another, as a request", events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"},
 			Type: events.TaskCreated, Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead"}}, false},
-		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-9", Actor: you, Type: events.TaskCreated,
+		{"a task for a coordinator that isn't one", events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "engineer"}}, false},
 	}
 	for _, c := range cases {
@@ -304,7 +505,7 @@ func TestYourMoveToDoneStands(t *testing.T) {
 // A task whose log can't be replayed takes no more events, not even a
 // task.created that would start it again.
 func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
-	state := current.New()
+	state := current.New(withIdeas, ideas.Streams())
 	state.Loaded(0)
 	var position int64
 	apply := func(p events.Proposal) {
@@ -318,7 +519,7 @@ func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
 	apply(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeMoved,
 		Data: map[string]any{"worker": "laptop", "path": "/w", "port": 7901}})
 	for _, st := range []step{created, {you, events.TaskRenamed, "", map[string]any{"title": "Again"}, false}} {
-		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state)
+		rejection := Check(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Data: st.data}, state, withIdeas)
 		if rejection == nil || !strings.Contains(rejection.Reason, "could not read the task: applying worktree.moved to task-1") {
 			t.Errorf("%s: %v, want refused with where the replay stopped", st.kind, rejection)
 		}
@@ -509,10 +710,94 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 		{events.ConnectionsStream, connected, "could not read the connections: applying it panicked"},
 	}
 	for _, c := range cases {
-		state := current.New()
+		state := current.New(withIdeas, ideas.Streams())
 		state.Loaded(0)
-		if rejection := Check(c.p, brokenStream{state, c.stream}); rejection == nil || rejection.Reason != c.want {
+		if rejection := Check(c.p, brokenStream{state, c.stream}, withIdeas); rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s broken, %s: %v, want %q", c.stream, c.p.Type, rejection, c.want)
 		}
+	}
+}
+
+// An archived task takes no events, whoever proposes them, and the
+// rejection says why.
+func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
+	state := current.New(withIdeas, ideas.Streams())
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data}) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	state.Archive("task-1")
+
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
+		{Stream: "task-1", Actor: you, Type: events.TaskRanked, Data: map[string]any{"rank": 1}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskDone, Data: map[string]any{"summary": "s"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Worker, ID: "local"}, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+	} {
+		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != "task-1 is archived: an archived task takes no events" {
+			t.Errorf("%s on an archived task: %v, %v", p.Type, rejection, err)
+		}
+	}
+}
+
+// A new task goes only into the stream Store.Create names: the next task
+// stream, never one further on or one a task has already. A refused one
+// leaves nothing in its stream.
+func TestATaskIsCreatedOnlyInTheNextTaskStream(t *testing.T) {
+	s := openSeeded(t)
+	create := func(stream string) *events.Rejection {
+		t.Helper()
+		_, rejection, err := s.Propose(events.Proposal{Stream: stream, Actor: you, Type: events.TaskCreated, Data: created.data})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	if rejection := create("task-1"); rejection != nil {
+		t.Fatalf("task-1, the next: %v", rejection)
+	}
+	for stream, want := range map[string]string{
+		"task-6": "a new task goes into task-2, the next task stream, not task-6",
+		"task-1": "task task-1 already exists",
+	} {
+		if rejection := create(stream); rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: %v, want %q", stream, rejection, want)
+		}
+	}
+	if stream, _ := s.Stream("task-6"); len(stream) != 0 {
+		t.Errorf("a refused task.created is stored in task-6: %v", stream)
+	}
+	if stream, _ := s.Stream("task-1"); len(stream) != 1 {
+		t.Errorf("task-1 has %d events, want its one task.created", len(stream))
+	}
+	made, rejection, err := s.Create(events.TaskPrefix, events.Proposal{Actor: you, Type: events.TaskCreated, Data: created.data})
+	if err != nil || rejection != nil || made.Stream != "task-2" {
+		t.Errorf("Store.Create after the refusals: %s %v %v, want task-2", made.Stream, rejection, err)
+	}
+}
+
+// On a build without ideas, idea-3 is a foreign stream: the rules refuse
+// anything in it, a task.created too, even where the shape check would not.
+func TestNothingGoesIntoAForeignStream(t *testing.T) {
+	state := current.New(events.Core())
+	state.Loaded(0)
+	created := events.Proposal{Stream: "idea-3", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "budget": 0, "maxTurns": 0}}
+	renamed := events.Proposal{Stream: "idea-3", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "y"}}
+	dismissed := events.Proposal{Stream: "idea-3", Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "no"}}
+	for _, p := range []events.Proposal{created, renamed, dismissed} {
+		rejection := Check(p, state, events.Core())
+		if rejection == nil || rejection.Reason != "stream idea-3 belongs to a feature this build doesn't have" {
+			t.Errorf("%s into idea-3: %v, want the foreign stream's refusal", p.Type, rejection)
+		}
+	}
+	if rejection := Check(dismissed, state, withIdeas); rejection != nil && rejection.Reason == events.ForeignReason("idea-3") {
+		t.Errorf("with ideas registered, idea-3 is refused as foreign: %v", rejection)
 	}
 }

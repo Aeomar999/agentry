@@ -54,3 +54,25 @@ func TestAnOldLogWithActionsAfterAHoldReplays(t *testing.T) {
 		t.Errorf("parked in %q, want todo", task.Parked)
 	}
 }
+
+// An old log names the idea a task was made from only as "idea"; a new one
+// says "from" as well, for older binaries. Both read as the same MadeFrom.
+func TestATaskIsMadeFromItsIdeaInOldAndNewLogs(t *testing.T) {
+	agentry := events.Actor{Kind: events.System, ID: "agentry"}
+	for _, c := range []struct {
+		name string
+		data map[string]any
+		want string
+	}{
+		{"old: only idea", map[string]any{"idea": "idea-3"}, "idea-3"},
+		{"new: from and idea", map[string]any{"from": "idea-3", "idea": "idea-3"}, "idea-3"},
+		{"only from", map[string]any{"from": "idea-3"}, "idea-3"},
+		{"neither", map[string]any{}, ""},
+	} {
+		c.data["title"], c.data["coordinator"] = "t", "tech-lead"
+		task := FromEvents([]events.Event{{At: time.Now(), Proposal: events.Proposal{Stream: "task-1", Actor: agentry, Type: events.TaskCreated, Data: c.data}}})
+		if task.MadeFrom != c.want {
+			t.Errorf("%s: made from %q, want %q", c.name, task.MadeFrom, c.want)
+		}
+	}
+}

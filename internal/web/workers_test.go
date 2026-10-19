@@ -21,6 +21,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
@@ -202,11 +203,13 @@ func watchTerminal(t *testing.T, ctx context.Context, hub *terminal.Hub, m machi
 	return screen.String()
 }
 
-// fakeClaudeOnPath puts a `claude` on PATH that says it works, then waits.
+// fakeClaudeOnPath puts a `claude` on PATH that says it works, then waits,
+// in sessions of the test's own.
 func fakeClaudeOnPath(t *testing.T) {
 	t.Helper()
+	sessionstest.Isolate(t)
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.1.301 (Claude Code)'; exit 0; }\necho fake claude is working\nsleep 30\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.1.301 (Claude Code)'; exit 0; }\necho fake claude is working\n"+sessionstest.Wait()+"\n"), 0o755)
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 }
 

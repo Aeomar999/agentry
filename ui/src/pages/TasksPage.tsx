@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Columns3, Inbox, List, Plus } from "lucide-react";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { FilterChip } from "@/components/molecules/FilterChip";
 import { SearchField } from "@/components/molecules/SearchField";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
-import { TaskStatusBadge } from "@/components/molecules/StatusBadges";
+import { QueuedBadge, TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
@@ -22,6 +22,7 @@ import { api } from "@/api/client";
 import { useToast } from "@/components/organisms/Toasts";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { TaskBoard } from "@/components/organisms/TaskBoard";
+import { RunningLimit } from "@/components/organisms/RunningLimit";
 import { useNewTask } from "@/lib/new-task";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
@@ -91,12 +92,11 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
           <p className="flex items-center gap-2">
             {task.kind === "epic" && <EpicBadge />}
             <span className="truncate font-medium text-ink-primary">{task.title}</span>
+            {task.queued && <QueuedBadge />}
             {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} className="shrink-0" />}
             <LabelList labels={task.labels} onPick={pickLabel} />
           </p>
-          <p className="truncate text-[12px] text-ink-muted">
-            {task.status === "needs you" ? <span className="text-warning">{task.needsYou}</span> : describe(task)}
-          </p>
+          <p className="truncate text-[12px] text-ink-muted">{describe(task)}</p>
         </div>
       ),
     },
@@ -124,11 +124,19 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
   ];
 }
 
-function describe(task: TaskSummary): string {
+// describe is the line under a task's title: its stage first, when it is
+// past building, then what it is waiting for or who is working on it.
+function describe(task: TaskSummary): ReactNode {
   if (task.status === "done") return "Done";
-  if (waitingLine(task)) return waitingLine(task);
   const stage = stageOf(task) ? `${stageOf(task)} · ` : "";
-  return stage + (task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next");
+  if (task.status === "needs you")
+    return (
+      <>
+        {stage}
+        <span className="text-warning">{task.needsYou}</span>
+      </>
+    );
+  return stage + (waitingLine(task) || (task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next"));
 }
 
 type View = "list" | "board";
@@ -230,6 +238,7 @@ export function TasksPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Tasks"
+        badges={<RunningLimit queued={tasks.filter((task) => task.queued).length} />}
         meta="The work under way: each task goes to its coordinator, which hands it from agent to agent until it is done. Shape epics and their stories in Plan. Drag tasks to put them in your order."
         actions={[{ label: "New task", icon: <Plus />, onClick: () => newTask(), primary: true }]}
       />
@@ -268,6 +277,7 @@ export function TasksPage() {
           <Banner title="Couldn't load the tasks">{error}</Banner>
         </div>
       )}
+      {!data && !error && <p className="px-6 py-4 text-[12px] text-ink-muted">Loading the tasks…</p>}
       {view === "board" && data && (
         <TaskBoard
           tasks={shown}
@@ -279,7 +289,7 @@ export function TasksPage() {
           onPickEpic={pickEpic}
         />
       )}
-      {view === "list" && (
+      {view === "list" && data && (
         <ResourceTable
           columns={columnsFor(pickLabel, folding)}
           rows={rows}
@@ -288,11 +298,9 @@ export function TasksPage() {
           activeKey={rows[cursor]?.id}
           onReorder={reorder}
           empty={
-            data && (
-              <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
-                {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
-              </EmptyState>
-            )
+            <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
+              {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
+            </EmptyState>
           }
         />
       )}

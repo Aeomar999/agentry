@@ -23,6 +23,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -74,7 +75,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	ids := createdTasks(t, path)
 	whole := minOf3(func() {
 		start := time.Now()
-		s, err := store.Open(path, nil, nil)
+		s, err := store.Open(path, storetest.WithIdeas(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +118,7 @@ func benchReplay(t *testing.T, path string, total int) replayed {
 	// The state built from events that are then dropped, so the texts it
 	// keeps count too (readmodel_bench_test.go kept the events alive).
 	held := heldBy(func() any {
-		s, err := store.Open(path, nil, nil)
+		s, err := store.Open(path, storetest.WithIdeas(), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -337,7 +338,7 @@ func benchArchive(t *testing.T, rows []row, state replayed) map[string]bool {
 	}
 	var summaries []int
 	for id := range doneAtAll {
-		summaries = append(summaries, len(must(json.Marshal(summaryOf(state.tasks[id], state.roster)))))
+		summaries = append(summaries, len(must(json.Marshal(tasks.SummaryOf(state.tasks[id], state.roster)))))
 	}
 	t.Logf("  a summary per archived task (the list's JSON): mean %d bytes, largest %d", mean(summaries), slices.Max(summaries))
 	return doneAtAll
@@ -648,7 +649,7 @@ func benchDesign(t *testing.T, rows []row, state replayed, archived map[string]b
 	thin := thinSnapshot{Roster: state.roster, Workers: state.workers.Workers}
 	for _, id := range state.order {
 		if archived[id] {
-			thin.Summaries = append(thin.Summaries, summaryOf(state.tasks[id], state.roster))
+			thin.Summaries = append(thin.Summaries, tasks.SummaryOf(state.tasks[id], state.roster))
 		} else {
 			thin.Tasks = append(thin.Tasks, mirror(state.tasks[id]))
 		}

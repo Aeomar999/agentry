@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -23,7 +21,7 @@ import (
 // the coordinator gets exactly one turn to wrap up, whose summary is kept.
 // Nothing runs after it.
 func TestYouFinishATaskAndTheCoordinatorWrapsUpOnce(t *testing.T) {
-	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-1")
+	s, _, id := taskWithTheEngineerWorking(t)
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone,
 		Data: map[string]any{"summary": "Moved.", "note": "Good enough for now.", "moved": true}})
 
@@ -52,7 +50,7 @@ func TestYouFinishATaskAndTheCoordinatorWrapsUpOnce(t *testing.T) {
 // A wrap-up that decides anything but its summary starts nothing: the
 // rules refuse it, and the task stays done.
 func TestAWrapUpCantStartMoreWork(t *testing.T) {
-	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-2")
+	s, _, id := taskWithTheEngineerWorking(t)
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Finish src/b.go."}`)
@@ -72,12 +70,12 @@ func TestAWrapUpCantStartMoreWork(t *testing.T) {
 // A wrap-up turn whose engine crashes still ends: the watchdog watches a
 // finished task while its coordinator wraps up, and nothing runs after.
 func TestAWrapUpThatCrashesStillEnds(t *testing.T) {
-	s, state, id := taskWithTheEngineerWorking(t, "task-wrap-3")
+	s, state, id := taskWithTheEngineerWorking(t)
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 
 	dead := func(string) bool { return false }
-	watch.New(s, state, watch.DefaultLimits, dead, func(string) {}).Check(time.Now().Add(time.Minute))
+	watch.New(s, state, watch.DefaultLimits, dead, func(string) {}, func(string, string) error { return nil }).Check(time.Now().Add(time.Minute))
 	task := waitUntil(t, s, id, "the wrap-up to end", func(task *tasks.Task) bool { return task.WrapUp == nil })
 	if !task.IsDone || task.Turns[2].Issue == "" || !strings.Contains(task.Told.Text, "ended without a reply") {
 		t.Errorf("done %v, issue %q, told %q", task.IsDone, task.Turns[2].Issue, task.Told.Text)
@@ -89,7 +87,7 @@ func TestAWrapUpThatCrashesStillEnds(t *testing.T) {
 // wrap-up turn, whose late decision changes nothing, and carries on in the
 // same worktree.
 func TestReopeningStopsTheWrapUp(t *testing.T) {
-	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-4")
+	s, _, id := taskWithTheEngineerWorking(t)
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	before := waitForTurn(t, s, id, "turn-3", "tech-lead").Worktree
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": "Reopen this task. It needs more work."}})
@@ -117,7 +115,7 @@ func TestReopeningStopsTheWrapUp(t *testing.T) {
 // Moved from Done to To do once its coordinator has wrapped up, the task
 // has nothing new to wrap up: no turn starts.
 func TestNoSecondWrapUp(t *testing.T) {
-	s, _, id := taskWithTheEngineerWorking(t, "task-wrap-5")
+	s, _, id := taskWithTheEngineerWorking(t)
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
 	waitForTurn(t, s, id, "turn-3", "tech-lead")
 	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "done", "summary": "Half done."}`)
@@ -134,10 +132,8 @@ func TestNoSecondWrapUp(t *testing.T) {
 // An epic you close parks its open stories: a story at work wraps up once,
 // and a story finished later doesn't report to the closed epic.
 func TestClosingAnEpicParksItsStories(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
@@ -145,9 +141,6 @@ func TestClosingAnEpicParksItsStories(t *testing.T) {
 		{"title": "Add the TODO store", "brief": "A store."}, {"title": "Add the TODO command", "brief": "A command."}]}`)
 	epic := waitUntil(t, s, id, "the split", func(task *tasks.Task) bool { return len(task.Stories) == 2 })
 	running, waiting := epic.Stories[0], epic.Stories[1]
-	for _, story := range epic.Stories {
-		defer sessions.Stop(sessions.SocketFor(story))
-	}
 	start(t, s, running)
 	waitForTurn(t, s, running, "turn-1", "tech-lead")
 	waitUntil(t, s, id, "the epic to wait", func(task *tasks.Task) bool { return task.OpenTurn() == nil && task.Handoff == nil })
@@ -179,20 +172,19 @@ func TestClosingAnEpicParksItsStories(t *testing.T) {
 }
 
 // taskWithTheEngineerWorking runs the loop on a task until the engineer's
-// turn (turn-2) is open.
-func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, *current.State, string) {
+// turn (turn-2) is open. The task is the store's first, task-1.
+func taskWithTheEngineerWorking(t *testing.T) (*store.Store, *current.State, string) {
+	const id = "task-1"
 	fakeClaudeOnPath(t)
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	t.Cleanup(func() { sessions.Stop(sessions.SocketFor(id)) })
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go newLoop(s, state, t.TempDir()).Run(ctx)
+	repo := gitRepo(t)
+	run(t, newLoop(s, state, t.TempDir()), state)
 
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
+		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove every TODO."}`)
 	waitForTurn(t, s, id, "turn-2", "engineer")
@@ -235,5 +227,87 @@ func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
 
 	if ports := (&Loop{store: s, state: state}).portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
 		t.Errorf("ports in use %v: want the working task's and the one wrapping up", ports)
+	}
+}
+
+// A task whose state can't be built still holds the port its stream last
+// gave it, on that machine only, so it isn't handed out again. The rules
+// never let a worktree.moved come first; with no check, it breaks the task.
+// The broken tasks' streams then give other ports, by worktree.ready and
+// worktree.moved: the last one counts.
+func TestABrokenTaskKeepsItsPort(t *testing.T) {
+	state := current.New(events.Core())
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), events.Core(), state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	created := func(id string) events.Proposal {
+		return events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}}
+	}
+	for _, p := range []events.Proposal{
+		created("task-1"),
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}},
+		created("task-2"),
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": workers.Local, "path": "/w/task-2", "port": 7902}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "b", "port": 7912}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-2", "branch": "b", "port": 7922}},
+		created("task-3"),
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "port": 7903}},
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "branch": "b", "port": 7913}},
+		{Stream: "task-3", Actor: worker, Type: events.WorktreeMoved, Data: map[string]any{"worker": "laptop", "path": "/w/task-3", "port": 7923}},
+	} {
+		propose(t, s, p)
+	}
+	if state.Broken("task-2") == nil || state.Broken("task-3") == nil {
+		t.Fatal("task-2 and task-3 should be broken")
+	}
+	loop := &Loop{store: s, state: state}
+	if ports := loop.portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7922}) {
+		t.Errorf("ports in use here %v: want task-1's and broken task-2's last", ports)
+	}
+	if ports := loop.portsInUse("laptop"); !slices.Equal(ports, []int{7923}) {
+		t.Errorf("ports in use on the laptop %v: want broken task-3's last", ports)
+	}
+}
+
+// An archived task is done, so its port is free: it is skipped like a done
+// task, not read from its stream as a broken one is.
+func TestAnArchivedTaskHoldsNoPort(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	for i, id := range []string{"task-1", "task-2"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901 + i}})
+	}
+	propose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
+	state.Archive("task-2")
+
+	if ports := (&Loop{store: s, state: state}).portsInUse(workers.Local); !slices.Equal(ports, []int{7901}) {
+		t.Errorf("ports in use %v: want only the working task's", ports)
+	}
+}
+
+// An archived task is done, so a story after it isn't blocked by it and
+// starts; a story after one that isn't done still waits.
+func TestAStoryAfterAnArchivedTaskStarts(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	for _, id := range []string{"task-1", "task-2"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+	}
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Shipped.", "moved": true}})
+	state.Archive("task-1")
+
+	loop := &Loop{store: s, state: state}
+	if loop.blocked(&tasks.Task{After: []string{"task-1"}}) {
+		t.Error("a story after an archived task is blocked")
+	}
+	if !loop.blocked(&tasks.Task{After: []string{"task-1", "task-2"}}) {
+		t.Error("a story after a task that isn't done isn't blocked")
 	}
 }

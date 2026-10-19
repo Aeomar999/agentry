@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -38,13 +39,15 @@ func Replay(stream []events.Event) (t *Task, err error) {
 			t = &Task{ID: e.Stream, CreatedAt: e.At}
 		}
 		if t != nil {
-			t.apply(e)
+			t.Apply(e)
 		}
 	}
 	return t, nil
 }
 
-func (t *Task) apply(e events.Event) {
+// Apply changes the task in place by one accepted event of its stream. A
+// state loaded from a snapshot takes the events after it this way.
+func (t *Task) Apply(e events.Event) {
 	t.LastActiveAt = e.At
 	if turn := t.Turn(e.Correlation); turn != nil {
 		turn.LastEventAt = e.At
@@ -75,7 +78,8 @@ func (t *Task) apply(e events.Event) {
 		t.TeamChosen, t.Parent, t.Depth = e.Flag("teamChosen"), e.Text("parent"), e.Number("depth")
 		t.Kind, t.KindChosen, t.Epic, t.After = Kind(e.Text("kind")), e.Flag("kindChosen"), e.Text("epic"), e.List("after")
 		t.Parked = e.Text("parked") // an epic's story, or an idea you accepted, starts in your Backlog
-		t.Idea = e.Text("idea")
+		t.MadeFrom, t.ByAgentry = MadeFromOf(e.Proposal), e.Actor.Kind == events.System
+		t.About, t.AboutClose = e.Text("about"), int64(e.Number("close"))
 		t.step(e, You, t.Coordinator, firstNonEmpty(t.Description, t.Title))
 
 	case events.TaskDirected:
@@ -109,6 +113,7 @@ func (t *Task) apply(e events.Event) {
 		default: // a wrap-up still going is over: you want more work
 			wrapping := t.WrapUp != nil
 			t.Parked, t.WrapUp = "", nil
+			t.AutoStarted = t.AutoStarted || e.Actor.Kind == events.System
 			t.moveColumn(e)
 			if t.stopTurn() || wrapping || t.idle() {
 				t.step(e, You, t.Coordinator, "I moved this task back to work. Carry on from where it was.")
@@ -138,8 +143,9 @@ func (t *Task) apply(e events.Event) {
 		} else {
 			t.Worktree = nil
 		}
-		t.IsDone, t.DoneByYou, t.Summary, t.WrapUp = false, false, "", nil
+		t.IsDone, t.DoneAt, t.DoneByYou, t.Summary, t.WrapUp = false, time.Time{}, false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
+		t.TurnsBeforeReopen = len(t.Turns)
 		t.step(e, You, t.Coordinator, e.Text("text"))
 		t.moveColumn(e)
 
@@ -193,6 +199,7 @@ func (t *Task) apply(e events.Event) {
 			Text: "Split into stories: " + e.Text("titles") + ". They wait in your Backlog until you start them."}
 		t.Closing = "" // more to do first
 		t.hearStoryNews(e)
+		t.hearApprovalNews(e)
 	case events.EpicWaits:
 		waits := "Waiting for its stories."
 		if t.Closing != "" {
@@ -201,6 +208,7 @@ func (t *Task) apply(e events.Event) {
 		t.reply(e)
 		t.step(e, t.Coordinator, You, cmp.Or(e.Text("note"), waits))
 		t.hearStoryNews(e)
+		t.hearApprovalNews(e)
 	case events.StoryDone:
 		t.StoriesDone = append(t.StoriesDone, e.Text("story"))
 		text := e.Text("story") + " is done: " + e.Text("summary")
@@ -236,6 +244,9 @@ func (t *Task) apply(e events.Event) {
 			t.Closing = "" // no stories left to have finished
 		}
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: "I took " + story + " out of this epic: it is no longer one of its stories."})
+	case events.FollowUpsSkipped:
+		t.Skipped = int64(e.Number("close"))
+		t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: You, Text: e.Text("reason")})
 	case events.RequestAnswered:
 		t.WaitingOn = ""
 		t.step(e, e.Text("coordinator"), t.Coordinator, e.Text("child")+" is done: "+e.Text("summary"))
@@ -278,8 +289,15 @@ func (t *Task) apply(e events.Event) {
 			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
-		if e.Text("agent") == t.Coordinator {
-			t.storyNews = false // its brief has every story's news so far
+		coordinates, unheard := e.Text("agent") == t.Coordinator, false
+		if coordinates {
+			unheard = t.hearApprovals(seenBy(e, len(t.Trail)))
+		}
+		t.startPasses(e.Correlation, e.Text("agent"))
+		if coordinates {
+			// Its brief has every story's news so far, and your approvals,
+			// but those that came after it was made.
+			t.storyNews, t.approvalNews = false, unheard
 			if t.WrapUp != nil {
 				t.WrapUp.Turn = e.Correlation
 			}
@@ -291,7 +309,7 @@ func (t *Task) apply(e events.Event) {
 
 	case events.ActionRequested:
 		turn := t.OpenTurn()
-		turn.Waiting = ""
+		turn.Waiting, turn.RetriedAt = "", time.Time{} // working again after a retry
 		t.Actions = append(t.Actions, &Action{ID: e.Correlation, Turn: turn.ID, Agent: e.Actor.ID,
 			Tool: e.Text("tool"), Command: e.Text("command"), RequestedAt: e.At})
 	case events.ActionAsked:
@@ -301,6 +319,9 @@ func (t *Task) apply(e events.Event) {
 		t.decide(e, Approved)
 	case events.ActionDenied:
 		t.decide(e, Denied)
+	case events.ActionHeld:
+		action := t.Action(e.Correlation)
+		action.Held, action.HeldAt = true, e.At
 	case events.ActionResult:
 		t.Action(e.Correlation).HasResult = true
 
@@ -312,7 +333,7 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TurnEnded:
 		turn := t.Turn(e.Correlation)
-		turn.Ended, turn.Report, turn.Tokens = true, e.Text("report"), e.Number("tokens")
+		turn.Ended, turn.Report, turn.Tokens, turn.TokensUnknown = true, e.Text("report"), e.Number("tokens"), e.Text("tokensUnknown")
 		t.moveRepo()
 		t.TokensUsed += turn.Tokens
 		t.IssuesInARow = 0
@@ -322,6 +343,36 @@ func (t *Task) apply(e events.Event) {
 			t.PendingDecision = cmp.Or(turn.Report, "(the coordinator's turn ended with no reply)")
 		} else {
 			t.step(e, turn.Agent, t.Coordinator, turn.Report)
+		}
+
+	case events.TurnLimited:
+		// Not an issue: nothing is wrong with the work, so it doesn't count
+		// towards asking you, and the turn stays open to go on after the
+		// reset. An old log's odd one (an ended turn, a time it can't read)
+		// changes what it can and nothing else.
+		if turn := t.Turn(e.Correlation); !turn.Ended {
+			again := turn.Limited != "" // the engine said so twice: the new reset time stands, noted once
+			turn.Limited = cmp.Or(e.Text("details"), e.Text("error"), "usage limit")
+			turn.ResetsAt, _ = time.Parse(time.RFC3339, e.Text("resetsAt"))
+			if again {
+				break
+			}
+			// Only noted in the trail: the turn goes on after the reset.
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " hit a " + LimitText(turn.ResetsAt, e.At)})
+		}
+
+	case events.TurnResumed:
+		// An old log's odd one (an ended turn, one not limited, another
+		// agent's) changes nothing.
+		if turn := t.Turn(e.Correlation); !turn.Ended && turn.Limited != "" && e.Text("agent") == turn.Agent {
+			turn.Limited, turn.ResetsAt = "", time.Time{}
+			turn.Resumes, turn.ResumedAt = turn.Resumes+1, e.At
+			if e.Text("reason") == "reset" {
+				turn.RetriedAt = e.At
+			}
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " resumed after its usage limit"})
 		}
 
 	case events.IssueRaised:
@@ -357,7 +408,7 @@ func (t *Task) apply(e events.Event) {
 		t.moveColumn(e)
 
 	case events.TaskDone:
-		t.IsDone, t.Summary = true, e.Text("summary")
+		t.IsDone, t.DoneAt, t.Summary = true, e.At, e.Text("summary")
 		t.Question, t.Asked, t.Closing = "", Asked{}, "" // an epic you closed: that was your answer
 		t.Column, t.SentBack = "", false
 		// You moved it to Done on the board: it is done, whatever was in hand.
@@ -379,9 +430,9 @@ func (t *Task) orphaned(e events.Event) bool {
 	switch e.Type {
 	case events.ActionRequested:
 		return t.OpenTurn() == nil
-	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult:
+	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult:
 		return t.Action(e.Correlation) == nil
-	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnStopped:
+	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
 	}
 	return false
@@ -436,6 +487,91 @@ func (t *Task) stopTurn() bool {
 func (t *Task) decide(e events.Event, decision Decision) {
 	action := t.Action(e.Correlation)
 	action.Decision, action.Reason = decision, e.Text("reason")
+	if pass := e.Text("pass"); pass != "" {
+		t.Action(pass).PassUsed = true
+	}
+	if action.Held && decision == Approved {
+		t.handBack(e, action)
+	}
+}
+
+// handBack tells the coordinator you approved a held action: its agent was
+// told no long ago, so it runs it again only when the coordinator hands it
+// back. Deciding, the coordinator hears it once it has decided.
+func (t *Task) handBack(e events.Event, action *Action) {
+	text := approvedLateText(t, action, e.At)
+	action.HandBack = len(t.Trail)
+	if t.idle() {
+		t.step(e, Agentry, t.Coordinator, text)
+		return
+	}
+	t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator, Text: text})
+	t.approvalNews = t.approvalNews || t.Handoff == nil
+}
+
+// approvedLateText is the hand-back: who asked for what, when, and that the
+// command is to be run again only once the branch is checked.
+func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
+	when := "after its turn ended"
+	if turn := t.Turn(action.Turn); turn != nil && !turn.Ended {
+		when = "while its turn went on without it"
+	}
+	again, turn := "Hand the task back to "+action.Agent+" to run it again", action.Agent+"'s next turn"
+	if action.Agent == t.Coordinator {
+		again, turn = "Run it again yourself in this turn", "this turn"
+	}
+	return fmt.Sprintf("The user approved a command %s asked for in %s at %s (%s), which Agentry held for them when no answer "+
+		"came in time. They approved it at %s, %s, so %s was told no and hasn't run it. The full command:\n\n%s\n\n"+
+		"%s, after checking the branch hasn't changed in a way that makes it wrong. Agentry lets this exact command "+
+		"through once without asking, in %s only.",
+		action.Agent, action.Turn, clock(action.RequestedAt), action.Tool, clock(approvedAt), when, action.Agent,
+		action.Command, again, turn)
+}
+
+// hearApprovals marks the held actions you approved as heard when the
+// starting coordinator turn's brief, made from the first seen steps of the
+// trail, has their hand-back. It says whether one is still unheard: you
+// approved it after the brief was made.
+func (t *Task) hearApprovals(seen int) (unheard bool) {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved && !action.Heard {
+			action.Heard = action.HandBack < seen
+			unheard = unheard || !action.Heard
+		}
+	}
+	return unheard
+}
+
+// seenBy is how many steps of the trail the turn's brief was made from. A
+// turn started before turn.started said so saw all of it.
+func seenBy(e events.Event, trail int) int {
+	if _, given := e.Data["seen"]; given {
+		return e.Number("seen")
+	}
+	return trail
+}
+
+// startPasses gives the agent's held actions you approved, which its
+// coordinator has heard and whose pass has no turn yet, this turn to work
+// in: the only one their pass works in. A turn the coordinator gave the
+// agent before it heard is for other work, and doesn't use the pass up.
+func (t *Task) startPasses(turn, agent string) {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved && action.Heard && action.PassTurn == "" && action.Agent == agent {
+			action.PassTurn = turn
+		}
+	}
+}
+
+func clock(at time.Time) string { return at.UTC().Format("2006-01-02 15:04 UTC") }
+
+// hearApprovalNews hands the task back to its coordinator when you approved
+// a held action after its brief was made.
+func (t *Task) hearApprovalNews(e events.Event) {
+	if t.approvalNews {
+		t.approvalNews = false
+		t.step(e, Agentry, t.Coordinator, "The user approved a held command after your brief was made: see above. Decide again with it in mind.")
+	}
 }
 
 // step adds a line to the trail. A step to an agent is also the task's
@@ -484,6 +620,21 @@ func stoppedText(turn *Turn, coordinator string) string {
 		"instructions brought up to date for what they said."
 }
 
+// LimitText says when a usage limit hit at at resets, in the server's local
+// time: "usage limit, resets ~03:00", with the date when that isn't the day
+// it was hit, or "usage limit, reset time unknown".
+func LimitText(resetsAt, at time.Time) string {
+	if resetsAt.IsZero() {
+		return "usage limit, reset time unknown"
+	}
+	resets, hit := resetsAt.Local(), at.Local()
+	layout := "15:04"
+	if resets.Format(time.DateOnly) != hit.Format(time.DateOnly) {
+		layout = "Jan 2 15:04"
+	}
+	return "usage limit, resets ~" + resets.Format(layout)
+}
+
 // moveRepo makes the move you asked for: the next turn works in a new
 // worktree, of the new repo.
 func (t *Task) moveRepo() {
@@ -493,6 +644,12 @@ func (t *Task) moveRepo() {
 }
 
 func turnID(number int) string { return fmt.Sprintf("turn-%d", number) }
+
+// MadeFromOf is the stream a task.created says made the task, "" for none.
+// Older logs and binaries name it only as "idea", so that stays the fallback.
+func MadeFromOf(p events.Proposal) string {
+	return cmp.Or(p.Text("from"), p.Text("idea"))
+}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {

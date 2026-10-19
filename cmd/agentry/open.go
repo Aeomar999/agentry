@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,9 +34,14 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	dataDir := flags.String("data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	repo := flags.String("repo", filepath.Join(home, "Agentry"), "the repo a new task works on when it names none")
 	port := flags.Int("port", 7800, "the first port to try; Agentry listens on it on every interface")
+	flags.Bool("https", false, "serve over https with Agentry's own local CA (see agentry serve -h)")
+	flags.Int("budget", 0, "the tokens a new task may use before it asks you; 0 for no limit (serve's default when not given)")
+	flags.Int("max-turns", 0, "the turns a new task may have without your answer; 0 for no limit (serve's default when not given)")
 	if flags.Parse(args) != nil {
 		return 2
 	}
+	passed := passedOn(flags, "https", "budget", "max-turns")
+	dropParentSession(stderr) // before the server starts, so it doesn't inherit them
 	for _, tool := range []string{"git", "claude"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			fmt.Fprintf(stdout, "Note: %s isn't installed here, and agents need it. %s\n", tool, installHint(tool))
@@ -43,6 +49,9 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if running, ok := runningServer(*dataDir); ok {
+		if len(passed) > 0 {
+			fmt.Fprintln(stdout, waitingForNextStart(passed))
+		}
 		return openPage(running, stdout, stderr)
 	}
 	if err := defaultRepo(*repo); err != nil {
@@ -55,7 +64,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintln(stdout, "Starting Agentry…")
-	if err := startServer(*dataDir, *repo, address); err != nil {
+	if err := startServer(*dataDir, *repo, address, passed); err != nil {
 		fmt.Fprintln(stderr, "agentry open:", err)
 		return 1
 	}
@@ -103,9 +112,40 @@ func runningServer(dataDir string) (client.Client, bool) {
 	return c, c.Call("GET", "/api/config", nil, nil) == nil
 }
 
+// passedOn is the flags named that were given, as serve takes them, so
+// serve's own defaults hold for the rest.
+func passedOn(flags *flag.FlagSet, names ...string) []string {
+	var args []string
+	flags.Visit(func(f *flag.Flag) {
+		if slices.Contains(names, f.Name) {
+			args = append(args, "-"+f.Name+"="+f.Value.String())
+		}
+	})
+	return args
+}
+
+// waitingForNextStart says that the flags passed, as passedOn gives them,
+// don't change a server that is already running.
+func waitingForNextStart(passed []string) string {
+	names := make([]string, len(passed))
+	for i, arg := range passed {
+		names[i], _, _ = strings.Cut(arg, "=")
+	}
+	verb := "apply"
+	if len(names) == 1 {
+		verb = "applies"
+	}
+	said := fmt.Sprintf("Agentry is already running; %s %s only when it next starts.", strings.Join(names, " "), verb)
+	if slices.Contains(names, "-https") {
+		// Nothing saves -https, and Start Agentry runs plain `agentry open`.
+		said += " Give -https on every start: Start Agentry doesn't pass it."
+	}
+	return said
+}
+
 // startServer runs `agentry serve` in the background, its output in the
-// data folder's serve.log.
-func startServer(dataDir, repo, address string) error {
+// data folder's serve.log, with extra flags after its own; tests replace it.
+var startServer = func(dataDir, repo, address string, extra []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -118,7 +158,7 @@ func startServer(dataDir, repo, address string) error {
 		return err
 	}
 	defer log.Close()
-	server := exec.Command(self, "serve", "-addr", address, "-repo", repo, "-data", dataDir)
+	server := exec.Command(self, append([]string{"serve", "-addr", address, "-repo", repo, "-data", dataDir}, extra...)...)
 	server.Dir = repo
 	server.Stdout, server.Stderr = log, log
 	procs.Detach(server)
@@ -183,21 +223,26 @@ type pageLink struct{ label, url string }
 
 // pageLinks are the signed-in links to a running server: this computer's
 // first, then its public address if it was given one, and one for each
-// network address when it listens on every interface.
+// network address when it listens on every interface. They are https when
+// the server serves it.
 func pageLinks(c client.Client) []pageLink {
 	signedIn := "/?token=" + c.Token
 	here, err := url.Parse(c.URL)
 	if err != nil {
 		return []pageLink{{"This computer", c.PageURL(signedIn)}}
 	}
+	if c.HTTPS {
+		here.Scheme = "https"
+	}
+	own := strings.TrimSuffix(here.String(), "/") // serve's page when it has no public address
 	if ip := net.ParseIP(here.Hostname()); ip != nil && ip.IsLoopback() {
 		here.Host = net.JoinHostPort("localhost", here.Port())
 	}
 	links := []pageLink{{"This computer", strings.TrimSuffix(here.String(), "/") + signedIn}}
-	if c.Page != "" && c.Page != c.URL {
+	if page := strings.TrimSuffix(c.Page, "/"); page != "" && page != c.URL && page != own {
 		links = append(links, pageLink{"Public address", c.PageURL(signedIn)})
 	}
-	for _, other := range networkURLs(listenAddress(c.Listen)) {
+	for _, other := range networkURLs(listenAddress(c.Listen), here.Scheme) {
 		links = append(links, pageLink{"On your network", other + signedIn})
 	}
 	return links

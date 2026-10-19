@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -24,15 +26,21 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/desk"
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
+	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
@@ -47,6 +55,7 @@ type serveOptions struct {
 	budget    int    // tokens a new task may use before it asks you; 0 is no limit
 	maxTurns  int    // turns a new task may have without your answer before it asks you; 0 is no limit
 	publicURL string // the address people open; "" for the address listened on
+	https     bool   // serve TLS with Agentry's own CA, on the same port as plain HTTP
 }
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
@@ -57,6 +66,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	var options serveOptions
 	flags.StringVar(&options.address, "addr", "0.0.0.0:7800", "where to listen: every interface by default, so other machines reach it; 127.0.0.1:7800 for this machine only")
 	flags.StringVar(&options.publicURL, "public-url", "", "the address people open, for the printed link, such as https://agentry.example.com")
+	flags.BoolVar(&options.https, "https", false, "serve over https with Agentry's own local CA, which devices trust once from /trust/")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
@@ -69,6 +79,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	dropParentSession(stderr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := serve(ctx, options, stdout); err != nil {
@@ -78,20 +89,44 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// dropParentSession removes what ties this process to an engine session it
+// was started from, such as an assistant running `agentry open` from its
+// Bash tool, so the sessions it starts aren't taken for that one's children.
+func dropParentSession(log io.Writer) {
+	if removed := engines.DropParentSession(); len(removed) > 0 {
+		fmt.Fprintln(log, "agentry: removed variables inherited from a Claude Code or Codex session:", strings.Join(removed, ", "))
+	}
+}
+
+// reportSkipped says once per prefix that the log holds streams of a
+// feature this build doesn't have: skipped, not lost.
+func reportSkipped(w io.Writer, unknown []current.Unknown) {
+	for _, u := range unknown {
+		if u.Prefix != "" {
+			fmt.Fprintf(w, "agentry: skipped %d events in %d %s streams, from a feature this build doesn't have; the log keeps them\n", u.Events, u.Streams, u.Prefix)
+		}
+	}
+}
+
 func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
 	}
-	state := current.New()
-	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state) })
+	catalogue, err := events.NewCatalogue(ideas.Registration())
+	if err != nil {
+		return fmt.Errorf("the event catalogue: %w", err)
+	}
+	state := current.New(catalogue, ideas.Streams())
+	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		return err
 	}
 	defer log.Close()
+	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {
 		return err
 	}
-	if err := hooks.DenyOrphanedAsks(log, state); err != nil {
+	if err := hooks.HoldOrphanedAsks(log, state); err != nil {
 		return err
 	}
 	agentPolicy, err := openPolicy(o.dataDir, log)
@@ -107,6 +142,12 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	var ca *tlsca.CA
+	if o.https {
+		if ca, err = tlsca.Open(tlsca.Dir(o.dataDir)); err != nil {
+			return err
+		}
 	}
 	uiToken, err := keptToken(filepath.Join(o.dataDir, "ui-token"))
 	if err != nil {
@@ -126,33 +167,52 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	serverURL := localURL(listener.Addr())  // what agents' hooks and the desk call, on this machine
-	network := networkURLs(listener.Addr()) // what other machines reach, when listening on every address
-	var theme atomic.Value                  // the page's theme, which the sessions it watches start in
+	// Hooks, `agentry mcp`, the status line and the desk call serverURL on
+	// loopback. With -https they call it over https, trusting only serverCA,
+	// which they are handed (server.json, the sessions' environment): agents
+	// can't read the CA's folder. Plain HTTP from this machine still works,
+	// for a hook started before an upgrade.
+	scheme := "http"
+	var serverCA string
+	if o.https {
+		scheme, serverCA = "https", string(ca.PEM())
+	}
+	serverURL := localURL(listener.Addr(), scheme)
+	network := networkURLs(listener.Addr(), scheme) // what other machines reach, when listening on every address
+	var theme atomic.Value                          // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
 	currentTheme := func() string { return theme.Load().(string) }
 
 	// Agents work here, and on any worker that joins and is online.
 	clones := filepath.Join(o.dataDir, "repos")                       // repos named by a git address or an archive link
 	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
-	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
-		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
+	worktreeRoot := filepath.Join(o.dataDir, "worktrees")
+	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, ServerCA: serverCA, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
+		WorktreeRoot: worktreeRoot}
 	fleet := machines.NewFleet(here)
 	if err := workerlink.ForgetConnections(log, state, fleet); err != nil {
 		return err
 	}
 	links := workerlink.NewServer(log, fleet)
 
+	// Every feature in this binary, written out here: no feature registers
+	// itself. The loop and the server are given the same list.
+	installed := []features.Feature{
+		ideas.Feature(),
+	}
+
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
+	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}
+	loop.Features = installed
 	go loop.Run(ctx)
-	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop).Run(ctx)
-	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Policy, refused error) { recordPolicy(log, agentPolicy, refused) })
+	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
+	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
 
 	// The desk starts when you first open it on the page, and stops with the server.
 	hub := terminal.NewHub()
-	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, Token: deskToken, Binary: self}
+	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, ServerCA: serverCA, Token: deskToken, Binary: self}
 	deskTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if t := r.URL.Query().Get("theme"); t == "light" || t == "dark" {
 			theme.Store(t) // the page opening the desk says its theme
@@ -194,11 +254,13 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
-		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
-		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs},
+		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
+		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
+		Features: installed, Worktrees: worktreeRoot},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
-	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
-	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
+	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
+	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
+		CA: serverCA}); err != nil {
 		return err // `agentry mcp` and the status line find the server by it
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
@@ -209,61 +271,60 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)
 	fmt.Fprintf(stdout, "Agents follow the policy in %s; edits take effect when you save.\n", agentPolicy.Path())
-	return serveUntilDone(ctx, listener, server.Handler())
+	if !o.https {
+		return serveUntilDone(ctx, listener, server.Handler(), nil)
+	}
+	fmt.Fprintf(stdout, "Served over https with Agentry's own CA, SHA-256 %s.\n", ca.Fingerprint())
+	fmt.Fprintf(stdout, "Trust it once on each device: %s%s\n", cmp.Or(plainURLs(append(slices.Clip(network), serverURL))...), trustPrefix)
+	issuer := tlsca.NewIssuer(ca, tlsca.Hosts, time.Now)
+	door := trust{ca: ca, issuer: issuer, addresses: append(slices.Clip(network), serverURL)}
+	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), door), tlsConfig(issuer))
 }
 
-// localURL is the server as seen from this machine. Listening on every
-// address (0.0.0.0, as in a container) is reached on loopback.
-func localURL(addr net.Addr) string {
+// localURL is the server as seen from this machine, over scheme (http or
+// https). Listening on every address (0.0.0.0, as in a container) is
+// reached on loopback.
+func localURL(addr net.Addr, scheme string) string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() {
-		return "http://" + addr.String()
+		return scheme + "://" + addr.String()
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d", tcp.Port)
+	return fmt.Sprintf("%s://127.0.0.1:%d", scheme, tcp.Port)
 }
 
 // localhostURL is the server at localhost, as a page on this machine opens
 // it, or "" when it listens on one address that isn't loopback.
-func localhostURL(addr net.Addr) string {
+func localhostURL(addr net.Addr, scheme string) string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() && !tcp.IP.IsLoopback() {
 		return ""
 	}
-	return fmt.Sprintf("http://localhost:%d", tcp.Port)
+	return fmt.Sprintf("%s://localhost:%d", scheme, tcp.Port)
 }
 
 // networkURLs are the server as other machines on the network reach it,
 // when it listens on every address: one for each of this machine's own
-// IPv4 addresses, leaving out loopback and the bridges containers use, which
-// no other machine reaches.
-func networkURLs(addr net.Addr) []string {
+// addresses other machines reach.
+func networkURLs(addr net.Addr, scheme string) []string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() {
 		return nil
 	}
-	interfaces, _ := net.Interfaces()
 	var urls []string
-	for _, i := range interfaces {
-		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 || isBridge(i.Name) {
-			continue
-		}
-		addresses, _ := i.Addrs()
-		for _, address := range addresses {
-			if ip, ok := address.(*net.IPNet); ok && ip.IP.To4() != nil && !ip.IP.IsLinkLocalUnicast() {
-				urls = append(urls, fmt.Sprintf("http://%s:%d", ip.IP, tcp.Port))
-			}
-		}
+	for _, ip := range hostaddrs.Network() {
+		urls = append(urls, fmt.Sprintf("%s://%s:%d", scheme, ip, tcp.Port))
 	}
 	return urls
 }
 
-func isBridge(name string) bool {
-	for _, prefix := range []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "vEthernet"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
+// plainURLs are urls over plain HTTP, as a device that doesn't trust the CA
+// yet opens them.
+func plainURLs(urls []string) []string {
+	plain := make([]string, len(urls))
+	for i, url := range urls {
+		plain[i] = "http://" + strings.TrimPrefix(url, "https://")
 	}
-	return false
+	return plain
 }
 
 func seedAgents(log *store.Store, state *current.State) error {
@@ -279,7 +340,9 @@ func seedAgents(log *store.Store, state *current.State) error {
 	return nil
 }
 
-func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Handler) error {
+// serveUntilDone serves handler on listener until ctx ends. With config, it
+// serves TLS and plain HTTP on the one port (see splitTLS).
+func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Handler, config *tls.Config) error {
 	// Requests share ctx, so stopping cancels a hook call waiting for you, and
 	// it records its own denial before the server exits.
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
@@ -290,10 +353,23 @@ func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Han
 		defer cancel()
 		server.Shutdown(shutdown)
 	}()
-	if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
-		return err
+	listeners := []net.Listener{listener}
+	if config != nil {
+		tlsConns, plainConns := splitTLS(listener)
+		listeners = []net.Listener{tls.NewListener(tlsConns, config), plainConns}
 	}
-	return nil
+	errs := make(chan error, len(listeners))
+	for _, l := range listeners {
+		go func() { errs <- server.Serve(l) }()
+	}
+	var failed error
+	for range listeners {
+		if err := <-errs; !errors.Is(err, http.ErrServerClosed) && failed == nil {
+			failed = err
+			server.Close() // one stopped, so stop the other too
+		}
+	}
+	return failed
 }
 
 // The tokens kept in the data folder, next to the UI token.

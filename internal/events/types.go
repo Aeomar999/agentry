@@ -8,7 +8,7 @@ const (
 	AgentCreated Type = "agent.created"
 	AgentChanged Type = "agent.changed"
 	AgentRemoved Type = "agent.removed"
-	AgentLearned Type = "agent.learned" // an agent's knowledge, all of it: changed by the agent as it works, or by you
+	AgentLearned Type = "agent.learned" // an agent's knowledge, changed by the agent as it works, or by you: all of it ("knowledge"), or a patch on the version before ("head", "tail", "middle", "sha256"; agents.Patch)
 	AgentRenamed Type = "agent.renamed" // an agent goes by a new name, keeping everything else
 )
 
@@ -31,16 +31,17 @@ const (
 	RepoChanged        Type = "task.repo_changed"  // the task's work goes in another repo from now on; its worktree is made again there
 	AgentRenamedInTask Type = "task.agent_renamed" // an agent the task names was renamed: its coordinator, or who it is handed to
 
-	TaskTransferred Type = "task.transferred"      // the task is another team's work: their coordinator takes it
-	TaskRequested   Type = "task.requested"        // the task asked another team for something, a task of theirs it waits for
-	RequestAnswered Type = "task.request_answered" // the other team's task it waited for is done: its summary comes back
-	TaskSplit       Type = "task.split"            // the coordinator split the task into stories: it is an epic now, or one with more stories
-	StoryDone       Type = "task.story_done"       // one of the epic's stories is done: its summary comes back
-	EpicWaits       Type = "task.epic_waits"       // the epic's coordinator has nothing to do until more of its stories are done
-	EpicJoined      Type = "task.epic_joined"      // you made the task a story of an epic
-	EpicLeft        Type = "task.epic_left"        // you took the task out of its epic
-	StoryAdded      Type = "task.story_added"      // you added a task of yours to the epic, as a story
-	StoryRemoved    Type = "task.story_removed"    // you took a story out of the epic
+	TaskTransferred  Type = "task.transferred"       // the task is another team's work: their coordinator takes it
+	TaskRequested    Type = "task.requested"         // the task asked another team for something, a task of theirs it waits for
+	RequestAnswered  Type = "task.request_answered"  // the other team's task it waited for is done: its summary comes back
+	TaskSplit        Type = "task.split"             // the coordinator split the task into stories: it is an epic now, or one with more stories
+	StoryDone        Type = "task.story_done"        // one of the epic's stories is done: its summary comes back
+	EpicWaits        Type = "task.epic_waits"        // the epic's coordinator has nothing to do until more of its stories are done
+	EpicJoined       Type = "task.epic_joined"       // you made the task a story of an epic
+	EpicLeft         Type = "task.epic_left"         // you took the task out of its epic
+	StoryAdded       Type = "task.story_added"       // you added a task of yours to the epic, as a story
+	StoryRemoved     Type = "task.story_removed"     // you took a story out of the epic
+	FollowUpsSkipped Type = "task.followups_skipped" // the epic you closed got no Visionaries session about it: "reason" says why, "close" is that task.done's position
 
 	// A task's shared files (package sharedfiles).
 	FileAdded      Type = "file.added"      // a file shared with the task, or a new version of one: yours, or from a turn's folder
@@ -61,11 +62,14 @@ const (
 	ActionApproved  Type = "action.approved"
 	ActionAsked     Type = "action.asked" // the policy hands the decision to the user
 	ActionDenied    Type = "action.denied"
+	ActionHeld      Type = "action.held" // no answer before the hook gave up: it waits for the user still
 	ActionResult    Type = "action.result"
 
 	PlanUpdated  Type = "plan.updated" // the turn's plan, all of it, as the agent last wrote it
 	AgentWaiting Type = "agent.waiting"
 	TurnEnded    Type = "turn.ended"   // the agent finished; its final message is its report
+	TurnLimited  Type = "turn.limited" // the engine stopped at the account's usage limit; the turn stays open until it resets
+	TurnResumed  Type = "turn.resumed" // the limited turn goes on: its limit reset, or the engine carried on by itself
 	IssueRaised  Type = "issue.raised" // something went wrong; ends the open turn
 	TurnStopped  Type = "turn.stopped" // you ended the open turn, to tell the coordinator something
 
@@ -89,25 +93,21 @@ const (
 	PolicyRefused Type = "policy.refused" // the file had an error; the policy before it stays
 )
 
-// An idea's stream, named by its ID (idea-N): a feature a Visionaries
-// session suggested for a repo, which you accept as a task or dismiss.
+// The settings stream: your choices for how Agentry works, each kept until
+// you change it.
 const (
-	IdeaSuggested Type = "idea.suggested"
-	IdeaAccepted  Type = "idea.accepted"  // you took it on: it became the task in "task", made just before
-	IdeaDismissed Type = "idea.dismissed" // you turned it down, saying why in "note"
+	SettingsChanged Type = "settings.changed" // the settings it names, each set to its new value
 )
 
 // ProposalRejected is written by the store, never proposed.
 const ProposalRejected Type = "proposal.rejected"
 
 // Streams that aren't tasks. Every other stream is one task's, named by its
-// ID, or one idea's (IdeaPrefix).
+// ID, or one of a feature's, named by the prefix it registered.
 const (
 	AgentsStream      = "agents"      // every agent event
 	PolicyStream      = "policy"      // every policy event
 	WorkersStream     = "workers"     // every worker event
 	ConnectionsStream = "connections" // every Claude Code connection's event
+	SettingsStream    = "settings"    // every settings event
 )
-
-// IdeaPrefix starts every idea's stream name, so ideas never show up as tasks.
-const IdeaPrefix = "idea-"

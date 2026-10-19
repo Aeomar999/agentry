@@ -44,7 +44,7 @@ func runClaudeHook(args []string, stdin io.Reader, stdout, stderr io.Writer) int
 		HookEventName string `json:"hook_event_name"`
 	}
 	json.NewDecoder(stdin).Decode(&hook)
-	agentry, err := connect(os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN"), defaultDataDir())
+	agentry, err := connectFromEnv()
 	if err != nil || len(args) != 1 {
 		return 0 // Agentry isn't reachable from here: Claude Code goes on without it
 	}
@@ -141,7 +141,7 @@ func alive(pid int) bool {
 // runWait waits for news (something new waiting for you, or a task
 // finished), prints it and returns.
 func runWait(_ []string, _ io.Reader, stdout, stderr io.Writer) int {
-	agentry, err := connect(os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN"), defaultDataDir())
+	agentry, err := connectFromEnv()
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry wait:", err)
 		return 1

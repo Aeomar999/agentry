@@ -43,9 +43,10 @@ interface ActivityFeedProps {
   show: Show;
   row: string; // the key of the row you came to see, picked out; "" for none
   now: Now | null; // null when nothing is happening
+  foot?: ReactNode; // under the oldest row: a way to read earlier ones
   onTurn: (turn: string) => void;
   onShow: (show: Show) => void;
-  loading?: boolean; // the task isn't here yet
+  loading?: boolean; // the task, or its newest events, aren't here yet
   error?: string; // it couldn't be loaded
   onRetry?: () => void;
 }
@@ -66,7 +67,7 @@ const NOTE_LINES = 4;
 const TEXT_LINES = 10; // briefs, reports, questions, issues, your messages and the rest
 
 export function ActivityFeed(props: ActivityFeedProps) {
-  const { items, agents, links, turn, show, row, now, onTurn, onShow, loading, error, onRetry } = props;
+  const { items, agents, links, turn, show, row, now, foot, onTurn, onShow, loading, error, onRetry } = props;
   const rows = shown(turn ? inTurn(items, turn) : items, show);
   const runs = sections(rows, show);
   const open = turn ? items.find((item) => item.kind === "turn" && item.turn === turn) : undefined;
@@ -160,6 +161,7 @@ export function ActivityFeed(props: ActivityFeedProps) {
               ))}
             </ol>
           )}
+          {foot}
         </div>
         {away && (
           <button
@@ -238,8 +240,8 @@ function SectionItem({ section, agent, links, row, clock, onTurn, narrowed, star
 function TurnBand({ section, agent, clock, onTurn, narrowed }: Omit<SectionProps, "links" | "row" | "starting">) {
   const item = section.turn!;
   const turn = item.turnInfo!;
-  const status = turn.issue ? "issue" : turn.stopped ? "stopped by you" : turn.ended ? "ended" : "running";
-  const variant = turn.issue ? "danger" : turn.stopped ? "warning" : turn.ended ? "default" : "info";
+  const status = turn.issue ? "issue" : turn.stopped ? "stopped by you" : turn.ended ? "ended" : turn.limited ? "usage limit" : "running";
+  const variant = turn.issue ? "danger" : turn.stopped || (turn.limited && !turn.ended) ? "warning" : turn.ended ? "default" : "info";
   const remote = turn.worker && turn.worker !== LOCAL ? turn.worker : "";
   const name = [
     authorName(section.by, agent),

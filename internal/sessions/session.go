@@ -7,12 +7,14 @@ package sessions
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"testing"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/procs"
@@ -39,6 +41,9 @@ func SocketFor(task string) string { return "agentry-" + task }
 // Start replaces whatever the session was running with the command, in a
 // host of its own that outlives this process.
 func Start(spec Spec) error {
+	if liveUnderTest() {
+		return errLiveUnderTest
+	}
 	Stop(spec.Socket)
 	self, err := os.Executable()
 	if err != nil {
@@ -71,6 +76,7 @@ func Start(spec Spec) error {
 		default:
 		}
 	}
+	host.Process.Kill() // else it runs on, with nobody able to reach it
 	return fmt.Errorf("starting the session: its host didn't answer")
 }
 
@@ -94,6 +100,9 @@ func Screen(name string) string {
 
 // Stop ends the session, its program and everything that started.
 func Stop(name string) {
+	if liveUnderTest() {
+		return
+	}
 	if a, err := ask(name, request{Op: "stop"}); err == nil {
 		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline) && procs.Alive(a.PID); {
 			time.Sleep(20 * time.Millisecond)
@@ -116,6 +125,33 @@ func Running() []string {
 	}
 	return tasks
 }
+
+// All are the sessions in Dir() that have a host, with the host's pid.
+func All() map[string]int {
+	entries, _ := os.ReadDir(Dir())
+	hosts := map[string]int{}
+	for _, entry := range entries {
+		if name, ok := strings.CutSuffix(entry.Name(), ".sock"); ok {
+			if a, err := ask(name, request{Op: "status"}); err == nil {
+				hosts[name] = a.PID
+			}
+		}
+	}
+	return hosts
+}
+
+// StopAll stops every session in Dir(), as a test does when it ends.
+func StopAll() {
+	for name := range All() {
+		Stop(name)
+	}
+}
+
+var errLiveUnderTest = errors.New("a test can't use the live sessions folder: give it its own (sessionstest)")
+
+// liveUnderTest is true when a test would reach the sessions of the
+// Agentry that runs on this machine: tests keep to a folder of their own.
+func liveUnderTest() bool { return testing.Testing() && Dir() == sessionsDir() }
 
 func sortedKeys(values map[string]string) []string {
 	keys := make([]string, 0, len(values))

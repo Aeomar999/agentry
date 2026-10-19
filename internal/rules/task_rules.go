@@ -41,6 +41,8 @@ var taskRules = map[events.Type]rule{
 	events.StoryAdded:      all(anEpic, notItsStoryYet),
 	events.StoryRemoved:    all(itsStory),
 
+	events.FollowUpsSkipped: all(aClosedEpic, notSkippedYet),
+
 	events.FileAdded:      all(aSharedFileName, aFileHash),
 	events.FileRemoved:    all(aSharedFile),
 	events.FilesCollected: all(anEndedTurn, notCollectedYet),
@@ -56,13 +58,16 @@ var taskRules = map[events.Type]rule{
 
 	events.ActionRequested: all(byTheWorkingAgent, isNewAction),
 	events.ActionAsked:     all(actionUndecided, notYetAsked, inTheOpenTurn),
-	events.ActionApproved:  all(actionUndecided),
-	events.ActionDenied:    all(actionUndecided),
+	events.ActionApproved:  all(actionUndecided, heldForYouAtWork, aFittingPass),
+	events.ActionDenied:    all(actionUndecided, heldForYouAtWork),
+	events.ActionHeld:      all(actionUndecided, wasAsked, notYetHeld),
 	events.ActionResult:    all(actionApproved, noResultYet),
 
 	events.PlanUpdated:  all(isTheOpenTurn),
 	events.AgentWaiting: all(isTheOpenTurn),
 	events.TurnEnded:    all(isTheOpenTurn, sameAgentAsTheTurn),
+	events.TurnLimited:  all(isTheOpenTurn, sameAgentAsTheTurn),
+	events.TurnResumed:  all(isTheOpenTurn, sameAgentAsTheTurn, turnIsLimited),
 	events.IssueRaised:  all(),
 	events.TurnStopped:  all(isTheOpenTurn),
 
@@ -276,6 +281,20 @@ func anEpic(t *tasks.Task, _ events.Proposal) string {
 	return ""
 }
 
+func aClosedEpic(t *tasks.Task, _ events.Proposal) string {
+	if t.Kind != tasks.Epic || !t.IsDone {
+		return "only an epic you closed gets a Visionaries session after it"
+	}
+	return ""
+}
+
+func notSkippedYet(t *tasks.Task, p events.Proposal) string {
+	if t.Skipped == int64(p.Number("close")) {
+		return "Agentry has said already why this close got no Visionaries session"
+	}
+	return ""
+}
+
 // closedByYouIfAnEpic: an epic closes when you approve it or move it to
 // Done, and only then, since you may have more for it; a story closes when
 // its coordinator says, or when you move it to Done.
@@ -352,6 +371,13 @@ func sameAgentAsTheTurn(t *tasks.Task, p events.Proposal) string {
 	return ""
 }
 
+func turnIsLimited(t *tasks.Task, p events.Proposal) string {
+	if t.OpenTurn().Limited == "" {
+		return p.Correlation + " is not waiting for a usage limit"
+	}
+	return ""
+}
+
 func notYetAcknowledged(t *tasks.Task, p events.Proposal) string {
 	if t.Turn(p.Correlation).Acknowledged {
 		return "the prompt of " + p.Correlation + " was already acknowledged"
@@ -421,6 +447,58 @@ func notYetAsked(t *tasks.Task, p events.Proposal) string {
 func inTheOpenTurn(t *tasks.Task, p events.Proposal) string {
 	if turn := t.OpenTurn(); turn == nil || turn.ID != t.Action(p.Correlation).Turn {
 		return "action " + p.Correlation + "'s turn is over"
+	}
+	return ""
+}
+
+func wasAsked(t *tasks.Task, p events.Proposal) string {
+	if !t.Action(p.Correlation).Asked {
+		return "action " + p.Correlation + " was never asked about"
+	}
+	return ""
+}
+
+func notYetHeld(t *tasks.Task, p events.Proposal) string {
+	if t.Action(p.Correlation).Held {
+		return "action " + p.Correlation + " is held already"
+	}
+	return ""
+}
+
+// heldForYouAtWork: no hook waits on a held action, so only you decide it,
+// and only while the task is at work, as only then does it show in Needs you.
+func heldForYouAtWork(t *tasks.Task, p events.Proposal) string {
+	switch {
+	case !t.Action(p.Correlation).Held:
+		return ""
+	case p.Actor.Kind != events.Human:
+		return "action " + p.Correlation + " is held for the user to decide"
+	case !t.AtWork():
+		return "action " + p.Correlation + " is held, and the task isn't at work: move it back to decide it"
+	}
+	return ""
+}
+
+// aFittingPass: an approval that uses a held action's pass names one you
+// approved, not used yet, for the same agent, tool and command, asked for
+// in that agent's first turn after its coordinator heard your approval.
+func aFittingPass(t *tasks.Task, p events.Proposal) string {
+	id := p.Text("pass")
+	if id == "" {
+		return ""
+	}
+	pass, action := t.Action(id), t.Action(p.Correlation)
+	switch {
+	case pass == nil || !pass.Held || pass.Decision != tasks.Approved:
+		return "action " + id + " is not a held action the user approved"
+	case pass.PassUsed:
+		return "action " + id + "'s pass was used already"
+	case pass.Agent != action.Agent:
+		return "action " + id + " was asked for by another agent"
+	case pass.PassTurn != action.Turn:
+		return "action " + id + "'s pass works only in " + pass.Agent + "'s first turn after its coordinator heard the approval"
+	case pass.Tool != action.Tool || pass.Command != action.Command:
+		return "action " + id + " was for another command"
 	}
 	return ""
 }

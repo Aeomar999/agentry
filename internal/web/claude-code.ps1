@@ -10,14 +10,36 @@ $ProgressPreference = 'SilentlyContinue'
 
 $server = {{SERVER}}
 $code = {{CODE}}
+# The server's own CA, when it is served with one (-https): the download
+# trusts it alone, and connecting keeps it. Both are '' when it needs none.
+$ca = {{CA}}
+$caFingerprint = {{CA_FINGERPRINT}}
 $bin = if ($env:AGENTRY_BIN) { $env:AGENTRY_BIN } else { Join-Path $env:LOCALAPPDATA 'Agentry\bin' }
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
 $exe = Join-Path $bin 'agentry.exe'
 
+# Downloads uri to path. With the server's own CA it uses curl.exe, which
+# comes with Windows 10 and later and can trust that CA alone; Schannel's
+# revocation check fails for a CA that publishes no list.
+function Save-Download($uri, $path) {
+  if (-not $ca) {
+    Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $path
+    return
+  }
+  $caFile = (New-TemporaryFile).FullName
+  try {
+    Set-Content $caFile $ca
+    curl.exe -fsSL --cacert $caFile --ssl-no-revoke -o $path $uri
+    if ($LASTEXITCODE -ne 0) { throw "curl.exe exited with $LASTEXITCODE" }
+  } finally {
+    Remove-Item -Force -ErrorAction SilentlyContinue $caFile
+  }
+}
+
 Write-Host "Installing agentry in $bin"
 New-Item -ItemType Directory -Force -Path $bin | Out-Null
 try {
-  Invoke-WebRequest -UseBasicParsing -Uri "$server/integrations/agentry?code=$code&os=windows&arch=$arch" -OutFile "$exe.part"
+  Save-Download "$server/integrations/agentry?code=$code&os=windows&arch=$arch" "$exe.part"
 } catch {
   Remove-Item -Force -ErrorAction SilentlyContinue "$exe.part"
   Write-Error "The server has no agentry for windows/$arch."
@@ -30,7 +52,9 @@ if (Test-Path $exe) {
 }
 Move-Item -Force "$exe.part" $exe
 
-& $exe mcp connect $server $code
+$connect = @('mcp', 'connect')
+if ($caFingerprint) { $connect += '-ca-fingerprint', $caFingerprint }
+& $exe @connect $server $code
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (Get-Command claude -ErrorAction SilentlyContinue) {

@@ -2,11 +2,15 @@ package engines
 
 import (
 	"bufio"
+	"cmp"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // claude is Claude Code, measured in proofs 01 to 03 (Claude Code 2.1.301).
@@ -16,9 +20,16 @@ func init() { register(claude{}) }
 
 func (claude) Name() string { return "claude" }
 
+// Why a turn's tokens are unknown. Claude Code saves no transcript when it
+// takes itself for another session's child (see IsParentSessionVar).
+const (
+	TranscriptNotSaved  = "transcript not saved"
+	NoUsageInTranscript = "no usage in transcript"
+)
+
 var (
 	claudeGates   = []string{"PreToolUse"}
-	claudeReports = []string{"PostToolUse", "UserPromptSubmit", "Notification", "Stop", "SessionStart", "SessionEnd"}
+	claudeReports = []string{"PostToolUse", "UserPromptSubmit", "Notification", "Stop", "StopFailure", "SessionStart", "SessionEnd"}
 )
 
 // Prepare writes a settings file for `claude --settings`: the hooks, and
@@ -73,15 +84,44 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 		}
 		return nil, nil
 	}
+	if p.HookEventName == "StopFailure" {
+		return []Signal{claudeFailure(p, time.Now())}, nil
+	}
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
-		signals[0].Tokens = claudeTokens(p.TranscriptPath)
+		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath)
 		if signals[0].Report == "" {
 			// Claude Code before 2.1 has no last_assistant_message.
 			signals[0].Report = claudeLastMessage(p.TranscriptPath)
 		}
 	}
 	return signals, nil
+}
+
+// claudeFailure is what a StopFailure means: Claude Code sends it instead
+// of Stop when the turn ends at an API error. rate_limit is a usage limit
+// only when the message or the error details say so or name a reset still
+// to come; it is also used for plain 429s and capacity errors, which fail
+// the turn like any other.
+func claudeFailure(p hookPayload, now time.Time) Signal {
+	details := cmp.Or(p.LastAssistantMessage, p.ErrorDetails)
+	failure := Signal{Kind: TurnFailed, Error: cmp.Or(p.Error, "unknown"), Details: details}
+	both := p.LastAssistantMessage + "\n" + p.ErrorDetails
+	// Claude Code's own details win over a time the model wrote.
+	resetsAt := ResetTime(p.ErrorDetails, now)
+	if resetsAt.IsZero() {
+		resetsAt = ResetTime(both, now)
+	}
+	if p.Error == "rate_limit" && (hitYourLimit(both) || !resetsAt.IsZero()) {
+		failure.Kind, failure.ResetsAt = UsageLimited, resetsAt
+	}
+	return failure
+}
+
+// hitYourLimit is Claude Code's "You've hit your session limit", with
+// either apostrophe.
+func hitYourLimit(text string) bool {
+	return strings.Contains(strings.ReplaceAll(text, "’", "'"), "You've hit your")
 }
 
 // claudeLastMessage is the text of the last thing the model said in a
@@ -124,11 +164,15 @@ func claudeLastMessage(transcript string) string {
 // claudeTokens adds up what a session's transcript says it used: every
 // token the model read (fresh, or from the cache) and wrote. Each turn is
 // its own session, so this is the turn's use. A reply can appear on several
-// lines with the same usage, so each message is counted once.
-func claudeTokens(transcript string) int {
+// lines with the same usage, so each message is counted once. When there is
+// nothing to count, it says why instead.
+func claudeTokens(transcript string) (int, string) {
 	file, err := os.Open(transcript)
+	if errors.Is(err, fs.ErrNotExist) { // also when the path is ""
+		return 0, TranscriptNotSaved
+	}
 	if err != nil {
-		return 0
+		return 0, "transcript unreadable: " + err.Error()
 	}
 	defer file.Close()
 	seen, total := map[string]bool{}, 0
@@ -153,7 +197,10 @@ func claudeTokens(transcript string) int {
 		u := entry.Message.Usage
 		total += u.Input + u.Output + u.CacheWrite + u.CacheRead
 	}
-	return total
+	if len(seen) == 0 {
+		return 0, NoUsageInTranscript
+	}
+	return total, ""
 }
 
 // GateReply: Claude's PreToolUse takes allow and deny as JSON.

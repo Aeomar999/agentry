@@ -80,7 +80,7 @@ func epicText(task *tasks.Task, f family) string {
 	for _, story := range f.stories {
 		fmt.Fprintf(&text, "- %s (%s): %s\n", story.ID, storyState(story, f), story.Title)
 		if story.IsDone && story.Summary != "" {
-			fmt.Fprintf(&text, "  Its summary: %s\n", shorten(story.Summary, 1500))
+			fmt.Fprintf(&text, "  Its summary: %s\n", tasks.Shorten(story.Summary, 1500))
 		}
 	}
 	text.WriteString("\nYou hear from each story as it finishes. When one does, check what it delivered against the " +
@@ -95,7 +95,7 @@ func epicText(task *tasks.Task, f family) string {
 func storyText(task *tasks.Task, f family) string {
 	var text strings.Builder
 	fmt.Fprintf(&text, "It is %s's story. The epic, %s: %s\n\n%s\n\n", f.epic.Coordinator, f.epic.ID, f.epic.Title,
-		shorten(f.epic.Description, 2000))
+		tasks.Shorten(f.epic.Description, 2000))
 	var later []string
 	for _, story := range f.stories {
 		if story.ID != task.ID && slices.Contains(story.After, task.ID) {

@@ -1,24 +1,27 @@
-import { Bot, Lightbulb, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
+import { Bot, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
+import { Features, visibleFeatures } from "@/features";
 
 interface SidebarProps {
   collapsed: boolean; // a 56px icon rail, on wide screens
   drawerOpen: boolean; // on narrow screens the sidebar is a drawer over the page
   needsYou: number;
+  features: Features; // which features show, each adding its items to its section
   onCloseDrawer: () => void;
 }
 
 const SECTIONS = [
   {
+    section: "work",
     title: "Work",
     items: [
       { to: "/tasks", label: "Tasks", icon: <ListTodo />, countsNeedsYou: true },
       { to: "/plan", label: "Plan", icon: <MapIcon /> },
-      { to: "/ideas", label: "Ideas", icon: <Lightbulb /> },
     ],
   },
   {
+    section: "setup",
     title: "Setup",
     items: [
       { to: "/agents", label: "Agents", icon: <Bot /> },
@@ -29,8 +32,9 @@ const SECTIONS = [
   },
 ];
 
-export function Sidebar({ collapsed, drawerOpen, needsYou, onCloseDrawer }: SidebarProps) {
+export function Sidebar({ collapsed, drawerOpen, needsYou, features, onCloseDrawer }: SidebarProps) {
   const rail = collapsed && !drawerOpen;
+  const shown = visibleFeatures(features);
   return (
     <>
       {drawerOpen && <div className="fixed inset-0 top-topbar z-20 bg-black/50 md:hidden" onClick={onCloseDrawer} />}
@@ -57,6 +61,20 @@ export function Sidebar({ collapsed, drawerOpen, needsYou, onCloseDrawer }: Side
                 count={"countsNeedsYou" in item ? needsYou : undefined}
               />
             ))}
+            {shown.flatMap((feature) =>
+              (feature.nav ?? [])
+                .filter((item) => item.section === section.section)
+                .map((item) => (
+                  <SidebarItem
+                    key={item.to}
+                    to={item.to}
+                    label={item.label}
+                    icon={item.icon}
+                    collapsed={rail}
+                    count={features.badge(feature.name)}
+                  />
+                )),
+            )}
           </div>
         ))}
       </nav>

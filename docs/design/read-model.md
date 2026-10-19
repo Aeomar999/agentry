@@ -211,7 +211,7 @@ means once per event, per open tab for the page.
 | `watchdog.Check` | `TaskIDs`, every task stream | tasks with an open turn | within a second | every second |
 | `turns.Runner.MachineOf` | the task | where its worktree is | last event | per stop, liveness check (the watchdog, per open turn) and terminal attach |
 | `hooks.Handler` | the task (`machineOf`, `gate`, `recordPlan`); the agents stream (`profileOf`, `recordWhatWasLearned`) | worktree, turn, agent profile and knowledge | last event | every hook call: each tool call and turn event |
-| `hooks.DenyOrphanedAsks` | every task stream | actions waiting on you | at startup | once |
+| `hooks.HoldOrphanedAsks` | every task stream | actions waiting on you | at startup | once |
 | `workerlink.ForgetConnections`, `serve.seedAgents`, `policy` setup | workers, agents, policy streams | the roster | at startup | once |
 | `serve` helper terminal | the task | its worktree | last event | per helper opened |
 
@@ -509,7 +509,7 @@ Each site in section 2 swaps `Stream` plus `FromEvents` for a lookup:
 | `web.Server.task`, `roster`, `listTasks`, `listQuestions`, `needing`, `tasksByMachine`, `listConnections`, the workers list | `s.current.Task(id)`, `Tasks()`, `Roster()`, `Workers()`, `Connections()` |
 | `coordinator.Loop.load`, `portsInUse`, `machines`, `newTask` | the same; `newTask` counts `len(Tasks())` |
 | `watchdog.Watchdog.Check` | `Tasks()` |
-| `turns.Runner.MachineOf`, `hooks.Handler`, `DenyOrphanedAsks`, `ForgetConnections`, `seedAgents`, the helper terminal | the same |
+| `turns.Runner.MachineOf`, `hooks.Handler`, `HoldOrphanedAsks`, `ForgetConnections`, `seedAgents`, the helper terminal | the same |
 
 They get a `*current.State` where they get the `*store.Store` today. A
 handler that both reads the state and then proposes keeps working as now:
@@ -534,9 +534,13 @@ A reader sees every event applied before it asked, and nothing that
 wasn't applied: the state and the log reads agree, because both stop at
 `applied`. To let the page skip refetches, each `GET` reply carries
 the position its state was read at, in an `X-Agentry-Position` header,
-taken from `State.Position()` before the handler reads. If an event lands
-between the two, the reply is newer than its header says, which only costs
-one extra refetch.
+taken before the handler reads. If an event lands between the two, the
+reply is newer than its header says, which only costs one extra refetch.
+The header is the store's applied position (`LastPosition`, which
+`/api/changes` reports too), not `State.Position()`: while an event is
+being applied the state is one ahead of the log's reads, so a reply that
+also reads the log (ideas, a task's events) would otherwise claim a
+position its log read didn't see.
 
 ### The page
 
@@ -614,8 +618,11 @@ it.
    `Apply` fails it. A second case opens a store on an existing log and
    checks `LastPosition()` equals the last event's position before any
    proposal, and a third does the same with a nil model.
-9. **The page.** A Playwright check: a refresh makes one request per
-   path, and an event refetches each path once.
+9. **The page.** A refresh makes one request per path, an event refetches
+   each shown path once, and N events during one read give one more read.
+   Built as a vitest test of the cache (`ui/src/live/resource-cache.test.ts`,
+   `npm test`) with a fake server and a fake live position; the browser
+   numbers were measured once with Playwright, not as a committed test.
 
 ### Startup and migration
 

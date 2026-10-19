@@ -1,4 +1,5 @@
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useState } from "react";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Banner } from "@/components/molecules/Banner";
@@ -6,7 +7,13 @@ import { CodeViewer } from "@/components/molecules/CodeViewer";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { DecisionBadge } from "@/components/molecules/StatusBadges";
 import { Mono } from "@/components/molecules/Mono";
-import type { Policy, PolicyProfile } from "@/api/types";
+import { AgentName } from "@/components/molecules/AgentName";
+import { DefaultProfiles } from "@/components/organisms/DefaultProfiles";
+import { PolicyHistory } from "@/components/organisms/PolicyHistory";
+import { UnshippedMissingProfiles } from "@/components/organisms/MissingProfiles";
+import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
+import { TryPolicyCall } from "@/components/organisms/TryPolicyCall";
+import type { Policy, PolicyProfile, TriedCall } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
 type Rule = PolicyProfile["rules"][number] & { order: number };
@@ -27,10 +34,13 @@ const RULE_COLUMNS: Column<Rule>[] = [
 ];
 
 // The policy is a file you edit: ~/.agentry/policy.toml. This page shows
-// the one in force; saving the file reloads it within two seconds.
+// the one in force; saving the file reloads it within two seconds. The
+// changes Agentry can make for you are here too: adding and updating its
+// default profiles, turning off use_for_everyone, restoring an earlier
+// version. Each is made against the version shown, and logged.
 export function PolicyPage() {
   useBreadcrumb({ label: "Policy" });
-  const { data: policy, error } = useResource<Policy>("/api/policy");
+  const { data: policy, error, reload } = useResource<Policy>("/api/policy");
 
   return (
     <>
@@ -41,8 +51,8 @@ export function PolicyPage() {
             <>
               <Mono>{policy.path}</Mono>
               <span>·</span>
-              <span>
-                version <Mono>{policy.hash.slice(0, 8)}</Mono>
+              <span title="Hash of the policy.toml in force">
+                file <Mono>{policy.hash.slice(0, 8)}</Mono>
               </span>
             </>
           )
@@ -55,21 +65,27 @@ export function PolicyPage() {
             <span className="font-mono text-[12px] whitespace-pre-wrap">{policy.problem}</span>
           </Banner>
         )}
+        {policy?.useForEveryone && <UseForEveryoneNotice policy={policy} onChanged={reload} />}
         {policy && (
           <Banner tone="info" title="Edit the file to change the policy">
             Rules are read top to bottom and the first that matches decides. Save the file and it takes effect within two seconds.
-            {policy.useForEveryone && (
-              <>
-                {" "}
-                Every agent uses the <Mono>{policy.useForEveryone}</Mono> profile, because the file sets <Mono>use_for_everyone</Mono>.
-                Comment that line out and each agent uses its own.
-              </>
-            )}
           </Banner>
+        )}
+        {policy && <UnshippedMissingProfiles policy={policy} />}
+        {policy && (
+          <DefaultProfiles
+            defaults={policy.defaults}
+            missing={policy.missing ?? {}}
+            useForEveryone={policy.useForEveryone}
+            version={policy.version}
+            hash={policy.hash}
+            onChanged={reload}
+          />
         )}
         {policy?.profiles.map((profile) => (
           <ProfilePanel key={profile.name} profile={profile} policy={policy} />
         ))}
+        {policy && <PolicyHistory hash={policy.hash} onChanged={reload} />}
         {policy && (
           <Panel flush title={<Mono>policy.toml</Mono>} aside="The file as loaded">
             <CodeViewer text={policy.text} language="ini" />
@@ -83,6 +99,9 @@ export function PolicyPage() {
 function ProfilePanel({ profile, policy }: { profile: PolicyProfile; policy: Policy }) {
   const inUse = policy.useForEveryone ? policy.useForEveryone === profile.name : true;
   const rules = profile.rules.map((rule, i) => ({ ...rule, order: i + 1 }));
+  const [tried, setTried] = useState<TriedCall>();
+  // The rule at that place decided, if the version shown is the one that judged.
+  const matched = tried?.verdict.policy === policy.hash ? rules.find((rule) => rule.order === tried.verdict.order) : undefined;
   return (
     <Panel
       flush
@@ -101,11 +120,43 @@ function ProfilePanel({ profile, policy }: { profile: PolicyProfile; policy: Pol
       }
     >
       <p className="border-b border-divider px-4 py-2.5 text-[13px] text-ink-secondary">{profile.why}</p>
+      <ProfileUsers profile={profile.name} policy={policy} />
+      <TryPolicyCall profile={profile.name} onTried={setTried} />
       {rules.length > 0 ? (
-        <ResourceTable columns={RULE_COLUMNS} rows={rules} rowKey={(rule) => String(rule.order)} />
+        <ResourceTable
+          columns={RULE_COLUMNS}
+          rows={rules}
+          rowKey={(rule) => String(rule.order)}
+          activeKey={matched && String(matched.order)}
+        />
       ) : (
         <p className="px-4 py-2.5 text-[12px] text-ink-muted">No rules: every call is decided by otherwise.</p>
       )}
     </Panel>
+  );
+}
+
+// ProfileUsers are the agents whose own profile this is: named by them, or
+// default_profile for those that name none. Removing a profile agents name
+// is refused, so this is who stops it.
+function ProfileUsers({ profile, policy }: { profile: string; policy: Policy }) {
+  const users = policy.users[profile] ?? [];
+  const overridden = policy.useForEveryone !== "" && policy.useForEveryone !== profile;
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-divider px-4 py-2 text-[12px] text-ink-muted">
+      {users.length === 0 ? (
+        <span>No agent has this profile.</span>
+      ) : (
+        <>
+          <span>{overridden ? "Agents' own profile, overridden for now:" : "Used by"}</span>
+          {users.map((user) => (
+            <span key={user.agent} className="inline-flex items-center gap-1">
+              <AgentName name={user.agent} className="text-ink-secondary" />
+              {user.followsDefault && <span className="text-ink-faint">(default_profile)</span>}
+            </span>
+          ))}
+        </>
+      )}
+    </p>
   );
 }

@@ -189,8 +189,9 @@ func retryAfter(times []time.Time, limit int, now time.Time) time.Duration {
 
 // issueSigninCode gives a signed-in device a code for another one, with the
 // server's addresses, so the page can draw a QR code of <address>/?signin=<code>.
-// expiresIn is in seconds: the page counts down from it, since its own
-// clock may not agree with expiresAt.
+// An address served with the server's own CA has its trust page too, for a
+// device to trust the CA first. expiresIn is in seconds: the page counts
+// down from it, since its own clock may not agree with expiresAt.
 func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 	code, expires, err := s.signins.issue()
 	if err != nil {
@@ -198,9 +199,13 @@ func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list, chosen := s.addresses(r)
-	addresses := make([]map[string]string, 0, len(list))
+	addresses := make([]map[string]any, 0, len(list))
 	for _, a := range list {
-		addresses = append(addresses, map[string]string{"url": a.URL, "label": a.Label})
+		address := map[string]any{"url": a.URL, "label": a.Label}
+		if trust := s.trustAt(r, a.URL); trust != nil {
+			address["trust"] = trust
+		}
+		addresses = append(addresses, address)
 	}
 	reply(w, map[string]any{"code": code, "expiresAt": expires, "expiresIn": int(codeLifetime / time.Second),
 		"addresses": addresses, "address": chosen})

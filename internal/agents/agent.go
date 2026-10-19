@@ -4,6 +4,7 @@
 package agents
 
 import (
+	"fmt"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -30,6 +31,9 @@ type Agent struct {
 	// board while it has it: Builds (In progress), Reviews (Review), or Ships
 	// (Shipping).
 	Column string `json:"column"`
+	// Template is the ID of the team template the agent was made from, ""
+	// for one you made yourself. Editing the agent keeps it.
+	Template string `json:"template"`
 
 	// Knowledge is what the agent has learned as it works, in its own words
 	// and yours; part of every brief. Changed only by agent.learned, so
@@ -37,7 +41,14 @@ type Agent struct {
 	Knowledge string `json:"knowledge"`
 
 	untouched bool // still as Agentry wrote it: you have never changed it
+	// patched is the bytes of patch middles since its knowledge's last full
+	// copy: what rebuilding its knowledge reads beyond that copy.
+	patched int
 }
+
+// Patched is the bytes of patch middles since the agent's knowledge was last
+// written as a full copy.
+func (a Agent) Patched() int { return a.patched }
 
 // Learned is the event that sets the agent's knowledge to knowledge.
 func (a Agent) Learned(by events.Actor, knowledge string) events.Proposal {
@@ -66,7 +77,7 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
-		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team,
+		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team, "template": a.Template,
 	}}
 }
 
@@ -90,7 +101,17 @@ func (a Agent) workers() []string {
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
 		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
-		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), untouched: e.Actor.Kind == events.System}
+		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), Template: e.Text("template"), untouched: e.Actor.Kind == events.System}
+}
+
+// templateBefore is the template of agent, read from an event written
+// before agents had one, which has no "template" at all: the one whose team
+// it is in, by name. An agent that stays in its team keeps what it had.
+func templateBefore(agent Agent, had *Agent) string {
+	if had != nil && had.TeamName() == agent.TeamName() {
+		return had.Template
+	}
+	return templateByName(agent.TeamName()).ID
 }
 
 // Roster is every agent, in the order they were created.
@@ -99,30 +120,37 @@ type Roster []Agent
 func FromEvents(stream []events.Event) Roster {
 	var roster Roster
 	for _, e := range stream {
-		apply(&roster, e)
+		roster.Apply(e)
 	}
 	return roster
 }
 
 // Next is the roster after e, built on a copy: r itself is left as it was.
-// Copying the slice is enough, as apply replaces an agent's Workers whole.
+// Copying the slice is enough, as Apply replaces an agent's Workers whole.
 func (r Roster) Next(e events.Event) Roster {
 	r = slices.Clone(r)
-	apply(&r, e)
+	r.Apply(e)
 	return r
 }
 
-// apply changes the roster in place.
-func apply(r *Roster, e events.Event) {
+// Apply changes the roster in place by one accepted event of its stream.
+func (r *Roster) Apply(e events.Event) {
 	roster := *r
 	switch e.Type {
 	case events.AgentCreated:
-		roster = append(roster, fromEvent(e))
+		agent := fromEvent(e)
+		if !e.Has("template") {
+			agent.Template = templateBefore(agent, nil)
+		}
+		roster = append(roster, agent)
 	case events.AgentChanged:
 		if i := roster.index(e.Text("name")); i >= 0 {
-			knowledge := roster[i].Knowledge
-			roster[i] = fromEvent(e)
-			roster[i].Knowledge = knowledge
+			agent := fromEvent(e)
+			if !e.Has("template") {
+				agent.Template = templateBefore(agent, &roster[i])
+			}
+			agent.Knowledge, agent.patched = roster[i].Knowledge, roster[i].patched
+			roster[i] = agent
 		}
 	case events.AgentRenamed:
 		if i := roster.index(e.Text("name")); i >= 0 {
@@ -130,7 +158,7 @@ func apply(r *Roster, e events.Event) {
 		}
 	case events.AgentLearned:
 		if i := roster.index(e.Text("name")); i >= 0 {
-			roster[i].Knowledge = e.Text("knowledge")
+			roster[i].learn(e)
 		}
 	case events.AgentRemoved:
 		if i := roster.index(e.Text("name")); i >= 0 {
@@ -138,6 +166,26 @@ func apply(r *Roster, e events.Event) {
 		}
 	}
 	*r = roster
+}
+
+// learn sets the agent's knowledge by an agent.learned: a full copy of it,
+// or a patch on what it knows. The rules verified the patch against this
+// same knowledge, so only its bounds are checked here; one that doesn't fit
+// them is a bug, and panics.
+func (a *Agent) learn(e events.Event) {
+	if !IsPatch(e.Proposal) {
+		a.Knowledge, a.patched = e.Text("knowledge"), 0
+		return
+	}
+	patch, err := PatchOf(e.Proposal)
+	knowledge := ""
+	if err == nil {
+		knowledge, err = patch.Apply(a.Knowledge)
+	}
+	if err != nil {
+		panic(fmt.Sprintf("%s's knowledge at position %d: %v", a.Name, e.Position, err))
+	}
+	a.Knowledge, a.patched = knowledge, a.patched+len(patch.Middle)
 }
 
 func (r Roster) Get(name string) (Agent, bool) {
@@ -180,6 +228,13 @@ func (r Roster) Coordinator(team string) (Agent, bool) {
 		return r[i], true
 	}
 	return Agent{}, false
+}
+
+// TemplateOf is the ID of the template team was made from: its
+// coordinator's. "" for a team you made yourself, or no such team.
+func (r Roster) TemplateOf(team string) string {
+	coordinator, _ := r.Coordinator(team)
+	return coordinator.Template
 }
 
 // Assignees are the agents of team a coordinator can hand work to.

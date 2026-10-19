@@ -101,7 +101,15 @@ function QuestionDetail({
       {q.kind === "approval" && (
         <Approval
           taskId={q.task}
-          action={{ id: q.action!, agent: q.agent, tool: q.tool!, command: q.text, reason: q.reason! }}
+          action={{
+            id: q.action!,
+            agent: q.agent,
+            tool: q.tool!,
+            command: q.text,
+            reason: q.reason!,
+            requestedAt: q.at,
+            held: q.held ?? false,
+          }}
           onChanged={onChanged}
         />
       )}

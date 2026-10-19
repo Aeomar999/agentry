@@ -25,6 +25,7 @@ import (
 type Local struct {
 	Label        string // its name: workers.Local, or the worker's
 	ServerURL    string // where its sessions' hooks post
+	ServerCA     string // the CA ServerURL's https is pinned to, PEM; "" for plain HTTP
 	HookCommand  string // runs `agentry hook`
 	WorktreeRoot string
 
@@ -42,6 +43,11 @@ type Hub struct {
 	URL        func(task string) string // the git address of a task's repo
 	Credential string                   // the worker's, which lets it in
 	MirrorRoot string                   // where the worker keeps its copy of each repo
+	// HTTP and CAFile trust only the server's CA, when it is served over
+	// https with Agentry's own: HTTP for Go's calls, CAFile (its PEM) for
+	// git's. Nil and "" are the defaults.
+	HTTP   *http.Client
+	CAFile string
 }
 
 func (h *Hub) header() string { return "Authorization: Bearer " + h.Credential }
@@ -57,7 +63,7 @@ func (l *Local) Prepare(_ context.Context, r WorktreeRequest) (worktrees.Worktre
 		return worktrees.Create(r.Repo, l.WorktreeRoot, r.Task, port)
 	}
 	mirror := worktrees.Mirror{Dir: filepath.Join(l.Hub.MirrorRoot, r.RepoKey), Hub: l.Hub.URL(r.Task),
-		Header: l.Hub.header(), Origin: r.Origin}
+		Header: l.Hub.header(), CAFile: l.Hub.CAFile, Origin: r.Origin}
 	return mirror.Worktree(l.WorktreeRoot, r.Task, r.Base, port)
 }
 
@@ -98,7 +104,11 @@ func (l *Local) upload(ctx context.Context, w worktrees.Worktree) error {
 		return err
 	}
 	request.Header.Set("Authorization", "Bearer "+l.Hub.Credential)
-	response, err := http.DefaultClient.Do(request)
+	client := l.Hub.HTTP
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("sending the work to Agentry: %w", err)
 	}
@@ -150,7 +160,7 @@ func (l *Local) StartTurn(_ context.Context, t Turn) error {
 	if !ok {
 		return fmt.Errorf("engine %q has no adapter", t.Engine)
 	}
-	env := map[string]string{hookcall.EnvServer: l.ServerURL, hookcall.EnvWorktree: t.Worktree}
+	env := map[string]string{hookcall.EnvServer: l.ServerURL, hookcall.EnvCA: l.ServerCA, hookcall.EnvWorktree: t.Worktree}
 	for name, value := range t.Env {
 		env[name] = value
 	}

@@ -136,7 +136,7 @@ function titled(text: string): { title: string; body: string } {
 // thing that gives way, so the badge and Activity › always show whole.
 function TurnFooter({ turn, actions, ledTo, onOpen }: { turn: Turn; actions: number; ledTo: boolean; onOpen: (turn: string) => void }) {
   const lead = ledTo ? "Led to" : "From";
-  const status = turn.issue ? "issue" : turn.ended ? "" : "running";
+  const status = turn.issue ? "issue" : turn.ended ? "" : turn.limited ? "usage limit" : "running";
   return (
     <button
       type="button"
@@ -151,7 +151,7 @@ function TurnFooter({ turn, actions, ledTo, onOpen }: { turn: Turn; actions: num
       {status && (
         <>
           <Dot />
-          <Badge variant={turn.issue ? "danger" : "info"} className="shrink-0">
+          <Badge variant={turn.issue ? "danger" : turn.limited ? "warning" : "info"} className="shrink-0">
             {status}
           </Badge>
         </>

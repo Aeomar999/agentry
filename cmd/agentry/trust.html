@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Trust this device</title>
+<style>
+:root {
+	--page: #ffffff; --text: #1c1f24; --muted: #5b626d; --line: #d9dde3;
+	--panel: #f4f6f8; --link: #1f5fbf; --warn-bg: #fff4e0; --warn-line: #e3b25c;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--page: #15171a; --text: #e6e8eb; --muted: #9aa1ab; --line: #30353c;
+		--panel: #1d2024; --link: #7fb0ff; --warn-bg: #2d2414; --warn-line: #8a6a2c;
+	}
+}
+* { box-sizing: border-box; }
+body {
+	margin: 0; background: var(--page); color: var(--text);
+	font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 46rem; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 1.6rem; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 32px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+h3 { font-size: 1rem; margin: 20px 0 4px; }
+p, ol, ul { margin: 6px 0; }
+ol, ul { padding-left: 1.4rem; }
+a { color: var(--link); }
+code, .fingerprint {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em;
+	overflow-wrap: anywhere;
+}
+pre {
+	background: var(--panel); border: 1px solid var(--line); padding: 8px 10px; margin: 6px 0;
+	white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.muted { color: var(--muted); }
+.fingerprint { display: block; background: var(--panel); border: 1px solid var(--line); padding: 8px 10px; }
+.notice { background: var(--warn-bg); border: 1px solid var(--warn-line); padding: 10px 12px; margin: 16px 0; }
+.downloads { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.downloads a {
+	display: inline-block; padding: 8px 12px; border: 1px solid var(--line); background: var(--panel);
+	text-decoration: none;
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Trust this device</h1>
+<p class="muted">This Agentry server serves https with its own certificate authority, <strong>{{.Name}}</strong>. Trust it once on each device, then open Agentry at its https address: the browser shows it as secure and lets you install the app.</p>
+{{if .Uncovered}}
+<p class="notice">This server's certificate doesn't cover <code>{{.Uncovered}}</code>, so it can't send you there over https. {{if .Addresses}}Trust the CA below, then open one of the addresses listed under "Then open Agentry".{{else}}Open Agentry at an address the server printed when it started.{{end}}</p>
+{{end}}
+
+<h2>Check the fingerprint</h2>
+<p>The CA's SHA-256 fingerprint. Before you trust it, check that it matches what <code>agentry ca</code> shows on the server; the device shows it in the certificate's details.</p>
+<code class="fingerprint">{{.Fingerprint}}</code>
+
+<h2>Download the CA</h2>
+<ul class="downloads">
+<li><a href="{{.Downloads}}ca.crt" download="agentry-ca.crt">agentry-ca.crt</a></li>
+<li><a href="{{.Downloads}}ca.pem" download="agentry-ca.pem">agentry-ca.pem</a></li>
+<li><a href="{{.Downloads}}{{.Profile}}">{{.Profile}}</a> <span class="muted">(iPhone, iPad)</span></li>
+</ul>
+<p class="muted">The same certificate in each: .crt for phones, Windows and macOS, .pem for Linux, and a profile for iOS.</p>
+
+<h2>Install it</h2>
+
+<h3>Android</h3>
+<ol>
+<li>Download <code>agentry-ca.crt</code>.</li>
+<li>Settings &gt; Security (or Security &amp; privacy) &gt; More security settings (or More security &amp; privacy) &gt; Encryption &amp; credentials &gt; Install a certificate &gt; CA certificate &gt; Install anyway, and choose <code>agentry-ca.crt</code>.</li>
+</ol>
+
+<h3>iPhone and iPad</h3>
+<ol>
+<li>Open this page in Safari and download <code>agentry.mobileconfig</code>; allow it.</li>
+<li>Settings &gt; Profile Downloaded (or General &gt; VPN &amp; Device Management) &gt; {{.Name}} &gt; Install.</li>
+<li>Settings &gt; General &gt; About &gt; Certificate Trust Settings, and turn on full trust for {{.Name}}.</li>
+</ol>
+
+<h3>macOS</h3>
+<ol>
+<li>Download <code>agentry-ca.crt</code> and open it: Keychain Access adds it. Choose the System keychain.</li>
+<li>In Keychain Access, open {{.Name}} &gt; Trust &gt; When using this certificate: Always Trust.</li>
+</ol>
+<p>Or in Terminal:</p>
+<pre>sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain agentry-ca.crt</pre>
+
+<h3>Windows</h3>
+<p>From a Command Prompt run as administrator:</p>
+<pre>certutil -addstore -f Root agentry-ca.crt</pre>
+<p>Or open <code>agentry-ca.crt</code> &gt; Install Certificate &gt; Local Machine &gt; Place all certificates in the following store &gt; Trusted Root Certification Authorities.</p>
+
+<h3>Linux</h3>
+<p>Debian and Ubuntu (the file must be PEM, named .crt):</p>
+<pre>sudo cp agentry-ca.pem /usr/local/share/ca-certificates/agentry-ca.crt
+sudo update-ca-certificates</pre>
+<p>Fedora, Arch and others with p11-kit:</p>
+<pre>sudo trust anchor --store agentry-ca.pem</pre>
+
+<h3>Chrome and Edge</h3>
+<p>They use the system's trusted certificates on Windows, macOS, Android, iOS and ChromeOS, so the steps above are enough. On Linux, Chrome keeps its own list: open <code>chrome://certificate-manager</code>, then Local certificates &gt; Custom &gt; Installed by you &gt; Trusted certificates &gt; Import, and choose <code>agentry-ca.crt</code>. Older versions: Settings &gt; Privacy and security &gt; Security &gt; Manage certificates &gt; Authorities &gt; Import, and tick trust for websites.</p>
+
+<h3>Firefox</h3>
+<p>Settings &gt; Privacy &amp; Security &gt; Certificates &gt; View Certificates &gt; Authorities &gt; Import, choose <code>agentry-ca.crt</code> and tick "Trust this CA to identify websites". Or, on Windows and macOS, set <code>security.enterprise_roots.enabled</code> to true in <code>about:config</code> to use the system's. Firefox for Android: Settings &gt; About Firefox, tap the logo five times, then Settings &gt; Secret Settings &gt; Use third party CA certificates.</p>
+
+<h2>Then open Agentry</h2>
+{{if .Addresses}}
+<ul>
+{{range .Addresses}}<li><a href="{{.}}/">{{.}}</a></li>
+{{end}}
+</ul>
+<p class="muted">Restart the browser if it still says the connection isn't private. Sign in with the link the server printed, or a sign-in code.</p>
+{{else}}
+<p>Open the https address the server printed when it started.</p>
+{{end}}
+</main>
+</body>
+</html>

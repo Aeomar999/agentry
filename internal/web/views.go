@@ -3,78 +3,42 @@ package web
 import (
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // The JSON the page reads. Kept apart from the task state so the state can
 // change shape without breaking the page, and the page sees only what it shows.
 
-type taskSummary struct {
-	ID               string       `json:"id"`
-	Title            string       `json:"title"`
-	Repo             string       `json:"repo"`
-	Status           tasks.Status `json:"status"`
-	CurrentAgent     string       `json:"currentAgent"`
-	Stage            string       `json:"stage"`  // the agent the coordinator last handed it to
-	Column           string       `json:"column"` // its column on the board: backlog, todo, in-progress, review, shipping or done
-	Turns            int          `json:"turns"`
-	NeedsYou         string       `json:"needsYou"`    // what you are asked, "" when nothing
-	HasQuestion      bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
-	Labels           []string     `json:"labels"`
-	Budget           int          `json:"budget"`           // tokens; 0 is no limit
-	TokensUsed       int          `json:"tokensUsed"`       // by every turn that has ended
-	OverBudget       bool         `json:"overBudget"`       // stopped, or about to stop, for its budget
-	MaxTurns         int          `json:"maxTurns"`         // turns it may have without your answer; 0 is no limit
-	TurnsSinceAnswer int          `json:"turnsSinceAnswer"` // turns since it started or you last answered
-	AtTurnLimit      bool         `json:"atTurnLimit"`      // stopped, or about to stop, for its limit of turns
-	StoppedAt        string       `json:"stoppedAt"`        // the limit whose stop is the open question, "budget" or "turns": raising it answers; "" for none
-	Rank             float64      `json:"rank"`             // your priority order, lower first
-	Parked           string       `json:"parked"`           // "todo" or "backlog" while you hold it there
-	Parent           string       `json:"parent"`           // the task, of another team, that asked for this one
-	WaitingOn        string       `json:"waitingOn"`        // another team's task this one waits for
-	Kind             tasks.Kind   `json:"kind"`             // "" for a story, "epic"
-	Epic             string       `json:"epic"`             // a story's epic
-	After            []string     `json:"after"`            // the stories it builds on
-	BlockedBy        []string     `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
-	Stories          int          `json:"stories"`          // an epic's
-	StoriesDone      int          `json:"storiesDone"`
-	Closing          string       `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
-	Told             *told        `json:"told"`    // the coordinator's latest word to you besides questions and summaries
-	CreatedAt        time.Time    `json:"createdAt"`
-	LastActiveAt     time.Time    `json:"lastActiveAt"`
-}
-
-type told struct {
-	At   time.Time `json:"at"`
-	From string    `json:"from"`
-	Text string    `json:"text"`
-}
+// taskSummary is a task in the list, as the tasks package summarizes it,
+// so an archived task can be its summary alone.
+type taskSummary = tasks.Summary
 
 type taskDetail struct {
 	taskSummary
-	Description string        `json:"description"`
-	FirstTitle  string        `json:"firstTitle"` // when the coordinator renamed the task
-	Options     []string      `json:"options"`    // answers the open question offers
-	Page        string        `json:"page"`       // the page the open question came with
-	Coordinator string        `json:"coordinator"`
-	TeamChosen  bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
-	EpicTitle   string        `json:"epicTitle"`  // a story's epic's
-	StoryList   []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
-	Shared      []sharedFile  `json:"shared"`     // its shared files
-	MovingTo    string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
-	Summary     string        `json:"summary"`
-	Worktree    *worktree     `json:"worktree"`
-	Trail       []step        `json:"trail"`
-	Turns       []turn        `json:"turnList"`
-	Approvals   []action      `json:"approvals"` // waiting for you
-	Actions     []action      `json:"actions"`
-	Events      []eventEntry  `json:"events"`
+	Description   string        `json:"description"`
+	FirstTitle    string        `json:"firstTitle"` // when the coordinator renamed the task
+	Options       []string      `json:"options"`    // answers the open question offers
+	Page          string        `json:"page"`       // the page the open question came with
+	Coordinator   string        `json:"coordinator"`
+	TeamChosen    bool          `json:"teamChosen"` // false: its coordinator may still pass it to the right team
+	EpicTitle     string        `json:"epicTitle"`  // a story's epic's
+	StoryList     []taskSummary `json:"storyList"`  // an epic's stories, in the order they were planned
+	Shared        []sharedFile  `json:"shared"`     // its shared files
+	MovingTo      string        `json:"movingTo"`   // the repo it moves to when the turn in progress ends
+	Summary       string        `json:"summary"`
+	Worktree      *worktree     `json:"worktree"`
+	Trail         []step        `json:"trail"`
+	Turns         []turn        `json:"turnList"`
+	TokensUnknown string        `json:"tokensUnknown"` // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+	Approvals     []action      `json:"approvals"`     // waiting for you
+	Actions       []action      `json:"actions"`       // its events are read a page at a time, at /api/tasks/{task}/events
 }
 
 type worktree struct {
@@ -94,18 +58,21 @@ type step struct {
 }
 
 type turn struct {
-	ID           string    `json:"id"`
-	Agent        string    `json:"agent"`
-	Worker       string    `json:"worker"` // the machine it ran on
-	StartedAt    time.Time `json:"startedAt"`
-	LastEventAt  time.Time `json:"lastEventAt"` // when it ended, once it has
-	Acknowledged bool      `json:"acknowledged"`
-	Ended        bool      `json:"ended"`
-	Issue        string    `json:"issue"`
-	Tokens       int       `json:"tokens"`
-	Plan         string    `json:"plan"`     // a Markdown checklist, "" until the agent writes one
-	PlanFrom     string    `json:"planFrom"` // the turn whose unfinished plan it started on, "" for a fresh one
-	Stopped      bool      `json:"stopped"`  // you ended it, to tell the coordinator something
+	ID            string     `json:"id"`
+	Agent         string     `json:"agent"`
+	Worker        string     `json:"worker"` // the machine it ran on
+	StartedAt     time.Time  `json:"startedAt"`
+	LastEventAt   time.Time  `json:"lastEventAt"` // when it ended, once it has
+	Acknowledged  bool       `json:"acknowledged"`
+	Ended         bool       `json:"ended"`
+	Issue         string     `json:"issue"`
+	Tokens        int        `json:"tokens"`
+	TokensUnknown string     `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
+	Plan          string     `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
+	PlanFrom      string     `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
+	Stopped       bool       `json:"stopped"`                 // you ended it, to tell the coordinator something
+	Limited       string     `json:"limited,omitempty"`       // what the engine said when it stopped at a usage limit
+	ResetsAt      *time.Time `json:"resetsAt,omitempty"`      // when that limit resets, when the engine said
 }
 
 type action struct {
@@ -116,9 +83,16 @@ type action struct {
 	Command     string    `json:"command"`
 	RequestedAt time.Time `json:"requestedAt"`
 	Asked       bool      `json:"asked"`
+	Held        bool      `json:"held"` // no answer came in time: the agent was told no, and it waits for you still
+	HeldAt      time.Time `json:"heldAt,omitzero"`
 	Decision    string    `json:"decision"`
 	Reason      string    `json:"reason"`
 	Finished    bool      `json:"finished"` // the tool ran and returned
+}
+
+func actionView(a *tasks.Action) action {
+	return action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command, RequestedAt: a.RequestedAt,
+		Asked: a.Asked, Held: a.Held, HeldAt: a.HeldAt, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
 }
 
 type eventEntry struct {
@@ -128,29 +102,6 @@ type eventEntry struct {
 	Actor       string         `json:"actor"`
 	Correlation string         `json:"correlation,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
-}
-
-func summaryOf(t *tasks.Task, roster agents.Roster) taskSummary {
-	needsYou := t.Question
-	if waiting := t.WaitingForYou(); needsYou == "" && len(waiting) > 0 {
-		needsYou = waiting[0].Agent + " asks to run: " + waiting[0].Command
-	}
-	if open := t.OpenTurn(); needsYou == "" && open != nil {
-		needsYou = open.Waiting
-	}
-	closing := t.Closing
-	if t.IsDone {
-		closing = ""
-	}
-	var said *told
-	if t.Told.Text != "" {
-		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
-	}
-	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), Column: columnOf(t, roster), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
-		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: coordinator.StoppedAt(t), Rank: t.Rank, Parked: t.Parked,
-		Parent: t.Parent, WaitingOn: t.WaitingOn,
-		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
-		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 
 // blockedBy are the stories a story builds on that aren't done, while it
@@ -176,50 +127,9 @@ func listOf(items []string) []string {
 	return items
 }
 
-// columnOf is the task's column on the board: Done, where you parked it, or
-// its work's column.
-func columnOf(t *tasks.Task, roster agents.Roster) string {
-	switch {
-	case t.IsDone:
-		return "done"
-	case t.Parked != "":
-		return t.Parked
-	}
-	return workColumn(t, roster)
-}
-
-// workColumn is the column of the task's work, done or parked or not: the
-// column you moved it to while that stands; otherwise its stage's: Review
-// while an agent that checks work has it, Shipping while one that ships
-// work has it.
-func workColumn(t *tasks.Task, roster agents.Roster) string {
-	if t.Column != "" {
-		return t.Column
-	}
-	agent, _ := roster.Get(stageOf(t))
-	switch agent.Column {
-	case agents.Reviews:
-		return "review"
-	case agents.Ships:
-		return "shipping"
-	}
-	return "in-progress"
-}
-
-// stageOf is the agent the coordinator last handed the task to, or "" before
-// the first handoff.
-func stageOf(t *tasks.Task) string {
-	for i := len(t.Trail) - 1; i >= 0; i-- {
-		if step := t.Trail[i]; step.From == t.Coordinator && step.To != tasks.You {
-			return step.To
-		}
-	}
-	return ""
-}
-
-func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
-	detail := taskDetail{taskSummary: summaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
-		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo}
+func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
+	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
+		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {
 		detail.Shared = append(detail.Shared, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})
@@ -232,26 +142,63 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
-			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
+			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
+		if resets := tu.ResetsAt; !resets.IsZero() {
+			detail.Turns[len(detail.Turns)-1].ResetsAt = &resets
+		}
 	}
 	for _, a := range t.Actions {
-		view := action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command,
-			RequestedAt: a.RequestedAt, Asked: a.Asked, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
-		detail.Actions = append(detail.Actions, view)
-		if a.Asked && a.Decision == tasks.Undecided {
-			detail.Approvals = append(detail.Approvals, view)
-		}
+		detail.Actions = append(detail.Actions, actionView(a))
 	}
-	for _, e := range log {
-		data := e.Data
-		if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
-			data = maps.Clone(data)
-			data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
-		}
-		detail.Events = append(detail.Events, eventEntry{Position: e.Position, At: e.At, Type: e.Type,
-			Actor: e.Actor.String(), Correlation: e.Correlation, Data: data})
+	for _, a := range t.WaitingForYou() {
+		detail.Approvals = append(detail.Approvals, actionView(a))
 	}
 	return detail
+}
+
+// entryOf is an event as the page reads it.
+func entryOf(e events.Event) eventEntry {
+	data := e.Data
+	if page, ok := data["html"].(string); ok { // a page kept in the log, from when agents published artifacts
+		data = maps.Clone(data)
+		data["html"] = fmt.Sprintf("(a page of %d bytes)", len(page))
+	}
+	return eventEntry{Position: e.Position, At: e.At, Type: e.Type, Actor: e.Actor.String(), Correlation: e.Correlation, Data: data}
+}
+
+// tokensUnknownOf says on how many turns the tokens couldn't be counted,
+// so the tokens used fall short of what was spent, and why: "Tokens unknown
+// on 3 turns: transcript not saved". "" when every turn was counted.
+func tokensUnknownOf(t *tasks.Task) string {
+	var reasons []string
+	count := map[string]int{}
+	for _, turn := range t.Turns {
+		if reason := turn.TokensUnknown; reason != "" {
+			if count[reason] == 0 {
+				reasons = append(reasons, reason)
+			}
+			count[reason]++
+		}
+	}
+	if len(reasons) == 1 {
+		return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(count[reasons[0]]), reasons[0])
+	}
+	total := 0
+	for i, reason := range reasons {
+		total += count[reason]
+		reasons[i] = fmt.Sprintf("%s (%d)", reason, count[reason])
+	}
+	if total == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(total), strings.Join(reasons, ", "))
+}
+
+func turnCount(n int) string {
+	if n == 1 {
+		return "1 turn"
+	}
+	return fmt.Sprintf("%d turns", n)
 }
 
 // turnOf is the turn a trail step leads to: the next turn of the agent it
@@ -270,47 +217,81 @@ func turnOf(t *tasks.Task, s tasks.Step) string {
 	return found
 }
 
-func agentsOf(roster agents.Roster) []agents.Agent {
-	list := []agents.Agent{}
+// agentView is an agent with the profile that judges its calls, when there
+// is a policy.
+type agentView struct {
+	agents.Agent
+	Effective *effectiveView `json:"effective,omitempty"`
+}
+
+func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
+	list := []agentView{}
 	for _, a := range roster {
 		if a.Workers == nil {
 			a.Workers = []string{} // the page reads a list, never null
 		}
-		list = append(list, a)
+		view := agentView{Agent: a}
+		if p != nil {
+			effective := effectiveOf(p, a.Profile)
+			view.Effective = &effective
+		}
+		list = append(list, view)
 	}
 	return list
 }
 
 type ideaView struct {
-	ID        string      `json:"id"`
-	Title     string      `json:"title"`
-	Problem   string      `json:"problem"`
-	Proposal  string      `json:"proposal"`
-	WhyNow    string      `json:"whyNow"`
-	Size      string      `json:"size"` // S, M or L
-	Risks     string      `json:"risks"`
-	BackedBy  []string    `json:"backedBy"`
-	DoubtedBy []string    `json:"doubtedBy"`
-	Task      string      `json:"task"` // the session it came from
-	Repo      string      `json:"repo"`
-	Epic      string      `json:"epic"` // the epic it follows up, "" for none
-	Kind      tasks.Kind  `json:"kind"` // what it suggests making of it: "" for a story, "epic"
-	State     ideas.State `json:"state"`
-	Note      string      `json:"note"`   // what you said when you accepted or dismissed it
-	Became    string      `json:"became"` // the task an accepted idea became
-	CreatedAt time.Time   `json:"createdAt"`
+	ID           string      `json:"id"`
+	Title        string      `json:"title"`
+	Problem      string      `json:"problem"`
+	Proposal     string      `json:"proposal"`
+	WhyNow       string      `json:"whyNow"`
+	Size         string      `json:"size"` // S, M or L
+	Risks        string      `json:"risks"`
+	BackedBy     []string    `json:"backedBy"`
+	DoubtedBy    []string    `json:"doubtedBy"`
+	Task         string      `json:"task"` // the session it came from
+	Repo         string      `json:"repo"`
+	Epic         string      `json:"epic"`       // the epic it follows up, "" for none
+	About        string      `json:"about"`      // the epic whose close started the session it came from, "" for none
+	AboutTitle   string      `json:"aboutTitle"` // that epic's title
+	Kind         tasks.Kind  `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
+	State        ideas.State `json:"state"`
+	Note         string      `json:"note"`               // what you said when you accepted or dismissed it
+	DecidedAt    time.Time   `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
+	Became       string      `json:"became"`             // the task an accepted idea became
+	BecameColumn string      `json:"becameColumn"`       // that task's column on the board now, as a task summary's column; "" when it can't be read
+	Auto         bool        `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
+	Repeats      string      `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
+	CreatedAt    time.Time   `json:"createdAt"`
+	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
+	// under your rule (ideas.NotAutoAccepted), even with that turned off;
+	// "" when it would, and for an idea that isn't open.
+	NotAutoAccepted string `json:"notAutoAccepted"`
 }
 
-func viewOf(idea *ideas.Idea) ideaView {
-	return ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
+// viewOf is the idea as the page shows it; about is the epic whose close
+// started its session, nil for none, became the task it became, nil for
+// none, and notAutoAccepted why Agentry wouldn't accept it for you.
+func viewOf(idea *ideas.Idea, about, became *tasks.Task, roster agents.Roster, notAutoAccepted string) ideaView {
+	view := ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
 		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
 		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
-		CreatedAt: idea.CreatedAt}
+		DecidedAt: idea.DecidedAt, Auto: idea.AutoAccepted, Repeats: idea.Repeats, CreatedAt: idea.CreatedAt,
+		NotAutoAccepted: notAutoAccepted}
+	if about != nil {
+		view.About, view.AboutTitle = about.ID, about.Title
+	}
+	if became != nil {
+		view.BecameColumn = became.BoardColumn(roster)
+	}
+	return view
 }
 
 // acceptance is what accepting an idea did (ideas.Acceptance).
 type acceptance struct {
 	Task     string `json:"task"`     // the task made from the idea
+	Column   string `json:"column"`   // its column on the board now, as a task summary's column; "" when it can't be read
 	Accepted bool   `json:"accepted"` // the idea is marked accepted
 	Refused  string `json:"refused"`  // why it isn't, "" once accepted
 }

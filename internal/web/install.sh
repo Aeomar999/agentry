@@ -9,6 +9,10 @@ set -eu
 
 server={{SERVER}}
 code={{CODE}}
+# The server's own CA, when it is served with one (-https): the download
+# trusts it alone, and joining keeps it. Both are '' when it needs none.
+ca={{CA}}
+ca_fingerprint={{CA_FINGERPRINT}}
 bin="${AGENTRY_BIN:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
@@ -22,7 +26,13 @@ esac
 
 say "Installing agentry in $bin"
 mkdir -p "$bin"
-if ! curl -fsSL "$server/worker/agentry?code=$code&os=$os&arch=$arch" -o "$bin/agentry.part"; then
+cacert=
+if [ -n "$ca" ]; then
+  cacert=$(mktemp)
+  trap 'rm -f "$cacert"' EXIT
+  printf '%s\n' "$ca" >"$cacert"
+fi
+if ! curl -fsSL ${cacert:+--cacert "$cacert"} "$server/worker/agentry?code=$code&os=$os&arch=$arch" -o "$bin/agentry.part"; then
   rm -f "$bin/agentry.part"
   say "The server has no agentry for $os/$arch." >&2
   exit 1
@@ -35,7 +45,7 @@ for tool in git claude; do
 done
 
 # Joins, or, if this machine has joined already, leaves the code unused.
-"$bin/agentry" worker join ${AGENTRY_WORKER_NAME:+-name "$AGENTRY_WORKER_NAME"} "$server" "$code"
+"$bin/agentry" worker join ${ca_fingerprint:+-ca-fingerprint "$ca_fingerprint"} ${AGENTRY_WORKER_NAME:+-name "$AGENTRY_WORKER_NAME"} "$server" "$code"
 
 # A worker started by hand before (as older installs did) would run beside
 # the service; it goes first.

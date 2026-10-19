@@ -6,7 +6,6 @@ import (
 	"slices"
 	"time"
 
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -23,11 +22,13 @@ type question struct {
 	Text      string    `json:"text"`    // the question, or the command to approve
 	Context   string    `json:"context"` // the step before it, so you know what led here
 
-	Action  string   `json:"action,omitempty"` // approval: the action's id
-	Tool    string   `json:"tool,omitempty"`
-	Reason  string   `json:"reason,omitempty"` // approval: the rule that asked
-	Options []string `json:"options,omitempty"`
-	Page    string   `json:"page,omitempty"` // a page the coordinator wrote to ask it
+	Action  string    `json:"action,omitempty"` // approval: the action's id
+	Tool    string    `json:"tool,omitempty"`
+	Reason  string    `json:"reason,omitempty"` // approval: the rule that asked
+	Held    bool      `json:"held,omitempty"`   // approval: no answer came in time, so the agent was told no
+	HeldAt  time.Time `json:"heldAt,omitzero"`
+	Options []string  `json:"options,omitempty"`
+	Page    string    `json:"page,omitempty"` // a page the coordinator wrote to ask it
 
 	TokensUsed int `json:"tokensUsed,omitempty"` // budget
 	Budget     int `json:"budget,omitempty"`
@@ -55,15 +56,16 @@ func questionsOf(t *tasks.Task) []question {
 	for _, a := range t.WaitingForYou() {
 		q := base("approval", a.ID)
 		q.Agent, q.At, q.Text, q.Action, q.Tool, q.Reason = a.Agent, a.RequestedAt, a.Command, a.ID, a.Tool, a.Reason
+		q.Held, q.HeldAt = a.Held, a.HeldAt
 		questions = append(questions, q)
 	}
 	if t.Question != "" {
 		q := base("question", "open")
 		q.Agent, q.At, q.Text, q.Options, q.Page = t.Asked.By, t.Asked.At, t.Question, t.Asked.Options, t.Asked.Page
-		switch coordinator.StoppedAt(t) {
-		case coordinator.LimitBudget:
+		switch t.StoppedAt() {
+		case tasks.LimitBudget:
 			q.Kind, q.TokensUsed, q.Budget = "budget", t.TokensUsed, t.Budget
-		case coordinator.LimitTurns:
+		case tasks.LimitTurns:
 			q.Kind, q.TurnsSinceAnswer, q.MaxTurns = "turns", t.TurnsSinceAnswer, t.MaxTurns
 		}
 		questions = append(questions, q)

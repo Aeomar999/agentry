@@ -7,6 +7,7 @@ import { timeAgo } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { waitingLine } from "@/lib/epics";
 import { EpicBadge, StoryProgress } from "./StoryProgress";
+import { QueuedBadge } from "./StatusBadges";
 
 interface TaskCardProps {
   task: TaskSummary;
@@ -65,14 +66,16 @@ export function TaskCard({
       <span className="flex items-start gap-1.5">
         {task.kind === "epic" && <EpicBadge />}
         <span className="line-clamp-2 text-[13px] leading-[18px] font-medium text-ink-primary">{task.title}</span>
+        {task.queued && <QueuedBadge />}
       </span>
       <span className="line-clamp-2 text-[12px] leading-4">{nowLine(task, coordinator)}</span>
       {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} />}
       <LabelList labels={task.labels} onPick={onPickLabel} />
       <span className="flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-ink-faint">
         {task.id}
-        <span className={cn("ml-auto", task.overBudget && "text-danger")}>{task.tokensUsed > 0 && tokens(task.tokensUsed)}</span>
-        <span>{task.turns} turns</span>
+        <span className="ml-auto">
+          <span className={cn(task.overBudget && "text-danger")}>{tokens(task.tokensUsed)} tok</span> · {task.turns} turns
+        </span>
         <span title={task.lastActiveAt}>{timeAgo(task.lastActiveAt)}</span>
       </span>
     </div>
@@ -80,7 +83,7 @@ export function TaskCard({
 }
 
 function nowLine(task: TaskSummary, coordinator: string) {
-  if (task.status === "done") return <span className="text-ink-muted">Done</span>;
+  if (task.status === "done") return <span className="text-ink-muted">{task.pushed ? "Shipped" : "Done"}</span>;
   if (task.status === "needs you") return <span className="text-warning">{task.needsYou}</span>;
   if (task.status === "held") return <span className="text-ink-muted">Waiting until you start it</span>;
   if (waitingLine(task)) return <span className="text-ink-muted">{waitingLine(task)}</span>;

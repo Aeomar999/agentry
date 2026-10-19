@@ -1,10 +1,13 @@
 package web
 
 import (
+	"crypto/tls"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
 // The install commands come for every address the server has, in order,
@@ -49,6 +52,48 @@ func TestIsLoopback(t *testing.T) {
 		if isLoopback(host) != want {
 			t.Errorf("isLoopback(%s) = %v", host, !want)
 		}
+	}
+}
+
+// Each way a reverse proxy says the client reached it over https marks the
+// request: its cookie is Secure, and the address it came to isn't served
+// with Agentry's own CA, as the proxy shows its own certificate.
+func TestAProxyMarksTheRequestAnyWay(t *testing.T) {
+	ca, err := tlsca.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{config: Config{CA: string(ca.PEM())}}
+	for _, c := range []struct {
+		header, value string
+		https         bool // the client reached the proxy over https
+	}{
+		{"X-Forwarded-Proto", "https", true},
+		{"X-Forwarded-Proto", "HTTPS, http", true},
+		{"X-Forwarded-Proto", "http", false},
+		{"Forwarded", "proto=https", true},
+		{"Forwarded", `for=192.0.2.60;Proto="HTTPS";by=203.0.113.43, for=198.51.100.17;proto=http`, true},
+		{"Forwarded", "for=192.0.2.60;proto=http, for=198.51.100.17;proto=https", false},
+		{"X-Forwarded-Ssl", "on", true},
+		{"X-Forwarded-Ssl", "ON", true},
+		{"X-Forwarded-Ssl", "off", false},
+	} {
+		request := httptest.NewRequest("GET", "/", nil)
+		request.Host = "agentry.example.com"
+		request.Header.Set(c.header, c.value)
+		if overHTTPS(request) != c.https {
+			t.Errorf("%s: %s: over https: %v", c.header, c.value, !c.https)
+		}
+		if url := requestURL(request); server.servedWithOwnCA(request, url) {
+			t.Errorf("%s: %s: %s is served with the server's own CA", c.header, c.value, url)
+		}
+	}
+
+	request := httptest.NewRequest("GET", "/", nil)
+	request.Host = "192.168.1.5:7800"
+	request.TLS = &tls.ConnectionState{}
+	if !server.servedWithOwnCA(request, requestURL(request)) {
+		t.Error("with no proxy header, the address isn't served with the server's own CA")
 	}
 }
 

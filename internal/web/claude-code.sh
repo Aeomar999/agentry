@@ -9,6 +9,10 @@ set -eu
 
 server={{SERVER}}
 code={{CODE}}
+# The server's own CA, when it is served with one (-https): the download
+# trusts it alone, and connecting keeps it. Both are '' when it needs none.
+ca={{CA}}
+ca_fingerprint={{CA_FINGERPRINT}}
 bin="${AGENTRY_BIN:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
@@ -22,7 +26,13 @@ esac
 
 say "Installing agentry in $bin"
 mkdir -p "$bin"
-if ! curl -fsSL "$server/integrations/agentry?code=$code&os=$os&arch=$arch" -o "$bin/agentry.part"; then
+cacert=
+if [ -n "$ca" ]; then
+  cacert=$(mktemp)
+  trap 'rm -f "$cacert"' EXIT
+  printf '%s\n' "$ca" >"$cacert"
+fi
+if ! curl -fsSL ${cacert:+--cacert "$cacert"} "$server/integrations/agentry?code=$code&os=$os&arch=$arch" -o "$bin/agentry.part"; then
   rm -f "$bin/agentry.part"
   say "The server has no agentry for $os/$arch." >&2
   exit 1
@@ -30,7 +40,7 @@ fi
 chmod +x "$bin/agentry.part"
 mv "$bin/agentry.part" "$bin/agentry"
 
-"$bin/agentry" mcp connect "$server" "$code"
+"$bin/agentry" mcp connect ${ca_fingerprint:+-ca-fingerprint "$ca_fingerprint"} "$server" "$code"
 
 if command -v claude >/dev/null 2>&1; then
   "$bin/agentry" mcp install

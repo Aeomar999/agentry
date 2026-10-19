@@ -45,21 +45,21 @@ type Roster struct {
 func FromEvents(stream []events.Event) Roster {
 	var r Roster
 	for _, e := range stream {
-		apply(&r, e)
+		r.Apply(e)
 	}
 	return r
 }
 
 // Next is the roster after e, built on a copy: r itself is left as it was.
-// Copying the slices is enough, as apply replaces whole any slice inside them.
+// Copying the slices is enough, as Apply replaces whole any slice inside them.
 func (r Roster) Next(e events.Event) Roster {
 	r.Connections, r.invites = slices.Clone(r.Connections), slices.Clone(r.invites)
-	apply(&r, e)
+	r.Apply(e)
 	return r
 }
 
-// apply changes the roster in place.
-func apply(r *Roster, e events.Event) {
+// Apply changes the roster in place by one accepted event of its stream.
+func (r *Roster) Apply(e events.Event) {
 	switch e.Type {
 	case events.ConnectionInvited:
 		expires, _ := time.Parse(time.RFC3339, e.Text("expires"))

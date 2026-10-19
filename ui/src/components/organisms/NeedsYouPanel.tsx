@@ -7,6 +7,7 @@ import { CodeBlock } from "@/components/molecules/CodeBlock";
 import { Panel } from "@/components/molecules/Panel";
 import { api } from "@/api/client";
 import type { Action, TaskDetail } from "@/api/types";
+import { dateTime, timeAgo } from "@/lib/time";
 import { useSaveLimit } from "./LimitEditor";
 import { useToast } from "./Toasts";
 
@@ -52,7 +53,7 @@ export function Approval({
   onChanged,
 }: {
   taskId: string;
-  action: Pick<Action, "id" | "agent" | "tool" | "command" | "reason">;
+  action: Pick<Action, "id" | "agent" | "tool" | "command" | "reason" | "requestedAt" | "held">;
   onChanged: () => void;
 }) {
   const notify = useToast();
@@ -62,7 +63,9 @@ export function Approval({
     setBusy(true);
     try {
       await api("POST", `/api/tasks/${taskId}/actions/${encodeURIComponent(action.id)}/${verdict}`, { reason: "decided on the page" });
-      notify("success", verdict === "approve" ? "Approved" : "Denied", action.command);
+      if (verdict === "deny") notify("success", "Denied", action.command);
+      else if (action.held) notify("success", "Approved: back to the coordinator", `${action.agent} may run it once, in its next turn.`);
+      else notify("success", "Approved", action.command);
       onChanged();
     } catch (error) {
       notify("danger", "Couldn't record that", (error as Error).message);
@@ -77,6 +80,13 @@ export function Approval({
         <span className="font-semibold text-ink-primary">{action.agent}</span> asks to run{" "}
         <span className="font-mono text-[12px]">{action.tool}</span>:
       </p>
+      {action.held && (
+        <p className="text-[12px] text-ink-secondary">
+          Asked <span title={dateTime(action.requestedAt)}>{timeAgo(action.requestedAt)}</span>; no answer came in time, so {action.agent}{" "}
+          was told no and carried on. If you approve, the coordinator hands it back and {action.agent} may run this exact command once, in
+          its next turn. Check it still fits the branch.
+        </p>
+      )}
       <CodeBlock text={action.command} className="max-h-60" />
       {action.reason && <p className="text-[12px] text-ink-muted">Rule: {action.reason}</p>}
       <div className="flex gap-2">

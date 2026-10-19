@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
@@ -34,12 +36,14 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /api/tasks":
 			io.WriteString(w, `[{"id":"task-2","title":"Ship it","repo":"/repo","status":"needs you","kind":"epic","stories":2,"storiesDone":2,"rank":-2},
-				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1},
+				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1,"budget":5000000,"tokensUsed":1200000,"maxTurns":24,"turnsSinceAnswer":4},
 				{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","rank":-3},
-				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4},
+				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4,"turns":7,"turnsSinceAnswer":2},
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
 		case "GET /api/tasks/task-3":
-			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished."}`)
+			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","tokensUnknown":"Tokens unknown on 2 turns: transcript not saved"}`)
+		case "GET /api/tasks/task-5":
+			io.WriteString(w, `{"id":"task-5","title":"Login page","repo":"/repo","status":"done","column":"done","pushed":true,"doneByYou":true}`)
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
 				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
@@ -133,8 +137,8 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 
 	board := c.tool("status", map[string]any{})
-	for _, want := range []string{"Agentry board for /repo", "task-1: deployer asks to run git push origin dev", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
-		"task-4 Release: deployer is working (Shipping)"} {
+	for _, want := range []string{"Agentry board for /repo", "task-1: Waiting for you to approve the push to dev (review_approvals)", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
+		"task-4 Release: deployer is working (Shipping) · 0 tokens (no limit) · 7 turns (no limit)"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("the board is missing %q:\n%s", want, board)
 		}
@@ -142,8 +146,12 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	if strings.Contains(board, "Elsewhere") {
 		t.Errorf("another repo's task is on this repo's board:\n%s", board)
 	}
-	if listed := c.tool("list_tasks", map[string]any{}); !strings.Contains(listed, "task-4 [working · Shipping] Release") {
-		t.Errorf("list_tasks should name the board column:\n%s", listed)
+	tasks := c.tool("list_tasks", map[string]any{})
+	if !strings.Contains(tasks, "task-4 [working · Shipping] Release · 0 tokens (no limit) · 7 turns (no limit)") {
+		t.Errorf("list_tasks should name the board column and what the task used:\n%s", tasks)
+	}
+	if !strings.Contains(tasks, "task-1 [needs you] Fix the login · 1.2M of 5M tokens · 4 of 24 turns") {
+		t.Errorf("list_tasks should say what the task used of its limits:\n%s", tasks)
 	}
 
 	created := c.tool("create_task", map[string]any{"title": "Add a retry", "description": "Retry on 503."})
@@ -165,6 +173,38 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	for _, call := range *calls {
 		if strings.Contains(call, "/approve") || strings.Contains(call, "Close the epic") {
 			t.Errorf("approved without the user: %s", call)
+		}
+	}
+}
+
+// A held action was refused long ago: the user hears that, when it was held
+// (with the zone), and what approving it does now.
+func TestAHeldApprovalSaysWhenItWasHeld(t *testing.T) {
+	heldAt := time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC)
+	agentry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/questions":
+			fmt.Fprintf(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev",
+				"action":"push-1","tool":"Bash","reason":"pushing asks you","held":true,"heldAt":%q}]`, heldAt.Format(time.RFC3339))
+		case "GET /api/tasks":
+			io.WriteString(w, `[]`)
+		default:
+			io.WriteString(w, `{}`)
+		}
+	}))
+	t.Cleanup(agentry.Close)
+	var asked string
+	c := startOn(t, client.Client{Where: client.Where{URL: agentry.URL}}, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = p.Message
+		return map[string]any{"action": "decline"}
+	})
+	c.tool("review_approvals", map[string]any{})
+	for _, want := range []string{"Bash: git push origin dev", "it was held at " + heldAt.Local().Format("Mon 2 Jan 15:04 MST") + ",", "deployer was told no",
+		"deployer may run this exact command once, in its next turn"} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the question should say %q:\n%s", want, asked)
 		}
 	}
 }
@@ -249,15 +289,51 @@ func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
 	}
 }
 
-// show_task says what a task has used of its budget and its turns.
+// show_task, list_tasks and status say what a task has used of its budget
+// and its turns, with no limit too, and none used yet.
 func TestTheTaskSaysItsLimits(t *testing.T) {
-	limited := detail{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, TurnsSinceAnswer: 18}
-	if got := budgetOf(limited) + " · " + turnsOf(limited); got != "1.2M of 5M tokens · 18 of 24 turns" {
-		t.Errorf("limited: %q", got)
+	for _, c := range []struct {
+		task task
+		want string
+	}{
+		{task{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, Turns: 30, TurnsSinceAnswer: 18}, "1.2M of 5M tokens · 18 of 24 turns"},
+		{task{TokensUsed: 950, Turns: 14, TurnsSinceAnswer: 3}, "950 tokens (no limit) · 14 turns (no limit)"},
+		{task{}, "0 tokens (no limit) · 0 turns (no limit)"},
+	} {
+		if got := usageOf(c.task); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
+		}
 	}
-	unlimited := detail{TokensUsed: 950, TurnsSinceAnswer: 3}
-	if got := budgetOf(unlimited) + " · " + turnsOf(unlimited); got != "950 tokens, no limit · 3 turns, no limit" {
-		t.Errorf("unlimited: %q", got)
+}
+
+// show_task says on how many turns the tokens couldn't be counted, and why,
+// as the server words it.
+func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
+	c, _ := start(t, false, nil)
+	if text := c.tool("show_task", map[string]any{"task": "task-3"}); !strings.Contains(text, "\nTokens unknown on 2 turns: transcript not saved\n") {
+		t.Errorf("show_task should say where the tokens are unknown:\n%s", text)
+	}
+}
+
+// show_task says a done task whose work an agent pushed is shipped, and
+// that the user moved it to Done when they did.
+func TestTheTaskSaysItShipped(t *testing.T) {
+	c, _ := start(t, false, nil)
+	text := c.tool("show_task", map[string]any{"task": "task-5"})
+	if !strings.Contains(text, "\nStatus: shipped · on the board: Done ·") || !strings.Contains(text, "\nMoved to Done by you.\n") {
+		t.Errorf("show_task should say it shipped and who moved it:\n%s", text)
+	}
+	for _, c := range []struct {
+		task task
+		want string
+	}{
+		{task{Status: "done", Pushed: true}, "shipped"},
+		{task{Status: "done"}, "done"},
+		{task{Status: "working", Pushed: true}, "working"},
+	} {
+		if got := statusOf(c.task); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
+		}
 	}
 }
 

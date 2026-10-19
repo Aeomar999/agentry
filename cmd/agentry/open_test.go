@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 )
 
 // Start Agentry prints a signed-in link for this computer, the public
@@ -19,7 +22,7 @@ func TestOpenPagePrintsEveryLink(t *testing.T) {
 	t.Cleanup(func() { openBrowser = saved })
 
 	every, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:7901")
-	network := networkURLs(every)
+	network := networkURLs(every, "http")
 	var out bytes.Buffer
 	c := client.Client{Where: client.Where{URL: "http://127.0.0.1:7901", Page: "https://agentry.example.com/", Listen: "0.0.0.0:7901"}, Token: "abc"}
 	if code := openPage(c, &out, &out); code != 0 {
@@ -59,6 +62,70 @@ func TestOpenPageOnThisComputerOnly(t *testing.T) {
 			"Open the first link in your browser. Agentry keeps running; Stop Agentry stops it.\n"
 		if out.String() != want {
 			t.Errorf("listening on %q, printed:\n%s", listen, out.String())
+		}
+	}
+}
+
+// open hands serve -https, -budget and -max-turns only when given, so
+// serve's own defaults hold otherwise.
+func TestOpenPassesItsServeFlagsOn(t *testing.T) {
+	var passed [][]string
+	saved := startServer
+	startServer = func(_, _, _ string, extra []string) error {
+		passed = append(passed, extra)
+		return errors.New("not starting in a test")
+	}
+	t.Cleanup(func() { startServer = saved })
+	for _, kv := range os.Environ() { // open drops a parent session's markers; restore them after
+		if name, value, _ := strings.Cut(kv, "="); engines.IsParentSessionVar(name) {
+			t.Setenv(name, value)
+		}
+	}
+	for _, args := range [][]string{
+		{"-https", "-budget", "0", "-max-turns=0"},
+		{"-budget", "2000000"},
+		{},
+	} {
+		var out bytes.Buffer
+		runOpen(append([]string{"-data", t.TempDir(), "-repo", t.TempDir(), "-port", "7905"}, args...), nil, &out, &out)
+	}
+	want := [][]string{{"-budget=0", "-https=true", "-max-turns=0"}, {"-budget=2000000"}, nil}
+	if !slices.EqualFunc(passed, want, slices.Equal) {
+		t.Errorf("passed %q, want %q", passed, want)
+	}
+}
+
+// With a server already running, open says the serve flags it was given
+// wait for the next start.
+func TestOpenSaysFlagsWaitForTheNextStart(t *testing.T) {
+	for passed, want := range map[string]string{
+		"-https=true -budget=0 -max-turns=5": "Agentry is already running; -https -budget -max-turns apply only when it next starts. Give -https on every start: Start Agentry doesn't pass it.",
+		"-budget=2000000":                    "Agentry is already running; -budget applies only when it next starts.",
+	} {
+		if said := waitingForNextStart(strings.Fields(passed)); said != want {
+			t.Errorf("passed %s, said %q, want %q", passed, said, want)
+		}
+	}
+}
+
+// With -https, open's links are https, this computer's at localhost.
+func TestOpenPageOverHTTPS(t *testing.T) {
+	saved := openBrowser
+	openBrowser = func(string) error { return errors.New("no browser") }
+	t.Cleanup(func() { openBrowser = saved })
+	c := client.Client{Where: client.Where{URL: "http://127.0.0.1:7901", Page: "https://127.0.0.1:7901", Listen: "127.0.0.1:7901", HTTPS: true}, Token: "abc"}
+	if links := pageLinks(c); len(links) != 1 || links[0].url != "https://localhost:7901/?token=abc" {
+		t.Errorf("links %v", links)
+	}
+	every, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:7901")
+	c.Listen = "0.0.0.0:7901"
+	links := pageLinks(c)
+	if want := len(networkURLs(every, "https")) + 1; len(links) != want {
+		t.Fatalf("links %v, want %d", links, want)
+	}
+	for _, link := range links {
+		if !strings.HasPrefix(link.url, "https://") {
+			t.Errorf("a link over plain HTTP: %v", link)
 		}
 	}
 }

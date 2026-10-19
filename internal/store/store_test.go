@@ -25,6 +25,8 @@ type created struct {
 
 func newCreated() *created { return &created{streams: map[string]bool{}} }
 
+func (c *created) Since() int64 { return 0 }
+
 func (c *created) Load(stream string, accepted []events.Event) {
 	for _, e := range accepted {
 		c.Apply(e)
@@ -39,6 +41,10 @@ func (c *created) Apply(e events.Event) {
 	if e.Type == events.TaskCreated {
 		c.streams[e.Stream] = true
 	}
+}
+
+func (c *created) Refold(stream string, before []events.Event, e events.Event) {
+	c.Load(stream, append(before, e))
 }
 
 func (c *created) has(stream string) bool {
@@ -57,6 +63,19 @@ func onlyOnce(model *created) OrderCheck {
 	}
 }
 
+// noteWritten is the one type of a feature's streams, note-N, that the
+// test stores know beside the core's.
+const noteWritten events.Type = "note.written"
+
+var withNotes = func() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(events.Registration{Prefix: "note-",
+		Types: map[events.Type]events.Spec{noteWritten: {Writers: []events.ActorKind{events.System}}}})
+	if err != nil {
+		panic(err)
+	}
+	return catalogue
+}()
+
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	s, _ := openAt(t, filepath.Join(t.TempDir(), "agentry.db"))
@@ -67,7 +86,7 @@ func openTestStore(t *testing.T) *Store {
 func openAt(t *testing.T, path string) (*Store, *created) {
 	t.Helper()
 	model := newCreated()
-	s, err := Open(path, model, onlyOnce(model))
+	s, err := Open(path, withNotes, model, onlyOnce(model))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,13 +178,12 @@ func TestReopenKeepsTheLog(t *testing.T) {
 
 func TestCreateNamesTheNextStreamOfItsKind(t *testing.T) {
 	s := openTestStore(t)
-	idea := events.Proposal{Actor: events.Actor{Kind: events.System, ID: "agentry"}, Type: events.IdeaSuggested,
-		Data: map[string]any{"title": "x", "problem": "p", "proposal": "f", "size": "S", "repo": "/src/app", "task": "task-1"}}
+	note := events.Proposal{Actor: events.Actor{Kind: events.System, ID: "agentry"}, Type: noteWritten}
 	var names []string
-	for _, p := range []events.Proposal{newTask(""), idea, newTask(""), idea} {
+	for _, p := range []events.Proposal{newTask(""), note, newTask(""), note} {
 		prefix := "task-"
-		if p.Type == events.IdeaSuggested {
-			prefix = "idea-"
+		if p.Type == noteWritten {
+			prefix = "note-"
 		}
 		created, rejection, err := s.Create(prefix, p)
 		if rejection != nil || err != nil {
@@ -173,7 +191,7 @@ func TestCreateNamesTheNextStreamOfItsKind(t *testing.T) {
 		}
 		names = append(names, created.Stream)
 	}
-	if want := []string{"task-1", "idea-1", "task-2", "idea-2"}; !slices.Equal(names, want) {
+	if want := []string{"task-1", "note-1", "task-2", "note-2"}; !slices.Equal(names, want) {
 		t.Errorf("made %v, want %v", names, want)
 	}
 }

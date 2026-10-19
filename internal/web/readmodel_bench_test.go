@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -44,7 +45,7 @@ func TestReadModelBench(t *testing.T) {
 	t.Logf("  store.Open:                  %8s", median(func() { openAndClose(t, path) }))
 	t.Logf("  heap held by the state:      %8d KB", heldBy(func() any { return openAndClose(t, path) })/1024)
 
-	s, state := storetest.Open(t, path)
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	raw, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +94,7 @@ func TestReadModelBench(t *testing.T) {
 	roster := agents.FromEvents(rosterEvents)
 	var summaries []taskSummary
 	for _, task := range built {
-		summaries = append(summaries, summaryOf(task, roster))
+		summaries = append(summaries, tasks.SummaryOf(task, roster))
 	}
 	var encodedSize int
 	encode := median(func() { encodedSize = encodedLen(t, summaries) })
@@ -114,7 +115,8 @@ func TestReadModelBench(t *testing.T) {
 	t.Log("rules.Check, which every Propose runs under its lock:")
 	proposal := events.Proposal{Stream: biggest, Actor: events.Actor{Kind: events.Agent, ID: "bench"}, Type: events.ActionResult,
 		Correlation: "no-such-action", Data: map[string]any{}}
-	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state) }))
+	catalogue := storetest.WithIdeas()
+	t.Logf("  on %-25s %8s", biggest+":", median(func() { rules.Check(proposal, state, catalogue) }))
 
 	t.Log("what replaying everything costs, as Open does once:")
 	var logged int
@@ -204,8 +206,9 @@ func watchdogLoad(state *current.State, stop chan struct{}) {
 // it, and returns the state.
 func openAndClose(t *testing.T, path string) *current.State {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(path, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state) })
+	catalogue := storetest.WithIdeas()
+	state := current.New(catalogue, ideas.Streams())
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}

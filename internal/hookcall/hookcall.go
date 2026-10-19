@@ -8,6 +8,7 @@ import "encoding/json"
 // The environment every agent session has, read by `agentry hook`.
 const (
 	EnvServer   = "AGENTRY_SERVER"     // the server's base URL
+	EnvCA       = "AGENTRY_SERVER_CA"  // the CA the server's https is pinned to, PEM encoded; unset for plain HTTP
 	EnvToken    = "AGENTRY_HOOK_TOKEN" // lets the hook post hook calls, and nothing else
 	EnvTask     = "AGENTRY_TASK"
 	EnvTurn     = "AGENTRY_TURN"
@@ -44,9 +45,12 @@ type Call struct {
 }
 
 type Ending struct {
-	Tokens    int     `json:"tokens"`
-	Report    string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
-	Knowledge *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
+	Tokens int `json:"tokens"`
+	// Why Tokens is 0, when the transcript couldn't tell; a worker older
+	// than this field sends none.
+	TokensUnknown string  `json:"tokensUnknown,omitempty"`
+	Report        string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
+	Knowledge     *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
 }
 
 // Reply is what the hook prints and exits with.

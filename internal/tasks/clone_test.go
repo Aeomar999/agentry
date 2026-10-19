@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 	"time"
-	"unsafe"
 
+	"gitlab.com/dev.chempa/agentry/internal/deeptest"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
@@ -14,93 +14,12 @@ import (
 // field added to Task later is checked without anyone adding it here.
 func TestACloneSharesNothing(t *testing.T) {
 	var task Task
-	fill(t, reflect.ValueOf(&task).Elem())
+	deeptest.Fill(t, reflect.ValueOf(&task).Elem())
 	clone := task.Clone()
 	if !reflect.DeepEqual(&task, clone) {
 		t.Fatalf("the clone differs from the task:\n%+v\n%+v", task, *clone)
 	}
-	shared(t, "Task", reflect.ValueOf(task), reflect.ValueOf(*clone))
-}
-
-// fill gives every field, exported or not, a value: every pointer, map and
-// slice is non-empty, and slices have spare capacity.
-func fill(t *testing.T, v reflect.Value) {
-	if v.Type() == reflect.TypeFor[time.Time]() {
-		v.Set(reflect.ValueOf(time.Unix(1, 0)))
-		return
-	}
-	switch v.Kind() {
-	case reflect.String:
-		v.SetString("x")
-	case reflect.Bool:
-		v.SetBool(true)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		v.SetInt(1)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		v.SetUint(1)
-	case reflect.Float32, reflect.Float64:
-		v.SetFloat(1)
-	case reflect.Struct:
-		for _, field := range v.Fields() {
-			fill(t, reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem()) // unexported ones too
-		}
-	case reflect.Pointer:
-		p := reflect.New(v.Type().Elem())
-		fill(t, p.Elem())
-		v.Set(p)
-	case reflect.Slice:
-		s := reflect.MakeSlice(v.Type(), 2, 4)
-		for i := range s.Len() {
-			fill(t, s.Index(i))
-		}
-		v.Set(s)
-	case reflect.Map:
-		key, value := reflect.New(v.Type().Key()).Elem(), reflect.New(v.Type().Elem()).Elem()
-		fill(t, key)
-		fill(t, value)
-		m := reflect.MakeMap(v.Type())
-		m.SetMapIndex(key, value)
-		v.Set(m)
-	default:
-		t.Fatalf("fill doesn't know a %s", v.Type())
-	}
-}
-
-// shared fails for every pointer, map or slice array a and b both hold.
-// Strings never change and time.Time's location is shared by design, so
-// they are not checked.
-func shared(t *testing.T, path string, a, b reflect.Value) {
-	if a.Type() == reflect.TypeFor[time.Time]() {
-		return
-	}
-	switch a.Kind() {
-	case reflect.Pointer, reflect.Map, reflect.Slice:
-		if a.IsNil() || a.Kind() != reflect.Pointer && a.Len() == 0 {
-			t.Errorf("%s is empty in the original, so nothing is checked", path)
-			return
-		}
-		if a.Pointer() == b.Pointer() {
-			t.Errorf("%s is shared with the clone", path)
-		}
-	}
-	switch a.Kind() {
-	case reflect.Pointer:
-		shared(t, path, a.Elem(), b.Elem())
-	case reflect.Map:
-		for _, key := range a.MapKeys() {
-			shared(t, path+"[key]", a.MapIndex(key), b.MapIndex(key))
-		}
-	case reflect.Slice:
-		for i := range a.Len() {
-			shared(t, path+"[i]", a.Index(i), b.Index(i))
-		}
-	case reflect.Struct:
-		for field, value := range a.Fields() {
-			shared(t, path+"."+field.Name, value, b.FieldByIndex(field.Index))
-		}
-	case reflect.Interface, reflect.Chan, reflect.Func, reflect.UnsafePointer, reflect.Array:
-		t.Errorf("%s is a %s, which shared doesn't check", path, a.Kind())
-	}
+	deeptest.Shared(t, "Task", reflect.ValueOf(task), reflect.ValueOf(*clone))
 }
 
 // Next must leave the task it is given as it was, and folding it over a
@@ -119,7 +38,7 @@ func TestNextLeavesTheTaskAsItWas(t *testing.T) {
 		}
 		task = next
 	}
-	if task == nil || !task.IsDone || !task.DoneByYou || task.WrapUp == nil || len(task.Turns) != 6 || len(task.Actions) != 2 {
+	if task == nil || !task.IsDone || !task.DoneByYou || task.WrapUp == nil || len(task.Turns) != 6 || len(task.Actions) != 4 {
 		t.Errorf("the log didn't run through: %+v", task)
 	}
 }
@@ -168,8 +87,17 @@ func everyEvent() []events.Event {
 	log = add(log, worker, events.ActionResult, "tool-1", map[string]any{})
 	log = add(log, engineer, events.ActionRequested, "tool-2", map[string]any{"tool": "Bash", "command": "rm x"})
 	log = add(log, policy, events.ActionDenied, "tool-2", map[string]any{"reason": "no"})
+	log = add(log, engineer, events.ActionRequested, "tool-3", map[string]any{"tool": "Bash", "command": "git push"})
+	log = add(log, policy, events.ActionAsked, "tool-3", map[string]any{"reason": "ask rule"})
+	log = add(log, policy, events.ActionHeld, "tool-3", nil)
+	log = add(log, you, events.ActionApproved, "tool-3", map[string]any{"reason": "late"})
+	log = add(log, engineer, events.ActionRequested, "tool-4", map[string]any{"tool": "Bash", "command": "git push"})
+	log = add(log, policy, events.ActionApproved, "tool-4", map[string]any{"reason": "you approved this earlier", "pass": "tool-3"})
 	log = add(log, agentry, events.FileAdded, "", map[string]any{"name": "profile.txt", "hash": "h1", "size": float64(10), "by": "builder"})
 	log = add(log, agentry, events.FilesCollected, "", map[string]any{"turn": "turn-1"})
+	log = add(log, worker, events.TurnLimited, "turn-1", map[string]any{"agent": "builder", "error": "rate_limit",
+		"details": "You've hit your session limit", "resetsAt": "2026-10-20T03:00:00Z"})
+	log = add(log, worker, events.TurnResumed, "turn-1", map[string]any{"agent": "builder", "reason": "engine"})
 	log = add(log, worker, events.TurnEnded, "turn-1", map[string]any{"agent": "builder", "report": "Profiled.", "tokens": float64(300)})
 	log = add(log, agentry, events.FilesDelivered, "", map[string]any{"worker": "laptop", "version": "1"})
 	log = add(log, lead, events.FileFetching, "", map[string]any{"machine": "laptop", "path": "/db", "as": "db"})
@@ -195,6 +123,7 @@ func everyEvent() []events.Event {
 	log = add(log, worker, events.TurnStarted, "turn-3", map[string]any{"agent": "builder", "hash": "h"})
 	log = add(log, you, events.TurnStopped, "turn-3", map[string]any{})
 	log = add(log, lead, events.TaskDone, "", map[string]any{"summary": "Fast now."})
+	log = add(log, agentry, events.FollowUpsSkipped, "", map[string]any{"reason": "No Visionaries team.", "close": float64(40)})
 	log = add(log, you, events.TaskReopened, "", map[string]any{"text": "One more thing."})
 	log = add(log, lead, events.TaskDone, "", map[string]any{"summary": "Done again."})
 	log = add(log, you, events.TaskReopened, "", map[string]any{"text": "And the board."})

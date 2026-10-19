@@ -1,4 +1,4 @@
-"""The figure in docs/design, drawn with docs/diagrams' flat kit:
+"""The figures in docs/design, drawn with docs/diagrams' flat kit:
 cd docs/design/source && python3 -B figures.py .."""
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "diagrams", "source"))
@@ -35,4 +35,38 @@ for x, title, sub, color in readers:
     f.card(x, 484, 246, 84, title, sub, color)
 f.note(48, 604, "Readers never write to the state; only step 4 does, under the store's lock.", size=12.5)
 with open(f"{OUT}/read-model.svg", "w") as out:
+    out.write(f.svg())
+
+f = Figure(1200, 800, "How a feature plugs in", "Agentry",
+           "A feature registers once, in serve.go. Each part lands in one core slot, and the core never names it.")
+f.panel(250, 140, 440, 620, "Core: names no feature")
+f.panel(790, 140, 362, 620, "The Ideas feature, internal/ideas")
+rows = [("events catalogue", "types, writers, a stream prefix", "teal",
+         "Types in idea-N streams", "idea.suggested, accepted, dismissed"),
+        ("Store.Propose, rules.Check", "check 3 under the one write lock", "amber",
+         "Streams.Check", "suggested once, decided once while open"),
+        ("current.State", "one applier, rebuilt from the log", "teal",
+         "FromEvents, Next", "the ideas slice, built and applied"),
+        ("Coordinator loop", "briefs and done decisions", "clay",
+         "Coordinator hook", "on done, a Visionaries lead's ideas"),
+        ("web: routes mounted by Route.Auth", "UI, desk or signed, never unwrapped", "blue",
+         "Routes", "/api/ideas, accept, dismiss"),
+        ("GET /api/features, /api/waiting", "what shows, and what waits for you", "blue",
+         "Manifest, Waiting", "on while the team or any idea exists"),
+        ("mcp: tools", "for Claude Code sessions", "blue",
+         "Tools", "list_ideas, accept_idea, dismiss_idea"),
+        ("UI shell: router, sidebar, Ctrl K", "shows what the manifest says", "green",
+         "FeatureUI, ui/src/features/ideas", "the /ideas page, nav item, command")]
+for i, (core, core_sub, color, mine, mine_sub) in enumerate(rows):
+    y = 184 + 70 * i
+    f.card(270, y, 400, 56, core, core_sub, color)
+    f.card(808, y, 326, 56, mine, mine_sub, color)
+    f.arrow(f"M802,{y+28} H676", color, width=1.5)
+f.store(130, 250, 160, 120, "The log", "agentry.db")
+f.note(130, 400, "Propose commits;", anchor="middle")
+f.note(130, 418, "State replays it", anchor="middle")
+f.arrow("M266,282 H214", "teal", width=1.5)
+f.arrow("M214,352 H266", "teal", width=1.5)
+f.note(48, 784, "It writes only through Core.Log, which checks its types. Without its code, its events stay, are skipped and counted, and new ones are refused.", size=12.5)
+with open(f"{OUT}/extensions.svg", "w") as out:
     out.write(f.svg())

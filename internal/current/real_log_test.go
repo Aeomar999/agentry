@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -35,13 +36,13 @@ func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := store.Open(path, nil, nil)
+	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 
-	state := New()
+	state := New(withIdeas, ideas.Streams())
 	accepted := map[string][]events.Event{} // each stream's accepted events so far
 	touched := map[string]bool{}
 	applied := 0
@@ -96,11 +97,13 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 		return equalReplay(stream, accepted, infallible(workers.FromEvents), held(state.Workers()))
 	case events.ConnectionsStream:
 		return equalReplay(stream, accepted, infallible(connections.FromEvents), held(state.Connections()))
+	case events.SettingsStream:
+		return equalReplay(stream, accepted, infallible(settings.FromEvents), held(state.Settings()))
 	case events.PolicyStream:
 		return nil
 	}
-	if events.IsIdeaStream(stream) {
-		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(stream) })
+	if ideas.IsStream(stream) {
+		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return ideas.Get(state, stream) })
 	}
 	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
 }

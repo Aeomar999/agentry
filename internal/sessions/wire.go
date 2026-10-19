@@ -78,20 +78,24 @@ func readFrame(r io.Reader) (byte, []byte, error) {
 	return header[0], payload, nil
 }
 
-// dirEnv names another folder for the sessions: a test run's own, so tests
+// DirEnv names another folder for the sessions: a test run's own, so tests
 // running at once never touch each other's sessions. Hosts get it from the
 // program that started them.
-const dirEnv = "AGENTRY_SESSIONS_DIR"
+const DirEnv = "AGENTRY_SESSIONS_DIR"
 
+// A test run takes a folder of its own even when it inherits one, as when
+// two runs start from the same shell: sharing it, each would stop the
+// other's sessions as its own leftovers. A host keeps the folder it was
+// given, which is its run's.
 func init() {
-	if testing.Testing() && os.Getenv(dirEnv) == "" {
-		os.Setenv(dirEnv, filepath.Join(os.TempDir(), fmt.Sprintf("agentry-test-%d", os.Getpid())))
+	if testing.Testing() && os.Getenv(hostEnv) == "" {
+		os.Setenv(DirEnv, filepath.Join(os.TempDir(), fmt.Sprintf("agentry-test-%d", os.Getpid())))
 	}
 }
 
 // Dir is where the sessions' sockets are: this user's, on this machine.
 func Dir() string {
-	if dir := os.Getenv(dirEnv); dir != "" {
+	if dir := os.Getenv(DirEnv); dir != "" {
 		return dir
 	}
 	return sessionsDir()
@@ -101,6 +105,9 @@ func socketPath(name string) string { return filepath.Join(Dir(), name+".sock") 
 
 // ask sends one request to the session's host and returns its answer.
 func ask(name string, r request) (answer, error) {
+	if liveUnderTest() {
+		return answer{}, errLiveUnderTest
+	}
 	conn, err := net.DialTimeout("unix", socketPath(name), 2*time.Second)
 	if err != nil {
 		return answer{}, err

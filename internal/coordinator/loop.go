@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -31,53 +32,21 @@ type Loop struct {
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
+	held   held     // tasks waiting for a slot (slots.go)
 
-	Clones string // where repos the user names by a git address are cloned, for a "move"
+	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
+
+	Clones   string             // where repos the user names by a git address are cloned, for a "move"
+	Defaults tasks.Limits       // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
+	Features []features.Feature // every feature in this binary: their coordinator hooks add to briefs and act on dones (features.go)
 }
 
-var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
+var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 
-// AsksForItself says whether the task's open question is the loop's own, one
-// of its stops, rather than one a coordinator asked.
-func AsksForItself(task *tasks.Task) bool { return task.Question != "" && task.Asked.By == agentry.ID }
-
-// The limits that stop a task, as its question says.
-const (
-	LimitBudget = "budget"
-	LimitTurns  = "turns"
-)
-
-// StoppedAt is the limit the task's open question is the loop's stop for,
-// LimitBudget or LimitTurns, or "" for any other question: raising that
-// limit answers it, and nothing else does.
-func StoppedAt(task *tasks.Task) string {
-	switch {
-	case !AsksForItself(task):
-		return ""
-	case task.Asked.Limit != "":
-		return task.Asked.Limit
-	case task.Asked.Fetch != nil:
-		return "" // the copy question
-	}
-	// Asked before the question said which: the stops' fixed words tell, and
-	// the loop's other questions, which carry no limit, never match them.
-	switch {
-	case strings.HasPrefix(task.Question, oldTurnStop):
-		return LimitTurns
-	case strings.HasPrefix(task.Question, oldBudgetStop):
-		return LimitBudget
-	}
-	return ""
-}
-
-// How the loop's stops at the limits began before they said their limit.
-const (
-	oldTurnStop   = "This task has had "
-	oldBudgetStop = "This task has used "
-)
-
+// NewLoop makes the loop before the server takes requests, so a close
+// written once it does is never mistaken for history.
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, state: state, runner: runner, fleet: fleet}
+	return &Loop{store: s, state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:
@@ -92,18 +61,29 @@ func (l *Loop) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		for _, id := range touchedTasks(batch) {
-			l.act(id)
-		}
+		l.take(batch)
 	}
 }
 
-// touchedTasks are the tasks a batch changed, each once, in order.
-func touchedTasks(batch []events.Event) []string {
+// take acts on each task a batch of the log touched, then on those waiting
+// for a slot, as the batch may have freed one, then follows up the closes
+// in it.
+func (l *Loop) take(batch []events.Event) {
+	for _, id := range touchedTasks(l.store.Catalogue(), batch) {
+		l.act(id)
+	}
+	l.wakeHeld()
+	l.followUps(batch)
+}
+
+// touchedTasks are the tasks a batch changed, each once, in order. A
+// foreign stream is no task's, so the loop never reads one as a task. When
+// tasks can be archived, an archived task is skipped here too.
+func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 	seen := map[string]bool{}
 	var ids []string
 	for _, e := range batch {
-		if !events.IsTaskStream(e.Stream) || e.Type == events.ProposalRejected || seen[e.Stream] {
+		if !catalogue.IsTaskStream(e.Stream) || e.Type == events.ProposalRejected || seen[e.Stream] {
 			continue
 		}
 		seen[e.Stream] = true
@@ -113,7 +93,11 @@ func touchedTasks(batch []events.Event) []string {
 }
 
 func (l *Loop) act(id string) {
+	delete(l.held, id) // held again below if its move is still a turn with no slot
 	task, roster, err := l.load(id)
+	if errors.Is(err, current.ErrArchived) {
+		return // done, and it takes nothing more
+	}
 	if err != nil || task == nil {
 		slog.Error("coordinator loop: reading the task", "task", id, "err", err)
 		return
@@ -147,7 +131,7 @@ func (l *Loop) act(id string) {
 	}
 	if task.Fetching != nil && !task.IsDone {
 		fetch := *task.Fetching
-		l.beside(task.ID, func(ctx context.Context) { l.fetch(ctx, task, fetch) })
+		l.beside(task, func(ctx context.Context) events.Proposal { return l.fetch(ctx, task, fetch) })
 		return
 	}
 
@@ -155,8 +139,15 @@ func (l *Loop) act(id string) {
 	case PrepareWorktree:
 		l.prepareWorktree(task)
 	case StartTurn:
+		if l.holdBack(task) {
+			return
+		}
 		l.startTurn(task, roster, move)
 	case ApplyDecision:
+		if why := l.unreadable(task, roster, move.Decision); why != "" {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": why})
+			return
+		}
 		l.apply(task, roster, move.Decision)
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
@@ -241,9 +232,9 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 		return // the task's files are on their way: the loop comes back here
 	}
 	shared, _ := l.filesFor(task)
-	brief := workerBrief(task, move.Agent, move.Handoff, shared)
+	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.dismissedFor(task, move.Agent))
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -347,14 +338,8 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			return
 		}
 		summary := decision.Summary
-		if len(decision.Ideas) > 0 {
-			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
-			if own, _ := roster.Get(task.Coordinator); isVisionaries(own) {
-				note = l.suggest(task, decision.Ideas)
-			}
-			if note != "" {
-				summary += "\n\n" + note
-			}
+		if note := l.onDone(task, roster, decision); note != "" {
+			summary += "\n\n" + note
 		}
 		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)
@@ -383,27 +368,26 @@ func (l *Loop) recoverDecision(task *tasks.Task, decision Decision) {
 // can ask the user.
 func (l *Loop) moveRepo(task *tasks.Task, coordinator events.Actor, repo string) {
 	if !worktrees.IsAddress(repo) {
-		l.movedTo(task, coordinator, repo, repo, worktrees.IsRepo(repo))
+		l.tell(movedTo(task, coordinator, repo, repo, worktrees.IsRepo(repo)))
 		return
 	}
-	l.beside(task.ID, func(context.Context) {
+	l.beside(task, func(context.Context) events.Proposal {
 		folder, err := worktrees.Clone(l.Clones, repo)
 		reason := ""
 		if err != nil {
 			reason = sentence(err) + " Ask the user to give Agentry access to it, or to clone it here themselves."
 		}
-		l.movedTo(task, coordinator, repo, folder, reason)
+		return movedTo(task, coordinator, repo, folder, reason)
 	})
 }
 
 // movedTo tells the move to folder, the repo named as repo, or why it
 // couldn't be made.
-func (l *Loop) movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason string) {
+func movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason string) events.Proposal {
 	if reason != "" {
-		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the task couldn't move to " + repo + ": " + reason})
-		return
+		return told(task, agentry, events.IssueRaised, map[string]any{"reason": "the task couldn't move to " + repo + ": " + reason})
 	}
-	l.propose(task.ID, coordinator, events.RepoChanged, map[string]any{"repo": folder})
+	return told(task, coordinator, events.RepoChanged, map[string]any{"repo": folder})
 }
 
 // request opens a task for another team, for what this one needs from it,
@@ -413,9 +397,10 @@ func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator event
 	asker, _ := roster.Get(task.Coordinator)
 	description := decision.Request + "\n\n(Asked by the " + asker.TeamName() + " team's coordinator, " + task.Coordinator +
 		", for " + task.ID + ": " + task.Title + ". When this is done, your summary goes back to them.)"
+	limits := tasks.NewLimits(l.Defaults, task)
 	child, refused := l.newTask(coordinator, map[string]any{
 		"title": firstLine(decision.Request), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": task.Budget, "maxTurns": task.MaxTurns, "labels": listOf(task.Labels)})
+		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": limits.Budget, "maxTurns": limits.MaxTurns, "labels": listOf(task.Labels)})
 	if refused != "" {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the request to the " + lead.TeamName() + " team failed: " + refused})
 		return
@@ -430,6 +415,7 @@ func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator event
 // can't be made, the ones before it are kept and the coordinator hears why.
 func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.Actor, decision Decision) {
 	own, _ := roster.Get(task.Coordinator)
+	limits := tasks.NewLimits(l.Defaults, task)
 	var ids, titles []string
 	refused := ""
 	for i, story := range decision.Stories {
@@ -448,7 +434,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 		var id string
 		if id, refused = l.newTask(coordinator, map[string]any{
 			"title": strings.TrimSpace(story.Title), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": task.Budget, "maxTurns": task.MaxTurns,
+			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": limits.Budget, "maxTurns": limits.MaxTurns,
 			"labels": listOf(task.Labels)}); refused != "" {
 			refused = fmt.Sprintf("story %d wasn't made: %s", i+1, refused)
 			break
@@ -516,10 +502,14 @@ func (l *Loop) wakeStories(epic *tasks.Task) {
 }
 
 // blocked is a story whose stories before it aren't done: its worktree
-// would start from a dev without their work.
+// would start from a dev without their work. An archived story is done.
 func (l *Loop) blocked(story *tasks.Task) bool {
 	for _, id := range story.After {
-		if before, _, err := l.load(id); err != nil || before == nil || !before.IsDone {
+		before, _, err := l.load(id)
+		if errors.Is(err, current.ErrArchived) {
+			continue
+		}
+		if err != nil || before == nil || !before.IsDone {
 			return true
 		}
 	}
@@ -570,15 +560,52 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 
 // portsInUse are the ports of tasks whose work is on the machine and not
 // over: unfinished, or done by you and still wrapping up, since a reopen
-// then works in the same worktree.
+// then works in the same worktree. A broken task's port counts too, read
+// from its stream, since nothing says its worktree has gone. An archived
+// task is done, so it is skipped like one, without reading its stream.
 func (l *Loop) portsInUse(machine string) []int {
 	var ports []int
-	for _, task := range l.state.Tasks() {
-		if (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
+	for _, id := range l.state.TaskIDs() {
+		task, err := l.state.Task(id)
+		if errors.Is(err, current.ErrArchived) {
+			continue
+		}
+		if err != nil {
+			if port, ok := l.lastPort(id, machine); ok {
+				ports = append(ports, port)
+			}
+			continue
+		}
+		if task != nil && (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
 			ports = append(ports, task.Worktree.Port)
 		}
 	}
 	return ports
+}
+
+// lastPort is the port a task's stream last gave its worktree, if that
+// worktree is on the machine: the worker and port of its last
+// worktree.ready or worktree.moved, read as tasks' apply reads them. It
+// needs none of the task's other state, so it works on a broken task. A
+// reopen or a repo move that clears the worktree is ignored, so a broken
+// task may hold a stale port: one port at most, which is fine.
+func (l *Loop) lastPort(id, machine string) (int, bool) {
+	stream, err := l.store.Stream(id)
+	if err != nil {
+		slog.Warn("coordinator loop: a broken task's port can't be read", "task", id, "err", err)
+		return 0, false
+	}
+	var worker string
+	var port int
+	for _, e := range stream {
+		switch e.Type {
+		case events.WorktreeReady:
+			worker, port = cmp.Or(e.Text("worker"), workers.Local), e.Number("port")
+		case events.WorktreeMoved:
+			worker, port = e.Text("worker"), e.Number("port")
+		}
+	}
+	return port, worker != "" && worker == machine
 }
 
 func (l *Loop) load(id string) (*tasks.Task, agents.Roster, error) {
@@ -602,3 +629,6 @@ func (l *Loop) propose(task string, actor events.Actor, kind events.Type, data m
 	}
 	return true
 }
+
+// tell proposes an event made earlier, as work beside the loop ends with.
+func (l *Loop) tell(p events.Proposal) bool { return l.propose(p.Stream, p.Actor, p.Type, p.Data) }

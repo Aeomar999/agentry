@@ -21,11 +21,11 @@ server changes with this document.
   against the version before, with a full copy when the hunks outgrow the
   text: 4.7% of today's knowledge bytes. Old events replay as they are.
   Plans, commands and reports stay inline.
-- **Snapshots** (section 2): `state.snapshot` beside the database, JSON,
-  tagged with the binary's hash and anchored to a row's hash; any doubt
-  means a full replay. Written every 10,000 events or 10 minutes, off the
-  request path, and proven `Equal` to a full replay at every cut of the
-  fixture logs.
+- **Snapshots** (section 2): `state.snapshot` beside the database, gob
+  (JSON was measured too slow in build step 2), tagged with the binary's
+  hash and anchored to a row's hash; any doubt means a full replay.
+  Written every 10,000 events or 10 minutes, off the request path, and
+  proven `Equal` to a full replay at every cut of the fixture logs.
 - **Archiving** (section 4): 30 days after a task is done, a
   `task.archived` marker with its summary, and its rows moved into one
   gzipped blob (22%) in the content store, in one transaction; the delete
@@ -524,6 +524,14 @@ is about 0.16 + 0.26 + 0.011 ≈ 0.43 s. If gob also misses 0.5 s with two
 or more cores, the build stops and asks the user; 0.75 s on one core stays
 the limit.
 
+**Measured in build step 2: gob.** `TestStartupBench` on a 1 GB synthetic
+log grown from the 19 October copy: a 201.7 MB body (128.5 MB of working-set
+tasks, 90,000 summaries at about 810 B each) decodes as JSON lines in 0.81 /
+0.43 / 0.14 s on 1 / 2 / 8 cores, and as gob (127.7 MB, 64 streams) in
+0.14 / 0.10 / 0.08 s. JSON misses 0.34 s on two cores, and so would a 186 MB
+body (about 0.40 s), so step 4 writes gob over saved forms with presence
+flags.
+
 The file is one header line, then the body:
 
 ```text
@@ -537,8 +545,8 @@ code is turned down without decoding megabytes.
 The body holds everything `current.Equal` compares, so a loaded state can
 be equal to a replay: every task, the summaries, the rosters, and two
 more. `order` is `State.taskIDs` as it is, duplicates and broken tasks
-included, since `Store.TaskIDs` lists every `task.created` row and the
-state copies that. `broken` is the names of the streams whose apply
+included, since the state keeps every `task.created` row in its
+`created` list (`State.TaskIDs`). `broken` is the names of the streams whose apply
 panicked, without their state.
 
 A broken stream is **rebuilt at load by a full replay of that stream**
@@ -710,9 +718,13 @@ diffs, so the same holds.
   `sha256`. A human editing the file on the page between the hook's read
   and its proposal makes the hook's patch fail, and the hook sends a full
   copy instead.
-- **Apply:** a mismatch can then only be a bug. It panics, and the
-  `agents` stream is broken as any panicking apply is (`guard` in
-  `current`); the real-copy replay test catches it before a release.
+- **Apply:** the fold checks only the bounds (`head + tail` within the
+  text, every field present), never the hash: replay is deterministic, so
+  what the rules accepted fits again, and hashing every version made a fold
+  of the `agents` stream take 75 ms instead of 0.12 ms. A patch out of
+  bounds can then only be a bug. It panics, and the `agents` stream is
+  broken as any panicking apply is (`guard` in `current`); the real-copy
+  replay test catches it before a release.
 - **Plans, commands, reports and instructions stay inline.** They are task
   texts: archiving takes them out of the live log and gzips them, which
   beats anything here. Plans would keep 58% as diffs, the rest 100%.
@@ -855,10 +867,12 @@ archived task's id: going back to an older release after archiving is not
 supported, and the release notes say so.
 
 Every reader that listed tasks by their `task.created` rows now has to
-see archived tasks too, or the next id collides with one. `Store.TaskIDs`
-(`internal/store/read.go`) is that reader. It lists `task.created` rows
-and `task.archived` markers together, each at the `task.created` position
-it stands for (the marker's `created`), oldest first:
+see archived tasks too, or the next id collides with one. `Store.made`
+(`internal/store/store.go`), which `Store.Create` calls to name the next
+task, is that reader. Today it counts `task.created` rows; it must count
+what this lists, `task.created` rows and `task.archived` markers
+together, each at the `task.created` position it stands for (the
+marker's `created`), oldest first:
 
 ```sql
 SELECT stream, position FROM events
@@ -1035,8 +1049,8 @@ created and last active, plus the done summary. About 630 bytes as JSON.
 `Task(id)` returns nil and `ErrArchived` for one; a new `Summaries()`
 serves the list. Task ids stay in creation order and are never reused:
 the marker's `created` is the `task.created` position the state orders by,
-and the next id counts archived tasks too, through `Store.TaskIDs`
-(section 4, "How it fits").
+and the next id counts archived tasks too, through `Store.made`, which
+`Store.Create` calls (section 4, "How it fits").
 
 At scale: a task is about 1.2 MB of file today, so 1 GB of history is
 about 900 tasks, and 100 GB about 90,000: some 60 MB of summaries in
@@ -1294,7 +1308,7 @@ W, or twice W with `AGENTRY_BENCH_WORKING=2`.
 | 6 | A snapshot write **≤ 0.5 s of CPU**, never on the request path and never under `Store.mu` | 0.28 s | the benchmark; a test that commits a proposal while the writer is held mid-write |
 | 7 | An archived task's history opens in **≤ 100 ms** for the largest task, **≤ 10 ms** from the cache | about 60 ms (17 ms gunzip, 40 ms fold) | `GET /api/tasks/task-8` on the archived copy, a benchmark in `internal/web` |
 | 8 | An archive blob **≤ 25%** of its rows' JSON | 22.3% | the archiver's benchmark on the copy |
-| 9 | Knowledge stored **≤ 6%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file | build step 1's test on the copy |
+| 9 | Knowledge stored **≤ 8%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file. Built: 7.47% and 2.02 times with a full copy past 1x the text; at about 61 KB per file one hunk's middle is wider than the 446 versions measured here showed, and no threshold met 6% (1.25x: 6.89%/2.25; 1.5x: 6.47%/2.47; 2x: 6.14%/3.00; never: 4.99%/31.4) | build step 1's test on the copy |
 | 10 | `Store.mu` held **≤ 200 ms** per task archived or unarchived, the largest included | not measured; roughly: unarchive holds it for about 40 ms of `Refold` plus the insert of about 4.8 MB of rows, archive for a delete through `events_by_stream`; step 7 measures it | a benchmark of `Store.Archive` and `Store.Unarchive` on `task-8` |
 
 Targets 1, 2, 4 and 5 grow only with the working set and, slowly, with
@@ -1384,7 +1398,7 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      as patches rebuilds byte for byte.
    - Target 9.
 2. **The startup benchmark.** Depends on task-21.
-   - Files: `internal/store/storetest/synthetic.go` (grows the copy into a
+   - Files: `internal/storetest/synthetic.go` (grows the copy into a
      synthetic log: its task streams repeated under new ids and later
      times, its knowledge extended, to `AGENTRY_BENCH_GB` of history and
      the working set W or 2W), `internal/current/startup_bench_test.go`.
@@ -1396,7 +1410,8 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      and applies
      [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model):
      over 0.34 s on 2 goroutines means gob, chosen here before step 4 is
-     built (projected: about 0.43 s of startup, so JSON passes).
+     built (projected: about 0.43 s of startup, so JSON passes; measured:
+     JSON 0.43 s on 2 goroutines, gob 0.10 s, so gob; see section 2).
    - Measures Targets 1 to 5 from here on; none passes yet.
 3. **Saved forms.** Depends on task-21; skip whatever task-21 already
    built (its item 1).
@@ -1419,14 +1434,13 @@ since the steps cite section 2's equivalence tests and the task-21 items.
 5. **Schema version 1.** Depends on task-21.
    - Files: `internal/store/store.go` (the migration in one transaction:
      the gated delete trigger, `auto_vacuum = INCREMENTAL`,
-     `user_version = 1`), `internal/store/read.go` (`TaskIDs` lists
-     markers too), `internal/events/catalogue.go` (`task.archived`,
+     `user_version = 1`, `made` counts markers too), `internal/events/catalogue.go` (`task.archived`,
      `task.unarchived`), `internal/rules` (on an archived task, only
      `task.unarchived`; no `task.created` on a stream with a summary).
    - Proves: a stray `DELETE` is refused; a delete a marker covers is
      allowed in the marker's transaction, and refused once
      `task.unarchived` follows; the migration runs once; a version 0 file
-     opens and migrates; `TaskIDs` lists a task once when archived,
+     opens and migrates; `made` counts a task once when archived,
      unarchived and archived twice.
 6. **Summaries in the state.** Depends on task-21 (items 4 to 8 and 10).
    - Files: `internal/tasks` (`Summary` from `web.summaryOf`, `DoneAt`,
@@ -1526,14 +1540,15 @@ and privacy work add to it instead of reworking it:
 5. **Order tasks by their `task.created` position, held per task**, not
    only in the `created` list `Loaded` sorts, since an archived task
    keeps that position in its marker and has no `task.created` row left.
-6. **Keep every task id going through `Store.TaskIDs`**, which will list
-   archived tasks too (section 4). Its callers, and what each should see
-   for an archived task:
-   - `web/api.go` `createTask` and `coordinator/loop.go` `newTask`: the
-     next id, `len(ids)+1`, so archived tasks must be counted;
+6. **Count archived tasks in `Store.made`**, which `Store.Create` calls
+   to name the next task, and keep them in `State.TaskIDs` (section 4).
+   The readers, and what each should see for an archived task:
+   - `Store.Create`, from `web/api.go` `createTask` and
+     `coordinator/loop.go` `newTask`: the next id, `made + 1`, so
+     archived tasks must be counted;
    - `web/api.go` `listTasks`: the task's summary;
    - `watchdog/watchdog.go` `Check`, `hooks/orphans.go`
-     `DenyOrphanedAsks`, `coordinator/loop.go` `portsInUse`,
+     `HoldOrphanedAsks`, `coordinator/loop.go` `portsInUse`,
      `web/agents_api.go` (the rename and `needing`),
      `web/questions_api.go` `listQuestions` and `web/workers_api.go`
      `tasksByMachine`: nothing, since an archived task is done; each

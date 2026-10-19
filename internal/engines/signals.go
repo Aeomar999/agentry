@@ -1,18 +1,25 @@
 package engines
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Signal is what Agentry sees from a hook call, whichever engine made it.
 type Signal struct {
 	Kind          SignalKind
 	ToolUseID     string // ties an action's request to its result
 	Tool          string
-	Command       string // the shell command, or the file path for file tools
-	Prompt        string // the exact prompt text the engine received
-	Report        string // the agent's final message of the turn
-	Question      string // what the engine is waiting for
-	EngineSession string // the engine's own session id
-	Tokens        int    // tokens the turn used, when the engine says (TurnEnded)
+	Command       string    // the shell command, or the file path for file tools
+	Prompt        string    // the exact prompt text the engine received
+	Report        string    // the agent's final message of the turn
+	Question      string    // what the engine is waiting for
+	EngineSession string    // the engine's own session id
+	Tokens        int       // tokens the turn used, when the engine says (TurnEnded)
+	TokensUnknown string    // why Tokens is 0, when the engine's count couldn't be read (TurnEnded)
+	Error         string    // the kind of error that stopped the turn, e.g. rate_limit (UsageLimited, TurnFailed)
+	Details       string    // what the engine said about it
+	ResetsAt      time.Time // when a usage limit resets, zero when the engine didn't say in a way Agentry reads (UsageLimited)
 }
 
 type SignalKind string
@@ -24,6 +31,8 @@ const (
 	ActionFinished  SignalKind = "action finished"
 	Waiting         SignalKind = "waiting"
 	TurnEnded       SignalKind = "turn ended"
+	UsageLimited    SignalKind = "usage limited" // the turn stopped at the account's usage limit; it can go on once that resets
+	TurnFailed      SignalKind = "turn failed"   // the turn stopped at an error from the engine's API
 	SessionEnded    SignalKind = "session ended"
 )
 
@@ -39,6 +48,8 @@ type hookPayload struct {
 	LastAssistantMessage string          `json:"last_assistant_message"`
 	Message              string          `json:"message"`
 	NotificationType     string          `json:"notification_type"` // Claude only
+	Error                string          `json:"error"`             // Claude's StopFailure only
+	ErrorDetails         string          `json:"error_details"`     // Claude's StopFailure only
 	TranscriptPath       string          `json:"transcript_path"`
 }
 

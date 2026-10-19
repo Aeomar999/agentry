@@ -23,8 +23,22 @@ func TestNextLeavesTheIdeaAsItWas(t *testing.T) {
 		}
 		idea = next
 	}
-	if idea == nil || idea.State != Accepted || idea.Became != "task-2" || len(idea.BackedBy) != 2 {
+	if idea == nil || idea.State != Accepted || idea.Became != "task-2" || idea.AutoAccepted || len(idea.BackedBy) != 2 {
 		t.Errorf("the log didn't run through: %+v", idea)
+	}
+}
+
+// An accepted or dismissed idea carries the time of the event that decided
+// it; an open one has none.
+func TestADecidedIdeaKeepsWhenItWasDecided(t *testing.T) {
+	log := everyEvent()
+	for _, step := range []struct {
+		after int
+		want  time.Time
+	}{{1, time.Time{}}, {2, log[2].At}, {4, log[4].At}} {
+		if idea := FromEvents(log[:step.after+1]); !idea.DecidedAt.Equal(step.want) {
+			t.Errorf("after %s: decided at %v, want %v", log[step.after].Type, idea.DecidedAt, step.want)
+		}
 	}
 }
 
@@ -45,11 +59,12 @@ func everyEvent() []events.Event {
 	}
 
 	var log []events.Event
-	log = add(log, you, events.IdeaDismissed, map[string]any{"note": "before it was suggested"})
-	log = add(log, agentry, events.IdeaSuggested, map[string]any{"title": "Search the board", "problem": "Scrolling",
+	log = add(log, you, IdeaDismissed, map[string]any{"note": "before it was suggested"})
+	log = add(log, agentry, IdeaSuggested, map[string]any{"title": "Search the board", "problem": "Scrolling",
 		"proposal": "A search box", "whyNow": "200 tasks", "size": "M", "risks": "Slow", "backedBy": []any{"dreamer", "builder"},
 		"doubtedBy": []any{"skeptic"}, "repo": "/r", "task": "task-1", "epic": "task-9", "kind": "story"})
-	log = add(log, you, events.IdeaDismissed, map[string]any{"note": "not now"})
-	log = add(log, you, events.IdeaAccepted, map[string]any{"task": "task-2", "note": "now"})
+	log = add(log, you, IdeaDismissed, map[string]any{"note": "not now"})
+	log = add(log, agentry, IdeaAccepted, map[string]any{"task": "task-3", "note": "auto-accepted: all Visionaries agreed"})
+	log = add(log, you, IdeaAccepted, map[string]any{"task": "task-2", "note": "now"})
 	return log
 }

@@ -45,10 +45,20 @@ CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 // A Model is state kept from the log. The store fills it at Open and
 // applies each event after it commits, before any reader of the log can
 // read that event.
+//
+// A model may start part way through the log, as one read from a snapshot
+// would: Since says where it is, and Open applies only the events after it
+// instead of loading every stream.
+//
+// An event that changes what came before it in its stream (the catalogue's
+// Refolds) is given to Refold in place of Apply, with the stream's accepted
+// events before it, since the model can't read the log itself.
 type Model interface {
-	Load(stream string, accepted []events.Event) // at Open, once per stream
-	Loaded(position int64)                       // at Open, the log's last position, rejections included
-	Apply(e events.Event)                        // after each commit
+	Since() int64                                                // the last position the model holds, 0 when it holds nothing
+	Load(stream string, accepted []events.Event)                 // at Open, once per stream, when Since is 0
+	Loaded(position int64)                                       // at Open, the log's last position, rejections included, when Since is 0
+	Apply(e events.Event)                                        // after each commit, and at Open each event after Since
+	Refold(stream string, before []events.Event, e events.Event) // in place of Apply, for an event that refolds its stream
 }
 
 // OrderCheck is check 3, order and per-agent who rules: given what happened so
@@ -57,22 +67,28 @@ type Model interface {
 type OrderCheck func(p events.Proposal) *events.Rejection
 
 type Store struct {
-	db      *sql.DB // the one connection that writes
-	reads   *sql.DB // read-only connections for the reads in read.go
-	model   Model   // nil when nothing keeps state from the log
-	check   OrderCheck
-	changes *changes
+	db        *sql.DB // the one connection that writes
+	reads     *sql.DB // read-only connections for the reads in read.go
+	catalogue *events.Catalogue
+	model     Model // nil when nothing keeps state from the log
+	check     OrderCheck
+	changes   *changes
 
 	mu      sync.Mutex   // one proposal at a time, from its check to its apply
 	applied atomic.Int64 // the last position in the model; no read of the log goes past it
 }
 
+// Driver names the database/sql driver Open uses: modernc's SQLite. A test
+// can name a wrapper around it instead, to count the statements sent.
+var Driver = "sqlite"
+
 // readConnections is how many reads of the log can run at once.
 const readConnections = 4
 
 // Open opens the log at path and loads it into model, if there is one.
-func Open(path string, model Model, check OrderCheck) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
+// Every proposal must be of a type in catalogue, in a stream it belongs in.
+func Open(path string, catalogue *events.Catalogue, model Model, check OrderCheck) (*Store, error) {
+	db, err := sql.Open(Driver, path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -81,22 +97,31 @@ func Open(path string, model Model, check OrderCheck) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
 	}
-	last, err := load(db, model)
+	last, err := load(db, catalogue, model)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("loading the log: %w", err)
 	}
 	// Opened after the schema, which made the file and switched it to WAL.
-	reads, err := sql.Open("sqlite", path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	reads, err := sql.Open(Driver, path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
 	reads.SetMaxOpenConns(readConnections)
-	s := &Store{db: db, reads: reads, model: model, check: check, changes: newChanges()}
+	// sql.Open connects lazily: a bad path or pragma fails here, not at the first read.
+	if err := reads.Ping(); err != nil {
+		reads.Close()
+		db.Close()
+		return nil, fmt.Errorf("opening the read pool: %w", err)
+	}
+	s := &Store{db: db, reads: reads, catalogue: catalogue, model: model, check: check, changes: newChanges()}
 	s.applied.Store(last)
 	return s, nil
 }
+
+// Catalogue is the event types the log was opened with.
+func (s *Store) Catalogue() *events.Catalogue { return s.catalogue }
 
 func (s *Store) Close() error { return errors.Join(s.reads.Close(), s.db.Close()) }
 
@@ -115,7 +140,7 @@ func (s *Store) Propose(p events.Proposal) (events.Event, *events.Rejection, err
 // Create is Propose for the event that starts a new stream, such as
 // task.created or idea.suggested. The stream is named prefix and the next
 // number, counted under the same lock, so two made at once never take the
-// same name.
+// same name. See made for what an archiver must change.
 func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -123,13 +148,16 @@ func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.
 	if err != nil {
 		return events.Event{}, nil, err
 	}
-	p.Stream = fmt.Sprintf("%s%d", prefix, made+1)
+	p.Stream = events.Numbered(prefix, made)
 	return s.propose(p)
 }
 
 // made counts the events of a type in the log, rejections left out, so the
 // next stream of its kind follows every one made, even one whose stream
-// can't be read.
+// can't be read. For tasks it counts task.created rows: once the archiver
+// deletes rows, it must count archive markers too, or it hands out ids
+// already taken (docs/design/log-growth.md, "What task-21 should leave
+// room for", item 6).
 func (s *Store) made(kind events.Type) (int, error) {
 	var made int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ? AND position <= ?`, kind, s.applied.Load()).Scan(&made)
@@ -143,12 +171,12 @@ func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, err
 	if rejection != nil {
 		stored = rejectionOf(p, rejection)
 	}
-	event, err := s.commit(stored)
+	event, before, err := s.commit(stored)
 	if err != nil {
 		return events.Event{}, nil, err
 	}
 	if s.model != nil {
-		s.model.Apply(event)
+		give(s.model, s.catalogue, event, before)
 	}
 	s.applied.Store(event.Position)
 	s.changes.notify()
@@ -156,10 +184,10 @@ func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, err
 }
 
 func (s *Store) validate(p events.Proposal) *events.Rejection {
-	if rejection := events.CheckShape(p); rejection != nil {
+	if rejection := s.catalogue.CheckShape(p); rejection != nil {
 		return rejection
 	}
-	if rejection := events.CheckWriter(p); rejection != nil {
+	if rejection := s.catalogue.CheckWriter(p); rejection != nil {
 		return rejection
 	}
 	if s.check == nil {
@@ -168,18 +196,46 @@ func (s *Store) validate(p events.Proposal) *events.Rejection {
 	return s.check(p)
 }
 
-// commit appends one event in its own transaction.
-func (s *Store) commit(p events.Proposal) (events.Event, error) {
+// commit appends one event in its own transaction. For an event that
+// refolds its stream, it also returns the stream's accepted events before
+// it, read in the same transaction: a read that fails then undoes the
+// event, rather than leave it in the log and out of the model.
+func (s *Store) commit(p events.Proposal) (events.Event, []events.Event, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return events.Event{}, err
+		return events.Event{}, nil, err
 	}
 	defer tx.Rollback()
 	event, err := appendEvent(tx, p)
 	if err != nil {
-		return events.Event{}, err
+		return events.Event{}, nil, err
 	}
-	return event, tx.Commit()
+	before, err := beforeRefold(tx, s.catalogue, event)
+	if err != nil {
+		return events.Event{}, nil, err
+	}
+	return event, before, tx.Commit()
+}
+
+// beforeRefold is the stream's accepted events before e, when e refolds
+// its stream; nil otherwise. It never reads past e: at Open the log holds
+// the rest of the tail too.
+func beforeRefold(db querier, catalogue *events.Catalogue, e events.Event) ([]events.Event, error) {
+	if !catalogue.Refolds(e.Type) {
+		return nil, nil
+	}
+	return queryEvents(db, `SELECT `+columns+` FROM events
+		WHERE stream = ? AND type != ? AND position < ? ORDER BY position`, e.Stream, events.ProposalRejected, e.Position)
+}
+
+// give hands the model a committed event: to Refold, with the stream's
+// events before it, when it refolds its stream, and to Apply otherwise.
+func give(model Model, catalogue *events.Catalogue, e events.Event, before []events.Event) {
+	if catalogue.Refolds(e.Type) {
+		model.Refold(e.Stream, before, e)
+		return
+	}
+	model.Apply(e)
 }
 
 func rejectionOf(p events.Proposal, rejection *events.Rejection) events.Proposal {

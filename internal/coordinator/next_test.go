@@ -37,6 +37,30 @@ func (h history) turn(id, agent, report string) history {
 		add(worker, events.TurnEnded, id, map[string]any{"agent": agent, "report": report})
 }
 
+// shipTurn is a turn of the deployer's, making the tool calls steps add.
+func (h history) shipTurn(id, report string, steps ...func(h history, turn string) history) history {
+	h = h.add(worker, events.TurnStarted, id, map[string]any{"agent": "deployer", "hash": "h"})
+	for _, step := range steps {
+		h = step(h, id)
+	}
+	return h.add(worker, events.TurnEnded, id, map[string]any{"agent": "deployer", "report": report})
+}
+
+// push asks to push the work to dev, decided as decision, and finished or not.
+func push(decision events.Type, finished bool) func(history, string) history {
+	return func(h history, turn string) history {
+		id := turn + "-push"
+		h = h.add(worker, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}).
+			add(you, decision, id, nil)
+		if finished {
+			h = h.add(worker, events.ActionResult, id, nil)
+		}
+		return h
+	}
+}
+
+var pushed = push(events.ActionApproved, true)
+
 func (h history) task() *tasks.Task { return tasks.FromEvents(h) }
 
 func started() history {
@@ -135,6 +159,78 @@ func TestAHandoffFitsTheColumnYouMovedItTo(t *testing.T) {
 	}
 	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "24 turns") {
 		t.Errorf("after %d refused handoffs: %+v", DefaultMaxTurns, move)
+	}
+}
+
+// A held command you approve while the coordinator is in a turn is handed
+// to it once it has decided: it can't finish without hearing it first.
+func TestALateApprovalReachesADecidingCoordinator(t *testing.T) {
+	policy := events.Actor{Kind: events.Policy, ID: "rules"}
+	engineer := events.Actor{Kind: events.Agent, ID: "engineer"}
+	held := started().turn("turn-1", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it."}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}).
+		add(policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}).
+		add(policy, events.ActionHeld, "toolu_1", nil).
+		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "The push is held."}).
+		add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "tech-lead", "hash": "h"}).
+		add(you, events.ActionApproved, "toolu_1", map[string]any{"reason": "fine"})
+
+	task := held.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": `{"action": "done", "summary": "Pushed."}`}).task()
+	if move := Next(task, defaultRoster()); move.Kind != RaiseIssue || !strings.Contains(move.Reason, "approved a held command") {
+		t.Errorf("finishing without hearing the approval: %+v", move)
+	}
+	if step := task.Trail[len(task.Trail)-1]; step.To != "tech-lead" || !strings.Contains(step.Text, "git push origin HEAD:dev") {
+		t.Errorf("the hand-back with the full command should be in the trail: %+v", step)
+	}
+
+	// Heard in its next turn, it may finish.
+	again := held.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": "assign"}).
+		add(watchdog, events.IssueRaised, "", map[string]any{"reason": "decide again"}).
+		turn("turn-4", "tech-lead", `{"action": "done", "summary": "Not needed."}`).task()
+	if again.ApprovalUnheard() {
+		t.Error("its next turn's brief has the approval")
+	}
+}
+
+// A held command you approve after the coordinator's brief was made, but
+// before its turn starts, isn't heard by that turn: it can't finish, the
+// agent's next turn gets no pass, and its following turn hears it.
+func TestAnApprovalAfterTheBriefWasMadeIsHeardNextTime(t *testing.T) {
+	policy := events.Actor{Kind: events.Policy, ID: "rules"}
+	engineer := events.Actor{Kind: events.Agent, ID: "engineer"}
+	ended := started().turn("turn-1", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it."}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}).
+		add(policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}).
+		add(policy, events.ActionHeld, "toolu_1", nil).
+		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "The push is held."})
+	seen := len(ended.task().Trail) // the coordinator's brief is made here
+	deciding := ended.add(you, events.ActionApproved, "toolu_1", map[string]any{"reason": "fine"}).
+		add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "tech-lead", "hash": "h", "seen": seen})
+	if task := deciding.task(); task.Action("toolu_1").Heard || !task.ApprovalUnheard() {
+		t.Fatalf("a brief made before the approval heard it: %+v, unheard %v", task.Action("toolu_1"), task.ApprovalUnheard())
+	}
+
+	finished := deciding.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": `{"action": "done", "summary": "Pushed."}`}).task()
+	if move := Next(finished, defaultRoster()); move.Kind != RaiseIssue || !strings.Contains(move.Reason, "approved a held command") {
+		t.Errorf("finishing without hearing the approval: %+v", move)
+	}
+
+	other := deciding.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": "assign"}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Write the docs."}).
+		turn("turn-4", "engineer", "Docs written.")
+	if pass := other.task().Action("toolu_1"); pass.PassTurn != "" {
+		t.Errorf("the turn given before hearing took the pass: %+v", pass)
+	}
+
+	heard := other.turn("turn-5", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it again."}).
+		add(worker, events.TurnStarted, "turn-6", map[string]any{"agent": "engineer", "hash": "h"}).task()
+	if pass := heard.Action("toolu_1"); !pass.Heard || pass.PassTurn != "turn-6" || heard.ApprovalUnheard() {
+		t.Errorf("once heard, the next turn should get the pass: %+v, unheard %v", pass, heard.ApprovalUnheard())
 	}
 }
 
@@ -239,7 +335,7 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}).
 			turn(turnID(len(h)+1), "engineer", "still broken")
 	}
-	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || move.Limit != LimitTurns || !strings.Contains(move.Reason, "24 of its 24 turns") {
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || move.Limit != tasks.LimitTurns || !strings.Contains(move.Reason, "24 of its 24 turns") {
 		t.Errorf("after %d turns: %+v", DefaultMaxTurns, move)
 	}
 	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": "?"}).add(you, events.TaskAnswered, "", map[string]any{"answer": "try X"})
@@ -307,15 +403,15 @@ func TestTheBudgetSendsTheTaskToYou(t *testing.T) {
 	h = h.add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
 		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "half done", "tokens": 50_000})
 	move := Next(h.task(), defaultRoster())
-	if move.Kind != AskYou || move.Limit != LimitBudget || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
+	if move.Kind != AskYou || move.Limit != tasks.LimitBudget || !strings.Contains(move.Reason, "110k tokens of its 100k budget") {
 		t.Errorf("over budget: %+v", move)
 	}
 	h = h.add(agentry, events.TaskNeedsYou, "", map[string]any{"question": move.Reason, "limit": move.Limit})
-	if task := h.task(); StoppedAt(task) != LimitBudget {
-		t.Errorf("the stop's limit: %q", StoppedAt(task))
+	if task := h.task(); task.StoppedAt() != tasks.LimitBudget {
+		t.Errorf("the stop's limit: %q", task.StoppedAt())
 	}
 	h = h.add(you, events.TaskAnswered, "", map[string]any{"answer": "Wrap up."})
-	if task := h.task(); task.Asked.Limit != "" || StoppedAt(task) != "" {
+	if task := h.task(); task.Asked.Limit != "" || task.StoppedAt() != "" {
 		t.Errorf("after your answer the limit is cleared: %q", task.Asked.Limit)
 	}
 	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn || move.Agent.Name != "tech-lead" {
@@ -332,10 +428,11 @@ func TestTokens(t *testing.T) {
 }
 
 // Work you moved to Shipping ships as it is: once an agent that ships work
-// has shipped it, the coordinator can finish without another check. Only a
+// has pushed it, the coordinator can finish without another check. Only a
 // change after that needs checking again, and a ship the coordinator chose
-// waives nothing. A ship turn that crashed or that you stopped hasn't
-// shipped it, but the next ship turn is still yours if nothing came between.
+// waives nothing. A ship turn that crashed, that you stopped or that ended
+// without a finished push hasn't shipped it, but the next ship turn is
+// still yours if nothing came between.
 func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 	const finish = `{"action": "done", "summary": "Shipped."}`
 	built := started().
@@ -345,9 +442,9 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 	toDeployer := map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}
 	yours := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
 		add(coordinator, events.TaskAssigned, "", toDeployer).
-		turn("turn-3", "deployer", "Pushed.")
+		shipTurn("turn-3", "Pushed.", pushed)
 	theirs := built.add(coordinator, events.TaskAssigned, "", toDeployer).
-		turn("turn-3", "deployer", "Pushed.")
+		shipTurn("turn-3", "Pushed.", pushed)
 	changed := yours.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "One more."}).
 		turn("turn-4", "engineer", "Changed it.")
 	cutShort := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
@@ -360,17 +457,32 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 	again := map[string]any{"agent": "deployer", "instructions": "Ship it."}
 	retried := crashed.turn("turn-4", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Ship it."}`).
 		add(coordinator, events.TaskAssigned, "", again).
-		turn("turn-5", "deployer", "Pushed.")
+		shipTurn("turn-5", "Pushed.", pushed)
 	retriedAfterAChange := crashed.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "One more."}).
 		turn("turn-4", "engineer", "Changed it.").
 		add(coordinator, events.TaskAssigned, "", again).
-		turn("turn-5", "deployer", "Pushed.")
+		shipTurn("turn-5", "Pushed.", pushed)
+	yoursUntil := func(report string, steps ...func(history, string) history) history {
+		return built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+			add(coordinator, events.TaskAssigned, "", toDeployer).
+			shipTurn("turn-3", report, steps...)
+	}
+	unfinished := yoursUntil("The push hung.", push(events.ActionApproved, false))
+	denied := yoursUntil("The push was denied.", push(events.ActionDenied, false))
+	testsFailed := yoursUntil("TestParse failed after the merge, so I didn't push.")
+	retriedAfterADenial := denied.turn("turn-4", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Ship it."}`).
+		add(coordinator, events.TaskAssigned, "", again).
+		shipTurn("turn-5", "Pushed.", pushed)
 	cases := []struct {
 		name string
 		h    history
 		want MoveKind
 	}{
 		{"shipped as you chose", yours.turn("turn-9", "tech-lead", finish), ApplyDecision},
+		{"your ship's push never finished", unfinished.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"you denied the push", denied.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"the tests after the merge failed", testsFailed.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"pushed on the try after your denial", retriedAfterADenial.turn("turn-9", "tech-lead", finish), ApplyDecision},
 		{"shipped as the coordinator chose", theirs.turn("turn-9", "tech-lead", finish), RaiseIssue},
 		{"changed after your ship", changed.turn("turn-9", "tech-lead", finish), RaiseIssue},
 		{"your ship crashed", crashed.turn("turn-9", "tech-lead", finish), RaiseIssue},
@@ -382,5 +494,80 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 		if move := Next(c.h.task(), defaultRoster()); move.Kind != c.want || c.want == RaiseIssue && !strings.Contains(move.Reason, "the work isn't checked yet") {
 			t.Errorf("%s: got %s (%q), want %s", c.name, move.Kind, move.Reason, c.want)
 		}
+	}
+
+	// What the coordinator reads after a ship that didn't push: the
+	// deployer's reason, and that the work still waits on a check or a push.
+	roster := defaultRoster()
+	lead, _ := roster.Get("tech-lead")
+	for name, h := range map[string]history{"denied": denied, "tests failed": testsFailed} {
+		task := h.task()
+		brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil)
+		report := task.Turns[len(task.Turns)-1].Report
+		if !strings.Contains(brief, "deployer → tech-lead: "+report) || !strings.Contains(brief, "Now: the work isn't checked yet") {
+			t.Errorf("%s: the coordinator's brief should give the deployer's reason and say the work isn't checked:\n%s", name, brief)
+		}
+	}
+}
+
+// Only a ship you chose tells the agent that ships it to skip the earlier
+// review, and so does its retry after a ship that didn't push, until a
+// change or a check comes between. A ship the coordinator chose, or a
+// builder, gets no such line.
+func TestYourShipTellsTheShipperToShipItAsItIs(t *testing.T) {
+	roster := defaultRoster()
+	deployer, _ := roster.Get("deployer")
+	engineer, _ := roster.Get("engineer")
+	built := started().
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Remove them."}).
+		turn("turn-1", "engineer", "Removed 3.").
+		turn("turn-2", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "ship"}`)
+	yours := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}).task()
+	theirs := built.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it."}).task()
+	// The coordinator hands it to the deployer again after your denied push:
+	// no "ships" flag, as the first handoff cleared the column you moved it to.
+	denied := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}).
+		shipTurn("turn-3", "The push was denied.", push(events.ActionDenied, false))
+	again := func(between ...string) *tasks.Task {
+		h := denied
+		for _, agent := range between {
+			h = h.turn("turn-4-"+agent, agent, "Done.\n\nVerdict: approved")
+		}
+		return h.turn("turn-5", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Ship it."}`).
+			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "deployer", "instructions": "Ship it."}).task()
+	}
+
+	for name, task := range map[string]*tasks.Task{"your ship": yours, "your ship's retry after a denied push": again()} {
+		if brief := workerBrief(task, deployer, roster, "Ship it.", nil); !strings.Contains(brief, "Ship it.\n\n"+YouChoseToShip) {
+			t.Errorf("%s's brief should say you chose to ship it:\n%s", name, brief)
+		}
+	}
+	for name, brief := range map[string]string{
+		"the coordinator's ship": workerBrief(theirs, deployer, roster, "Ship it.", nil),
+		"a builder":              workerBrief(yours, engineer, roster, "Ship it.", nil),
+		"a retry after a review": workerBrief(again("reviewer"), deployer, roster, "Ship it.", nil),
+		"a retry after a change": workerBrief(again("engineer"), deployer, roster, "Ship it.", nil),
+	} {
+		if strings.Contains(brief, YouChoseToShip) {
+			t.Errorf("%s's brief shouldn't say you chose to ship it:\n%s", name, brief)
+		}
+	}
+}
+
+// A turn that hit a usage limit and then went silent: the coordinator reads
+// the limit just before the issue.
+func TestTheBriefTellsOfAUsageLimit(t *testing.T) {
+	task := started().turn("turn-1", "tech-lead", "assign").
+		add(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(worker, events.TurnLimited, "turn-2", map[string]any{"agent": "engineer", "error": "rate_limit", "details": "limit", "resetsAt": ""}).
+		add(events.Actor{Kind: events.System, ID: "watchdog"}, events.IssueRaised, "", map[string]any{"reason": "silent"}).task()
+	roster := defaultRoster()
+	lead, _ := roster.Get("tech-lead")
+	brief := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil)
+	if !strings.Contains(brief, "agentry → tech-lead: engineer's turn-2 hit a usage limit, reset time unknown\n\n4. agentry → tech-lead: silent") {
+		t.Errorf("the brief should tell of the limit before the issue:\n%s", brief)
 	}
 }

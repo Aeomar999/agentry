@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -25,17 +26,18 @@ type tool struct {
 type task struct {
 	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
 	Labels, BlockedBy                                                                    []string
+	Pushed, DoneByYou                                                                    bool
 	Stories, StoriesDone                                                                 int
+	Budget, TokensUsed, MaxTurns, Turns, TurnsSinceAnswer                                int // a limit of 0 is none
 	Rank                                                                                 float64
 	Told                                                                                 *struct{ At, From, Text string }
 }
 
 type detail struct {
 	task
-	Description, Summary, Coordinator              string
-	Budget, TokensUsed, MaxTurns, TurnsSinceAnswer int // a limit of 0 is none
-	Trail                                          []struct{ From, To, Text string }
-	Shared                                         []struct {
+	Description, Summary, Coordinator, TokensUnknown string
+	Trail                                            []struct{ From, To, Text string }
+	Shared                                           []struct {
 		Name, By, From string
 		Size           int64
 	}
@@ -44,6 +46,8 @@ type detail struct {
 type question struct {
 	Kind, Task, TaskTitle, Agent, Text, Action, Tool, Reason string
 	Options                                                  []string
+	Held                                                     bool // approval: no answer came in time, so the agent was told no
+	HeldAt                                                   time.Time
 }
 
 func (s *Server) tools() []tool {
@@ -87,9 +91,10 @@ func (s *Server) tools() []tool {
 			object(props{"task": text("its id"), "name": text("the shared file's name"), "to": text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
 		{"list_ideas", "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
 			object(props{"all": boolean("every repo, not only this one"), "state": enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
-		{"accept_idea", "Make an idea a task in the user's Backlog. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
+		{"accept_idea", "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			object(props{"id": text("the idea's id, such as idea-3"), "kind": enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
-				"note": text("optional: what the user said, for the task's coordinator")}, "id"), s.acceptIdea},
+				"note":  text("optional: what the user said, for the task's coordinator"),
+				"start": boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), s.acceptIdea},
 		{"dismiss_idea", "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
 			object(props{"id": text("the idea's id"), "note": text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
 	}
@@ -127,12 +132,12 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 			what = t.CurrentAgent + " is working"
 		}
 		if t.Column != "" {
-			what += " (" + boardName(t) + ")"
+			what += " (" + boardName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
 			what = "waits for " + strings.Join(t.BlockedBy, ", ")
 		}
-		return t.ID + " " + t.Title + ": " + what, true
+		return t.ID + " " + t.Title + ": " + what + " · " + usageOf(t), true
 	}))
 	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
 		if t.Closing != "" && t.Status == "working" {
@@ -167,7 +172,7 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		}
 		status := t.Status
 		if t.Column != "" && t.Column != "done" { // done says it already
-			status += " · " + boardName(t)
+			status += " · " + boardName(t.Column)
 		}
 		fmt.Fprintf(&b, "%s [%s] %s", t.ID, status, t.Title)
 		switch {
@@ -175,6 +180,9 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 			fmt.Fprintf(&b, " (epic, %d of %d stories done)", t.StoriesDone, t.Stories)
 		case t.Epic != "":
 			fmt.Fprintf(&b, " (story of %s)", t.Epic)
+		}
+		if t.Kind != "epic" { // an epic's work is its stories'
+			fmt.Fprintf(&b, " · %s", usageOf(t))
 		}
 		if len(t.Labels) > 0 {
 			fmt.Fprintf(&b, " {%s}", strings.Join(t.Labels, ", "))
@@ -198,14 +206,20 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, t.Status, columnOf(t.task), t.Coordinator, t.Repo,
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, statusOf(t.task), columnOf(t.task), t.Coordinator, t.Repo,
 		s.agentry.PageURL("/tasks/"+t.ID))
+	if t.Status == "done" && t.DoneByYou {
+		b.WriteString("Moved to Done by you.\n")
+	}
 	if t.Kind == "epic" {
 		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
 	} else if t.Epic != "" {
 		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
 	}
-	fmt.Fprintf(&b, "Budget: %s · %s\n", budgetOf(t), turnsOf(t))
+	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.task))
+	if t.TokensUnknown != "" {
+		fmt.Fprintf(&b, "%s\n", t.TokensUnknown)
+	}
 	if t.Description != "" {
 		fmt.Fprintf(&b, "\n%s\n", t.Description)
 	}
@@ -230,30 +244,43 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	return b.String(), nil
 }
 
+// statusOf is the task's status, with a done task whose work an agent
+// pushed said to be shipped.
+func statusOf(t task) string {
+	if t.Status == "done" && t.Pushed {
+		return "shipped"
+	}
+	return t.Status
+}
+
 // columnOf is where the task shows on the board: "on the board: Shipping".
 func columnOf(t task) string {
-	return "on the board: " + boardName(t)
+	return "on the board: " + boardName(t.Column)
 }
 
-// boardName is the task's column as the board names it: "Shipping".
-func boardName(t task) string {
+// boardName is a column as the board names it: "Shipping".
+func boardName(column string) string {
 	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
-	return cmp.Or(names[t.Column], t.Column)
+	return cmp.Or(names[column], column)
 }
+
+// usageOf is what the task has used of its budget and its turns, shown
+// with no limit too: "1.2M tokens (no limit) · 14 turns (no limit)".
+func usageOf(t task) string { return budgetOf(t) + " · " + turnsOf(t) }
 
 // budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
-func budgetOf(t detail) string {
+func budgetOf(t task) string {
 	if t.Budget == 0 {
-		return coordinator.Tokens(t.TokensUsed) + " tokens, no limit"
+		return coordinator.Tokens(t.TokensUsed) + " tokens (no limit)"
 	}
 	return coordinator.Tokens(t.TokensUsed) + " of " + coordinator.Tokens(t.Budget) + " tokens"
 }
 
 // turnsOf is how many turns the task has had since the user last answered,
-// against its limit: "18 of 24 turns".
-func turnsOf(t detail) string {
+// against its limit: "18 of 24 turns"; with no limit, all its turns.
+func turnsOf(t task) string {
 	if t.MaxTurns == 0 {
-		return fmt.Sprintf("%d turns, no limit", t.TurnsSinceAnswer)
+		return fmt.Sprintf("%d turns (no limit)", t.Turns)
 	}
 	return fmt.Sprintf("%d of %d turns", t.TurnsSinceAnswer, t.MaxTurns)
 }
@@ -442,8 +469,7 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 	}
 	var done []string
 	for _, q := range approvals {
-		answer, ok, err := s.elicit(ctx, fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.Task, q.TaskTitle,
-			q.Tool, q.Text, q.Reason), object(props{
+		answer, ok, err := s.elicit(ctx, approvalText(q), object(props{
 			"decision": enum("Let it run, or refuse it", "approve", "deny"),
 			"reason":   text("Optional: why, for the agent"),
 		}, "decision"))
@@ -466,6 +492,22 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 		done = append(done, q.Task+" "+q.Action+": "+past+" by the user")
 	}
 	return strings.Join(done, "\n"), nil
+}
+
+// heldAtLayout shows when an action was held in local time, with its zone,
+// since the coordinator's hand-back message gives the time in UTC.
+const heldAtLayout = "Mon 2 Jan 15:04 MST"
+
+// approvalText asks about one action. A held one was refused long ago, so
+// approving it now means something else, and the branch may have moved.
+func approvalText(q question) string {
+	text := fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.Task, q.TaskTitle, q.Tool, q.Text, q.Reason)
+	if q.Held {
+		text += fmt.Sprintf("\n\nNo answer came in time: it was held at %s, and %s was told no and carried on. "+
+			"If you approve, the coordinator hears of it and %s may run this exact command once, in its next turn. Check it still fits the branch.",
+			q.HeldAt.Local().Format(heldAtLayout), q.Agent, q.Agent)
+	}
+	return text
 }
 
 // closeEpic is the answer that approves closing an epic (coordinator.CloseEpic).
@@ -574,7 +616,7 @@ func (s *Server) waitingNote() string {
 func describe(q question) string {
 	switch q.Kind {
 	case "approval":
-		return fmt.Sprintf("%s: %s asks to run %s (review_approvals)", q.Task, q.Agent, oneLine(q.Text, 120))
+		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, oneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
 	case "waiting":
 		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, oneLine(q.Text, 120))
 	}
@@ -585,7 +627,7 @@ func describe(q question) string {
 		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, oneLine(q.Text, 200), copyFile)
 	}
 	asker := q.Agent
-	if asker == "coordinator-loop" {
+	if asker == tasks.Loop {
 		asker = "Agentry" // its own stops: a budget, a limit of turns
 	}
 	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, oneLine(q.Text, 160))

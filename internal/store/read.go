@@ -3,6 +3,8 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -26,26 +28,6 @@ func (s *Store) Stream(name string) ([]events.Event, error) {
 func (s *Store) After(position int64, limit int) ([]events.Event, error) {
 	return queryEvents(s.reads, `SELECT `+columns+` FROM events
 		WHERE position > ? AND position <= ? ORDER BY position LIMIT ?`, position, s.applied.Load(), limit)
-}
-
-// IdeaIDs returns every idea's stream name, oldest first.
-func (s *Store) IdeaIDs() ([]string, error) { return s.streamsStartedBy(events.IdeaSuggested) }
-
-func (s *Store) streamsStartedBy(kind events.Type) ([]string, error) {
-	rows, err := s.reads.Query(`SELECT stream FROM events WHERE type = ? AND position <= ? ORDER BY position`, kind, s.applied.Load())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
 }
 
 type querier interface {
@@ -91,16 +73,50 @@ func (s *Store) Log(name string) ([]events.Event, error) {
 		WHERE stream = ? AND position <= ? ORDER BY position`, name, s.applied.Load())
 }
 
+// LogAfter returns a page of a stream's whole record, as Log has it: up to
+// limit events of the given types (every type when none is given) after one
+// position and before another, both left out, in order.
+func (s *Store) LogAfter(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error) {
+	only, args := ofTypes(name, types, after, before, s.applied.Load())
+	return queryEvents(s.reads, `SELECT `+columns+` FROM events
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?`+only+`
+		ORDER BY position LIMIT ?`, append(args, limit)...)
+}
+
+// LogBefore is LogAfter's page from the other end: the last limit events
+// between the two positions, still in order.
+func (s *Store) LogBefore(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error) {
+	only, args := ofTypes(name, types, after, before, s.applied.Load())
+	return queryEvents(s.reads, `SELECT * FROM (SELECT `+columns+` FROM events
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?`+only+`
+		ORDER BY position DESC LIMIT ?) ORDER BY position`, append(args, limit)...)
+}
+
+// ofTypes is the condition that keeps a page to some types, nothing when
+// it keeps every type, and the page's arguments with the types after them.
+func ofTypes(name string, types []events.Type, after, before, applied int64) (string, []any) {
+	args := []any{name, after, before, applied}
+	if len(types) == 0 {
+		return "", args
+	}
+	for _, t := range types {
+		args = append(args, t)
+	}
+	return ` AND type IN (?` + strings.Repeat(`, ?`, len(types)-1) + `)`, args
+}
+
 // LastPosition is the position of the newest event in the model, 0 for an
 // empty log.
 func (s *Store) LastPosition() int64 { return s.applied.Load() }
 
-// load gives the model each stream's accepted events, streams in the order of
-// their first accepted event (tasks in creation order), and returns the log's
-// last position. It runs in Open, before applied is set and before any reader
-// exists, so it reads everything up to that last position, in one
+// load fills the model and returns the log's last position. A model that
+// holds nothing is given each stream's accepted events, streams in the order
+// of their first accepted event (tasks in creation order); one that starts
+// part way is given each event after its position, rejections included, as
+// Propose gives them. It runs in Open, before applied is set and before any
+// reader exists, so it reads everything up to that last position, in one
 // transaction for one snapshot.
-func load(db *sql.DB, model Model) (int64, error) {
+func load(db *sql.DB, catalogue *events.Catalogue, model Model) (int64, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -112,6 +128,9 @@ func load(db *sql.DB, model Model) (int64, error) {
 	}
 	if model == nil {
 		return last, nil
+	}
+	if since := model.Since(); since > 0 {
+		return last, applyAfter(tx, catalogue, model, since, last)
 	}
 	accepted, err := queryEvents(tx, `SELECT `+columns+` FROM events
 		WHERE type != ? AND position <= ? ORDER BY position`, events.ProposalRejected, last)
@@ -131,4 +150,25 @@ func load(db *sql.DB, model Model) (int64, error) {
 	}
 	model.Loaded(last)
 	return last, nil
+}
+
+// applyAfter brings a model that starts part way up to the log's last
+// position. A model past the end was made from some other log.
+func applyAfter(tx *sql.Tx, catalogue *events.Catalogue, model Model, since, last int64) error {
+	if since > last {
+		return fmt.Errorf("the model is at position %d, past the log's last, %d", since, last)
+	}
+	tail, err := queryEvents(tx, `SELECT `+columns+` FROM events
+		WHERE position > ? AND position <= ? ORDER BY position`, since, last)
+	if err != nil {
+		return err
+	}
+	for _, e := range tail {
+		before, err := beforeRefold(tx, catalogue, e)
+		if err != nil {
+			return err
+		}
+		give(model, catalogue, e, before)
+	}
+	return nil
 }

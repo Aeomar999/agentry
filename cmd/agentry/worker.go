@@ -19,16 +19,28 @@ import (
 	"syscall"
 
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 	"gitlab.com/dev.chempa/agentry/internal/procs"
-	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 )
 
 // workerConfig is what `agentry worker join` keeps, and the worker runs with.
+// CA is the server's own CA, PEM encoded, when it is served over https with
+// one: the worker trusts it alone for the server.
 type workerConfig struct {
 	Server     string `json:"server"`
 	Name       string `json:"name"`
 	Credential string `json:"credential"`
+	CA         string `json:"ca,omitempty"`
+}
+
+// client calls the server, trusting only its CA when it has one.
+func (c workerConfig) client() *http.Client { return pinned.Client([]byte(c.CA), 0) }
+
+// link is the worker's end of the link to the server, with no machine: for
+// asking about updates.
+func (c workerConfig) link() *workerlink.Worker {
+	return &workerlink.Worker{Server: c.Server, Credential: c.Credential, HTTP: c.client()}
 }
 
 // workerCommand is one of `agentry worker`'s subcommands. run gets the
@@ -42,16 +54,18 @@ type workerCommand struct {
 // workerSetup is what every subcommand works with: the worker's folder,
 // and the flags a subcommand takes.
 type workerSetup struct {
-	dir    string
-	name   string // join -name
-	follow bool   // logs -f
-	purge  bool   // leave -purge
+	dir           string
+	name          string // join -name
+	caFingerprint string // join -ca-fingerprint
+	follow        bool   // logs -f
+	purge         bool   // leave -purge
 }
 
 var workerCommands = []workerCommand{
-	{name: "join", args: "[-name n] <server> <code>", summary: "join a server with a code from its Workers page",
+	{name: "join", args: "[-name n] [-ca-fingerprint f] <server> <code>", summary: "join a server with a code from its Workers page",
 		run: runJoin, flags: func(f *flag.FlagSet, w *workerSetup) {
 			f.StringVar(&w.name, "name", "", "what to call this machine (default: its host name)")
+			f.StringVar(&w.caFingerprint, "ca-fingerprint", "", "the SHA-256 of the server's own CA, from `agentry ca`, to trust it over https")
 		}},
 	{name: "start", summary: "run in the background, started at login and kept running", run: runStart},
 	{name: "stop", summary: "stop running in the background", run: runStop},
@@ -118,25 +132,61 @@ func printWorkerUsage(w io.Writer) {
 // runJoin joins the server with the code, unless this machine has joined
 // it already and the server still takes its credential: then the code is
 // left unused, so the install command can be run again to update a worker.
+// Run again with -ca-fingerprint, it moves a worker that joined over plain
+// HTTP to the server's https, keeping the CA; without it, a worker keeps
+// the CA it has.
 func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
-	server := strings.TrimSuffix(args[0], "/")
-	if config, err := loadWorker(w.dir); err == nil && config.Server == server && stillJoined(config) {
-		fmt.Fprintf(stdout, "%s has joined %s already.\n", config.Name, server)
-		return nil
+	given := strings.TrimSuffix(args[0], "/")
+	config, err := loadWorker(w.dir)
+	joined := err == nil
+	var target trustedServer
+	if joined && config.Server == given && config.CA != "" && w.caFingerprint == "" {
+		target = trustedServer{server: given, ca: []byte(config.CA)}
+	} else if target, err = trustServer(given, w.caFingerprint, trustTimeout); err != nil {
+		return err
 	}
-	return joinServer(w.dir, server, args[1], w.name, stdout)
+	if joined && sameServer(config.Server, given, target) {
+		config.Server, config.CA = target.server, string(target.ca)
+		if still, err := stillJoined(config); err != nil {
+			return err
+		} else if still {
+			if err := saveWorker(w.dir, config); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "%s has joined %s already.\n", config.Name, config.Server)
+			return nil
+		}
+	}
+	return joinServer(w.dir, target, args[1], w.name, stdout)
 }
 
-// stillJoined asks the server whether it takes the credential.
-func stillJoined(config workerConfig) bool {
+// sameServer is whether a worker that joined joinedAt has joined the server
+// given, which is reached at target: the same address, or, once the CA is
+// checked, the https of the plain HTTP address it joined at.
+func sameServer(joinedAt, given string, target trustedServer) bool {
+	if joinedAt == given || joinedAt == target.server {
+		return true
+	}
+	secure, err := httpsOf(joinedAt)
+	return target.ca != nil && err == nil && secure == target.server
+}
+
+// stillJoined asks the server whether it takes the credential. A server
+// whose certificate the kept CA doesn't vouch for is an error: its CA was
+// regenerated, and only a new fingerprint can say to trust the new one.
+func stillJoined(config workerConfig) (bool, error) {
 	request, _ := http.NewRequest(http.MethodHead, config.Server+workerlink.UpdatePath, nil)
 	request.Header.Set("Authorization", "Bearer "+config.Credential)
-	response, err := http.DefaultClient.Do(request)
+	response, err := config.client().Do(request)
+	if pinned.Untrusted(err) {
+		return false, fmt.Errorf("%s's CA isn't the one kept when this worker joined: it was regenerated, or this is another server. "+
+			"Join again with -ca-fingerprint from `agentry ca` on the server", config.Server)
+	}
 	if err != nil {
-		return true // can't tell: keep what it has rather than spend the code
+		return true, nil // can't tell: keep what it has rather than spend the code
 	}
 	response.Body.Close()
-	return response.StatusCode != http.StatusUnauthorized
+	return response.StatusCode != http.StatusUnauthorized, nil
 }
 
 func runForeground(w *workerSetup, _ []string, stdout io.Writer) error {
@@ -161,10 +211,10 @@ func loadWorker(dir string) (workerConfig, error) {
 	return config, nil
 }
 
-func joinServer(dir, server, code, name string, stdout io.Writer) error {
-	server = strings.TrimSuffix(server, "/")
+func joinServer(dir string, target trustedServer, code, name string, stdout io.Writer) error {
+	server := target.server
 	body, _ := json.Marshal(map[string]any{"code": code, "name": name, "machine": machines.Describe()})
-	response, err := http.Post(server+"/api/worker/join", "application/json", bytes.NewReader(body))
+	response, err := pinned.Client(target.ca, 0).Post(server+"/api/worker/join", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -177,16 +227,20 @@ func joinServer(dir, server, code, name string, stdout io.Writer) error {
 	if err := json.NewDecoder(response.Body).Decode(&joined); err != nil {
 		return err
 	}
-	joined.Server = server
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	saved, _ := json.MarshalIndent(joined, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "worker.json"), saved, 0o600); err != nil {
+	joined.Server, joined.CA = server, string(target.ca)
+	if err := saveWorker(dir, joined); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Joined %s as %s. Run `agentry worker start` to start taking work.\n", server, joined.Name)
 	return nil
+}
+
+func saveWorker(dir string, config workerConfig) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	saved, _ := json.MarshalIndent(config, "", "  ")
+	return os.WriteFile(filepath.Join(dir, "worker.json"), saved, 0o600)
 }
 
 func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
@@ -200,15 +254,14 @@ func runAsWorker(ctx context.Context, dir string, out io.Writer) error {
 	}
 	logger := log.New(out, "", log.LstdFlags)
 	logger.Printf("%s, working for %s", config.Name, config.Server)
-	worker := &workerlink.Worker{
-		Server: config.Server, Credential: config.Credential, About: machines.Describe(), Log: logger.Printf, SelfUpdate: true,
-		OnLink: func(up bool, err error) { saveLinkState(dir, up, err) },
-		Machine: &machines.Local{Label: config.Name, ServerURL: config.Server, HookCommand: shellQuote(self) + " hook",
-			Blobs:        sharedfiles.Hub{Server: config.Server, Credential: config.Credential},
-			WorktreeRoot: filepath.Join(dir, "worktrees"),
-			Hub: &machines.Hub{URL: workerlink.HubURL(config.Server), Credential: config.Credential,
-				MirrorRoot: filepath.Join(dir, "repos")}},
+	dropParentSession(logger.Writer())
+	worker, err := workerlink.Setup{Server: config.Server, Name: config.Name, Credential: config.Credential, CA: config.CA,
+		Dir: dir, HookCommand: shellQuote(self) + " hook"}.Worker()
+	if err != nil {
+		return err
 	}
+	worker.Log, worker.SelfUpdate = logger.Printf, true
+	worker.OnLink = func(up bool, err error) { saveLinkState(dir, up, err) }
 	err = worker.Run(ctx)
 	if errors.Is(err, workerlink.ErrUpdated) {
 		logger.Print("agentry was updated to the server's; restarting")

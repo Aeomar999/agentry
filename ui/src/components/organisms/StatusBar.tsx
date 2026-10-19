@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { GitBranch, SquareTerminal } from "lucide-react";
 import { StatusDot, DotTone } from "@/components/atoms/StatusDot";
 import { Kbd } from "@/components/atoms/Kbd";
@@ -15,6 +16,8 @@ interface StatusBarProps {
   connection: Connection;
   position: number;
   defaultRepo: string;
+  policyProblem: boolean; // policy.toml has a mistake, so the version before it is in force
+  missingProfiles: Record<string, string[]>; // profiles agents have that policy.toml lacks, with those agents
   working: number;
   needsYou: number; // questions and approvals waiting for you
   onOpenQuestions: () => void;
@@ -26,6 +29,8 @@ export function StatusBar({
   connection,
   position,
   defaultRepo,
+  policyProblem,
+  missingProfiles,
   working,
   needsYou,
   onOpenQuestions,
@@ -40,6 +45,17 @@ export function StatusBar({
         {label}
       </span>
       <span className="font-mono">log #{position}</span>
+      {policyProblem && (
+        <Link
+          to="/policy"
+          title="policy.toml has a mistake, so the version before it is still in force"
+          className="flex items-center gap-1.5 whitespace-nowrap text-warning hover:text-ink-primary"
+        >
+          <StatusDot tone="warning" />
+          Policy file has a mistake
+        </Link>
+      )}
+      <MissingProfilesLink missing={missingProfiles} />
       {working > 0 && <span>{working === 1 ? "1 task working" : `${working} tasks working`}</span>}
       {defaultRepo && (
         <span className="flex min-w-0 items-center gap-1 max-sm:hidden">
@@ -74,5 +90,23 @@ export function StatusBar({
         Press <Kbd>?</Kbd> for shortcuts
       </span>
     </footer>
+  );
+}
+
+// MissingProfilesLink points to the Policy page while agents have a profile
+// policy.toml lacks, whose calls are all denied until it's back.
+function MissingProfilesLink({ missing }: { missing: Record<string, string[]> }) {
+  const names = Object.keys(missing).sort();
+  if (names.length === 0) return null;
+  const agents = Object.values(missing).flat().sort();
+  return (
+    <Link
+      to="/policy"
+      title={`${agents.join(", ")} ${agents.length === 1 ? "has a profile" : "have profiles"} policy.toml doesn't have: ${names.join(", ")}`}
+      className="flex items-center gap-1.5 whitespace-nowrap text-warning hover:text-ink-primary"
+    >
+      <StatusDot tone="warning" />
+      {names.length === 1 ? `Profile ${names[0]} is missing from policy.toml` : `${names.length} profiles are missing from policy.toml`}
+    </Link>
   );
 }

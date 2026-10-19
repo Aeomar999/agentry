@@ -134,21 +134,21 @@ describe("activityOf's authors", () => {
     coordinator: "coordinator",
     turnList: [turn],
     actions: [],
-    events: [
-      event(1, "task.created", "human:you", { title: "Make it readable" }),
-      event(2, "task.assigned", "agent:coordinator", { agent: "engineer", instructions: "Build it" }),
-      event(3, "worktree.ready", "worker:local", { branch: "agentry/task-1" }),
-      event(4, "turn.started", "worker:local", { agent: "engineer" }, "turn-1"),
-      event(5, "prompt.acknowledged", "worker:local", {}, "turn-1"),
-      event(6, "task.needs_you", "system:coordinator-loop", { question: "Raise the budget?" }),
-    ],
   } as unknown as TaskDetail;
+  const log = [
+    event(1, "task.created", "human:you", { title: "Make it readable" }),
+    event(2, "task.assigned", "agent:coordinator", { agent: "engineer", instructions: "Build it" }),
+    event(3, "worktree.ready", "worker:local", { branch: "agentry/task-1" }),
+    event(4, "turn.started", "worker:local", { agent: "engineer" }, "turn-1"),
+    event(5, "prompt.acknowledged", "worker:local", {}, "turn-1"),
+    event(6, "task.needs_you", "system:coordinator-loop", { question: "Raise the budget?" }),
+  ];
 
   test("names you, the agent, and Agentry for the loop's and the workers' own rows; a turn is its agent's", () => {
-    expect(activityOf(task).map((item) => item.by)).toEqual(["you", "coordinator", "Agentry", "engineer", "Agentry", "Agentry"]);
+    expect(activityOf(task, log).map((item) => item.by)).toEqual(["you", "coordinator", "Agentry", "engineer", "Agentry", "Agentry"]);
   });
 
   test("says a message from the loop is from Agentry", () => {
-    expect(activityOf(task).at(-1)!.from).toBe("Agentry");
+    expect(activityOf(task, log).at(-1)!.from).toBe("Agentry");
   });
 });

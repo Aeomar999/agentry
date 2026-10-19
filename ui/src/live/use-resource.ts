@@ -1,40 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
-import { api } from "@/api/client";
-import { useLive } from "./LiveProvider";
+import { useCallback, useSyncExternalStore } from "react";
+import { useResourceCache } from "./LiveProvider";
+import { nothing } from "./resource-cache";
 
 export interface Resource<T> {
   data: T | undefined;
   error: string;
-  reload: () => void;
+  position: number; // of the log, that data is as fresh as; -1 before the first read
+  reload: () => Promise<void>; // returns once a read started after it is shown
 }
 
-// useResource reads one API path and reads it again whenever the log moves,
-// so what's on screen is never older than the last event.
+const unwatched = () => () => {};
+
+// useResource reads one API path and reads it again whenever the log moves
+// past what it was read at, so what's on screen is never older than the
+// last event. Every component showing the path shares one read of it.
 export function useResource<T>(path: string | null): Resource<T> {
-  const { position } = useLive();
-  const [data, setData] = useState<T>();
-  const [error, setError] = useState("");
-  const [reloads, setReloads] = useState(0);
-
-  useEffect(() => {
-    setData(undefined);
-    setError("");
-  }, [path]);
-
-  useEffect(() => {
-    if (!path) return;
-    const stop = new AbortController();
-    api<T>("GET", path, undefined, stop.signal)
-      .then((value) => {
-        setData(value);
-        setError("");
-      })
-      .catch((failure: Error) => {
-        if (!stop.signal.aborted) setError(failure.message);
-      });
-    return () => stop.abort();
-  }, [path, position, reloads]);
-
-  const reload = useCallback(() => setReloads((n) => n + 1), []);
-  return { data, error, reload };
+  const cache = useResourceCache();
+  const watch = useCallback((changed: () => void) => cache.watch(path!, changed), [cache, path]);
+  const snapshot = useSyncExternalStore(path ? watch : unwatched, () => (path ? cache.snapshot(path) : nothing));
+  const reload = useCallback(() => (path ? cache.reload(path) : Promise.resolve()), [cache, path]);
+  return { data: snapshot.data as T | undefined, error: snapshot.error, position: snapshot.position, reload };
 }
