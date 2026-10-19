@@ -902,6 +902,41 @@ func TestQuestionsGatherWhatWaitsForYou(t *testing.T) {
 	}
 }
 
+// A held action says so, and when, on the task and in Questions: its
+// agent was told no long ago, and the command may no longer fit.
+func TestAHeldActionSaysItWasHeld(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Deploy"}`)
+	worker, policy := events.Actor{Kind: events.Worker, ID: "local"}, events.Actor{Kind: events.Policy, ID: "rules"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.ActionRequested, Correlation: "toolu_1",
+			Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}},
+		{Stream: "task-1", Actor: policy, Type: events.ActionAsked, Correlation: "toolu_1", Data: map[string]any{"reason": "every push"}},
+		{Stream: "task-1", Actor: policy, Type: events.ActionHeld, Correlation: "toolu_1"},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if len(detail.Approvals) != 1 || !detail.Approvals[0].Held || detail.Approvals[0].HeldAt.IsZero() {
+		t.Fatalf("the task should show the held approval:\n%s", body)
+	}
+	heldAt := detail.Approvals[0].HeldAt
+
+	_, body = call(t, server, "GET", "/api/questions", "")
+	var questions []question
+	json.Unmarshal([]byte(body), &questions)
+	if len(questions) != 1 || !questions[0].Held || !questions[0].HeldAt.Equal(heldAt) || questions[0].Text != "git push origin HEAD:dev" {
+		t.Errorf("Questions should show the held approval with its full command:\n%s", body)
+	}
+}
+
 // The board's columns are the work's stages: a card goes onto any of them,
 // and the coordinator still makes the move.
 func TestCardsMoveThroughTheStages(t *testing.T) {

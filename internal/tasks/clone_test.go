@@ -38,7 +38,7 @@ func TestNextLeavesTheTaskAsItWas(t *testing.T) {
 		}
 		task = next
 	}
-	if task == nil || !task.IsDone || !task.DoneByYou || task.WrapUp == nil || len(task.Turns) != 6 || len(task.Actions) != 2 {
+	if task == nil || !task.IsDone || !task.DoneByYou || task.WrapUp == nil || len(task.Turns) != 6 || len(task.Actions) != 4 {
 		t.Errorf("the log didn't run through: %+v", task)
 	}
 }
@@ -87,6 +87,12 @@ func everyEvent() []events.Event {
 	log = add(log, worker, events.ActionResult, "tool-1", map[string]any{})
 	log = add(log, engineer, events.ActionRequested, "tool-2", map[string]any{"tool": "Bash", "command": "rm x"})
 	log = add(log, policy, events.ActionDenied, "tool-2", map[string]any{"reason": "no"})
+	log = add(log, engineer, events.ActionRequested, "tool-3", map[string]any{"tool": "Bash", "command": "git push"})
+	log = add(log, policy, events.ActionAsked, "tool-3", map[string]any{"reason": "ask rule"})
+	log = add(log, policy, events.ActionHeld, "tool-3", nil)
+	log = add(log, you, events.ActionApproved, "tool-3", map[string]any{"reason": "late"})
+	log = add(log, engineer, events.ActionRequested, "tool-4", map[string]any{"tool": "Bash", "command": "git push"})
+	log = add(log, policy, events.ActionApproved, "tool-4", map[string]any{"reason": "you approved this earlier", "pass": "tool-3"})
 	log = add(log, agentry, events.FileAdded, "", map[string]any{"name": "profile.txt", "hash": "h1", "size": float64(10), "by": "builder"})
 	log = add(log, agentry, events.FilesCollected, "", map[string]any{"turn": "turn-1"})
 	log = add(log, worker, events.TurnLimited, "turn-1", map[string]any{"agent": "builder", "error": "rate_limit",

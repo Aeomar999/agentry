@@ -160,15 +160,16 @@ var coreTypes = map[Type]Spec{
 	WorktreeReady:      {Fields: []string{"path", "branch", "port"}, Writers: []ActorKind{Worker}},
 	WorktreeMoved:      {Fields: []string{"worker", "path", "port"}, Writers: []ActorKind{Worker}},
 
-	TaskAssigned:       {Fields: []string{"agent", "instructions"}, Writers: []ActorKind{Agent}}, // "checks": the agent checks work; "ships": it ships work
-	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}},
+	TaskAssigned:       {Fields: []string{"agent", "instructions"}, Writers: []ActorKind{Agent}},             // "checks": the agent checks work; "ships": it ships work
+	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}}, // "seen": the trail steps its brief was made from
 	PromptAcknowledged: {Fields: []string{"hash"}, Correlation: true, Writers: []ActorKind{Worker}},
 	SessionStarted:     {Fields: []string{"engineSession"}, Correlation: true, Writers: []ActorKind{Worker}},
 
 	ActionRequested: {Fields: []string{"tool", "command"}, Correlation: true, Writers: []ActorKind{Agent}},
-	ActionApproved:  {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}},
+	ActionApproved:  {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}}, // "pass": the held action whose late approval let it through
 	ActionAsked:     {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy}},
 	ActionDenied:    {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}},
+	ActionHeld:      {Correlation: true, Writers: []ActorKind{Policy}},
 	ActionResult:    {Correlation: true, Writers: []ActorKind{Worker}},
 
 	PlanUpdated:  {Correlation: true, Writers: []ActorKind{Worker}}, // "plan" may be empty: the agent cleared it

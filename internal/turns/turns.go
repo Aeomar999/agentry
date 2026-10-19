@@ -40,8 +40,9 @@ func NewRunner(s *store.Store, state *current.State, fleet *machines.Fleet, conf
 // startTimeout is how long a machine has to set a turn up and start it.
 const startTimeout = 2 * time.Minute
 
-// Start begins the task's next turn: the agent works from brief. If it
-// can't, it raises an issue, so the coordinator hears about it.
+// Start begins the task's next turn: the agent works from brief, made from
+// task as it is. If it can't, it raises an issue, so the coordinator hears
+// about it.
 //
 // The brief goes in a file and the prompt is one line pointing at it, never
 // the brief itself: a pasted prompt gets wrapped and cut at 16 KB, and a
@@ -79,7 +80,7 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	// Recorded before the session starts, so its first hook call finds the turn open.
 	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
 		Correlation: id, Data: map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
-			"worker": machine.Name(), "planFrom": planFrom}})
+			"worker": machine.Name(), "planFrom": planFrom, "seen": len(task.Trail)}})
 	if err != nil {
 		return err
 	}

@@ -62,6 +62,7 @@ const (
 	ActionApproved  Type = "action.approved"
 	ActionAsked     Type = "action.asked" // the policy hands the decision to the user
 	ActionDenied    Type = "action.denied"
+	ActionHeld      Type = "action.held" // no answer before the hook gave up: it waits for the user still
 	ActionResult    Type = "action.result"
 
 	PlanUpdated  Type = "plan.updated" // the turn's plan, all of it, as the agent last wrote it

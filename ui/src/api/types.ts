@@ -105,6 +105,8 @@ export interface Action {
   command: string;
   requestedAt: string;
   asked: boolean;
+  held: boolean; // no answer came in time: the agent was told no, and it waits for you still
+  heldAt?: string;
   decision: string;
   reason: string;
   finished: boolean; // the tool ran and returned
@@ -352,6 +354,8 @@ export interface Question {
   action?: string;
   tool?: string;
   reason?: string;
+  held?: boolean; // approval: no answer came in time, so the agent was told no
+  heldAt?: string;
   options?: string[];
   page?: string;
   tokensUsed?: number;

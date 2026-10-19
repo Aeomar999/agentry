@@ -239,6 +239,11 @@ func (h *Handler) gate(ctx context.Context, call hookcall.Call, signal engines.S
 	if verdict.Decision != policy.Ask {
 		return h.decide(call.Task, action, verdict)
 	}
+	if pass := task.PassFor(task.Action(action)); pass != nil {
+		if answer, reason, ok := h.usePass(call.Task, action, pass.ID); ok {
+			return answer, reason
+		}
+	}
 	return h.askTheUser(ctx, call.Task, action, verdict)
 }
 
@@ -271,9 +276,28 @@ func (h *Handler) decide(task, action string, verdict policy.Verdict) (engines.D
 	return answer, "Agentry: " + verdict.Reason()
 }
 
+// usePass approves the action with the pass of a held action you approved
+// late, in place of asking you again: the agent asks for the very command
+// again, as its coordinator handed it back. It reports false if the pass
+// was refused, and you are asked as usual.
+func (h *Handler) usePass(task, action, pass string) (engines.Decision, string, bool) {
+	const reason = "the user approved this earlier, after it timed out"
+	_, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionApproved,
+		Correlation: action, Data: map[string]any{"reason": reason, "pass": pass}})
+	if err != nil || rejection != nil {
+		return "", "", false
+	}
+	return engines.Allow, "Agentry: " + reason, true
+}
+
+// Held is what the agent is told when no answer came in time.
+const Held = "Agentry: no answer yet; the command is held for the user's approval. Don't retry it now; carry on with " +
+	"other work or report back. If the user approves it, your coordinator will hand it back."
+
 // askTheUser records action.asked, which puts the task in Needs you, then waits
 // for the user's decision. If the hook gives up first (its deadline, or the
-// engine killed it), the action is denied so the task doesn't wait forever.
+// engine killed it), the agent is told no and the action is held for the
+// user, so the task doesn't wait on it.
 func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict policy.Verdict) (engines.Decision, string) {
 	asked, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionAsked,
 		Correlation: action, Data: verdictData(verdict)})
@@ -286,7 +310,7 @@ func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict p
 	for {
 		batch, err := reader.Next(ctx)
 		if err != nil {
-			return h.decide(task, action, refusal("no decision before the hook's deadline; ask again"))
+			return h.hold(task, action)
 		}
 		for _, e := range batch {
 			if e.Stream != task || e.Correlation != action {
@@ -300,6 +324,16 @@ func (h *Handler) askTheUser(ctx context.Context, task, action string, verdict p
 			}
 		}
 	}
+}
+
+// hold keeps the action waiting for you after the hook gave up on it. One
+// that can't be held, as in a task you moved to Done, is denied.
+func (h *Handler) hold(task, action string) (engines.Decision, string) {
+	_, rejection, err := h.store.Propose(events.Proposal{Stream: task, Actor: ruleset, Type: events.ActionHeld, Correlation: action})
+	if err != nil || rejection != nil {
+		return h.decide(task, action, refusal("no decision before the hook's deadline; ask again"))
+	}
+	return engines.Deny, Held
 }
 
 // profileOf is the agent's policy profile, "" (the default) if it has none.

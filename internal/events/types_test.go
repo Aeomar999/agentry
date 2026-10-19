@@ -4,7 +4,7 @@ import "testing"
 
 func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, AgentRenamed, AgentRenamedInTask, TaskTransferred, TaskRequested, RequestAnswered, ConnectionInvited, ConnectionMade, ConnectionRevoked, FileAdded, FileRemoved, FilesCollected, FilesDelivered, FileFetching, FilesFetched, TaskSplit, StoryDone, EpicWaits, EpicJoined, EpicLeft, StoryAdded, StoryRemoved, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskTurnsLimited, TaskRanked, TaskHeld, TaskWrappedUp, TaskReopened, RepoChanged, WorktreeReady, TaskAssigned, TurnStarted,
-		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
+		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied, ActionHeld,
 		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, TurnLimited, TurnResumed, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
 		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved,

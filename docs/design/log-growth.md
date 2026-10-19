@@ -1533,7 +1533,7 @@ and privacy work add to it instead of reworking it:
      next id, `len(ids)+1`, so archived tasks must be counted;
    - `web/api.go` `listTasks`: the task's summary;
    - `watchdog/watchdog.go` `Check`, `hooks/orphans.go`
-     `DenyOrphanedAsks`, `coordinator/loop.go` `portsInUse`,
+     `HoldOrphanedAsks`, `coordinator/loop.go` `portsInUse`,
      `web/agents_api.go` (the rename and `needing`),
      `web/questions_api.go` `listQuestions` and `web/workers_api.go`
      `tasksByMachine`: nothing, since an archived task is done; each

@@ -127,7 +127,7 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 		}
 		return ""
 	}
-	isWaitingForYou := len(task.WaitingForYou()) > 0 || turn.Waiting != ""
+	isWaitingForYou := len(task.HooksWaiting()) > 0 || turn.Waiting != "" // a held action waits for you, the agent doesn't
 	if !isWaitingForYou && now.Sub(turn.LastEventAt) > w.limits.Silence {
 		return fmt.Sprintf("%s has been silent for over %s (stalled: a hung network call or a stuck tool)", turn.Agent, w.limits.Silence)
 	}

@@ -7,11 +7,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/store"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // A broken task before the one with an orphaned ask doesn't stop the start:
-// it is skipped, and the ask after it is still denied.
+// it is skipped, and the ask after it is still held.
 func TestARestartSkipsABrokenTask(t *testing.T) {
 	state := current.New()
 	// No rules: they would refuse the worktree.moved that breaks task-1.
@@ -40,11 +39,11 @@ func TestARestartSkipsABrokenTask(t *testing.T) {
 		t.Fatal("task-1 should be broken")
 	}
 
-	if err := DenyOrphanedAsks(s, state); err != nil {
+	if err := HoldOrphanedAsks(s, state); err != nil {
 		t.Fatal(err)
 	}
 	task, _ := state.Task("task-2")
-	if action := task.Action("toolu_1"); action == nil || action.Decision != tasks.Denied {
-		t.Errorf("task-2's ask should be denied, got %+v", action)
+	if action := task.Action("toolu_1"); action == nil || !action.Held {
+		t.Errorf("task-2's ask should be held, got %+v", action)
 	}
 }

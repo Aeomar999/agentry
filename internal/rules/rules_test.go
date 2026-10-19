@@ -3,6 +3,7 @@ package rules
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -235,11 +236,135 @@ func TestALimitedTurnResumes(t *testing.T) {
 func TestEveryTaskEventHasARule(t *testing.T) {
 	for _, kind := range []events.Type{events.WorktreeReady, events.TaskAssigned, events.TurnStarted,
 		events.PromptAcknowledged, events.SessionStarted, events.ActionRequested, events.ActionAsked,
-		events.ActionApproved, events.ActionDenied, events.ActionResult, events.AgentWaiting, events.TurnEnded,
+		events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult, events.AgentWaiting, events.TurnEnded,
 		events.TurnLimited, events.TurnResumed, events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
 		if taskRules[kind] == nil {
 			t.Errorf("%s has no rule", kind)
 		}
+	}
+}
+
+// An engineer's turn whose git push was asked about: toolu_1.
+var askedPush = []step{
+	created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+	{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+	turnStarted("turn-2", "engineer"),
+	{engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push"}, true},
+	{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+}
+
+func TestOnlyYouDecideAHeldAction(t *testing.T) {
+	approve := func(actor events.Actor, id, pass string, accepted bool) step {
+		data := map[string]any{"reason": "approved"}
+		if pass != "" {
+			data["pass"] = pass
+		}
+		return step{actor, events.ActionApproved, id, data, accepted}
+	}
+	request := func(id, command string) step {
+		return step{engineer, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": command}, true}
+	}
+	task := run(t, append(append([]step{}, askedPush...),
+		step{you, events.ActionHeld, "toolu_1", nil, false}, // only the policy holds one
+		step{policy, events.ActionHeld, "toolu_1", nil, true},
+		step{policy, events.ActionHeld, "toolu_1", nil, false}, // held once
+		approve(policy, "toolu_1", "", false),                  // no hook waits: only you decide it
+		request("toolu_2", "ls"),
+		step{policy, events.ActionHeld, "toolu_2", nil, false}, // never asked
+		approve(policy, "toolu_2", "toolu_1", false),           // not approved yet
+		approve(policy, "toolu_2", "", true),
+		turnEnded("turn-2", "engineer", "Pushed? No, it was held."),
+		approve(you, "toolu_1", "", true),
+		turnStarted("turn-3", "tech-lead"), turnEnded("turn-3", "tech-lead", "assign"),
+		step{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "push again"}, true},
+		turnStarted("turn-4", "engineer"),
+		request("toolu_3", "git push --force"),
+		approve(policy, "toolu_3", "toolu_1", false), // another command
+		approve(policy, "toolu_3", "toolu_2", false), // not a held action
+		request("toolu_4", "git push"),
+		approve(policy, "toolu_4", "toolu_1", true),
+		request("toolu_5", "git push"),
+		approve(policy, "toolu_5", "toolu_1", false), // its pass is used
+	))
+	if held := task.Action("toolu_1"); !held.Held || held.Decision != tasks.Approved || !held.PassUsed {
+		t.Errorf("toolu_1: %+v, want held, approved, its pass used", held)
+	}
+}
+
+// A pass works for the agent that asked, in its first turn after your
+// approval, and in no other.
+func TestAPassFitsItsAgentAndTurn(t *testing.T) {
+	reviewer := events.Actor{Kind: events.Agent, ID: "reviewer"}
+	request := func(actor events.Actor, id string) step {
+		return step{actor, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push"}, true}
+	}
+	usePass := func(id string, accepted bool) step {
+		return step{policy, events.ActionApproved, id, map[string]any{"reason": "approved", "pass": "toolu_1"}, accepted}
+	}
+	handTo := func(agent, decide, next string) []step {
+		return []step{turnStarted(decide, "tech-lead"), turnEnded(decide, "tech-lead", "assign"),
+			{coordinator, events.TaskAssigned, "", map[string]any{"agent": agent, "instructions": "go"}, true},
+			turnStarted(next, agent)}
+	}
+	log := append(append([]step{}, askedPush...),
+		step{policy, events.ActionHeld, "toolu_1", nil, true},
+		step{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, true},
+		request(engineer, "toolu_2"),
+		usePass("toolu_2", false), // the turn it was asked in, not the next one
+		turnEnded("turn-2", "engineer", "held"))
+	log = append(log, handTo("reviewer", "turn-3", "turn-4")...)
+	log = append(log, request(reviewer, "toolu_3"), usePass("toolu_3", false), // another agent
+		turnEnded("turn-4", "reviewer", "reviewed"))
+	log = append(log, handTo("engineer", "turn-5", "turn-6")...)
+	log = append(log, turnEnded("turn-6", "engineer", "didn't push"))
+	log = append(log, handTo("engineer", "turn-7", "turn-8")...)
+	task := run(t, append(log, request(engineer, "toolu_4"), usePass("toolu_4", false))) // turn-6 was its turn
+	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-6" || pass.PassUsed {
+		t.Errorf("toolu_1: %+v, want its pass for turn-6, unused", pass)
+	}
+}
+
+// When the coordinator itself asked, its next turn hears your approval and
+// its pass works there.
+func TestACoordinatorsPassWorksInItsNextTurn(t *testing.T) {
+	push := func(id string) step {
+		return step{coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "git push"}, true}
+	}
+	task := run(t, []step{created, worktree, turnStarted("turn-1", "tech-lead"),
+		push("toolu_1"),
+		{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+		{policy, events.ActionHeld, "toolu_1", nil, true},
+		turnEnded("turn-1", "tech-lead", "held"),
+		{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, true},
+		turnStarted("turn-2", "tech-lead"),
+		push("toolu_2"),
+		{policy, events.ActionApproved, "toolu_2", map[string]any{"reason": "approved", "pass": "toolu_1"}, true},
+	})
+	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-2" || !pass.PassUsed {
+		t.Errorf("toolu_1: %+v, want its pass used in turn-2", pass)
+	}
+	handBack := slices.IndexFunc(task.Trail, func(s tasks.Step) bool { return strings.Contains(s.Text, "Run it again yourself in this turn") })
+	if handBack < 0 || !strings.HasSuffix(task.Trail[handBack].Text, "in this turn only.") {
+		t.Errorf("the hand-back should tell the coordinator to run it in this turn: %+v", task.Trail)
+	}
+}
+
+func TestAHeldActionWaitsWhileTheTaskIsParkedOrDone(t *testing.T) {
+	for name, move := range map[string]step{
+		"to do": {you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},
+		"done":  {you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := run(t, append(append([]step{}, askedPush...),
+				step{policy, events.ActionHeld, "toolu_1", nil, true},
+				move,
+				step{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, false},
+				step{you, events.ActionDenied, "toolu_1", map[string]any{"reason": "late"}, false},
+			))
+			if len(task.WaitingForYou()) != 0 {
+				t.Errorf("waiting for you: %+v, want none while the task is %s", task.WaitingForYou(), name)
+			}
+		})
 	}
 }
 
