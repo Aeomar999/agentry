@@ -4,8 +4,9 @@ import { readPlan } from "./plan";
 import { tokens } from "./tokens";
 
 // A task's activity: its whole event log read as rows a person follows,
-// oldest first (newestFirst turns it round for the page). An action's request, decision and result are one row, and
-// each turn opens with a row of its own. The Events tab keeps the raw log.
+// oldest first (sections groups them by author, newest first, for the page).
+// An action's request, decision and result are one row, and each turn opens
+// with a row of its own. The Events tab keeps the raw log.
 
 export type ActivityKind = "turn" | "action" | "message" | "waiting" | "issue" | "ended" | "note";
 export type ActivityTone = "default" | "success" | "warning" | "danger" | "info";
@@ -17,6 +18,7 @@ export interface ActivityItem {
   until?: string; // when it finished; none while it is still happening
   live: boolean; // still happening
   turn: string; // the turn it happened in, "" between turns
+  by: string; // who wrote it: an agent, you, or Agentry; a turn's row is its agent's
   leadsTo?: string; // a handoff: the turn it started
   from?: string; // who said it, for a message
   to?: string;
@@ -91,17 +93,70 @@ export function newestFirst(items: ActivityItem[]): ActivityItem[] {
   return blocks.reverse().flatMap(([first, ...rest]) => [first, ...rest.reverse()]);
 }
 
+// A Section is a run of rows with one author, under one band: a turn (its
+// agent's), or rows between turns by you, by Agentry or by another agent.
+export interface Section {
+  key: string; // its oldest row's, which stays as rows are added
+  by: string;
+  turn?: ActivityItem; // the turn's own row, for a turn's section
+  continued: boolean; // the turn's later rows, after someone else's in the middle of it
+  rows: ActivityItem[]; // newest first, the turn's own row left out
+}
+
+// sections groups rows, oldest first as activityOf gives them, into author
+// sections, newest first. A new turn or a new author starts a section; rows
+// between turns by the agent of the turn just before them stay in its
+// section (the coordinator's handoff after its turn). Your message in the
+// middle of a turn splits it: the turn's later rows go under a continued
+// band. A turn left with no rows by the Messages filter goes, and what was
+// on either side of it joins up if it has one author; in Actions and
+// Everything a turn's band stays, as the turn happened.
+export function sections(items: ActivityItem[], show: Show = "all"): Section[] {
+  const kept: Section[] = [];
+  for (const section of grouped(items)) {
+    const last = kept[kept.length - 1];
+    if (!section.rows.length && show === "messages") continue;
+    if (!section.turn && last?.by === section.by) last.rows.push(...section.rows);
+    else kept.push(section);
+  }
+  for (const section of kept) section.rows.reverse();
+  return kept.reverse();
+}
+
+// grouped is sections' first pass: every section, oldest first, its rows too.
+function grouped(items: ActivityItem[]): Section[] {
+  const out: Section[] = [];
+  const turns = new Map<string, ActivityItem>();
+  for (const item of items) {
+    const last = out[out.length - 1];
+    if (item.kind === "turn") {
+      turns.set(item.turn, item);
+      out.push({ key: item.key, by: item.by, turn: item, continued: false, rows: [] });
+    } else if (item.turn ? last?.turn?.turn === item.turn : last?.by === item.by) {
+      last.rows.push(item);
+    } else {
+      const turn = item.turn ? turns.get(item.turn) : undefined;
+      out.push({ key: item.key, by: turn?.by ?? item.by, turn, continued: Boolean(turn), rows: [item] });
+    }
+  }
+  return out;
+}
+
 function turnOfEvent(e: LogEvent, turns: Map<string, Turn>, actions: Map<string, Action>): string {
   if (!e.correlation) return "";
   if (turns.has(e.correlation)) return e.correlation;
   return actions.get(e.correlation)?.turn ?? "";
 }
 
+// AGENTRY is the name Agentry's own rows go by: the loop's, the workers'
+// and the policy's.
+export const AGENTRY = "Agentry";
+
 // who is the name an event's actor goes by in the trail: "agent:dev" is
-// dev, and a person is you.
+// dev, a person is you, and anyone else is Agentry.
 function who(e: LogEvent): string {
   const [kind, id] = e.actor.split(":", 2);
-  return kind === "human" ? "you" : (id ?? kind);
+  return kind === "human" ? "you" : kind === "agent" ? (id ?? kind) : AGENTRY;
 }
 
 function text(e: LogEvent, key: string): string {
@@ -117,7 +172,7 @@ function rowOf(
   settledAt: Map<string, string>,
   coordinator: string,
 ): ActivityItem | null {
-  const base = { key: String(e.position), at: e.at, turn, live: false, tone: "default" as ActivityTone };
+  const base = { key: String(e.position), at: e.at, turn, by: who(e), live: false, tone: "default" as ActivityTone };
   const message = (from: string, to: string, body: string, tone: ActivityTone = "default"): ActivityItem => ({
     ...base,
     kind: "message",
@@ -150,6 +205,7 @@ function rowOf(
       return {
         ...base,
         kind: "turn",
+        by: info.agent,
         title: info.agent,
         turnInfo: info,
         until: ended,
