@@ -22,14 +22,15 @@ func List(source Source, repo string) []*Idea {
 	return list
 }
 
-// Dismissals are the ideas in list you dismissed, in the same order. A
-// Visionaries brief names them, with your note, so they aren't suggested again.
-func Dismissals(list []*Idea) []*Idea {
-	var dismissed []*Idea
+// InState are the ideas in list that are in state, in the same order. A
+// Visionaries brief names those you accepted and dismissed, so they aren't
+// suggested again.
+func InState(list []*Idea, state State) []*Idea {
+	var in []*Idea
 	for _, idea := range list {
-		if idea.State == Dismissed {
-			dismissed = append(dismissed, idea)
+		if idea.State == state {
+			in = append(in, idea)
 		}
 	}
-	return dismissed
+	return in
 }

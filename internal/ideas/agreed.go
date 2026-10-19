@@ -53,24 +53,13 @@ func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, rule string
 // MinBackers of them. No such team, or one with no viewpoints, agrees on
 // nothing, and a rule Agentry doesn't know is the strict one.
 func Disagreed(idea *Idea, roster agents.Roster, team, rule string) string {
-	viewpoints := slices.DeleteFunc(slices.Clone(roster), func(a agents.Agent) bool {
-		return a.Coordinates || !strings.EqualFold(a.TeamName(), team)
-	})
-	if len(viewpoints) == 0 {
+	if !slices.ContainsFunc(roster, isViewpointOf(team)) {
 		return "the " + team + " team has no viewpoints"
 	}
 	if doubters := trimmed(idea.DoubtedBy); len(doubters) > 0 {
 		return "doubted by " + strings.Join(doubters, ", ")
 	}
-	var backers, missing []string
-	for _, viewpoint := range viewpoints {
-		backs := func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), viewpoint.Name) }
-		if slices.ContainsFunc(idea.BackedBy, backs) {
-			backers = append(backers, viewpoint.Name)
-		} else {
-			missing = append(missing, viewpoint.Name)
-		}
-	}
+	backers, missing := backing(idea, roster, team)
 	if rule != settings.NobodyDoubted {
 		if len(missing) > 0 {
 			return "not backed by " + strings.Join(missing, ", ")
@@ -86,6 +75,36 @@ func Disagreed(idea *Idea, roster agents.Roster, team, rule string) string {
 		return "only one backer"
 	}
 	return "only " + strconv.Itoa(len(backers)) + " backers"
+}
+
+// Backers are the viewpoints of team, by their roster names, that back
+// the idea.
+func Backers(idea *Idea, roster agents.Roster, team string) []string {
+	backers, _ := backing(idea, roster, team)
+	return backers
+}
+
+// backing splits the viewpoints of team into those that back the idea and
+// those that don't.
+func backing(idea *Idea, roster agents.Roster, team string) (backers, missing []string) {
+	for _, viewpoint := range roster {
+		if !isViewpointOf(team)(viewpoint) {
+			continue
+		}
+		backs := func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), viewpoint.Name) }
+		if slices.ContainsFunc(idea.BackedBy, backs) {
+			backers = append(backers, viewpoint.Name)
+		} else {
+			missing = append(missing, viewpoint.Name)
+		}
+	}
+	return backers, missing
+}
+
+// isViewpointOf: the agent is one of team's, in any case, and doesn't
+// coordinate it.
+func isViewpointOf(team string) func(agents.Agent) bool {
+	return func(a agents.Agent) bool { return !a.Coordinates && strings.EqualFold(a.TeamName(), team) }
 }
 
 // trimmed are the names, trimmed, without the blank ones.

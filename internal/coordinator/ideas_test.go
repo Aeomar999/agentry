@@ -185,10 +185,10 @@ func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) 
 }
 
 // The story's "dismissals reach a Visionaries brief": a Visionaries
-// coordinator reads what you dismissed in its repo, and a Software one
+// coordinator reads what you dismissed and accepted in its repo, and a Software one
 // doesn't, nor how to suggest ideas.
 func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
-	s, _, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	startTask(t, s, "task-vision-3", repo, "editor")
 	endTurn(t, s, "task-vision-3", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Dark mode", "problem": "Bright at night", "proposal": "A dark theme", "size": "S"}]}`)
@@ -199,8 +199,19 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 	}
 
 	vision := startTask(t, s, "task-vision-4", repo, "editor")
-	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode: The OS does it") {
+	if brief := readBrief(t, vision, "turn-1"); !strings.Contains(brief, "## Ideas the user dismissed\n\n- Dark mode (idea-1): The OS does it") {
 		t.Errorf("the editor's brief should name the dismissed idea:\n%s", brief)
+	}
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": "Search",
+		"problem": "p", "proposal": "f", "size": "S", "task": "task-vision-3", "repo": repo}})
+	got, err := ideas.Accept(s, state, accepted, ideas.Choice{})
+	if err != nil || !got.Accepted {
+		t.Fatalf("accepting: %+v %v", got, err)
+	}
+	again := startTask(t, s, "task-vision-6", repo, "editor")
+	if brief := readBrief(t, again, "turn-1"); !strings.Contains(brief, "## Ideas already accepted\n\n- Search (idea-2): became " + got.Task) ||
+		!strings.Contains(brief, `"repeats"`) {
+		t.Errorf("the editor's brief should name the accepted idea and how to repeat one:\n%s", brief)
 	}
 	software := startTask(t, s, "task-vision-5", repo, "tech-lead")
 	if brief := readBrief(t, software, "turn-1"); strings.Contains(brief, "Dark mode") || strings.Contains(brief, `"ideas"`) {

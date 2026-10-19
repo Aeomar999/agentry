@@ -11,7 +11,7 @@ import (
 
 // Settings are your choices for how Agentry works.
 type Settings struct {
-	VisionariesOnEpicClose bool // a Visionaries session starts after you close an epic, about what it delivered and what could follow
+	VisionariesOnEpicClose bool   // a Visionaries session starts after you close an epic, about what it delivered and what could follow
 	AutoAcceptIdeas        bool   // Agentry accepts an idea the Visionaries agree on, by AutoAcceptRule, as you would
 	AutoStartIdeas         bool   // and starts the task it made; only with AutoAcceptIdeas
 	AutoAcceptRule         string // which ideas count as agreed: EveryoneBacked or NobodyDoubted
@@ -35,7 +35,9 @@ const (
 var AutoAcceptRules = []string{EveryoneBacked, NobodyDoubted}
 
 // Default is the settings before you change any.
-func Default() Settings { return Settings{VisionariesOnEpicClose: true, AutoAcceptRule: EveryoneBacked} }
+func Default() Settings {
+	return Settings{VisionariesOnEpicClose: true, AutoAcceptRule: EveryoneBacked}
+}
 
 // FromEvents applies the settings stream's accepted events in order.
 func FromEvents(stream []events.Event) Settings {

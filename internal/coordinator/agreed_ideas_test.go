@@ -88,7 +88,7 @@ func TestAnIdeaEveryVisionaryAgreedOnIsAcceptedAndStarted(t *testing.T) {
 	byTitle := agreedDone(t, s, state, repo, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true})
 
 	agreed := byTitle["Search the board"]
-	if agreed.State != ideas.Accepted || !agreed.AutoAccepted || agreed.Note != AutoAccepted || agreed.Became == "" {
+	if agreed.State != ideas.Accepted || !agreed.AutoAccepted || agreed.Note != "auto-accepted: all Visionaries agreed" || agreed.Became == "" {
 		t.Fatalf("the agreed idea: %s, auto %v, note %q, became %q", agreed.State, agreed.AutoAccepted, agreed.Note, agreed.Became)
 	}
 	leftOpen(t, byTitle)
@@ -187,5 +187,55 @@ func TestAnAgreedIdeaTakesTheServersLimitsOrItsEpics(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Under nobodyDoubted an idea two viewpoints backed with no doubt is
+// accepted, with a note that says so, while a doubted one, one with a
+// single backer and every duplicate stay open: one under the title of an
+// idea you chose, one that says what an accepted idea said under a new
+// title, and one the Visionaries said repeats an idea.
+func TestUnderNobodyDoubtedADuplicateIsNeverAccepted(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	runLoop(t, s, state)
+	byTitle := agreedDone(t, s, state, repo, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoAcceptRule: settings.NobodyDoubted})
+	for title, note := range map[string]string{"Search the board": "auto-accepted: nobody doubted it, 3 backed it",
+		"Half": "auto-accepted: nobody doubted it, 2 backed it"} {
+		if idea := byTitle[title]; idea.State != ideas.Accepted || !idea.AutoAccepted || idea.Note != note {
+			t.Errorf("%q: %s, auto %v, note %q; want accepted with %q", title, idea.State, idea.AutoAccepted, idea.Note, note)
+		}
+	}
+	for _, title := range []string{"Doubted", "dark mode", "Export"} {
+		if idea := byTitle[title]; idea.State != ideas.Open {
+			t.Errorf("%q should be left open for you: %s", title, idea.State)
+		}
+	}
+
+	const problem = "Finding the right task on a busy board takes a lot of scrolling through every column"
+	const proposal = "Add a search box above the board that filters the cards by title as you type"
+	accepted := mustCreate(t, s, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{"title": "Board search",
+		"problem": problem, "proposal": proposal, "size": "M", "task": "task-earlier", "repo": repo}})
+	if got, err := ideas.Accept(s, state, accepted, ideas.Choice{}); err != nil || !got.Accepted {
+		t.Fatalf("accepting the original: %+v %v", got, err)
+	}
+	const id = "task-vision-again"
+	startTask(t, s, id, repo, "editor")
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "Three ideas.", "ideas": [
+		{"title": "Find cards fast", "problem": "`+problem+`", "proposal": "A search box above the board that filters cards by their title", "size": "M",
+			"backedBy": `+everyViewpoint+`},
+		{"title": "Something new", "problem": "p", "proposal": "f", "size": "S", "backedBy": `+everyViewpoint+`, "repeats": "`+accepted+`"},
+		{"title": "Alone", "problem": "p", "proposal": "f", "size": "S", "backedBy": ["writer"]}]}`)
+	waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	kept := 0
+	for _, idea := range ideas.List(state, repo) {
+		if idea.Task == id {
+			kept++
+			if idea.State != ideas.Open {
+				t.Errorf("%q should be left open for you: %s", idea.Title, idea.State)
+			}
+		}
+	}
+	if kept != 3 {
+		t.Errorf("want the three ideas kept, got %d", kept)
 	}
 }

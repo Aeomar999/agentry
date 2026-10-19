@@ -339,6 +339,43 @@ func TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow(t *testing.T) {
 	}
 }
 
+// The rules refuse Agentry's accept of an idea that repeats another, even
+// one the Visionaries all agreed on, and under nobodyDoubted they let it
+// accept an idea two viewpoints backed but not one only one backed.
+func TestTheRulesRefuseAgentryADuplicate(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
+		Data: map[string]any{settings.AutoAcceptRule: settings.NobodyDoubted}})
+	first := suggestAgreed(t, s, repo, map[string]any{"title": "Search the board"})
+	if got, _ := ideas.Accept(s, state, first, ideas.Choice{}); !got.Accepted {
+		t.Fatalf("accept: %+v", got)
+	}
+	accepts := func(id string) *events.Rejection {
+		t.Helper()
+		task := "task-" + id
+		mustPropose(t, s, events.Proposal{Stream: task, Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "From " + id, "repo": repo, "coordinator": "tech-lead", "idea": id}})
+		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": task}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	for name, data := range map[string]map[string]any{
+		"the same title":    {"title": "search the Board!"},
+		"said to repeat it": {"title": "Find tasks fast", "repeats": first},
+		"one backer":        {"title": "Alone", "backedBy": []string{"skeptic"}},
+	} {
+		if rejection := accepts(suggestAgreed(t, s, repo, data)); rejection == nil {
+			t.Errorf("%s: Agentry's accept should be refused", name)
+		}
+	}
+	if rejection := accepts(suggestAgreed(t, s, repo, map[string]any{"title": "Dark mode", "backedBy": []string{"skeptic", "technologist"}})); rejection != nil {
+		t.Errorf("two backers and no doubt: %v", rejection)
+	}
+}
+
 // Agentry makes a task from an idea only while it is open, and starts only
 // a task it made from an idea it accepted, once, out of the Backlog into
 // In progress, before it has run; no agent accepts an idea.
