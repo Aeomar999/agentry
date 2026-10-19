@@ -78,11 +78,12 @@ func (l *Live) Watch(ctx context.Context, interval time.Duration) {
 }
 
 // reload reads the file and, if it changed, puts it in force or logs why it
-// can't. A missing file is an empty one: removing it removes the secrets.
+// can't.
 func (l *Live) reload() {
 	text, err := os.ReadFile(l.path)
 	if errors.Is(err, fs.ErrNotExist) {
-		text, err = nil, nil
+		l.gone()
+		return
 	}
 	if err != nil {
 		if l.lastSeen == unread {
@@ -106,6 +107,18 @@ func (l *Live) reload() {
 	}
 	l.current.Store(&tables)
 	slog.Info("agentry: settings file loaded", "file", l.path, "features", len(tables))
+}
+
+// gone is a missing file: no settings, as an empty one. Removing the file
+// removes the secrets, which is said once, naming only the file.
+func (l *Live) gone() {
+	none := sha256.Sum256(nil)
+	if l.lastSeen == none {
+		return // never there, empty, or already said
+	}
+	l.lastSeen = none
+	l.current.Store(&map[string]features.Table{})
+	slog.Warn("agentry: the settings file is gone; features have no settings now", "file", l.path)
 }
 
 // parse reads the file's tables. Its errors never quote the file: go-toml's

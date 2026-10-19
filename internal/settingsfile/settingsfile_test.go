@@ -85,6 +85,37 @@ func TestAnEditReachesSettingsHandedOutBefore(t *testing.T) {
 	}
 }
 
+// A file that goes missing takes its secrets with it, and that is said once,
+// naming only the file.
+func TestARemovedFileIsSaidOnce(t *testing.T) {
+	logged := captureLog(t)
+	path := write(t, filepath.Join(t.TempDir(), "features.toml"), good)
+	live := Open(path)
+	logged.Reset()
+	os.Remove(path)
+	live.reload()
+	live.reload()
+	if tables := live.Tables(); len(tables) != 0 {
+		t.Errorf("tables %v, want none", tables)
+	}
+	said := logged.String()
+	if strings.Count(said, "the settings file is gone") != 1 || !strings.Contains(said, path) {
+		t.Errorf("it logged\n%s\nwant one line saying the file is gone", said)
+	}
+	if strings.Contains(said, secret) {
+		t.Errorf("the log quotes the file:\n%s", said)
+	}
+	logged.Reset()
+	write(t, path, good)
+	live.reload()
+	if token, _ := live.For("ideas").Secret("token"); token != secret {
+		t.Errorf("putting the file back gave token %q", token)
+	}
+	if said := logged.String(); !strings.Contains(said, "settings file loaded") {
+		t.Errorf("putting the file back wasn't said:\n%s", said)
+	}
+}
+
 // A version that doesn't load leaves the one before it in force and is
 // reported once, naming the file and where, never what the file holds.
 func TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted(t *testing.T) {

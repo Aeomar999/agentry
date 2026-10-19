@@ -315,6 +315,7 @@ token = "..."
 
 - **Watched:** save the file and a running feature sees the change within two seconds, with no restart. A feature reads only its own table.
 - **Mistakes:** a version that doesn't load is refused, the one before it stays in force, and the server's output names the file and the line, never what the line holds. With no file, or a broken one, at start, Agentry starts with no settings.
+- **Removing it:** removes every feature's settings and secrets at once; the server's output says once that the file is gone.
 - **Secrets stay in the file:** they never reach the log, the state's snapshot, the page or the API, and no agent may read the file.
 
 ## Deploy it
