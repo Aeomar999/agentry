@@ -1,7 +1,9 @@
 package features
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -11,8 +13,13 @@ import (
 )
 
 // A feature whose Manifest panics is listed hidden and disabled, saying
-// why, and the features around it keep their own lines.
+// why, and logged once; the features around it keep their own lines.
 func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
+	var said bytes.Buffer
+	before := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&said, nil)))
+	t.Cleanup(func() { slog.SetDefault(before) })
+
 	shown := Entry{Enabled: true, Visible: true, Why: "on", Badge: 2}
 	list := []Feature{
 		{Name: "before", Manifest: func(Reader) Entry { return shown }},
@@ -31,6 +38,10 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 	}
 	if !reflect.DeepEqual(lines, want) {
 		t.Errorf("lines:\n got %+v\nwant %+v", lines, want)
+	}
+	logged := strings.Split(strings.TrimSpace(said.String()), "\n")
+	if len(logged) != 2 || !strings.Contains(logged[0], "feature=\"nil reader\"") || !strings.Contains(logged[1], "feature=panics panic=\"a bad manifest\"") {
+		t.Errorf("want one line for each panicking manifest, got:\n%s", said.String())
 	}
 }
 

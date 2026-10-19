@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -214,11 +215,12 @@ func Manifest(list []Feature, state Reader) []Line {
 	return lines
 }
 
-// entryOf is f's Manifest, a panic in it turned into a hidden, disabled
-// entry.
+// entryOf is f's Manifest, a panic in it logged and turned into a hidden,
+// disabled entry.
 func entryOf(f Feature, state Reader) (entry Entry) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			slog.Warn("features: a feature's manifest panicked", "feature", f.Name, "panic", recovered)
 			entry = Entry{Why: fmt.Sprintf("its manifest failed: %v", recovered)}
 		}
 	}()
