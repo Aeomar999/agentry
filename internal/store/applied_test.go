@@ -15,9 +15,10 @@ import (
 // blocking is a model whose Apply says it has started, then waits to be released.
 type blocking struct{ started, release chan struct{} }
 
-func (blocking) Since() int64                { return 0 }
-func (blocking) Load(string, []events.Event) {}
-func (blocking) Loaded(int64)                {}
+func (blocking) Since() int64                                { return 0 }
+func (blocking) Load(string, []events.Event)                 {}
+func (blocking) Loaded(int64)                                {}
+func (blocking) Refold(string, []events.Event, events.Event) {}
 
 func (b blocking) Apply(events.Event) {
 	b.started <- struct{}{}
@@ -141,6 +142,9 @@ func (p *partWay) Since() int64                         { return p.since }
 func (p *partWay) Load(stream string, _ []events.Event) { p.calls = append(p.calls, "Load "+stream) }
 func (p *partWay) Loaded(int64)                         { p.calls = append(p.calls, "Loaded") }
 func (p *partWay) Apply(e events.Event)                 { p.applied = append(p.applied, e.Position) }
+func (p *partWay) Refold(stream string, _ []events.Event, _ events.Event) {
+	p.calls = append(p.calls, "Refold "+stream)
+}
 
 // A model that starts part way is given only the events after its position,
 // the refusal among them, and no Load or Loaded; the log's reads start at

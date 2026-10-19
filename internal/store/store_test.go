@@ -43,6 +43,10 @@ func (c *created) Apply(e events.Event) {
 	}
 }
 
+func (c *created) Refold(stream string, before []events.Event, e events.Event) {
+	c.Load(stream, append(before, e))
+}
+
 func (c *created) has(stream string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

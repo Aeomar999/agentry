@@ -8,12 +8,14 @@ import (
 )
 
 // Spec is what the catalogue knows about one event type: the data it must
-// carry, whether it needs a correlation, and who may write it. Rules that
-// depend on what happened before (order) live in package rules.
+// carry, whether it needs a correlation, who may write it, and whether it
+// refolds its stream. Rules that depend on what happened before (order) live
+// in package rules.
 type Spec struct {
 	Fields      []string
 	Correlation bool
 	Writers     []ActorKind
+	Refolds     bool
 }
 
 // A Registration is what a feature adds to the catalogue: its own streams,
@@ -267,3 +269,9 @@ func (c *Catalogue) CheckWriter(p Proposal) *Rejection {
 	}
 	return nil
 }
+
+// Refolds says whether an event changes what came before it in its stream,
+// as task.unarchived and event.redacted will: the stream's state is then
+// folded again from its earlier events and this one, not changed by this
+// one alone. No core type does yet.
+func (c *Catalogue) Refolds(kind Type) bool { return c.specs[kind].Refolds }

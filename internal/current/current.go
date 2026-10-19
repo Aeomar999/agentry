@@ -78,6 +78,12 @@ func (s *State) Load(stream string, accepted []events.Event) {
 	if len(accepted) > 0 {
 		s.streams[stream] = accepted[len(accepted)-1].Position
 	}
+	s.fold(stream, accepted)
+}
+
+// fold builds a stream's state from its accepted events, as a replay does,
+// and keeps it, or marks the stream broken if it can't be built.
+func (s *State) fold(stream string, accepted []events.Event) {
 	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
 		case events.AgentsStream:
@@ -101,6 +107,25 @@ func (s *State) Load(stream string, accepted []events.Event) {
 			}
 		}
 	})
+}
+
+// Refold builds a stream's state again from its accepted events before e
+// and e, as Load does, for an event that changes what came before it
+// (events.Catalogue.Refolds). What the state held for the stream goes, even a broken
+// or archived task, and the position moves as Apply moves it.
+func (s *State) Refold(stream string, before []events.Event, e events.Event) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.position = e.Position
+	s.streams[stream] = e.Position
+	if e.Type == events.TaskCreated {
+		s.created = append(s.created, created{e.Position, stream})
+	}
+	delete(s.tasks, stream)
+	delete(s.ideas, stream)
+	delete(s.broken, stream)
+	delete(s.archived, stream)
+	s.fold(stream, append(slices.Clip(before), e))
 }
 
 // Loaded ends the load: position is the log's last, rejections included.

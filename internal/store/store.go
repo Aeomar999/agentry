@@ -49,11 +49,16 @@ CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 // A model may start part way through the log, as one read from a snapshot
 // would: Since says where it is, and Open applies only the events after it
 // instead of loading every stream.
+//
+// An event that changes what came before it in its stream (the catalogue's
+// Refolds) is given to Refold in place of Apply, with the stream's accepted
+// events before it, since the model can't read the log itself.
 type Model interface {
-	Since() int64                                // the last position the model holds, 0 when it holds nothing
-	Load(stream string, accepted []events.Event) // at Open, once per stream, when Since is 0
-	Loaded(position int64)                       // at Open, the log's last position, rejections included, when Since is 0
-	Apply(e events.Event)                        // after each commit, and at Open each event after Since
+	Since() int64                                                // the last position the model holds, 0 when it holds nothing
+	Load(stream string, accepted []events.Event)                 // at Open, once per stream, when Since is 0
+	Loaded(position int64)                                       // at Open, the log's last position, rejections included, when Since is 0
+	Apply(e events.Event)                                        // after each commit, and at Open each event after Since
+	Refold(stream string, before []events.Event, e events.Event) // in place of Apply, for an event that refolds its stream
 }
 
 // OrderCheck is check 3, order and per-agent who rules: given what happened so
@@ -92,7 +97,7 @@ func Open(path string, catalogue *events.Catalogue, model Model, check OrderChec
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
 	}
-	last, err := load(db, model)
+	last, err := load(db, catalogue, model)
 	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("loading the log: %w", err)
@@ -163,12 +168,12 @@ func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, err
 	if rejection != nil {
 		stored = rejectionOf(p, rejection)
 	}
-	event, err := s.commit(stored)
+	event, before, err := s.commit(stored)
 	if err != nil {
 		return events.Event{}, nil, err
 	}
 	if s.model != nil {
-		s.model.Apply(event)
+		give(s.model, s.catalogue, event, before)
 	}
 	s.applied.Store(event.Position)
 	s.changes.notify()
@@ -188,18 +193,46 @@ func (s *Store) validate(p events.Proposal) *events.Rejection {
 	return s.check(p)
 }
 
-// commit appends one event in its own transaction.
-func (s *Store) commit(p events.Proposal) (events.Event, error) {
+// commit appends one event in its own transaction. For an event that
+// refolds its stream, it also returns the stream's accepted events before
+// it, read in the same transaction: a read that fails then undoes the
+// event, rather than leave it in the log and out of the model.
+func (s *Store) commit(p events.Proposal) (events.Event, []events.Event, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return events.Event{}, err
+		return events.Event{}, nil, err
 	}
 	defer tx.Rollback()
 	event, err := appendEvent(tx, p)
 	if err != nil {
-		return events.Event{}, err
+		return events.Event{}, nil, err
 	}
-	return event, tx.Commit()
+	before, err := beforeRefold(tx, s.catalogue, event)
+	if err != nil {
+		return events.Event{}, nil, err
+	}
+	return event, before, tx.Commit()
+}
+
+// beforeRefold is the stream's accepted events before e, when e refolds
+// its stream; nil otherwise. It never reads past e: at Open the log holds
+// the rest of the tail too.
+func beforeRefold(db querier, catalogue *events.Catalogue, e events.Event) ([]events.Event, error) {
+	if !catalogue.Refolds(e.Type) {
+		return nil, nil
+	}
+	return queryEvents(db, `SELECT `+columns+` FROM events
+		WHERE stream = ? AND type != ? AND position < ? ORDER BY position`, e.Stream, events.ProposalRejected, e.Position)
+}
+
+// give hands the model a committed event: to Refold, with the stream's
+// events before it, when it refolds its stream, and to Apply otherwise.
+func give(model Model, catalogue *events.Catalogue, e events.Event, before []events.Event) {
+	if catalogue.Refolds(e.Type) {
+		model.Refold(e.Stream, before, e)
+		return
+	}
+	model.Apply(e)
 }
 
 func rejectionOf(p events.Proposal, rejection *events.Rejection) events.Proposal {

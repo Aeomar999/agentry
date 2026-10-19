@@ -83,7 +83,7 @@ func (s *Store) LastPosition() int64 { return s.applied.Load() }
 // Propose gives them. It runs in Open, before applied is set and before any
 // reader exists, so it reads everything up to that last position, in one
 // transaction for one snapshot.
-func load(db *sql.DB, model Model) (int64, error) {
+func load(db *sql.DB, catalogue *events.Catalogue, model Model) (int64, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -97,7 +97,7 @@ func load(db *sql.DB, model Model) (int64, error) {
 		return last, nil
 	}
 	if since := model.Since(); since > 0 {
-		return last, applyAfter(tx, model, since, last)
+		return last, applyAfter(tx, catalogue, model, since, last)
 	}
 	accepted, err := queryEvents(tx, `SELECT `+columns+` FROM events
 		WHERE type != ? AND position <= ? ORDER BY position`, events.ProposalRejected, last)
@@ -121,7 +121,7 @@ func load(db *sql.DB, model Model) (int64, error) {
 
 // applyAfter brings a model that starts part way up to the log's last
 // position. A model past the end was made from some other log.
-func applyAfter(tx *sql.Tx, model Model, since, last int64) error {
+func applyAfter(tx *sql.Tx, catalogue *events.Catalogue, model Model, since, last int64) error {
 	if since > last {
 		return fmt.Errorf("the model is at position %d, past the log's last, %d", since, last)
 	}
@@ -131,7 +131,11 @@ func applyAfter(tx *sql.Tx, model Model, since, last int64) error {
 		return err
 	}
 	for _, e := range tail {
-		model.Apply(e)
+		before, err := beforeRefold(tx, catalogue, e)
+		if err != nil {
+			return err
+		}
+		give(model, catalogue, e, before)
 	}
 	return nil
 }
