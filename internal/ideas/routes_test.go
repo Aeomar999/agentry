@@ -307,7 +307,7 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
 	created, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
 		"title": "Search the board", "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": "task-1", "kind": "",
 		"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"}}})
@@ -397,7 +397,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
 	for _, p := range agents.AddTeam(visionaries, nil, you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)

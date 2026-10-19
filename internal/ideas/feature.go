@@ -49,13 +49,10 @@ func next(prev any, e events.Event) any {
 func manifest(state features.Reader) features.Entry {
 	list := All(state)
 	entry := features.Entry{Badge: open(list)}
-	roster := state.Roster()
-	for _, team := range roster.Teams() {
-		if coordinator, found := roster.Coordinator(team); found && Suggests(coordinator) {
-			entry.Enabled, entry.Visible = true, true
-			entry.Why = fmt.Sprintf("the %s team suggests ideas", team)
-			return entry
-		}
+	if teams := Visionaries(state.Roster()); len(teams) > 0 {
+		entry.Enabled, entry.Visible = true, true
+		entry.Why = fmt.Sprintf("the %s team suggests ideas", teams[0])
+		return entry
 	}
 	switch kept := len(list); kept {
 	case 0:

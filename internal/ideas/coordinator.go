@@ -143,7 +143,7 @@ func autoAccepted(idea *Idea, roster agents.Roster, rule string) string {
 	if rule != settings.NobodyDoubted {
 		return "auto-accepted: all Visionaries agreed"
 	}
-	return fmt.Sprintf("auto-accepted: nobody doubted it, %d backed it", len(Backers(idea, roster, VisionariesTeam)))
+	return fmt.Sprintf("auto-accepted: nobody doubted it, %d backed it", len(Backers(idea, roster)))
 }
 
 // acceptAgreed accepts for you, when you turned that on, each of the ideas

@@ -9,9 +9,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
-// VisionariesTeam is the team whose coordinators suggest ideas.
-const VisionariesTeam = "Visionaries"
-
 // Name is the feature's name, which a team template lists to make its
 // coordinators suggest ideas.
 const Name = "ideas"
@@ -23,6 +20,21 @@ const Name = "ideas"
 func Suggests(coordinator agents.Agent) bool {
 	template, found := agents.TemplateWithID(coordinator.Template)
 	return found && template.Lists(Name)
+}
+
+// Visionaries are the teams of the roster whose coordinators suggest ideas
+// (Suggests), in roster order, whatever they are called: a team made from
+// the Visionaries template, "Visionaries 2" too, and not one you made
+// yourself and called Visionaries. A follow-up session goes to the first;
+// the viewpoints of all of them weigh in on an idea.
+func Visionaries(roster agents.Roster) []string {
+	var teams []string
+	for _, team := range roster.Teams() {
+		if coordinator, found := roster.Coordinator(team); found && Suggests(coordinator) {
+			teams = append(teams, team)
+		}
+	}
+	return teams
 }
 
 // MinBackers is how many viewpoints must back an idea nobody doubted before
@@ -41,7 +53,7 @@ func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, rule string
 	if original := Duplicate(idea, list); original != nil {
 		return duplicateText(original)
 	}
-	return Disagreed(idea, roster, VisionariesTeam, rule)
+	return Disagreed(idea, roster, rule)
 }
 
 // LeftForYou is NotAutoAccepted, and when that would accept the idea, the
@@ -58,22 +70,23 @@ func LeftForYou(board Tasks, idea *Idea, list []*Idea, roster agents.Roster, rul
 	return ""
 }
 
-// Disagreed says how the viewpoints of team fall short of agreeing on the
-// idea under rule, "" when they agree. The viewpoints are the team's agents
-// that don't coordinate, read from the roster, so a team with other
-// viewpoints works; a name counts in any case and once. Any doubt is
-// enough to disagree. EveryoneBacked then needs every viewpoint to back
-// it, so one that didn't weigh in leaves it short; NobodyDoubted needs
-// MinBackers of them. No such team, or one with no viewpoints, agrees on
-// nothing, and a rule Agentry doesn't know is the strict one.
-func Disagreed(idea *Idea, roster agents.Roster, team, rule string) string {
-	if !slices.ContainsFunc(roster, isViewpointOf(team)) {
-		return "the " + team + " team has no viewpoints"
+// Disagreed says how the viewpoints of the roster's Visionaries teams
+// (Visionaries) fall short of agreeing on the idea under rule, "" when they
+// agree. The viewpoints are those teams' agents that don't coordinate, so
+// a team with other viewpoints works; a name counts in any case and once.
+// Any doubt is enough to disagree. EveryoneBacked then needs every
+// viewpoint to back it, so one that didn't weigh in leaves it short;
+// NobodyDoubted needs MinBackers of them. No such team, or none with
+// viewpoints, agrees on nothing, and a rule Agentry doesn't know is the
+// strict one.
+func Disagreed(idea *Idea, roster agents.Roster, rule string) string {
+	if !slices.ContainsFunc(roster, isViewpointOf(Visionaries(roster))) {
+		return "the Visionaries have no viewpoints"
 	}
 	if doubters := trimmed(idea.DoubtedBy); len(doubters) > 0 {
 		return "doubted by " + strings.Join(doubters, ", ")
 	}
-	backers, missing := backing(idea, roster, team)
+	backers, missing := backing(idea, roster)
 	if rule != settings.NobodyDoubted {
 		if len(missing) > 0 {
 			return "not backed by " + strings.Join(missing, ", ")
@@ -91,18 +104,19 @@ func Disagreed(idea *Idea, roster agents.Roster, team, rule string) string {
 	return "only " + strconv.Itoa(len(backers)) + " backers"
 }
 
-// Backers are the viewpoints of team, by their roster names, that back
-// the idea.
-func Backers(idea *Idea, roster agents.Roster, team string) []string {
-	backers, _ := backing(idea, roster, team)
+// Backers are the viewpoints of the roster's Visionaries teams, by their
+// roster names, that back the idea.
+func Backers(idea *Idea, roster agents.Roster) []string {
+	backers, _ := backing(idea, roster)
 	return backers
 }
 
-// backing splits the viewpoints of team into those that back the idea and
-// those that don't.
-func backing(idea *Idea, roster agents.Roster, team string) (backers, missing []string) {
+// backing splits the viewpoints of the roster's Visionaries teams into
+// those that back the idea and those that don't.
+func backing(idea *Idea, roster agents.Roster) (backers, missing []string) {
+	isViewpoint := isViewpointOf(Visionaries(roster))
 	for _, viewpoint := range roster {
-		if !isViewpointOf(team)(viewpoint) {
+		if !isViewpoint(viewpoint) {
 			continue
 		}
 		backs := func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), viewpoint.Name) }
@@ -115,10 +129,9 @@ func backing(idea *Idea, roster agents.Roster, team string) (backers, missing []
 	return backers, missing
 }
 
-// isViewpointOf: the agent is one of team's, in any case, and doesn't
-// coordinate it.
-func isViewpointOf(team string) func(agents.Agent) bool {
-	return func(a agents.Agent) bool { return !a.Coordinates && strings.EqualFold(a.TeamName(), team) }
+// isViewpointOf: the agent is in one of teams and doesn't coordinate it.
+func isViewpointOf(teams []string) func(agents.Agent) bool {
+	return func(a agents.Agent) bool { return !a.Coordinates && slices.Contains(teams, a.TeamName()) }
 }
 
 // trimmed are the names, trimmed, without the blank ones.

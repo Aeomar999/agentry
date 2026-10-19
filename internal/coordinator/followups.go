@@ -41,14 +41,14 @@ func (l *Loop) followUp(id string, close int64) {
 	if err != nil || epic == nil || epic.Kind != tasks.Epic || !epic.IsDone || l.followedUp(id, close) {
 		return
 	}
-	team := teamNamed(roster, ideas.VisionariesTeam)
-	lead, ok := roster.Coordinator(team)
-	if team == "" || !ok {
+	teams := ideas.Visionaries(roster)
+	if len(teams) == 0 {
 		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as there is no Visionaries team. "+
 			"To have one after the next epic you close, add the team: on the Agents page, Add a team, Visionaries. "+
 			"Or turn these sessions off on the Ideas page.")
 		return
 	}
+	lead, _ := roster.Coordinator(teams[0])
 	limits := tasks.NewLimits(l.Defaults, nil)
 	_, refused := l.newTask(agentry, map[string]any{
 		"title": firstLine("Follow-ups after " + epic.Title), "description": followUpBrief(epic, l.familyOf(epic)),

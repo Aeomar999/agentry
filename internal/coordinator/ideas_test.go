@@ -365,7 +365,7 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 // Visionaries doesn't, and a log from before agents recorded their template
 // still has its Visionaries teams.
 func TestATeamSuggestsIdeasByItsTemplate(t *testing.T) {
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
 	var log []events.Event
 	add := func(p events.Proposal) { log = append(log, events.Event{Proposal: p}) }
 	for _, p := range agents.SeedProposals(nil) {

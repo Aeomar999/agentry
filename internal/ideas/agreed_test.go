@@ -18,7 +18,16 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
+// team is a team called name made from the Visionaries template, whose
+// coordinator is lead.
 func team(name string, members ...string) agents.Roster {
+	roster := handMade(name, members...)
+	roster[0].Template = "visionaries"
+	return roster
+}
+
+// handMade is a team called name you made yourself, from no template.
+func handMade(name string, members ...string) agents.Roster {
 	roster := agents.Roster{{Name: "lead", Coordinates: true, Team: name}}
 	for _, member := range members {
 		roster = append(roster, agents.Agent{Name: member, Team: name})
@@ -33,27 +42,26 @@ func TestAnIdeaIsAgreedWhenEveryViewpointBacksIt(t *testing.T) {
 	cases := []struct {
 		name      string
 		roster    agents.Roster
-		team      string
 		backedBy  []string
 		doubtedBy []string
 		want      string // "" for agreed
 	}{
-		{"every viewpoint backs it", four, "Visionaries", all, nil, ""},
-		{"in another order and case, past the team", four, "Visionaries", []string{"Skeptic", "technologist ", "user-advocate", "product-strategist", "engineer"}, nil, ""},
-		{"one doubts it", four, "Visionaries", all, []string{"skeptic"}, "doubted by skeptic"},
-		{"one doubts it as well as backing it", four, "Visionaries", all, []string{"technologist"}, "doubted by technologist"},
-		{"one didn't weigh in", four, "Visionaries", all[:3], nil, "not backed by skeptic"},
-		{"nobody weighed in", four, "Visionaries", nil, nil, "not backed by product-strategist, user-advocate, technologist, skeptic"},
-		{"no such team", four, "Dreamers", all, nil, "the Dreamers team has no viewpoints"},
-		{"a team of only its coordinator", team("Visionaries"), "Visionaries", all, nil, "the Visionaries team has no viewpoints"},
-		{"a team with other viewpoints", team("Visionaries", "dreamer", "builder"), "Visionaries", []string{"builder", "dreamer"}, nil, ""},
-		{"a team with other viewpoints, one missing", team("Visionaries", "dreamer", "builder"), "Visionaries", all, nil, "not backed by dreamer, builder"},
+		{"every viewpoint backs it", four, all, nil, ""},
+		{"in another order and case, past the team", four, []string{"Skeptic", "technologist ", "user-advocate", "product-strategist", "engineer"}, nil, ""},
+		{"one doubts it", four, all, []string{"skeptic"}, "doubted by skeptic"},
+		{"one doubts it as well as backing it", four, all, []string{"technologist"}, "doubted by technologist"},
+		{"one didn't weigh in", four, all[:3], nil, "not backed by skeptic"},
+		{"nobody weighed in", four, nil, nil, "not backed by product-strategist, user-advocate, technologist, skeptic"},
+		{"no Visionaries team", four[5:], all, nil, "the Visionaries have no viewpoints"},
+		{"a team of only its coordinator", team("Visionaries"), all, nil, "the Visionaries have no viewpoints"},
+		{"a team with other viewpoints", team("Visionaries", "dreamer", "builder"), []string{"builder", "dreamer"}, nil, ""},
+		{"a team with other viewpoints, one missing", team("Visionaries", "dreamer", "builder"), all, nil, "not backed by dreamer, builder"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
 			for _, rule := range []string{settings.EveryoneBacked, "a rule from a later version"} {
-				if got := ideas.Disagreed(idea, c.roster, c.team, rule); got != c.want {
+				if got := ideas.Disagreed(idea, c.roster, rule); got != c.want {
 					t.Errorf("%s: got %q, want %q", rule, got, c.want)
 				}
 			}
@@ -85,12 +93,12 @@ func TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
-			if got := ideas.Disagreed(idea, four, "Visionaries", settings.NobodyDoubted); got != c.want {
+			if got := ideas.Disagreed(idea, four, settings.NobodyDoubted); got != c.want {
 				t.Errorf("got %q, want %q", got, c.want)
 			}
 		})
 	}
-	if got := ideas.Disagreed(&ideas.Idea{BackedBy: []string{"skeptic", "technologist"}}, team("Visionaries"), "Visionaries", settings.NobodyDoubted); got == "" {
+	if got := ideas.Disagreed(&ideas.Idea{BackedBy: []string{"skeptic", "technologist"}}, team("Visionaries"), settings.NobodyDoubted); got == "" {
 		t.Error("a team with no viewpoints agrees on nothing")
 	}
 }
@@ -298,7 +306,7 @@ func TestTheBudgetYouChooseKeepsTheTasksTurns(t *testing.T) {
 // for you, the ideas every Visionary agreed on, and starting them.
 func turnOn(t *testing.T, s *store.Store, state *current.State) {
 	t.Helper()
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
 	for _, p := range agents.AddTeam(visionaries, state.Roster(), you) {
 		mustPropose(t, s, p)
 	}
