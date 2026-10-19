@@ -425,7 +425,7 @@ func TestALogWithNoIdeas(t *testing.T) {
 		t.Errorf("ideas: %v", list)
 	}
 	if before.MadeFrom != "" || before.Parked != "" || before.Status() != tasks.Working {
-		t.Errorf("task-1: idea %q parked %q status %s", before.MadeFrom, before.Parked, before.Status())
+		t.Errorf("task-1: made from %q parked %q status %s", before.MadeFrom, before.Parked, before.Status())
 	}
 	if id := suggest(t, s, repo, nil); id != "idea-1" {
 		t.Errorf("first idea is %s", id)

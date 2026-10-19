@@ -412,8 +412,8 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "idea": "idea-99"}}},
 		{"a task from no such idea, by from", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": "idea-99"}}},
-		{"a task from no such idea, by from, beside an open one", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
-			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": "idea-99", "idea": open}}},
+		{"a task whose from and idea differ", events.Proposal{Stream: "task-9", Actor: agentry, Type: events.TaskCreated,
+			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": open, "idea": "idea-99"}}},
 		{"starting the task you accepted", start("task-3")},
 		{"starting the Visionaries' task", start("task-1")},
 		{"parking its own", events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}}},
@@ -428,6 +428,8 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 			t.Errorf("%s: want refused, got %v %v", c.name, rejection, err)
 		}
 	}
+	mustPropose(t, s, events.Proposal{Stream: "task-90", Actor: agentry, Type: events.TaskCreated,
+		Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": open}})
 	mustPropose(t, s, start("task-2"))
 	if task := loadTask(t, s, "task-2"); task.Parked != "" || task.Column != "in-progress" {
 		t.Errorf("started: parked %q column %q", task.Parked, task.Column)

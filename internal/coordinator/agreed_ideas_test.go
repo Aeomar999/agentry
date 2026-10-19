@@ -99,7 +99,7 @@ func TestAnIdeaEveryVisionaryAgreedOnIsAcceptedAndStarted(t *testing.T) {
 	task := waitUntil(t, s, agreed.Became, "started", func(task *tasks.Task) bool { return task.Parked == "" })
 	if task.Repo != repo || task.MadeFrom != agreed.ID || task.Coordinator != "tech-lead" ||
 		!strings.Contains(task.Description, "Limits from task-epic (copied from the epic):\n\nHard limits:\n- No deploys.\n- No secrets.") {
-		t.Errorf("task: repo %q idea %q coordinator %q\n%s", task.Repo, task.MadeFrom, task.Coordinator, task.Description)
+		t.Errorf("task: repo %q made from %q coordinator %q\n%s", task.Repo, task.MadeFrom, task.Coordinator, task.Description)
 	}
 	started := false
 	for _, e := range mustStream(t, s, agreed.Became) {
