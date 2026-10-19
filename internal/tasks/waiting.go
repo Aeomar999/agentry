@@ -18,6 +18,10 @@ func WaitingLine(agent, command string) string {
 	return "Waiting for you to approve the push to " + push
 }
 
+// plainText is a command bash passes to git word for word: no quotes,
+// escapes, globs, braces, comments, variables or operators to rewrite it.
+var plainText = regexp.MustCompile(`^[A-Za-z0-9 \t._/:+=@^,-]*$`)
+
 // remoteName is a remote named in the repo's config, not a URL or a path.
 var remoteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
@@ -26,7 +30,7 @@ var remoteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 // push it fully understands is plain: any option, quote or remote it doesn't
 // know could delete a branch or run code, so its whole text stays in view.
 func plainPush(command string) (branch string, ok bool) {
-	if strings.ContainsAny(command, ";&|<>`$\n'\"") {
+	if !plainText.MatchString(command) {
 		return "", false
 	}
 	words := strings.Fields(command)
@@ -73,7 +77,7 @@ func plainPush(command string) (branch string, ok bool) {
 	if mapped && src == "" { // ":branch" deletes it
 		return "", false
 	}
-	if dst == "HEAD" || dst == "" || strings.Contains(dst, "*") {
+	if dst == "HEAD" || dst == "" {
 		return "", true
 	}
 	return strings.TrimPrefix(dst, "refs/heads/"), true
