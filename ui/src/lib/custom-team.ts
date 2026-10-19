@@ -142,12 +142,17 @@ function checkTeamName(team: string, roster: Agent[], templates: TeamRules["temp
   }
 }
 
-// checkCoordinator asks for a coordinator when no row is one. The radio
-// across rows keeps it to one at most.
+// checkCoordinator asks for exactly one coordinator. The panel's radio
+// across rows can't check two, but a team made agent by agent can have them.
 function checkCoordinator(agents: DraftAgent[]): Words | undefined {
   if (agents.length === 0) return { message: "Add an agent: it coordinates the team.", summary: "Agents: add an agent" };
-  if (!agents.some((agent) => agent.coordinates)) {
+  const coordinators = agents.filter((agent) => agent.coordinates).map(shownName);
+  if (coordinators.length === 0) {
     return { message: "Pick one agent to coordinate.", summary: "Agents: pick one agent to coordinate" };
+  }
+  if (coordinators.length > 1) {
+    const who = `${listed(coordinators, "and")} ${coordinators.length === 2 ? "both" : "all"} coordinate`;
+    return { message: `${who}. Pick the one that takes the team's tasks.`, summary: `Agents: ${who}` };
   }
 }
 
@@ -253,9 +258,9 @@ function checkProfile(agent: DraftAgent, { rules }: RowContext): Words | undefin
 
 const inPolicy = (profile: string, policy: Pick<Policy, "profiles">) => policy.profiles.some((p) => p.name === profile);
 
-// listed is "a", "a or b", "a, b or c".
-function listed(words: string[]): string {
-  return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`;
+// listed is "a", "a or b", "a, b or c", or with "and".
+function listed(words: string[], last = "or"): string {
+  return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} ${last} ${words[words.length - 1]}`;
 }
 
 // missingProfiles are the profiles the draft's agents use that policy.toml

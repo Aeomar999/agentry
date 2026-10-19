@@ -196,6 +196,16 @@ describe("checkTeam", () => {
     expect(checkTeam(team, roster, rules)[0].field).toBe("agents");
   });
 
+  test("two or more coordinators", () => {
+    const two = draft(row("head", { coordinates: true }));
+    expect(problemsOf(two)).toEqual([
+      ["chief and head both coordinate. Pick the one that takes the team's tasks.", "Agents: chief and head both coordinate"],
+    ]);
+    expect(checkTeam(two, roster, rules)[0].field).toBe("agents");
+    const three = draft(row("head", { coordinates: true }), row("boss", { coordinates: true }));
+    expect(problemsOf(three)[0][0]).toBe("chief, head and boss all coordinate. Pick the one that takes the team's tasks.");
+  });
+
   test("no agents", () => {
     expect(problemsOf({ team: "Research", agents: [] })).toEqual([["Add an agent: it coordinates the team.", "Agents: add an agent"]]);
   });
