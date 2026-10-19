@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -14,7 +15,7 @@ import (
 // live from them equals a replay of the log, and the state a restart loads.
 func TestTheLiveStateEqualsARestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	live := New(withIdeas)
+	live := New(withIdeas, ideas.Streams())
 	s, err := store.Open(path, withIdeas, live, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +37,7 @@ func TestTheLiveStateEqualsARestart(t *testing.T) {
 	}
 	s.Close()
 
-	restarted := New(withIdeas)
+	restarted := New(withIdeas, ideas.Streams())
 	again, err := store.Open(path, withIdeas, restarted, nil)
 	if err != nil {
 		t.Fatal(err)

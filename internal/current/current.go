@@ -4,9 +4,10 @@
 // as each event commits, so it can't disagree with what happened.
 //
 // The catalogue the state is made with says what each stream is. A task's
-// stream makes a task, and an idea's an idea: an idea is never a task. The
-// agents, workers and connections streams each make a roster, and the
-// settings stream your settings. The policy stream keeps no state here: its
+// stream makes a task, and a feature's own stream whatever that feature's
+// Streams build from it: an idea, never a task. The agents, workers and
+// connections streams each make a roster, and the settings stream your
+// settings. The policy stream keeps no state here: its
 // events only move the position. A foreign stream, which a feature this
 // build doesn't have wrote, is skipped and only counted, as is an event of
 // a type the catalogue doesn't know in any other stream.
@@ -19,12 +20,13 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -37,15 +39,16 @@ import (
 type State struct {
 	mu          sync.RWMutex
 	catalogue   *events.Catalogue
-	position    int64                  // of the last event applied, rejections included
-	streams     map[string]int64       // each stream's last accepted event applied, by stream
-	tasks       map[string]*tasks.Task // by stream
-	created     []created              // every task.created applied, in the order of their positions, as the log lists them
-	tasksMade   int                    // every task.created applied, a foreign stream's too, as Store.Create counts them
-	ideas       map[string]*ideas.Idea // by stream
-	suggested   []created              // every idea.suggested applied, in the order of their positions, as the log lists them
-	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
-	archived    map[string]bool        // tasks the state holds no full state for
+	position    int64                        // of the last event applied, rejections included
+	streams     map[string]int64             // each stream's last accepted event applied, by stream
+	tasks       map[string]*tasks.Task       // by stream
+	created     []created                    // every task.created applied, in the order of their positions, as the log lists them
+	tasksMade   int                          // every task.created applied, a foreign stream's too, as Store.Create counts them
+	owners      map[string]*features.Streams // by prefix: the features whose streams the state keeps
+	owned       map[string]any               // a feature's stream's state, as its Streams built it, by stream
+	ownedOrder  map[string][]created         // by prefix: each owned stream's first event applied, in the order of their positions
+	broken      map[string]error             // streams whose apply panicked: reads fail, as a replay would
+	archived    map[string]bool              // tasks the state holds no full state for
 	roster      agents.Roster
 	workers     workers.Roster
 	connections connections.Roster
@@ -53,10 +56,10 @@ type State struct {
 	skipped     tally // foreign streams and unknown types
 }
 
-// created is a task.created or idea.suggested event's place in the log.
-// The task and idea orders are by these positions, not by when the state
-// took each event, so a state that starts part way and takes the rest keeps
-// the log's order.
+// created is a task.created event's place in the log, or the first event of
+// a feature's stream. The task and owned stream orders are by these
+// positions, not by when the state took each event, so a state that starts
+// part way and takes the rest keeps the log's order.
 type created struct {
 	position int64
 	id       string
@@ -68,10 +71,35 @@ type created struct {
 var ErrArchived = errors.New("the task is archived")
 
 // New is an empty state that reads streams as catalogue says, which must be
-// the catalogue the store is opened with.
-func New(catalogue *events.Catalogue) *State {
-	return &State{catalogue: catalogue, streams: map[string]int64{}, tasks: map[string]*tasks.Task{}, ideas: map[string]*ideas.Idea{},
+// the catalogue the store is opened with, and keeps the streams of each
+// feature in owned. A stream the catalogue doesn't give to a feature is
+// never one of owned's, whatever its name: without the registration it is
+// foreign. An owned stream with no Streams here keeps no state.
+func New(catalogue *events.Catalogue, owned ...*features.Streams) *State {
+	owners := map[string]*features.Streams{}
+	for _, streams := range owned {
+		if owners[streams.Prefix] != nil {
+			panic("current: two features own the streams " + streams.Prefix)
+		}
+		owners[streams.Prefix] = streams
+	}
+	return &State{catalogue: catalogue, streams: map[string]int64{}, tasks: map[string]*tasks.Task{},
+		owners: owners, owned: map[string]any{}, ownedOrder: map[string][]created{},
 		broken: map[string]error{}, archived: map[string]bool{}, settings: settings.Default(), skipped: newTally()}
+}
+
+// ownerOf is the Streams that keeps a stream, or nil for a stream no
+// feature here owns.
+func (s *State) ownerOf(stream string, kind events.StreamKind) *features.Streams {
+	if kind != events.OwnedStream {
+		return nil
+	}
+	for prefix, streams := range s.owners {
+		if strings.HasPrefix(stream, prefix) {
+			return streams
+		}
+	}
+	return nil
 }
 
 // Load builds a stream's state from its accepted events, in place: no copy
@@ -90,8 +118,8 @@ func (s *State) Load(stream string, accepted []events.Event) {
 	if kind == events.ForeignStream {
 		return
 	}
-	for _, e := range accepted {
-		s.made(e)
+	for i, e := range accepted {
+		s.made(e, kind, i == 0)
 	}
 	s.fold(stream, accepted)
 }
@@ -101,6 +129,7 @@ func (s *State) Load(stream string, accepted []events.Event) {
 // stream never gets here.
 func (s *State) fold(stream string, accepted []events.Event) {
 	kind := s.catalogue.KindOf(stream)
+	owner := s.ownerOf(stream, kind)
 	s.guard(stream, func() string { return "building " + stream }, func() {
 		switch stream {
 		case events.AgentsStream:
@@ -113,9 +142,9 @@ func (s *State) fold(stream string, accepted []events.Event) {
 			s.settings = settings.FromEvents(accepted)
 		case events.PolicyStream:
 		default:
-			if kind == events.OwnedStream && ideas.IsStream(stream) {
-				if idea := ideas.FromEvents(accepted); idea != nil {
-					s.ideas[stream] = idea
+			if owner != nil {
+				if held := owner.FromEvents(accepted); held != nil {
+					s.owned[stream] = held
 				}
 			} else if kind != events.TaskStream {
 				return
@@ -141,15 +170,16 @@ func (s *State) Refold(stream string, before []events.Event, e events.Event) {
 	defer s.mu.Unlock()
 	s.position = e.Position
 	kind := s.catalogue.KindOf(stream)
-	s.skipped.count(s.catalogue, kind, e, s.streams[stream] == 0)
+	first := s.streams[stream] == 0
+	s.skipped.count(s.catalogue, kind, e, first)
 	s.streams[stream] = e.Position
 	s.countMade(e)
 	if kind == events.ForeignStream {
 		return
 	}
-	s.made(e)
+	s.made(e, kind, first)
 	delete(s.tasks, stream)
-	delete(s.ideas, stream)
+	delete(s.owned, stream)
 	delete(s.broken, stream)
 	delete(s.archived, stream)
 	s.fold(stream, append(slices.Clip(before), e))
@@ -160,7 +190,9 @@ func (s *State) Loaded(position int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	slices.SortFunc(s.created, byPosition)
-	slices.SortFunc(s.suggested, byPosition)
+	for _, order := range s.ownedOrder {
+		slices.SortFunc(order, byPosition)
+	}
 	s.position = position
 }
 
@@ -182,7 +214,8 @@ func (s *State) Apply(e events.Event) {
 		return
 	}
 	kind := s.catalogue.KindOf(e.Stream)
-	s.skipped.count(s.catalogue, kind, e, s.streams[e.Stream] == 0)
+	first := s.streams[e.Stream] == 0
+	s.skipped.count(s.catalogue, kind, e, first)
 	s.streams[e.Stream] = e.Position
 	s.countMade(e)
 	if kind == events.ForeignStream {
@@ -190,13 +223,14 @@ func (s *State) Apply(e events.Event) {
 	}
 	// The store applies in the log's order, after everything Load or an
 	// earlier Apply gave, so appending keeps the positions in order.
-	s.made(e)
+	s.made(e, kind, first)
 	if s.broken[e.Stream] != nil {
 		return
 	}
 	// Said as tasks.Replay says it, so a task that breaks here reads as one
 	// that broke at Load.
 	applying := func() string { return fmt.Sprintf("applying %s to %s at %d", e.Type, e.Stream, e.Position) }
+	owner := s.ownerOf(e.Stream, kind)
 	s.guard(e.Stream, applying, func() {
 		switch e.Stream {
 		case events.AgentsStream:
@@ -209,9 +243,9 @@ func (s *State) Apply(e events.Event) {
 			s.settings = s.settings.Next(e)
 		case events.PolicyStream:
 		default:
-			if kind == events.OwnedStream && ideas.IsStream(e.Stream) {
-				if idea := ideas.Next(s.ideas[e.Stream], e); idea != nil {
-					s.ideas[e.Stream] = idea
+			if owner != nil {
+				if held := owner.Next(s.owned[e.Stream], e); held != nil {
+					s.owned[e.Stream] = held
 				}
 			} else if kind != events.TaskStream {
 				return
@@ -222,14 +256,14 @@ func (s *State) Apply(e events.Event) {
 	})
 }
 
-// made notes where a task.created or an idea.suggested is in the log, for
-// the task and idea orders.
-func (s *State) made(e events.Event) {
-	switch e.Type {
-	case events.TaskCreated:
+// made notes where a task.created, or the first event of a stream a
+// feature here owns, is in the log, for the task and owned stream orders.
+func (s *State) made(e events.Event, kind events.StreamKind, first bool) {
+	if e.Type == events.TaskCreated {
 		s.created = append(s.created, created{e.Position, e.Stream})
-	case ideas.IdeaSuggested:
-		s.suggested = append(s.suggested, created{e.Position, e.Stream})
+	}
+	if owner := s.ownerOf(e.Stream, kind); owner != nil && first {
+		s.ownedOrder[owner.Prefix] = append(s.ownedOrder[owner.Prefix], created{e.Position, e.Stream})
 	}
 }
 
@@ -261,19 +295,24 @@ func (s *State) breaks(stream string, err error) {
 }
 
 // copy is the state as it is now, in maps of its own, so it can be read
-// while the store goes on applying events to s. The tasks, ideas and rosters
-// in it are shared: no one changes them.
+// while the store goes on applying events to s. The tasks, owned streams'
+// states and rosters in it are shared: no one changes them.
 func (s *State) copy() *State {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	ownedOrder := map[string][]created{}
+	for prefix, order := range s.ownedOrder {
+		ownedOrder[prefix] = slices.Clone(order)
+	}
 	return &State{
 		position:    s.position,
 		streams:     maps.Clone(s.streams),
 		tasks:       maps.Clone(s.tasks),
 		created:     slices.Clone(s.created),
 		tasksMade:   s.tasksMade,
-		ideas:       maps.Clone(s.ideas),
-		suggested:   slices.Clone(s.suggested),
+		owners:      s.owners,
+		owned:       maps.Clone(s.owned),
+		ownedOrder:  ownedOrder,
 		broken:      maps.Clone(s.broken),
 		archived:    maps.Clone(s.archived),
 		roster:      s.roster,
@@ -313,15 +352,16 @@ func (s *State) Task(id string) (*tasks.Task, error) {
 	return s.tasks[id], nil
 }
 
-// Idea is an idea's state: nil, nil when there is no such idea, and the
-// error when its stream is broken.
-func (s *State) Idea(id string) (*ideas.Idea, error) {
+// Owned is a feature's stream's state, as its Streams left it: nil, nil
+// when the stream holds nothing, and the error when it is broken. The
+// feature's own typed read (ideas.Get) says what it is.
+func (s *State) Owned(stream string) (any, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if err := s.broken[id]; err != nil {
+	if err := s.broken[stream]; err != nil {
 		return nil, err
 	}
-	return s.ideas[id], nil
+	return s.owned[stream], nil
 }
 
 // Tasks is every task, oldest first, in a new slice the caller may sort.
@@ -361,27 +401,15 @@ func (s *State) NextTask() string {
 	return events.Numbered(events.TaskPrefix, s.tasksMade)
 }
 
-// Ideas is every idea, oldest first, in a new slice the caller may sort.
-// A broken idea is left out, as Tasks leaves out a broken task.
-func (s *State) Ideas() []*ideas.Idea {
+// OwnedIDs is every stream with prefix that a feature here owns, in the
+// order of their first events in the log, in a new slice: a broken one's
+// too, as TaskIDs lists a broken task.
+func (s *State) OwnedIDs(prefix string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	all := make([]*ideas.Idea, 0, len(s.suggested))
-	for _, c := range s.suggested {
-		if idea := s.ideas[c.id]; idea != nil && s.broken[c.id] == nil {
-			all = append(all, idea)
-		}
-	}
-	return all
-}
-
-// ideaIDs is the stream of every idea.suggested applied, oldest first: a
-// broken idea's too, for Equal to compare with the log's.
-func (s *State) ideaIDs() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ids := make([]string, len(s.suggested))
-	for i, c := range s.suggested {
+	order := s.ownedOrder[prefix]
+	ids := make([]string, len(order))
+	for i, c := range order {
 		ids[i] = c.id
 	}
 	return ids

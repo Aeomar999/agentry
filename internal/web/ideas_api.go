@@ -114,7 +114,7 @@ func (s *Server) ideaExists(w http.ResponseWriter, id string) bool {
 		http.Error(w, "no such idea", http.StatusNotFound)
 		return false
 	}
-	idea, err := s.state.Idea(id)
+	idea, err := ideas.Get(s.state, id)
 	switch {
 	case err != nil:
 		failed(w, err)

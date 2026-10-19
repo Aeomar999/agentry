@@ -16,7 +16,7 @@ import (
 // Visionaries agreed on, by your rule, when you turned that on; the
 // catalogue checks that no agent does.
 func checkIdea(p events.Proposal, state State) *events.Rejection {
-	idea, err := state.Idea(p.Stream)
+	idea, err := ideas.Get(state, p.Stream)
 	if err != nil {
 		return refuse("could not read the idea: " + err.Error())
 	}
@@ -71,7 +71,7 @@ func repeatsAnIdea(p events.Proposal, state State) string {
 	if repeats == "" {
 		return ""
 	}
-	original, err := state.Idea(repeats)
+	original, err := ideas.Get(state, repeats)
 	switch {
 	case err != nil:
 		return "could not read the idea it repeats: " + err.Error()
@@ -125,7 +125,7 @@ func forAnOpenIdea(p events.Proposal, state State) string {
 	if from == "" {
 		return only
 	}
-	idea, err := state.Idea(from)
+	idea, err := ideas.Get(state, from)
 	switch {
 	case err != nil:
 		return "could not read the idea: " + err.Error()
@@ -152,7 +152,7 @@ func startingAnAcceptedIdea(task *tasks.Task, p events.Proposal, state State) st
 		task.Parked == "" || len(task.Turns) > 0 || task.AutoStarted || !task.ByAgentry || task.MadeFrom == "" {
 		return only
 	}
-	idea, err := state.Idea(task.MadeFrom)
+	idea, err := ideas.Get(state, task.MadeFrom)
 	switch {
 	case err != nil:
 		return "could not read the idea: " + err.Error()

@@ -25,8 +25,8 @@ import (
 type State interface {
 	Task(id string) (*tasks.Task, error)
 	NextTask() string
-	Idea(id string) (*ideas.Idea, error)
-	Ideas() []*ideas.Idea
+	Owned(stream string) (any, error) // a feature's stream, read through its typed helper: ideas.Get
+	OwnedIDs(prefix string) []string
 	Roster() agents.Roster
 	Settings() settings.Settings
 	Workers() workers.Roster

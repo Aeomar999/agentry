@@ -42,8 +42,8 @@ func TestIdeasStreamsAreSkippedAndCountedWithoutIdeas(t *testing.T) {
 		if !reflect.DeepEqual(s.Roster(), with.Roster()) || s.Settings() != with.Settings() {
 			t.Errorf("%s: the rosters differ from a build with ideas", name)
 		}
-		if len(s.Ideas()) != 0 {
-			t.Errorf("%s: %d ideas, want none", name, len(s.Ideas()))
+		if len(ideas.All(s)) != 0 {
+			t.Errorf("%s: %d ideas, want none", name, len(ideas.All(s)))
 		}
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
 			t.Errorf("%s: idea-1 reads as a task: %+v, %v", name, task, err)

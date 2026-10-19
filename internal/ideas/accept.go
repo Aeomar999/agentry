@@ -65,7 +65,7 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 
 // accept is Accept, under its lock, before the column is read.
 func accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
-	idea, err := board.Idea(id)
+	idea, err := Get(board, id)
 	switch {
 	case err != nil:
 		return Acceptance{}, err

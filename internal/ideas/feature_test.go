@@ -14,9 +14,22 @@ type board struct {
 }
 
 func (b board) Roster() agents.Roster { return b.roster }
-func (b board) Ideas() []*ideas.Idea  { return b.ideas }
-func (b board) Idea(string) (*ideas.Idea, error) {
+
+func (b board) Owned(stream string) (any, error) {
+	for _, idea := range b.ideas {
+		if idea.ID == stream {
+			return idea, nil
+		}
+	}
 	return nil, nil
+}
+
+func (b board) OwnedIDs(prefix string) []string {
+	var ids []string
+	for _, idea := range b.ideas {
+		ids = append(ids, idea.ID)
+	}
+	return ids
 }
 
 // Ideas is on by the template a team was made from, not its name.

@@ -14,7 +14,7 @@ import (
 // open ideas.
 func Feature(source Source) features.Feature {
 	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Manifest: func(state features.Reader) features.Entry {
-		return manifest(source.Ideas(), state)
+		return manifest(All(source), state)
 	}}
 }
 
