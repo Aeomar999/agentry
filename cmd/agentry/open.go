@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,9 +34,13 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	dataDir := flags.String("data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	repo := flags.String("repo", filepath.Join(home, "Agentry"), "the repo a new task works on when it names none")
 	port := flags.Int("port", 7800, "the first port to try; Agentry listens on it on every interface")
+	flags.Bool("https", false, "serve over https with Agentry's own local CA (see agentry serve -h)")
+	flags.Int("budget", 0, "the tokens a new task may use before it asks you; 0 for no limit (serve's default when not given)")
+	flags.Int("max-turns", 0, "the turns a new task may have without your answer; 0 for no limit (serve's default when not given)")
 	if flags.Parse(args) != nil {
 		return 2
 	}
+	passed := passedOn(flags, "https", "budget", "max-turns")
 	dropParentSession(stderr) // before the server starts, so it doesn't inherit them
 	for _, tool := range []string{"git", "claude"} {
 		if _, err := exec.LookPath(tool); err != nil {
@@ -56,7 +61,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintln(stdout, "Starting Agentry…")
-	if err := startServer(*dataDir, *repo, address); err != nil {
+	if err := startServer(*dataDir, *repo, address, passed); err != nil {
 		fmt.Fprintln(stderr, "agentry open:", err)
 		return 1
 	}
@@ -104,9 +109,21 @@ func runningServer(dataDir string) (client.Client, bool) {
 	return c, c.Call("GET", "/api/config", nil, nil) == nil
 }
 
+// passedOn is the flags named that were given, as serve takes them, so
+// serve's own defaults hold for the rest.
+func passedOn(flags *flag.FlagSet, names ...string) []string {
+	var args []string
+	flags.Visit(func(f *flag.Flag) {
+		if slices.Contains(names, f.Name) {
+			args = append(args, "-"+f.Name+"="+f.Value.String())
+		}
+	})
+	return args
+}
+
 // startServer runs `agentry serve` in the background, its output in the
-// data folder's serve.log.
-func startServer(dataDir, repo, address string) error {
+// data folder's serve.log, with extra flags after its own; tests replace it.
+var startServer = func(dataDir, repo, address string, extra []string) error {
 	self, err := os.Executable()
 	if err != nil {
 		return err
@@ -119,7 +136,7 @@ func startServer(dataDir, repo, address string) error {
 		return err
 	}
 	defer log.Close()
-	server := exec.Command(self, "serve", "-addr", address, "-repo", repo, "-data", dataDir)
+	server := exec.Command(self, append([]string{"serve", "-addr", address, "-repo", repo, "-data", dataDir}, extra...)...)
 	server.Dir = repo
 	server.Stdout, server.Stderr = log, log
 	procs.Detach(server)

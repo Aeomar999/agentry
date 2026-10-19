@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"net"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 )
 
 // Start Agentry prints a signed-in link for this computer, the public
@@ -60,6 +63,35 @@ func TestOpenPageOnThisComputerOnly(t *testing.T) {
 		if out.String() != want {
 			t.Errorf("listening on %q, printed:\n%s", listen, out.String())
 		}
+	}
+}
+
+// open hands serve -https, -budget and -max-turns only when given, so
+// serve's own defaults hold otherwise.
+func TestOpenPassesItsServeFlagsOn(t *testing.T) {
+	var passed [][]string
+	saved := startServer
+	startServer = func(_, _, _ string, extra []string) error {
+		passed = append(passed, extra)
+		return errors.New("not starting in a test")
+	}
+	t.Cleanup(func() { startServer = saved })
+	for _, kv := range os.Environ() { // open drops a parent session's markers; restore them after
+		if name, value, _ := strings.Cut(kv, "="); engines.IsParentSessionVar(name) {
+			t.Setenv(name, value)
+		}
+	}
+	for _, args := range [][]string{
+		{"-https", "-budget", "0", "-max-turns=0"},
+		{"-budget", "2000000"},
+		{},
+	} {
+		var out bytes.Buffer
+		runOpen(append([]string{"-data", t.TempDir(), "-repo", t.TempDir(), "-port", "7905"}, args...), nil, &out, &out)
+	}
+	want := [][]string{{"-budget=0", "-https=true", "-max-turns=0"}, {"-budget=2000000"}, nil}
+	if !slices.EqualFunc(passed, want, slices.Equal) {
+		t.Errorf("passed %q, want %q", passed, want)
 	}
 }
 
