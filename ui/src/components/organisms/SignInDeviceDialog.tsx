@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { QRCode } from "@/components/atoms/QRCode";
@@ -15,22 +15,31 @@ import { useNow } from "@/live/use-now";
 // the one the device reaches (hidden when there is only one).
 export function SignInDeviceDialog({ onClose }: { onClose: () => void }) {
   const [issued, setIssued] = useState<SigninCode | null>(null);
+  const [expires, setExpires] = useState(0); // on this browser's clock
   const [url, setURL] = useState("");
   const [error, setError] = useState("");
   const now = useNow(issued !== null);
 
+  // Only the latest request's reply counts: New code clicked twice can be
+  // answered out of order.
+  const latest = useRef(0);
   const newCode = useCallback(() => {
+    const request = ++latest.current;
     setError("");
     newSigninCode()
       .then((code) => {
+        if (request !== latest.current) return;
         setIssued(code);
+        setExpires(Date.now() + code.expiresIn * 1000);
         setURL((picked) => (code.addresses.some((a) => a.url === picked) ? picked : code.address));
       })
-      .catch((failure: Error) => setError(failure.message));
+      .catch((failure: Error) => {
+        if (request === latest.current) setError(failure.message);
+      });
   }, []);
   useEffect(newCode, [newCode]);
 
-  const secondsLeft = issued ? Math.max(0, Math.round((Date.parse(issued.expiresAt) - now) / 1000)) : 0;
+  const secondsLeft = issued ? Math.max(0, Math.round((expires - now) / 1000)) : 0;
   const expired = issued !== null && secondsLeft === 0;
   return (
     <Dialog title="Sign in another device" onClose={onClose}>

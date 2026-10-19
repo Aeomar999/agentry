@@ -107,6 +107,7 @@ func TestOnlyTheUITokenIssuesSigninCodes(t *testing.T) {
 	var issued struct {
 		Code      string
 		ExpiresAt time.Time
+		ExpiresIn int
 		Addresses []struct{ URL, Label string }
 		Address   string
 	}
@@ -116,7 +117,7 @@ func TestOnlyTheUITokenIssuesSigninCodes(t *testing.T) {
 	if !regexp.MustCompile(`^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$`).MatchString(issued.Code) {
 		t.Errorf("code %q", issued.Code)
 	}
-	if !issued.ExpiresAt.Equal(s.now.Add(5*time.Minute)) || issued.Address != "http://example.com" ||
+	if !issued.ExpiresAt.Equal(s.now.Add(5*time.Minute)) || issued.ExpiresIn != 300 || issued.Address != "http://example.com" ||
 		len(issued.Addresses) != 2 || issued.Addresses[0] != (struct{ URL, Label string }{"http://192.168.1.5:7800", "On your network"}) {
 		t.Errorf("issued: %+v", issued)
 	}

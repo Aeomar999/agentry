@@ -189,6 +189,8 @@ func retryAfter(times []time.Time, limit int, now time.Time) time.Duration {
 
 // issueSigninCode gives a signed-in device a code for another one, with the
 // server's addresses, so the page can draw a QR code of <address>/?signin=<code>.
+// expiresIn is in seconds: the page counts down from it, since its own
+// clock may not agree with expiresAt.
 func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 	code, expires, err := s.signins.issue()
 	if err != nil {
@@ -200,7 +202,8 @@ func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 	for _, a := range list {
 		addresses = append(addresses, map[string]string{"url": a.URL, "label": a.Label})
 	}
-	reply(w, map[string]any{"code": code, "expiresAt": expires, "addresses": addresses, "address": chosen})
+	reply(w, map[string]any{"code": code, "expiresAt": expires, "expiresIn": int(codeLifetime / time.Second),
+		"addresses": addresses, "address": chosen})
 }
 
 // signIn swaps a code, or the token pasted in, for the token and the cookie.

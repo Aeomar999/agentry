@@ -263,6 +263,7 @@ export interface Question {
 export interface SigninCode {
   code: string; // XXXX-XXXX
   expiresAt: string;
+  expiresIn: number; // seconds, so a browser clock that's off doesn't matter
   addresses: { url: string; label: string }[];
   address: string; // the address this page came from, the one to show first
 }
