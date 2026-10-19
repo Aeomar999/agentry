@@ -4,6 +4,7 @@
 package features
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -17,10 +18,11 @@ import (
 // A Feature is one capability a team or a setting turns on. Every field but
 // Name may be left out.
 type Feature struct {
-	Name     string             // "ideas": its manifest entry, routes and UI folder use it
-	Version  int                // raised when its events or state change
-	Streams  *Streams           // the streams it owns, if any
-	Manifest func(Reader) Entry // whether the page shows it, and why
+	Name        string             // "ideas": its manifest entry, routes and UI folder use it
+	Version     int                // raised when its events or state change
+	Streams     *Streams           // the streams it owns, if any
+	Coordinator *Coordinator       // its part in coordinators' briefs and decisions
+	Manifest    func(Reader) Entry // whether the page shows it, and why
 }
 
 // Streams are a feature's own streams, each named Prefix and an ID: how the
@@ -51,6 +53,35 @@ type Reader interface {
 	Owned(stream string) (any, error) // a feature's stream, as its Next left it; nil, nil when it holds nothing
 	OwnedIDs(prefix string) []string  // the streams with a prefix, in log order, broken ones too
 }
+
+// Proposer writes to the log, as *store.Store does. A feature is given one
+// in its Core, never the store itself.
+type Proposer interface {
+	Propose(p events.Proposal) (events.Event, *events.Rejection, error)
+	Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error)
+}
+
+// Core is all a feature's hooks may use: it has no store. Defaults are the
+// server's limits for a task Agentry makes that comes from no other task.
+type Core struct {
+	Log      Proposer
+	Read     Reader
+	Defaults tasks.Limits
+}
+
+// Coordinator is a feature's part in the coordinator loop, for the
+// coordinators For says. Brief and OnDone run on the state of the moment,
+// so Brief is given the Reader to read the feature's streams from.
+type Coordinator struct {
+	For      func(coordinator agents.Agent) bool                          // a Visionaries coordinator
+	Brief    func(state Reader, task *tasks.Task) []Section               // more sections for its brief
+	Decision string                                                       // what its done decision may add, for "Your decision"
+	Field    string                                                       // the done decision's field it reads: "ideas"
+	OnDone   func(c Core, task *tasks.Task, field json.RawMessage) string // acts on it; returns a note for the summary
+}
+
+// Section is one more part of a coordinator's brief.
+type Section struct{ Heading, Text string }
 
 // Entry is whether the page shows a feature, and why.
 type Entry struct {
