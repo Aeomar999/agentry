@@ -163,8 +163,7 @@ type Schedule struct {
 `Named` is how the job tells a recorded run from one a crash cut short
 (section 5, step 1). A task number alone can't: `Store.Create` numbers
 tasks in order, but a run the job made and didn't record can sit below a
-later Run now's task (section 5, step 1). It grows by one
-per run, a few hundred a year for a nightly schedule, and `Next` copies it
+later Run now's task. It grows by one per run, a few hundred a year for a nightly schedule, and `Next` copies it
 on each event that adds to it: an estimate of microseconds per event,
 unmeasured.
 
@@ -369,7 +368,9 @@ alike, as `ideas.Accept` holds `accepting`
    `slot` and writes `schedule.fired` for it as System (with `slot` `""`
    and `manual` for a task you made with Run now). If that write is
    refused (the refusal is stored as `proposal.rejected`,
-   `internal/store/store.go:258`), it writes `schedule.skipped {slot: "",
+   `internal/store/store.go:258`; it can be, only when the schedule was
+   paused, changed or resumed after that slot, so `Since` has passed it
+   and the slot isn't due either), it writes `schedule.skipped {slot: "",
    reason: "unrecorded", task, why}` once instead, which puts the task in
    `Named` and says so in `LastRun`, so no later wake tries it again; if
    even that is refused, the job logs it and keeps the task in a set in
@@ -389,8 +390,8 @@ alike, as `ideas.Accept` holds `accepting`
    open (the same walk as step 1, and the same check as section 4's rule;
    usually it is `LastTask`, but a Run now may have made a later one),
    write `schedule.skipped {slot, reason: "open", task, missed}` for the
-   latest due slot and stop. `LastSlot` moves on, so the next wake doesn't try
-   the same slot again.
+   latest due slot and stop. `LastSlot` moves on, so the next wake
+   doesn't try the same slot again.
 4. **Make the task.** `Core.Log.Create("task-", ...)` as
    `{System, "schedules"}`, with `title`, `description`, `repo`,
    `coordinator` (the team's, from the roster now), `budget`, `maxTurns`,
@@ -427,8 +428,10 @@ Each claim, checked against the store:
   recorded run, which step 1 finds and records. The order is chosen so
   the other gap can't happen: no `schedule.fired` names a task that
   doesn't exist, because the rule needs the task first.
-- **A restart forgets nothing.** The job keeps no state of its own: what
-  has run is `LastSlot`, rebuilt from the log at start.
+- **A restart forgets nothing.** What has run is `LastSlot` and `Named`,
+  rebuilt from the log at start. The job's only state of its own is step
+  1's set of tasks it couldn't record even as a skip, which only stops it
+  retrying them; a restart tries each once more.
 - **A sleeping machine.** Covered by the wall-clock compare and catch-up
   once above.
 - **What the mutex is for.** Not correctness of the log, which the rules
