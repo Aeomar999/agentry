@@ -596,7 +596,7 @@ func describe(q question) string {
 		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, oneLine(q.Text, 200), copyFile)
 	}
 	asker := q.Agent
-	if asker == "coordinator-loop" {
+	if asker == tasks.Loop {
 		asker = "Agentry" // its own stops: a budget, a limit of turns
 	}
 	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, oneLine(q.Text, 160))
