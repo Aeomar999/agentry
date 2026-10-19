@@ -22,11 +22,18 @@ func TestASavedRosterComesBackWhole(t *testing.T) {
 func TestARestoredRosterSharesNothing(t *testing.T) {
 	var roster Roster
 	deeptest.Fill(t, reflect.ValueOf(&roster).Elem())
-	restored := Restore(roster.Save())
+	saved := roster.Save()
+	restored := Restore(saved)
 	if !reflect.DeepEqual(roster, restored) {
 		t.Fatalf("the restored roster differs:\n%+v\n%+v", roster, restored)
 	}
 	deeptest.Shared(t, "Roster", reflect.ValueOf(roster), reflect.ValueOf(restored))
+	// Each side on its own, so a clone dropped from Save alone or from
+	// Restore alone fails too. The invites hold only strings and times.
+	for i := range roster.Workers {
+		deeptest.Shared(t, "Workers[i]", reflect.ValueOf(roster.Workers[i]), reflect.ValueOf(saved.Workers[i].Worker))
+		deeptest.Shared(t, "Saved.Workers[i].Worker", reflect.ValueOf(saved.Workers[i].Worker), reflect.ValueOf(restored.Workers[i]))
+	}
 }
 
 // A roster replayed from its log, and an empty one, come back the same.
