@@ -206,10 +206,13 @@ func TestHandshakesDuringAListingKeepTheOldList(t *testing.T) {
 	asked, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
 	hosts := func() []string {
-		if calls.Add(1) == 1 {
+		n := calls.Add(1)
+		if n == 1 {
 			return []string{"box", "192.168.1.20"}
 		}
-		close(asked)
+		if n == 2 {
+			close(asked)
+		}
 		<-release
 		return []string{"box", "192.168.1.20", "100.64.0.7"}
 	}

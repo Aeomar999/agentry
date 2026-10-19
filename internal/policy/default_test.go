@@ -284,6 +284,8 @@ func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 			bash("X=$(pwd)/../../tls; cat $X/x"),
 			bash("cat $X/*/tls/ca.key"),
 			bash("cat $X/.agentry/*"),
+			bash("cat $X/[t]l*/x"), // a class and one more character
+			bash("cat $X/[a-z][a-z]s/x"),
 			bash("cat $X/ca.ke?"),
 			bash("cat $X/*.key"),
 			bash("cat $X/policy.tom?"),
@@ -393,6 +395,9 @@ func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 			bash(`ls "$d"/a*`),
 			bash(`ls "$GOPATH"/t*`),
 			bash(`ls "$d"/.*`),
+			bash("ls $d/[ab]*"), // a class is one character
+			bash("ls $d/[!x]?"),
+			bash("ls $d/[]a]*"),
 			file("Grep", workspace),
 		} {
 			got := p.Decide(profile, call)

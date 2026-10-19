@@ -188,19 +188,53 @@ func (p *Policy) touchesAgentry(call Call, f facts) bool {
 	return false
 }
 
-// patternCharacters removes the characters that make a name a pattern.
-var patternCharacters = strings.NewReplacer("*", "", "?", "", "[", "", "]", "")
+// knownCharacters is how many characters a name, perhaps a pattern, holds
+// besides * and ?, a bracket class ([ab], [!a]) counting as the one character
+// it stands for.
+func knownCharacters(name string) int {
+	count := 0
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '*', '?':
+			continue
+		case '[':
+			if end := classEnd(name, i); end > 0 {
+				i = end
+			}
+		}
+		count++
+	}
+	return count
+}
+
+// classEnd is the index of the ] that closes the bracket class opening at
+// open, or 0 when none does. A ] first in the class ([]a], [!]a]) is one of
+// its characters.
+func classEnd(name string, open int) int {
+	i := open + 1
+	if i < len(name) && (name[i] == '!' || name[i] == '^') {
+		i++
+	}
+	if i < len(name) && name[i] == ']' {
+		i++
+	}
+	if end := strings.IndexByte(name[i:], ']'); end >= 0 {
+		return i + end
+	}
+	return 0
+}
 
 // isProtectedName: name, spelt out by a path that can't be fully known, may
 // be one of Agentry's files or the folder that holds them, without case. It
 // is a best-effort rule: such a path can still reach them without spelling a
 // name out ($X alone), which only the rules that ask about unknown commands
-// cover. A name with at most one character besides * ? [ ] (*, c*, .*) isn't
-// spelt out: after a folder that can't be known, it may be anything there,
-// just as $X alone may, and refusing it would refuse ls $d/c*. One with more
-// text (tl*, ca.ke?, agentry.d[b]) is matched as a pattern.
+// cover. A name with at most one character besides * and ? (*, c*, .*,
+// [ab]*) isn't spelt out: after a folder that can't be known, it may be
+// anything there, just as $X alone may, and refusing it would refuse
+// ls $d/c*. One with more text (tl*, ca.ke?, agentry.d[b]) is matched as a
+// pattern.
 func (p *Policy) isProtectedName(name string) bool {
-	if len(patternCharacters.Replace(name)) <= 1 {
+	if knownCharacters(name) <= 1 {
 		return false
 	}
 	for _, protected := range p.protected {
