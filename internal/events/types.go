@@ -81,6 +81,9 @@ const (
 	// Archiving (docs/design/log-growth.md section 4): only the store writes these.
 	TaskArchived   Type = "task.archived"   // the task's rows up to "through" ("count" of them) moved to the blob "archive"; "created" is its task.created position, "summary" what the list shows of it
 	TaskUnarchived Type = "task.unarchived" // the rows of the "archive" that the marker at "marker" moved are back: the task is whole again
+
+	// Erasing (docs/design/log-growth.md section 5): only the store writes it, for you.
+	TaskErased Type = "task.erased" // the task's rows up to "through" ("count" of them) are deleted for good, and the "archives" blobs that held its rows; "created" is its task.created position, "why" your reason
 )
 
 // The workers stream: the machines, besides Agentry's own, that run agents.

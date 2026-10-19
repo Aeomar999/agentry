@@ -175,7 +175,7 @@ func laterOf(a, b time.Time) time.Time {
 func (a *Archiver) anyInTheState(ids []string) bool {
 	for _, id := range ids {
 		task, err := a.state.Task(id)
-		if task != nil || (err != nil && !errors.Is(err, current.ErrArchived)) {
+		if task != nil || (err != nil && !errors.Is(err, current.ErrArchived) && !errors.Is(err, current.ErrErased)) {
 			return true
 		}
 	}

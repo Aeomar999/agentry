@@ -117,3 +117,17 @@ func Unarchived(stream string, marker int64) events.Proposal {
 	return events.Proposal{Stream: stream, Actor: events.Actor{Kind: events.System, ID: "archiver"}, Type: events.TaskUnarchived,
 		Data: map[string]any{"marker": marker, "archive": Blob}}
 }
+
+// Erasure erases a task as Store.Erase does (docs/design/log-growth.md
+// section 5): a task.erased by you covering accepted, the task's stream so
+// far, which starts with its task.created or, archived, the marker that
+// stands for it, naming archives as the blobs that held its rows.
+func Erasure(accepted []events.Event, archives ...string) events.Proposal {
+	created := accepted[0].Position
+	if accepted[0].Type == events.TaskArchived {
+		created = int64(accepted[0].Number("created"))
+	}
+	return events.Proposal{Stream: accepted[0].Stream, Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskErased,
+		Data: map[string]any{"why": "Asked to be forgotten.", "through": accepted[len(accepted)-1].Position, "count": len(accepted),
+			"created": created, "archives": append([]string{}, archives...)}}
+}

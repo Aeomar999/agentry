@@ -32,8 +32,13 @@ func FromEvents(stream []events.Event) *Task {
 // set aside, and Archived gives its summary. A task.unarchived takes back
 // the task set aside, rebuilt from the restored rows before the marker in
 // the same stream (docs/design/log-growth.md, "Reopening an archived
-// task"); with none set aside the stream can't be replayed.
+// task"); with none set aside the stream can't be replayed. An erased task
+// folds to nil too, whatever its events before the erasure, and Erased
+// gives the little it keeps.
 func Replay(stream []events.Event) (t *Task, err error) {
+	if _, erased := Erased(stream); erased {
+		return nil, nil
+	}
 	var e events.Event
 	defer func() {
 		if recovered := recover(); recovered != nil {

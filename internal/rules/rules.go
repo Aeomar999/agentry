@@ -81,6 +81,15 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 
 	task, err := state.Task(p.Stream)
 	switch {
+	case errors.Is(err, current.ErrErased):
+		return refuse(ErasedRefusal(p.Stream))
+	case p.Type == events.TaskErased && task == nil && err == nil:
+		return refuse("task " + p.Stream + " doesn't exist")
+	case p.Type == events.TaskErased:
+		if reason := anErasure(p); reason != "" {
+			return refuse(reason)
+		}
+		return nil
 	case errors.Is(err, current.ErrArchived) && p.Type == events.TaskUnarchived:
 		if reason := anUnarchiving(p); reason != "" {
 			return refuse(reason)

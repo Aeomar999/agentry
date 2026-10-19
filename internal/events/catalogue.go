@@ -248,6 +248,7 @@ var coreTypes = map[Type]Spec{
 
 	TaskArchived:   {Fields: []string{"through", "count", "archive", "created", "summary"}, Writers: []ActorKind{System}},
 	TaskUnarchived: {Fields: []string{"marker", "archive"}, Writers: []ActorKind{System}, Refolds: true}, // the task is folded again from its restored rows
+	TaskErased:     {Fields: []string{"why", "through", "count", "created", "archives"}, Writers: []ActorKind{Human}},
 
 	WorkerInvited:      {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},
 	ConnectionInvited:  {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},

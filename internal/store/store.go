@@ -257,10 +257,10 @@ func (s *Store) made(kind events.Type) (int, error) {
 	return made, err
 }
 
-// byTheStore are the types the store writes itself, through Archive and
-// Unarchive: Propose refuses them from anyone, so no marker goes into the
-// log without its rows moving with it.
-var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived}
+// byTheStore are the types the store writes itself, through Archive,
+// Unarchive and Erase: Propose refuses them from anyone, so no marker goes
+// into the log without its rows moving, or going, with it.
+var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived, events.TaskErased}
 
 // propose is Propose, under Store.mu.
 func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, error) {

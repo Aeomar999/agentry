@@ -9,7 +9,7 @@ import (
 
 // Archived is the summary an archived task keeps: the "summary" of its
 // stream's last task.archived that no task.unarchived follows. It is false
-// for a task that isn't archived. A marker whose summary can't be read
+// for a task that isn't archived, and for an erased one, which keeps less. A marker whose summary can't be read
 // panics, as an event apply can't take does. store.MarkerOf finds the
 // same marker: change the rule in both.
 func Archived(stream []events.Event) (Summary, bool) {
@@ -18,7 +18,7 @@ func Archived(stream []events.Event) (Summary, bool) {
 		switch e.Type {
 		case events.TaskArchived:
 			marker = &stream[i]
-		case events.TaskUnarchived:
+		case events.TaskUnarchived, events.TaskErased:
 			marker = nil
 		}
 	}

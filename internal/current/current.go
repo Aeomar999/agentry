@@ -52,6 +52,7 @@ type State struct {
 	ownedOrder  map[string][]created         // by prefix: each owned stream's first event applied, in the order of their positions
 	broken      map[string]error             // streams whose apply panicked: reads fail, as a replay would
 	archived    map[string]tasks.Summary     // tasks the state holds as their summary alone, by stream
+	erased      map[string]tasks.Erasure     // tasks erased for good, whose ids stay taken, by stream
 	roster      agents.Roster
 	workers     workers.Roster
 	connections connections.Roster
@@ -79,6 +80,11 @@ type created struct {
 // holds no full state for, which takes no more events. Its readers skip it
 // as they skip a done task, without reading its stream.
 var ErrArchived = errors.New("the task is archived")
+
+// ErrErased is Task's error for an erased task: one the state holds only
+// as its id and when it went, which takes no events, ever again. Its
+// readers skip it as they skip an archived task.
+var ErrErased = errors.New("the task is erased")
 
 // New is an empty state that reads streams as catalogue says, which must be
 // the catalogue the store is opened with, and keeps the streams of each
@@ -108,7 +114,7 @@ func (s *State) empty() {
 	s.position, s.streams, s.tasks = 0, map[string]int64{}, map[string]*tasks.Task{}
 	s.created, s.tasksMade = nil, 0
 	s.owned, s.ownedOrder = map[string]any{}, map[string][]created{}
-	s.broken, s.archived = map[string]error{}, map[string]tasks.Summary{}
+	s.broken, s.archived, s.erased = map[string]error{}, map[string]tasks.Summary{}, map[string]tasks.Erasure{}
 	s.roster, s.workers, s.connections, s.settings = nil, workers.Roster{}, connections.Roster{}, settings.Default()
 	s.skipped = newTally()
 	s.snapshot, s.tail, s.resumed = nil, nil, 0
@@ -178,6 +184,8 @@ func (s *State) fold(stream string, accepted []events.Event) {
 				s.breaks(stream, err)
 			} else if task != nil {
 				s.tasks[stream] = task
+			} else if erasure, erased := tasks.Erased(accepted); erased {
+				s.erased[stream] = erasure
 			} else if summary, archived := tasks.Archived(accepted); archived {
 				s.archived[stream] = summary
 			}
@@ -210,6 +218,7 @@ func (s *State) Refold(stream string, before []events.Event, e events.Event) {
 	delete(s.owned, stream)
 	delete(s.broken, stream)
 	delete(s.archived, stream)
+	delete(s.erased, stream)
 	s.fold(stream, append(slices.Clip(before), e))
 }
 
@@ -260,6 +269,10 @@ func (s *State) Apply(e events.Event) {
 		return
 	}
 	s.made(e, kind, first)
+	if e.Type == events.TaskErased {
+		s.erase(e) // a broken task too: nothing of its stream is left to break
+		return
+	}
 	if s.broken[e.Stream] != nil {
 		return
 	}
@@ -303,6 +316,16 @@ func (s *State) archive(marker events.Event) {
 	s.archived[marker.Stream] = summary
 }
 
+// erase keeps a task as its erasure alone, as a replay of its stream
+// ends: tasks.Replay folds it to nil, and tasks.Erased gives the erasure.
+func (s *State) erase(marker events.Event) {
+	erasure, _ := tasks.Erased([]events.Event{marker})
+	delete(s.tasks, marker.Stream)
+	delete(s.archived, marker.Stream)
+	delete(s.broken, marker.Stream)
+	s.erased[marker.Stream] = erasure
+}
+
 // nextTask is tasks.Next, or, while Resume applies the events after a
 // snapshot, the same change made in place: nobody has read the restored
 // tasks yet, and copying a large task for every event would cost more than
@@ -318,8 +341,9 @@ func (s *State) nextTask(task *tasks.Task, e events.Event) *tasks.Task {
 
 // made notes where a task.created, or the first event of a stream a
 // feature here owns, is in the log, for the task and owned stream orders.
-// An archived task's task.created row is gone with the rest, so a marker
-// that starts its stream stands for it, at the position it names.
+// An archived or erased task's task.created row is gone with the rest, so
+// a marker that starts its stream stands for it, at the position it names
+// (standsFor).
 //
 // The store applies in the log's order, after everything Load or an
 // earlier Apply gave, so appending a task.created keeps the positions in
@@ -329,7 +353,7 @@ func (s *State) made(e events.Event, kind events.StreamKind, first bool) {
 	switch {
 	case e.Type == events.TaskCreated:
 		s.created = append(s.created, created{e.Position, e.Stream})
-	case e.Type == events.TaskArchived && first:
+	case standsFor(e, first):
 		c := created{int64(e.Number("created")), e.Stream}
 		at, _ := slices.BinarySearchFunc(s.created, c, byPosition)
 		s.created = slices.Insert(s.created, at, c)
@@ -342,9 +366,16 @@ func (s *State) made(e events.Event, kind events.StreamKind, first bool) {
 // countMade counts a task.created in any stream, and a marker that stands
 // for one (see made), so NextTask names the stream Store.Create would.
 func (s *State) countMade(e events.Event, first bool) {
-	if e.Type == events.TaskCreated || e.Type == events.TaskArchived && first {
+	if e.Type == events.TaskCreated || standsFor(e, first) {
 		s.tasksMade++
 	}
+}
+
+// standsFor says whether e stands for its stream's task.created: a
+// task.archived or task.erased that starts the stream, whose rows the
+// marker took away, the task.created among them.
+func standsFor(e events.Event, first bool) bool {
+	return first && (e.Type == events.TaskArchived || e.Type == events.TaskErased)
 }
 
 // guard runs change, and marks the stream broken if it panics, so one bad
@@ -390,6 +421,7 @@ func (s *State) copy() *State {
 		ownedOrder:  ownedOrder,
 		broken:      maps.Clone(s.broken),
 		archived:    maps.Clone(s.archived),
+		erased:      maps.Clone(s.erased),
 		roster:      s.roster,
 		workers:     s.workers,
 		connections: s.connections,
@@ -422,10 +454,14 @@ func (s *State) StreamPosition(stream string) int64 {
 }
 
 // Task is a task's state: nil, nil when there is no such task, ErrArchived
-// when it is archived, and the error when its stream is broken.
+// when it is archived, ErrErased when it is erased, and the error when its
+// stream is broken.
 func (s *State) Task(id string) (*tasks.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if _, erased := s.erased[id]; erased {
+		return nil, ErrErased
+	}
 	if _, archived := s.archived[id]; archived {
 		return nil, ErrArchived
 	}
@@ -447,8 +483,17 @@ func (s *State) Owned(stream string) (any, error) {
 	return s.owned[stream], nil
 }
 
+// Erased is an erased task's erasure, and false for a task that isn't
+// erased.
+func (s *State) Erased(id string) (tasks.Erasure, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	erasure, erased := s.erased[id]
+	return erasure, erased
+}
+
 // Tasks is every task, oldest first, in a new slice the caller may sort.
-// A broken or archived task is left out, as the list skips a task it can't
+// A broken, archived or erased task is left out, as the list skips a task it can't
 // read.
 func (s *State) Tasks() []*tasks.Task {
 	s.mu.RLock()
@@ -463,8 +508,8 @@ func (s *State) Tasks() []*tasks.Task {
 }
 
 // TaskIDs is the stream of every task.created applied, oldest first, in a
-// new slice: a broken or archived task's too, so its length counts every
-// task made.
+// new slice: a broken, archived or erased task's too, so its length counts
+// every task made.
 func (s *State) TaskIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -477,7 +522,7 @@ func (s *State) TaskIDs() []string {
 
 // NextTask is the stream the next task.created goes into: the one
 // Store.Create("task-", ...) names, as both count every task.created, an
-// archived task's through its marker (see Store.made).
+// archived or erased task's through its marker (see Store.made).
 func (s *State) NextTask() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -501,7 +546,8 @@ func (s *State) OwnedIDs(prefix string) []string {
 // Summaries is every task as the list shows it, oldest first, in a new
 // slice the caller may sort: a whole task's summary, as tasks.SummaryOf
 // makes it with the roster, and an archived one's, as its marker keeps it.
-// A broken task is left out, as Tasks leaves it out. BlockedBy and Queued
+// A broken or erased task is left out, as Tasks leaves it out: an erased
+// one has no summary, only its Erased. BlockedBy and Queued
 // need the other tasks, so they are the caller's to fill.
 func (s *State) Summaries() []tasks.Summary {
 	s.mu.RLock()
@@ -519,7 +565,7 @@ func (s *State) Summaries() []tasks.Summary {
 
 // Summary is a task's summary as Summaries has it: a whole task's, made
 // with the roster, or an archived one's, as its marker keeps it. It is
-// false for a broken task and for no such task.
+// false for a broken or erased task and for no such task.
 func (s *State) Summary(id string) (tasks.Summary, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

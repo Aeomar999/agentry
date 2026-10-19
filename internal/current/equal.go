@@ -94,26 +94,41 @@ func equalStream[T any](s *store.Store, cut int64, stream string, replay func([]
 }
 
 // equalTask compares a task with a replay of its stream: the whole task,
-// and the summary an archived one keeps, against tasks.Archived of the
-// replay. A broken task has neither, so the first compare is all there is.
+// the summary an archived one keeps, against tasks.Archived of the replay,
+// and an erased one's erasure, against tasks.Erased. A broken task has
+// none of them, so the first compare is all there is.
 func equalTask(s *store.Store, cut int64, held *State, id string) error {
+	accepted, err := s.Stream(id)
+	if err != nil {
+		return err
+	}
+	accepted = upTo(accepted, cut)
 	summary, archived := held.archived[id]
+	erasure, erased := held.erased[id]
 	whole := func() (any, error) {
-		if archived {
+		if archived || erased {
 			return (*tasks.Task)(nil), nil // its replay folds to nil too
 		}
 		return held.Task(id)
 	}
-	if err := equalStream(s, cut, id, tasks.Replay, whole); err != nil || held.broken[id] != nil {
+	if err := equalReplay(id, accepted, tasks.Replay, whole); err != nil || held.broken[id] != nil {
 		return err
 	}
-	kept := func() (any, error) {
-		if archived {
-			return &summary, nil
-		}
-		return (*tasks.Summary)(nil), nil
+	if err := equalReplay(id, accepted, archivedIn, kept(summary, archived)); err != nil {
+		return err
 	}
-	return equalStream(s, cut, id, archivedIn, kept)
+	return equalReplay(id, accepted, erasedIn, kept(erasure, erased))
+}
+
+// kept is what the state keeps of a task that isn't whole, for
+// equalReplay: a pointer to it, or a nil one when it keeps none.
+func kept[T any](held T, keeps bool) func() (any, error) {
+	return func() (any, error) {
+		if keeps {
+			return &held, nil
+		}
+		return (*T)(nil), nil
+	}
 }
 
 // archivedIn is tasks.Archived in the shape of tasks.Replay: nil for a task
@@ -121,6 +136,15 @@ func equalTask(s *store.Store, cut int64, held *State, id string) error {
 func archivedIn(accepted []events.Event) (*tasks.Summary, error) {
 	if summary, archived := tasks.Archived(accepted); archived {
 		return &summary, nil
+	}
+	return nil, nil
+}
+
+// erasedIn is tasks.Erased in the shape of tasks.Replay: nil for a task
+// that isn't erased.
+func erasedIn(accepted []events.Event) (*tasks.Erasure, error) {
+	if erasure, erased := tasks.Erased(accepted); erased {
+		return &erasure, nil
 	}
 	return nil, nil
 }
@@ -203,7 +227,7 @@ func differingField(got, want any) string {
 
 // index is the log up to a cut, as Equal compares it.
 type index struct {
-	tasks   []string            // the stream of every accepted task.created, oldest first, in any stream but a foreign one, and of every marker that stands for one
+	tasks   []string            // the stream of every accepted task.created, oldest first, in any stream but a foreign one, and of every marker that stands for one (standsFor)
 	made    int                 // every accepted task.created, a foreign stream's too, and every marker that stands for one
 	owned   map[string][]string // by prefix: each owned stream with a Streams, in the order of its first accepted event
 	streams map[string]int64    // each stream's last accepted position
@@ -233,8 +257,8 @@ func indexOf(s *store.Store, held *State, cut int64) (index, error) {
 			found.skipped.count(catalogue, kind, e, first)
 			found.streams[e.Stream] = e.Position
 			// A marker that starts its stream stands for the task.created
-			// archived with the rest, at the position it names.
-			standsIn := e.Type == events.TaskArchived && first
+			// it took away with the rest, at the position it names.
+			standsIn := standsFor(e, first)
 			if e.Type == events.TaskCreated || standsIn {
 				found.made++
 			}

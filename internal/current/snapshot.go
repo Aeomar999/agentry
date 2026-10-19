@@ -61,6 +61,12 @@ type header struct {
 // owned one only by its place in the order: Resume rebuilds both from the
 // log, as their streams are small, and a broken one then breaks again with
 // its reason.
+//
+// A field added later goes last. exactgob's nil bits follow the fields'
+// order, so a body of the shape before it then runs out of bits at the new
+// field and fails to decode, where one in the middle could shift every bit
+// after it and be misread (TestASnapshotFromBeforeErasuresReplays). A body
+// of an older shape is another build's anyway, which Resume never reads.
 type savedState struct {
 	Position    int64
 	Streams     map[string]int64
@@ -75,6 +81,7 @@ type savedState struct {
 	Settings    settings.Settings
 	Prefixes    map[string]Unknown
 	Types       map[events.Type]Unknown
+	Erased      map[string]tasks.Erasure
 }
 
 // savedPlace is a created, exported for gob.
@@ -191,7 +198,7 @@ func (s *State) saved() savedState {
 	}
 	return savedState{
 		Position: s.position, Streams: s.streams, Created: placesOf(s.created), TasksMade: s.tasksMade,
-		OwnedOrder: ownedOrder, Broken: slices.Sorted(maps.Keys(s.broken)), Archived: s.archived,
+		OwnedOrder: ownedOrder, Broken: slices.Sorted(maps.Keys(s.broken)), Archived: s.archived, Erased: s.erased,
 		Roster: s.roster.Save(), Workers: s.workers.Save(), Connections: s.connections.Save(), Settings: s.settings,
 		Prefixes: s.skipped.prefixes, Types: s.skipped.types,
 	}
@@ -323,7 +330,7 @@ func (s *State) decode(body []byte) (broken []string, err error) {
 	for prefix, order := range saved.OwnedOrder {
 		s.ownedOrder[prefix] = createdOf(order)
 	}
-	s.archived = saved.Archived
+	s.archived, s.erased = saved.Archived, saved.Erased
 	if !isBroken[events.AgentsStream] {
 		s.roster = agents.Restore(saved.Roster)
 	}

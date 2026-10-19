@@ -99,8 +99,8 @@ func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 func (l *Loop) act(id string) {
 	delete(l.held, id) // held again below if its move is still a turn with no slot
 	task, roster, err := l.load(id)
-	if errors.Is(err, current.ErrArchived) {
-		return // done, and it takes nothing more
+	if errors.Is(err, current.ErrArchived) || errors.Is(err, current.ErrErased) {
+		return // done or gone, and it takes nothing more
 	}
 	if err != nil || task == nil {
 		slog.Error("coordinator loop: reading the task", "task", id, "err", err)
@@ -506,11 +506,12 @@ func (l *Loop) wakeStories(epic *tasks.Task) {
 }
 
 // blocked is a story whose stories before it aren't done: its worktree
-// would start from a dev without their work. An archived story is done.
+// would start from a dev without their work. An archived story is done,
+// and an erased one blocks nothing: nothing of it is left to wait for.
 func (l *Loop) blocked(story *tasks.Task) bool {
 	for _, id := range story.After {
 		before, _, err := l.load(id)
-		if errors.Is(err, current.ErrArchived) {
+		if errors.Is(err, current.ErrArchived) || errors.Is(err, current.ErrErased) {
 			continue
 		}
 		if err != nil || before == nil || !before.IsDone {
@@ -570,12 +571,13 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 // over: unfinished, or done by you and still wrapping up, since a reopen
 // then works in the same worktree. A broken task's port counts too, read
 // from its stream, since nothing says its worktree has gone. An archived
-// task is done, so it is skipped like one, without reading its stream.
+// task is done, so it is skipped like one, without reading its stream, and
+// an erased one has no stream left to read.
 func (l *Loop) portsInUse(machine string) []int {
 	var ports []int
 	for _, id := range l.state.TaskIDs() {
 		task, err := l.state.Task(id)
-		if errors.Is(err, current.ErrArchived) {
+		if errors.Is(err, current.ErrArchived) || errors.Is(err, current.ErrErased) {
 			continue
 		}
 		if err != nil {
