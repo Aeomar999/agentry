@@ -72,6 +72,23 @@ func (s *Store) Log(name string) ([]events.Event, error) {
 		WHERE stream = ? AND position <= ? ORDER BY position`, name, s.applied.Load())
 }
 
+// LogAfter returns a page of a stream's whole record, as Log has it: up to
+// limit events after one position and before another, both left out, in
+// order.
+func (s *Store) LogAfter(name string, after, before int64, limit int) ([]events.Event, error) {
+	return queryEvents(s.reads, `SELECT `+columns+` FROM events
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?
+		ORDER BY position LIMIT ?`, name, after, before, s.applied.Load(), limit)
+}
+
+// LogBefore is LogAfter's page from the other end: the last limit events
+// between the two positions, still in order.
+func (s *Store) LogBefore(name string, after, before int64, limit int) ([]events.Event, error) {
+	return queryEvents(s.reads, `SELECT * FROM (SELECT `+columns+` FROM events
+		WHERE stream = ? AND position > ? AND position < ? AND position <= ?
+		ORDER BY position DESC LIMIT ?) ORDER BY position`, name, after, before, s.applied.Load(), limit)
+}
+
 // LastPosition is the position of the newest event in the model, 0 for an
 // empty log.
 func (s *Store) LastPosition() int64 { return s.applied.Load() }
