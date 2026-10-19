@@ -180,7 +180,7 @@ scratch = ['/tmp/claude-*/**']
     'npm test *', 'npm run *', 'npx tsc *', 'npx vitest *', 'npx jest *', 'npx eslint *', 'npx prettier *',
     'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make', 'make test *', 'make build *', 'make lint *',
     'cargo test *', 'cargo build *', 'cargo check *', 'cargo fmt *', 'cargo clippy *',
-    # read a commit's pipeline
+    # read a commit's pipeline from the forge; reruns, cancels and the rest still ask
     'glab ci list *', 'glab ci get *', 'gh run list *', 'gh run view *',
   ]
   why = "These read, or change only files in the workspace, which you review as a diff."
