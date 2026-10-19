@@ -141,6 +141,7 @@ func TestNewCatalogueRefusesATypeOutsideItsNamespace(t *testing.T) {
 	}
 	accepted := [][]events.Registration{
 		{ideas.Registration()},
+		{ideas.Registration(), {}},
 		{ideas.Registration(), {Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.flagged": spec}}},
 		{ideas.Registration(), {TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "git.pr_merged": spec}}},
 	}
