@@ -92,6 +92,15 @@ export function ActivityFeed(props: ActivityFeedProps) {
   }, [view]);
   const onScroll = () => setAway(scroller.current!.scrollTop > 200);
   const toTop = () => scroller.current?.scrollTo({ top: 0 });
+  // Try again takes its alert away, so focus goes to the feed first: it
+  // stays there through loading, and Tab reaches the rows, or the alert's
+  // button again if the read fails again.
+  const retry =
+    onRetry &&
+    (() => {
+      scroller.current?.focus();
+      onRetry();
+    });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -132,13 +141,14 @@ export function ActivityFeed(props: ActivityFeedProps) {
           ref={scroller}
           onScroll={onScroll}
           onFocus={keepFocusInView}
+          tabIndex={-1}
           aria-busy={loading || undefined}
           // Focus and the row you came to see stop under the stuck band, and on a phone above Newest.
           // Positioned, so screen-reader-only text (absolute) is placed in it and scrolls with it, not the page.
           className="relative h-full scroll-pt-11 scrollbar-thin overflow-y-auto max-md:scroll-pb-12"
         >
           {error ? (
-            <LoadError error={error} onRetry={onRetry} />
+            <LoadError error={error} onRetry={retry} />
           ) : loading ? (
             <Loading />
           ) : rows.length === 0 && !now ? (
