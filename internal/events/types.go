@@ -13,6 +13,13 @@ const (
 	TeamRenamed  Type = "team.renamed"  // every agent of a team moves to the team's new name, its coordinator too
 )
 
+// The templates stream: the teams you saved to add again, beside the
+// built-in templates (agents.Templates).
+const (
+	TemplateSaved   Type = "template.saved"   // a team's agents, whole, kept by "id" with its "team" and "description"; saved again under an id, it replaces what that id had
+	TemplateRemoved Type = "template.removed" // the template with "id" is gone; teams made from it stay
+)
+
 // A task's stream, in roughly the order they happen.
 const (
 	ConnectionInvited Type = "connection.invited" // you made an install command for Claude Code on a machine
@@ -118,4 +125,5 @@ const (
 	WorkersStream     = "workers"     // every worker event
 	ConnectionsStream = "connections" // every Claude Code connection's event
 	SettingsStream    = "settings"    // every settings event
+	TemplatesStream   = "templates"   // every team template you saved, and removed
 )

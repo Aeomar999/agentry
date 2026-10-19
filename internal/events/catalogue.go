@@ -190,6 +190,9 @@ var coreTypes = map[Type]Spec{
 	AgentRenamed: {Fields: []string{"name", "to"}, Writers: []ActorKind{Human}},
 	TeamRenamed:  {Fields: []string{"team", "to"}, Writers: []ActorKind{Human}},
 
+	TemplateSaved:   {Fields: []string{"id", "team", "agents"}, Writers: []ActorKind{Human}}, // "description" may be missing; each agent's definition, never its knowledge or workers
+	TemplateRemoved: {Fields: []string{"id"}, Writers: []ActorKind{Human}},
+
 	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)
 	TaskRenamed:        {Fields: []string{"title"}, Writers: []ActorKind{Agent, Human}},
 	TaskDirected:       {Fields: []string{"text"}, Writers: []ActorKind{Human}}, // with a board move's "column", "sentBack"
@@ -276,10 +279,11 @@ var streamOf = map[Type]string{
 	WorkerDisconnected: WorkersStream, WorkerRemoved: WorkersStream,
 	ConnectionInvited: ConnectionsStream, ConnectionMade: ConnectionsStream, ConnectionRevoked: ConnectionsStream,
 	SettingsChanged: SettingsStream,
+	TemplateSaved:   TemplatesStream, TemplateRemoved: TemplatesStream,
 }
 
 // coreStreams are the streams that aren't tasks, each holding the types streamOf puts there.
-var coreStreams = []string{AgentsStream, PolicyStream, WorkersStream, ConnectionsStream, SettingsStream}
+var coreStreams = []string{AgentsStream, PolicyStream, WorkersStream, ConnectionsStream, SettingsStream, TemplatesStream}
 
 // StreamKind is what a stream is, by its name alone.
 type StreamKind int
