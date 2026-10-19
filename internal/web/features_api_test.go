@@ -39,7 +39,8 @@ func TestFeaturesNeedTheUIToken(t *testing.T) {
 func TestFeaturesCountWhatThisBuildSkipped(t *testing.T) {
 	spec := events.Spec{Writers: []events.ActorKind{events.System}}
 	newer, err := events.NewCatalogue(
-		events.Registration{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
+		events.Registration{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}},
+		events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
 	if err != nil {
 		t.Fatal(err)
 	}
