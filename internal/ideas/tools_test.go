@@ -24,7 +24,6 @@ type ideasAgentry struct {
 	mu     sync.Mutex
 	ideas  []map[string]any
 	calls  []string
-	fail   bool    // GET /api/ideas fails
 	column *string // the column an accept answers, when set
 	like   bool    // an accept without anyway is refused as looking like task-30
 }
@@ -53,10 +52,6 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 	id, action, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/ideas/"), "/")
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/api/ideas":
-		if f.fail {
-			http.Error(w, "the log is broken", http.StatusInternalServerError)
-			return
-		}
 		list := []map[string]any{}
 		for _, idea := range f.ideas {
 			if repo := r.URL.Query().Get("repo"); repo == "" || idea["repo"] == repo {
@@ -167,20 +162,6 @@ func (c *claude) ask(_ context.Context, text string, schema map[string]any) (map
 	}
 	json.Unmarshal(encoded, &reply)
 	return reply.Content, reply.Action == "accept", nil
-}
-
-// waitingFor is what of ideas waits for you, about repo.
-func waitingFor(agentry client.Client, repo string) []features.Waiting {
-	return ideas.Feature().Waiting(agentry, repo)
-}
-
-// seen is the keys of waiting.
-func seen(waiting []features.Waiting) map[string]bool {
-	keys := map[string]bool{}
-	for _, w := range waiting {
-		keys[w.Key] = true
-	}
-	return keys
 }
 
 func TestListIdeasShowsTheOpenOnesUnlessAsked(t *testing.T) {
@@ -344,92 +325,6 @@ func TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway(t *testing.T) {
 	want = []string{`POST /api/ideas/idea-1/accept {"kind":"epic","note":""}`, `POST /api/ideas/idea-1/accept {"anyway":true,"kind":"epic","note":""}`}
 	if posts := fake.posts(); strings.Join(posts, "\n") != strings.Join(want, "\n") {
 		t.Errorf("sent %v, want %v", posts, want)
-	}
-}
-
-// Open ideas are one line of what waits for you; a new idea is news, one
-// decided isn't.
-func TestOpenIdeasWaitForYou(t *testing.T) {
-	fake, agentry := newIdeasAgentry(t)
-	ideasIn := func(waiting []features.Waiting) []features.Waiting {
-		var found []features.Waiting
-		for _, w := range waiting {
-			if w.Kind == "ideas" {
-				found = append(found, w)
-			}
-		}
-		return found
-	}
-	before := waitingFor(agentry, "")
-	if got := ideasIn(before); len(got) != 1 || got[0].Line != "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)" || got[0].Task != "task-24" {
-		t.Fatalf("waiting: %+v", before)
-	}
-
-	fake.mu.Lock()
-	fake.ideas[0]["state"] = "dismissed"
-	fake.mu.Unlock()
-	after := waitingFor(agentry, "")
-	if got := ideasIn(after); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !seen(before)[got[0].Key] {
-		t.Errorf("an idea decided isn't news: %+v, before %+v", after, before)
-	}
-
-	fake.mu.Lock()
-	fake.ideas = append([]map[string]any{{"id": "idea-8", "title": "Search", "task": "task-40", "state": "accepted", "autoAccepted": true}}, fake.ideas...)
-	fake.mu.Unlock()
-	agreed := waitingFor(agentry, "")
-	if got := ideasIn(agreed); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !seen(before)[got[0].Key] {
-		t.Errorf("an idea Agentry accepted for you isn't news: %+v, before %+v", agreed, before)
-	}
-
-	fake.mu.Lock()
-	fake.ideas = append([]map[string]any{{"id": "idea-5", "title": "Undo a move", "task": "task-40", "state": "open"},
-		{"id": "idea-6", "title": "Bulk start", "task": "task-40", "state": "open"},
-		{"id": "idea-7", "title": "Tags", "task": "task-40", "state": "open"}}, fake.ideas...)
-	fake.mu.Unlock()
-	news := waitingFor(agentry, "")
-	if got := ideasIn(news); len(got) != 1 || got[0].Line != "4 open ideas from the Visionaries: Undo a move, Bulk start, Tags, and 1 more (list_ideas all)" || seen(before)[got[0].Key] {
-		t.Errorf("new ideas are news: %+v", news)
-	}
-
-	fake.mu.Lock()
-	for _, idea := range fake.ideas {
-		idea["state"] = "accepted"
-	}
-	fake.mu.Unlock()
-	if none := waitingFor(agentry, ""); len(ideasIn(none)) != 0 {
-		t.Errorf("no open ideas, yet: %+v", none)
-	}
-	fake.mu.Lock()
-	fake.fail = true
-	fake.mu.Unlock()
-	if failed := waitingFor(agentry, ""); len(failed) != 0 {
-		t.Errorf("ideas the server can't list should be left out: %+v", failed)
-	}
-}
-
-// The entry points at list_ideas with all when some open ideas are in
-// another repo, which list_ideas alone doesn't show, or when the repo isn't
-// known, as in the hook's WaitingFor. Either way the key is the same, so
-// where an idea is isn't news.
-func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
-	fake, agentry := newIdeasAgentry(t)
-	elsewhere := waitingFor(agentry, "/repo")[0]
-	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)"; elsewhere.Line != want {
-		t.Errorf("some in another repo: %q, want %q", elsewhere.Line, want)
-	}
-	fake.mu.Lock()
-	fake.ideas[0]["repo"] = "/repo"
-	fake.mu.Unlock()
-	here := waitingFor(agentry, "/repo")[0]
-	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas)"; here.Line != want {
-		t.Errorf("all in this repo: %q, want %q", here.Line, want)
-	}
-	if here.Key != "ideas/4" || elsewhere.Key != here.Key {
-		t.Errorf("keys %q and %q, want ideas/4 for both", elsewhere.Key, here.Key)
-	}
-	waiting := waitingFor(agentry, "")
-	if len(waiting) != 1 || !strings.HasSuffix(waiting[0].Line, "(list_ideas all)") || waiting[0].Key != here.Key {
-		t.Errorf("repo not known: %+v, want (list_ideas all) and key %q", waiting, here.Key)
 	}
 }
 

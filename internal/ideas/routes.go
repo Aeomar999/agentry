@@ -3,7 +3,6 @@ package ideas
 import (
 	"encoding/json"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -31,18 +30,18 @@ func routes(c features.Core) []features.Route {
 // one the column its task is in now.
 func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 	list := List(c.Read, r.URL.Query().Get("repo"))
-	started, about := map[string]time.Time{}, map[string]*tasks.Task{}
+	newestSessionFirst(c.Read, list)
+	about := map[string]*tasks.Task{}
 	for _, idea := range list {
-		if _, seen := started[idea.Task]; !seen {
+		if _, seen := about[idea.Task]; !seen {
+			about[idea.Task] = nil
 			if task, err := c.Read.Task(idea.Task); err == nil && task != nil {
-				started[idea.Task] = task.CreatedAt
 				if epic, err := c.Read.Task(task.About); err == nil && epic != nil {
 					about[idea.Task] = epic
 				}
 			}
 		}
 	}
-	slices.SortStableFunc(list, func(a, b *Idea) int { return started[b.Task].Compare(started[a.Task]) })
 	rule, roster := c.Read.Settings().AutoAcceptRule, c.Read.Roster()
 	views := []ideaView{}
 	for _, idea := range list {

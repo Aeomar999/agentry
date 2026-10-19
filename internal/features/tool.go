@@ -42,11 +42,12 @@ func AskOf(ctx context.Context) Ask {
 	return ask
 }
 
-// Waiting is one thing waiting for you, as agentry mcp lists it: a line in
-// its replies, the status line and the hooks, and news when Key is new.
+// Waiting is one thing waiting for you, as GET /api/waiting lists it and
+// agentry mcp shows it: a line in its replies, the status line and the
+// hooks, and news when Key is new.
 type Waiting struct {
-	Key  string // the same while it lasts: a new one has a new key
-	Task string
-	Line string // for a person: "task-4: Waiting for you to approve the push to dev"
-	Kind string // "needs you", "done", "said", "offline", or a feature's own, such as "ideas"
+	Key  string `json:"key"` // the same while it lasts: a new one has a new key
+	Task string `json:"task"`
+	Line string `json:"line"` // for a person: "task-4: Waiting for you to approve the push to dev"
+	Kind string `json:"kind"` // "needs you", "done", "said", "offline", or a feature's own, such as "ideas"
 }

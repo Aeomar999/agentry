@@ -17,8 +17,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 )
 
-// votes is a feature with one tool, a line in the instructions and one
-// thing waiting for you.
+// votes is a feature with one tool and a line in the instructions. The
+// server says one vote waits for you (votesAgentry).
 func votes() features.Feature {
 	return features.Feature{Name: "votes",
 		Tools: func(agentry features.API, repo string) []features.Tool {
@@ -26,15 +26,13 @@ func votes() features.Feature {
 				Run: func(context.Context, json.RawMessage) (string, error) { return "voted in " + repo, nil }}}
 		},
 		Instructions: "- Votes: cast them with cast_vote.",
-		Waiting: func(agentry features.API, repo string) []features.Waiting {
-			return []features.Waiting{{Key: "votes/1", Kind: "votes", Line: "1 vote to count (cast_vote)"}}
-		},
 	}
 }
 
 // votesAgentry is an Agentry whose votes feature is hidden until show is
 // called. Its log is at position 1 until then, and 2 after: a wait for a
-// change past 1 answers once show is called.
+// change past 1 answers once show is called. One vote waits for you all
+// along, as GET /api/waiting says.
 func votesAgentry(t *testing.T) (agentry client.Client, show func()) {
 	var visible atomic.Bool
 	shown, done := make(chan struct{}), make(chan struct{})
@@ -56,6 +54,8 @@ func votesAgentry(t *testing.T) (agentry client.Client, show func()) {
 			fmt.Fprintf(w, `{"position":%d}`, map[bool]int{false: 1, true: 2}[visible.Load()])
 		case "/api/tasks", "/api/questions":
 			io.WriteString(w, `[]`)
+		case "/api/waiting":
+			io.WriteString(w, `[{"key":"votes/1","kind":"votes","line":"1 vote to count (cast_vote)"}]`)
 		default:
 			io.WriteString(w, `{}`)
 		}

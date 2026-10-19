@@ -39,6 +39,11 @@ type question struct {
 }
 
 func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
+	httpapi.Reply(w, s.questions())
+}
+
+// questions are what waits for you of every task not done, oldest first.
+func (s *Server) questions() []question {
 	questions := []question{}
 	for _, task := range s.state.Tasks() {
 		if !task.IsDone {
@@ -46,7 +51,7 @@ func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.SortStableFunc(questions, func(a, b question) int { return cmp.Compare(a.At.UnixNano(), b.At.UnixNano()) }) // oldest first
-	httpapi.Reply(w, questions)
+	return questions
 }
 
 func questionsOf(t *tasks.Task) []question {

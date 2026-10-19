@@ -1,6 +1,11 @@
 package ideas
 
-import "slices"
+import (
+	"slices"
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/features"
+)
 
 // Source is every idea, as kept from the log (current.State), read through
 // the state's generic reads of a feature's streams.
@@ -57,4 +62,18 @@ func InState(list []*Idea, state State) []*Idea {
 		}
 	}
 	return in
+}
+
+// newestSessionFirst sorts list by when the task each idea came from was
+// made, newest first, keeping list's order within a task.
+func newestSessionFirst(read features.Reader, list []*Idea) {
+	started := map[string]time.Time{}
+	for _, idea := range list {
+		if _, seen := started[idea.Task]; !seen {
+			if task, err := read.Task(idea.Task); err == nil && task != nil {
+				started[idea.Task] = task.CreatedAt
+			}
+		}
+	}
+	slices.SortStableFunc(list, func(a, b *Idea) int { return started[b.Task].Compare(started[a.Task]) })
 }

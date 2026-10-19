@@ -580,7 +580,7 @@ func (s *Server) waitingNote() string {
 		return ""
 	}
 	notes := lines(waiting, func(q question) (string, bool) { return waitlist.Line(q.Question), true })
-	for _, w := range featuresWaiting(s.agentry, s.features, s.repo) {
+	for _, w := range featuresWaiting(s.agentry, s.repo) {
 		notes = append(notes, w.Line)
 	}
 	if len(notes) == 0 {

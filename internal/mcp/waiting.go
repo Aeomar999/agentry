@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -35,7 +37,7 @@ func WaitingFor(agentry client.Client, list []features.Feature) ([]Waiting, erro
 	for _, q := range questions {
 		all = append(all, waitlist.Entry(q.Question))
 	}
-	return append(all, featuresWaiting(agentry, list, "")...), nil
+	return append(all, featuresWaiting(agentry, "")...), nil
 }
 
 // News is everything a waiter compares with what it saw before: what waits
@@ -108,19 +110,15 @@ func WaitForNew(ctx context.Context, agentry client.Client, list []features.Feat
 	}
 }
 
-// featuresWaiting is what waits of each feature in list, about repo ("" when
-// not known). What a feature can't read is left out, not an error. Unlike
-// Tools and Instructions, it asks every feature, hidden or not: a feature
-// with something waiting (open ideas) shows anyway, and in story 13 the
-// server lists what waits (GET /api/waiting) and this goes.
-func featuresWaiting(agentry client.Client, list []features.Feature, repo string) []Waiting {
+// featuresWaiting is what the features say waits for you, about repo (""
+// when not known), as GET /api/waiting lists it after the core's entries.
+// What can't be read is left out, not an error.
+func featuresWaiting(agentry client.Client, repo string) []Waiting {
 	var all []Waiting
-	for _, f := range list {
-		if f.Waiting != nil {
-			all = append(all, f.Waiting(agentry, repo)...)
-		}
+	if agentry.Call("GET", "/api/waiting?repo="+url.QueryEscape(repo), nil, &all) != nil {
+		return nil
 	}
-	return all
+	return slices.DeleteFunc(all, func(w Waiting) bool { return w.Kind == "needs you" })
 }
 
 // withSummary adds a finished task's summary to its line.

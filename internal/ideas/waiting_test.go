@@ -2,6 +2,7 @@ package ideas_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/mcp"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -19,7 +21,7 @@ import (
 // oldest first, then the open ideas, for a session outside any repo and
 // for one in each repo. A dismissed idea leaves the line but not the key.
 func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
-	server, s := newTestServer(t)
+	server, s, state := newServer(t, tasks.Limits{})
 	other := gitRepo(t)
 	api := client.Client{Where: client.Where{URL: server.URL}, Token: token}
 	worker, policy := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Policy, ID: "policy"}
@@ -62,22 +64,7 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	suggestIdea(t, s, "task-7", "/src/app", "Search the board")
 	suggestIdea(t, s, "task-7", "/src/app", "Sort the columns")
 	tagRepos := suggestIdea(t, s, "task-8", other, "Tag the repos")
-	agreed, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
-		"title": "Show the costs", "problem": "p", "proposal": "f", "size": "M", "repo": other, "task": "task-8", "kind": "",
-		"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"}}})
-	if rejection != nil || err != nil {
-		t.Fatal(rejection, err)
-	}
-	auto := agreed.Stream
-	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
-	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
-		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
-		{Stream: "task-9", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Show the costs", "repo": other,
-			"coordinator": "tech-lead", "parked": "backlog", "idea": auto}},
-		{Stream: auto, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-9", "note": "auto-accepted: all Visionaries agreed"}},
-	}...) {
-		mustPropose(t, s, p)
-	}
+	autoAccepted(t, s, "task-8", other, "Show the costs", "task-9")
 
 	core := []features.Waiting{
 		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "task-1: tech-lead asks: Which layout?"},
@@ -90,8 +77,13 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	}
 	open := features.Waiting{Key: "ideas/3", Task: "task-8", Kind: "ideas",
 		Line: "3 open ideas from the Visionaries: Tag the repos, Sort the columns, Search the board (list_ideas all)"}
+	all, err := mcp.WaitingFor(api, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkWaiting(t, "agentry mcp, outside a repo", all, append(core, open))
 	for _, repo := range []string{"", "/src/app", other} {
-		checkWaiting(t, "in "+repo, waitingIn(t, api, repo), append(core, open))
+		checkWaiting(t, "in "+repo, waitingIn(t, api, state, repo), append(core, open))
 	}
 
 	if code, body := call(t, server, "POST", "/api/ideas/"+tagRepos+"/dismiss", `{"note":"not now"}`); code != 200 {
@@ -99,22 +91,45 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	}
 	here := features.Waiting{Key: "ideas/3", Task: "task-7", Kind: "ideas",
 		Line: "2 open ideas from the Visionaries: Sort the columns, Search the board (list_ideas)"}
-	checkWaiting(t, "in /src/app, its ideas all here", waitingIn(t, api, "/src/app"), append(core, here))
+	checkWaiting(t, "in /src/app, its ideas all here", waitingIn(t, api, state, "/src/app"), append(core, here))
 	here.Line = strings.Replace(here.Line, "(list_ideas)", "(list_ideas all)", 1)
-	checkWaiting(t, "in "+other+", with none of its own", waitingIn(t, api, other), append(core, here))
-	checkWaiting(t, "outside a repo, after the dismiss", waitingIn(t, api, ""), append(core, here))
+	checkWaiting(t, "in "+other+", with none of its own", waitingIn(t, api, state, other), append(core, here))
+	checkWaiting(t, "outside a repo, after the dismiss", waitingIn(t, api, state, ""), append(core, here))
 }
 
-// waitingIn is what agentry mcp lists as waiting for a session in repo
-// ("" outside one): WaitingFor's entries, then the feature's about repo, as
-// the end of every reply has them.
-func waitingIn(t *testing.T, api client.Client, repo string) []features.Waiting {
+// waitingIn is what waits for a session in repo ("" outside one): the
+// core's entries agentry mcp reads, then what ideas says about repo.
+func waitingIn(t *testing.T, api client.Client, state features.Reader, repo string) []features.Waiting {
 	t.Helper()
 	all, err := mcp.WaitingFor(api, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(all, ideas.Feature().Waiting(api, repo)...)
+	core := slices.DeleteFunc(all, func(w features.Waiting) bool { return w.Kind != "needs you" })
+	return append(core, ideas.Feature().Waiting(state, repo)...)
+}
+
+// autoAccepted is an idea from task about repo that Agentry accepted for
+// you as task as: every Visionary backed it, with their team added and
+// your rule on.
+func autoAccepted(t *testing.T, s *store.Store, task, repo, title, as string) string {
+	t.Helper()
+	created, rejection, err := s.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
+		"title": title, "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": task, "kind": "",
+		"backedBy": []string{"product-strategist", "user-advocate", "technologist", "skeptic"}}})
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
+		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
+		{Stream: as, Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": title, "repo": repo,
+			"coordinator": "tech-lead", "parked": "backlog", "idea": created.Stream}},
+		{Stream: created.Stream, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": as, "note": "auto-accepted: all Visionaries agreed"}},
+	}...) {
+		mustPropose(t, s, p)
+	}
+	return created.Stream
 }
 
 func checkWaiting(t *testing.T, where string, got, want []features.Waiting) {
@@ -128,5 +143,69 @@ func checkWaiting(t *testing.T, where string, got, want []features.Waiting) {
 	}
 	if line(got) != line(want) {
 		t.Errorf("%s:\n%s\nwant:\n%s", where, line(got), line(want))
+	}
+}
+
+// Open ideas are one line of what waits for you; a new idea is news, one
+// decided isn't, and one Agentry accepted for you isn't either.
+func TestOpenIdeasWaitForYou(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	waiting := func() []features.Waiting { return ideas.Feature().Waiting(state, "") }
+	retry := suggest(t, s, repo, map[string]any{"title": "Retry webhooks"})
+	boot := suggest(t, s, "/other", map[string]any{"title": "Faster boot"})
+	before := waiting()
+	if len(before) != 1 || before[0].Line != "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)" ||
+		before[0].Task != "task-1" || before[0].Kind != "ideas" || before[0].Key != "ideas/2" {
+		t.Fatalf("waiting: %+v", before)
+	}
+
+	mustPropose(t, s, events.Proposal{Stream: boot, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "not now"}})
+	if after := waiting(); len(after) != 1 || after[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || after[0].Key != before[0].Key {
+		t.Errorf("an idea decided isn't news: %+v, before %+v", after, before)
+	}
+	autoAccepted(t, s, "task-1", repo, "Search", "task-2")
+	if agreed := waiting(); len(agreed) != 1 || agreed[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || agreed[0].Key != before[0].Key {
+		t.Errorf("an idea Agentry accepted for you isn't news: %+v, before %+v", agreed, before)
+	}
+
+	var more []string
+	for _, title := range []string{"Undo a move", "Bulk start", "Tags"} {
+		more = append(more, suggest(t, s, repo, map[string]any{"title": title}))
+	}
+	if news := waiting(); len(news) != 1 || news[0].Line != "4 open ideas from the Visionaries: Tags, Bulk start, Undo a move, and 1 more (list_ideas all)" || news[0].Key != "ideas/5" {
+		t.Errorf("new ideas are news: %+v", news)
+	}
+
+	for _, id := range append(more, retry) {
+		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "no"}})
+	}
+	if none := waiting(); len(none) != 0 {
+		t.Errorf("no open ideas, yet: %+v", none)
+	}
+}
+
+// The entry points at list_ideas with all when some open ideas are in
+// another repo, which list_ideas alone doesn't show, or when the repo isn't
+// known, as outside a session. Either way the key is the same, so where an
+// idea is isn't news.
+func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	suggest(t, s, repo, map[string]any{"title": "Retry webhooks"})
+	boot := suggest(t, s, "/other", map[string]any{"title": "Faster boot"})
+	elsewhere := ideas.Feature().Waiting(state, repo)[0]
+	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)"; elsewhere.Line != want {
+		t.Errorf("some in another repo: %q, want %q", elsewhere.Line, want)
+	}
+	mustPropose(t, s, events.Proposal{Stream: boot, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "not now"}})
+	here := ideas.Feature().Waiting(state, repo)[0]
+	if want := "1 open idea from the Visionaries: Retry webhooks (list_ideas)"; here.Line != want {
+		t.Errorf("all in this repo: %q, want %q", here.Line, want)
+	}
+	if here.Key != "ideas/2" || elsewhere.Key != here.Key {
+		t.Errorf("keys %q and %q, want ideas/2 for both", elsewhere.Key, here.Key)
+	}
+	unknown := ideas.Feature().Waiting(state, "")
+	if len(unknown) != 1 || !strings.HasSuffix(unknown[0].Line, "(list_ideas all)") || unknown[0].Key != here.Key {
+		t.Errorf("repo not known: %+v, want (list_ideas all) and key %q", unknown, here.Key)
 	}
 }

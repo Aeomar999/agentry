@@ -28,16 +28,19 @@ type Feature struct {
 	Routes      func(Core) []Route // its HTTP API, which web mounts behind each Route's Auth
 	Manifest    func(Reader) Entry // whether the page shows it, and why
 
+	// Waiting is what of it waits for you, about repo ("" when not known),
+	// worked out in the server, which lists it in GET /api/waiting after the
+	// core's entries. The server asks every feature, hidden or not: one with
+	// something waiting (open ideas) shows anyway.
+	Waiting func(state Reader, repo string) []Waiting
+
 	// In agentry mcp, a separate process that reaches the server only over
 	// its API: Tools are its MCP tools for a session in repo ("" outside
 	// one), and Instructions its lines in the server instructions Claude
 	// Code reads, each a "- " bullet; both only while the feature is
-	// enabled or visible. Waiting is what of it waits for you, about repo
-	// ("" when not known), read over the API until the server lists it in
-	// story 13 (GET /api/waiting).
+	// enabled or visible.
 	Tools        func(agentry API, repo string) []Tool
 	Instructions string
-	Waiting      func(agentry API, repo string) []Waiting
 
 	// Jobs is its background work, which serve starts beside the loop
 	// (StartJobs) and ctx ends. A panic in it stops it, not the server.

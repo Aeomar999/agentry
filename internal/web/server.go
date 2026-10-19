@@ -94,6 +94,7 @@ func (s *Server) Handler() http.Handler {
 	deskToo("POST /api/tasks/{task}/answer", s.answer)
 	deskToo("PUT /api/tasks/{task}/epic", s.setEpic)
 	deskToo("GET /api/questions", s.listQuestions)
+	deskToo("GET /api/waiting", s.listWaiting)
 	deskToo("GET /api/tasks/{task}/shared", s.listShared)
 	deskToo("GET /api/tasks/{task}/shared/file", s.downloadShared)
 	deskToo("POST /api/tasks/{task}/shared", s.uploadShared)
