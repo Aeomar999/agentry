@@ -10,6 +10,7 @@ import (
 // decision is held by its hook call, and no hook call survives a restart: the
 // hook failed closed and the agent was already told no. So each such action
 // is denied, and the task stops showing an approval nothing is waiting on.
+// A held action waits on no hook call, so it stays held for you.
 // A task the state can't hand out, such as a broken one, is skipped: it can't
 // take an event either, and it must not keep the server from starting.
 func DenyOrphanedAsks(s *store.Store, state *current.State) error {
@@ -18,7 +19,7 @@ func DenyOrphanedAsks(s *store.Store, state *current.State) error {
 		if err != nil || task == nil || task.IsDone {
 			continue
 		}
-		for _, action := range task.WaitingForYou() {
+		for _, action := range task.HooksWaiting() {
 			_, _, err := s.Propose(events.Proposal{Stream: id, Actor: ruleset, Type: events.ActionDenied, Correlation: action.ID,
 				Data: map[string]any{"reason": "Agentry restarted while this waited for you; the agent was told no and can ask again"}})
 			if err != nil {

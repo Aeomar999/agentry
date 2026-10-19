@@ -136,14 +136,85 @@ func TestAnAskedActionWaitsForTheUser(t *testing.T) {
 	}
 }
 
-func TestAnAskThatTimesOutIsDenied(t *testing.T) {
+func TestAnAskThatTimesOutIsHeldForTheUser(t *testing.T) {
 	s, state := engineerAtWork(t)
+	reply := timedOut(t, NewHandler(s, state, judgeByCommand), "toolu_4", "curl example.com")
+	task := taskIn(t, s)
+	action := task.Action("toolu_4")
+	if decisionOf(reply) != "deny" || !strings.Contains(reply.Stdout, "held for the user's approval") {
+		t.Errorf("reply %+v, want a denial that says it is held", reply)
+	}
+	if !action.Held || action.Decision != tasks.Undecided || task.Status() != tasks.NeedsYou || len(task.HooksWaiting()) != 0 {
+		t.Errorf("action %+v, status %s, hooks waiting %+v", action, task.Status(), task.HooksWaiting())
+	}
+}
+
+// timedOut is the reply to a gate call whose ask gets no answer in time.
+func timedOut(t *testing.T, h *Handler, id, command string) hookcall.Reply {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
+	return h.Handle(ctx, hookCall("PreToolUse", bash(id, command)))
+}
+
+func TestALateApprovalLetsTheSameCommandThroughOnce(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	timedOut(t, h, "toolu_4", "git push origin HEAD:dev")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Human, ID: "you"},
+		Type: events.ActionApproved, Correlation: "toolu_4", Data: map[string]any{"reason": "fine"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	last := taskIn(t, s).Trail[len(taskIn(t, s).Trail)-1]
+	if last.To != "tech-lead" || !strings.Contains(last.Text, "git push origin HEAD:dev") {
+		t.Errorf("the coordinator should be handed the full command back: %+v", last)
+	}
+
+	if reply := timedOut(t, h, "toolu_5", "git push origin HEAD:main"); decisionOf(reply) == "allow" {
+		t.Errorf("another command must not use the pass: %+v", reply)
+	}
+	if reply := h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_6", "git push origin HEAD:dev"))); decisionOf(reply) != "allow" ||
+		!strings.Contains(reply.Stdout, "after it timed out") {
+		t.Errorf("the same command should pass once: %+v", reply)
+	}
+	timedOut(t, h, "toolu_7", "git push origin HEAD:dev")
+	if task := taskIn(t, s); !task.Action("toolu_4").PassUsed || !task.Action("toolu_7").Asked {
+		t.Errorf("the pass is used once, then the command is asked about again: %+v %+v", task.Action("toolu_4"), task.Action("toolu_7"))
+	}
+}
+
+func TestALateDenialGivesNoPass(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	timedOut(t, h, "toolu_4", "git push")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Human, ID: "you"},
+		Type: events.ActionDenied, Correlation: "toolu_4", Data: map[string]any{"reason": "no"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if task := taskIn(t, s); task.PassFor("Bash", "git push") != nil || task.Status() != tasks.Working {
+		t.Errorf("pass %+v, status %s", task.PassFor("Bash", "git push"), task.Status())
+	}
+	timedOut(t, h, "toolu_5", "git push")
+	if !taskIn(t, s).Action("toolu_5").Asked {
+		t.Error("after a denial the same command is asked about again")
+	}
+}
+
+// In a task you moved to Done, a timed-out ask can't be held: it is denied.
+func TestAnAskThatCantBeHeldIsDenied(t *testing.T) {
+	s, state := engineerAtWork(t)
+	go func() {
+		for len(taskIn(t, s).WaitingForYou()) == 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
+		s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskDone,
+			Data: map[string]any{"summary": "Moved.", "moved": true}})
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 	reply := NewHandler(s, state, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_4", "curl example.com")))
-	task := taskIn(t, s)
-	if decisionOf(reply) != "deny" || task.Action("toolu_4").Decision != tasks.Denied || task.Status() != tasks.Working {
-		t.Errorf("reply %+v, action %+v, status %s", reply, task.Action("toolu_4"), task.Status())
+	if action := taskIn(t, s).Action("toolu_4"); decisionOf(reply) != "deny" || action.Held || action.Decision != tasks.Denied {
+		t.Errorf("reply %+v, action %+v", reply, action)
 	}
 }
 
@@ -186,8 +257,8 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 		cancel() // the hook call dies, as when the server stops
 	}()
 	NewHandler(s, state, judgeByCommand).Handle(ctx, hookCall("PreToolUse", bash("toolu_7", "npm install left-pad")))
-	if task := taskIn(t, s); task.Status() != tasks.Working {
-		t.Fatalf("a hook call that dies denies its own ask, got %s", task.Status())
+	if task := taskIn(t, s); !task.Action("toolu_7").Held {
+		t.Fatalf("a hook call that dies holds its own ask for you: %+v", task.Action("toolu_7"))
 	}
 
 	// An ask left open (the server was killed outright) is denied at the next start.
@@ -198,8 +269,8 @@ func TestARestartDeniesAsksNoHookIsWaitingFor(t *testing.T) {
 	if err := DenyOrphanedAsks(s, state); err != nil {
 		t.Fatal(err)
 	}
-	if task := taskIn(t, s); task.Status() != tasks.Working || task.Action("toolu_8").Decision != tasks.Denied {
-		t.Errorf("status %s, action %+v", task.Status(), task.Action("toolu_8"))
+	if task := taskIn(t, s); task.Action("toolu_8").Decision != tasks.Denied || task.Action("toolu_7").Decision != tasks.Undecided {
+		t.Errorf("the open ask %+v should be denied, the held one %+v kept", task.Action("toolu_8"), task.Action("toolu_7"))
 	}
 }
 

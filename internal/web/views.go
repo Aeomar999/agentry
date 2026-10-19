@@ -82,9 +82,15 @@ type action struct {
 	Command     string    `json:"command"`
 	RequestedAt time.Time `json:"requestedAt"`
 	Asked       bool      `json:"asked"`
+	Held        bool      `json:"held"` // no answer came in time: the agent was told no, and it waits for you still
 	Decision    string    `json:"decision"`
 	Reason      string    `json:"reason"`
 	Finished    bool      `json:"finished"` // the tool ran and returned
+}
+
+func actionView(a *tasks.Action) action {
+	return action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command, RequestedAt: a.RequestedAt,
+		Asked: a.Asked, Held: a.Held, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
 }
 
 type eventEntry struct {
@@ -137,12 +143,10 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
 	}
 	for _, a := range t.Actions {
-		view := action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command,
-			RequestedAt: a.RequestedAt, Asked: a.Asked, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
-		detail.Actions = append(detail.Actions, view)
-		if a.Asked && a.Decision == tasks.Undecided {
-			detail.Approvals = append(detail.Approvals, view)
-		}
+		detail.Actions = append(detail.Actions, actionView(a))
+	}
+	for _, a := range t.WaitingForYou() {
+		detail.Approvals = append(detail.Approvals, actionView(a))
 	}
 	for _, e := range log {
 		data := e.Data
