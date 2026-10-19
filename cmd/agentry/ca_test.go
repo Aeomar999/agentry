@@ -35,7 +35,7 @@ func TestCARegenerate(t *testing.T) {
 	if renewed.Fingerprint() == old.Fingerprint() {
 		t.Error("the CA is the same one")
 	}
-	for _, want := range []string{"no longer trust", "/trust/ca.crt", "-ca-fingerprint", "keep the old CA until they restart", renewed.Fingerprint()} {
+	for _, want := range []string{"no longer trust", "/trust/ca.crt", "-ca-fingerprint", "can't reach Agentry until they are restarted, after joining again", renewed.Fingerprint()} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("said %q, want %q in it", out.String(), want)
 		}
