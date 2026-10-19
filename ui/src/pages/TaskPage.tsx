@@ -44,6 +44,7 @@ import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { useResource } from "@/live/use-resource";
 import { useNow } from "@/live/use-now";
+import { COLUMN_TITLES, stageOf } from "@/lib/columns";
 
 // A task in full. The header and a strip of facts stay put. Under them, on
 // the left, the agents' plans stay on every tab; on the right, the path of
@@ -199,6 +200,7 @@ export function TaskPage() {
           <>
             {isEpic && <EpicBadge />}
             <TaskStatusBadge status={task.status} />
+            {stageOf(task) && <Badge>{stageOf(task)}</Badge>}
           </>
         }
         actions={[
@@ -415,6 +417,7 @@ export function TaskPage() {
                       items={[
                         { label: "Id", value: <Mono>{task.id}</Mono> },
                         { label: "Status", value: <TaskStatusBadge status={task.status} /> },
+                        ...(isEpic ? [] : [{ label: "Board column", value: COLUMN_TITLES[task.column] }]),
                         { label: "Repo", value: <RepoEditor task={task} onChanged={reload} /> },
                         ...(isEpic ? [] : [{ label: "Epic", value: <EpicPicker task={task} onChanged={reload} /> }]),
                         { label: "Coordinator", value: <AgentName name={task.coordinator} /> },

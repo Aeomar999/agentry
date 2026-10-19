@@ -3,7 +3,7 @@ import type { SharedFile } from "@/lib/shared";
 
 export type TaskStatus = "working" | "needs you" | "done" | "held";
 
-export type BoardColumn = "backlog" | "todo" | "in-progress" | "review" | "done";
+export type BoardColumn = "backlog" | "todo" | "in-progress" | "review" | "shipping" | "done";
 
 export interface TaskSummary {
   id: string;

@@ -12,13 +12,15 @@ import { useToast } from "./Toasts";
 import { rankAt } from "@/lib/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { DONE_DAYS, onBoard } from "@/lib/epics";
+import { COLUMN_TITLES } from "@/lib/columns";
 
 // The board's columns are the stages of the work, the same whichever agents
-// you have: Backlog (shown when you ask), To do, In progress, Review, Done.
-// The server says which column a task is in. Moving a card onto another
-// column is final and takes effect at once (direct in
+// you have: Backlog (shown when you ask), To do, In progress, Review,
+// Shipping, Done. The server says which column a task is in. Moving a card
+// onto another column is final and takes effect at once (direct in
 // internal/web/board_api.go): Done finishes it, To do and the Backlog park
-// it, In progress and Review send it to an agent that builds or checks it.
+// it, In progress, Review and Shipping send it to an agent that builds,
+// checks or ships it; a team with no agent that ships work refuses Shipping.
 // The card shows in its new column as soon as you send the move. Where in
 // the column you drop it is its place in your priority order. A task waiting
 // for you stays where it is, marked, and its question is in the dock.
@@ -31,13 +33,7 @@ interface Column {
 const BACKLOG = "backlog";
 const DONE = "done";
 
-const COLUMNS: Column[] = [
-  { id: BACKLOG, title: "Backlog" },
-  { id: "todo", title: "To do" },
-  { id: "in-progress", title: "In progress" },
-  { id: "review", title: "Review" },
-  { id: DONE, title: "Done" },
-];
+const COLUMNS: Column[] = (Object.keys(COLUMN_TITLES) as BoardColumn[]).map((id) => ({ id, title: COLUMN_TITLES[id] }));
 
 // A move you sent, shown until fresh data for the task comes after it.
 interface Move {
@@ -128,6 +124,7 @@ export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onP
       todo: [`Parked ${task.id} in To do`, "It waits there until you move it on."],
       "in-progress": [`Moved ${task.id} to In progress`, "The coordinator hands it to an agent that builds it."],
       review: [`Moved ${task.id} to Review`, "The coordinator has it checked next."],
+      shipping: [`Moved ${task.id} to Shipping`, "The coordinator hands it to an agent that ships it."],
       done: [`${task.id} is done`, "The coordinator writes its summary."],
     };
     notify("success", ...toasts[to]);
@@ -276,6 +273,7 @@ function DirectDialog({ task, to, onClose, onSend }: DirectDialogProps) {
     todo: `${reopen}park ${task.id} in To do?`,
     "in-progress": task.parked ? `Start ${task.id}?` : `${reopen}send ${task.id} back for more work?`,
     review: `${reopen}have ${task.id} reviewed next?`,
+    shipping: `${reopen}ship ${task.id} now?`,
     done: `Move ${task.id} to Done?`,
   };
   const title = titles[to].charAt(0).toUpperCase() + titles[to].slice(1);
@@ -314,7 +312,12 @@ function whatItDoes(task: TaskSummary, to: BoardColumn): string {
       ? "It reopens, parked: nothing runs on it until you move it on."
       : "It is parked now: a turn in progress stops and the coordinator gets a short wrap-up. Nothing more runs until you move it on.";
   }
-  const agent = to === "review" ? "an agent that checks work, if its team has one" : "an agent that builds it";
+  const agent =
+    to === "review"
+      ? "an agent that checks work, if its team has one"
+      : to === "shipping"
+        ? "an agent of its team that ships work. Checked or not, it ships as it is, and that agent still runs its usual checks first"
+        : "an agent that builds it";
   if (task.status === "done") return `It reopens now, in its worktree kept or made again, and the coordinator must hand it to ${agent}.`;
   const answer = task.hasQuestion ? " The coordinator asked you something, so your note goes as your answer." : "";
   return `The card moves now, and the coordinator must hand it to ${agent}.${answer}`;

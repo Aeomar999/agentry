@@ -12,7 +12,7 @@ import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
 import { AgentName } from "@/components/molecules/AgentName";
 import { LabelList } from "@/components/molecules/LabelChip";
-import type { Agent, TaskStatus, TaskSummary } from "@/api/types";
+import type { Agent, BoardColumn, TaskStatus, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useKeys, useRowCursor } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
@@ -26,17 +26,31 @@ import { useNewTask } from "@/lib/new-task";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { grouped, waitingLine } from "@/lib/epics";
+import { stageOf } from "@/lib/columns";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 
 // The filter lives in the address (?status=needs-you), so a link can open
-// the list already filtered: the bell in the top bar does.
-const FILTERS: { id: string; label: string; status?: TaskStatus }[] = [
+// the list already filtered: the bell in the top bar does. Review and
+// Shipping are the board's columns of work being checked or shipped.
+interface Filter {
+  id: string;
+  label: string;
+  status?: TaskStatus;
+  column?: BoardColumn;
+}
+
+const FILTERS: Filter[] = [
   { id: "all", label: "All" },
   { id: "needs-you", label: "Needs you", status: "needs you" },
   { id: "working", label: "Working", status: "working" },
+  { id: "review", label: "Review", column: "review" },
+  { id: "shipping", label: "Shipping", column: "shipping" },
   { id: "held", label: "Held", status: "held" },
   { id: "done", label: "Done", status: "done" },
 ];
+
+const fits = (filter: Filter, task: TaskSummary) =>
+  (!filter.status || task.status === filter.status) && (!filter.column || task.column === filter.column);
 
 // Epics show their stories under them, folded or not by a click on the
 // chevron; a finished epic starts folded.
@@ -113,7 +127,8 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
 function describe(task: TaskSummary): string {
   if (task.status === "done") return "Done";
   if (waitingLine(task)) return waitingLine(task);
-  return task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next";
+  const stage = stageOf(task) ? `${stageOf(task)} · ` : "";
+  return stage + (task.currentAgent ? `${task.currentAgent} is working` : "The coordinator is next");
 }
 
 type View = "list" | "board";
@@ -175,7 +190,7 @@ export function TasksPage() {
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
     return tasks.filter(
       (task) =>
-        (!filter.status || task.status === filter.status) &&
+        fits(filter, task) &&
         (showBacklog || task.parked !== "backlog") &&
         (!label || task.labels.includes(label)) &&
         (!epic || task.id === epic || task.epic === epic) &&
@@ -223,7 +238,7 @@ export function TasksPage() {
           <FilterChip
             key={f.id}
             label={f.label}
-            count={f.status ? tasks.filter((task) => task.status === f.status).length : tasks.length}
+            count={tasks.filter((task) => fits(f, task)).length}
             active={f === filter}
             onClick={() => setParam("status", f.id === "all" ? null : f.id)}
           />

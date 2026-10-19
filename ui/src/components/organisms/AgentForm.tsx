@@ -170,10 +170,10 @@ export function AgentForm({ agent }: { agent?: Agent }) {
               htmlFor="agent-column"
               hint={
                 draft.column === "review"
-                  ? "Checking. Its report ends with a verdict, and its coordinator can't finish a task until it approves the last change."
+                  ? "Checking. Its report ends with a verdict, and its coordinator can't finish a task until it approves the last change. Its tasks show in Review on the board."
                   : draft.column === "ship"
-                    ? "Shipping checked work, such as deploying it: it doesn't change the work, so the checks still hold."
-                    : "Building. A change it makes is checked again by the team's reviewers before the task is done."
+                    ? "Shipping checked work, such as deploying it: it doesn't change the work, so the checks still hold. Its tasks show in Shipping on the board."
+                    : "Building. A change it makes is checked again by the team's reviewers before the task is done. Its tasks show in In progress on the board."
               }
             >
               <Select id="agent-column" value={draft.column} onChange={(e) => set({ column: e.target.value as Agent["column"] })}>

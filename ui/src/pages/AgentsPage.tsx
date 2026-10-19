@@ -20,6 +20,7 @@ import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
 import { cn } from "@/lib/cn";
+import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 
 // The agents, in their teams. A team is a coordinator and the agents it
 // hands work to, for one kind of work: Software, Writing, Research, Design,
@@ -207,7 +208,7 @@ function AgentCard({ agent, onRemove }: { agent: Agent; onRemove: () => void }) 
         <AgentName name={agent.name} className="text-[13px] font-semibold text-ink-primary" />
         <span className="ml-auto flex gap-1">
           {agent.coordinates && <Badge variant="brand">coordinator</Badge>}
-          {agent.column && <Badge>{agent.column}</Badge>}
+          <ColumnBadge agent={agent} />
         </span>
         <button
           type="button"
@@ -281,7 +282,7 @@ function Node({ agent }: { agent: Agent }) {
     >
       <span className="flex items-center gap-2">
         <AgentName name={agent.name} className="text-[12.5px] font-semibold text-ink-primary" />
-        {agent.column && <Badge className="ml-auto">{agent.column}</Badge>}
+        <ColumnBadge agent={agent} className="ml-auto" />
         {agent.coordinates && (
           <Badge variant="brand" className="ml-auto">
             lead
@@ -404,5 +405,17 @@ function RemoveDialog({ removing, onClose, onRemoved }: { removing: Removing; on
         </div>
       </div>
     </Dialog>
+  );
+}
+
+// ColumnBadge names the board column an agent's work shows in, if it is
+// past building: Review or Shipping.
+function ColumnBadge({ agent, className }: { agent: Agent; className?: string }) {
+  const column = columnOfAgent(agent);
+  if (!column) return null;
+  return (
+    <span title={`Its work shows in ${COLUMN_TITLES[column]} on the board`} className={className}>
+      <Badge>{COLUMN_TITLES[column]}</Badge>
+    </span>
   );
 }
