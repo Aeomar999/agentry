@@ -180,6 +180,17 @@ func TestALimitWithNoResetTimeWaitsAnHour(t *testing.T) {
 	}
 }
 
+func TestALimitResetDaysAwayIsWaitedOutForADayAtMost(t *testing.T) {
+	w := newWorld(t)
+	w.limit(time.Now().Add(3 * 24 * time.Hour).UTC().Format(time.RFC3339))
+	if issue := w.after(MaxLimitWait + 9*time.Minute); issue != "" {
+		t.Errorf("issue %q", issue)
+	}
+	if issue := w.after(MaxLimitWait + 11*time.Minute); !strings.Contains(issue, "usage limit") {
+		t.Errorf("a reset days away still stalls after a day plus the silence limit: issue %q", issue)
+	}
+}
+
 func TestALimitedTurnWhoseProcessExitedIsACrash(t *testing.T) {
 	w := newWorld(t)
 	w.limit(time.Now().Add(time.Hour).UTC().Format(time.RFC3339))

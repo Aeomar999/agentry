@@ -38,6 +38,10 @@ var DefaultLimits = Limits{
 // didn't say when it resets.
 const UnknownReset = time.Hour
 
+// MaxLimitWait is the longest a usage limit is waited out, however far off
+// the engine says it resets, so a misread reset can't hide a stall for days.
+const MaxLimitWait = 24 * time.Hour
+
 type Watchdog struct {
 	store     *store.Store   // where it raises issues
 	state     *current.State // the tasks it watches
@@ -121,6 +125,9 @@ func (w *Watchdog) limitedProblem(now time.Time, turn *tasks.Turn) string {
 	quietFrom := turn.ResetsAt
 	if quietFrom.IsZero() {
 		quietFrom = turn.LastEventAt.Add(UnknownReset)
+	}
+	if latest := turn.LastEventAt.Add(MaxLimitWait); quietFrom.After(latest) {
+		quietFrom = latest
 	}
 	if turn.LastEventAt.After(quietFrom) {
 		quietFrom = turn.LastEventAt
