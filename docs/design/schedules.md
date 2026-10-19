@@ -673,13 +673,20 @@ green).
 **S3. The job** (S/M). `Feature.Jobs`: the ticker, `Due`, catch-up once,
 the five steps under `firing`, with the clock injected for tests. Its
 checked proposer in `serve.go`'s `logs` (`:218`), with `Writes:
-[task.created]`. Done: tests with a fake clock for one run, a missed
-weekend (one run, `missed: 2`), a run skipped because the last task is
-open, a refused task (team removed) recorded as skipped, a crash between
-`task.created` and `schedule.fired` (a test seam as `beforeMarking` in
-`internal/ideas/accept.go:140`) recovered on the next wake, and two
-firings at once making one task; a panic in the job logs and stops it,
-the server goes on (`features.StartJobs`).
+[task.created]`. Done: tests with a fake clock for one run; a machine
+shut from Friday night to Monday morning, for a daily schedule (one run,
+`missed: 2`) and a weekdays one (one run, `missed: 0`); a run skipped
+because a task from the schedule is open; a refused task (team removed)
+recorded as skipped; a crash between `task.created` and
+`schedule.fired` (a test seam as `beforeMarking` in
+`internal/ideas/accept.go:140`) recovered on the next wake; a panic at
+that seam, with the task done before the restart, recorded once and its
+slot not fired again; a Run now while the clock's task is open, after
+which the next wake writes no `fired` for either task; an old done
+scheduled task reopened, which step 1 ignores; a refused step 1 record
+written as one `unrecorded` skip and not retried on the next wake; and
+two firings at once making one task. A panic in the job logs and stops
+it, the server goes on (`features.StartJobs`).
 
 **S4. Routes** (S). Section 6's routes in `internal/schedules/routes.go`,
 with HTTP tests in `routes_test.go` as Ideas has. Done: each route's
