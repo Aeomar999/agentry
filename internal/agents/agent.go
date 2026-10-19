@@ -97,6 +97,12 @@ func (a Agent) Renaming(by events.Actor, to string) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentRenamed, Data: map[string]any{"name": a.Name, "to": to}}
 }
 
+// TeamRenaming is the event that gives team a new name, to: every agent of
+// it, its coordinator too, moves there and keeps everything else.
+func TeamRenaming(team, to string, by events.Actor) events.Proposal {
+	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.TeamRenamed, Data: map[string]any{"team": team, "to": to}}
+}
+
 // Removal is the event that removes this agent.
 func (a Agent) Removal(by events.Actor) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentRemoved, Data: map[string]any{"name": a.Name}}
@@ -166,6 +172,12 @@ func (r *Roster) Apply(e events.Event) {
 	case events.AgentRenamed:
 		if i := roster.index(e.Text("name")); i >= 0 {
 			roster[i].Name = e.Text("to")
+		}
+	case events.TeamRenamed:
+		for i := range roster {
+			if roster[i].TeamName() == e.Text("team") {
+				roster[i].Team = e.Text("to")
+			}
 		}
 	case events.AgentLearned:
 		if i := roster.index(e.Text("name")); i >= 0 {

@@ -477,6 +477,7 @@ func TestATeamHasOneCoordinator(t *testing.T) {
 			"the Writing team already has a coordinator, editor: a team has exactly one"},
 		{"a coordinator edited", agents.Agent{Name: "editor", Engine: "codex", Prompt: "Edit hard.", Coordinates: true, Team: "Writing"}.Proposal(you, true), ""},
 		{"a specialist edited", agents.Agent{Name: "writer", Engine: "codex", Prompt: "Write more.", Team: "Writing"}.Proposal(you, true), ""},
+		{"a lone lead respelling its team", agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "SOLO"}.Proposal(you, true), ""},
 		{"a coordinator moved to a team of its own", agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Scouting"}.Proposal(you, true), ""},
 	}
 	for _, c := range cases {
@@ -540,6 +541,43 @@ func TestACheckedCustomTeamIsAddedWhole(t *testing.T) {
 	for _, p := range agents.CustomTeam("Data", members, you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Errorf("adding %s: %v %v", p.Text("name"), rejection, err)
+		}
+	}
+}
+
+// A team is renamed whole, to a name a new team could have; it may keep its
+// own in another case.
+func TestATeamIsRenamedToAFreeName(t *testing.T) {
+	s := openSeeded(t)
+	for _, a := range []agents.Agent{
+		{Name: "data-lead", Engine: "claude", Prompt: "Lead.", Coordinates: true, Team: "Data"},
+		{Name: "analyst", Engine: "claude", Prompt: "Analyse.", Team: "Data"},
+		{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Words"},
+	} {
+		if _, rejection, err := s.Propose(a.Proposal(you, false)); rejection != nil || err != nil {
+			t.Fatalf("adding %s: %v %v", a.Name, rejection, err)
+		}
+	}
+	cases := []struct {
+		name, team, to, reason string
+	}{
+		{"an unknown team", "Ops", "Operations", "there is no team called Ops"},
+		{"a team spelled otherwise than the roster has it", "data", "Analytics", "there is no team called data"},
+		{"to a blank name", "Data", "", "a team needs a name"},
+		{"to a name with spaces around it", "Data", " Analytics", `a team's name can't start or end with spaces: " Analytics"`},
+		{"to another team's name in another case", "Data", "words", "there is a team called words already"},
+		{"to a template's team not in the roster", "Data", "visionaries", "visionaries is the name of the Visionaries template's team; choose another"},
+		{"to its own name in another case", "Data", "DATA", ""},
+		{"to a free name", "DATA", "Analytics", ""},
+		{"the team that names none", "Software", "Platform", ""},
+	}
+	for _, c := range cases {
+		_, rejection, err := s.Propose(agents.TeamRenaming(c.team, c.to, you))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reason := cmp.Or(rejection, &events.Rejection{}).Reason; reason != c.reason {
+			t.Errorf("%s: refused with %q, want %q", c.name, reason, c.reason)
 		}
 	}
 }

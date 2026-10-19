@@ -1806,6 +1806,65 @@ func TestACustomTeamIsRemovedWithItsAgents(t *testing.T) {
 	}
 }
 
+// A team renamed, named in any case, moves with its agents, and its open
+// tasks stay with its coordinator; a name taken by another team or a
+// template's is refused.
+func TestATeamIsRenamedWithItsTasks(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+
+	if code, body := call(t, server, "POST", "/api/teams/data/rename", `{"to":" Analytics "}`); code != 200 || body != `{"team":"Data","to":"Analytics"}`+"\n" {
+		t.Fatalf("renaming data: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	roster := agents.FromEvents(stream)
+	if lead, ok := roster.Coordinator("Analytics"); !ok || lead.Name != "data-lead" || len(roster.Assignees("Analytics")) != 2 || slices.Contains(roster.Teams(), "Data") {
+		t.Errorf("the team after its rename: %v", roster.Teams())
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "data-lead" {
+		t.Errorf("the open task stays with data-lead, not %q", detail.Coordinator)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"analytics"}`)
+	_, body = call(t, server, "GET", "/api/tasks/task-2", "")
+	json.Unmarshal([]byte(body), &detail)
+	if detail.Coordinator != "data-lead" {
+		t.Errorf("a task for the new name goes to data-lead, not %q", detail.Coordinator)
+	}
+
+	for _, c := range []struct {
+		team, to string
+		code     int
+		reason   string
+	}{
+		{"Data", "Numbers", http.StatusNotFound, "there is no team called Data"},
+		{"Analytics", "SOFTWARE", http.StatusConflict, "there is a team called SOFTWARE already"},
+		{"Analytics", "writing", http.StatusConflict, "writing is the name of the Writing template's team; choose another"},
+		{"Analytics", "", http.StatusConflict, "a team needs a name"},
+		{"Analytics", "ANALYTICS", http.StatusOK, ""},
+		{"Software", "software", http.StatusOK, ""},
+	} {
+		code, body := call(t, server, "POST", "/api/teams/"+c.team+"/rename", `{"to":"`+c.to+`"}`)
+		if code != c.code || !strings.Contains(body, c.reason) {
+			t.Errorf("renaming %s to %q: %d %s, want %d %s", c.team, c.to, code, body, c.code, c.reason)
+		}
+	}
+	// An agent of Software respelled stays in it when edited, not in a new Software.
+	edited := `{"engine":"claude","prompt":"Lead.","coordinates":true,"team":"Software"}`
+	if code, body := call(t, server, "PUT", "/api/agents/tech-lead", edited); code != 200 {
+		t.Fatalf("editing tech-lead: %d %s", code, body)
+	}
+	stream, _ = s.Stream(events.AgentsStream)
+	if lead, _ := agents.FromEvents(stream).Get("tech-lead"); lead.Team != "software" {
+		t.Errorf("tech-lead is in team %q, want software", lead.Team)
+	}
+}
+
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)

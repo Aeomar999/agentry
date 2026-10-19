@@ -79,6 +79,30 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 	httpapi.Propose(w, s.store, agents.Agent{Name: name}.Removal(httpapi.You))
 }
 
+// renameTeam gives a team, named in any case, a new name: every agent of it
+// moves there in one event. Its open tasks go on as they were, as a task
+// names its coordinator, not its team, and the coordinator keeps its name.
+func (s *Server) renameTeam(w http.ResponseWriter, r *http.Request) {
+	var request struct{ To string }
+	if !httpapi.Decode(w, r, &request) {
+		return
+	}
+	roster, err := s.roster()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	team, to := roster.TeamNamed(r.PathValue("team")), strings.TrimSpace(request.To)
+	if team == "" {
+		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
+		return
+	}
+	if !httpapi.ProposeOrRefuse(w, s.store, agents.TeamRenaming(team, to, httpapi.You)) {
+		return
+	}
+	httpapi.Reply(w, map[string]string{"team": team, "to": to})
+}
+
 // removeTeam removes a team and all its agents, its coordinator last, once
 // no unfinished task needs any of them. The last team stays: every task
 // needs a coordinator.
@@ -346,10 +370,14 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	agent.Name, agent.Model = strings.TrimSpace(agent.Name), strings.TrimSpace(agent.Model)
 	agent.Template = "" // only AddTeam makes an agent from a template
 	agent.Description, agent.Prompt = strings.TrimSpace(agent.Description), strings.TrimSpace(agent.Prompt)
-	if agent.Team = strings.TrimSpace(agent.Team); strings.EqualFold(agent.Team, agents.DefaultTeam) {
+	team := strings.TrimSpace(agent.Team)
+	switch named := s.state.Roster().TeamNamed(team); {
+	case named != "" && named != agents.DefaultTeam:
+		agent.Team = named // a team named in another case is that team, not a twin of it; Software respelled too
+	case strings.EqualFold(team, agents.DefaultTeam):
 		agent.Team = "" // the default team, as agents from before teams have it
-	} else if team := s.state.Roster().TeamNamed(agent.Team); team != "" {
-		agent.Team = team // a team named in another case is that team, not a twin of it
+	default:
+		agent.Team = team
 	}
 	if problem := s.unknownProfile(agent.Profile); problem != "" {
 		http.Error(w, problem, http.StatusBadRequest)

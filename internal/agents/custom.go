@@ -17,7 +17,7 @@ import (
 // rules and to policy.toml.
 func CheckCustomTeam(team string, members []Agent, current Roster) string {
 	team, members = trimmed(team, members)
-	if problem := checkTeamName(team, current); problem != "" {
+	if problem := CheckTeamName(team, current); problem != "" {
 		return problem
 	}
 	if len(members) == 0 {
@@ -36,7 +36,10 @@ func CheckCustomTeam(team string, members []Agent, current Roster) string {
 	return ""
 }
 
-func checkTeamName(team string, current Roster) string {
+// CheckTeamName is why a new team, or a team renamed, can't be called team,
+// or "" when it can: it needs a name, and one no team in the roster and no
+// built-in template's team has, in any case.
+func CheckTeamName(team string, current Roster) string {
 	switch {
 	case team == "":
 		return "a team needs a name"

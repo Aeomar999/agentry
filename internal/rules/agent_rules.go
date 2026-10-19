@@ -23,6 +23,7 @@ var rosterRules = map[events.Type]rosterRule{
 	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
 	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge, patchFits),
 	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
+	events.TeamRenamed:     allOf(teamExists, newTeamNameIsFree),
 	events.TaskCreated:     allOf(coordinatorExists),
 	events.TaskAssigned:    allOf(assigneeExists),
 	events.TaskTransferred: allOf(coordinatorExists), // the new coordinator, which must be one
@@ -55,6 +56,28 @@ func newNameIsFree(roster agents.Roster, p events.Proposal) string {
 		return "an agent called " + to + " already exists"
 	}
 	return ""
+}
+
+// teamExists: the team is one in the roster, spelled as the roster has it,
+// so that renaming it moves its agents.
+func teamExists(roster agents.Roster, p events.Proposal) string {
+	if !slices.Contains(roster.Teams(), p.Text("team")) {
+		return "there is no team called " + p.Text("team")
+	}
+	return ""
+}
+
+// newTeamNameIsFree: a team's new name is one a new team could have. The
+// team may keep its own name in another case, even a template's team's.
+func newTeamNameIsFree(roster agents.Roster, p events.Proposal) string {
+	to := p.Text("to")
+	switch {
+	case to != strings.TrimSpace(to):
+		return "a team's name can't start or end with spaces: \"" + to + "\""
+	case strings.EqualFold(to, p.Text("team")):
+		return ""
+	}
+	return agents.CheckTeamName(to, roster)
 }
 
 func nameIsValid(_ agents.Roster, p events.Proposal) string {
@@ -113,7 +136,7 @@ func oneCoordinatorPerTeam(roster agents.Roster, p events.Proposal) string {
 		return ""
 	}
 	team = cmp.Or(roster.TeamNamed(team), team)
-	if lead, ok := roster.Coordinator(team); ok {
+	if lead, ok := roster.Coordinator(team); ok && lead.Name != p.Text("name") {
 		return "the " + team + " team already has a coordinator, " + lead.Name + ": a team has exactly one"
 	}
 	return ""

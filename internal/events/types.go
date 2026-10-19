@@ -10,6 +10,7 @@ const (
 	AgentRemoved Type = "agent.removed"
 	AgentLearned Type = "agent.learned" // an agent's knowledge, changed by the agent as it works, or by you: all of it ("knowledge"), or a patch on the version before ("head", "tail", "middle", "sha256"; agents.Patch)
 	AgentRenamed Type = "agent.renamed" // an agent goes by a new name, keeping everything else
+	TeamRenamed  Type = "team.renamed"  // every agent of a team moves to the team's new name, its coordinator too
 )
 
 // A task's stream, in roughly the order they happen.

@@ -121,3 +121,24 @@ func TestACustomTeamTakesTasksLikeAnyOther(t *testing.T) {
 		t.Errorf("the Data team's lead takes it: coordinator %q", task.Coordinator)
 	}
 }
+
+// A team renamed is listed by its new name in other coordinators' briefs,
+// and takes tasks by it.
+func TestARenamedTeamIsListedByItsNewName(t *testing.T) {
+	s, repo := twoTeams(t)
+	if _, rejection, err := s.Propose(agents.TeamRenaming("Writing", "Docs", you)); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	const id = "task-1"
+	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead"}})
+
+	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
+	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, "- Docs, coordinated by editor: ") || strings.Contains(brief, "- Writing, ") {
+		t.Errorf("the tech lead's brief should list the Docs team, and not Writing:\n%s", brief)
+	}
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "transfer", "team": "docs", "reason": "It is writing."}`)
+	if task = waitForTurn(t, s, id, "turn-2", "editor"); task.Coordinator != "editor" {
+		t.Errorf("the Docs team's editor takes it: coordinator %q", task.Coordinator)
+	}
+}

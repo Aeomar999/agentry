@@ -435,3 +435,33 @@ func TestATeamIsNamedInAnyCase(t *testing.T) {
 		}
 	}
 }
+
+func TestATeamRenamedMovesEveryAgent(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "engineer", Template: "software"},
+		{Name: "data-lead", Coordinates: true, Team: "Data", Knowledge: "Know."},
+		{Name: "analyst", Team: "Data", Column: Reviews},
+	}
+	roster = roster.Next(events.Event{Proposal: TeamRenaming("Data", "Analytics", you)})
+	if lead, ok := roster.Coordinator("Analytics"); !ok || lead.Name != "data-lead" || lead.Knowledge != "Know." {
+		t.Errorf("Analytics' coordinator = %+v, %v, want data-lead with its knowledge", lead, ok)
+	}
+	if analyst, _ := roster.Get("analyst"); analyst.Team != "Analytics" || analyst.Column != Reviews {
+		t.Errorf("analyst = %+v, want in Analytics, still reviewing", analyst)
+	}
+	if teams := strings.Join(roster.Teams(), ","); teams != "Software,Analytics" {
+		t.Errorf("teams = %s, want Software,Analytics", teams)
+	}
+
+	// The team that names none gets the new name; its template stays.
+	roster = roster.Next(events.Event{Proposal: TeamRenaming(DefaultTeam, "Platform", you)})
+	for _, name := range []string{"tech-lead", "engineer"} {
+		if a, _ := roster.Get(name); a.Team != "Platform" || a.Template != "software" {
+			t.Errorf("%s = %+v, want in Platform from the software template", name, a)
+		}
+	}
+	if teams := strings.Join(roster.Teams(), ","); teams != "Platform,Analytics" {
+		t.Errorf("teams = %s, want Platform,Analytics", teams)
+	}
+}
