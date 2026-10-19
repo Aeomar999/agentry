@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Input } from "@/components/atoms/Input";
 import { Select } from "@/components/atoms/Select";
 import { cn } from "@/lib/cn";
@@ -13,9 +14,11 @@ interface LimitSelectProps {
 }
 
 // A limit's presets, Unlimited and Custom, which opens a field for your own
-// number; a custom value that isn't one says so under it.
+// number; a custom value that isn't one says so under it. The field takes
+// the focus only when you pick Custom, not when a form opens on it.
 export function LimitSelect({ id, scale, choice, onChange, defaultLimit, className }: LimitSelectProps) {
   const custom = choice.option === CUSTOM;
+  const [picked, setPicked] = useState(false);
   const invalid = custom && choice.custom.trim() !== "" && Number.isNaN(limitOf(scale, choice));
   const label = (limit: number) => scale.show(limit) + (limit === defaultLimit ? " (default)" : "");
   return (
@@ -25,7 +28,10 @@ export function LimitSelect({ id, scale, choice, onChange, defaultLimit, classNa
           id={id}
           aria-label={scale.name}
           value={choice.option}
-          onChange={(e) => onChange({ ...choice, option: e.target.value })}
+          onChange={(e) => {
+            setPicked(e.target.value === CUSTOM);
+            onChange({ ...choice, option: e.target.value });
+          }}
           className="w-32"
         >
           {scale.presets.map((limit) => (
@@ -39,7 +45,7 @@ export function LimitSelect({ id, scale, choice, onChange, defaultLimit, classNa
         {custom && (
           <Input
             mono
-            autoFocus
+            autoFocus={picked}
             aria-label={`${scale.name}, custom`}
             aria-invalid={invalid}
             value={choice.custom}
