@@ -108,7 +108,8 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	if code != 200 || got != (acceptance{Task: "task-2", Accepted: true}) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
-	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) {
+	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
+		!strings.Contains(body, `"idea":"`+id+`"`) {
 		t.Errorf("the task made from it: %s", body)
 	}
 	if code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{}`); code != http.StatusConflict || !strings.Contains(body, "accepted already") {

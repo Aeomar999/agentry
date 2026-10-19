@@ -37,6 +37,7 @@ type Summary struct {
 	WaitingOn        string    `json:"waitingOn"`        // another team's task this one waits for
 	Kind             Kind      `json:"kind"`             // "" for a story, "epic"
 	Epic             string    `json:"epic"`             // a story's epic
+	Idea             string    `json:"idea"`             // the idea it was accepted as, "" for none
 	After            []string  `json:"after"`            // the stories it builds on
 	BlockedBy        []string  `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
 	Stories          int       `json:"stories"`          // an epic's
@@ -75,7 +76,7 @@ func SummaryOf(t *Task, roster agents.Roster) Summary {
 	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), Pushed: t.pushedSinceReopen(), DoneByYou: t.DoneByYou, HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: t.StoppedAt(), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
-		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
+		Kind: t.Kind, Epic: t.Epic, Idea: t.Idea, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}
 }
 
