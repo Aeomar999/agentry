@@ -16,7 +16,7 @@ const KEPT_LIGHT = [
   "/src/components/molecules/LazyColorize.tsx",
   "/src/components/organisms/EntryText.tsx",
   "/src/components/organisms/ActivityFeed.tsx",
-  "/src/components/molecules/HandoffTimeline.tsx",
+  "/src/components/organisms/HandoffTimeline.tsx",
 ];
 
 const STATIC_IMPORT = /^\s*(?:import(?!\s*\()|export)\b[^;'"]*?(?:from\s*)?["']([^"']+)["']/gm;

@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { Clamp } from "@/components/molecules/Clamp";
 import { Tabs } from "@/components/molecules/Tabs";
-import { HandoffTimeline } from "@/components/molecules/HandoffTimeline";
+import { HandoffTimeline } from "@/components/organisms/HandoffTimeline";
 import { ResourceTable, Column } from "@/components/molecules/ResourceTable";
 import { ActionBadge, TaskStatusBadge } from "@/components/molecules/StatusBadges";
 import { KeyValueList } from "@/components/molecules/KeyValueList";
@@ -348,20 +348,23 @@ export function TaskPage() {
 
           <div className="h-[80dvh] min-h-0 md:h-auto md:flex-1">
             {tab === "handoffs" && (
-              <Scroll>
+              // Focus stops under the stuck card header.
+              <Scroll className="scroll-pt-10">
                 <h2 className="sr-only">Handoffs</h2>
                 <div className="max-w-4xl px-6 py-5">
                   {task.trail?.length ? (
                     <HandoffTimeline
                       steps={task.trail}
                       turns={turns}
+                      coordinator={task.coordinator}
+                      links={links}
                       actionsIn={(id) => actions.filter((a) => a.turn === id).length}
                       working={task.status === "working" ? working : ""}
                       onOpen={openTurn}
                       onWatch={watch}
                     />
                   ) : (
-                    <EmptyState title="No handoffs yet">The coordinator reads the task first.</EmptyState>
+                    <EmptyState title="No handoffs yet">When the coordinator hands the task to an agent, the brief shows here.</EmptyState>
                   )}
                 </div>
               </Scroll>
@@ -530,8 +533,8 @@ function Fact({ label, className, children }: { label: string; className?: strin
   );
 }
 
-function Scroll({ children }: { children: ReactNode }) {
-  return <div className="h-full scrollbar-thin overflow-y-auto">{children}</div>;
+function Scroll({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("h-full scrollbar-thin overflow-y-auto", className)}>{children}</div>;
 }
 
 // TaskLink goes to another task, such as the one another team does for this.
