@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"cmp"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -40,18 +39,13 @@ func SlotsOf(all []*tasks.Task, roster agents.Roster, limit int) Slots {
 	if limit == 0 {
 		return slots
 	}
-	byRank(waiting)
+	slices.SortStableFunc(waiting, tasks.InPriorityOrder)
 	free := max(limit-slots.Running, 0)
 	slots.queued = map[string]bool{}
 	for _, task := range waiting[min(free, len(waiting)):] {
 		slots.queued[task.ID] = true
 	}
 	return slots
-}
-
-// byRank sorts tasks in your priority order; a tie keeps their order.
-func byRank(all []*tasks.Task) {
-	slices.SortStableFunc(all, func(a, b *tasks.Task) int { return cmp.Compare(a.Rank, b.Rank) })
 }
 
 // Queued says whether the task wants a turn and waits for a slot.
@@ -114,7 +108,7 @@ func (l *Loop) wakeHeld() {
 			delete(l.held, id)
 		}
 	}
-	byRank(ready)
+	slices.SortStableFunc(ready, tasks.InPriorityOrder)
 	for _, task := range ready {
 		l.act(task.ID)
 	}

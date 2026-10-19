@@ -66,6 +66,17 @@ func TestSlotsGoInYourPriorityOrder(t *testing.T) {
 	}
 }
 
+// On a tie of rank the newer task comes first, as on the board, which
+// lists tasks in the same order.
+func TestATieOfRankAdmitsTheNewerTask(t *testing.T) {
+	older, newer := named(started(), "task-1", 1), named(started(), "task-2", 1)
+	newer.CreatedAt = older.CreatedAt.Add(time.Second)
+	all := []*tasks.Task{older, newer}
+	if queued := queuedOf(SlotsOf(all, defaultRoster(), 1), all); !slices.Equal(queued, []string{"task-1"}) {
+		t.Errorf("the newer task should take the one slot: queued %v", queued)
+	}
+}
+
 func TestALimitUnderWhatRunsQueuesEveryOneWaiting(t *testing.T) {
 	working := started().add(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "tech-lead", "hash": "h"})
 	all := []*tasks.Task{named(working, "task-1", 1), named(working, "task-2", 2), named(started(), "task-3", 0)}
@@ -178,7 +189,7 @@ func assertSlots(t *testing.T, state *current.State, running int, queued ...stri
 	var got []string
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
 		all := state.Tasks()
-		byRank(all)
+		slices.SortStableFunc(all, tasks.InPriorityOrder)
 		slots = SlotsOf(all, state.Roster(), state.Settings().MaxRunningTasks)
 		if got = queuedOf(slots, all); slots.Running == running && slices.Equal(got, queued) {
 			return
@@ -190,7 +201,7 @@ func assertSlots(t *testing.T, state *current.State, running int, queued ...stri
 // waiting is the tasks with no turn yet, by rank.
 func waiting(state *current.State) []string {
 	all := state.Tasks()
-	byRank(all)
+	slices.SortStableFunc(all, tasks.InPriorityOrder)
 	var ids []string
 	for _, task := range all {
 		if len(task.Turns) == 0 {

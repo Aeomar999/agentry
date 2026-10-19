@@ -33,7 +33,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	all := s.state.Tasks()
-	slices.Reverse(all) // newest first, which a tie keeps
+	slices.SortStableFunc(all, tasks.InPriorityOrder)
 	done := map[string]bool{}
 	for _, task := range all {
 		done[task.ID] = task.IsDone
@@ -52,8 +52,6 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		summary.Queued = slots.Queued(task.ID)
 		summaries = append(summaries, summary)
 	}
-	// In your priority order; a new task starts first.
-	slices.SortStableFunc(summaries, func(a, b taskSummary) int { return cmp.Compare(a.Rank, b.Rank) })
 	reply(w, summaries)
 }
 
