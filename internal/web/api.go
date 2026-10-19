@@ -243,17 +243,18 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
 		return
 	}
-	answered := false
+	answered, refused := false, ""
 	if coordinator.StoppedAt(task) == coordinator.LimitBudget && (budget == 0 || task.TokensUsed < budget) {
 		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
 		if budget == 0 {
 			answer = "I made the budget unlimited. Carry on."
 		}
-		if answered = s.carryOn(w, task, answer); !answered {
+		if answered, refused, err = s.carryOn(task, answer); err != nil {
+			failed(w, err)
 			return
 		}
 	}
-	reply(w, map[string]any{"budget": budget, "answered": answered})
+	reply(w, limitReply("budget", budget, answered, refused))
 }
 
 // setMaxTurns gives the task a new limit of turns without your answer, 0 (or
@@ -273,23 +274,42 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
 		return
 	}
-	answered := false
+	answered, refused := false, ""
 	if coordinator.StoppedAt(task) == coordinator.LimitTurns && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
 		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
 		if maxTurns == 0 {
 			answer = "I made the turns unlimited. Carry on."
 		}
-		if answered = s.carryOn(w, task, answer); !answered {
+		if answered, refused, err = s.carryOn(task, answer); err != nil {
+			failed(w, err)
 			return
 		}
 	}
-	reply(w, map[string]any{"maxTurns": maxTurns, "answered": answered})
+	reply(w, limitReply("maxTurns", maxTurns, answered, refused))
 }
 
 // carryOn answers the loop's stop for you, so the coordinator goes on. It
-// says whether it did; if not, the refusal is already written.
-func (s *Server) carryOn(w http.ResponseWriter, task *tasks.Task, answer string) bool {
-	return s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+// says whether it did, or why the rules refused it.
+func (s *Server) carryOn(task *tasks.Task, answer string) (answered bool, refused string, err error) {
+	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+	switch {
+	case err != nil:
+		return false, "", err
+	case rejection != nil:
+		return false, rejection.Reason, nil
+	}
+	return true, "", nil
+}
+
+// limitReply is what a saved limit answers: the limit, whether it answered
+// the task's stop, and why not if the rules refused that answer. The limit is
+// kept either way.
+func limitReply(field string, limit int, answered bool, refused string) map[string]any {
+	body := map[string]any{field: limit, "answered": answered}
+	if refused != "" {
+		body["refused"] = refused
+	}
+	return body
 }
 
 // rank puts the task in your priority order: the page sends a rank between

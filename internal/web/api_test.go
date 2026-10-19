@@ -421,7 +421,14 @@ func TestTasksCarryLabels(t *testing.T) {
 // event's data: the loop's limit stops say "limit".
 func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	return limitsServerChecked(t, rules.Check)
+}
+
+// limitsServerChecked is limitsServer with its own rules, to refuse what the
+// real rules would refuse only in a race.
+func limitsServerChecked(t *testing.T, check store.OrderCheck) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), check)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -577,6 +584,57 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 	}
 	if code, _ := call(t, server, "PUT", "/api/tasks/task-3/turns", `{"maxTurns":-2}`); code != http.StatusConflict {
 		t.Errorf("a limit of -2: %d", code)
+	}
+}
+
+// A limit is kept though its answer to the task's stop is refused, as when
+// the stop was answered as you saved: the reply says why, with a 200. On a
+// done task nothing is kept, and the reply is a 409.
+func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
+	answeredFirst := func(p events.Proposal, history store.History) *events.Rejection {
+		if p.Type == events.TaskAnswered {
+			return &events.Rejection{Check: "order", Reason: "there's no open question"}
+		}
+		return rules.Check(p, history)
+	}
+	server, work, ask := limitsServerChecked(t, answeredFirst)
+	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)
+	call(t, server, "POST", "/api/tasks", `{"description":"Turns"}`)
+	work("task-1", 1, 210_000)
+	work("task-2", 2, 1000)
+	ask("task-1", theLoop, atLimit("budget"))
+	ask("task-2", theLoop, atLimit("turns"))
+
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`); code != 200 ||
+		body != `{"answered":false,"budget":1000000,"refused":"there's no open question"}`+"\n" {
+		t.Errorf("the budget: %d %s", code, body)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-2/turns", `{"maxTurns":5}`); code != 200 ||
+		body != `{"answered":false,"maxTurns":5,"refused":"there's no open question"}`+"\n" {
+		t.Errorf("the turns: %d %s", code, body)
+	}
+	if d := detailOfTask(t, server, "task-1"); d.Budget != 1_000_000 {
+		t.Errorf("the budget kept: %d", d.Budget)
+	}
+	if d := detailOfTask(t, server, "task-2"); d.MaxTurns != 5 {
+		t.Errorf("the turns kept: %d", d.MaxTurns)
+	}
+}
+
+func TestADoneTasksLimitsStay(t *testing.T) {
+	server, _, ask := limitsServer(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Done","kind":"epic","budget":200000,"maxTurns":5}`)
+	ask("task-1", techLead, map[string]any{"options": []string{"Close the epic"}, "closing": "All shipped."})
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/answer", `{"answer":"Close the epic"}`); code != 200 {
+		t.Fatalf("close: %d %s", code, body)
+	}
+	for _, change := range [][2]string{{"budget", `{"budget":1000000}`}, {"turns", `{"maxTurns":10}`}} {
+		if code, body := call(t, server, "PUT", "/api/tasks/task-1/"+change[0], change[1]); code != http.StatusConflict || !strings.Contains(body, "is done") {
+			t.Errorf("the %s: %d %s", change[0], code, body)
+		}
+	}
+	if d := detailOfTask(t, server, "task-1"); d.Budget != 200_000 || d.MaxTurns != 5 {
+		t.Errorf("after: budget %d, max turns %d", d.Budget, d.MaxTurns)
 	}
 }
 
