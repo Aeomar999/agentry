@@ -25,6 +25,7 @@ import (
 type Local struct {
 	Label        string // its name: workers.Local, or the worker's
 	ServerURL    string // where its sessions' hooks post
+	ServerCA     string // the CA ServerURL's https is pinned to, PEM; "" for plain HTTP
 	HookCommand  string // runs `agentry hook`
 	WorktreeRoot string
 
@@ -150,7 +151,7 @@ func (l *Local) StartTurn(_ context.Context, t Turn) error {
 	if !ok {
 		return fmt.Errorf("engine %q has no adapter", t.Engine)
 	}
-	env := map[string]string{hookcall.EnvServer: l.ServerURL, hookcall.EnvWorktree: t.Worktree}
+	env := map[string]string{hookcall.EnvServer: l.ServerURL, hookcall.EnvCA: l.ServerCA, hookcall.EnvWorktree: t.Worktree}
 	for name, value := range t.Env {
 		env[name] = value
 	}

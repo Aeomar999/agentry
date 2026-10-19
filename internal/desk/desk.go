@@ -24,6 +24,7 @@ const Name = "desk"
 // Env names: how `agentry task` finds the server and proves it is the desk.
 const (
 	EnvServer = "AGENTRY_SERVER"
+	EnvCA     = "AGENTRY_SERVER_CA" // the CA its https is pinned to, as for hooks
 	EnvToken  = "AGENTRY_DESK_TOKEN"
 )
 
@@ -33,6 +34,7 @@ var prompt string
 type Config struct {
 	Dir       string // where Claude starts: the default repo
 	ServerURL string
+	ServerCA  string // the CA ServerURL's https is pinned to, PEM; "" for plain HTTP
 	Token     string // opens only what the desk may do, see internal/web
 	Binary    string // this agentry binary, put first on the desk's PATH
 	Theme     string // "light" or "dark": the page's, so Claude's colours suit the terminal
@@ -88,7 +90,7 @@ func Start(c Config) error {
 		Socket: Socket(),
 		Dir:    c.Dir,
 		// This binary comes first on the PATH, so `agentry task` is it.
-		Env: map[string]string{EnvServer: c.ServerURL, EnvToken: c.Token,
+		Env: map[string]string{EnvServer: c.ServerURL, EnvCA: c.ServerCA, EnvToken: c.Token,
 			"PATH": filepath.Dir(c.Binary) + string(os.PathListSeparator) + os.Getenv("PATH")},
 		Command: command,
 	})

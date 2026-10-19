@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -360,8 +361,9 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// serve -https prints https links and the CA's fingerprint, and saves a
-// plain-HTTP loopback address for this machine's clients, which it serves.
+// serve -https prints https links and the CA's fingerprint, and saves an
+// https loopback address and the CA for this machine's clients, which reach
+// it trusting only that CA. Plain HTTP on loopback still works.
 func TestServeHTTPS(t *testing.T) {
 	dataDir, repo := t.TempDir(), t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -389,19 +391,54 @@ func TestServeHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(saved.URL, "http://127.0.0.1:") || !strings.HasPrefix(saved.Page, "https://127.0.0.1:") || !saved.HTTPS {
-		t.Errorf("saved %+v: want plain HTTP for clients and https for the page", saved.Where)
+	if !strings.HasPrefix(saved.URL, "https://127.0.0.1:") || saved.Page != saved.URL || !saved.HTTPS || saved.CA != string(ca.PEM()) {
+		t.Errorf("saved %+v: want https on loopback for clients and the page, with the CA", saved.Where)
 	}
+	plain := "http://" + strings.TrimPrefix(saved.URL, "https://")
 	printed := out.String()
-	for _, want := range []string{"Open " + saved.Page + "/?token=", "SHA-256 " + ca.Fingerprint(), saved.URL + "/trust/ca.crt"} {
+	for _, want := range []string{"Open " + saved.Page + "/?token=", "SHA-256 " + ca.Fingerprint(), plain + "/trust/ca.crt"} {
 		if !strings.Contains(printed, want) {
 			t.Errorf("printed:\n%s\nwant it to say %q", printed, want)
 		}
 	}
-	if err := saved.Call("GET", "/api/config", nil, nil); err != nil {
+	// `agentry mcp` and the status line find it so, when this machine wasn't
+	// connected to a server from its Integrations page.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	mcp, err := connect("", "", dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mcp.Call("GET", "/api/config", nil, nil); err != nil {
+		t.Errorf("a client over https with the CA: %v", err)
+	}
+	unpinned := mcp
+	unpinned.CA = ""
+	if err := unpinned.Call("GET", "/api/config", nil, nil); err == nil {
+		t.Error("a client without the CA trusted the server: the system store shouldn't")
+	}
+	old := mcp
+	old.URL, old.CA = plain, ""
+	if err := old.Call("GET", "/api/config", nil, nil); err != nil {
 		t.Errorf("a client on loopback over plain HTTP: %v", err)
 	}
 	if response, _ := get(t, trusting(ca), saved.Page+"/api/config"); response.StatusCode != http.StatusUnauthorized {
 		t.Errorf("https without the token: %d, want 401", response.StatusCode)
+	}
+
+	// A hook, as a session runs it: the server and CA from its environment.
+	hookToken, err := os.ReadFile(filepath.Join(dataDir, hookTokenFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hookEnv(t, saved.URL)
+	t.Setenv(hookcall.EnvToken, strings.TrimSpace(string(hookToken)))
+	t.Setenv(hookcall.EnvDeadline, "5s")
+	t.Setenv(hookcall.EnvCA, saved.CA)
+	if _, _, stderr := runHookWith(`{}`, "PreToolUse"); strings.Contains(stderr, "fail closed") {
+		t.Errorf("the hook over https with the CA: %s", stderr)
+	}
+	t.Setenv(hookcall.EnvCA, "")
+	if code, _, stderr := runHookWith(`{}`, "PreToolUse"); code != 2 || !strings.Contains(stderr, "certificate") {
+		t.Errorf("the hook without the CA: exit %d, %s; want it refused", code, stderr)
 	}
 }

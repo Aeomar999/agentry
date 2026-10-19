@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/desk"
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 )
 
 // `agentry task` is how the desk (internal/desk) hands work to the
@@ -36,7 +37,7 @@ func runTask(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, taskUsage)
 		return 2
 	}
-	client := taskClient{server: strings.TrimSuffix(os.Getenv(desk.EnvServer), "/"), token: os.Getenv(desk.EnvToken)}
+	client := taskClient{server: strings.TrimSuffix(os.Getenv(desk.EnvServer), "/"), ca: os.Getenv(desk.EnvCA), token: os.Getenv(desk.EnvToken)}
 	if client.server == "" || client.token == "" {
 		fmt.Fprintf(stderr, "agentry task: %s and %s must be set (the desk's session has both)\n", desk.EnvServer, desk.EnvToken)
 		return 2
@@ -64,7 +65,7 @@ func runTask(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-type taskClient struct{ server, token string }
+type taskClient struct{ server, ca, token string }
 
 func (c taskClient) create(args []string, stdin io.Reader, stdout io.Writer) error {
 	flags := flag.NewFlagSet("task create", flag.ContinueOnError)
@@ -234,7 +235,7 @@ func (c taskClient) call(method, path string, body, into any) error {
 	}
 	request.Header.Set("Authorization", "Bearer "+c.token)
 	request.Header.Set("Content-Type", "application/json")
-	response, err := (&http.Client{Timeout: 10 * time.Second}).Do(request)
+	response, err := pinned.Client([]byte(c.ca), 10*time.Second).Do(request)
 	if err != nil {
 		return fmt.Errorf("can't reach Agentry at %s: %w", c.server, err)
 	}

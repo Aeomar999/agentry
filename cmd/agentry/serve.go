@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -156,13 +157,16 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err
 	}
 	// Hooks, `agentry mcp`, the status line and the desk call serverURL on
-	// loopback, over plain HTTP even with -https: the front door lets this
-	// machine through. Step 3 moves them to https, trusting the pinned CA.
-	serverURL := localURL(listener.Addr(), "http")
-	scheme := "http" // of the links people open
+	// loopback. With -https they call it over https, trusting only serverCA,
+	// which they are handed (server.json, the sessions' environment): agents
+	// can't read the CA's folder. Plain HTTP from this machine still works,
+	// for a hook started before an upgrade.
+	scheme := "http"
+	var serverCA string
 	if o.https {
-		scheme = "https"
+		scheme, serverCA = "https", string(ca.PEM())
 	}
+	serverURL := localURL(listener.Addr(), scheme)
 	network := networkURLs(listener.Addr(), scheme) // what other machines reach, when listening on every address
 	var theme atomic.Value                          // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
@@ -172,7 +176,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	clones := filepath.Join(o.dataDir, "repos")                       // repos named by a git address or an archive link
 	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
 	worktreeRoot := filepath.Join(o.dataDir, "worktrees")
-	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
+	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, ServerCA: serverCA, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
 		WorktreeRoot: worktreeRoot}
 	fleet := machines.NewFleet(here)
 	if err := workerlink.ForgetConnections(log, state, fleet); err != nil {
@@ -190,7 +194,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 
 	// The desk starts when you first open it on the page, and stops with the server.
 	hub := terminal.NewHub()
-	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, Token: deskToken, Binary: self}
+	deskConfig := desk.Config{Dir: o.repo, ServerURL: serverURL, ServerCA: serverCA, Token: deskToken, Binary: self}
 	deskTerminal := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if t := r.URL.Query().Get("theme"); t == "light" || t == "dark" {
 			theme.Store(t) // the page opening the desk says its theme
@@ -241,7 +245,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		Features: installed, Worktrees: worktreeRoot},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
-	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https}); err != nil {
+	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
+		CA: serverCA}); err != nil {
 		return err // `agentry mcp` and the status line find the server by it
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
@@ -256,7 +261,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return serveUntilDone(ctx, listener, server.Handler(), nil)
 	}
 	fmt.Fprintf(stdout, "Served over https with Agentry's own CA, SHA-256 %s.\n", ca.Fingerprint())
-	fmt.Fprintf(stdout, "Trust it once on each device: %s%sca.crt\n", cmp.Or(append(plainURLs(network), serverURL)...), trustPrefix)
+	fmt.Fprintf(stdout, "Trust it once on each device: %s%sca.crt\n", cmp.Or(plainURLs(append(slices.Clip(network), serverURL))...), trustPrefix)
 	issuer := tlsca.NewIssuer(ca, tlsca.Hosts, time.Now)
 	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), ca), tlsConfig(issuer))
 }

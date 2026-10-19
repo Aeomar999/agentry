@@ -14,6 +14,7 @@ import (
 
 func hookEnv(t *testing.T, server string) {
 	t.Setenv(hookcall.EnvServer, server)
+	t.Setenv(hookcall.EnvCA, "")
 	t.Setenv(hookcall.EnvToken, "secret")
 	t.Setenv(hookcall.EnvTask, "task-1")
 	t.Setenv(hookcall.EnvTurn, "turn-2")

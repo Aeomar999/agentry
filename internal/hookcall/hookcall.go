@@ -8,6 +8,7 @@ import "encoding/json"
 // The environment every agent session has, read by `agentry hook`.
 const (
 	EnvServer   = "AGENTRY_SERVER"     // the server's base URL
+	EnvCA       = "AGENTRY_SERVER_CA"  // the CA the server's https is pinned to, PEM encoded; unset for plain HTTP
 	EnvToken    = "AGENTRY_HOOK_TOKEN" // lets the hook post hook calls, and nothing else
 	EnvTask     = "AGENTRY_TASK"
 	EnvTurn     = "AGENTRY_TURN"

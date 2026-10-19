@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
+	"gitlab.com/dev.chempa/agentry/internal/pinned"
 )
 
 // runHook is `agentry hook <event>`, which an engine runs with the event's
@@ -93,11 +94,11 @@ func post(call hookcall.Call) (hookcall.Reply, error) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(hookcall.TokenHeader, os.Getenv(hookcall.EnvToken))
 
-	client := &http.Client{}
+	var timeout time.Duration
 	if deadline, err := time.ParseDuration(os.Getenv(hookcall.EnvDeadline)); err == nil {
-		client.Timeout = deadline
+		timeout = deadline
 	}
-	response, err := client.Do(request)
+	response, err := pinned.Client([]byte(os.Getenv(hookcall.EnvCA)), timeout).Do(request)
 	if err != nil {
 		return hookcall.Reply{}, fmt.Errorf("no answer from the Agentry server: %w", err)
 	}

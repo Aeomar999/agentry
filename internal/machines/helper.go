@@ -50,7 +50,7 @@ func (l *Local) StartHelper(_ context.Context, h Helper) error {
 	if self, err := os.Executable(); err == nil {
 		path = filepath.Dir(self) + string(os.PathListSeparator) + path // `agentry send` is this agentry
 	}
-	env := map[string]string{hookcall.EnvServer: l.ServerURL, "PATH": path}
+	env := map[string]string{hookcall.EnvServer: l.ServerURL, hookcall.EnvCA: l.ServerCA, "PATH": path}
 	for name, value := range h.Env {
 		env[name] = value
 	}
