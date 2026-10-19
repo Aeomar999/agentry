@@ -873,6 +873,13 @@ func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 			{"a brace in an assignment", bash("d={" + scratch + ",}; ls $d"), Allow}, // ls {/tmp/…,}
 			{"find an escaped glob", bash(`find . -name \*.go`), Allow},
 			{"go test a brace in the workspace", bash("go test ./internal/{policy,tasks}/"), Allow},
+
+			// a $ that starts nothing is text
+			{"grep a regex with $ in the middle", bash(`grep -E "^$|^#" README.md`), Allow},
+			{"grep a regex with $ before \\|", bash(`grep -n "foo$\|bar" README.md`), Allow},
+			{"git log a format with $", bash(`git log --format="%h$%s"`), Allow},
+			{"echo a $ in a path", bash("echo a$/b"), Allow},
+			{"grep a regex ending in $", bash(`grep -c ^$ README.md`), Allow},
 		})
 	}
 }
@@ -936,6 +943,9 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"go test a brace", bash("go test ./internal/{policy,tasks}/"), Allow},
 		{"a sequence in a loop list", bash("for i in {1..3}; do echo $i; done"), Allow},
 		{"ls a sequence", bash("ls {1..3}"), Allow},
+		{"grep a regex with $ in the middle", bash(`grep -E "^$|^#" README.md`), Allow},
+		{"git log a format with $", bash(`git log --format="%h$%s"`), Allow},
+		{"echo a $ in a path", bash("echo a$/b"), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {
 		check(t, p, profile, []decisionCase{

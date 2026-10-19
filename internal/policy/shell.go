@@ -899,12 +899,15 @@ func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]st
 	return results, true
 }
 
-// joinsDollar: a $ is followed by more of the word, which only a backslash and
-// a newline between them make. mvdan drops those and keeps the $ apart, but
-// bash joins the lines first, so $\<newline>x is $x.
+// joinsDollar: a backslash and a newline sit between a $ and the rest of the
+// word. mvdan keeps any $ that starts no expansion as its own literal (a$/b is
+// a, $, /b) and drops a backslash-newline, but bash joins the lines first, so
+// $\<newline>x is $x. Only the backslash-newline leaves a gap in the source
+// between the $ and the next part; with no gap the $ is plain text.
 func joinsDollar(parts []syntax.WordPart) bool {
-	for _, part := range parts[:max(len(parts)-1, 0)] {
-		if lit, isLit := part.(*syntax.Lit); isLit && lit.Value == "$" {
+	for i, part := range parts[:max(len(parts)-1, 0)] {
+		lit, isLit := part.(*syntax.Lit)
+		if isLit && lit.Value == "$" && parts[i+1].Pos().Offset() > lit.Pos().Offset()+1 {
 			return true
 		}
 	}

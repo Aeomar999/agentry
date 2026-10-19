@@ -51,6 +51,13 @@ func TestWordsAreReadAsBashReadsThem(t *testing.T) {
 		{"$\\\nx{a,b}", nil},
 		{`\$x`, []string{"$x"}},
 		{`a$`, []string{"a$"}},
+		{`a$/b`, []string{"a$/b"}}, // a $ that starts nothing is text
+		{`"^$|x"`, []string{"^$|x"}},
+		{`"%h$%s"`, []string{"%h$%s"}},
+		{`"a$ b"`, []string{"a$ b"}},
+		{`"a$"x`, []string{"a$x"}},
+		{`a$$b`, nil},
+		{`$'a'b`, []string{"ab"}},
 		{`'a\b'`, []string{`a\b`}},
 		{`$'a\x41'`, nil},
 		{`{a,b}"x"`, []string{"ax", "bx"}},
