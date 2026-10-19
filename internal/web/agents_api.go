@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // Adding, changing and removing agents from the page. Each is an event, so
@@ -229,9 +230,17 @@ func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []age
 		httpapi.Failed(w, err)
 		return
 	}
+	machines, err := s.workers()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
 	problem := agents.CheckCustomTeam(team, members, roster)
 	if problem == "" {
 		problem = unknownEngine(members)
+	}
+	if problem == "" {
+		problem = unknownWorker(members, machines)
 	}
 	missing := s.missingProfiles(members)
 	if problem == "" {
@@ -251,7 +260,17 @@ func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []age
 func unknownEngine(members []agents.Agent) string {
 	for _, a := range members {
 		if engine := strings.TrimSpace(a.Engine); !slices.Contains(rules.KnownEngines, engine) {
-			return a.Name + "'s engine must be one of " + strings.Join(rules.KnownEngines, ", ") + ", not " + strconv.Quote(engine)
+			return strings.TrimSpace(a.Name) + "'s engine must be one of " + strings.Join(rules.KnownEngines, ", ") + ", not " + strconv.Quote(engine)
+		}
+	}
+	return ""
+}
+
+// unknownWorker says which agent names a worker that hasn't joined, or "".
+func unknownWorker(members []agents.Agent, machines workers.Roster) string {
+	for _, a := range members {
+		if problem := rules.UnknownWorker(machines, a.Workers); problem != "" {
+			return strings.TrimSpace(a.Name) + ": " + problem
 		}
 	}
 	return ""
@@ -263,7 +282,7 @@ func unshippedProfile(members []agents.Agent, missing []string) string {
 	for _, a := range members {
 		profile := strings.TrimSpace(a.Profile)
 		if _, shipped := policy.ShippedProfile(profile); slices.Contains(missing, profile) && !shipped {
-			return a.Name + "'s profile " + profile + " isn't in policy.toml, and Agentry doesn't ship it: write it in policy.toml, or pick another profile"
+			return strings.TrimSpace(a.Name) + "'s profile " + profile + " isn't in policy.toml, and Agentry doesn't ship it: write it in policy.toml, or pick another profile"
 		}
 	}
 	return ""

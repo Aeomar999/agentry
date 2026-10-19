@@ -37,7 +37,13 @@ func allWorkers(rules ...workerRule) workerRule {
 // one Agentry runs on (workers.Local), which is always there. None is that
 // one too.
 func workersAreKnown(_ agents.Roster, machines workers.Roster, p events.Proposal) string {
-	for _, name := range p.List("workers") {
+	return UnknownWorker(machines, p.List("workers"))
+}
+
+// UnknownWorker says which of the names is no worker an agent can run on,
+// or "".
+func UnknownWorker(machines workers.Roster, names []string) string {
+	for _, name := range names {
 		if _, ok := machines.Get(name); ok || name == workers.Local {
 			continue
 		}

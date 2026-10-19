@@ -28,6 +28,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 const token = "ui-secret"
@@ -1646,13 +1647,14 @@ func TestACustomTeamIsRefusedWhole(t *testing.T) {
 	server, s := newTestServer(t)
 	lead := `{"name":"data-lead","engine":"claude","coordinates":true}`
 	for request, want := range map[string]string{
-		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"claude","coordinates":true}]}`: "exactly one coordinator",
-		`{"team":"writing","agents":[` + lead + `]}`:                                                      "Writing template",
-		`{"team":"software","agents":[` + lead + `]}`:                                                     "a team called software already",
-		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"gemini"}]}`:                    `analyst's engine must be one of claude, codex, not "gemini"`,
-		`{"team":"Data","agents":[` + lead + `,{"name":"analyst"}]}`:                                      `analyst's engine must be one of claude, codex, not ""`,
-		`{"template":"research","team":"Data","agents":[` + lead + `]}`:                                   "not both",
-		`{"template":"research","agents":[` + lead + `]}`:                                                 "not both",
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"claude","coordinates":true}]}`:    "exactly one coordinator",
+		`{"team":"writing","agents":[` + lead + `]}`:                                                         "Writing template",
+		`{"team":"software","agents":[` + lead + `]}`:                                                        "a team called software already",
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"gemini"}]}`:                       `analyst's engine must be one of claude, codex, not "gemini"`,
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst"}]}`:                                         `analyst's engine must be one of claude, codex, not ""`,
+		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"claude","workers":["nowhere"]}]}`: "analyst: no worker called nowhere: no machine has joined yet",
+		`{"template":"research","team":"Data","agents":[` + lead + `]}`:                                      "not both",
+		`{"template":"research","agents":[` + lead + `]}`:                                                    "not both",
 		`{}`:              "name a template, or a team and its agents",
 		`{"team":"Data"}`: "the Data team needs agents",
 	} {
@@ -1665,6 +1667,32 @@ func TestACustomTeamIsRefusedWhole(t *testing.T) {
 		if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
 			t.Errorf("%s: %d agent events written", request, len(after)-len(before))
 		}
+	}
+}
+
+// A refusal names the agent as it will be called, without the spaces sent
+// around its name.
+func TestACustomTeamRefusalNamesTheTrimmedAgent(t *testing.T) {
+	server, _ := newTestServer(t)
+	request := `{"team":"Data","agents":[{"name":"data-lead","engine":"claude","coordinates":true},{"name":" analyst ","engine":"gemini"}]}`
+	_, body := call(t, server, "POST", "/api/teams", request)
+	var refusal struct{ Error string }
+	json.Unmarshal([]byte(body), &refusal)
+	if want := `analyst's engine must be one of claude, codex, not "gemini"`; refusal.Error != want {
+		t.Errorf("want %q, got %q", want, refusal.Error)
+	}
+}
+
+// An agent of a custom team can run on the machine Agentry runs on.
+func TestACustomTeamCanRunOnThisMachine(t *testing.T) {
+	server, s := newTestServer(t)
+	request := `{"team":"Data","agents":[{"name":"data-lead","engine":"claude","coordinates":true,"workers":["` + workers.Local + `"]}]}`
+	if code, body := call(t, server, "POST", "/api/teams", request); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	if lead, _ := agents.FromEvents(stream).Get("data-lead"); !slices.Equal(lead.Workers, []string{workers.Local}) {
+		t.Errorf("the lead runs on %v", lead.Workers)
 	}
 }
 
