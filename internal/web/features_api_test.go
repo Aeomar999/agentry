@@ -321,3 +321,30 @@ func TestASignedRouteRefusesAnOversizedBody(t *testing.T) {
 		t.Errorf("the log moved from %d to %d", before, after)
 	}
 }
+
+// A body of exactly MaxBody is within the limit: verify sees all of it and
+// the handler gets it.
+func TestASignedRouteTakesABodyOfExactlyMaxBody(t *testing.T) {
+	server, s := votesServer(t, checkedVotes)
+	body := strings.Repeat("x", httpapi.MaxBody)
+	code, reply := callHook(t, server, body, map[string]string{"X-Signature": hex.EncodeToString(signature(hookSecret, []byte(body)))})
+	if code != http.StatusOK {
+		t.Fatalf("a body of MaxBody: %d %s, want 200", code, reply)
+	}
+	log, _ := s.Log("task-1")
+	if last := log[len(log)-1]; last.Type != events.IssueRaised || last.Data["reason"] != body {
+		t.Errorf("the hook should raise an issue with the whole body: %s", last.Type)
+	}
+}
+
+// A hand-built request may carry no body at all: signed reads it as empty,
+// so verify refuses it for its missing signature instead of a panic.
+func TestASignedRouteTakesARequestWithNoBody(t *testing.T) {
+	reached := false
+	handler := signed(signedWith(hookSecret), func(w http.ResponseWriter, r *http.Request) { reached = true })
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, &http.Request{Method: "POST", Header: http.Header{}})
+	if response.Code != http.StatusUnauthorized || reached {
+		t.Errorf("no body: %d, handler reached %v; want 401 and not reached", response.Code, reached)
+	}
+}

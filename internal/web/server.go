@@ -243,6 +243,9 @@ func (s *Server) requireUIOrDesk(next http.HandlerFunc) http.Handler {
 // page has no business writing as System.
 func signed(verify func(r *http.Request, body []byte) error, next http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil {
+			r.Body = http.NoBody // a hand-built request may have none
+		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpapi.MaxBody))
 		if err != nil {
 			http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)

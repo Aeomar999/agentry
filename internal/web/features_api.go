@@ -27,8 +27,8 @@ func (s *Server) mount(f features.Feature, mux *http.ServeMux) {
 }
 
 // wrapperOf is the wrapper auth names: signed for features.Signed,
-// requireUIOrDesk for features.Desk, and requireUI for features.UI and any
-// other. None is requireRealUIToken, which hands out the token.
+// requireUIOrDesk for features.Desk, and requireUI for features.UI. None is
+// requireRealUIToken, which hands out the token.
 func (s *Server) wrapperOf(auth features.Auth) func(http.HandlerFunc) http.Handler {
 	switch {
 	case auth.Verify() != nil:
