@@ -274,7 +274,7 @@ func TestThePinnedInstallCommandsRunInSh(t *testing.T) {
 	before = len(withCode(requests()))
 	right := commands(url, "/worker/install", code, ca.Fingerprint())["command"].(string)
 	out, ran, err = runShell(t, []string{"sh", "-c"}, right, "PATH="+bin, "TMPDIR="+temp)
-	if err == nil || ran[0] != "" || len(withCode(requests())) != before {
+	if err == nil || !strings.Contains(out, noHashTool) || strings.Contains(out, "another CA") || ran[0] != "" || len(withCode(requests())) != before {
 		t.Errorf("no hash tool: %v\n%s\nagentry ran: %q\nthe requests with the code: %v", err, out, ran, withCode(requests())[before:])
 	}
 	if left, _ := os.ReadDir(temp); len(left) != 0 {
