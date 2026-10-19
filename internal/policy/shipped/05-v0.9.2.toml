@@ -153,6 +153,12 @@ scratch = ['/tmp/claude-*/**']
   why = "Every change shows in the task's diff."
 
   [[profiles.developer.rules]]
+  name = "pipeline commands that open a browser or show CI variables"
+  decision = "ask"
+  runs_any = ['gh run view *-w*', 'glab ci get *--with-variables*']
+  why = "gh run view -w opens a browser, and glab ci get --with-variables prints the pipeline's variables, which can hold secrets."
+
+  [[profiles.developer.rules]]
   name = "stays inside the workspace"
   decision = "allow"
   where = "workspace"
@@ -174,21 +180,10 @@ scratch = ['/tmp/claude-*/**']
     'npm test *', 'npm run *', 'npx tsc *', 'npx vitest *', 'npx jest *', 'npx eslint *', 'npx prettier *',
     'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make', 'make test *', 'make build *', 'make lint *',
     'cargo test *', 'cargo build *', 'cargo check *', 'cargo fmt *', 'cargo clippy *',
+    # read a commit's pipeline
+    'glab ci list *', 'glab ci get *', 'gh run list *', 'gh run view *',
   ]
   why = "These read, or change only files in the workspace, which you review as a diff."
-
-  [[profiles.developer.rules]]
-  name = "pipeline commands that open a browser or show CI variables"
-  decision = "ask"
-  runs_any = ['gh run view *-w*', 'glab ci get *--with-variables*']
-  why = "gh run view -w opens a browser, and glab ci get --with-variables prints the pipeline's variables, which can hold secrets."
-
-  [[profiles.developer.rules]]
-  name = "read a commit's pipeline"
-  decision = "allow"
-  where = "workspace"
-  runs_only = ['glab ci list *', 'glab ci get *', 'gh run list *', 'gh run view *']
-  why = "They only read a pipeline's status from the forge, as the deployer does after its push; reruns, cancels and the rest still ask. The read-only profiles run none of them, so they still ask there."
 
 
 [profiles.read-only]

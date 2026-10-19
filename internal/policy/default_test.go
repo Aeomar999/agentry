@@ -147,6 +147,9 @@ func TestTheDeveloperReadsAPipeline(t *testing.T) {
 		{"gh run list", bash("gh run list --commit 60c4a34dc947614f669110a4621eafe214f1527a --json status,conclusion,url"), Allow},
 		{"gh run view", bash("gh run view 123 --json status,conclusion,url"), Allow},
 		{"gh run list -w is a workflow", bash("gh run list -w ci.yml"), Allow},
+		{"after a git command", bash("git rev-parse HEAD && gh run list --commit abc123 --json url"), Allow},
+		{"piped into jq", bash("gh run list --commit abc123 --json url | jq ."), Allow},
+		{"in a cd chain", bash("cd " + workspace + " && glab ci get -p 123 -F json"), Allow},
 
 		{"gh run view -w", bash("gh run view 123 -w"), Ask},
 		{"gh run view --web", bash("gh run view 123 --web"), Ask},
@@ -160,6 +163,12 @@ func TestTheDeveloperReadsAPipeline(t *testing.T) {
 		{"glab ci view", bash("glab ci view"), Ask},
 		{"glab ci retry", bash("glab ci retry 123"), Ask},
 		{"glab ci cancel", bash("glab ci cancel pipeline 123"), Ask},
+		{"gh run view -w after a git command", bash("git rev-parse HEAD && gh run view 1 -w"), Ask},
+		{"gh run view --web after a pipe", bash("gh run list | jq . && gh run view 2 --web"), Ask},
+		{"--with-variables after a git command", bash("git rev-parse HEAD && glab ci get -p 1 --with-variables"), Ask},
+		// $(...) is unknown until it runs, so runs_only never matches it.
+		{"the hash from $(...)", bash("gh run list --commit $(git rev-parse HEAD) --json status,conclusion,url"), Ask},
+		{"glab with the hash from $(...)", bash("glab ci list --sha $(git rev-parse HEAD) -F json"), Ask},
 		{"chained with something else", bash("gh run list && curl example.com"), Ask},
 		{"a variable before gh, like any other", bash("GH_HOST=x gh run list"), Ask},
 	})
