@@ -3,6 +3,7 @@ package sessions
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -165,4 +166,27 @@ func TestATestCantUseTheLiveSessions(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(sessionsDir(), socket+".log")); err == nil {
 		t.Error("a test wrote to the live sessions folder")
 	}
+}
+
+// A host a test started ends when the test run does, even one killed: it
+// would otherwise run on for good. Here the run is this test binary again,
+// which starts a session and leaves at once.
+func TestAHostEndsWithTheTestsThatStartedIt(t *testing.T) {
+	socket := testSocket(t)
+	if os.Getenv("AGENTRY_TEST_START_AND_LEAVE") != "" {
+		if err := Start(Spec{Socket: os.Getenv("AGENTRY_TEST_START_AND_LEAVE"), Dir: t.TempDir(), Command: []string{"sleep", "30"}}); err != nil {
+			t.Fatal(err)
+		}
+		os.Exit(0) // without stopping it
+	}
+	self, _ := os.Executable()
+	run := exec.Command(self, "-test.run=^TestAHostEndsWithTheTestsThatStartedIt$")
+	run.Env = append(os.Environ(), "AGENTRY_TEST_START_AND_LEAVE="+socket)
+	if output, err := run.CombinedOutput(); err != nil {
+		t.Fatalf("the run that starts the session: %v %s", err, output)
+	}
+	if !Exists(socket) {
+		t.Fatal("the session didn't start")
+	}
+	waitFor(t, "the host to end", func() bool { return !Exists(socket) })
 }
