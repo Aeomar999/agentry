@@ -27,6 +27,13 @@
 #   redirects_to_file
 #              true: a shell command writes a file through a redirect (> f,
 #              >> f, &> f). > /dev/null, 2>&1 and the scratch places don't count
+#   runs_outside
+#              a shell command runs a command matching these patterns from a
+#              folder outside the task's worktree (after cd elsewhere, or a cd
+#              Agentry can't follow, such as cd - or popd), or names a file
+#              outside it in an argument or an option's value (--config=f,
+#              -cf, a list or JSON in a value). The scratch places count as
+#              outside here
 #
 # Patterns
 #   commands   * matches anything, spaces included: 'git push *'. A trailing
@@ -272,6 +279,12 @@ scratch = ['/tmp/claude-*/**']
   why = "sed -n prints lines by number, and npx tsc checks types with --noEmit (and -p). Another option can add a script that writes, or make tsc write, so it asks."
 
   [[profiles.read-only.rules]]
+  name = "runs no tests from outside the workspace"
+  decision = "ask"
+  runs_outside = ['go *', 'npm *', 'npx *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'cargo *', 'make *']
+  why = "A test runner started in another folder, or pointed at a file there, runs code nobody reviews: a test, a config, a plugin or a reporter, perhaps written to the scratch folder. Run the tests from the workspace, with its own config."
+
+  [[profiles.read-only.rules]]
   name = "reads and runs the tests"
   decision = "allow"
   where = "workspace"
@@ -405,6 +418,12 @@ scratch = ['/tmp/claude-*/**']
   decision = "ask"
   runs_any = ['sed -n * -*', 'npx tsc -* -* -*']
   why = "sed -n prints lines by number, and npx tsc checks types with --noEmit (and -p). Another option can add a script that writes, or make tsc write, so it asks."
+
+  [[profiles.read-mostly.rules]]
+  name = "runs no tests from outside the workspace"
+  decision = "ask"
+  runs_outside = ['go *', 'npm *', 'npx *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'cargo *', 'make *']
+  why = "A test runner started in another folder, or pointed at a file there, runs code nobody reviews: a test, a config, a plugin or a reporter, perhaps written to the scratch folder. Run the tests from the workspace, with its own config."
 
   [[profiles.read-mostly.rules]]
   name = "reads and runs the tests"

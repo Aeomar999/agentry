@@ -635,6 +635,170 @@ func TestAVerdictNamesItsRule(t *testing.T) {
 	}
 }
 
+// scratch is a folder in Claude's scratch place, where an agent may write
+// files through a redirect.
+const scratch = "/tmp/claude-1000/x/s"
+
+// A test runner started outside the workspace, or pointed at a file outside
+// it, runs code nobody reviews, even from the scratch folder: a Go test, a
+// package.json, a conftest.py or a jest reporter written there (task-89).
+func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// go
+			{"go test a scratch package", bash("go test " + scratch + "/..."), Ask},
+			{"go test a scratch file", bash("go test " + scratch + "/x_test.go"), Ask},
+			{"go -C", bash("go -C " + scratch + " test ./..."), Ask},
+			{"go test -C", bash("go test -C " + scratch + " ./..."), Ask},
+			{"go test -C=", bash("go test -C=" + scratch + " ./..."), Ask},
+			{"go test up and out", bash("go test ../other/..."), Ask},
+			{"go test from scratch", bash("cd " + scratch + " && go test ./..."), Ask},
+
+			// npm
+			{"npm test from scratch", bash("cd " + scratch + " && npm test"), Ask},
+			{"npm --prefix", bash("npm --prefix " + scratch + " test"), Ask},
+			{"npm test --prefix=", bash("npm test --prefix=" + scratch), Ask},
+
+			// pytest
+			{"pytest from scratch", bash("cd " + scratch + " && pytest"), Ask},
+			{"pytest a scratch folder", bash("pytest " + scratch), Ask},
+			{"python -m pytest a scratch folder", bash("python -m pytest " + scratch), Ask},
+			{"python3 -m pytest a scratch folder", bash("python3 -m pytest " + scratch + "/t.py"), Ask},
+			{"pytest -c", bash("pytest -c " + scratch + "/x.ini"), Ask},
+			{"pytest -c joined", bash("pytest -c" + scratch + "/x.ini"), Ask},
+			{"pytest --rootdir", bash("pytest --rootdir " + scratch), Ask},
+			{"pytest --rootdir=", bash("pytest --rootdir=" + scratch), Ask},
+			{"pytest -p a path", bash("pytest -p " + scratch + "/plugin.py"), Ask},
+			{"pytest --confcutdir=", bash("python3 -m pytest --confcutdir=" + scratch), Ask},
+			{"pytest -c in a cluster", bash("pytest -qc " + scratch + "/x.ini"), Ask},
+
+			// jest
+			{"jest --reporters", bash("npx jest --reporters " + scratch + "/r.js"), Ask},
+			{"jest --reporters=", bash("npx jest --reporters=" + scratch + "/r.js"), Ask},
+			{"jest --reporters= in a list", bash("npx jest --reporters=default," + scratch + "/r.js"), Ask},
+			{"jest --config", bash("npx jest --config " + scratch + "/j.js"), Deny},
+			{"jest -c", bash("npx jest -c " + scratch + "/j.js"), Deny},
+			{"jest --rootDir", bash("npx jest --rootDir " + scratch), Ask},
+			{"jest --rootDir=", bash("npx jest --rootDir=" + scratch), Ask},
+			{"jest --setupFiles", bash("npx jest --setupFiles " + scratch + "/s.js"), Ask},
+			{"jest --testRunner=", bash("npx jest --testRunner=" + scratch + "/r.js"), Ask},
+			{"jest --transform JSON", bash(`npx jest --transform='{"^.+\\.js$":"` + scratch + `/t.js"}'`), Ask},
+			{"jest a path", bash("npx jest " + scratch), Ask},
+			{"jest from scratch", bash("cd " + scratch + " && npx jest --ci"), Ask},
+
+			// vitest
+			{"vitest --config", bash("npx vitest run --config " + scratch + "/v.ts"), Ask},
+			{"vitest -c", bash("npx vitest run -c " + scratch + "/v.ts"), Ask},
+			{"vitest --root=", bash("npx vitest run --root=" + scratch), Ask},
+			{"vitest -r", bash("npx vitest run -r " + scratch), Ask},
+			{"vitest --dir", bash("npx vitest run --dir " + scratch), Ask},
+			{"vitest --reporter=", bash("npx vitest run --reporter=" + scratch + "/r.js"), Ask},
+			{"vitest a path", bash("npx vitest run " + scratch), Ask},
+
+			// eslint
+			{"eslint -c", bash("npx eslint -c " + scratch + "/e.js ."), Ask},
+			{"eslint --config=", bash("npx eslint --config=" + scratch + "/e.js ."), Ask},
+			{"eslint --rulesdir", bash("npx eslint --rulesdir " + scratch + " ."), Ask},
+			{"eslint --resolve-plugins-relative-to", bash("npx eslint --resolve-plugins-relative-to " + scratch + " ."), Ask},
+			{"eslint --plugin", bash("npx eslint --plugin " + scratch + "/p.js ."), Ask},
+			{"eslint a path", bash("npx eslint " + scratch), Ask},
+
+			// cargo and make
+			{"cargo --manifest-path", bash("cargo test --manifest-path " + scratch + "/Cargo.toml"), Ask},
+			{"cargo --manifest-path=", bash("cargo test --manifest-path=" + scratch + "/Cargo.toml"), Ask},
+			{"cargo test from scratch", bash("cd " + scratch + " && cargo test"), Ask},
+			{"make test from scratch", bash("cd " + scratch + " && make test"), Ask},
+
+			// a tilde, a variable and a folder they name
+			{"a home path", bash("pytest ~/t"), Ask},
+			{"a variable that names scratch", bash("d=" + scratch + "; go test $d/..."), Ask},
+			{"cd through a variable", bash("d=" + scratch + "; cd $d && go test ./..."), Ask},
+		})
+	}
+}
+
+// The inspector follows cd and pushd. A folder it can't know makes the
+// runners and relative paths after it ask (task-89).
+func TestTheJudgingProfilesFollowCd(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"cd in a subshell", bash("(cd " + scratch + " && npm test)"), Ask},
+			{"pushd", bash("pushd " + scratch + " && go test ./..."), Ask},
+			{"pushd then popd", bash("pushd " + scratch + "; popd; go test ./..."), Ask},
+			{"popd", bash("popd; go test ./..."), Ask},
+			{"cd -", bash("cd internal && cd - && go test ./..."), Ask},
+			{"cd home", bash("cd && go test ./..."), Ask},
+			{"cd ~", bash("cd ~ && go test ./..."), Ask},
+			{"cd an unknown variable", bash("cd $D && go test ./..."), Ask},
+			{"cd a variable with several values", bash("for d in internal " + scratch + "; do :; done; cd $d && go test ./..."), Ask},
+			{"cd -P", bash("cd -P " + scratch + " && go test ./..."), Ask},
+			{"cd --", bash("cd -- " + scratch + " && go test ./..."), Ask},
+			{"builtin cd", bash("builtin cd " + scratch + " && go test ./..."), Ask},
+			{"command cd", bash("command cd " + scratch + " && go test ./..."), Ask},
+			{"cd up and out", bash("cd .. && go test ./..."), Ask},
+			{"cd up in steps", bash("cd internal; cd ../..; go test ./..."), Ask},
+			{"a cd that may fail", bash("cd internal/policy || true; go test ../../..."), Ask},
+			{"a cd in a loop", bash("for i in 1 2; do go test ./...; cd " + scratch + "; done"), Ask},
+			{"a cd in a while loop", bash("while true; do go test ./...; cd ..; done"), Ask},
+			{"a cd in a function", bash("f() { cd " + scratch + "; }; f; go test ./..."), Ask},
+			{"a cd in an if", bash("if true; then cd " + scratch + "; fi; npm test"), Ask},
+			{"a relative path from scratch", bash("cd " + scratch + " && cat ../../../../etc/hostname"), Ask},
+			{"cd then a relative test path", bash("cd /tmp/claude-1000/x && go test ./s/..."), Ask},
+
+			// a cd that doesn't leak, or stays in the workspace
+			{"cd in a subshell doesn't leak", bash("(cd " + scratch + "); go test ./..."), Allow},
+			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			// cd may fail, so ../.. may be counted from the workspace too
+			{"cd back up into the workspace asks", bash("cd internal/policy && cd ../.. && go test ./..."), Ask},
+			{"cd to the workspace by its path", bash("cd " + workspace + " && go test ./..."), Allow},
+			{"cd into scratch only to read", bash("cd " + scratch + " && cat out.txt"), Allow},
+		})
+	}
+}
+
+// What the judging profiles are for still runs from the workspace (task-89).
+func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"go test", bash("go test ./..."), Allow},
+			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"go test a package", bash("go test ./internal/policy/"), Allow},
+			{"go test with flags", bash("go test -count=1 -run 'TestX/a' -timeout 10m ./internal/policy"), Allow},
+			{"go test by absolute path", bash("go test " + workspace + "/internal/..."), Allow},
+			{"npm test", bash("npm test"), Allow},
+			{"jest --ci", bash("npx jest --ci"), Allow},
+			{"jest with its reporter in the workspace", bash("npx jest --reporters=default,./tools/r.js"), Allow},
+			{"vitest with its config in the workspace", bash("npx vitest run --config vitest.config.ts"), Allow},
+			{"eslint with its config in the workspace", bash("npx eslint -c eslint.config.js src"), Allow},
+			{"pytest", bash("pytest"), Allow},
+			{"pytest with a filter", bash("python3 -m pytest -q -k 'not slow' tests"), Allow},
+			{"cargo test", bash("cargo test"), Allow},
+			{"cd into the workspace", bash("cd internal/policy && go test ."), Allow},
+			{"output to scratch", bash("go test ./... > " + scratch + "/out.txt"), Allow},
+		})
+	}
+}
+
+// The other profiles judge these as they did before (task-89).
+func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
+	p := loadDefault(t)
+	check(t, p, "developer", []decisionCase{
+		{"npm test from scratch", bash("cd " + scratch + " && npm test"), Allow},
+		{"go test a scratch package", bash("go test " + scratch + "/..."), Allow},
+		{"jest with a scratch reporter", bash("npx jest --reporters " + scratch + "/r.js"), Allow},
+		{"go test elsewhere", bash("go test /elsewhere/..."), Ask},
+	})
+	for _, profile := range []string{"autonomous", "allow-everything"} {
+		check(t, p, profile, []decisionCase{
+			{"npm test from scratch", bash("cd " + scratch + " && npm test"), Allow},
+			{"go test elsewhere", bash("cd /elsewhere && go test ./..."), Allow},
+		})
+	}
+}
+
 // A relative path is counted from every folder a cd may have moved the shell
 // to, under every profile: `cd && cat .netrc` reads ~/.netrc (task-89).
 func TestARelativePathIsCountedFromWhereCdWent(t *testing.T) {
