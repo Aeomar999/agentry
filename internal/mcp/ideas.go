@@ -42,7 +42,7 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 		if a.State != "all" && i.State != a.State {
 			continue
 		}
-		fmt.Fprintf(&b, "%s [%s] %s (size %s, %s, suggested in %s)\n", i.ID, i.State, i.Title, i.Size, kindOf(i), i.Task)
+		fmt.Fprintf(&b, "%s [%s] %s (%s)\n", i.ID, i.State, i.Title, headerOf(i))
 		fmt.Fprintf(&b, "    problem: %s\n    feature: %s\n", oneLine(i.Problem, 300), oneLine(i.Proposal, 300))
 		if len(i.BackedBy)+len(i.DoubtedBy) > 0 {
 			fmt.Fprintf(&b, "    backed by: %s · doubted by: %s\n", namesOf(i.BackedBy), namesOf(i.DoubtedBy))
@@ -165,18 +165,25 @@ func ideasOf(agentry client.Client, repo string) ([]idea, error) {
 	return list, err
 }
 
-// openIdeas is one entry for every open idea: how many, and the newest
-// titles. Its key is the number of ideas ever suggested, so a new idea is
-// news and one you accept or dismiss isn't. ok is false with none open.
-func openIdeas(agentry client.Client) (w Waiting, ok bool) {
+// openIdeas is one entry for every open idea, of every repo: how many, and
+// the newest titles. It points at list_ideas with all when some are in
+// another repo than repo ("" is any). Its key is the number of ideas ever
+// suggested, so a new idea is news and one you accept or dismiss isn't. ok
+// is false with none open.
+func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	all, err := ideasOf(agentry, "")
 	if err != nil {
 		return Waiting{}, false
 	}
 	var open []idea
+	pointer := "list_ideas"
 	for _, i := range all {
-		if i.State == "open" {
-			open = append(open, i)
+		if i.State != "open" {
+			continue
+		}
+		open = append(open, i)
+		if repo != "" && i.Repo != repo {
+			pointer = "list_ideas all"
 		}
 	}
 	if len(open) == 0 {
@@ -194,12 +201,27 @@ func openIdeas(agentry client.Client) (w Waiting, ok bool) {
 		what = "open idea"
 	}
 	return Waiting{Key: "ideas/" + strconv.Itoa(len(all)), Task: open[0].Task, Kind: "ideas",
-		Line: fmt.Sprintf("%d %s from the Visionaries: %s (list_ideas)", len(open), what, strings.Join(titles, ", "))}, true
+		Line: fmt.Sprintf("%d %s from the Visionaries: %s (%s)", len(open), what, strings.Join(titles, ", "), pointer)}, true
 }
 
 // aboutIdea is what you read before deciding on an idea.
 func aboutIdea(i idea) string {
-	return fmt.Sprintf("Problem: %s\n\nFeature: %s\n\nSize %s, suggested as %s in %s.", i.Problem, i.Proposal, i.Size, kindOf(i), i.Task)
+	header := headerOf(i)
+	return fmt.Sprintf("Problem: %s\n\nFeature: %s\n\n%s%s.", i.Problem, i.Proposal, strings.ToUpper(header[:1]), header[1:])
+}
+
+// headerOf is the idea's size, kind and source task, leaving out what it
+// doesn't have.
+func headerOf(i idea) string {
+	var parts []string
+	if i.Size != "" {
+		parts = append(parts, "size "+i.Size)
+	}
+	parts = append(parts, kindOf(i))
+	if i.Task != "" {
+		parts = append(parts, "suggested in "+i.Task)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // kindOf is what the idea suggests making of it: a task or an epic.

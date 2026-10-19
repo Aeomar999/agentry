@@ -266,7 +266,7 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 // Every reply ends with the open ideas among what waits for you.
 func TestRepliesEndWithTheOpenIdeas(t *testing.T) {
 	c, fake := startOnIdeas(t, false, nil)
-	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas)") {
+	if text := c.tool("list_tasks", map[string]any{}); !strings.HasSuffix(text, "Waiting for the user (1):\n- 2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)") {
 		t.Errorf("reply: %s", text)
 	}
 	fake.mu.Lock()
@@ -276,5 +276,47 @@ func TestRepliesEndWithTheOpenIdeas(t *testing.T) {
 	fake.mu.Unlock()
 	if text := c.tool("list_tasks", map[string]any{}); strings.Contains(text, "Waiting for the user") {
 		t.Errorf("nothing waits, yet: %s", text)
+	}
+}
+
+// The entry points at list_ideas with all only when some open ideas are in
+// another repo, which list_ideas alone doesn't show. Either way the key is
+// the same, so where an idea is isn't news.
+func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
+	fake, agentry := newIdeasAgentry(t)
+	elsewhere, _ := openIdeas(agentry, "/repo")
+	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)"; elsewhere.Line != want {
+		t.Errorf("some in another repo: %q, want %q", elsewhere.Line, want)
+	}
+	fake.mu.Lock()
+	fake.ideas[0]["repo"] = "/repo"
+	fake.mu.Unlock()
+	here, _ := openIdeas(agentry, "/repo")
+	if want := "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas)"; here.Line != want {
+		t.Errorf("all in this repo: %q, want %q", here.Line, want)
+	}
+	if here.Key != "ideas/4" || elsewhere.Key != here.Key {
+		t.Errorf("keys %q and %q, want ideas/4 for both", elsewhere.Key, here.Key)
+	}
+}
+
+// An idea without a size or a source task reads cleanly.
+func TestAnIdeaWithoutSizeOrTask(t *testing.T) {
+	var asked string
+	c, fake := startOnIdeas(t, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = p.Message
+		return map[string]any{"action": "decline"}
+	})
+	fake.mu.Lock()
+	fake.ideas = append(fake.ideas, map[string]any{"id": "idea-5", "title": "Tags", "problem": "Hard to find.", "proposal": "Tags.", "repo": "/repo", "state": "open"})
+	fake.mu.Unlock()
+	if list := c.tool("list_ideas", map[string]any{}); !strings.Contains(list, "idea-5 [open] Tags (task)\n") {
+		t.Errorf("list:\n%s", list)
+	}
+	c.tool("accept_idea", map[string]any{"id": "idea-5"})
+	if !strings.HasSuffix(asked, "Feature: Tags.\n\nTask.") {
+		t.Errorf("asked: %q", asked)
 	}
 }
