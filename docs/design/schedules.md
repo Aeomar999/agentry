@@ -349,10 +349,13 @@ down, or the machine asleep or off, and:
 So the trail says exactly what happened: "fired for Mon 02:00, 2 missed
 since Sat". A run caught up this way is a normal run in every other way,
 and it runs however old its slot is. The alternative, skipping a slot
-more than one period old, would keep a daily schedule's Monday run (it
-is hours old when the laptop opens) but lose a weekly schedule's only run
-when the machine was off past it, and every schedule's run after an
-absence of more than a week; that is open question 2.
+more than one period old, changes nothing for a daily schedule or a
+weekly one on one day: the latest due slot is always less than one
+period old, or the next slot would be due. It bites only where the gap
+between slots varies: a weekdays schedule (period a day) found on
+Saturday morning loses Friday's run, and a Mon and Thu schedule
+(period three days) found on Wednesday loses Monday's; that is open
+question 2.
 
 ### Firing one schedule
 
@@ -606,12 +609,12 @@ ship before them: they are only less useful without them (open question
    Cron can come later as an optional field.
 2. **A missed run: catch up once, always?** Recommendation: yes, the latest
    missed slot, once, however old, with the count of the rest. The
-   alternative is to skip a missed slot older than one period. A daily
-   schedule would rarely notice (Monday 02:00 is hours old when a laptop
-   shut all weekend opens on Monday morning), but a weekly schedule whose
-   slot passed while the machine was off loses its only run that week,
-   and a machine off for over a week loses every schedule's run until the
-   next slot.
+   alternative is to skip a missed slot older than one period. It never
+   drops a daily schedule's run (Monday 02:00 is hours old when a laptop
+   shut all weekend opens on Monday morning) or a one-day weekly one's,
+   since the latest due slot is always less than a period old. It drops
+   runs only where the gap between slots varies: a weekdays schedule
+   found on Saturday loses Friday's run until Monday.
 3. **Build schedules before Web Push sends (story 15)?** Recommendation:
    build them now, and say on the page, beside a schedule, that its runs
    can't reach you while push is off (the same reason
