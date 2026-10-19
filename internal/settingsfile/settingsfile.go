@@ -24,6 +24,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"regexp"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ type Live struct {
 	path     string
 	current  atomic.Pointer[map[string]features.Table]
 	lastSeen [32]byte // the content last loaded or refused, so each version is judged once
+	inForce  bool     // whether a version that loaded is in force, rather than none
 }
 
 // unread is lastSeen while the file can't be read, so that is said once.
@@ -90,8 +92,7 @@ func (l *Live) reload() {
 			return // already reported
 		}
 		l.lastSeen = unread
-		slog.Error("agentry: the settings file can't be read; the last version that loaded stays in force",
-			"file", l.path, "err", err)
+		slog.Error("agentry: the settings file can't be read; "+l.meanwhile(), "file", l.path, "err", err)
 		return
 	}
 	sum := sha256.Sum256(text)
@@ -101,12 +102,21 @@ func (l *Live) reload() {
 	l.lastSeen = sum
 	tables, err := parse(text)
 	if err != nil {
-		slog.Error("agentry: the settings file doesn't load; the last version that loaded stays in force",
-			"file", l.path, "problem", err)
+		slog.Error("agentry: the settings file doesn't load; "+l.meanwhile(), "file", l.path, "problem", err)
 		return
 	}
 	l.current.Store(&tables)
+	l.inForce = true
 	slog.Info("agentry: settings file loaded", "file", l.path, "features", len(tables))
+}
+
+// meanwhile is what is in force while the file doesn't load: the last
+// version that did, or none, at the start or once the file was gone.
+func (l *Live) meanwhile() string {
+	if l.inForce {
+		return "the last version that loaded stays in force"
+	}
+	return "features have no settings until it is fixed"
 }
 
 // gone is a missing file: no settings, as an empty one. Removing the file
@@ -118,12 +128,14 @@ func (l *Live) gone() {
 	}
 	l.lastSeen = none
 	l.current.Store(&map[string]features.Table{})
+	l.inForce = false
 	slog.Warn("agentry: the settings file is gone; features have no settings now", "file", l.path)
 }
 
 // parse reads the file's tables. Its errors never quote the file: go-toml's
 // can, so only their position is kept. They name a feature's table, never a
-// key, where a token pasted in the wrong place would be.
+// key or a header that isn't a feature's name, where a token pasted in the
+// wrong place would be.
 func parse(text []byte) (map[string]features.Table, error) {
 	var file map[string]any
 	if err := toml.NewDecoder(bytes.NewReader(text)).Decode(&file); err != nil {
@@ -156,12 +168,12 @@ func parseTable(feature string, table map[string]any) (features.Table, error) {
 		if key == "secrets" {
 			secrets, ok := value.(map[string]any)
 			if !ok {
-				return parsed, fmt.Errorf("[%s.secrets] should be a table", feature)
+				return parsed, fmt.Errorf("%s should be a table", header(feature, true))
 			}
 			for name, secret := range secrets {
 				text, ok := secret.(string)
 				if !ok {
-					return parsed, fmt.Errorf("a secret in [%s.secrets] should be a string", feature)
+					return parsed, fmt.Errorf("a secret in %s should be a string", header(feature, true))
 				}
 				parsed.Secrets[name] = text
 			}
@@ -169,9 +181,34 @@ func parseTable(feature string, table map[string]any) (features.Table, error) {
 		}
 		text, ok := value.(string)
 		if !ok {
-			return parsed, fmt.Errorf("a setting in [%s] should be a string", feature)
+			return parsed, fmt.Errorf("a setting in %s should be a string", header(feature, false))
 		}
 		parsed.Values[key] = text
 	}
 	return parsed, nil
+}
+
+// header names feature's table, or the secrets table under it, in a problem:
+// by its header when feature looks like a feature's name, and otherwise
+// without it, as a token pasted as a header would be logged.
+func header(feature string, secrets bool) string {
+	switch {
+	case !looksLikeAFeature(feature) && secrets:
+		return "a secrets table in the file"
+	case !looksLikeAFeature(feature):
+		return "a table in the file"
+	case secrets:
+		return "[" + feature + ".secrets]"
+	}
+	return "[" + feature + "]"
+}
+
+// featureName is the shape of a feature's name, such as ideas or git-host:
+// short lowercase words joined by dashes. A token rarely has it, having
+// digits or capitals.
+var featureName = regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`)
+
+// looksLikeAFeature is whether name has the shape of a feature's name.
+func looksLikeAFeature(name string) bool {
+	return len(name) <= 32 && featureName.MatchString(name)
 }

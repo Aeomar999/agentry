@@ -141,7 +141,7 @@ func TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted(t *testing.T) {
 		live.reload()
 		live.reload() // the same version again: said once
 		said := logged.String()
-		if strings.Count(said, "doesn't load") != 1 || !strings.Contains(said, c.want) || !strings.Contains(said, path) {
+		if strings.Count(said, "doesn't load; the last version that loaded stays in force") != 1 || !strings.Contains(said, c.want) || !strings.Contains(said, path) {
 			t.Errorf("for\n%s\nit logged\n%s\nwant one line naming the file and %q", c.text, said, c.want)
 		}
 		if strings.Contains(said, secret) {
@@ -153,7 +153,8 @@ func TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted(t *testing.T) {
 	}
 }
 
-// A file that doesn't load at the start is no settings, and is reported.
+// A file that doesn't load at the start is no settings, and is reported as
+// that, not as a last good version staying in force.
 func TestABrokenFileAtTheStartIsNoSettings(t *testing.T) {
 	logged := captureLog(t)
 	path := write(t, filepath.Join(t.TempDir(), "features.toml"), "[ideas\n")
@@ -161,8 +162,54 @@ func TestABrokenFileAtTheStartIsNoSettings(t *testing.T) {
 	if tables := live.Tables(); len(tables) != 0 {
 		t.Errorf("tables %v, want none", tables)
 	}
-	if said := logged.String(); !strings.Contains(said, "doesn't load") {
-		t.Errorf("it wasn't reported:\n%s", said)
+	said := logged.String()
+	if !strings.Contains(said, "doesn't load; features have no settings until it is fixed") || strings.Contains(said, "stays in force") {
+		t.Errorf("it logged\n%s\nwant the file doesn't load and features have no settings until it is fixed", said)
+	}
+}
+
+// A file that comes back broken after it was gone is no settings too.
+func TestABrokenFileAfterItWasGoneIsNoSettings(t *testing.T) {
+	logged := captureLog(t)
+	path := write(t, filepath.Join(t.TempDir(), "features.toml"), good)
+	live := Open(path)
+	os.Remove(path)
+	live.reload()
+	logged.Reset()
+	write(t, path, "[ideas\n")
+	live.reload()
+	said := logged.String()
+	if !strings.Contains(said, "features have no settings until it is fixed") || strings.Contains(said, "stays in force") {
+		t.Errorf("it logged\n%s\nwant features have no settings until it is fixed", said)
+	}
+}
+
+// A header that isn't a feature's name, such as a token pasted as one, is
+// never named in the log: the problem says only that a table is wrong.
+func TestAHeaderThatIsntAFeatureNameIsNotLogged(t *testing.T) {
+	logged := captureLog(t)
+	path := write(t, filepath.Join(t.TempDir(), "features.toml"), good)
+	live := Open(path)
+	const longWord = "abcdefghijklmnopqrstuvwxyzabcdefg" // the shape of a name, but too long for one
+	cases := []struct{ text, header, want string }{
+		{"[TOKEN]\nx = 3\n", "TOKEN", "a setting in a table in the file should be a string"},
+		{"[TOKEN.secrets]\nx = 3\n", "TOKEN", "a secret in a secrets table in the file should be a string"},
+		{"[TOKEN]\nsecrets = \"x\"\n", "TOKEN", "a secrets table in the file should be a table"},
+		{"[" + secret + "]\nx = 3\n", secret, "a setting in a table in the file should be a string"},
+		{"[" + longWord + "]\nx = 3\n", longWord, "a setting in a table in the file should be a string"},
+		{"[git-host]\nx = 3\n", "", "a setting in [git-host] should be a string"},
+	}
+	for _, c := range cases {
+		logged.Reset()
+		write(t, path, c.text)
+		live.reload()
+		said := logged.String()
+		if !strings.Contains(said, c.want) {
+			t.Errorf("for\n%s\nit logged\n%s\nwant %q", c.text, said, c.want)
+		}
+		if c.header != "" && strings.Contains(said, c.header) {
+			t.Errorf("the log names the header %q:\n%s", c.header, said)
+		}
 	}
 }
 
