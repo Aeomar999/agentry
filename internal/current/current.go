@@ -14,6 +14,7 @@ import (
 	"cmp"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 
@@ -171,6 +172,26 @@ func (s *State) guard(stream string, doing func() string, change func()) {
 func (s *State) breaks(stream string, err error) {
 	s.broken[stream] = err
 	slog.Error("current: a stream's state can't be built, so its reads fail", "stream", stream, "err", err)
+}
+
+// copy is the state as it is now, in maps of its own, so it can be read
+// while the store goes on applying events to s. The tasks, ideas and rosters
+// in it are shared: no one changes them.
+func (s *State) copy() *State {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return &State{
+		position:    s.position,
+		streams:     maps.Clone(s.streams),
+		tasks:       maps.Clone(s.tasks),
+		created:     slices.Clone(s.created),
+		ideas:       maps.Clone(s.ideas),
+		broken:      maps.Clone(s.broken),
+		roster:      s.roster,
+		workers:     s.workers,
+		connections: s.connections,
+		settings:    s.settings,
+	}
 }
 
 // Position is the last event applied, rejections included.

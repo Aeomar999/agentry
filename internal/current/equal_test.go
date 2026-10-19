@@ -1,6 +1,7 @@
 package current
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -146,5 +147,67 @@ func TestEqualSeesAWrongDoneAt(t *testing.T) {
 	state.tasks["task-1"] = wrong
 	if err := Equal(s, state); err == nil || err.Error() != "task-1: field DoneAt differs from a replay" {
 		t.Errorf("Equal with task-1's DoneAt wrong: %v", err)
+	}
+}
+
+// heldApply is a state that, while hold is set, keeps the store waiting
+// after it applies an event: the state then has an event the log's readers
+// don't see yet, as it does for a moment on every write.
+type heldApply struct {
+	*State
+	hold    bool
+	applied chan struct{} // the state has the held event
+	release chan struct{} // the store may go on
+}
+
+func (h *heldApply) Apply(e events.Event) {
+	h.State.Apply(e)
+	if h.hold {
+		h.hold = false
+		close(h.applied)
+		<-h.release
+	}
+}
+
+// The store goes on taking events while Equal runs, as the coordinator
+// loop does after a test's body: Equal compares at one cut, so it finds no
+// difference with a state that is ahead of the log, nor with events
+// committed while it reads.
+func TestEqualHoldsWhileTheStoreTakesEvents(t *testing.T) {
+	state := &heldApply{State: New(), applied: make(chan struct{}), release: make(chan struct{})}
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for _, p := range someProposals() {
+		propose(t, s, p)
+	}
+	rename := func(title string) events.Proposal {
+		return proposal("task-1", lead, events.TaskRenamed, map[string]any{"title": title})
+	}
+
+	state.hold = true
+	held := make(chan error, 1)
+	go func() {
+		_, _, err := s.Propose(rename("Held"))
+		held <- err
+	}()
+	<-state.applied
+	equal := make(chan error, 1)
+	go func() { equal <- Equal(s, state.State) }()
+	time.Sleep(50 * time.Millisecond) // for Equal to copy the state, ahead of the log
+	close(state.release)
+	if err := <-held; err != nil {
+		t.Fatal(err)
+	}
+	for i := range 20 {
+		propose(t, s, rename(fmt.Sprintf("After %d", i)))
+	}
+	if err := <-equal; err != nil {
+		t.Errorf("Equal while the store took events: %v", err)
+	}
+	if err := Equal(s, state.State); err != nil {
+		t.Errorf("Equal after: %v", err)
 	}
 }

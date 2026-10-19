@@ -1,10 +1,12 @@
 package current
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"reflect"
 	"slices"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -18,24 +20,33 @@ import (
 
 // Equal checks the state against a replay of the store's log, which stays
 // the definition of state: every task, idea and roster, the task order, each
-// stream's last position and the log's. It returns the first difference, named by stream, or nil. A
-// stream the state holds as broken must fail to replay too.
+// stream's last position and the log's. It returns the first difference,
+// named by stream, or nil. A stream the state holds as broken must fail to
+// replay too.
+//
+// The store may go on taking events while Equal runs, so it compares at one
+// cut: a copy of the state, and the log read only up to the copy's position.
+// The model has each event before the log's readers do, so the copy can be
+// ahead of the log for a moment; Equal waits for the log to catch up. A
+// state behind the log missed an event: the cut is then the log's position.
 func Equal(s *store.Store, state *State) error {
-	ids, streams, err := indexOf(s)
+	applied := s.LastPosition()
+	held := state.copy()
+	cut := max(held.position, applied)
+	if err := awaitApplied(s, cut); err != nil {
+		return err
+	}
+	index, err := indexOf(s, cut)
 	if err != nil {
 		return err
 	}
-	for _, id := range ids {
-		if err := equalStream(s, id, tasks.Replay, func() (any, error) { return state.Task(id) }); err != nil {
+	for _, id := range index.tasks {
+		if err := equalStream(s, cut, id, tasks.Replay, func() (any, error) { return held.Task(id) }); err != nil {
 			return err
 		}
 	}
-	ideaIDs, err := s.IdeaIDs()
-	if err != nil {
-		return err
-	}
-	for _, id := range ideaIDs {
-		if err := equalStream(s, id, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(id) }); err != nil {
+	for _, id := range index.ideas {
+		if err := equalStream(s, cut, id, infallible(ideas.FromEvents), func() (any, error) { return held.Idea(id) }); err != nil {
 			return err
 		}
 	}
@@ -44,37 +55,59 @@ func Equal(s *store.Store, state *State) error {
 		replay func([]events.Event) (any, error)
 		held   any
 	}{
-		{events.AgentsStream, func(e []events.Event) (any, error) { return agents.FromEvents(e), nil }, state.Roster()},
-		{events.WorkersStream, func(e []events.Event) (any, error) { return workers.FromEvents(e), nil }, state.Workers()},
-		{events.ConnectionsStream, func(e []events.Event) (any, error) { return connections.FromEvents(e), nil }, state.Connections()},
-		{events.SettingsStream, func(e []events.Event) (any, error) { return settings.FromEvents(e), nil }, state.Settings()},
+		{events.AgentsStream, func(e []events.Event) (any, error) { return agents.FromEvents(e), nil }, held.Roster()},
+		{events.WorkersStream, func(e []events.Event) (any, error) { return workers.FromEvents(e), nil }, held.Workers()},
+		{events.ConnectionsStream, func(e []events.Event) (any, error) { return connections.FromEvents(e), nil }, held.Connections()},
+		{events.SettingsStream, func(e []events.Event) (any, error) { return settings.FromEvents(e), nil }, held.Settings()},
 	}
 	for _, r := range rosters {
-		held := func() (any, error) { return r.held, state.Broken(r.stream) }
-		if err := equalStream(s, r.stream, r.replay, held); err != nil {
+		heldRoster := func() (any, error) { return r.held, held.Broken(r.stream) }
+		if err := equalStream(s, cut, r.stream, r.replay, heldRoster); err != nil {
 			return err
 		}
 	}
-	if order := state.TaskIDs(); !slices.Equal(order, ids) {
-		return fmt.Errorf("task order: the state has %v, the log %v", order, ids)
+	if order := held.TaskIDs(); !slices.Equal(order, index.tasks) {
+		return fmt.Errorf("task order: the state has %v, the log %v", order, index.tasks)
 	}
-	if err := equalStreamPositions(state, streams); err != nil {
+	if err := equalStreamPositions(held, index.streams); err != nil {
 		return err
 	}
-	if position, last := state.Position(), s.LastPosition(); position != last {
-		return fmt.Errorf("position: the state is at %d, the log at %d", position, last)
+	if held.position != index.last {
+		return fmt.Errorf("position: the state is at %d, the log at %d", held.position, index.last)
+	}
+	return nil
+}
+
+// settling is how long Equal waits for the log to reach the state.
+const settling = 5 * time.Second
+
+// awaitApplied waits until the log's readers see every event up to
+// position. A state that stays ahead was built from some other log.
+func awaitApplied(s *store.Store, position int64) error {
+	deadline := time.Now().Add(settling)
+	for s.LastPosition() < position {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("position: the state is at %d, the log at %d after %s", position, s.LastPosition(), settling)
+		}
+		time.Sleep(time.Millisecond)
 	}
 	return nil
 }
 
 // equalStream compares what the state holds for a stream with a replay of
 // the stream's accepted events in the log.
-func equalStream[T any](s *store.Store, stream string, replay func([]events.Event) (T, error), held func() (any, error)) error {
+func equalStream[T any](s *store.Store, cut int64, stream string, replay func([]events.Event) (T, error), held func() (any, error)) error {
 	accepted, err := s.Stream(stream)
 	if err != nil {
 		return err
 	}
-	return equalReplay(stream, accepted, replay, held)
+	return equalReplay(stream, upTo(accepted, cut), replay, held)
+}
+
+// upTo is the events, in the log's order, at or before position.
+func upTo(log []events.Event, position int64) []events.Event {
+	end, _ := slices.BinarySearchFunc(log, position+1, func(e events.Event, p int64) int { return cmp.Compare(e.Position, p) })
+	return log[:end]
 }
 
 // equalReplay compares what the state holds for a stream with a replay of
@@ -129,28 +162,38 @@ func differingField(got, want any) string {
 	return "an unexported field"
 }
 
-// indexOf reads the whole log for the stream of every accepted task.created,
-// oldest first, whatever the stream, and each stream's last accepted
-// position.
-func indexOf(s *store.Store) (ids []string, streams map[string]int64, err error) {
+// index is the log up to a cut, as Equal compares it.
+type index struct {
+	tasks   []string         // the stream of every accepted task.created, oldest first, whatever the stream
+	ideas   []string         // the stream of every accepted idea.suggested, oldest first
+	streams map[string]int64 // each stream's last accepted position
+	last    int64            // the last position, rejections included
+}
+
+// indexOf reads the whole log up to cut.
+func indexOf(s *store.Store, cut int64) (index, error) {
 	const page = 1000
-	streams = map[string]int64{}
+	found := index{streams: map[string]int64{}}
 	for position := int64(0); ; {
 		batch, err := s.After(position, page)
 		if err != nil {
-			return nil, nil, err
+			return index{}, err
 		}
+		batch = upTo(batch, cut)
 		for _, e := range batch {
-			if e.Type == events.ProposalRejected {
+			found.last = e.Position
+			switch e.Type {
+			case events.ProposalRejected:
 				continue
+			case events.TaskCreated:
+				found.tasks = append(found.tasks, e.Stream)
+			case events.IdeaSuggested:
+				found.ideas = append(found.ideas, e.Stream)
 			}
-			if e.Type == events.TaskCreated {
-				ids = append(ids, e.Stream)
-			}
-			streams[e.Stream] = e.Position
+			found.streams[e.Stream] = e.Position
 		}
 		if len(batch) < page {
-			return ids, streams, nil
+			return found, nil
 		}
 		position = batch[len(batch)-1].Position
 	}
