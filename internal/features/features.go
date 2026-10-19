@@ -85,6 +85,7 @@ type Coordinator struct {
 	Brief    func(state Reader, task *tasks.Task) []Section               // more sections for its brief
 	Decision string                                                       // what its done decision may add, for "Your decision"
 	Field    string                                                       // the done decision's field it reads: "ideas"
+	Check    func(field json.RawMessage) error                            // optional: refuses a done whose field it can't read, so the coordinator is asked again; it never writes
 	OnDone   func(c Core, task *tasks.Task, field json.RawMessage) string // acts on it; returns a note for the summary
 }
 

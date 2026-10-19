@@ -144,6 +144,10 @@ func (l *Loop) act(id string) {
 		}
 		l.startTurn(task, roster, move)
 	case ApplyDecision:
+		if why := l.unreadable(task, roster, move.Decision); why != "" {
+			l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": why})
+			return
+		}
 		l.apply(task, roster, move.Decision)
 	case RaiseIssue:
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})

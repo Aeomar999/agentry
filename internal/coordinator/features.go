@@ -14,8 +14,8 @@ import (
 
 // A feature takes part in the loop through its Coordinator hook, for the
 // coordinators its For says: its Brief adds sections to their briefs, its
-// Decision says what their done may carry, and its OnDone acts on the
-// done's Field. A done carrying a field no feature of its coordinator reads
+// Decision says what their done may carry, its Check may refuse a done
+// whose Field it can't read, and its OnDone acts on that Field. A done carrying a field no feature of its coordinator reads
 // still goes through, and its summary says the field wasn't kept. Each hook
 // runs under recover, so a feature's panic costs only its own part.
 
@@ -49,6 +49,30 @@ func briefSections(hooks []features.Feature, state features.Reader, task *tasks.
 		}
 	}
 	return sections
+}
+
+// unreadable says why a done decision can't be applied: a field that a
+// feature for the task's coordinator reads, and whose Check refuses. The
+// coordinator is told, as of any decision it got wrong, and sends it again.
+// It is "" for any other decision, and when every Check passes. A Check
+// that panics passes, so one feature's bug can't hold up every done.
+func (l *Loop) unreadable(task *tasks.Task, roster agents.Roster, decision Decision) string {
+	if decision.Action != Finish {
+		return ""
+	}
+	own, _ := roster.Get(task.Coordinator)
+	for _, f := range hooksFor(l.Features, own) {
+		hook := f.Coordinator
+		field := decision.field(hook.Field)
+		if hook.Check == nil || field == nil {
+			continue
+		}
+		var err error
+		if guarded(f, "Check", func() { err = hook.Check(field) }) == "" && err != nil {
+			return fmt.Sprintf("the coordinator's reply had no usable decision: Agentry couldn't read its %q: %v", hook.Field, err)
+		}
+	}
+	return ""
 }
 
 // onDone acts on the fields of a done decision that features read: each

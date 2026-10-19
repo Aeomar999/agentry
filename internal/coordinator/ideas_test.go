@@ -212,6 +212,47 @@ func TestAPanickingOnDoneIsANoteAndTheDoneGoesThrough(t *testing.T) {
 	}
 }
 
+// A Visionaries done whose ideas Agentry can't read, here "backedBy" a name
+// rather than a list, isn't applied: the coordinator is told why and asked
+// again, and nothing is written, so the session's ideas aren't lost.
+func TestADoneWithUnreadableIdeasIsSentBack(t *testing.T) {
+	s, state, repo := withVisionaries(t)
+	const id = "task-1"
+	startTask(t, s, id, repo, "editor")
+
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "backedBy": "dreamer"}]}`)
+	task := waitForTurn(t, s, id, "turn-2", "editor")
+	if task.IsDone {
+		t.Error("the done should not be applied")
+	}
+	if reason := lastIssue(t, s, id); !strings.Contains(reason, `no usable decision: Agentry couldn't read its "ideas": json: `) {
+		t.Errorf("the issue should name the field and why: %q", reason)
+	}
+	if kept := state.OwnedIDs(ideas.Prefix); len(kept) != 0 {
+		t.Errorf("no idea should be written: %v", kept)
+	}
+}
+
+// A feature whose Check panics doesn't hold up the done: it goes through,
+// as if the Check had passed.
+func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
+	s, state, repo := withTeams(t, true)
+	loop := newLoop(s, state, t.TempDir())
+	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
+		For: func(agents.Agent) bool { return true }, Field: "votes",
+		Check:  func(json.RawMessage) error { panic("a bad hook") },
+		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { return "" }}})
+	run(t, loop, state)
+	const id = "task-1"
+	startTask(t, s, id, repo, "tech-lead")
+
+	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "done", "summary": "Built it.", "votes": [1, 2]}`)
+	if task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone }); task.Summary != "Built it." {
+		t.Errorf("summary %q", task.Summary)
+	}
+}
+
 // A done from a coordinator the roster no longer has, here renamed while its
 // session ran, keeps no ideas and says so.
 func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) {
@@ -314,10 +355,36 @@ func TestAVisionariesBriefIsAsItWasBeforeTheHook(t *testing.T) {
 	}
 }
 
+// A feature whose For or Brief panics costs the brief only its own part:
+// the brief is the one the other features make.
+func TestAPanickingHookLeavesTheBriefToTheOthers(t *testing.T) {
+	want, err := os.ReadFile(filepath.Join("testdata", "visionaries-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, broken := range map[string]*features.Coordinator{
+		"For":   {For: func(agents.Agent) bool { panic("a bad hook") }},
+		"Brief": {For: func(agents.Agent) bool { return true }, Brief: func(features.Reader, *tasks.Task) []features.Section { panic("a bad hook") }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			brief, repo := visionariesBriefWith(t, features.Feature{Name: "votes", Coordinator: broken}, ideas.Feature())
+			if got := strings.ReplaceAll(brief, repo, "<repo>"); got != string(want) {
+				t.Errorf("the brief changed:\n got %q\nwant %q", got, want)
+			}
+		})
+	}
+}
+
 // visionariesBrief is the brief of editor, the Visionaries coordinator, on
 // a task in a repo where one idea was dismissed and one accepted, and an
 // open one is left out.
 func visionariesBrief(t *testing.T) (string, string) {
+	t.Helper()
+	return visionariesBriefWith(t, ideas.Feature())
+}
+
+// visionariesBriefWith is visionariesBrief, made with list's features.
+func visionariesBriefWith(t *testing.T, list ...features.Feature) (string, string) {
 	t.Helper()
 	s, state, repo := withTeams(t, true)
 	mustCreateTask(t, s, events.Proposal{Actor: you, Type: events.TaskCreated,
@@ -342,5 +409,5 @@ func visionariesBrief(t *testing.T) (string, string) {
 	task := *held // the state's own stays as the log made it
 	task.Worktree = &tasks.Worktree{Repo: repo, Worker: "local", Path: repo + "/task-1", Branch: "agentry/task-1", Base: "abc123"}
 	editor, _ := state.Roster().Get("editor")
-	return coordinatorBrief(&task, editor, state.Roster(), family{}, nil, nil, state, []features.Feature{ideas.Feature()}), repo
+	return coordinatorBrief(&task, editor, state.Roster(), family{}, nil, nil, state, list), repo
 }

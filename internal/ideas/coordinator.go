@@ -25,7 +25,7 @@ import (
 // coordinatorHook is Ideas' part in the coordinator loop, for the
 // coordinators that suggest ideas.
 func coordinatorHook() *features.Coordinator {
-	return &features.Coordinator{For: Suggests, Brief: brief, Decision: IdeasFormat, Field: "ideas", OnDone: onDone}
+	return &features.Coordinator{For: Suggests, Brief: brief, Decision: IdeasFormat, Field: "ideas", Check: check, OnDone: onDone}
 }
 
 // agentry is the coordinator loop, which keeps the ideas a done suggests.
@@ -54,6 +54,14 @@ const IdeasFormat = `Your "done" decision carries the ideas the session agreed o
 	`"epic": "<optional: the epic it follows up>", "kind": "<optional: \"epic\" when it is too big for one story>", ` +
 	`"repeats": "<optional: the id of an idea already accepted or dismissed that it raises again>"}]}. ` +
 	`Each needs a title, the problem, the proposal and a size of S, M or L. The user accepts or dismisses each one.`
+
+// check refuses a done whose "ideas" field isn't a list of ideas, such as
+// one with "backedBy" a name rather than a list, so the coordinator sends it
+// again rather than the session's ideas being lost.
+func check(field json.RawMessage) error {
+	var suggested []suggestion
+	return json.Unmarshal(field, &suggested)
+}
 
 // onDone keeps the ideas of a done decision's "ideas" field (suggest).
 func onDone(c features.Core, task *tasks.Task, field json.RawMessage) string {
