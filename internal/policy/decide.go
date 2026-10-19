@@ -68,13 +68,7 @@ func (p *Policy) Decide(agentProfile string, call Call) Verdict {
 }
 
 func (p *Policy) decide(agentProfile string, call Call) Verdict {
-	name := agentProfile
-	if p.useForEveryone != "" {
-		name = p.useForEveryone
-	}
-	if name == "" {
-		name = p.defaultProfile
-	}
+	name := p.EffectiveProfile(agentProfile).Profile
 	prof, ok := p.profiles[name]
 	if !ok {
 		return Verdict{Decision: Deny, Rule: "profile " + name + " isn't in policy.toml"}
