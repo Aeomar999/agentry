@@ -113,6 +113,7 @@ func (t *Task) Apply(e events.Event) {
 		default: // a wrap-up still going is over: you want more work
 			wrapping := t.WrapUp != nil
 			t.Parked, t.WrapUp = "", nil
+			t.AutoStarted = t.AutoStarted || e.Actor.Kind == events.System
 			t.moveColumn(e)
 			if t.stopTurn() || wrapping || t.idle() {
 				t.step(e, You, t.Coordinator, "I moved this task back to work. Carry on from where it was.")

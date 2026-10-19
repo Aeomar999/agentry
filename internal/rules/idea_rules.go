@@ -125,7 +125,7 @@ func startingAnAcceptedIdea(task *tasks.Task, p events.Proposal, state State) st
 		return "Agentry starts a task from an idea it accepted only when you turn that on"
 	}
 	if p.Text("place") != "" || p.Text("column") != "in-progress" || p.Flag("sentBack") ||
-		task.Parked == "" || len(task.Turns) > 0 || !task.ByAgentry || task.Idea == "" {
+		task.Parked == "" || len(task.Turns) > 0 || task.AutoStarted || !task.ByAgentry || task.Idea == "" {
 		return only
 	}
 	idea, err := state.Idea(task.Idea)

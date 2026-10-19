@@ -289,6 +289,26 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	}
 }
 
+// A task you parked again before it ever ran stays parked: Agentry starts
+// it only once.
+func TestAgentryStartsATaskOnce(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+		t.Fatalf("accept: %+v", got)
+	}
+	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,
+		Data: map[string]any{"place": "", "note": "", "column": "in-progress", "sentBack": false}}
+	mustPropose(t, s, start)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": ""}})
+	if task := loadTask(t, s, "task-2"); len(task.Turns) > 0 || task.Parked != "backlog" {
+		t.Fatalf("want parked before it ran: %d turns, parked %q", len(task.Turns), task.Parked)
+	}
+	if _, rejection, err := s.Propose(start); err != nil || rejection == nil {
+		t.Errorf("starting again a task you parked before it ran: want refused, got %v %v", rejection, err)
+	}
+}
+
 // Agentry starts the task of an idea it accepted only while you have both
 // accepting and starting them turned on.
 func TestAgentryStartsOnlyWhileTheSettingsSay(t *testing.T) {
