@@ -34,7 +34,7 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 		switch r.Method + " " + r.URL.Path {
 		case "GET /api/tasks":
 			io.WriteString(w, `[{"id":"task-2","title":"Ship it","repo":"/repo","status":"needs you","kind":"epic","stories":2,"storiesDone":2,"rank":-2},
-				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1},
+				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1,"budget":5000000,"tokensUsed":1200000,"maxTurns":24,"turnsSinceAnswer":4},
 				{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","rank":-3},
 				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4},
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
@@ -134,7 +134,7 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 
 	board := c.tool("status", map[string]any{})
 	for _, want := range []string{"Agentry board for /repo", "task-1: Waiting for you to approve the push to dev (review_approvals)", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
-		"task-4 Release: deployer is working (Shipping)"} {
+		"task-4 Release: deployer is working (Shipping) · 0 tokens, no limit · 0 turns, no limit"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("the board is missing %q:\n%s", want, board)
 		}
@@ -142,8 +142,12 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	if strings.Contains(board, "Elsewhere") {
 		t.Errorf("another repo's task is on this repo's board:\n%s", board)
 	}
-	if listed := c.tool("list_tasks", map[string]any{}); !strings.Contains(listed, "task-4 [working · Shipping] Release") {
-		t.Errorf("list_tasks should name the board column:\n%s", listed)
+	tasks := c.tool("list_tasks", map[string]any{})
+	if !strings.Contains(tasks, "task-4 [working · Shipping] Release · 0 tokens, no limit · 0 turns, no limit") {
+		t.Errorf("list_tasks should name the board column and what the task used:\n%s", tasks)
+	}
+	if !strings.Contains(tasks, "task-1 [needs you] Fix the login · 1.2M of 5M tokens · 4 of 24 turns") {
+		t.Errorf("list_tasks should say what the task used of its limits:\n%s", tasks)
 	}
 
 	created := c.tool("create_task", map[string]any{"title": "Add a retry", "description": "Retry on 503."})
@@ -249,15 +253,44 @@ func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
 	}
 }
 
-// show_task says what a task has used of its budget and its turns.
+// show_task, list_tasks and status say what a task has used of its budget
+// and its turns, with no limit too, and none used yet.
 func TestTheTaskSaysItsLimits(t *testing.T) {
-	limited := detail{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, TurnsSinceAnswer: 18}
-	if got := budgetOf(limited) + " · " + turnsOf(limited); got != "1.2M of 5M tokens · 18 of 24 turns" {
-		t.Errorf("limited: %q", got)
+	for _, c := range []struct {
+		task task
+		want string
+	}{
+		{task{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, TurnsSinceAnswer: 18}, "1.2M of 5M tokens · 18 of 24 turns"},
+		{task{TokensUsed: 950, TurnsSinceAnswer: 3}, "950 tokens, no limit · 3 turns, no limit"},
+		{task{}, "0 tokens, no limit · 0 turns, no limit"},
+	} {
+		if got := usageOf(c.task); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
+		}
 	}
-	unlimited := detail{TokensUsed: 950, TurnsSinceAnswer: 3}
-	if got := budgetOf(unlimited) + " · " + turnsOf(unlimited); got != "950 tokens, no limit · 3 turns, no limit" {
-		t.Errorf("unlimited: %q", got)
+}
+
+// show_task says on how many turns the tokens couldn't be counted, and why.
+func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
+	withReasons := func(reasons ...string) detail {
+		var d detail
+		for _, reason := range reasons {
+			d.TurnList = append(d.TurnList, struct{ TokensUnknown string }{reason})
+		}
+		return d
+	}
+	for _, c := range []struct {
+		task detail
+		want string
+	}{
+		{withReasons("", ""), ""},
+		{withReasons("", "transcript not saved"), "Tokens unknown on 1 turn: transcript not saved"},
+		{withReasons("transcript not saved", "", "transcript not saved", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved"},
+		{withReasons("transcript not saved", "no tokens reported", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"},
+	} {
+		if got := tokensUnknownOf(c.task); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.task.TurnList, got, c.want)
+		}
 	}
 }
 

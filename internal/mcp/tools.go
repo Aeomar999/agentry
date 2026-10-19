@@ -27,16 +27,17 @@ type task struct {
 	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
 	Labels, BlockedBy                                                                    []string
 	Stories, StoriesDone                                                                 int
+	Budget, TokensUsed, MaxTurns, TurnsSinceAnswer                                       int // a limit of 0 is none
 	Rank                                                                                 float64
 	Told                                                                                 *struct{ At, From, Text string }
 }
 
 type detail struct {
 	task
-	Description, Summary, Coordinator              string
-	Budget, TokensUsed, MaxTurns, TurnsSinceAnswer int // a limit of 0 is none
-	Trail                                          []struct{ From, To, Text string }
-	Shared                                         []struct {
+	Description, Summary, Coordinator string
+	Trail                             []struct{ From, To, Text string }
+	TurnList                          []struct{ TokensUnknown string }
+	Shared                            []struct {
 		Name, By, From string
 		Size           int64
 	}
@@ -133,7 +134,7 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 		if len(t.BlockedBy) > 0 {
 			what = "waits for " + strings.Join(t.BlockedBy, ", ")
 		}
-		return t.ID + " " + t.Title + ": " + what, true
+		return t.ID + " " + t.Title + ": " + what + " · " + usageOf(t), true
 	}))
 	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
 		if t.Closing != "" && t.Status == "working" {
@@ -177,6 +178,9 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		case t.Epic != "":
 			fmt.Fprintf(&b, " (story of %s)", t.Epic)
 		}
+		if t.Kind != "epic" { // an epic's work is its stories'
+			fmt.Fprintf(&b, " · %s", usageOf(t))
+		}
 		if len(t.Labels) > 0 {
 			fmt.Fprintf(&b, " {%s}", strings.Join(t.Labels, ", "))
 		}
@@ -206,7 +210,10 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	} else if t.Epic != "" {
 		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
 	}
-	fmt.Fprintf(&b, "Budget: %s · %s\n", budgetOf(t), turnsOf(t))
+	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.task))
+	if unknown := tokensUnknownOf(t); unknown != "" {
+		fmt.Fprintf(&b, "%s\n", unknown)
+	}
 	if t.Description != "" {
 		fmt.Fprintf(&b, "\n%s\n", t.Description)
 	}
@@ -242,8 +249,12 @@ func boardName(t task) string {
 	return cmp.Or(names[t.Column], t.Column)
 }
 
+// usageOf is what the task has used of its budget and its turns, shown
+// with no limit too: "1.2M tokens, no limit · 14 turns, no limit".
+func usageOf(t task) string { return budgetOf(t) + " · " + turnsOf(t) }
+
 // budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
-func budgetOf(t detail) string {
+func budgetOf(t task) string {
 	if t.Budget == 0 {
 		return coordinator.Tokens(t.TokensUsed) + " tokens, no limit"
 	}
@@ -252,11 +263,46 @@ func budgetOf(t detail) string {
 
 // turnsOf is how many turns the task has had since the user last answered,
 // against its limit: "18 of 24 turns".
-func turnsOf(t detail) string {
+func turnsOf(t task) string {
 	if t.MaxTurns == 0 {
 		return fmt.Sprintf("%d turns, no limit", t.TurnsSinceAnswer)
 	}
 	return fmt.Sprintf("%d of %d turns", t.TurnsSinceAnswer, t.MaxTurns)
+}
+
+// tokensUnknownOf says on how many turns the tokens couldn't be counted,
+// so the tokens used fall short of what was spent, and why: "Tokens unknown
+// on 3 turns: transcript not saved". "" when every turn was counted.
+func tokensUnknownOf(t detail) string {
+	var reasons []string
+	count := map[string]int{}
+	for _, turn := range t.TurnList {
+		if reason := turn.TokensUnknown; reason != "" {
+			if count[reason] == 0 {
+				reasons = append(reasons, reason)
+			}
+			count[reason]++
+		}
+	}
+	if len(reasons) == 1 {
+		return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(count[reasons[0]]), reasons[0])
+	}
+	total := 0
+	for i, reason := range reasons {
+		total += count[reason]
+		reasons[i] = fmt.Sprintf("%s (%d)", reason, count[reason])
+	}
+	if total == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Tokens unknown on %s: %s", turnCount(total), strings.Join(reasons, ", "))
+}
+
+func turnCount(n int) string {
+	if n == 1 {
+		return "1 turn"
+	}
+	return fmt.Sprintf("%d turns", n)
 }
 
 // ---- handing over work ---------------------------------------------------------
