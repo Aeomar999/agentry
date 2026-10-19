@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
 import { DecisionBadge } from "@/components/molecules/StatusBadges";
@@ -18,6 +18,9 @@ export function TryPolicyCall({ profile, onTried }: { profile: string; onTried: 
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState<TriedCall>();
   const [failure, setFailure] = useState("");
+  // Each request takes the next number, and an edit takes one too, so a
+  // reply that lands after either is dropped: it is about an older call.
+  const latest = useRef(0);
   const tools = `try-tools-${profile}`;
 
   function show(next?: TriedCall) {
@@ -26,20 +29,24 @@ export function TryPolicyCall({ profile, onTried }: { profile: string; onTried: 
   }
   function edit(change: () => void) {
     change();
+    latest.current++;
     show(undefined);
     setFailure("");
+    setBusy(false);
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
     show(undefined);
     setFailure("");
     setBusy(true);
+    const request = ++latest.current;
     try {
-      show(await tryPolicyCall({ profile, tool: tool.trim(), input }));
+      const reply = await tryPolicyCall({ profile, tool: tool.trim(), input });
+      if (request === latest.current) show(reply);
     } catch (failed) {
-      setFailure(failed instanceof Error ? failed.message : String(failed));
+      if (request === latest.current) setFailure(failed instanceof Error ? failed.message : String(failed));
     } finally {
-      setBusy(false);
+      if (request === latest.current) setBusy(false);
     }
   }
 
