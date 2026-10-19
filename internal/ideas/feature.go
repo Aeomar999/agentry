@@ -11,9 +11,12 @@ import (
 // suggests ideas (Suggests), and visible while it is enabled or any idea, of
 // any state, is left: your open ideas still need an answer and the rest are
 // their history. Its badge is the number of open ideas. Those coordinators'
-// done decisions carry the ideas Agentry keeps (coordinator.go).
+// done decisions carry the ideas Agentry keeps (coordinator.go). Of the
+// core's types it writes the task an accepted idea becomes (makeTask), and
+// the task.held that starts one Agentry accepted (startIdea).
 func Feature() features.Feature {
-	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Coordinator: coordinatorHook(), Manifest: manifest}
+	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Writes: []events.Type{events.TaskCreated, events.TaskHeld},
+		Coordinator: coordinatorHook(), Manifest: manifest}
 }
 
 // Streams are the ideas' streams, for the state to build and keep: each
