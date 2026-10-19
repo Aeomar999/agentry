@@ -161,6 +161,8 @@ func TestTheReadMostlyProfile(t *testing.T) {
 		{"commit", bash("git commit -am 'x'"), Deny},
 		{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
 		{"push", bash("git push origin HEAD:dev"), Deny},
+		{"commit in another folder", bash("git -C . commit -m x"), Deny},
+		{"push from another folder", bash("git -C /w push origin HEAD:dev"), Deny},
 		{"secrets", bash("cat .env"), Deny},
 	})
 }

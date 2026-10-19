@@ -237,7 +237,7 @@ scratch = ['/tmp/claude-*/**']
   [[profiles.read-mostly.rules]]
   name = "this agent never commits"
   decision = "deny"
-  runs_any = ['git commit *', 'git push *']
+  runs_any = ['git commit *', 'git push *', 'git -C * commit *', 'git -C * push *']
   why = "It suggests ideas; the engineers commit."
 
   [[profiles.read-mostly.rules]]
