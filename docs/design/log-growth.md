@@ -479,11 +479,28 @@ The file is one header line, then the body:
 
 ```text
 {"format":1,"build":"<sha256 of the binary>","position":24180,"anchor":"<sha256 of row 24180>","size":10589375,"sha256":"<sha256 of the body>"}
-{"tasks":[...],"archived":[...],"roster":[...],"workers":{...},"connections":{...}}
+{"tasks":[...],"archived":[...],"order":[...],"broken":[...],"roster":[...],"workers":{...},"connections":{...}}
 ```
 
 The header is checked before the body is read, so a snapshot from other
 code is turned down without decoding megabytes.
+
+The body holds everything `current.Equal` compares, so a loaded state can
+be equal to a replay: every task, the summaries, the rosters, and two
+more. `order` is `State.taskIDs` as it is, duplicates and broken tasks
+included, since `Store.TaskIDs` lists every `task.created` row and the
+state copies that. `broken` is the names of the streams whose apply
+panicked, without their state.
+
+A broken stream is **rebuilt at load by a full replay of that stream**
+(its accepted events up to the snapshot's position, through `Load`), so
+it breaks again by the same panic and says why. The other choice, writing
+no snapshot while any stream is broken, was dropped: a stream stays broken
+until a release fixes its apply, and that may be many restarts away, so
+startup would go back to replaying the whole log exactly when something is
+already wrong. The rebuild costs one stream's replay. A broken roster then
+reads as empty, not as it was before the event that broke it; that is what
+a restart does today, and `Equal` only asks that both sides fail.
 
 ### The version tag
 
@@ -510,8 +527,10 @@ so no test has to catch one; a test checks that a snapshot with another
   shutdown, and after each archiving round (section 4), which shrinks the
   state.
 - **Never on the request path, and never under `Store.mu`.** It takes the
-  state's read lock only to copy the map of task pointers, the rosters and
-  the position. Copy on write (`read-model.md`, "Locking") means nothing
+  state's read lock only to copy the map of task pointers, the summaries,
+  the rosters, the position, the `taskIDs` slice and the names of the
+  broken streams (a new slice and a new list, since `Apply` appends to
+  `taskIDs` in place). Copy on write (`read-model.md`, "Locking") means nothing
   it then encodes can change, so it encodes and writes with no lock held.
   One write at a time; a failed write is logged and leaves the old file.
 - **Cost now:** about 25 ms of CPU (encode 20 ms, write 3.2 ms) per
@@ -537,11 +556,14 @@ about fsync.
 
 At `Open`: read the header; check `format` and `build`; read row
 `position` and compare its hash with `anchor`; read the body and check
-`size` and `sha256`; decode; load the state from it; then apply every
-event after `position` in order (`After`, by primary key, so the cost is
-the tail, not the log), and call `Loaded` with the last position. The
-tail is applied in place, with no clone per event: nothing has read the
-decoded state yet.
+`size` and `sha256`; decode; load the state from it; rebuild each stream
+named in `broken` (above); then apply every event after `position` in
+order (by primary key, so the cost is the tail, not the log), and call
+`Loaded` with the last position. The tail is applied in place, with no
+clone per event: nothing has read the decoded state yet. A tail event that
+folds its stream again (`task.unarchived`, `event.redacted`, section 4) is
+given its stream's events below its own position, never the stream's
+current rows, which hold the rest of the tail too.
 
 | Case | Found by | Then |
 |---|---|---|
@@ -567,7 +589,10 @@ included) against a full replay is the judge, as in `read-model.md`.
 
 1. **Every cut of the fixture logs.** For each log the suite builds
    (every scenario's store, `read-model.md` test 2), task-21's
-   `everyEvent()` log and the seeded random sequences (test 4): at every
+   `everyEvent()` log, the seeded random sequences (test 4), and a log
+   with a broken task stream (as task-21's
+   `TestAPanicBreaksOnlyItsStream` builds: a `worktree.moved` before the
+   task has a worktree) and events on that stream after the break: at every
    position, build the state of the events up to it, write a snapshot,
    load it back as `Open` would, apply the rest, and require it `Equal` to
    a full replay. Logs of a few thousand events make that a few seconds.
@@ -770,42 +795,64 @@ schema's first migration: `Open` drops and recreates it in one
 transaction and records `PRAGMA user_version = 1`. An older Agentry
 opening the database keeps the new trigger (`CREATE TRIGGER IF NOT
 EXISTS`), ignores the unknown marker in its replay, and shows archived
-tasks as gone, since their `task.created` rows are; nothing else breaks.
+tasks as gone, since their `task.created` rows are. It also counts only
+`task.created` rows for the next id, so it could give a new task an
+archived task's id: going back to an older release after archiving is not
+supported, and the release notes say so.
+
+Every reader that listed tasks by their `task.created` rows now has to
+see archived tasks too, or the next id collides with one. `Store.TaskIDs`
+(`internal/store/read.go`) is that reader. It lists `task.created` rows
+and `task.archived` markers together, each at the `task.created` position
+it stands for (the marker's `created`), oldest first:
+
+```sql
+SELECT stream, position FROM events
+WHERE type = 'task.created' AND position <= ?applied
+UNION
+SELECT stream, json_extract(data, '$.created') FROM events
+WHERE type = 'task.archived' AND position <= ?applied
+ORDER BY 2
+```
+
+`UNION` drops a row that is the same in both halves, so a task appears
+once whether it is archived, unarchived (its `task.created` row is back,
+at the same position the marker names) or archived twice (two markers,
+one `created`). The rules (`internal/rules/rules.go`) refuse a
+`task.created` on a stream that holds a summary, as on one that holds a
+task.
 
 ### The move, step by step
 
 An archiver goroutine (`internal/archive`) runs at startup and then
-hourly, a task at a time:
+hourly, a task at a time. It changes the log only through one store
+method, `Store.Archive`, which acts under `Store.mu` like `Propose`, so
+no proposal, reopening or other archiving runs between its check and its
+commit:
 
 1. **Choose:** tasks done for at least the age (below), not archived yet,
    and not an epic with a story still in the state (below).
 2. **Write the blob:** read the stream with `Log`, rejections included,
    up to `through`, its last position now. Encode, gzip (Go's gzip writes
    no time into its header, so the same rows always make the same bytes),
-   put it in the store with the file and folder synced.
-3. **Append the marker:** propose `task.archived`. The rules, under the
-   store's lock, require the task done for the age, its last position
-   still `through` (anything since and the marker is refused, to be tried
-   next round), and the blob present (`Blobs.Has`). The state applies it:
-   the task becomes its summary.
-4. **Delete:** in one transaction, `DELETE FROM events WHERE stream = ?
-   AND position <= ?`. If SQLite's `changes()` is not `count`, roll back
-   and log; the blob and the marker stay, and reads still work (below).
-5. **Give the space back:** `PRAGMA incremental_vacuum` and a WAL
+   put it in the store with the file and folder synced. No lock is held.
+3. **Marker and delete, in one transaction under `Store.mu`:** the rules
+   check the `task.archived` proposal: the task done for the age, the
+   stream's last position in the database still `through` (anything since,
+   and the round leaves it for the next), and the blob present
+   (`Blobs.Has`). Then one transaction inserts the marker and runs
+   `DELETE FROM events WHERE stream = ? AND position <= ?`. The trigger
+   sees the marker, uncommitted, inside the same transaction, so it allows
+   the delete. If SQLite's `changes()` is not `count`, the transaction
+   rolls back and nothing happened. After the commit, the model applies
+   the marker (the task becomes its summary) and `applied` moves, as for
+   any proposal.
+4. **Give the space back:** `PRAGMA incremental_vacuum` and a WAL
    checkpoint (below), and a new snapshot after the round.
 
-Each step checks before it acts, so a restart redoes only what is
-missing:
-
-| Crash after | What is left | At restart |
-|---|---|---|
-| Step 2 | a blob no event names | the next round makes the same bytes; `Put` finds them there |
-| Step 3 | the marker, with the rows still live | the archiver finds markers whose rows are still there and does step 4 |
-| During step 4 | the transaction rolled back | the same |
-
-Until step 4 commits, a task's rows are both live and in the blob.
-Readers of an archived task's history merge the two by position, so they
-see each event once either way.
+A crash can only leave a blob that no event names (after step 2): the
+next round makes the same bytes, and `Put` finds them there. A marker
+never stands beside its rows, and rows never go without their marker.
 
 ### The age
 
@@ -837,16 +884,49 @@ next step first.
 ### Reopening an archived task
 
 The rules refuse every event on an archived task except
-`task.unarchived`. Reopening one is three steps:
+`task.unarchived`. Reopening one is four steps:
 
-1. **Rows back:** `INSERT OR IGNORE` the blob's rows into `events` with
-   their own positions, which are free (`AUTOINCREMENT` never reused
-   them), in one transaction, counting them.
-2. **`task.unarchived`**, naming the blob. From here the trigger refuses
-   deletes of those rows again. The state applies it by folding the
-   restored stream, read through the store under its lock: one task's
-   replay, about 40 ms for the largest (`read-model.md`, task-8).
-3. **`task.reopened`**, as today.
+1. **Read the blob:** open and gunzip it, with no lock held.
+2. **Rows back and `task.unarchived`, in one transaction under
+   `Store.mu`:** a store method, `Store.Unarchive`, acts like
+   `Store.Archive`. The rules check the proposal (the stream's last event
+   is still the marker that names this blob). Then one transaction
+   inserts the blob's rows into `events` with their own positions, which
+   are free (`AUTOINCREMENT` never reused them), checks that it inserted
+   `count` of them, and inserts `task.unarchived`, naming the blob. If the
+   count is wrong, it rolls back and nothing happened. Since the archiver
+   takes the same lock, it can never delete rows that were just restored:
+   by the time it can look, `task.unarchived` is there and the trigger
+   refuses the delete.
+3. **The state folds the stream again.** After the commit, still under
+   `Store.mu`, the store reads the stream's accepted events with a
+   position below the `task.unarchived` (the restored rows and the
+   marker) and hands them to the model with `Refold` ("What task-21
+should leave room for", item 9). It never
+   reads the stream's current rows: at `Open` those hold the rest of the
+   tail too. One task's replay, about 40 ms for the largest
+   (`read-model.md`, task-8). Then `applied` moves, as for any proposal.
+4. **`task.reopened`**, as today, as its own proposal.
+
+How the fold reads the markers. `tasks.FromEvents` today returns nil for
+`[marker]`, since there is no `task.created`, and `current.Load` would
+drop the task. It changes in three ways:
+
+- **`task.archived`:** the task folded so far is set aside and the fold
+  goes on with none. A new `tasks.Archived(accepted)` returns the summary
+  of the last marker that no `task.unarchived` follows, and
+  `current.Load` (and `Refold`) keep that summary in `archived`, ordered
+  by the marker's `created`, whenever `FromEvents` returns nil. So a
+  stream that is only `[marker]` becomes its summary, not nothing.
+- **`task.unarchived`:** the fold takes back the task it set aside at
+  the marker this event reverses, then applies the event. That task was
+  rebuilt from the restored events before the marker in the same slice,
+  so nothing is read twice. If none was set aside (the rows were not in
+  the slice), the fold panics and the stream is broken, as for any event
+  that can't apply.
+- **`current.Load`'s `created`** takes a task's position from its
+  `task.created` row when the slice has one, and from the marker's
+  `created` only when it does not, so an unarchived task is listed once.
 
 Readers that follow the log by position (`After`, the coordinator's
 `Reader`, `/api/changes`) never see the restored rows, whose positions
@@ -894,7 +974,8 @@ created and last active, plus the done summary. About 630 bytes as JSON.
 `Task(id)` returns nil and `ErrArchived` for one; a new `Summaries()`
 serves the list. Task ids stay in creation order and are never reused:
 the marker's `created` is the `task.created` position the state orders by,
-and the next id counts archived tasks too.
+and the next id counts archived tasks too, through `Store.TaskIDs`
+(section 4, "How it fits").
 
 At scale: a task is about 1.2 MB of file today, so 1 GB of history is
 about 900 tasks, and 100 GB about 90,000: some 60 MB of summaries in
@@ -1000,9 +1081,12 @@ widely) whose `data` contains it, and shows the user the count first.
 
    With `secure_delete` on, then a WAL checkpoint with `TRUNCATE`, since
    the old page is in the WAL too.
-3. The state applies `event.redacted` by folding the stream again from
-   the rewritten rows, as for `task.unarchived`, and a new snapshot is
-   written at once.
+3. Steps 1 and 2 are one transaction under `Store.mu`, by a store method
+   `Store.Redact` that acts like `Store.Archive`. After the commit the
+   store folds the stream again as for `task.unarchived` (section 4): it
+   hands `Refold` the stream's accepted events with a position below the
+   `event.redacted`, which are the rewritten rows, never the stream's
+   current rows. A new snapshot is written at once.
 4. **A secret in a knowledge file** is in every version after it was
    written. The path first proposes a full copy of the current file
    without it, then rewrites each earlier version that holds it as a full
@@ -1037,31 +1121,56 @@ Small things the read-model build can do now, so the snapshot, archive
 and privacy work add to it instead of reworking it:
 
 1. **Saved forms beside `Clone`.** `tasks.Saved` with `(*Task).Save()`
-   and `tasks.Restore`, and the same in `agents` (`untouched`), `workers`
-   and `connections` (`credential`, `invites`): the same field list
-   `Clone` walks, checked by the same kind of reflection test.
-2. **An in-place apply that starts from a given state.** Export the body
-   `tasks.FromEvents` loops over (`tasks.Apply(t, e)`) and the rosters'
-   `apply`, so a loaded snapshot takes its tail without a clone per event.
+   and `tasks.Restore`, for the unexported `collected` and `storyNews`,
+   and the same in `agents` (`untouched`), `workers` and `connections`
+   (`credential`, `invites`): the same field list `(*Task).Clone`
+   (`internal/tasks/clone.go`) walks, checked by the same kind of
+   reflection test (`clone_test.go`).
+2. **An in-place apply that starts from a given state.** Export the
+   method `tasks.FromEvents` loops over (`(*Task).apply`, as `Apply`) and
+   the rosters' `apply(r *Roster, e)`, so a loaded snapshot takes its tail
+   without a clone per event.
 3. **Let the model start part way.** A `store.Model` that can say where
    it already is (say `Since() int64`, 0 for empty), so `Open` replays
    `After(since)` instead of grouping every stream.
 4. **Keep each stream's last applied position** in `current.State`, next
-   to `position`; archiving refuses a marker if the task moved since.
+   to `position`. task-21 has only the log's `position` today. The
+   archiver reads it to choose `through` without a query; the check that
+   the task has not moved since stays in `Store.Archive`, against the
+   database, under `Store.mu`.
 5. **Order tasks by their `task.created` position, held per task**, not
    only in the `created` list `Loaded` sorts, since an archived task
    keeps that position in its marker and has no `task.created` row left.
-6. **Count tasks, not `len(Tasks())`, for the next id**, so tasks kept
-   only as summaries are counted.
+6. **Keep every task id going through `Store.TaskIDs`**, which will list
+   archived tasks too (section 4). Its callers, and what each should see
+   for an archived task:
+   - `web/api.go` `createTask` and `coordinator/loop.go` `newTask`: the
+     next id, `len(ids)+1`, so archived tasks must be counted;
+   - `web/api.go` `listTasks`: the task's summary;
+   - `watchdog/watchdog.go` `Check`, `hooks/orphans.go`
+     `DenyOrphanedAsks`, `coordinator/loop.go` `portsInUse`,
+     `web/agents_api.go` (the rename and `needing`),
+     `web/questions_api.go` `listQuestions` and `web/workers_api.go`
+     `tasksByMachine`: nothing, since an archived task is done; each
+     skips it, as it skips a done task, without reading its stream;
+   - `current.Equal`: the summary on both sides, the state's against
+     `tasks.Archived` of a replay.
+   So task-21 should not count `len(Tasks())` for an id, and those readers
+   should skip a task the state can't hand out instead of failing.
 7. **Done tasks behind a summary type.** Move `web.summaryOf` into
    `tasks.Summary` and have the list read summaries, so an archived task
    can be a summary alone.
 8. **Getters that can say "archived".** Room for `Task(id)` to return
    nil with an `ErrArchived`, and for readers to handle a task with no
    full state.
-9. **One way to fold a stream again** under the store's lock, for
-   `task.unarchived` and `event.redacted`: `State.Refold(stream,
-   accepted)`.
+9. **One way to fold a stream again**, for `task.unarchived` and
+   `event.redacted`: a fourth `store.Model` method,
+   `Refold(stream string, before []events.Event, e events.Event)`, beside
+   `Load`, `Loaded` and `Apply`. `Apply(e)` alone can't read the store, so
+   the store, under `Store.mu`, reads the stream's accepted events with a
+   position below `e` and calls `Refold` in place of `Apply`, live and in
+   `Open`'s tail. `State.Refold` folds `before` plus `e` as `Load` does and
+   moves `position`.
 10. **`Task.DoneAt`**, set by `task.done` and cleared by `task.reopened`.
 11. **No version constant.** The snapshot will be tagged with the
     binary's hash, so nothing needs bumping by hand.
