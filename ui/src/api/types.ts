@@ -140,6 +140,55 @@ export interface Policy {
   useForEveryone: string;
   profiles: PolicyProfile[];
   text: string;
+  version: string; // this Agentry's, as the defaults it ships are
+  defaults: DefaultProfile[];
+  users: Record<string, ProfileUser[]>; // by each agent's own profile
+  effective: Record<string, EffectiveProfile>; // by agent
+}
+
+// A profile Agentry ships, as your file has it: missing, the default of
+// this version, the default of an older one you never touched, or changed by you.
+export interface DefaultProfile {
+  name: string;
+  state: "missing" | "current" | "outdated" | "edited";
+  shippedIn?: string; // the version an outdated profile is the default of
+  text: string; // as this version ships it
+  diff?: string; // yours against it, when outdated or edited
+}
+
+// An agent with a profile. One that follows default_profile names none of its own.
+export interface ProfileUser {
+  agent: string;
+  followsDefault: boolean;
+}
+
+// The profile that judges an agent's calls: its own, unless use_for_everyone overrides it.
+export interface EffectiveProfile {
+  profile: string;
+  own: string;
+  overridden: boolean;
+  text: string; // "read-mostly, overridden by allow-everything"
+}
+
+// One entry of the policy's history, newest first.
+export interface PolicyVersion {
+  position: number;
+  at: string;
+  actor: { kind: string; id: string };
+  change: string; // what changed; for a refused file, why it was refused
+  refused?: boolean;
+  hash: string;
+  diff?: string;
+  backup?: string;
+  canRevert: boolean; // the log holds its text
+}
+
+// A change made to the policy from the page.
+export interface PolicyChange {
+  hash: string;
+  change: string;
+  diff: string;
+  backup: string;
 }
 
 export interface PolicyProfile {

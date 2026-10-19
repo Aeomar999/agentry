@@ -5,7 +5,7 @@
 // in: the server sets a cookie too, and an installed app, on iOS
 // especially, may keep only that. So only a 401 means signed out.
 
-import type { Settings, SigninCode } from "@/api/types";
+import type { PolicyChange, Settings, SigninCode } from "@/api/types";
 
 const tokenKey = "agentry-token";
 
@@ -81,8 +81,32 @@ function authorization(): Record<string, string> {
   return token ? { Authorization: "Bearer " + token } : {};
 }
 
+// ApiError is a call the server refused, with its reason as the message.
+// A reply of JSON {error, ...} keeps the rest in body, for a caller that
+// can act on it, such as the profiles a new team needs.
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body?: Record<string, unknown>;
+  constructor(message: string, status: number, body?: Record<string, unknown>) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+async function refusal(response: Response): Promise<ApiError> {
+  const text = (await response.text()).trim();
+  try {
+    const body = JSON.parse(text) as Record<string, unknown>;
+    if (typeof body.error === "string") return new ApiError(body.error, response.status, body);
+  } catch {
+    // a plain-text reason
+  }
+  return new ApiError(text || response.statusText, response.status);
+}
+
 // send makes a call signed in, and throws what the server refused: a 401 as
-// SignedOutError, anything else with the server's reason.
+// SignedOutError, anything else as an ApiError with the server's reason.
 export async function send(path: string, init: RequestInit & { headers?: Record<string, string> }): Promise<Response> {
   const sentIn = session;
   const response = await fetch(path, { ...init, headers: { ...init.headers, ...authorization() } });
@@ -90,7 +114,7 @@ export async function send(path: string, init: RequestInit & { headers?: Record<
     if (sentIn === session) setSignedOut(true);
     throw new SignedOutError();
   }
-  if (!response.ok) throw new Error((await response.text()).trim() || response.statusText);
+  if (!response.ok) throw await refusal(response);
   return response;
 }
 
@@ -136,6 +160,32 @@ export function newSigninCode(): Promise<SigninCode> {
 // changeSettings changes the settings named, and answers with all of them.
 export function changeSettings(change: Partial<Settings>): Promise<Settings> {
   return api<Settings>("PUT", "/api/settings", change);
+}
+
+// Changes to the policy, each made against the version the page saw
+// (hash). The server refuses one made against an older version.
+
+const profilePath = (name: string, action: string) => `/api/policy/profiles/${encodeURIComponent(name)}/${action}`;
+
+export function addDefaultProfile(name: string, hash: string): Promise<PolicyChange> {
+  return api<PolicyChange>("POST", profilePath(name, "add"), { hash });
+}
+
+export function updateDefaultProfile(name: string, hash: string): Promise<PolicyChange> {
+  return api<PolicyChange>("POST", profilePath(name, "update"), { hash });
+}
+
+// takeDefaultProfile replaces a profile you changed with the default.
+export function takeDefaultProfile(name: string, hash: string): Promise<PolicyChange> {
+  return api<PolicyChange>("POST", profilePath(name, "use-default"), { hash });
+}
+
+export function turnOffUseForEveryone(hash: string): Promise<PolicyChange> {
+  return api<PolicyChange>("POST", "/api/policy/use-for-everyone/off", { hash });
+}
+
+export function revertPolicy(position: number, hash: string): Promise<PolicyChange> {
+  return api<PolicyChange>("POST", "/api/policy/revert", { position, hash });
 }
 
 // Websockets can't send headers, so the terminal's carries the token in its address.
