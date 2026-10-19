@@ -75,8 +75,9 @@ func History(stream []events.Event) []Version {
 			if v.Change == "" {
 				v.Change = "loaded" // recorded before changes were described
 			}
-			// Logs from before the flag say it only in the change's words.
-			v.OnDisk = e.Flag("onDisk") || v.Change == "noticed on disk"
+			// Logs from before the flag say it only in the change's words,
+			// "changed on disk" at first and "noticed on disk" later.
+			v.OnDisk = e.Flag("onDisk") || v.Change == "changed on disk" || v.Change == "noticed on disk"
 		case events.PolicyRefused:
 			v.Refused, v.OnDisk, v.Change, v.Hash = true, true, e.Text("reason"), e.Text("kept")
 		default:
