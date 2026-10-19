@@ -345,6 +345,16 @@ func (t *Task) Apply(e events.Event) {
 				Text: turn.Agent + "'s " + turn.ID + " hit a " + LimitText(turn.ResetsAt, e.At)})
 		}
 
+	case events.TurnResumed:
+		// An old log's odd one (an ended turn, one not limited, another
+		// agent's) changes nothing.
+		if turn := t.Turn(e.Correlation); !turn.Ended && turn.Limited != "" && e.Text("agent") == turn.Agent {
+			turn.Limited, turn.ResetsAt = "", time.Time{}
+			turn.Resumes++
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
+				Text: turn.Agent + "'s " + turn.ID + " resumed after its usage limit"})
+		}
+
 	case events.IssueRaised:
 		t.Fetching = nil // a fetch that failed is told as an issue
 		if turn := t.OpenTurn(); turn != nil {
@@ -402,7 +412,7 @@ func (t *Task) orphaned(e events.Event) bool {
 		return t.OpenTurn() == nil
 	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult:
 		return t.Action(e.Correlation) == nil
-	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnStopped:
+	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
 	}
 	return false

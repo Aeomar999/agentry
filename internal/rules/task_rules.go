@@ -66,6 +66,7 @@ var taskRules = map[events.Type]rule{
 	events.AgentWaiting: all(isTheOpenTurn),
 	events.TurnEnded:    all(isTheOpenTurn, sameAgentAsTheTurn),
 	events.TurnLimited:  all(isTheOpenTurn, sameAgentAsTheTurn),
+	events.TurnResumed:  all(isTheOpenTurn, sameAgentAsTheTurn, turnIsLimited),
 	events.IssueRaised:  all(),
 	events.TurnStopped:  all(isTheOpenTurn),
 
@@ -365,6 +366,13 @@ func isTheOpenTurn(t *tasks.Task, p events.Proposal) string {
 func sameAgentAsTheTurn(t *tasks.Task, p events.Proposal) string {
 	if agent := t.OpenTurn().Agent; p.Text("agent") != agent {
 		return p.Correlation + " belongs to " + agent + ", not " + p.Text("agent")
+	}
+	return ""
+}
+
+func turnIsLimited(t *tasks.Task, p events.Proposal) string {
+	if t.OpenTurn().Limited == "" {
+		return p.Correlation + " is not waiting for a usage limit"
 	}
 	return ""
 }

@@ -68,6 +68,7 @@ const (
 	AgentWaiting Type = "agent.waiting"
 	TurnEnded    Type = "turn.ended"   // the agent finished; its final message is its report
 	TurnLimited  Type = "turn.limited" // the engine stopped at the account's usage limit; the turn stays open until it resets
+	TurnResumed  Type = "turn.resumed" // the limited turn goes on: its limit reset, or the engine carried on by itself
 	IssueRaised  Type = "issue.raised" // something went wrong; ends the open turn
 	TurnStopped  Type = "turn.stopped" // you ended the open turn, to tell the coordinator something
 

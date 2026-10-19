@@ -69,6 +69,7 @@ var catalogue = map[Type]spec{
 	AgentWaiting: {fields: []string{"question"}, correlation: true, writers: []ActorKind{Worker, System}},
 	TurnEnded:    {fields: []string{"agent", "report"}, correlation: true, writers: []ActorKind{Worker}},
 	TurnLimited:  {fields: []string{"agent", "error", "details", "resetsAt"}, correlation: true, writers: []ActorKind{Worker}}, // "resetsAt" "" when the engine didn't say
+	TurnResumed:  {fields: []string{"agent", "reason"}, correlation: true, writers: []ActorKind{Worker, System}},               // "reason" "reset" or "engine"
 	IssueRaised:  {fields: []string{"reason"}, writers: []ActorKind{Worker, System}},
 	TurnStopped:  {correlation: true, writers: []ActorKind{Human}},
 

@@ -193,11 +193,40 @@ func TestAUsageLimitKeepsTheTurnOpenAndIsNoIssue(t *testing.T) {
 	}
 }
 
+// A limited turn resumes, said by its machine or by Agentry at the reset,
+// only while it is the open turn, its agent's, and limited. It stays open,
+// and the count of issues is as it was.
+func TestALimitedTurnResumes(t *testing.T) {
+	limited := map[string]any{"agent": "engineer", "error": "rate_limit", "details": "You've hit your session limit", "resetsAt": ""}
+	resumed := func(agent, reason string) map[string]any { return map[string]any{"agent": agent, "reason": reason} }
+	task := run(t, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+		turnStarted("turn-2", "engineer"),
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // not limited
+		{worker, events.TurnLimited, "turn-2", limited, true},
+		{worker, events.TurnResumed, "turn-1", resumed("engineer", "engine"), false},   // not the open turn
+		{worker, events.TurnResumed, "turn-2", resumed("tech-lead", "engine"), false},  // not its agent
+		{engineer, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // the agent can't say it
+		{agentry, events.TurnResumed, "turn-2", resumed("engineer", "reset"), true},
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), false}, // no longer limited
+		{worker, events.TurnLimited, "turn-2", limited, true},
+		{worker, events.TurnResumed, "turn-2", resumed("engineer", "engine"), true},
+	})
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-2" || turn.Limited != "" || turn.Resumes != 2 {
+		t.Errorf("the turn should be open, no longer limited, resumed twice: %+v", turn)
+	}
+	if task.IssuesInARow != 0 || task.Status() != tasks.Working {
+		t.Errorf("issues in a row %d, status %s", task.IssuesInARow, task.Status())
+	}
+}
+
 func TestEveryTaskEventHasARule(t *testing.T) {
 	for _, kind := range []events.Type{events.WorktreeReady, events.TaskAssigned, events.TurnStarted,
 		events.PromptAcknowledged, events.SessionStarted, events.ActionRequested, events.ActionAsked,
 		events.ActionApproved, events.ActionDenied, events.ActionResult, events.AgentWaiting, events.TurnEnded,
-		events.TurnLimited, events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
+		events.TurnLimited, events.TurnResumed, events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
 		if taskRules[kind] == nil {
 			t.Errorf("%s has no rule", kind)
 		}

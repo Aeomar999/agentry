@@ -189,6 +189,7 @@ type Turn struct {
 	Issue         string    // why the turn was cut short, if it was
 	Limited       string    // what the engine said when it stopped at a usage limit, if it did
 	ResetsAt      time.Time // when that limit resets, zero when the engine didn't say
+	Resumes       int       // how many times it went on after a usage limit
 	Stopped       bool      // you ended it, to tell the coordinator something
 	Shipped       bool      // it ships the work because you moved the task to Shipping: you took the work as it was
 	Tokens        int       // what it used, when the engine said

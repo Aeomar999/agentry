@@ -117,3 +117,69 @@ func TestLimitText(t *testing.T) {
 		}
 	}
 }
+
+// Resuming clears the limit and counts it; the turn stays open, the issues
+// in a row stay as they were, and the trail notes it.
+func TestAResumedTurnIsNoLongerLimited(t *testing.T) {
+	log := limitedLog(map[string]any{"agent": "engineer", "error": "rate_limit", "resetsAt": "2026-10-20T03:00:00Z"})
+	resumed := log[len(log)-1]
+	resumed.Type, resumed.Data = events.TurnResumed, map[string]any{"agent": "engineer", "reason": "reset"}
+	task := FromEvents(append(log, resumed))
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != "turn-3" || turn.Limited != "" || !turn.ResetsAt.IsZero() || turn.Resumes != 1 {
+		t.Errorf("the turn should stay open, no longer limited, resumed once: %+v", turn)
+	}
+	if task.IssuesInARow != 1 {
+		t.Errorf("issues in a row %d, want the 1 from before", task.IssuesInARow)
+	}
+	last := task.Trail[len(task.Trail)-1]
+	if last.From != Agentry || last.To != "tech-lead" || last.Text != "engineer's turn-3 resumed after its usage limit" {
+		t.Errorf("last step %+v", last)
+	}
+	if task.Stage() != "engineer" || task.Handoff != nil {
+		t.Errorf("stage %q, handoff %+v: a note is no handoff", task.Stage(), task.Handoff)
+	}
+}
+
+// The rules refuse an odd turn.resumed, but apply takes one from an old log
+// without a panic, and changes nothing.
+func TestOddResumesInAnOldLogReplay(t *testing.T) {
+	limit := map[string]any{"agent": "engineer", "error": "rate_limit", "resetsAt": "2026-10-20T03:00:00Z"}
+	cases := map[string]struct {
+		correlation string
+		data        map[string]any
+		limited     bool // the turn the odd one comes after
+	}{
+		"no data":            {"turn-3", nil, true},
+		"another agent":      {"turn-3", map[string]any{"agent": "tech-lead", "reason": "reset"}, true},
+		"a turn not limited": {"turn-3", map[string]any{"agent": "engineer", "reason": "engine"}, false},
+		"no such turn":       {"turn-9", map[string]any{"agent": "engineer", "reason": "engine"}, true},
+		"no correlation":     {"", map[string]any{"agent": "engineer", "reason": "engine"}, true},
+		"an ended turn":      {"turn-2", map[string]any{"agent": "engineer", "reason": "engine"}, true},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			log := limitedLog(limit)
+			if !c.limited {
+				log = log[:len(log)-1]
+			}
+			odd := log[len(log)-1]
+			odd.Type, odd.Correlation, odd.Data = events.TurnResumed, c.correlation, c.data
+			before := FromEvents(log)
+			task := FromEvents(append(log, odd))
+			if turn := task.OpenTurn(); turn == nil || turn.ID != "turn-3" || turn.Limited != before.OpenTurn().Limited || turn.Resumes != 0 {
+				t.Errorf("open turn %+v, want it as it was", turn)
+			}
+			if len(task.Trail) != len(before.Trail) || task.IssuesInARow != 1 {
+				t.Errorf("trail %d steps, want %d; issues in a row %d", len(task.Trail), len(before.Trail), task.IssuesInARow)
+			}
+		})
+	}
+
+	// Before any turn at all.
+	task := FromEvents(limitedLog(nil)[:1:1])
+	task.Apply(events.Event{Proposal: events.Proposal{Stream: "task-1", Type: events.TurnResumed, Correlation: "turn-1"}})
+	if len(task.Turns) != 0 {
+		t.Errorf("turns: %+v", task.Turns)
+	}
+}
