@@ -4,7 +4,7 @@
 Usage: python3 docs/screenshots/prepare.py SOURCE_DIR OUTPUT_DIR
 
 SOURCE_DIR holds the originals, named as in SHOTS below and taken at
-2877x1800. Each one is cropped to the page, has its personal details
+SOURCE_SIZE. Each one is cropped to the page, has its personal details
 covered with flat boxes, is scaled to WIDTH and saved as an optimised PNG
 of the same name in OUTPUT_DIR. Needs Pillow.
 """
@@ -15,6 +15,9 @@ from pathlib import Path
 from PIL import Image
 
 WIDTH = 1600
+
+# The originals' size. Every box below is measured in these pixels.
+SOURCE_SIZE = (2877, 1800)
 
 # Everything above the app's header: the desktop bar and the browser's title bar.
 PAGE = (0, 91, 2877, 1800)
@@ -54,6 +57,11 @@ SHOTS = {
 
 def prepare(source, covers):
     image = Image.open(source).convert("RGB")
+    if image.size != SOURCE_SIZE:
+        sys.exit(
+            f"{source} is {image.width}x{image.height}, not "
+            f"{SOURCE_SIZE[0]}x{SOURCE_SIZE[1]}: the cover boxes would miss"
+        )
     for box, colour in covers:
         image.paste(colour, box)
     image = image.crop(PAGE)

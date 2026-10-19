@@ -15,7 +15,7 @@ The README's screenshots of the running page. To retake them:
    ```
 
    It crops off the desktop bar and the browser's title bar, covers personal details with flat boxes, scales each to 1600 px wide and saves an optimised PNG. It needs Pillow.
-4. **Check.** Open each output at full size and read it all. The cover boxes in `prepare.py` are pixel positions in the originals, so new shots need new boxes. Hide:
+4. **Check.** Open each output at full size and read it all. The cover boxes in `prepare.py` are pixel positions in the originals, so new shots need new boxes. The script refuses an original of another size, so a different screen means re-measuring every box. Hide:
    - machine names, on the agent cards and anywhere in handoff text;
    - your home folder and any path under it: the status bar, the repo path under a task's title, and paths in briefs and reports;
    - sign-in tokens or `?token=` links, email addresses and personal names;
