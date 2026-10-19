@@ -60,3 +60,13 @@ function repoPath(text: string): string {
   }
   return segments.length ? segments.join("/") + rest : "";
 }
+
+// linkInto is where a link in a task's text goes: the web as it is, a file of
+// the task into its Workspace preview, in a new tab; null when it isn't a link.
+export function linkInto(taskId: string, href: string): LinkTo | null {
+  const safe = safeHref(href);
+  if (!safe) return null;
+  if (safe.kind !== "path") return { href: safe.href, external: safe.kind === "external" };
+  const path = safe.href.split("#")[0];
+  return { href: `/tasks/${encodeURIComponent(taskId)}/workspace?file=${encodeURIComponent(path)}&view=preview`, external: true };
+}

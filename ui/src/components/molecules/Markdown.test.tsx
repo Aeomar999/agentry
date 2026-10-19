@@ -1,9 +1,16 @@
 import { describe, expect, test } from "vitest";
 import { render } from "@testing-library/react";
 import { Markdown, MarkdownProps } from "./Markdown";
+import { linkInto } from "@/lib/links";
 import { OTHER_SITES, UNSAFE } from "@/lib/links.fixtures";
 
-const HOSTS: [string, Partial<MarkdownProps>][] = [["without a link hook", {}]];
+const hook = (href: string) => linkInto("task-75", href);
+
+// Every link test runs twice: on Markdown's own check, and through the chat's hook.
+const HOSTS: [string, Partial<MarkdownProps>][] = [
+  ["without a link hook", {}],
+  ["with a link hook", { link: hook }],
+];
 
 function links(text: string, props: Partial<MarkdownProps> = {}) {
   const { container } = render(<Markdown text={text} {...props} />);
@@ -57,6 +64,12 @@ describe("Markdown repo paths", () => {
     expect(links(`[x](${raw})`)[0].getAttribute("href")).toBe("docs/design.md");
   });
 
+  test.each(["docs/design.md", "./docs/design.md", "/docs/design.md"])("with the hook, opens [x](%j) in the Workspace", (raw) => {
+    const [a] = links(`[x](${raw})`, { link: hook });
+    expect(a.getAttribute("href")).toBe("/tasks/task-75/workspace?file=docs%2Fdesign.md&view=preview");
+    expect(a.getAttribute("target")).toBe("_blank");
+  });
+
   test("refuses a hook's link that safeHref wouldn't let through", () => {
     expect(links("[x](docs/a.md)", { link: () => ({ href: "javascript:alert(1)", external: false }) })).toEqual([]);
   });
@@ -64,7 +77,7 @@ describe("Markdown repo paths", () => {
 
 describe("Markdown marks", () => {
   test("marks a new-tab link with ↗ and says so to screen readers", () => {
-    const [a] = links("[the design](https://example.com)", { marks: true });
+    const [a] = links("[the design](docs/design.md)", { link: hook, marks: true });
     expect(a.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     expect(a.textContent).toBe("the design (opens in a new tab)");
     expect(a.className).toContain("text-link");
@@ -77,7 +90,7 @@ describe("Markdown marks", () => {
   });
 
   test("draws links as before without marks", () => {
-    const [a] = links("[x](https://example.com)");
+    const [a] = links("[x](https://example.com)", { link: hook });
     expect(a.querySelector("svg")).toBeNull();
     expect(a.textContent).toBe("x");
     expect(a.className).toContain("text-info");

@@ -11,6 +11,7 @@ import {
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
+import { Avatar } from "@/components/molecules/Avatar";
 import { Markdown } from "@/components/molecules/Markdown";
 import { Mono } from "@/components/molecules/Mono";
 import { api } from "@/api/client";
@@ -18,7 +19,7 @@ import type { TaskDetail } from "@/api/types";
 import { ChatEntry, ChatItem, chatOf, threadOf } from "@/lib/chat";
 import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
-import { useAgentColor } from "@/live/agent-colors";
+import { linkInto } from "@/lib/links";
 import { useToast } from "./Toasts";
 import { useOpenQuestion } from "@/components/templates/AdminShell";
 
@@ -425,32 +426,6 @@ function Long({ text, taskId, short = false, className }: { text: string; taskId
         </button>
       )}
     </div>
-  );
-}
-
-// linkInto is where a link in a message goes: the web as it is, a file of the
-// task into its Workspace.
-function linkInto(taskId: string, href: string): { href: string; external: boolean } {
-  if (/^(https?:|mailto:)/i.test(href) || href.startsWith("#")) return { href, external: /^(https?:|mailto:)/i.test(href) };
-  const path = href
-    .split("#")[0]
-    .replace(/^(\.\/)+/, "")
-    .replace(/^\//, "");
-  return { href: `/tasks/${encodeURIComponent(taskId)}/workspace?file=${encodeURIComponent(path)}&view=preview`, external: true };
-}
-
-// An agent's avatar: the first letter of its name on a tint of its colour.
-function Avatar({ name }: { name: string }) {
-  const colorOf = useAgentColor();
-  const color = colorOf(name);
-  return (
-    <span
-      aria-hidden
-      className="flex size-7 shrink-0 items-center justify-center rounded-md font-mono text-[12px] font-bold"
-      style={{ color, background: `color-mix(in srgb, ${color} 18%, transparent)` }}
-    >
-      {name.slice(0, 1).toUpperCase()}
-    </span>
   );
 }
 

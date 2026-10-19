@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { safeHref } from "./links";
+import { linkInto, safeHref } from "./links";
 import { OTHER_SITES, UNSAFE } from "./links.fixtures";
 
 describe("safeHref", () => {
@@ -42,5 +42,37 @@ describe("safeHref", () => {
 
   test("keeps an anchor on the page", () => {
     expect(safeHref("#strings")).toEqual({ kind: "anchor", href: "#strings" });
+  });
+});
+
+describe("linkInto", () => {
+  test.each(UNSAFE)("refuses %j", (raw) => {
+    expect(linkInto("task-75", raw)).toBeNull();
+  });
+
+  test.each(OTHER_SITES)("sends %j to https://evil.example/ in a new tab", (raw) => {
+    expect(linkInto("task-75", raw)).toEqual({ href: "https://evil.example/", external: true });
+  });
+
+  test("sends the web there, in a new tab", () => {
+    expect(linkInto("task-75", "https://example.com/x")).toEqual({ href: "https://example.com/x", external: true });
+  });
+
+  test.each(["docs/design.md", "./docs/design.md", "/docs/design.md", "docs/design.md#links"])(
+    "opens %j in the task's Workspace preview, in a new tab",
+    (raw) => {
+      expect(linkInto("task-75", raw)).toEqual({
+        href: "/tasks/task-75/workspace?file=docs%2Fdesign.md&view=preview",
+        external: true,
+      });
+    },
+  );
+
+  test("refuses a path above the root", () => {
+    expect(linkInto("task-75", "../../etc/passwd")).toBeNull();
+  });
+
+  test("keeps an anchor on the page", () => {
+    expect(linkInto("task-75", "#strings")).toEqual({ href: "#strings", external: false });
   });
 });

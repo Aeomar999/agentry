@@ -117,6 +117,11 @@ html.light {
   --color-agent-red: #f87171;
   --color-agent-pink: #f472b6;
   --color-agent-slate: #94a3b8;
+
+  /* An agent's avatar: its colour on a tint of itself. In light the letter
+     mixes toward ink-primary, so every colour reads at 3:1 on its tint. */
+  --chip-letter: 100%;
+  --chip-tint: 22%;
 }
 html.light {
   --color-agent-blue: #2563eb;
@@ -128,6 +133,9 @@ html.light {
   --color-agent-red: #dc2626;
   --color-agent-pink: #db2777;
   --color-agent-slate: #64748b;
+
+  --chip-letter: 75%;
+  --chip-tint: 18%;
 }
 
 html {
