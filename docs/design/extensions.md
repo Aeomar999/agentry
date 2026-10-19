@@ -318,9 +318,10 @@ in one place.
 ### Which way the imports go
 
 `features` is a leaf. It imports only `events`, `agents`, `tasks`,
-`workers`, `connections` and `client`, and none of those imports anything
-that imports `features`. Checked with `go list -deps` on dev: `events` and
-`client` import no Agentry package, `agents` and `workers` import only
+`workers`, `connections` and `settings`, and none of those imports anything
+that imports `features`; `agentry mcp`'s `client.Client` reaches it as the
+`API` interface. Checked with `go list -deps` on dev: `events`
+imports no Agentry package, `agents` and `workers` import only
 `events`, `connections` imports `events` and `workers`, and `tasks` imports
 `events`, `agents` and `workers`.
 
@@ -356,9 +357,10 @@ type Feature struct {
 
 	Coordinator *Coordinator                        // its part in coordinators' briefs and decisions
 	Routes      func(Core) []Route                  // its HTTP API
-	Tools       func(client.Client, string) []Tool  // its MCP tools, for the session's repo, run in agentry mcp
-	Waiting     func(Reader) []Waiting              // what of it waits for you, worked out in the server
-	Manifest    func(Reader) Entry                  // whether the page shows it, and why
+	Tools        func(API, string) []Tool  // its MCP tools, for the session's repo, run in agentry mcp
+	Instructions string                    // its "- " lines in agentry mcp's instructions to Claude
+	Waiting      func(Reader) []Waiting    // what of it waits for you, worked out in the server
+	Manifest     func(Reader) Entry        // whether the page shows it, and why
 }
 
 // Streams are the feature's own streams: every one starts with Prefix and
@@ -439,8 +441,17 @@ func Signed(verify func(r *http.Request, body []byte) error) Auth
 // A Tool is one MCP tool, as mcp's tool is today, with exported fields.
 type Tool struct {
 	Name, Description string
-	Input             map[string]any // JSON Schema of its arguments
+	Input             map[string]any // JSON Schema of its arguments (internal/schema)
 	Run               func(ctx context.Context, arguments json.RawMessage) (string, error)
+}
+
+// API is the server as agentry mcp reaches it: client.Client's Call and
+// PageURL. An interface, because client imports pinned, which features
+// needn't. A tool asks you through Claude Code with AskOf(ctx), nil when
+// Claude Code can't elicit; mcp puts it there with WithAsk.
+type API interface {
+	Call(method, path string, body, into any) error
+	PageURL(path string) string
 }
 
 // Waiting is one thing waiting for you, as mcp.Waiting is today.
@@ -526,6 +537,9 @@ How each core package changes, with the real types:
   `propose` move to a small exported kit both use, `internal/httpapi`.
   `GET /api/features` calls every `Manifest`.
 - `mcp`: `tool` becomes `features.Tool`; `tools()` appends every feature's.
+  Its schema builders (`object`, `text`, ...) move to `internal/schema`,
+  which both use. Until `GET /api/waiting` (story 13), `Waiting` is
+  `func(API, repo string) []Waiting`, read in `agentry mcp` over the API.
   `WaitingFor` reads `GET /api/waiting`, where the server lists the core's
   waiting entries and every feature's `Waiting`. The MCP process reads
   `GET /api/features` at `initialize` and lists only the tools of enabled or
