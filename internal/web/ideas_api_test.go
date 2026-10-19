@@ -157,7 +157,7 @@ func TestYouAcceptAndStartAnIdea(t *testing.T) {
 		s.Propose(p)
 	}
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 12,
-		Features: []features.Feature{ideas.Feature(state)}}, http.NotFoundHandler(), nil).Handler())
+		Features: []features.Feature{ideas.Feature()}}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
