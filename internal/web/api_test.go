@@ -1892,6 +1892,18 @@ func TestAnAgentWithNoTeamJoinsTheDefaultTeam(t *testing.T) {
 	if aide, _ := roster.Get("aide"); aide.Team != "software" {
 		t.Errorf("aide is in team %q, want software", aide.Team)
 	}
+
+	if code, body := call(t, server, "PUT", "/api/agents/helper", `{"engine":"claude","prompt":"Help more.","team":""}`); code != 200 {
+		t.Fatalf("editing helper: %d %s", code, body)
+	}
+	stream, _ = s.Stream(events.AgentsStream)
+	roster = agents.FromEvents(stream)
+	if !slices.Equal(roster.Teams(), []string{"software"}) {
+		t.Errorf("after editing helper, teams %v, want only software", roster.Teams())
+	}
+	if helper, _ := roster.Get("helper"); helper.Team != "software" {
+		t.Errorf("helper is in team %q, want software", helper.Team)
+	}
 }
 
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
