@@ -27,7 +27,7 @@ type task struct {
 	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
 	Labels, BlockedBy                                                                    []string
 	Stories, StoriesDone                                                                 int
-	Budget, TokensUsed, MaxTurns, TurnsSinceAnswer                                       int // a limit of 0 is none
+	Budget, TokensUsed, MaxTurns, Turns, TurnsSinceAnswer                                int // a limit of 0 is none
 	Rank                                                                                 float64
 	Told                                                                                 *struct{ At, From, Text string }
 }
@@ -250,22 +250,22 @@ func boardName(t task) string {
 }
 
 // usageOf is what the task has used of its budget and its turns, shown
-// with no limit too: "1.2M tokens, no limit · 14 turns, no limit".
+// with no limit too: "1.2M tokens (no limit) · 14 turns (no limit)".
 func usageOf(t task) string { return budgetOf(t) + " · " + turnsOf(t) }
 
 // budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
 func budgetOf(t task) string {
 	if t.Budget == 0 {
-		return coordinator.Tokens(t.TokensUsed) + " tokens, no limit"
+		return coordinator.Tokens(t.TokensUsed) + " tokens (no limit)"
 	}
 	return coordinator.Tokens(t.TokensUsed) + " of " + coordinator.Tokens(t.Budget) + " tokens"
 }
 
 // turnsOf is how many turns the task has had since the user last answered,
-// against its limit: "18 of 24 turns".
+// against its limit: "18 of 24 turns"; with no limit, all its turns.
 func turnsOf(t task) string {
 	if t.MaxTurns == 0 {
-		return fmt.Sprintf("%d turns, no limit", t.TurnsSinceAnswer)
+		return fmt.Sprintf("%d turns (no limit)", t.Turns)
 	}
 	return fmt.Sprintf("%d of %d turns", t.TurnsSinceAnswer, t.MaxTurns)
 }
