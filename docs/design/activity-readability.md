@@ -19,7 +19,7 @@ Before: the tabs as they were, from a fresh demo server with an empty data dir (
 | ![Activity before: raw Markdown, plain commands, faint authors](activity-readability/before/activity.png) | ![Activity after: author bands, Markdown, coloured commands, folded entries](activity-readability/after/activity-dark.png) |
 | ![Handoffs before: raw Markdown, a brief cut mid-line](activity-readability/before/handoffs.png) | ![Handoffs after: cards with author headers, titles, folded briefs and a footer that opens the turn](activity-readability/after/handoffs-dark.png) |
 
-Light: [Activity](activity-readability/after/activity-light.png), [Handoffs](activity-readability/after/handoffs-light.png). Scrolled with the wheel, a band or card header stuck at the top: [Activity](activity-readability/after/activity-scrolled.png) (the engineer's `continued` band), [Handoffs](activity-readability/after/handoffs-scrolled.png).
+Light: [Activity](activity-readability/after/activity-light.png), [Handoffs](activity-readability/after/handoffs-light.png). Scrolled with the wheel, a band or card header stuck at the top: [Activity](activity-readability/after/activity-scrolled.png) (the engineer's `turn-2` band), [Handoffs](activity-readability/after/handoffs-scrolled.png).
 
 Phone, 390 wide:
 
@@ -32,10 +32,14 @@ Wireframes: [Activity, desktop](activity-readability/activity-desktop.svg), [Act
 
 ### Found while taking the after shots
 
-- **The page scrolls past Activity into blank space.** Screen-reader-only text in the rows (the ` to ` between names, "(opens in a new tab)") is positioned against a box outside the tab's own scroller, so it isn't clipped by it and makes the page's scroller as tall as the whole feed (2,629px for a 924px window). Scrolling the page, over the Plan column or past the end of the feed, shows empty space: [screenshot](activity-readability/after/found/activity-page-scrolls-into-blank.png). Handoffs doesn't have it: each card's list item is the positioned box.
-- **A code box's language and copy button draw over a stuck Handoffs header.** When a card's header is stuck and a folded code box passes under it, the box's `go` label and copy button show on top of the header's lower edge (both are `z-10`; the later one wins): [screenshot](activity-readability/after/found/codebox-controls-over-handoff-header.png).
-- **Activity's rail times wrap on a phone** (`01:09` over `AM`), where the wireframe has them on one line: [screenshot](activity-readability/after/activity-phone-scrolled.png).
-- **Small:** a link's underline runs under the space before ↗; a task id or branch name can break at its hyphen (`task-` / `2`); the fold cuts a code box through its middle with no edge under it; the task's Done banner above the tabs still shows its summary's raw `**Markdown**` (outside this design's scope).
+- **Out of scope:** the task's Done banner above the tabs still shows its summary's raw `**Markdown**`.
+
+Fixed, and the shots above re-taken from a fresh demo server (the screenshots in [found/](activity-readability/after/found/) are the before):
+
+- **The page scrolled past Activity into blank space** ([before](activity-readability/after/found/activity-page-scrolls-into-blank.png)). Screen-reader-only text in the rows (` to `, "(opens in a new tab)") was positioned against a box outside the tab's scroller, so the page grew to the feed's height. The scroller is that box now, in Activity and the coordinator chat: at 1280×924 and 390 the page's scrollHeight equals its clientHeight and only the tab's scroller scrolls (on a phone the task page's own column scrolls as it always has, to exactly its content).
+- **A code box's language and Copy drew over a stuck Handoffs header** ([before](activity-readability/after/found/codebox-controls-over-handoff-header.png)). The corner has no z-index of its own now, so stuck headers and bands cover it in both tabs; the top bar and the phone drawer stay above the tab.
+- **Activity's rail times wrapped on a phone** (`01:09` over `AM`). Rail and Handoffs times are `{hh:mm}` as the copy deck says, five characters on the 24-hour clock, on one line.
+- **Small:** a link's underline stops at its label (the gap before ↗ is a margin); task ids, commits and one-word code such as a branch move to the next line whole instead of breaking at a hyphen, with no sideways scroll at 390; a fold that cuts through a code box ends with a 1px divider at the cut.
 
 ## What changes
 
