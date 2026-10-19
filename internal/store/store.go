@@ -61,6 +61,16 @@ type Model interface {
 	Refold(stream string, before []events.Event, e events.Event) // in place of Apply, for an event that refolds its stream
 }
 
+// A Resumer is a Model that may start from a saved copy of itself, such as
+// a snapshot, which may not fit the log it is opened on. Open calls Resume
+// first, with the log as it loads it: the model checks its copy against the
+// log, finishes it and brings it up to the log's last position, or empties
+// itself to be loaded whole. Since then says which. The error is for the
+// database failing.
+type Resumer interface {
+	Resume(log Past) error
+}
+
 // OrderCheck is check 3, order and per-agent who rules: given what happened so
 // far, may this proposal happen now? It lives outside the store (package
 // rules) and reads the model it was made with.
