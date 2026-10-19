@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -16,8 +17,19 @@ type shellCall struct {
 	pipelines []string // each pipeline of two or more commands, as "a | b"
 	paths     []string // every word that may name a file, and every redirect target
 	writes    []string // redirect targets written to: > f, >> f, &> f, >| f, <> f
+	runs      []run    // each simple command, with where it starts and what it names
 	opaque    bool     // part of it can't be known before it runs: $(...), an unknown variable
 	invalid   bool     // the shell couldn't parse it
+}
+
+// run is one simple command as a runner rule sees it: the folders it may
+// start in (nil when they can't be known), and every file its arguments may
+// name, options' values included, so a rule can tell whether it may load
+// code from outside the workspace.
+type run struct {
+	texts []string // the command, once for each way its words can expand
+	dirs  []string
+	files []string
 }
 
 // variables Agentry knows the value of in an agent's session.
@@ -30,7 +42,7 @@ func inspectShell(command, workspace, home string) shellCall {
 	if err != nil {
 		return shellCall{invalid: true}
 	}
-	inspector := &shellInspector{variables: knownVariables(workspace, home)}
+	inspector := &shellInspector{variables: knownVariables(workspace, home), home: home, dirs: []string{workspace}}
 	inspector.learnVariables(file)
 	syntax.Walk(file, inspector.visit)
 	return inspector.call
@@ -39,6 +51,15 @@ func inspectShell(command, workspace, home string) shellCall {
 type shellInspector struct {
 	call      shellCall
 	variables map[string][]string // name → the literal values it can hold
+	home      string
+
+	// dirs are the folders the shell may be in at the command the walk has
+	// reached: the workspace, where Agentry starts it, and wherever a cd or
+	// pushd before it may have moved it. A cd can fail and leave the shell
+	// where it was, so a cd adds folders rather than replacing them. nil when
+	// they can't be known: after cd -, popd or a cd in a loop. Relative paths
+	// are counted from each of them.
+	dirs []string
 }
 
 // learnVariables records variables whose every possible value is written in
@@ -234,10 +255,16 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 	switch n := node.(type) {
 	case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.FuncDecl, *syntax.CoprocClause:
 		s.call.opaque = true
+	case *syntax.Subshell:
+		s.inSubshell(n)
+		return false
 	case *syntax.ForClause:
 		if iteration, ok := n.Loop.(*syntax.WordIter); ok {
 			s.setVariable(iteration.Name.Value, false)
 		}
+		s.enterLoop(n)
+	case *syntax.WhileClause:
+		s.enterLoop(n)
 	case *syntax.CallExpr:
 		s.addCommand(n.Args, n.Assigns)
 	case *syntax.DeclClause:
@@ -270,18 +297,176 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	if len(args) == 0 {
 		return
 	}
-	for _, text := range s.commandTexts(args) {
+	texts := s.commandTexts(args)
+	for _, text := range texts {
 		if name, found := printfVariable(text); found {
 			s.setVariable(name, false)
 		}
 		s.call.commands = append(s.call.commands, text)
 	}
+	s.call.runs = append(s.call.runs, run{texts: texts, dirs: slices.Clone(s.dirs), files: s.namedFiles(args[1:])})
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
 		s.addPath(args[0]) // ./test.sh runs a file
 	}
 	for _, arg := range args[1:] {
 		s.addPath(arg)
 	}
+	s.followCd(args)
+}
+
+// namedFiles is every file the arguments may name: each argument, an
+// option's value after "=" (--config=x) or joined to a short option (-cx),
+// and each item of a list or a JSON value in them (--reporters=a,b,
+// --transform='{"x":"t.js"}'). Most are no file at all; a word that isn't
+// one is counted from the shell's folder and stays inside the workspace.
+func (s *shellInspector) namedFiles(args []*syntax.Word) []string {
+	var files []string
+	for _, arg := range args {
+		fields, _ := s.fields(arg) // a word that can't be known makes the call opaque elsewhere
+		for _, value := range slices.Concat(fields...) {
+			for _, item := range strings.FieldsFunc(optionValue(value), isListSeparator) {
+				files = append(files, s.resolve(item)...)
+			}
+		}
+	}
+	return files
+}
+
+// optionValue is what an option gives as its value: --x=v and -xv give v. A
+// word that isn't an option is its own value.
+func optionValue(word string) string {
+	if !strings.HasPrefix(word, "-") {
+		return word
+	}
+	if _, value, found := strings.Cut(word, "="); found {
+		return value
+	}
+	if !strings.HasPrefix(word, "--") && len(word) > 2 {
+		return word[2:]
+	}
+	return ""
+}
+
+func isListSeparator(r rune) bool { return strings.ContainsRune(`,:;"'{}[] `, r) }
+
+// dirBuiltins are the builtins that change the shell's folder.
+var dirBuiltins = map[string]bool{"cd": true, "pushd": true, "popd": true}
+
+// followCd moves dirs when the command may be cd, pushd or popd, as `builtin
+// cd` and `command cd` are too.
+func (s *shellInspector) followCd(args []*syntax.Word) {
+	names, args := s.dirBuiltin(args)
+	switch {
+	case len(names) == 0:
+	case slices.Contains(names, "popd"), slices.Contains(names, "pushd") && len(args) == 0:
+		s.dirs = nil // the folder stack isn't followed
+	default:
+		s.moveTo(args)
+	}
+}
+
+// dirBuiltin is the names the command may run when one of them is cd, pushd
+// or popd, and the words after the name. A name that can't be known may be
+// any of them.
+func (s *shellInspector) dirBuiltin(args []*syntax.Word) ([]string, []*syntax.Word) {
+	for len(args) > 0 {
+		names, ok := s.values(args[0])
+		switch {
+		case !ok:
+			return []string{"popd"}, nil
+		case slices.ContainsFunc(names, func(name string) bool { return dirBuiltins[name] }):
+			return names, args[1:]
+		case len(names) == 1 && (names[0] == "builtin" || names[0] == "command"):
+			args = args[1:]
+			continue
+		}
+		return nil, nil
+	}
+	return nil, nil
+}
+
+// cdOptions are cd's and pushd's options that don't change where they go.
+var cdOptions = map[string]bool{"-L": true, "-P": true, "-e": true, "-@": true, "--": true}
+
+// moveTo adds the folder cd or pushd goes to, from each folder the shell may
+// be in. With no folder, cd goes home. cd - and a folder that can't be known
+// leave dirs unknown.
+func (s *shellInspector) moveTo(args []*syntax.Word) {
+	for len(args) > 0 && cdOptions[args[0].Lit()] {
+		args = args[1:]
+	}
+	targets := []string{s.home}
+	if len(args) > 0 {
+		fields, ok := s.fields(args[0])
+		if !ok || len(args) > 1 {
+			s.dirs = nil
+			return
+		}
+		targets = nil
+		for _, words := range fields {
+			if len(words) != 1 || words[0] == "-" || words[0] == "" {
+				s.dirs = nil
+				return
+			}
+			targets = append(targets, words[0])
+		}
+	}
+	dirs := s.dirs
+	for _, target := range targets {
+		for _, dir := range s.resolve(target) {
+			if !slices.Contains(dirs, dir) {
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	if s.dirs == nil || len(dirs) > maxValues {
+		dirs = nil
+	}
+	s.dirs = dirs
+}
+
+// resolve is every file a path may name from the folders the shell may be
+// in. With them unknown, a relative path is unknown too.
+func (s *shellInspector) resolve(path string) []string {
+	switch {
+	case path == "~" || strings.HasPrefix(path, "~/"):
+		return []string{s.home + strings.TrimPrefix(path, "~")}
+	case strings.HasPrefix(path, "~"): // ~user is that user's home
+		s.call.opaque = true
+		return []string{path}
+	case filepath.IsAbs(path):
+		return []string{filepath.Clean(path)}
+	case s.dirs == nil:
+		s.call.opaque = true
+		return []string{path}
+	}
+	paths := make([]string, len(s.dirs))
+	for i, dir := range s.dirs {
+		paths[i] = filepath.Join(dir, path)
+	}
+	return paths
+}
+
+// inSubshell walks a subshell, whose cd ends with it.
+func (s *shellInspector) inSubshell(n *syntax.Subshell) {
+	dirs := slices.Clone(s.dirs)
+	for _, stmt := range n.Stmts {
+		syntax.Walk(stmt, s.visit)
+	}
+	s.dirs = dirs
+}
+
+// enterLoop: a cd in a loop moves the commands of its next round, which the
+// walk has already passed, so with one the folder can't be known.
+func (s *shellInspector) enterLoop(loop syntax.Node) {
+	syntax.Walk(loop, func(node syntax.Node) bool {
+		if call, ok := node.(*syntax.CallExpr); ok {
+			if names, _ := s.dirBuiltin(call.Args); len(names) > 0 {
+				s.dirs = nil
+			}
+		}
+		return true
+	})
 }
 
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
@@ -320,9 +505,12 @@ func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 	if r.Op != syntax.RdrIn {
 		values, ok := s.values(r.Word)
 		if !ok {
-			values = []string{"$?"} // a file it can't name is still written
+			s.call.writes = append(s.call.writes, "$?") // a file it can't name is still written
+			return
 		}
-		s.call.writes = append(s.call.writes, values...)
+		for _, value := range values {
+			s.call.writes = append(s.call.writes, s.resolve(value)...)
+		}
 	}
 }
 
@@ -418,7 +606,7 @@ func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 		if value == "" || strings.Contains(value, "://") || (!isTarget && strings.HasPrefix(value, "-")) {
 			continue
 		}
-		s.call.paths = append(s.call.paths, value)
+		s.call.paths = append(s.call.paths, s.resolve(value)...)
 	}
 }
 
@@ -554,7 +742,7 @@ func (s *shellInspector) withoutGitOptions(words []string) []string {
 			s.call.opaque = true
 		}
 		if joined && (name == "--git-dir" || name == "--work-tree") {
-			s.call.paths = append(s.call.paths, value) // addPath skips the whole word: it starts with "-"
+			s.call.paths = append(s.call.paths, s.resolve(value)...) // addPath skips the whole word: it starts with "-"
 		}
 	}
 	return []string{"git"}

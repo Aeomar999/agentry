@@ -634,3 +634,15 @@ func TestAVerdictNamesItsRule(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 }
+
+// A relative path is counted from every folder a cd may have moved the shell
+// to, under every profile: `cd && cat .netrc` reads ~/.netrc (task-89).
+func TestARelativePathIsCountedFromWhereCdWent(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous"} {
+		check(t, p, profile, []decisionCase{
+			{"a secret read after cd home", bash("cd && cat .netrc"), Deny},
+			{"a secret read after cd ~", bash("cd ~ && cat .git-credentials"), Deny},
+		})
+	}
+}
