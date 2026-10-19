@@ -3,6 +3,7 @@ package pinned
 import (
 	"crypto/tls"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,6 +80,22 @@ func TestAPinnedClientRefusesEverythingWhenItsCAIsUnreadable(t *testing.T) {
 	server := agentryServer(t, tlsca.NewIssuer(ca, func() []string { return nil }, time.Now))
 	if err := get(Client([]byte("not a certificate"), 5*time.Second), server.URL); err == nil {
 		t.Fatal("an unreadable CA fell back to trusting the server")
+	}
+}
+
+// A server another CA vouches for is untrusted; one that isn't there is
+// not, however the error is wrapped.
+func TestUntrusted(t *testing.T) {
+	ours, theirs := newCA(t), newCA(t)
+	server := agentryServer(t, tlsca.NewIssuer(theirs, func() []string { return nil }, time.Now))
+	refused := get(Client(ours.PEM(), 5*time.Second), server.URL)
+	if !Untrusted(refused) || !Untrusted(fmt.Errorf("link: %w", refused)) {
+		t.Errorf("not untrusted: %v", refused)
+	}
+	gone := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	gone.Close()
+	if unreachable := get(Client(ours.PEM(), 5*time.Second), "https://"+gone.Listener.Addr().String()); Untrusted(unreachable) {
+		t.Errorf("untrusted: %v", unreachable)
 	}
 }
 
