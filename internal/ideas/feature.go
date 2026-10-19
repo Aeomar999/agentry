@@ -10,9 +10,10 @@ import (
 // Feature is Ideas as a feature. It is enabled while some team's coordinator
 // suggests ideas (Suggests), and visible while it is enabled or any idea, of
 // any state, is left: your open ideas still need an answer and the rest are
-// their history. Its badge is the number of open ideas.
+// their history. Its badge is the number of open ideas. Those coordinators'
+// done decisions carry the ideas Agentry keeps (coordinator.go).
 func Feature() features.Feature {
-	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Manifest: manifest}
+	return features.Feature{Name: Name, Version: 1, Streams: Streams(), Coordinator: coordinatorHook(), Manifest: manifest}
 }
 
 // Streams are the ideas' streams, for the state to build and keep: each
