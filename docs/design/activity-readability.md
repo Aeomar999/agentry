@@ -40,6 +40,8 @@ Fixed, and the shots above re-taken from a fresh demo server (the screenshots in
 - **A code box's language and Copy drew over a stuck Handoffs header** ([before](activity-readability/after/found/codebox-controls-over-handoff-header.png)). The corner has no z-index of its own now, so stuck headers and bands cover it in both tabs; the top bar and the phone drawer stay above the tab.
 - **Activity's rail times wrapped on a phone** (`01:09` over `AM`). Rail and Handoffs times are `{hh:mm}` as the copy deck says, five characters on the 24-hour clock, on one line.
 - **Small:** a link's underline stops at its label (the gap before ↗ is a margin); task ids, commits and one-word code such as a branch move to the next line whole instead of breaking at a hyphen, with no sideways scroll at 390; a fold that cuts through a code box ends with a 1px divider at the cut.
+- **A long path took a line of its own on a phone** (`ui/src/components/organisms/AuthorBand.tsx` as a full-width box, with `, sticky, 44px.` pushed under it). Only short one-word code and refs, up to 24 characters (task ids, commits, branches), move to the next line whole; longer code and links wrap inline as text does ([phone, scrolled](activity-readability/after/handoffs-phone-scrolled.png)).
+- **The desktop rail showed seconds and AM/PM** (`01:09:23 AM`). It shows `{hh:mm}` at every width now, as the copy deck says; the rail column is unchanged and the time still sits above the duration ([Activity](activity-readability/after/activity-light.png), [scrolled](activity-readability/after/activity-scrolled.png)).
 
 ## What changes
 
