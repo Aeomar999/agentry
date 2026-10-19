@@ -26,8 +26,9 @@ const trustPrefix = "/trust/"
 
 // frontDoor is the server with -https on. Over TLS it is next. Over plain
 // HTTP it is next only for this machine, whose hooks, `agentry mcp`, status
-// line and desk call it on loopback, and for trustPrefix; anyone else is
-// sent to the same address over https. The CA certificate is at
+// line and desk call it on loopback or on the address it serves (serve
+// -addr <LAN IP>), and for trustPrefix; anyone else is sent to the same
+// address over https. The CA certificate is at
 // /trust/ca.crt (DER, as phones install it) and /trust/ca.pem; its key is
 // never served.
 func frontDoor(next http.Handler, ca *tlsca.CA) http.Handler {
@@ -39,7 +40,7 @@ func frontDoor(next http.Handler, ca *tlsca.CA) http.Handler {
 		serveCA(w, r, "application/x-pem-file", "ca.pem", ca.PEM())
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS != nil || fromLoopback(r) || strings.HasPrefix(r.URL.Path, trustPrefix) {
+		if r.TLS != nil || fromThisMachine(r) || strings.HasPrefix(r.URL.Path, trustPrefix) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -58,12 +59,30 @@ func serveCA(w http.ResponseWriter, r *http.Request, contentType, name string, b
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
 }
 
-// fromLoopback is a request this machine sent.
-func fromLoopback(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
+// fromThisMachine is a request this machine sent: from loopback, or from
+// the very address it arrived on.
+func fromThisMachine(r *http.Request) bool {
+	remote, ok := ipOf(r.RemoteAddr)
+	if !ok {
 		return false
 	}
+	if remote.IsLoopback() {
+		return true
+	}
+	local, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	if local == nil {
+		return false
+	}
+	arrivedOn, ok := ipOf(local.String())
+	return ok && remote == arrivedOn
+}
+
+// ipOf is the IP of a host:port address, IPv4 in IPv6 unmapped.
+func ipOf(address string) (netip.Addr, bool) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return netip.Addr{}, false
+	}
 	ip, err := netip.ParseAddr(host)
-	return err == nil && ip.Unmap().IsLoopback()
+	return ip.Unmap(), err == nil
 }

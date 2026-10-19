@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,8 +113,9 @@ func TestASilentConnectionHoldsUpNoOther(t *testing.T) {
 	}
 }
 
-// Over plain HTTP, this machine is served as it is; another is sent to the
-// same address over https, path and query kept. Over TLS everyone is served.
+// Over plain HTTP, this machine is served as it is, on loopback or on the
+// address it serves; another is sent to the same address over https, path
+// and query kept. Over TLS everyone is served.
 func TestTheFrontDoor(t *testing.T) {
 	ca, _ := testCA(t)
 	door := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), ca)
@@ -121,18 +123,25 @@ func TestTheFrontDoor(t *testing.T) {
 		name, from, path string
 		overTLS          bool
 		want             string // the body, or the redirect's Location
+		arrivedOn        string // the local address, when not loopback
 	}{
-		{"this machine", "127.0.0.1:5000", "/api/config", false, "served"},
-		{"this machine on IPv6", "[::1]:5000", "/api/config", false, "served"},
-		{"this machine, IPv4 in IPv6", "[::ffff:127.0.0.1]:5000", "/", false, "served"},
-		{"another machine", "192.168.1.20:5000", "/tasks/task-1?tab=log&x=1", false, "https://box:7800/tasks/task-1?tab=log&x=1"},
-		{"another machine at the root", "100.64.0.7:5000", "/", false, "https://box:7800/"},
-		{"another machine over TLS", "192.168.1.20:5000", "/api/config", true, "served"},
-		{"the trust pages", "192.168.1.20:5000", "/trust/", false, "served"},
+		{"this machine", "127.0.0.1:5000", "/api/config", false, "served", ""},
+		{"this machine on IPv6", "[::1]:5000", "/api/config", false, "served", ""},
+		{"this machine, IPv4 in IPv6", "[::ffff:127.0.0.1]:5000", "/", false, "served", ""},
+		{"another machine", "192.168.1.20:5000", "/tasks/task-1?tab=log&x=1", false, "https://box:7800/tasks/task-1?tab=log&x=1", ""},
+		{"another machine at the root", "100.64.0.7:5000", "/", false, "https://box:7800/", ""},
+		{"another machine over TLS", "192.168.1.20:5000", "/api/config", true, "served", ""},
+		{"the trust pages", "192.168.1.20:5000", "/trust/", false, "served", ""},
+		{"this machine on the LAN address it serves", "192.168.1.160:5000", "/api/config", false, "served", "192.168.1.160:7800"},
+		{"this machine, IPv4 in IPv6 on its LAN address", "[::ffff:192.168.1.160]:5000", "/", false, "served", "192.168.1.160:7800"},
+		{"another machine on that LAN address", "192.168.1.20:5000", "/api/config", false, "https://box:7800/api/config", "192.168.1.160:7800"},
 	}
 	for _, c := range cases {
 		r := httptest.NewRequest("GET", "http://box:7800"+c.path, nil)
 		r.RemoteAddr = c.from
+		if c.arrivedOn != "" {
+			r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, net.TCPAddrFromAddrPort(netip.MustParseAddrPort(c.arrivedOn))))
+		}
 		if c.overTLS {
 			r.TLS = &tls.ConnectionState{}
 		}
