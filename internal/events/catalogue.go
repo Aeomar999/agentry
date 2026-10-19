@@ -28,7 +28,8 @@ var catalogue = map[Type]spec{
 	TaskBudgeted:       {fields: []string{"budget"}, writers: []ActorKind{Human}},
 	TaskTurnsLimited:   {fields: []string{"maxTurns"}, writers: []ActorKind{Human}},
 	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
-	TaskHeld:           {writers: []ActorKind{Human}}, // "place" "" lets it go
+	TaskHeld:           {writers: []ActorKind{Human}},         // "place" "" lets it go
+	TaskWrappedUp:      {writers: []ActorKind{Agent, System}}, // "summary" from the coordinator; Agentry's "reason" when it had none
 	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},
 	RepoChanged:        {fields: []string{"repo"}, writers: []ActorKind{Human, Agent}}, // an agent: the coordinator, to a repo you named
 	AgentRenamedInTask: {fields: []string{"name", "to"}, writers: []ActorKind{Human}},
@@ -70,7 +71,7 @@ var catalogue = map[Type]spec{
 
 	TaskNeedsYou: {fields: []string{"question"}, writers: []ActorKind{Agent, System}}, // Agentry's: "limit" says which stopped the task
 	TaskAnswered: {fields: []string{"answer"}, writers: []ActorKind{Human}},
-	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}}, // yours: an epic you approved closing
+	TaskDone:     {fields: []string{"summary"}, writers: []ActorKind{Agent, Human}}, // yours: an epic you approved closing, or a card you moved to Done ("moved")
 
 	WorkerInvited:      {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},
 	ConnectionInvited:  {fields: []string{"code", "expires"}, writers: []ActorKind{Human}},

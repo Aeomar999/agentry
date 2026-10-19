@@ -24,16 +24,17 @@ var taskRules = map[events.Type]rule{
 	events.TaskTurnsLimited:   all(aTurnLimit),
 	events.TaskRanked:         all(),
 	events.TaskHeld:           all(aKnownPlace),
+	events.TaskWrappedUp:      all(byTheCoordinatorOrAgentry, wrappingUp, noOpenTurn),
 	events.TaskReopened:       all(isDone),
-	events.RepoChanged:        all(byTheCoordinatorOrYou, anotherRepo),
+	events.RepoChanged:        all(byTheCoordinatorOrYou, notUndoingYourMove, anotherRepo),
 	events.AgentRenamedInTask: all(),
 
-	events.TaskTransferred: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
-	events.TaskRequested:   all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
+	events.TaskTransferred: all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
+	events.TaskRequested:   all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
 	events.RequestAnswered: all(waitingOnIt),
-	events.TaskSplit:       all(byTheCoordinator, noOpenTurn, noQuestionOpen, notWaitingOnAnother, notAStory),
+	events.TaskSplit:       all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notWaitingOnAnother, notAStory),
 	events.StoryDone:       all(itsStory, notYetHeard),
-	events.EpicWaits:       all(byTheCoordinator, noOpenTurn, anEpic),
+	events.EpicWaits:       all(byTheCoordinator, notUndoingYourMove, noOpenTurn, anEpic),
 	events.EpicJoined:      all(notAnEpic, inNoEpic, notItself),
 	events.EpicLeft:        all(inThatEpic),
 	events.StoryAdded:      all(anEpic, notItsStoryYet),
@@ -43,10 +44,10 @@ var taskRules = map[events.Type]rule{
 	events.FileRemoved:    all(aSharedFile),
 	events.FilesCollected: all(anEndedTurn, notCollectedYet),
 	events.FilesDelivered: all(),
-	events.FileFetching:   all(byTheCoordinator, noOpenTurn, noQuestionOpen, notFetchingAlready),
+	events.FileFetching:   all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notFetchingAlready),
 	events.FilesFetched:   all(approvedIfAnswer),
 
-	events.TaskAssigned: all(byTheCoordinator, noOpenTurn, noQuestionOpen, notToTheCoordinator),
+	events.TaskAssigned: all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notToTheCoordinator),
 	events.TurnStarted:  all(noOpenTurn, noQuestionOpen, worktreeReady, isTheNextTurn),
 
 	events.PromptAcknowledged: all(isTheOpenTurn, notYetAcknowledged, hashMatches),
@@ -64,9 +65,9 @@ var taskRules = map[events.Type]rule{
 	events.IssueRaised:  all(),
 	events.TurnStopped:  all(isTheOpenTurn),
 
-	events.TaskNeedsYou: all(byTheCoordinatorOrAgentry, noOpenTurn, noQuestionOpen),
+	events.TaskNeedsYou: all(byTheCoordinatorOrAgentry, notUndoingYourMove, noOpenTurn, noQuestionOpen),
 	events.TaskAnswered: all(questionOpen),
-	events.TaskDone:     all(byTheCoordinatorOrYou, noOpenTurn, closedByYouIfAnEpic),
+	events.TaskDone:     all(byTheCoordinatorOrYou, notUndoingYourMove, noOpenTurnUnlessMoved, closedByYouIfAnEpic),
 }
 
 func all(rules ...rule) rule {
@@ -179,7 +180,39 @@ func notToTheCoordinator(t *tasks.Task, p events.Proposal) string {
 	return ""
 }
 
+// notUndoingYourMove: when you move a task to Done, To do or the Backlog
+// yourself, it stays there. Its coordinator only wraps up: it starts no new
+// work, asks nothing, and doesn't finish, move or pass the task on.
+func notUndoingYourMove(t *tasks.Task, p events.Proposal) string {
+	if p.Actor.Kind != events.Agent {
+		return ""
+	}
+	switch {
+	case t.DoneByYou:
+		return "the user moved this task to Done; it stays done"
+	case t.Parked != "":
+		return "the user moved this task to " + tasks.PlaceName(t.Parked) + "; it waits there until they move it on"
+	}
+	return ""
+}
+
+func wrappingUp(t *tasks.Task, _ events.Proposal) string {
+	if t.WrapUp == nil {
+		return "the task has no wrap-up going: only a task the user moved to Done, To do or the Backlog has one"
+	}
+	return ""
+}
+
 // ---- turns --------------------------------------------------------------------
+
+// noOpenTurnUnlessMoved: your move to Done on the board stops the turn in
+// progress; anyone else waits for it to end.
+func noOpenTurnUnlessMoved(t *tasks.Task, p events.Proposal) string {
+	if p.Actor.Kind == events.Human && p.Flag("moved") {
+		return ""
+	}
+	return noOpenTurn(t, p)
+}
 
 func noOpenTurn(t *tasks.Task, _ events.Proposal) string {
 	if turn := t.OpenTurn(); turn != nil {
@@ -231,13 +264,14 @@ func anEpic(t *tasks.Task, _ events.Proposal) string {
 	return ""
 }
 
-// closedByYouIfAnEpic: an epic closes when you approve it, and only then,
-// since you may have more for it; a story closes when its coordinator says.
+// closedByYouIfAnEpic: an epic closes when you approve it or move it to
+// Done, and only then, since you may have more for it; a story closes when
+// its coordinator says, or when you move it to Done.
 func closedByYouIfAnEpic(t *tasks.Task, p events.Proposal) string {
 	switch {
 	case t.Kind == tasks.Epic && p.Actor.Kind != events.Human:
 		return "an epic closes when the user approves it"
-	case t.Kind != tasks.Epic && p.Actor.Kind == events.Human:
+	case t.Kind != tasks.Epic && p.Actor.Kind == events.Human && !p.Flag("moved"):
 		return "a task is finished by its coordinator; move it to Done on the board to have it finished as it is"
 	}
 	return ""

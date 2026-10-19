@@ -105,6 +105,12 @@ const DecisionFormat = "End your reply with exactly one decision: a JSON object,
 	`turn (the steps from "you" in what has happened). In one or two plain lines, say what you changed because of it, ` +
 	`or why you didn't. The user reads it in their chat with you. Leave it out when they haven't said anything new.` + "\n"
 
+// WrapUpFormat closes the brief of a coordinator's last turn after the
+// user moved its task: its summary is the only decision it has.
+const WrapUpFormat = "End your reply with exactly one decision: a JSON object, on its own, as the very last thing you write:\n\n" +
+	`{"action": "done", "summary": "<what was done, what was left, and where the work is, for the user>"}` + "\n\n" +
+	`It may also carry "toYou": your reply to the user, when they have told you something since your last turn.` + "\n"
+
 // PageDesign is how a question's page should look. It is shown in the full
 // width of the content area, next to the rest of Agentry, so it should read
 // as part of it (QuestionPage gives it these variables and plain styles).

@@ -120,8 +120,10 @@ func (l *Loop) act(id string) {
 	}
 	// A request between teams never stalls: a finished task answers the one
 	// that asked for it, and a waiting task checks on its own, so an answer
-	// missed (as across a restart) is given on the next pass.
-	if task.IsDone && task.Parent != "" {
+	// missed (as across a restart) is given on the next pass. A task you
+	// finished answers once its coordinator has wrapped up, with its summary.
+	finished := task.IsDone && task.WrapUp == nil
+	if finished && task.Parent != "" {
 		l.answer(task)
 	}
 	if task.WaitingOn != "" {
@@ -131,7 +133,7 @@ func (l *Loop) act(id string) {
 	}
 	// Stories the same way: a finished one reports to its epic, and the
 	// epic checks on the rest, starting any whose stories before it are done.
-	if task.IsDone && task.Epic != "" {
+	if finished && task.Epic != "" {
 		l.storyDone(task)
 	}
 	if task.Kind == tasks.Epic && !task.IsDone {
@@ -157,6 +159,22 @@ func (l *Loop) act(id string) {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": move.Reason})
 	case AskYou:
 		l.askAt(task, move.Reason, move.Limit)
+	case EndWrapUp:
+		l.endWrapUp(task, move)
+	}
+}
+
+// endWrapUp ends the coordinator's last turn after you moved the task, with
+// its summary, or why it has none. A task you finished is cleaned up then,
+// as one its coordinator finished is.
+func (l *Loop) endWrapUp(task *tasks.Task, move Move) {
+	by, data := agentry, map[string]any{"reason": move.Reason}
+	if move.Reason == "" {
+		by = events.Actor{Kind: events.Agent, ID: task.Coordinator}
+		data = map[string]any{"summary": move.Decision.Summary, "toYou": move.Decision.ToYou}
+	}
+	if l.propose(task.ID, by, events.TaskWrappedUp, data) && task.IsDone && task.Worktree != nil {
+		l.removeWorktree(task)
 	}
 }
 

@@ -37,13 +37,13 @@ type Task struct {
 	TokensUsed  int     // by every turn that has ended
 	Description string
 	Repo        string
-	MovingTo    string // a repo you moved the task to while a turn was running: it moves when the turn ends
-	Coordinator string // the agent that decides who works on the task next
-	TeamChosen  bool   // you chose its team; otherwise the coordinator may pass it to the right one
-	Parent      string // the task that asked for this one, from another team; "" for yours
-	Depth       int    // how many requests deep it is: yours are 0
-	WaitingOn   string // another team's task this one asked for and waits for, "" for none
-	FinishAsIs  bool   // you said to finish it as it is, checked or not
+	MovingTo    string  // a repo you moved the task to while a turn was running: it moves when the turn ends
+	Coordinator string  // the agent that decides who works on the task next
+	TeamChosen  bool    // you chose its team; otherwise the coordinator may pass it to the right one
+	Parent      string  // the task that asked for this one, from another team; "" for yours
+	Depth       int     // how many requests deep it is: yours are 0
+	WaitingOn   string  // another team's task this one asked for and waits for, "" for none
+	WrapUp      *WrapUp // you moved the task to Done, To do or the Backlog: its coordinator's last turn, until it is over
 
 	Kind        Kind
 	KindChosen  bool     // you chose story or epic; otherwise the coordinator may split a story that is too big
@@ -72,6 +72,7 @@ type Task struct {
 	Asked        Asked  // how it was asked: by whom, when, with which options or page
 	Summary      string // the coordinator's summary, once done
 	IsDone       bool
+	DoneByYou    bool // you moved it to Done on the board, rather than its coordinator finishing it
 	LastActiveAt time.Time
 
 	// What is waiting to happen. The coordinator loop acts on these.
@@ -92,6 +93,23 @@ func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget
 
 // AtTurnLimit says whether the task has had all the turns it may without your answer.
 func (t *Task) AtTurnLimit() bool { return t.MaxTurns > 0 && t.TurnsSinceAnswer >= t.MaxTurns }
+
+// WrapUp is the one turn a coordinator has after you move its task to Done,
+// To do or the Backlog yourself: to write its summary, commit or tidy the
+// work in progress, and note what was left. It starts no new work, and
+// your move stands.
+type WrapUp struct {
+	To   string // where you moved it: "done", "todo" or "backlog"
+	Turn string // the coordinator's wrap-up turn, once it has started
+}
+
+// PlaceName is the board's name for a place a task is parked in.
+func PlaceName(place string) string {
+	if place == "todo" {
+		return "To do"
+	}
+	return "the Backlog"
+}
 
 type Worktree struct {
 	Repo   string // the main checkout it was made from, on the machine Agentry runs on
@@ -166,7 +184,7 @@ func (t *Task) Status() Status {
 		return NeedsYou
 	case t.OpenTurn() != nil && t.OpenTurn().Waiting != "":
 		return NeedsYou
-	case t.Parked != "" && t.OpenTurn() == nil: // a turn running when you parked it finishes first
+	case t.Parked != "" && t.OpenTurn() == nil: // its coordinator may still be wrapping up
 		return Held
 	}
 	return Working

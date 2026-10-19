@@ -59,7 +59,7 @@ func TestCheckShapeAndWriter(t *testing.T) {
 }
 
 func TestEveryTypeIsInTheCatalogue(t *testing.T) {
-	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, AgentRenamed, AgentRenamedInTask, TaskTransferred, TaskRequested, RequestAnswered, ConnectionInvited, ConnectionMade, ConnectionRevoked, FileAdded, FileRemoved, FilesCollected, FilesDelivered, FileFetching, FilesFetched, TaskSplit, StoryDone, EpicWaits, EpicJoined, EpicLeft, StoryAdded, StoryRemoved, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskTurnsLimited, TaskRanked, TaskHeld, TaskReopened, RepoChanged, WorktreeReady, TaskAssigned, TurnStarted,
+	all := []Type{AgentCreated, AgentChanged, AgentRemoved, AgentLearned, AgentRenamed, AgentRenamedInTask, TaskTransferred, TaskRequested, RequestAnswered, ConnectionInvited, ConnectionMade, ConnectionRevoked, FileAdded, FileRemoved, FilesCollected, FilesDelivered, FileFetching, FilesFetched, TaskSplit, StoryDone, EpicWaits, EpicJoined, EpicLeft, StoryAdded, StoryRemoved, TaskCreated, TaskRenamed, TaskDirected, TaskLabeled, TaskBudgeted, TaskTurnsLimited, TaskRanked, TaskHeld, TaskWrappedUp, TaskReopened, RepoChanged, WorktreeReady, TaskAssigned, TurnStarted,
 		PromptAcknowledged, SessionStarted, ActionRequested, ActionApproved, ActionAsked, ActionDenied,
 		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,

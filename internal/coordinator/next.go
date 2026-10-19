@@ -26,8 +26,8 @@ type Move struct {
 	Agent    agents.Agent // for StartTurn
 	Handoff  string       // for StartTurn: what the agent is given
 	Machine  string       // for StartTurn: where the coordinator wants it to work, "" for Agentry to choose
-	Decision Decision     // for ApplyDecision
-	Reason   string       // for RaiseIssue and AskYou
+	Decision Decision     // for ApplyDecision, and EndWrapUp with a summary
+	Reason   string       // for RaiseIssue and AskYou, and EndWrapUp without a summary
 	Limit    string       // for AskYou: the limit that stopped the task, LimitBudget or LimitTurns, "" for any other stop
 }
 
@@ -40,13 +40,18 @@ const (
 	ApplyDecision   MoveKind = "apply the coordinator's decision"
 	RaiseIssue      MoveKind = "raise an issue"
 	AskYou          MoveKind = "ask you"
+	EndWrapUp       MoveKind = "end the wrap-up" // with the coordinator's summary, or why there is none
 )
 
 // Next decides what should happen next for a task, from its state alone, so
 // the loop can stop and restart at any point and pick up where it was.
 func Next(task *tasks.Task, roster agents.Roster) Move {
 	switch {
-	case task.IsDone, task.Question != "", task.OpenTurn() != nil, task.Parked != "", task.WaitingOn != "":
+	case task.Question != "", task.OpenTurn() != nil:
+		return Move{Kind: Wait}
+	case task.WrapUp != nil:
+		return wrapUp(task, roster)
+	case task.IsDone, task.Parked != "", task.WaitingOn != "":
 		return Move{Kind: Wait}
 	case task.Worktree == nil:
 		return Move{Kind: PrepareWorktree}
@@ -76,6 +81,42 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 		return Move{Kind: RaiseIssue, Reason: "there is no agent called " + task.Handoff.To}
 	}
 	return Move{Kind: StartTurn, Agent: agent, Handoff: task.Handoff.Text, Machine: task.Handoff.Machine}
+}
+
+// wrapUp is the coordinator's one last turn after you moved the task to
+// Done, To do or the Backlog, and then its summary. Whatever else it
+// decides, or if the turn fails, the wrap-up ends there: your move stands.
+func wrapUp(task *tasks.Task, roster agents.Roster) Move {
+	coordinator, exists := roster.Get(task.Coordinator)
+	switch {
+	case task.WrapUp.Turn != "" && task.PendingDecision != "":
+		decision, err := ParseDecision(task.PendingDecision)
+		switch {
+		case err != nil:
+			return Move{Kind: EndWrapUp, Reason: "the coordinator's reply had no usable decision: " + err.Error()}
+		case decision.Action != Finish:
+			return Move{Kind: EndWrapUp, Reason: "the coordinator decided \"" + string(decision.Action) + "\", and " + movedText(task) +
+				", so only its summary is kept"}
+		}
+		return Move{Kind: EndWrapUp, Decision: decision}
+	case task.WrapUp.Turn != "":
+		return Move{Kind: EndWrapUp, Reason: "the coordinator's wrap-up turn ended without a reply"}
+	case !exists:
+		return Move{Kind: EndWrapUp, Reason: "the task's coordinator, " + task.Coordinator + ", no longer exists"}
+	case task.Handoff == nil || task.Handoff.From == tasks.Agentry:
+		return Move{Kind: EndWrapUp, Reason: "the coordinator's wrap-up turn couldn't start"}
+	case task.Worktree == nil:
+		return Move{Kind: PrepareWorktree}
+	}
+	return Move{Kind: StartTurn, Agent: coordinator, Handoff: task.Handoff.Text}
+}
+
+// movedText says where you moved the task, as the coordinator is told.
+func movedText(task *tasks.Task) string {
+	if task.WrapUp.To == "done" {
+		return "the user moved this task to Done: it stays done"
+	}
+	return "the user moved this task to " + tasks.PlaceName(task.WrapUp.To) + ": it waits there until they move it on"
 }
 
 // MaxRequestDepth is how many requests deep tasks may go: a task asking a

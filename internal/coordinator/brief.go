@@ -46,9 +46,28 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	if refused := refusedActions(task); refused != "" {
 		section(&b, "Actions Agentry refused", refused)
 	}
+	if task.WrapUp != nil {
+		section(&b, "Wrap up", wrapUpText(task))
+		section(&b, "Your decision", WrapUpFormat)
+		return b.String()
+	}
 	checks(&b, task, roster)
 	section(&b, "Your decision", DecisionFormat)
 	return b.String()
+}
+
+// wrapUpText tells the coordinator the user moved the task themselves, and
+// what its one last turn may do.
+func wrapUpText(task *tasks.Task) string {
+	moved := "The user moved this task to Done themselves: it is finished as it is, and it stays done."
+	if task.WrapUp.To != "done" {
+		moved = "The user moved this task to " + tasks.PlaceName(task.WrapUp.To) + " themselves: it waits there until they move it on."
+	}
+	return moved + " Any turn in progress was stopped; its work so far is in the worktree.\n\n" +
+		"This is your last turn on the task until they move it again: wrap it up. You may write its summary for the user, " +
+		"commit or tidy the work in progress on its branch (never push), and note what was left undone and where the work is. " +
+		"Start no new work: don't hand the task to an agent, ask, split, move it or pass it to another team, and don't reopen " +
+		"it. Agentry keeps your summary and refuses any other decision."
 }
 
 func workerBrief(task *tasks.Task, agent agents.Agent, instructions string, shared []sharedfiles.File) string {

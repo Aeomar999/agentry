@@ -23,6 +23,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 const token = "ui-secret"
@@ -900,6 +901,52 @@ func TestCardsMoveThroughTheStages(t *testing.T) {
 	move("in-progress", "The fix broke sign-out.")
 	if d := show(); d.Status != "working" || d.Worktree != nil || lastStep(d) != "Reopen this task. Carry on. The fix broke sign-out." {
 		t.Errorf("reopened: %s, worktree %v, %q", d.Status, d.Worktree, lastStep(d))
+	}
+}
+
+// Your moves to Done, To do and the Backlog stand in the same request: the
+// turn in progress stops, and the coordinator only wraps up.
+func TestYourMovesOnTheBoardStand(t *testing.T) {
+	server, s := newTestServer(t)
+	worker := events.Actor{Kind: events.Worker, ID: "laptop"}
+	working := func(id string) {
+		for _, p := range []events.Proposal{
+			{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901}},
+			{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+		} {
+			if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+				t.Fatalf("%s: %v %v", p.Type, err, rejection)
+			}
+		}
+	}
+	move := func(id, to string) {
+		if code, body := call(t, server, "POST", "/api/tasks/"+id+"/direct", `{"to":"`+to+`","note":"Enough."}`); code != 200 {
+			t.Fatalf("%s onto %s: %d %s", id, to, code, body)
+		}
+	}
+	load := func(id string) *tasks.Task {
+		stream, _ := s.Stream(id)
+		return tasks.FromEvents(stream)
+	}
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	working("task-1")
+	move("task-1", "done")
+	if task := load("task-1"); task.Status() != tasks.Done || !task.DoneByYou || !task.Turns[0].Stopped || task.WrapUp == nil {
+		t.Errorf("onto Done: %s, by you %v, turn stopped %v, wrap-up %+v", task.Status(), task.DoneByYou, task.Turns[0].Stopped, task.WrapUp)
+	}
+
+	call(t, server, "POST", "/api/tasks", `{"description":"Tidy the README"}`)
+	working("task-2")
+	move("task-2", "todo")
+	if task := load("task-2"); task.Status() != tasks.Held || task.Parked != "todo" || !task.Turns[0].Stopped || task.WrapUp == nil {
+		t.Errorf("onto To do: %s, parked %q, turn stopped %v, wrap-up %+v", task.Status(), task.Parked, task.Turns[0].Stopped, task.WrapUp)
+	}
+
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","kind":"epic"}`)
+	move("task-3", "done")
+	if task := load("task-3"); !task.IsDone {
+		t.Errorf("an epic onto Done should close: %s", task.Status())
 	}
 }
 

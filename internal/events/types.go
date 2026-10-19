@@ -25,7 +25,8 @@ const (
 	TaskBudgeted       Type = "task.budgeted"      // a new token budget for the task, as when you raise it
 	TaskTurnsLimited   Type = "task.turns_limited" // a new limit of turns without your answer, as when you raise it
 	TaskRanked         Type = "task.ranked"        // where the task sits in your priority order: lower is first
-	TaskHeld           Type = "task.held"          // parked in a place ("todo", "backlog") until you move it on ("")
+	TaskHeld           Type = "task.held"          // parked in a place ("todo", "backlog") until you move it on (""); a turn in progress stops
+	TaskWrappedUp      Type = "task.wrapped_up"    // the coordinator's last turn, after you moved the task to Done, To do or the Backlog, is over: its summary
 	TaskReopened       Type = "task.reopened"      // a finished task back to work, with what you want done
 	RepoChanged        Type = "task.repo_changed"  // the task's work goes in another repo from now on; its worktree is made again there
 	AgentRenamedInTask Type = "task.agent_renamed" // an agent the task names was renamed: its coordinator, or who it is handed to
@@ -70,7 +71,7 @@ const (
 
 	TaskNeedsYou Type = "task.needs_you"
 	TaskAnswered Type = "task.answered"
-	TaskDone     Type = "task.done"
+	TaskDone     Type = "task.done" // yours with "moved": you moved it to Done on the board, and a turn in progress stops
 )
 
 // The workers stream: the machines, besides Agentry's own, that run agents.

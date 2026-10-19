@@ -64,7 +64,6 @@ func (t *Task) apply(e events.Event) {
 		} else {
 			t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: e.Text("text")})
 		}
-		t.FinishAsIs = t.FinishAsIs || e.Flag("asIs")
 
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
@@ -73,12 +72,40 @@ func (t *Task) apply(e events.Event) {
 		t.MaxTurns = e.Number("maxTurns")
 
 	case events.TaskHeld:
-		t.Parked = e.Text("place")
+		// Your move stands at once: a turn in progress stops, and the
+		// coordinator wraps up. Moved on again, it carries on from there.
+		place := e.Text("place")
+		switch {
+		case place != "" && t.Parked == "":
+			t.Parked = place
+			t.wrapUp(e, place, "I moved this task to "+PlaceName(place)+": it waits there until I move it on.")
+		case place != "":
+			t.Parked = place
+		default: // a wrap-up still going is over: you want more work
+			wrapping := t.WrapUp != nil
+			t.Parked, t.WrapUp = "", nil
+			if t.stopTurn() || wrapping || t.idle() {
+				t.step(e, You, t.Coordinator, "I moved this task back to work. Carry on from where it was.")
+			}
+		}
+
+	case events.TaskWrappedUp:
+		t.WrapUp, t.PendingDecision, t.Handoff = nil, "", nil
+		t.reply(e)
+		text := e.Text("summary")
+		if e.Actor.Kind == events.Agent && t.IsDone {
+			t.Summary = text
+		}
+		if text == "" {
+			text = "Wrapped up without a summary: " + e.Text("reason")
+		}
+		t.Told = Step{At: e.At, From: e.Actor.ID, To: You, Text: text}
+		t.Trail = append(t.Trail, t.Told)
 
 	case events.TaskReopened:
 		// Back to work in a fresh worktree (the loop makes it again), with a
 		// new count of turns and issues, from what you said.
-		t.IsDone, t.Summary, t.Worktree, t.FinishAsIs = false, "", nil, false
+		t.IsDone, t.DoneByYou, t.Summary, t.Worktree, t.WrapUp = false, false, "", nil, nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("text"))
 
@@ -211,6 +238,9 @@ func (t *Task) apply(e events.Event) {
 		t.TurnsSinceAnswer++
 		if e.Text("agent") == t.Coordinator {
 			t.storyNews = false // its brief has every story's news so far
+			if t.WrapUp != nil {
+				t.WrapUp.Turn = e.Correlation
+			}
 		}
 
 	case events.PromptAcknowledged:
@@ -265,8 +295,7 @@ func (t *Task) apply(e events.Event) {
 		// Not an issue: nothing went wrong, so it doesn't count towards
 		// asking you. What you said is just above it in the trail.
 		turn := t.Turn(e.Correlation)
-		turn.Ended, turn.Stopped = true, true
-		t.moveRepo()
+		t.stopTurn()
 		t.step(e, Agentry, t.Coordinator, stoppedText(turn, t.Coordinator))
 
 	case events.TaskNeedsYou:
@@ -282,15 +311,53 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskAnswered:
 		// Closing stays: an epic you leave open can still be closed later.
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
-		t.FinishAsIs = t.FinishAsIs || e.Flag("asIs")
 		t.step(e, You, t.Coordinator, e.Text("answer"))
 
 	case events.TaskDone:
 		t.IsDone, t.Summary = true, e.Text("summary")
 		t.Question, t.Asked, t.Closing = "", Asked{}, "" // an epic you closed: that was your answer
+		// You moved it to Done on the board: it is done, whatever was in hand.
+		if e.Flag("moved") {
+			t.DoneByYou, t.Parked, t.WaitingOn = true, "", ""
+			t.wrapUp(e, "done", "I moved this task to Done: it is finished as it is.")
+			return
+		}
 		t.reply(e)
 		t.step(e, e.Actor.ID, You, t.Summary)
 	}
+}
+
+// wrapUp makes your move to Done or a parking place stand at once: the turn
+// in progress stops, and the coordinator has one last turn to wrap up, if
+// anyone has worked on the task at all.
+func (t *Task) wrapUp(e events.Event, to, text string) {
+	if note := e.Text("note"); note != "" {
+		text += " " + note
+	}
+	switch {
+	case t.WrapUp != nil: // moved on while it wraps up: that is still its one turn
+		t.WrapUp.To = to
+		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
+	case len(t.Turns) == 0 && to == "done": // nothing to wrap up
+		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
+		t.PendingDecision, t.Handoff = "", nil
+	case len(t.Turns) == 0: // parked before it started: it starts as it would have
+	default:
+		t.stopTurn()
+		t.WrapUp = &WrapUp{To: to}
+		t.step(e, You, t.Coordinator, text)
+	}
+}
+
+// stopTurn ends the turn in progress, if there is one, as you stopped it.
+func (t *Task) stopTurn() bool {
+	turn := t.OpenTurn()
+	if turn == nil {
+		return false
+	}
+	turn.Ended, turn.Stopped = true, true
+	t.moveRepo()
+	return true
 }
 
 func (t *Task) decide(e events.Event, decision Decision) {

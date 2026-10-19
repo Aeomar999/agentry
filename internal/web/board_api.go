@@ -12,11 +12,13 @@ import (
 // work's stages, not agents: the coordinator still decides who works next,
 // so the board never disagrees with the log.
 //
-//   - Backlog, To do: park it there; the coordinator leaves it alone
+//   - Backlog, To do: park it there at once; a turn in progress stops, and
+//     the coordinator only wraps up
 //   - In progress: start it (let it go); from Review, send it back for more
 //     work
 //   - Review: have it checked next
-//   - Done: wrap it up
+//   - Done: it is done at once, as it is; a turn in progress stops, and the
+//     coordinator only wraps up (an epic closes)
 //
 // A finished task moved anywhere but Done is reopened first. A task
 // waiting for your answer takes the words as the answer.
@@ -37,7 +39,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	}
 	note := strings.TrimSpace(request.Note)
 	park := func(place string) events.Proposal {
-		return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": place}}
+		return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": place, "note": note}}
 	}
 
 	switch request.To {
@@ -52,7 +54,8 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the task is done already", http.StatusConflict)
 			return
 		}
-		s.tell(w, task, "Wrap this task up: finish it as it is, checked or not.", note, true)
+		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone,
+			Data: map[string]any{"summary": "The user moved it to Done, as it was.", "note": note, "moved": true}})
 		return
 	case "in-progress", "review":
 	default:
@@ -87,14 +90,12 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]string{"task": task.ID})
 		return
 	}
-	s.tell(w, task, text, note, false)
+	s.tell(w, task, text, note)
 }
 
 // tell gives the coordinator your words: as the answer, if it asked you
 // something, or as a direction it reads at its next turn.
-// tell sends the coordinator what you said; asIs lets it finish the task
-// without the checks it needs otherwise.
-func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string, asIs bool) {
+func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string) {
 	if note != "" {
 		text += " " + note
 	}
@@ -102,11 +103,7 @@ func (s *Server) tell(w http.ResponseWriter, task *tasks.Task, text, note string
 	if task.Question != "" {
 		kind, field = events.TaskAnswered, "answer"
 	}
-	data := map[string]any{field: text}
-	if asIs {
-		data["asIs"] = true
-	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: data})
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}})
 }
 
 func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {

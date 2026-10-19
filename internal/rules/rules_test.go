@@ -260,3 +260,85 @@ func TestDirectionsWaitForNoQuestion(t *testing.T) {
 		t.Errorf("trail: %+v", steps)
 	}
 }
+
+// Your moves on the board stand: the task is done or parked at once, the
+// turn in progress stops, and the coordinator only wraps up, in one turn.
+func TestYourMoveToDoneStands(t *testing.T) {
+	s := openSeeded(t)
+	proposeAll(t, s, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+		{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+		turnStarted("turn-2", "engineer"),
+		{you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true}, true}, // the engineer's turn stops
+		turnStarted("turn-3", "tech-lead"),                                                   // the coordinator's wrap-up
+		turnEnded("turn-3", "tech-lead", `{"action":"assign"}`),
+	})
+	const stays = "the user moved this task to Done; it stays done"
+	refusedWith(t, s, coordinator, events.TaskAssigned, map[string]any{"agent": "engineer", "instructions": "more"}, stays)
+	refusedWith(t, s, coordinator, events.TaskNeedsYou, map[string]any{"question": "Reopen it?"}, stays)
+	refusedWith(t, s, coordinator, events.TaskDone, map[string]any{"summary": "again"}, stays)
+	proposeAll(t, s, []step{
+		{coordinator, events.TaskWrappedUp, "", map[string]any{"summary": "The parser is half done, committed."}, true},
+		{coordinator, events.TaskWrappedUp, "", map[string]any{"summary": "twice"}, false},
+		{worker, events.TurnStarted, "turn-4", map[string]any{"agent": "tech-lead", "hash": "h"}, false}, // nothing more runs
+	})
+	task := taskIn(s)
+	if !task.IsDone || !task.DoneByYou || task.WrapUp != nil || !task.Turns[1].Stopped || task.Summary != "The parser is half done, committed." {
+		t.Errorf("done %v by you %v, wrap-up %+v, engineer stopped %v, summary %q", task.IsDone, task.DoneByYou, task.WrapUp, task.Turns[1].Stopped, task.Summary)
+	}
+}
+
+func TestYourMoveToToDoStands(t *testing.T) {
+	s := openSeeded(t)
+	proposeAll(t, s, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"),
+		{you, events.TaskHeld, "", map[string]any{"place": "todo"}, true}, // the coordinator's turn stops
+		turnStarted("turn-2", "tech-lead"),                                // its wrap-up
+		turnEnded("turn-2", "tech-lead", `{"action":"assign"}`),
+	})
+	refusedWith(t, s, coordinator, events.TaskAssigned, map[string]any{"agent": "engineer", "instructions": "go"},
+		"the user moved this task to To do; it waits there until they move it on")
+	proposeAll(t, s, []step{{coordinator, events.TaskWrappedUp, "", map[string]any{"summary": "Nothing started yet."}, true}})
+	if task := taskIn(s); task.Status() != tasks.Held || task.WrapUp != nil || !task.Turns[0].Stopped || task.Told.Text != "Nothing started yet." {
+		t.Errorf("status %s, wrap-up %+v, first turn stopped %v, told %q", task.Status(), task.WrapUp, task.Turns[0].Stopped, task.Told.Text)
+	}
+}
+
+// Only your move gives a wrap-up, and only the board's Done finishes a
+// story for you.
+func TestNoWrapUpWithoutYourMove(t *testing.T) {
+	s := openSeeded(t)
+	proposeAll(t, s, []step{
+		created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "x"),
+		{coordinator, events.TaskWrappedUp, "", map[string]any{"summary": "x"}, false},
+	})
+	refusedWith(t, s, you, events.TaskDone, map[string]any{"summary": "x"},
+		"a task is finished by its coordinator; move it to Done on the board to have it finished as it is")
+}
+
+// proposeAll proposes the steps to task-1.
+func proposeAll(t *testing.T, s *store.Store, steps []step) {
+	t.Helper()
+	for i, st := range steps {
+		_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: st.actor, Type: st.kind, Correlation: st.correlation, Data: st.data})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (rejection == nil) != st.accepted {
+			t.Errorf("step %d %s by %s: accepted=%v (%v), want %v", i+1, st.kind, st.actor, rejection == nil, rejection, st.accepted)
+		}
+	}
+}
+
+func refusedWith(t *testing.T, s *store.Store, actor events.Actor, kind events.Type, data map[string]any, reason string) {
+	t.Helper()
+	_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Data: data})
+	if err != nil || rejection == nil || rejection.Reason != reason {
+		t.Errorf("%s by %s: %v %v, want refused: %s", kind, actor, rejection, err, reason)
+	}
+}
+
+func taskIn(s *store.Store) *tasks.Task {
+	stream, _ := s.Stream("task-1")
+	return tasks.FromEvents(stream)
+}

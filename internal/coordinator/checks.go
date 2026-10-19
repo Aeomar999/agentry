@@ -48,8 +48,8 @@ func verdictOf(report string) Verdict {
 }
 
 // unchecked says why the task's work isn't checked yet, or "" when it is:
-// nothing has changed it, the team has no one to check it, every check
-// since the last change approves it, or you said to finish it as it is.
+// nothing has changed it, the team has no one to check it, or every check
+// since the last change approves it.
 func unchecked(task *tasks.Task, roster agents.Roster) string {
 	lead, _ := roster.Get(task.Coordinator)
 	var checkers []string
@@ -58,7 +58,7 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 			checkers = append(checkers, agent.Name)
 		}
 	}
-	if task.FinishAsIs || len(checkers) == 0 {
+	if len(checkers) == 0 {
 		return ""
 	}
 

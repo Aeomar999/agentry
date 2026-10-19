@@ -75,7 +75,11 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 		return nil
 	case task == nil:
 		return refuse("task " + p.Stream + " doesn't exist")
+	case task.IsDone && task.WrapUp != nil && slices.Contains(duringWrapUp, p.Type):
 	case task.IsDone && !slices.Contains(afterDone, p.Type):
+		if reason := notUndoingYourMove(task, p); reason != "" {
+			return refuse(reason)
+		}
 		return refuse("task " + p.Stream + " is done")
 	}
 	if reason := taskRules[p.Type](task, p); reason != "" {
@@ -90,6 +94,14 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.RepoChanged, events.WorktreeReady,
 	events.AgentRenamedInTask,          // a finished task reopened later goes to its coordinator by its new name
 	events.EpicJoined, events.EpicLeft} // finished work is filed under epics too
+
+// duringWrapUp are what may happen to a task you moved to Done while its
+// coordinator wraps up: its one turn, the shared files around it, and
+// Agentry asking you for what the turn needs to start (a machine online).
+var duringWrapUp = []events.Type{events.TaskNeedsYou, events.TaskAnswered, events.TurnStarted, events.PromptAcknowledged, events.SessionStarted,
+	events.ActionRequested, events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult,
+	events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.IssueRaised, events.TurnStopped, events.TaskWrappedUp,
+	events.WorktreeMoved, events.FileAdded, events.FileRemoved, events.FilesCollected, events.FilesDelivered}
 
 func refuse(reason string) *events.Rejection {
 	return &events.Rejection{Check: "order", Reason: reason}

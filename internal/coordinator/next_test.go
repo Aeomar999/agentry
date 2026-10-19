@@ -27,8 +27,8 @@ func defaultRoster() agents.Roster {
 // history builds a task from events, without the store: Next only reads state.
 type history []events.Event
 
+// add returns a new history, so two can branch from one.
 func (h history) add(actor events.Actor, kind events.Type, correlation string, data map[string]any) history {
-	// Clipped: histories that share a start don't write over each other.
 	return append(slices.Clip(h), events.Event{Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}})
 }
 
@@ -138,6 +138,46 @@ func TestWhenAnEpicMayWait(t *testing.T) {
 	if empty = leftOpen.turn("turn-3", "tech-lead", wait).add(coordinator, events.EpicWaits, "", nil).
 		add(you, events.StoryRemoved, "", map[string]any{"story": "task-2"}).task(); empty.Closing != "" || len(empty.Stories) != 0 {
 		t.Errorf("no stories left: closing %q, stories %v", empty.Closing, empty.Stories)
+	}
+}
+
+// After you move a task to Done, To do or the Backlog, its coordinator has
+// one turn to wrap up, whose only outcome is its summary; then nothing runs.
+func TestAWrapUpIsOneTurn(t *testing.T) {
+	working := started().turn("turn-1", "tech-lead", `{"action":"assign","agent":"engineer","instructions":"go"}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"})
+	done := working.add(you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true})
+	parked := working.add(you, events.TaskHeld, "", map[string]any{"place": "backlog"})
+	wrapUp := func(h history, report string) *tasks.Task { return h.turn("turn-3", "tech-lead", report).task() }
+	cases := []struct {
+		name string
+		task *tasks.Task
+		want MoveKind
+		says string
+	}{
+		{"moved to Done: the coordinator wraps up", done.task(), StartTurn, "I moved this task to Done"},
+		{"moved to the Backlog: the same", parked.task(), StartTurn, "I moved this task to the Backlog"},
+		{"its summary ends it", wrapUp(done, `{"action":"done","summary":"Half done."}`), EndWrapUp, ""},
+		{"anything else ends it too", wrapUp(done, `{"action":"assign","agent":"engineer","instructions":"more"}`), EndWrapUp,
+			`decided "assign", and the user moved this task to Done: it stays done`},
+		{"as does no decision", wrapUp(parked, "I tidied up."), EndWrapUp, "no usable decision"},
+		{"or a turn that failed", done.add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "tech-lead", "hash": "h"}).
+			add(watchdog, events.IssueRaised, "", map[string]any{"reason": "the engine crashed"}).task(), EndWrapUp, "ended without a reply"},
+		{"then nothing runs", done.turn("turn-3", "tech-lead", "x").
+			add(coordinator, events.TaskWrappedUp, "", map[string]any{"summary": "Half done."}).task(), Wait, ""},
+		{"nor in the Backlog", parked.turn("turn-3", "tech-lead", "x").
+			add(watchdog, events.TaskWrappedUp, "", map[string]any{"reason": "no usable decision"}).task(), Wait, ""},
+	}
+	for _, c := range cases {
+		move := Next(c.task, defaultRoster())
+		said := move.Agent.Name + " " + move.Handoff + " " + move.Reason
+		if move.Kind != c.want || !strings.Contains(said, c.says) {
+			t.Errorf("%s: got %s (%q), want %s with %q", c.name, move.Kind, said, c.want, c.says)
+		}
+	}
+	if move := Next(wrapUp(done, `{"action":"done","summary":"Half done."}`), defaultRoster()); move.Decision.Summary != "Half done." {
+		t.Errorf("the summary: %+v", move)
 	}
 }
 
