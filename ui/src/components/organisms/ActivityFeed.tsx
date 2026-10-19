@@ -451,7 +451,7 @@ function Rail({ item, clock, band = false }: { item: ActivityItem; clock: number
       />
       <div
         className={cn(
-          "flex flex-col font-mono text-[11px] leading-4 text-ink-muted",
+          "flex flex-col font-mono text-[11px] leading-4 whitespace-nowrap text-ink-muted",
           band ? "pt-3.5" : item.kind === "note" ? "pt-1" : "pt-2",
         )}
       >

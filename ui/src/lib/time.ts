@@ -4,9 +4,10 @@ export function clockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-// clockMinutes is clockTime without the seconds, where there is no room.
+// clockMinutes is clockTime without the seconds, where there is no room:
+// always five characters, "06:15", so it is on the 24-hour clock.
 export function clockMinutes(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 }
 
 export function dateTime(iso: string): string {

@@ -152,6 +152,16 @@ describe("ActivityFeed", () => {
     for (const band of container.querySelectorAll("h3")) expect(band.parentElement!.className).toContain("sticky top-0 z-10");
   });
 
+  test("keeps a phone's rail time on one line, as hh:mm", () => {
+    const { container } = feed();
+    const times = [...container.querySelectorAll("span.md\\:hidden")].filter((span) => span.textContent!.includes(":"));
+    expect(times.length).toBeGreaterThan(0);
+    for (const time of times) {
+      expect(time.textContent).toMatch(/^\d\d:\d\d$/);
+      expect(time.parentElement!.className).toContain("whitespace-nowrap");
+    }
+  });
+
   test("loads no Monaco while no command is near the screen", async () => {
     feed();
     await new Promise((resolve) => setTimeout(resolve, 20));
