@@ -120,19 +120,27 @@ export function IdeasPage() {
 
 // FollowUpsSetting turns on or off the Visionaries session that starts when
 // you close an epic. It waits for the setting before you can change it,
-// shows what you chose while the server saves it, and on when the setting
-// can't be read.
+// shows what you chose while the server saves it and what it saved until the
+// setting loads again (it only reloads when the event log moves), and on when
+// the setting can't be read.
 function FollowUpsSetting() {
   const { data, error } = useResource<Settings>("/api/settings");
   const [saving, setSaving] = useState<boolean | null>(null);
+  const [saved, setSaved] = useState<Settings | null>(null);
   const [failed, setFailed] = useState("");
+  const [seen, setSeen] = useState(data);
+  if (seen !== data) {
+    setSeen(data);
+    setSaved(null);
+  }
 
   async function change(on: boolean) {
     setSaving(on);
     setFailed("");
     try {
-      await changeSettings({ visionariesOnEpicClose: on });
+      setSaved(await changeSettings({ visionariesOnEpicClose: on }));
     } catch (failure) {
+      setSaved(null);
       setFailed((failure as Error).message);
     } finally {
       setSaving(null);
@@ -143,7 +151,7 @@ function FollowUpsSetting() {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-start gap-x-3">
         <Checkbox
-          checked={saving ?? data?.visionariesOnEpicClose ?? true}
+          checked={saving ?? saved?.visionariesOnEpicClose ?? data?.visionariesOnEpicClose ?? true}
           onChange={change}
           disabled={saving !== null || (!data && !error)}
           label="Ask the visionaries for follow-ups when you close an epic"
