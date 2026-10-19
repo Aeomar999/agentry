@@ -35,6 +35,9 @@ var archiver = events.Actor{Kind: events.System, ID: "archiver"}
 // for the summary. It checks the marker and, in one transaction, appends
 // it and deletes the rows it covers; the model takes the marker once that
 // commits. summarise reads the model, so it must not take the store.
+// summarise runs before the rules, so it must cope with a task the state
+// can't hand out (archived, or its stream broken): it returns nil, which
+// the rules refuse along with the task.
 //
 // It returns the marker and, when it is refused, the rejection: by the
 // rules, or because the stream took an event since its rows were read,

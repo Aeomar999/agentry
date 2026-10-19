@@ -35,7 +35,10 @@ func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 // state holds it then.
 func summarise(state *current.State, id string) func() any {
 	return func() any {
-		task, _ := state.Task(id)
+		task, err := state.Task(id)
+		if task == nil || err != nil {
+			return nil // archived, broken or missing: the rules refuse the marker
+		}
 		return tasks.SummaryOf(task, state.Roster())
 	}
 }

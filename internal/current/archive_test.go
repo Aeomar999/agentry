@@ -29,7 +29,10 @@ func archiveTask(t *testing.T, s *store.Store, state *State, id string, blobs st
 // state holds it then. (storetest.Summarise, which imports this package.)
 func summarise(state *State, id string) func() any {
 	return func() any {
-		task, _ := state.Task(id)
+		task, err := state.Task(id)
+		if task == nil || err != nil {
+			return nil // archived, broken or missing: the rules refuse the marker
+		}
 		return tasks.SummaryOf(task, state.Roster())
 	}
 }
@@ -142,5 +145,23 @@ func TestTheMarkerSummarisesTheRowsItCovers(t *testing.T) {
 	listed := slices.IndexFunc(state.Summaries(), func(s tasks.Summary) bool { return s.ID == "task-1" && s.Title == "Renamed in the gap" })
 	if listed < 0 {
 		t.Error("the list should show task-1 with the rename's title")
+	}
+}
+
+// The summariser gives nil for a task the state can't hand out, archived
+// or broken, for the rules to refuse: Archive calls it before they run.
+func TestTheSummariserGivesNilForATaskTheStateCantHandOut(t *testing.T) {
+	path, _ := seededLog(t, someProposals()...)
+	state := New(withIdeas, ideas.Streams())
+	s, err := store.Open(path, withIdeas, state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	archiveTask(t, s, state, "task-1", sharedfiles.Disk{Dir: t.TempDir()})
+	for _, id := range []string{"task-1", "task-3"} { // archived, broken
+		if summary := summarise(state, id)(); summary != nil {
+			t.Errorf("the summary of %s is %v, want nil", id, summary)
+		}
 	}
 }

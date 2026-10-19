@@ -519,3 +519,24 @@ func TestAMarkerNamesABlobThatIsThere(t *testing.T) {
 		t.Error("task-1 should keep its rows")
 	}
 }
+
+// Archive summarises under the store's lock, after the rows are read and
+// put in their blob: the summary is of exactly the rows the marker covers.
+func TestArchiveSummarisesUnderTheLockAfterTheRows(t *testing.T) {
+	s := archivable(t)
+	put := false
+	blobs := putThen{sharedfiles.Disk{Dir: t.TempDir()}, func() error { put = true; return nil }}
+	underTheLock := func() any {
+		if s.mu.TryLock() {
+			s.mu.Unlock()
+			t.Error("summarise ran without the store's lock")
+		}
+		if !put {
+			t.Error("summarise ran before the rows were read into their blob")
+		}
+		return summary()
+	}
+	if _, rejection, err := s.Archive("task-1", underTheLock, blobs); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+}
