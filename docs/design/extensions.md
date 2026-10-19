@@ -351,7 +351,7 @@ type Feature struct {
 	Version int    // raised when its events or state change (section 8)
 
 	Streams   *Streams                    // the streams it owns, if any
-	TaskTypes map[events.Type]events.Spec // its types in task streams, in its own namespace: "git.pr_opened"
+	TaskTypes map[events.Type]events.Spec // its types in task streams, in its namespace: "git.pr_opened"
 	Writes    []events.Type               // core types it proposes: ideas makes a task.created
 	Guards    map[events.Type]Rule        // extra checks on core types, as rules.rosterRules
 
@@ -364,7 +364,7 @@ type Feature struct {
 }
 
 // Streams are the feature's own streams: every one starts with Prefix and
-// holds only Types.
+// holds only Types, all in Prefix's namespace ("idea-" holds idea.*).
 type Streams struct {
 	Prefix string                      // "idea-"
 	Types  map[events.Type]events.Spec // fields and writers, checked as the core's are
@@ -476,27 +476,42 @@ its `Feature` value says (section 9). `Owned` and `OwnedIDs` are the two new
 generic reads for owned streams; a feature wraps them in typed helpers
 (`ideas.Get(r, id) (*Idea, error)`), so the `any` stays inside its package.
 
-Two choices are made now because the log keeps them. A feature's types in a
-task's stream are registered as `TaskTypes`, each in a namespace of the
-feature's own that no core type uses: T-019 writes `git.pr_opened`, never a
-bare `pr.opened` or a `task.` name. Core already uses many namespaces in
-task streams (`task.`, `turn.`, `action.`, `file.`, `worktree.` and more),
-so the catalogue refuses a feature namespace that collides. Once T-019
-writes its first event under a name, that name is in the log for good. The
-others (`Route.Auth` in place of a `Desk` flag, `Waiting` worked out in the
-server rather than in `agentry mcp`) are cheap now and could change later,
-because under (a) a field change is a compile error fixed in one commit.
-`Waiting` in the server is what lets a sink there, such as Web Push, use the
-same list as Claude Code (section 13).
+Two choices are made now because the log keeps them. Every type a feature
+registers is in one namespace of its own, which no core type and no other
+feature uses: its stream prefix without the `-` (`idea-` holds `idea.*`),
+or, for a feature with no streams, the one namespace its `TaskTypes` share.
+T-019 writes `git.pr_opened`, never a bare `pr.opened` or a `task.` name.
+Core already uses many namespaces (`task.`, `turn.`, `action.`, `file.`,
+`agent.`, `policy.` and more), so the catalogue refuses a feature namespace
+that collides. Once T-019 writes its first event under a name, that name is
+in the log for good. The others (`Route.Auth` in place of a `Desk` flag,
+`Waiting` worked out in the server rather than in `agentry mcp`) are cheap
+now and could change later, because under (a) a field change is a compile
+error fixed in one commit. `Waiting` in the server is what lets a sink
+there, such as Web Push, use the same list as Claude Code (section 13).
 
 How each core package changes, with the real types:
 
 - `events`: `spec` becomes `Spec`. There is no global `Register`: the
   catalogue becomes a value. `events.NewCatalogue(extra ...Registration)
   (*Catalogue, error)` builds it once, in `serve.go`, from the core types
-  plus each feature's prefix, stream types and task types, and returns an
-  error (the server doesn't start) if a prefix or type is taken, a prefix
-  starts with `task-`, or a type is outside its feature's namespace.
+  plus each feature's prefix, stream types and task types:
+
+  ```go
+  // A Registration's types are all in one namespace of its own: the Prefix
+  // without its "-", or, with no Prefix, the one its TaskTypes share.
+  type Registration struct {
+  	Prefix    string        // "idea-": its streams, holding only Types
+  	Types     map[Type]Spec // idea.suggested and the rest
+  	TaskTypes map[Type]Spec // its types in task streams: "git.pr_opened"
+  }
+  ```
+
+  It returns an error naming the type and the namespace (the server
+  doesn't start) if a prefix or type is taken, a prefix starts with
+  `task-`, a type is outside its registration's namespace (`task.noted`
+  under `note-`), or that namespace is the core's or another
+  registration's.
   `store.Open` takes the catalogue, and `CheckShape`, `CheckWriter` and
   `IsTaskStream` become its methods, which `Store.Catalogue()` hands to the
   rules and the coordinator. A test passes the catalogue it wants
@@ -505,7 +520,8 @@ How each core package changes, with the real types:
   that changes it, so it is fixed for as long as a log is open.
   `IsTaskStream` stays stateless: not core, not a registered prefix, and
   starting with `task-` (section 7). `ideaTypes`, `IdeaPrefix` and the
-  three `Idea*` constants move to `internal/ideas`.
+  three `Idea*` constants move to `internal/ideas` (`IdeaPrefix` is now
+  `ideas.Prefix`).
 - `current`: `State.ideas` becomes `owned map[string]any` plus the
   `*features.Streams` for each prefix. `Load` and `Apply` keep their
   `switch` for the core streams; the `default` asks the owning `Streams`
@@ -682,17 +698,17 @@ streams are not tasks and are never archived by it.
 
 ### How the core classifies a stream
 
-Today the rule is accidental. `current.Load` sends any stream that is not
-`agents`, `workers`, `connections` or `policy` and does not start with
-`idea-` to `tasks.Replay`, and `Replay` returns nil for a stream with no
-`task.created`, so without the ideas code an `idea-N` stream would load as
-nothing. Three other places would not be so quiet. `events.IsTaskStream`
-would call `idea-3` a task's stream, so `rules.Check` would treat a
-proposal into it as one for a task: it refuses most (a `task.renamed` gets
-"task idea-3 doesn't exist"), but a `task.created` into `idea-3` would pass
-and start a task there. `coordinator.touchedTasks` would hand `idea-3` to
-`Loop.act`, which logs "reading the task" as an error for every idea event.
-And `current.Equal` would never look at it.
+Before the rule below, the classification was accidental. `current.Load`
+sends any stream that is not `agents`, `workers`, `connections` or `policy`
+and does not start with `idea-` to `tasks.Replay`, and `Replay` returns nil
+for a stream with no `task.created`, so without the ideas code an `idea-N`
+stream would load as nothing. Three other places would not be so quiet.
+`events.IsTaskStream` would call `idea-3` a task's stream, so `rules.Check`
+would treat a proposal into it as one for a task: it refuses most (a
+`task.renamed` gets "task idea-3 doesn't exist"), but a `task.created` into
+`idea-3` would pass and start a task there. `coordinator.touchedTasks` would
+hand `idea-3` to `Loop.act`, which logs "reading the task" as an error for
+every idea event. And `current.Equal` would never look at it.
 
 The stated rule, by stream name:
 
@@ -817,11 +833,11 @@ never rewritten, so `apply` reads every shape a type has had. The rules:
   change: old events lack it, and `apply` gives it the old default, as
   `task.created`'s `maxTurns` does today ("a task made before keeps the
   old limit").
-- A required field is never added to an existing type, because
-  `events.CheckShape` would only enforce it on new proposals while replay
-  still meets events without it. If a type must change its shape, it gets a
-  new name (`idea.suggested` and, say, `idea.proposed`), the old one stays
-  registered for replay with no writers, and `apply` handles both.
+- A required field is never added to an existing type, because the
+  catalogue's `CheckShape` would only enforce it on new proposals while
+  replay still meets events without it. If a type must change its shape, it
+  gets a new name (`idea.suggested` and, say, `idea.proposed`), the old one
+  stays registered for replay with no writers, and `apply` handles both.
 - `events.Spec` gains a `Since` (the feature version that added the type)
   and a `Retired` flag (registered for replay only: `CheckWriter` refuses
   it). No version is stored on each event: the type name and the fields
@@ -920,13 +936,14 @@ Compiled-in code is trusted code: it is reviewed and built into the
 binary. The point of the rules below is legibility and catching mistakes,
 so a reader can see from a `Feature` value what that feature can write.
 
-- A feature owns its prefix and its types. `events.NewCatalogue` refuses
-  to build, and the server doesn't start, if a prefix or a type name is
-  already taken (by core or another feature), if a prefix starts with
-  `task-`, or if a type's name is outside the feature's namespace (`idea.`,
-  `git.`). Types it registers for its own streams can go only there
-  (`belongsIn`, as today for ideas); its `TaskTypes` can go only in task
-  streams.
+- A feature owns its prefix and its types. `events.NewCatalogue` refuses to
+  build, and the server doesn't start, if a prefix or a type name is already
+  taken (by core or another feature), if a prefix starts with `task-`, if a
+  type's name is outside the feature's one namespace (`idea.` for `idea-`,
+  `git.` for a feature whose task types are `git.*`), or if that namespace
+  is the core's or another feature's. Types it registers for its own streams
+  can go only there (`belongsIn`, as today for ideas); its `TaskTypes` can
+  go only in task streams.
 - Each type's `writers` (`Human`, `Agent`, `System`, ...) work as now:
   `CheckWriter` refuses an `idea.accepted` from anyone but you.
 - A feature names the core types it writes, in `Writes`: Ideas lists
