@@ -355,9 +355,13 @@ since Sat". A run caught up this way is a normal run in every other way,
 and it runs however old its slot is. The alternative, skipping a slot
 more than one period old, changes nothing for a daily schedule or a
 weekly one on one day: the latest due slot is always less than one
-period old, or the next slot would be due. It bites only where the gap
-between slots varies: a weekdays schedule (period a day) found on
-Saturday morning loses Friday's run; that is open question 2.
+period old, or the next slot would be due. (Once a year that is off by
+an hour: across the autumn clock change a daily slot comes 25 hours
+before the next, so for that hour it is more than a day old.) It bites
+where the gap between slots varies: a weekdays schedule (period a day)
+found on Saturday morning loses Friday's run, and a weekly one on Monday
+and Thursday (period the shorter gap, three days) found on Sunday loses
+Thursday's. That is open question 2.
 
 ### Firing one schedule
 
@@ -622,9 +626,11 @@ ship before them: they are only less useful without them (open question
    alternative is to skip a missed slot older than one period. It never
    drops a daily schedule's run (Monday 02:00 is hours old when a laptop
    shut all weekend opens on Monday morning) or a one-day weekly one's,
-   since the latest due slot is always less than a period old. It drops
-   runs only where the gap between slots varies: a weekdays schedule
-   found on Saturday loses Friday's run until Monday.
+   since the latest due slot is always less than a period old (bar an
+   hour a year, after the autumn clock change). It drops runs where the
+   gap between slots varies: a weekdays schedule found on Saturday loses
+   Friday's run until Monday, and a Monday-and-Thursday one found on
+   Sunday loses Thursday's.
 3. **Build schedules before Web Push sends (story 15)?** Recommendation:
    build them now, and say on the page, beside a schedule, that its runs
    can't reach you while push is off (the same reason
