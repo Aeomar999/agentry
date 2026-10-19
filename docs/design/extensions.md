@@ -1168,6 +1168,7 @@ ready to file as Backlog stories under one epic.
     pipeline fails, a `taskTabs` slot, and its webhook. Done: the note is
     in `docs/design` and the user has reviewed it; its build stories are
     filed from it.
+    The note: [t-019-shipping.md](t-019-shipping.md).
 
 ### Phase 5: per-team profiles
 
