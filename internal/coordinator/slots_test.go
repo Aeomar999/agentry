@@ -250,3 +250,46 @@ func TestATaskHeldIsLetGoOnceItsMoveIsNoTurn(t *testing.T) {
 		t.Errorf("task-2 is parked: nothing should be held, got %v", loop.held)
 	}
 }
+
+// A turn stopped at a usage limit stays open, so its task keeps its slot
+// while it waits for the reset, and the resume goes on in that same slot:
+// nothing waiting starts in between. Once the resumed turn ends, the slot
+// goes to the first waiting by rank.
+func TestATurnAtAUsageLimitKeepsItsSlot(t *testing.T) {
+	fakeClaudeOnPath(t)
+	repo := gitRepo(t)
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	setLimit(t, s, 1)
+	ranks := map[string]float64{"task-1": 1, "task-2": 3, "task-3": 2}
+	for _, id := range []string{"task-1", "task-2", "task-3"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": id, "repo": repo, "coordinator": "tech-lead", "parked": "backlog"}})
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskRanked, Data: map[string]any{"rank": ranks[id]}})
+	}
+	for _, id := range []string{"task-1", "task-2", "task-3"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskHeld,
+			Data: map[string]any{"place": "", "column": "in-progress", "sentBack": false}})
+	}
+	run(t, newLoop(s, state, t.TempDir()), state)
+	waitForTurn(t, s, "task-1", "turn-1", "tech-lead")
+	assertSlots(t, state, 1, "task-3", "task-2")
+
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnLimited, Correlation: "turn-1",
+		Data: map[string]any{"agent": "tech-lead", "error": "rate_limit", "details": "limit reached", "resetsAt": ""}})
+	waitUntil(t, s, "task-1", "the usage limit", func(task *tasks.Task) bool { return task.OpenTurn().Limited != "" })
+	assertSlots(t, state, 1, "task-3", "task-2")
+
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.System, ID: "watchdog"}, Type: events.TurnResumed,
+		Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "reason": "reset"}})
+	if task := waitForTurn(t, s, "task-1", "turn-1", "tech-lead"); task.OpenTurn().Resumes != 1 || len(task.Turns) != 1 {
+		t.Errorf("the resume should go on in the same open turn: %+v", task.Turns)
+	}
+	assertSlots(t, state, 1, "task-3", "task-2")
+
+	endTurn(t, s, "task-1", "turn-1", "tech-lead", `{"action": "ask", "question": "Which?"}`)
+	waitForTurn(t, s, "task-3", "turn-1", "tech-lead")
+	assertSlots(t, state, 1, "task-2")
+}
