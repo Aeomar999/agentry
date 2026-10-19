@@ -840,6 +840,22 @@ func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 	}
 }
 
+// A word with too many braces to expand quickly asks, and quickly (task-89,
+// review round 4).
+func TestAWordWithManyBracesIsJudgedQuickly(t *testing.T) {
+	p := loadDefault(t)
+	nested := strings.Repeat("{", 20000) + "a" + strings.Repeat("}", 20000)
+	for _, word := range []string{nested, strings.Repeat("{", 20000) + "," + strings.Repeat("}", 20000), strings.Repeat("{a}", maxBraces+1)} {
+		call := bash("ls " + word)
+		start := time.Now()
+		check(t, p, "read-only", []decisionCase{{fmt.Sprintf("ls a %d-byte brace word", len(word)), call, Ask}})
+		if took := time.Since(start); took > raceSlowdown*time.Second/10 {
+			t.Errorf("a %d-byte brace word took %v to judge", len(word), took)
+		}
+	}
+	check(t, p, "read-only", []decisionCase{{"ls a brace word under the limits", bash("ls " + strings.Repeat("{a}", maxBraces)), Allow}})
+}
+
 // What the judging profiles are for still runs from the workspace (task-89).
 func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 	p := loadDefault(t)

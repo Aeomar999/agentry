@@ -1012,15 +1012,28 @@ type braceAtom struct {
 	brace bool
 }
 
+// mvdan's expand.Braces ignores backslashes, skips words with quotes and has
+// no limit, so braceWords expands as bash does.
+//
 // braceWords is the words brace expansion makes of word: {a,b}c is ac bc,
 // x{a,} is just xa, x{1..3} is x1 x2 x3. Not ok for a sequence this can't
-// read ({1..a}), for more than maxValues words, and next to a $name or a $
-// that joins the next line, which bash reads again after expanding, so that
-// $x{y,} is $xy $x.
+// read ({1..a}), for more than maxValues words, for a word too long or with
+// too many braces to expand quickly, and next to a $name or a $ that joins
+// the next line, which bash reads again after expanding, so that $x{y,} is
+// $xy $x.
 func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
 	atoms := braceAtoms(word)
-	if !slices.ContainsFunc(atoms, func(a braceAtom) bool { return a.brace && a.text == "{" }) {
+	opens := 0
+	for _, a := range atoms {
+		if a.brace && a.text == "{" {
+			opens++
+		}
+	}
+	if opens == 0 {
 		return []*syntax.Word{word}, true
+	}
+	if opens > maxBraces || len(atoms) > maxBracedLength {
+		return nil, false
 	}
 	ways, ok := expandAtoms(atoms)
 	if !ok || len(ways) > maxValues {
@@ -1064,6 +1077,13 @@ func braceAtoms(word *syntax.Word) []braceAtom {
 	}
 	return atoms
 }
+
+// maxBraces and maxBracedLength bound a word brace expansion reads, whose
+// time grows with their product.
+const (
+	maxBraces       = 256
+	maxBracedLength = 4096
+)
 
 // expandAtoms expands the first {…} holding a comma at its own level, or a
 // sequence, and the rest after it, as bash does. A { that doesn't close stays

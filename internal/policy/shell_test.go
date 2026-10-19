@@ -89,6 +89,7 @@ func TestWordsAreReadAsBashReadsThem(t *testing.T) {
 		{`{1..a}`, nil},     // bash leaves it as it is
 		{`{1..{2,3}}`, nil}, // bash makes {1..2} {1..3}
 		{`$x{y,}`, nil},
+		{"{" + strings.Repeat("{a,b}", maxBraces) + "}", nil}, // too many braces
 	}
 	for _, c := range cases {
 		file, err := syntax.NewParser().Parse(strings.NewReader("echo "+c.word), "")
