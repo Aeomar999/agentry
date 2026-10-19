@@ -10,6 +10,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -323,6 +324,7 @@ func TestARetryReportsWhereTheTaskReallyIs(t *testing.T) {
 
 // A broken task made from the idea can't be marked, so Accept refuses, but
 // makes no second task either; a broken task made from nothing is skipped.
+// Accept reads the log as the coordinator hook gives it (asCore).
 func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	repo := gitRepo(t)
@@ -350,7 +352,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 		t.Fatal("task-2 and task-3 should be broken")
 	}
 
-	got, err := ideas.Accept(s, state, fromBroken, ideas.Choice{})
+	got, err := ideas.Accept(asCore(s), state, fromBroken, ideas.Choice{})
 	if err != nil || got.Task != "task-2" || got.Column != "" || got.Accepted || !strings.Contains(got.Refused, "can't be read") {
 		t.Errorf("accepting %s: %+v %v", fromBroken, got, err)
 	}
@@ -360,9 +362,18 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	if idea := load(t, state, fromBroken); idea.State != ideas.Open {
 		t.Errorf("%s is %s", fromBroken, idea.State)
 	}
-	if got, err := ideas.Accept(s, state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Column: "backlog", Accepted: true}) {
+	if got, err := ideas.Accept(asCore(s), state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Column: "backlog", Accepted: true}) {
 		t.Errorf("accepting %s past the broken tasks: %+v %v", fresh, got, err)
 	}
+}
+
+// asCore is s as a hook's Core gives it: a Proposer and a read-only
+// EventLog, two values, neither of them the store.
+func asCore(s *store.Store) ideas.Log {
+	return struct {
+		features.Proposer
+		features.EventLog
+	}{s, s}
 }
 
 // A kind that is neither a task nor an epic is refused, whether or not a
