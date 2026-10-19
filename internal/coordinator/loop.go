@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -301,6 +302,7 @@ func sentence(err error) string { return strings.TrimRight(err.Error(), ". ") + 
 
 // apply turns the coordinator's decision into its event, written as the coordinator.
 func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) {
+	defer l.recoverDecision(task, decision)
 	coordinator := events.Actor{Kind: events.Agent, ID: task.Coordinator}
 	if title := strings.TrimSpace(decision.Title); title != "" && title != task.Title {
 		l.propose(task.ID, coordinator, events.TaskRenamed, map[string]any{"title": title})
@@ -358,6 +360,20 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 			l.removeWorktree(task)
 		}
 	}
+}
+
+// recoverDecision turns a panic while acting on a decision into an issue on
+// its task: the coordinator hears why and decides again, and the loop, and
+// the server with it, goes on serving the other tasks. Deferred by apply.
+func (l *Loop) recoverDecision(task *tasks.Task, decision Decision) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	slog.Error("coordinator loop: acting on a decision panicked", "task", task.ID, "action", decision.Action, "panic", r,
+		"stack", string(debug.Stack()))
+	l.propose(task.ID, agentry, events.IssueRaised, map[string]any{
+		"reason": fmt.Sprintf("Agentry failed acting on the %q decision: %v", decision.Action, r)})
 }
 
 // moveRepo moves the task to the repo the user named for it: a folder here,

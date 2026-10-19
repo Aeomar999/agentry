@@ -10,6 +10,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -297,11 +298,48 @@ func TestASplitStoryAfterAStoryNotBeforeItIsRefused(t *testing.T) {
 	}
 }
 
+// A decision that panics while the loop acts on it raises an issue on its
+// task instead of stopping the server, and the loop goes on to the next
+// task. Here the store's check breaks on the story it is asked to make.
+func TestADecisionThatPanicsRaisesAnIssueAndTheLoopGoesOn(t *testing.T) {
+	broken := func(p events.Proposal, state rules.State) *events.Rejection {
+		if p.Type == events.TaskCreated && p.Text("title") == "Break the check" {
+			panic("the check broke")
+		}
+		return rules.Check(p, state)
+	}
+	s, state, epic := splittingWith(t, broken, `{"action": "split", "stories": [{"title": "Break the check", "brief": "Boom."}]}`)
+	loop := newLoop(s, state, t.TempDir())
+	loop.act(epic)
+	loop.act("task-1")
+
+	if reason := lastIssue(t, s, epic); !strings.Contains(reason, `"split" decision: the check broke`) {
+		t.Errorf("the issue should name the decision and the panic: %q", reason)
+	}
+	if task := load(t, s, epic); task.IssuesInARow != 1 || len(task.Stories) != 1 {
+		t.Errorf("%d issues, stories %v", task.IssuesInARow, task.Stories)
+	}
+	if question := load(t, s, "task-1").Question; !strings.Contains(question, "worktree") {
+		t.Errorf("the loop should go on to task-1, whose repo isn't there: question %q", question)
+	}
+}
+
 // splitting is a store with task-2, an epic with one story, task-1, whose
 // coordinator's turn ended with report.
 func splitting(t *testing.T, report string) (*store.Store, *current.State, string) {
+	return splittingWith(t, rules.Check, report)
+}
+
+// splittingWith is splitting with the rules the store checks proposals by.
+func splittingWith(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection, report string) (*store.Store, *current.State, string) {
 	t.Helper()
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { storetest.CheckEqual(t, s, state) }) // cleanups run last first: before the close
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
