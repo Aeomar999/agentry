@@ -1,6 +1,7 @@
 package events_test
 
 import (
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -76,5 +77,62 @@ func TestCheckShapeAndWriter(t *testing.T) {
 		if got != c.wantCheck {
 			t.Errorf("%s: got check %q (%v), want %q", c.name, got, rejection, c.wantCheck)
 		}
+	}
+}
+
+func TestNewCatalogueRefusesWhatWouldCollide(t *testing.T) {
+	spec := events.Spec{Writers: []events.ActorKind{events.System}}
+	notes := events.Registration{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}}
+	cases := []struct {
+		name         string
+		registration []events.Registration
+		want         string // in the error
+	}{
+		{"a prefix ideas took", []events.Registration{ideas.Registration(), {Prefix: ideas.Prefix, Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "idea-" is taken`},
+		{"a prefix overlapping another", []events.Registration{notes, {Prefix: "note-pad-", Types: map[events.Type]events.Spec{"pad.written": spec}}}, `prefix "note-pad-" is taken`},
+		{"a prefix a core stream starts with", []events.Registration{{Prefix: "agent", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "agent" is taken`},
+		{"a core type", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{events.TaskCreated: spec}}}, "task.created is taken"},
+		{"another registration's type", []events.Registration{notes, {TaskTypes: map[events.Type]events.Spec{"note.written": spec}}}, "note.written is taken"},
+		{"a task- prefix", []events.Registration{{Prefix: "task-notes-", Types: map[events.Type]events.Spec{"note.written": spec}}}, "starts with task-"},
+		{"stream types with no prefix", []events.Registration{{Types: map[events.Type]events.Spec{"note.written": spec}}}, "need a stream prefix"},
+		{"a task type in task.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"task.pr_opened": spec}}}, "in the task. namespace"},
+		{"a task type in turn.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"turn.paused": spec}}}, "in the turn. namespace"},
+	}
+	for _, c := range cases {
+		_, err := events.NewCatalogue(c.registration...)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
+		}
+	}
+	if _, err := events.NewCatalogue(ideas.Registration(), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}); err != nil {
+		t.Errorf("a task type in a namespace of its own: %v", err)
+	}
+}
+
+// A feature's task types go in task streams; its stream types only in its
+// own streams, which aren't tasks.
+func TestARegisteredPrefixIsNotATask(t *testing.T) {
+	spec := events.Spec{Writers: []events.ActorKind{events.System}}
+	catalogue, err := events.NewCatalogue(ideas.Registration(), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for stream, want := range map[string]bool{"task-1": true, "idea-1": false, events.AgentsStream: false, events.SettingsStream: false} {
+		if got := catalogue.IsTaskStream(stream); got != want {
+			t.Errorf("IsTaskStream(%q) = %v, want %v", stream, got, want)
+		}
+		if got := events.Core().IsTaskStream(stream); got != (want || stream == "idea-1") {
+			t.Errorf("the core's IsTaskStream(%q) = %v", stream, got)
+		}
+	}
+	agentry := events.Actor{Kind: events.System, ID: "agentry"}
+	if rejection := catalogue.CheckShape(events.Proposal{Stream: "task-1", Actor: agentry, Type: "git.pr_opened"}); rejection != nil {
+		t.Errorf("a task type in a task: %v", rejection)
+	}
+	if rejection := catalogue.CheckShape(events.Proposal{Stream: "idea-1", Actor: agentry, Type: "git.pr_opened"}); rejection == nil {
+		t.Error("a task type in an idea was let through")
+	}
+	if rejection := events.Core().CheckShape(events.Proposal{Stream: "task-1", Actor: agentry, Type: "git.pr_opened"}); rejection == nil {
+		t.Error("the core knows a type nobody registered")
 	}
 }
