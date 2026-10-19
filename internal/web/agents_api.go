@@ -31,6 +31,9 @@ func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agent.Name = r.PathValue("name") // the name is who the agent is; it doesn't change
+	if had, found := s.state.Roster().Get(agent.Name); found {
+		agent.Template = had.Template // what it was made from stays, so its team keeps its features
+	}
 	s.propose(w, agent.Proposal(you, true))
 }
 
@@ -236,6 +239,7 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 		return agent, false
 	}
 	agent.Name, agent.Model = strings.TrimSpace(agent.Name), strings.TrimSpace(agent.Model)
+	agent.Template = "" // only AddTeam makes an agent from a template
 	agent.Description, agent.Prompt = strings.TrimSpace(agent.Description), strings.TrimSpace(agent.Prompt)
 	if agent.Team = strings.TrimSpace(agent.Team); strings.EqualFold(agent.Team, agents.DefaultTeam) {
 		agent.Team = "" // the default team, as agents from before teams have it

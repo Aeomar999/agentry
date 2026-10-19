@@ -19,8 +19,11 @@ import (
 // Agentry accepts for you each idea every Visionary agreed on, and can
 // start its task too.
 
+// isVisionaries says whether the coordinator's team was made from a
+// template that brings ideas, whatever the team is called.
 func isVisionaries(coordinator agents.Agent) bool {
-	return strings.EqualFold(coordinator.TeamName(), ideas.VisionariesTeam)
+	template, found := agents.TemplateWithID(coordinator.Template)
+	return found && template.Lists(ideas.Feature)
 }
 
 // Idea is one feature a done decision suggests.

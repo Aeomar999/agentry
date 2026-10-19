@@ -18,7 +18,8 @@ import (
 )
 
 // Software and a Visionaries team on a real loop. The Visionaries team is
-// Writing's agents by another name, so its coordinator is editor.
+// Writing's agents made as the Visionaries' template, so its coordinator is
+// editor.
 func withVisionaries(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	s, state, repo := withTeams(t, true)
@@ -40,7 +41,7 @@ func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, st
 		return s, state, repo
 	}
 	team, _ := agents.TemplateNamed("Writing")
-	team.Team = "visionaries" // in any case
+	team.ID, team.Team = "visionaries", "visionaries" // its name in any case
 	for _, p := range agents.AddTeam(team, agents.FromEvents(mustStream(t, s, events.AgentsStream)), you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
@@ -204,5 +205,36 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 	software := startTask(t, s, "task-vision-5", repo, "tech-lead")
 	if brief := readBrief(t, software, "turn-1"); strings.Contains(brief, "Dark mode") || strings.Contains(brief, `"ideas"`) {
 		t.Errorf("a Software brief has no ideas:\n%s", brief)
+	}
+}
+
+// A team suggests ideas because of the template it was made from, not its
+// name: a second Visionaries team does, a team you made and called
+// Visionaries doesn't, and a log from before agents recorded their template
+// still has its Visionaries teams.
+func TestATeamSuggestsIdeasByItsTemplate(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	var log []events.Event
+	add := func(p events.Proposal) { log = append(log, events.Event{Proposal: p}) }
+	for _, p := range agents.SeedProposals(nil) {
+		add(p)
+	}
+	for range 2 {
+		for _, p := range agents.AddTeam(visionaries, agents.FromEvents(log), you) {
+			add(p)
+		}
+	}
+	add(agents.Agent{Name: "lead", Team: "visionaries", Coordinates: true, Engine: "claude", Prompt: "Think."}.Proposal(you, false))
+	for _, team := range []string{"Old Visionaries", "Old Visionaries 2"} {
+		p := agents.Agent{Name: team, Team: strings.TrimPrefix(team, "Old "), Coordinates: true, Engine: "claude", Prompt: "Think."}.Proposal(you, false)
+		delete(p.Data, "template") // as Agentry wrote it before the field
+		add(p)
+	}
+	roster := agents.FromEvents(log)
+	for name, want := range map[string]bool{"tech-lead": false, "visionary-lead": true, "visionary-lead-2": true, "lead": false,
+		"Old Visionaries": true, "Old Visionaries 2": true} {
+		if coordinator, _ := roster.Get(name); isVisionaries(coordinator) != want {
+			t.Errorf("%s of team %q (template %q): suggests ideas %v, want %v", name, coordinator.TeamName(), coordinator.Template, !want, want)
+		}
 	}
 }
