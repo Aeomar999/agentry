@@ -101,6 +101,7 @@ func TestEqualNamesWhatAMissedApplyLeftBehind(t *testing.T) {
 		want   string
 	}{
 		{"task", proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Missed"}), "task-2: field Title"},
+		{"idea", proposal("idea-1", you, ideas.IdeaDismissed, map[string]any{"note": "Missed"}), "idea-1: field State"},
 		{"new task", proposal("task-4", you, events.TaskCreated, map[string]any{"title": "Missed", "repo": "/r", "coordinator": "tech-lead"}), "task-4:"},
 		{"roster", proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Missed."}), "agents:"},
 		{"workers", proposal(events.WorkersStream, system, events.WorkerDisconnected, map[string]any{"name": "laptop"}), "workers: field Workers"},

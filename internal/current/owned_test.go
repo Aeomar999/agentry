@@ -175,6 +175,34 @@ func brokenOnly(t *testing.T, name string, s, want *State, stream string) {
 	}
 }
 
+// Equal compares what each owned stream holds with its replay, so it sees
+// a feature whose Next is subtly wrong though every stream's position and
+// the order are right.
+func TestEqualSeesAFeaturesWrongNext(t *testing.T) {
+	forgetful := *notes
+	forgetful.Next = func(prev any, e events.Event) any {
+		n := notes.Next(prev, e).(*note)
+		if len(n.texts) > 1 {
+			n.texts = n.texts[1:] // forgets the first text once there is another
+		}
+		return n
+	}
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withNotes, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for _, e := range notesLog() {
+		propose(t, s, e.Proposal)
+	}
+	state := New(withNotes, ideas.Streams(), &forgetful)
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "note-2:") {
+		t.Errorf("Equal with a Next that forgets note-2's first text: %v, want it to name note-2", err)
+	}
+}
+
 // Every log these tests make, written to a store: a state that applied it
 // event by event, and one loaded from it, equal a replay, every feature's
 // streams and their order included. A spoiled note breaks in both and in
