@@ -1,40 +1,59 @@
 import { useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Play, X } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
 import { Dialog } from "@/components/molecules/Dialog";
 import { Field } from "@/components/molecules/Field";
+import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
+import type { ServerConfig } from "@/api/types";
+import { LimitChoice, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
+import { useResource } from "@/live/use-resource";
+import { COLUMN_TITLES } from "@/lib/columns";
 import { TaskLink } from "./IdeaCard";
 import type { Idea, IdeaAcceptance } from "./types";
 import { useToast } from "@/components/organisms/Toasts";
 
 const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeURIComponent(idea.id)}/${action}`;
 
-// AcceptIdeaDialog makes the idea a task or an epic in your Backlog, the
-// kind it suggests unless you pick the other, with your note. It stays open
-// to link to what was made, and says why when the idea couldn't be marked.
+// AcceptIdeaDialog makes the idea a task or an epic, the kind it suggests
+// unless you pick the other, with your note and token budget, in your
+// Backlog or started at once. It stays open to link to what was made, and
+// says why when the idea couldn't be marked.
 export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () => void }) {
   const notify = useToast();
+  const config = useResource<ServerConfig>("/api/config").data;
   const [kind, setKind] = useState<"task" | "epic">(idea.kind === "epic" ? "epic" : "task");
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [budget, setBudget] = useState<LimitChoice | null>(null); // null: the server's default
+  const [busy, setBusy] = useState<"" | "accept" | "start">("");
   const [refused, setRefused] = useState("");
-  const [made, setMade] = useState<IdeaAcceptance | null>(null);
+  const [made, setMade] = useState<(IdeaAcceptance & { started: boolean }) | null>(null);
 
-  async function accept() {
-    setBusy(true);
+  async function accept(start: boolean) {
+    const limit = budget ? limitOf(SCALES.budget, budget) : undefined;
+    if (Number.isNaN(limit)) {
+      setRefused("Give the budget as a number of tokens, or pick a preset.");
+      return;
+    }
+    setBusy(start ? "start" : "accept");
     setRefused("");
     try {
-      const got = await api<IdeaAcceptance>("POST", path(idea, "accept"), { kind, note });
-      setMade(got);
-      if (got.accepted) notify("success", `Made ${got.task} from the idea`, "In your Backlog until you start it.");
+      const asked = { kind, note, ...(limit !== undefined && { budget: sent(limit) }), ...(start && { start }) };
+      const got = await api<IdeaAcceptance>("POST", path(idea, "accept"), asked);
+      setMade({ ...got, started: start });
+      if (got.accepted)
+        notify(
+          "success",
+          `Made ${got.task} from the idea`,
+          start ? `Started: it is ${COLUMN_TITLES["in-progress"]}.` : "In your Backlog until you start it.",
+        );
     } catch (failure) {
       setRefused((failure as Error).message);
     }
-    setBusy(false);
+    setBusy("");
   }
 
   return (
@@ -42,7 +61,8 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       {made ? (
         <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
           <p>
-            Made <TaskLink id={made.task} /> from it, in your Backlog until you start it.
+            Made <TaskLink id={made.task} /> from it,{" "}
+            {made.started ? `started: it is ${COLUMN_TITLES["in-progress"]}` : "in your Backlog until you start it"}.
           </p>
           {!made.accepted && <Banner title="The idea wasn't marked accepted">{made.refused}</Banner>}
           <div className="flex gap-2">
@@ -71,10 +91,28 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
           <Field label="Note" htmlFor="idea-note" hint="Optional. Kept with the idea, in its history.">
             <TextArea id="idea-note" autoFocus rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
+          {config && (
+            <Field
+              label="Token budget"
+              htmlFor="idea-budget"
+              hint="Started at once, it spends tokens straight away. At this many it stops and asks you to raise it or wrap up."
+            >
+              <LimitSelect
+                id="idea-budget"
+                scale={SCALES.budget}
+                choice={budget ?? choiceOf(SCALES.budget, config.budget)}
+                onChange={setBudget}
+                defaultLimit={config.budget}
+              />
+            </Field>
+          )}
           {refused && <Banner title="It wasn't accepted">{refused}</Banner>}
           <div className="flex gap-2">
-            <Button variant="primary" icon={<Check />} disabled={busy} onClick={accept}>
-              {busy ? "Accepting…" : kind === "epic" ? "Accept as an epic" : "Accept as a task"}
+            <Button variant="primary" icon={<Check />} disabled={busy !== ""} onClick={() => accept(false)}>
+              {busy === "accept" ? "Accepting…" : kind === "epic" ? "Accept as an epic" : "Accept as a task"}
+            </Button>
+            <Button icon={<Play />} disabled={busy !== ""} onClick={() => accept(true)}>
+              {busy === "start" ? "Starting…" : "Accept and start"}
             </Button>
             <Button variant="ghost" onClick={onClose}>
               Cancel
