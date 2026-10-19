@@ -94,8 +94,10 @@ type Coordinator struct {
 
 // A Route is one endpoint of a feature's HTTP API. Web mounts it behind the
 // wrapper its Auth names; there is no way to mount one without, and none
-// sits behind the wrapper that hands out the UI token. Every write it makes
-// is as you (httpapi.You), with your authority and no more.
+// sits behind the wrapper that hands out the UI token. Its writes should be
+// made as you (httpapi.You), with your authority and no more; that is the
+// route's to keep, since the checked proposer limits only the event type it
+// writes, not the actor.
 type Route struct {
 	Pattern string // as http.ServeMux takes it: "GET /api/ideas"
 	Auth    Auth
