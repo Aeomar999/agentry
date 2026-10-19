@@ -373,9 +373,11 @@ alike, as `ideas.Accept` holds `accepting`
    `slot` and writes `schedule.fired` for it as System (with `slot` `""`
    and `manual` for a task you made with Run now). If that write is
    refused (the refusal is stored as `proposal.rejected`,
-   `internal/store/store.go:258`; it can be, only when the schedule was
-   paused, changed or resumed after that slot, so `Since` has passed it
-   and the slot isn't due either), it writes `schedule.skipped {slot: "",
+   `internal/store/store.go:260-265`; it can be, only when the schedule is
+   paused now, or was changed or resumed after that slot, so `Since` has
+   passed it and the slot isn't due either; a paused schedule never
+   reaches step 1, as the job fires only schedules that are on, but it
+   can be paused while step 1 runs), it writes `schedule.skipped {slot: "",
    reason: "unrecorded", task, why}` once instead, which puts the task in
    `Named` and says so in `LastRun`, so no later wake tries it again; if
    even that is refused, the job logs it and keeps the task in a set in
