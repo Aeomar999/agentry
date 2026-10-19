@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -94,11 +95,11 @@ func (s *Server) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		a.Kind = kindOf(i)
 	}
 	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), object(props{
-			"decision": enum("Make it a task, or leave the idea open", "accept", "leave open"),
-			"kind":     withDefault(enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
-			"note":     withDefault(text("Optional: what to tell its coordinator"), a.Note),
-			"start":    withDefault(enum("Leave it in the Backlog, or start it now (it spends tokens straight away)", "backlog", "start"), startOf(a.Start)),
+		answer, ok, err := s.elicit(ctx, "Accept the idea "+i.ID+", "+i.Title+"? It becomes a task in your Backlog, or one that starts now.\n\n"+aboutIdea(i), schema.Object(schema.Props{
+			"decision": schema.Enum("Make it a task, or leave the idea open", "accept", "leave open"),
+			"kind":     withDefault(schema.Enum("A task (one change) or an epic (split into stories)", "task", "epic"), a.Kind),
+			"note":     withDefault(schema.Text("Optional: what to tell its coordinator"), a.Note),
+			"start":    withDefault(schema.Enum("Leave it in the Backlog, or start it now (it spends tokens straight away)", "backlog", "start"), startOf(a.Start)),
 		}, "decision"))
 		if err != nil {
 			return "", err
@@ -139,9 +140,9 @@ func (s *Server) dismissIdea(ctx context.Context, arguments json.RawMessage) (st
 		return "", err
 	}
 	if s.canElicit {
-		answer, ok, err := s.elicit(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), object(props{
-			"decision": enum("Dismiss it, or leave it open", "dismiss", "leave open"),
-			"note":     withDefault(text("Optional: why, so the Visionaries don't suggest it again"), a.Note),
+		answer, ok, err := s.elicit(ctx, "Dismiss the idea "+i.ID+", "+i.Title+"?\n\n"+aboutIdea(i), schema.Object(schema.Props{
+			"decision": schema.Enum("Dismiss it, or leave it open", "dismiss", "leave open"),
+			"note":     withDefault(schema.Text("Optional: why, so the Visionaries don't suggest it again"), a.Note),
 		}, "decision"))
 		if err != nil {
 			return "", err

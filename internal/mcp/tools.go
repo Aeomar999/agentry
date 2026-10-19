@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
@@ -52,50 +53,50 @@ type question struct {
 func (s *Server) tools() []tool {
 	return []tool{
 		{"status", "What needs the user, what is running and what is planned, for this repo (or all repos). Use it when the user asks how things stand.",
-			object(props{"all": boolean("every repo, not only this one")}), s.status},
+			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one")}), s.status},
 		{"list_tasks", "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
-			object(props{"all": boolean("every repo, not only this one"), "status": text("only this status: working, needs you, held, done")}), s.listTasks},
+			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "status": schema.Text("only this status: working, needs you, held, done")}), s.listTasks},
 		{"show_task", "One task: its description, what it waits for, its summary when done, and its latest steps.",
-			object(props{"task": text("its id, such as task-4")}, "task"), s.showTask},
+			schema.Object(schema.Props{"task": schema.Text("its id, such as task-4")}, "task"), s.showTask},
 		{"create_task", "Hand work to Agentry: a task (a story), or an epic of stories. It works in this repo unless repo says otherwise. Show the user the title and description before creating it, unless they said to go ahead.",
-			object(props{
-				"title":       text("one imperative line under 80 characters"),
-				"description": text("what to change and why, the areas involved, and how to tell it works"),
-				"kind":        enum("story: one change, never split; epic: split into stories; leave it out to let the coordinator decide", "story", "epic"),
-				"team":        text("the team that does it, such as Software or Writing; leave it out to let the coordinators decide"),
-				"labels":      texts("one to three short lowercase words, such as bug or docs"),
-				"epic":        text("for a new story of an epic: the epic's id"),
-				"stories":     texts("for a new epic: ids of tasks there already, to file under it"),
-				"repo":        text("when not this one: the repo's absolute path, a git address to clone (git@host:team/app.git, https://...), or a link to a .zip or .tar.gz of it"),
-				"budget":      integer("the tokens it may use before it asks the user, such as 2000000; -1 for no limit; leave it out for the server's default"),
-				"maxTurns":    integer("the turns it may have without the user's answer before it asks them; -1 for no limit; leave it out for the server's default"),
+			schema.Object(schema.Props{
+				"title":       schema.Text("one imperative line under 80 characters"),
+				"description": schema.Text("what to change and why, the areas involved, and how to tell it works"),
+				"kind":        schema.Enum("story: one change, never split; epic: split into stories; leave it out to let the coordinator decide", "story", "epic"),
+				"team":        schema.Text("the team that does it, such as Software or Writing; leave it out to let the coordinators decide"),
+				"labels":      schema.Texts("one to three short lowercase words, such as bug or docs"),
+				"epic":        schema.Text("for a new story of an epic: the epic's id"),
+				"stories":     schema.Texts("for a new epic: ids of tasks there already, to file under it"),
+				"repo":        schema.Text("when not this one: the repo's absolute path, a git address to clone (git@host:team/app.git, https://...), or a link to a .zip or .tar.gz of it"),
+				"budget":      schema.Integer("the tokens it may use before it asks the user, such as 2000000; -1 for no limit; leave it out for the server's default"),
+				"maxTurns":    schema.Integer("the turns it may have without the user's answer before it asks them; -1 for no limit; leave it out for the server's default"),
 			}, "title"), s.createTask},
 		{"tell_coordinator", "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
-			object(props{"task": text("its id"), "text": text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
+			schema.Object(schema.Props{"task": schema.Text("its id"), "text": schema.Text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
 		{"answer_question", "Send the user's answer to a coordinator's question. Only ever their own answer.",
-			object(props{"task": text("its id"), "answer": text("the user's answer")}, "task", "answer"), s.answer},
+			schema.Object(schema.Props{"task": schema.Text("its id"), "answer": schema.Text("the user's answer")}, "task", "answer"), s.answer},
 		{"close_epic", "Ask the user, directly in Claude Code, whether to close an epic whose stories are all done, whether it is asking or they left it open. Only they can.",
-			object(props{"epic": text("the epic's id")}, "epic"), s.closeEpic},
+			schema.Object(schema.Props{"epic": schema.Text("the epic's id")}, "epic"), s.closeEpic},
 		{"review_approvals", "Ask the user, directly in Claude Code, to approve or deny each action an agent is waiting to take (of one task, or all). Only they can.",
-			object(props{"task": text("only this task's")}), s.reviewApprovals},
+			schema.Object(schema.Props{"task": schema.Text("only this task's")}), s.reviewApprovals},
 		{"file_under_epic", "Make a task a story of an epic, move it to another, or with an empty epic take it out of its epic.",
-			object(props{"task": text("its id"), "epic": text(`the epic's id, or "" to take it out`)}, "task", "epic"), s.fileUnder},
+			schema.Object(schema.Props{"task": schema.Text("its id"), "epic": schema.Text(`the epic's id, or "" to take it out`)}, "task", "epic"), s.fileUnder},
 		{"set_priority", "Put tasks (such as an epic's stories) in this priority order, first first.",
-			object(props{"tasks": texts("their ids, in the order wanted")}, "tasks"), s.setPriority},
+			schema.Object(schema.Props{"tasks": schema.Texts("their ids, in the order wanted")}, "tasks"), s.setPriority},
 		{"start", "Start tasks waiting in the user's Backlog or To do, such as an epic's stories, in the order given.",
-			object(props{"tasks": texts("their ids")}, "tasks"), s.start},
+			schema.Object(schema.Props{"tasks": schema.Texts("their ids")}, "tasks"), s.start},
 		{"attach_file", "Share a file on this machine with a task: its agents find it in .agentry/files, on whichever machine works on it. For data, documents or builds that aren't in git.",
-			object(props{"task": text("its id"), "path": text("the file's path here"), "as": text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), s.attachFile},
+			schema.Object(schema.Props{"task": schema.Text("its id"), "path": schema.Text("the file's path here"), "as": schema.Text("optional: the name to share it by, such as data/sales.csv")}, "task", "path"), s.attachFile},
 		{"get_file", "Download one of a task's shared files to this machine.",
-			object(props{"task": text("its id"), "name": text("the shared file's name"), "to": text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
+			schema.Object(schema.Props{"task": schema.Text("its id"), "name": schema.Text("the shared file's name"), "to": schema.Text("optional: where to save it; this folder if left out")}, "task", "name"), s.getFile},
 		{"list_ideas", "The features the Visionaries suggest for this repo (or all repos), newest first: open ones unless state says otherwise. Relay them to the user; the user decides on each.",
-			object(props{"all": boolean("every repo, not only this one"), "state": enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
+			schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "state": schema.Enum("which ideas: open (the default), accepted, dismissed or all", "open", "accepted", "dismissed", "all")}), s.listIdeas},
 		{"accept_idea", "Make an idea a task in the user's Backlog, or with start, a task that starts now. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
-			object(props{"id": text("the idea's id, such as idea-3"), "kind": enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
-				"note":  text("optional: what the user said, for the task's coordinator"),
-				"start": boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), s.acceptIdea},
+			schema.Object(schema.Props{"id": schema.Text("the idea's id, such as idea-3"), "kind": schema.Enum("task (one change) or epic; leave it out for what the idea suggests", "task", "epic"),
+				"note":  schema.Text("optional: what the user said, for the task's coordinator"),
+				"start": schema.Boolean("start the task now instead of leaving it in the Backlog; it spends tokens straight away")}, "id"), s.acceptIdea},
 		{"dismiss_idea", "Dismiss an idea. Only with the user's own decision, never on your own judgement: Claude Code asks the user to confirm when it can, and otherwise acts on these arguments.",
-			object(props{"id": text("the idea's id"), "note": text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
+			schema.Object(schema.Props{"id": schema.Text("the idea's id"), "note": schema.Text("optional: the user's reason, so the Visionaries don't suggest it again")}, "id"), s.dismissIdea},
 	}
 }
 
@@ -411,8 +412,8 @@ func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (stri
 	if !s.canElicit {
 		return "Closing an epic is the user's to approve. Give them this link: " + s.agentry.PageURL("/tasks/"+a.Epic), nil
 	}
-	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+title+"?\n\n"+text, object(props{
-		"decision": enum("Close it, or keep it open to tell its coordinator what else it needs", "close", "keep open"),
+	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+title+"?\n\n"+text, schema.Object(schema.Props{
+		"decision": schema.Enum("Close it, or keep it open to tell its coordinator what else it needs", "close", "keep open"),
 	}, "decision"))
 	if err != nil {
 		return "", err
@@ -462,9 +463,9 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 	}
 	var done []string
 	for _, q := range approvals {
-		answer, ok, err := s.elicit(ctx, approvalText(q), object(props{
-			"decision": enum("Let it run, or refuse it", "approve", "deny"),
-			"reason":   text("Optional: why, for the agent"),
+		answer, ok, err := s.elicit(ctx, approvalText(q), schema.Object(schema.Props{
+			"decision": schema.Enum("Let it run, or refuse it", "approve", "deny"),
+			"reason":   schema.Text("Optional: why, for the agent"),
 		}, "decision"))
 		if err != nil {
 			return "", err
@@ -519,7 +520,7 @@ func (s *Server) approveCopy(ctx context.Context, q question) (string, error) {
 	if !s.canElicit {
 		return "Copying a file from outside a machine's worktrees is the user's to allow. Give them this link: " + s.agentry.PageURL("/tasks/"+q.Task), nil
 	}
-	answer, ok, err := s.elicit(ctx, q.Text, object(props{"decision": enum("Copy it into the task's shared files, or not", "copy", "don't copy")}, "decision"))
+	answer, ok, err := s.elicit(ctx, q.Text, schema.Object(schema.Props{"decision": schema.Enum("Copy it into the task's shared files, or not", "copy", "don't copy")}, "decision"))
 	if err != nil {
 		return "", err
 	}
@@ -627,32 +628,6 @@ func describe(q question) string {
 }
 
 // ---- small helpers -------------------------------------------------------------
-
-type props map[string]any
-
-func object(properties props, required ...string) map[string]any {
-	schema := map[string]any{"type": "object", "properties": properties}
-	if len(required) > 0 {
-		schema["required"] = required
-	}
-	return schema
-}
-
-func text(description string) map[string]any {
-	return map[string]any{"type": "string", "description": description}
-}
-func texts(description string) map[string]any {
-	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": description}
-}
-func integer(description string) map[string]any {
-	return map[string]any{"type": "integer", "description": description}
-}
-func boolean(description string) map[string]any {
-	return map[string]any{"type": "boolean", "description": description}
-}
-func enum(description string, values ...string) map[string]any {
-	return map[string]any{"type": "string", "enum": values, "description": description}
-}
 
 func section(b *strings.Builder, title string, items []string) {
 	if len(items) == 0 {
