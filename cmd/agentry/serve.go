@@ -46,6 +46,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
+	"gitlab.com/dev.chempa/agentry/internal/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -147,6 +148,10 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	agentPolicy, err := openPolicy(o.dataDir, log)
 	if err != nil {
 		return err
+	}
+	push, err := webpush.Open(filepath.Join(o.dataDir, webpush.File)) // beside the log, never in it
+	if err != nil {
+		return fmt.Errorf("push subscriptions: %w", err)
 	}
 
 	// Listen before anything starts, so a busy port fails at once.
@@ -269,7 +274,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed, Logs: logs, Worktrees: worktreeRoot},
+		Features: installed, Logs: logs, Worktrees: worktreeRoot, Push: push},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,

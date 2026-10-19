@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -46,6 +47,7 @@ type Config struct {
 	Features    []features.Feature           // what teams and settings can turn on, for GET /api/features; their routes are mounted too
 	Logs        map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its routes may write through
 	Worktrees   string                       // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
+	Push        *webpush.Store               // the VAPID keys and the browsers subscribed to pushes; nil for none
 }
 
 // PolicySource is the policy in force and any problem with the file on
@@ -141,6 +143,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /integrations/agentry", s.integrationBinary)
 	mux.HandleFunc("POST /api/integrations/connect", s.connect)
 	api("POST /api/theme", s.setTheme)
+	api("GET /api/push", s.showPush)
+	api("POST /api/push/subscriptions", s.subscribePush)
+	api("DELETE /api/push/subscriptions", s.unsubscribePush)
 	// Signing in: a device without the token swaps a one-time code, or the
 	// token pasted in, for the cookie and the token.
 	mux.Handle("POST /api/signin/codes", s.requireRealUIToken(s.issueSigninCode))
