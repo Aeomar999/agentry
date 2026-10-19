@@ -52,8 +52,12 @@ func Dir(dataDir string) string {
 }
 
 // Open loads the CA from dir, or makes one there on first use. It refuses a
-// key file that is a symbolic link or that others than its owner may read.
+// folder or key file that is a symbolic link, and a key that others than its
+// owner may read.
 func Open(dir string) (*CA, error) {
+	if err := checkFolder(dir); err != nil {
+		return nil, err
+	}
 	keyPath, certPath := filepath.Join(dir, keyFile), filepath.Join(dir, certFile)
 	_, keyErr := os.Lstat(keyPath)
 	_, certErr := os.Lstat(certPath)
@@ -64,6 +68,27 @@ func Open(dir string) (*CA, error) {
 		return nil, fmt.Errorf("the CA in %s is incomplete: regenerate it", dir)
 	}
 	return load(keyPath, certPath)
+}
+
+// checkFolder refuses a CA folder that is a link or not a folder, and closes
+// one open to others. It is tightened rather than refused: the key in it is
+// checked on its own, and a folder made by hand or under a loose umask
+// shouldn't stop the server. Windows keeps no Unix permissions.
+func checkFolder(dir string) error {
+	info, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil // create makes it
+	case err != nil:
+		return err
+	case info.Mode()&fs.ModeSymlink != 0:
+		return fmt.Errorf("%s is a symbolic link: the CA's folder must be a plain folder", dir)
+	case !info.IsDir():
+		return fmt.Errorf("%s is not a folder", dir)
+	case runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0:
+		return os.Chmod(dir, 0o700)
+	}
+	return nil
 }
 
 // Regenerate removes the CA from dir, so the next Open makes a new one.

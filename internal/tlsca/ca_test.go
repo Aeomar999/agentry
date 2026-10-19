@@ -94,6 +94,43 @@ func TestAKeyThatIsNotAFileIsRefused(t *testing.T) {
 	}
 }
 
+func TestAFolderThatIsALinkOrAFileIsRefused(t *testing.T) {
+	elsewhere := t.TempDir()
+	if _, err := Open(elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(t.TempDir(), Folder)
+	if err := os.Symlink(elsewhere, linked); err != nil {
+		t.Skip("no symbolic links here:", err)
+	}
+	if _, err := Open(linked); err == nil || !strings.Contains(err.Error(), "symbolic link") {
+		t.Errorf("a linked folder: %v", err)
+	}
+
+	file := filepath.Join(t.TempDir(), Folder)
+	os.WriteFile(file, nil, 0o600)
+	if _, err := Open(file); err == nil || !strings.Contains(err.Error(), "not a folder") {
+		t.Errorf("a file for a folder: %v", err)
+	}
+}
+
+func TestAFolderOpenToOthersIsClosed(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps no Unix permissions")
+	}
+	dir := filepath.Join(t.TempDir(), Folder)
+	if _, err := Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(dir, 0o755)
+	if _, err := Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(dir); info.Mode().Perm() != 0o700 {
+		t.Errorf("the folder is %v after Open, want 0700", info.Mode().Perm())
+	}
+}
+
 func TestAHalfMadeOrMismatchedCAIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Open(dir); err != nil {
