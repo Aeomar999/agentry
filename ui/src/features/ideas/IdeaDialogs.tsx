@@ -7,13 +7,13 @@ import { Dialog } from "@/components/molecules/Dialog";
 import { Field } from "@/components/molecules/Field";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
-import { api } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import type { ServerConfig, TaskSummary } from "@/api/types";
 import { LimitChoice, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
 import { TaskLink } from "./IdeaCard";
-import type { Idea, IdeaAcceptance } from "./types";
+import type { Idea, IdeaAcceptance, IdeaDuplicate } from "./types";
 import { useToast } from "@/components/organisms/Toasts";
 
 const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeURIComponent(idea.id)}/${action}`;
@@ -21,7 +21,9 @@ const path = (idea: Idea, action: "accept" | "dismiss") => `/api/ideas/${encodeU
 // AcceptIdeaDialog makes the idea a task or an epic, the kind it suggests
 // unless you pick the other, with your note and token budget, in your
 // Backlog or started at once. It stays open to link to what was made, and
-// says why when the idea couldn't be marked.
+// says why when the idea couldn't be marked. An idea that looks like an open
+// task makes none at first: the dialog shows that task, and you make another
+// anyway or cancel.
 export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () => void }) {
   const notify = useToast();
   const config = useResource<ServerConfig>("/api/config").data;
@@ -33,8 +35,9 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
   const [busy, setBusy] = useState<"" | "accept" | "start">("");
   const [refused, setRefused] = useState("");
   const [made, setMade] = useState<IdeaAcceptance | null>(null);
+  const [like, setLike] = useState<{ task: IdeaDuplicate; start: boolean } | null>(null);
 
-  async function accept(start: boolean) {
+  async function accept(start: boolean, anyway = false) {
     const limit = budget ? limitOf(SCALES.budget, budget) : undefined;
     if (Number.isNaN(limit)) {
       setRefused("Give the budget as a number of tokens, or pick a preset.");
@@ -43,12 +46,14 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
     setBusy(start ? "start" : "accept");
     setRefused("");
     try {
-      const asked = { kind, note, ...(limit !== undefined && { budget: sent(limit) }), ...(start && { start }) };
+      const asked = { kind, note, ...(limit !== undefined && { budget: sent(limit) }), ...(start && { start }), ...(anyway && { anyway }) };
       const got = await api<IdeaAcceptance>("POST", path(idea, "accept"), asked);
       setMade(got);
       if (got.accepted) notify("success", `Made ${got.task} from the idea`, placeOf(got.column));
     } catch (failure) {
-      setRefused((failure as Error).message);
+      const task = duplicateOf(failure);
+      if (task) setLike({ task, start });
+      else setRefused((failure as Error).message);
     }
     setBusy("");
   }
@@ -64,6 +69,22 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>
               Close
+            </Button>
+          </div>
+        </div>
+      ) : like ? (
+        <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
+          <Banner tone="warning" title="It looks like an open task">
+            <TaskLink id={like.task.id}>{like.task.title || like.task.id}</TaskLink> ({like.task.id}). {placeOf(like.task.column)}
+          </Banner>
+          <p>Nothing was made. Make another task from the idea anyway, or cancel to leave the idea open.</p>
+          {refused && <Banner title="It wasn't accepted">{refused}</Banner>}
+          <div className="flex gap-2">
+            <Button variant="primary" icon={<Check />} disabled={busy !== ""} onClick={() => accept(like.start, true)}>
+              {busy !== "" ? "Making it…" : "Make another anyway"}
+            </Button>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
             </Button>
           </div>
         </div>
@@ -118,6 +139,14 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       )}
     </Dialog>
   );
+}
+
+// duplicateOf is the open task an accept was refused for looking like,
+// from the 409's body, or undefined for any other failure.
+function duplicateOf(failure: unknown): IdeaDuplicate | undefined {
+  if (!(failure instanceof ApiError) || failure.status !== 409) return undefined;
+  const task = failure.body?.duplicate as IdeaDuplicate | undefined;
+  return task?.id ? task : undefined;
 }
 
 // untouchedBudget is what the budget field shows, marked as the default,

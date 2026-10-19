@@ -36,3 +36,11 @@ export interface IdeaAcceptance {
   accepted: boolean;
   refused: string;
 }
+
+// The open task an idea looks like, which an accept without anyway is
+// refused for (internal/ideas/routes.go duplicateView, in the 409's body).
+export interface IdeaDuplicate {
+  id: string;
+  title: string;
+  column: BoardColumn | ""; // "" when it can't be read
+}
