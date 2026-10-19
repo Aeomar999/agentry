@@ -314,6 +314,18 @@ func TestTheTemplatesAndTheirAgents(t *testing.T) {
 	}
 }
 
+// A built-in template's id is its team's name in lowercase: adding a team
+// finds a built-in template by its team's name before a saved one by id,
+// and the rules refuse a saved template a built-in's id, so no saved
+// template is hidden behind a built-in one.
+func TestEveryTemplatesIDIsItsTeamInLowercase(t *testing.T) {
+	for _, template := range Templates {
+		if template.ID != strings.ToLower(template.Team) {
+			t.Errorf("the %s template's id is %s, not %s", template.Team, template.ID, strings.ToLower(template.Team))
+		}
+	}
+}
+
 func TestEveryTemplateHasACoordinatorAndPrompts(t *testing.T) {
 	for _, template := range Templates {
 		coordinators := 0
