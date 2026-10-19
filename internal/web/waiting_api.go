@@ -9,10 +9,15 @@ import (
 )
 
 // listWaiting answers everything waiting for you, about ?repo= ("" when not
-// known): the core's entries oldest first, as Questions lists them, then
-// what each feature says waits. Every feature is asked, hidden or not.
+// known), as Waiting lists it.
 func (s *Server) listWaiting(w http.ResponseWriter, r *http.Request) {
-	repo := r.URL.Query().Get("repo")
+	httpapi.Reply(w, s.Waiting(r.URL.Query().Get("repo")))
+}
+
+// Waiting is everything waiting for you, about repo ("" when not known):
+// the core's entries oldest first, as Questions lists them, then what each
+// feature says waits. Every feature is asked, hidden or not.
+func (s *Server) Waiting(repo string) []features.Waiting {
 	waiting := []features.Waiting{}
 	for _, q := range s.questions() {
 		waiting = append(waiting, waitlist.Entry(waitlist.Question{Kind: q.Kind, Task: q.Task, TaskTitle: q.TaskTitle,
@@ -23,5 +28,5 @@ func (s *Server) listWaiting(w http.ResponseWriter, r *http.Request) {
 			waiting = append(waiting, f.Waiting(s.state, repo)...)
 		}
 	}
-	httpapi.Reply(w, waiting)
+	return waiting
 }
