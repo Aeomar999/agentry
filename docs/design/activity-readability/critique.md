@@ -244,3 +244,62 @@ The tokens table, desktop note 12 and every SVG say `success-ink`; these two lin
 None. Majors 1 to 5 are fixed. R1 to R4 are minors to fold into the build; R1 and R3 are a sentence each in flows.md and R4 is two words, so they can be fixed by the designer and writer in a quick pass or taken by Software as written here.
 
 Verdict: approved
+
+## Final check (turn 24)
+
+Checked everything since my first review (`git diff 766540d..HEAD -- docs/design`): 8156cf2, 622a062, 344c14e, c8e6329 and 4ca58ff. I read spec decisions 1 to 11, flows.md, copy.md and the design note, rendered the five wireframes to PNG and read them at full size, regenerated them from `activity_bands.py` (byte-identical to the committed SVGs), and grepped the SVGs for text colours, corner radii, shadows and gradients.
+
+### R1 to R4 and N1 to N7
+
+| # | Status | Checked |
+|---|---|---|
+| R1 URL check | **Fixed** | Flow 3 step 3 takes any mix of `/` and `\`; `safeHref` returns the href to render and every caller, `Markdown`'s fallback included, renders that; `/\evil.example`, `\/evil.example` in the test table and the Build checklist |
+| R2 Newest over focus | **Fixed** | `scroll-padding-bottom: 48px` below `md` in flow 1 step 7, Accessibility, the checklist, mobile note 7 and copy.md's toolbar row |
+| R3 Double scroll-back offset | **Fixed** | Flow 2 step 4: no `scroll-margin-top`, the scroller's padding (44 / 40) alone; in the checklist |
+| R4 Live duration colour | **Fixed** | `success-ink` in flow 1 and copy.md's Time rail. No green text in any light SVG uses #16a34a; all of it is #197d40 |
+| N1 Phone brief fold | **Fixed** | Drawn at about 10 lines, `Show all · 38 lines`, mobile note 8 |
+| N2 Loading text | **Fixed** | Dashed box labelled "sr-only, not visible" in states 2 and 8 |
+| N3 Stale copy note | **Fixed** | The wireframe sentence is gone; the note now points at flows' placeholder, which is right |
+| N4 Phone table | **Fixed** | Own box, thin scrollbar under it, mobile note 6 |
+| N5 Footer separator | **Fixed** | ` · ` at every width, no dot, in copy.md, flow 5, handoffs.svg (note 10) and the design note |
+| N6 Tab heading | **Fixed** | sr-only `h2` `Activity` / `Handoffs` in the component map, Accessibility and copy.md |
+| N7 Phone running footer | **Fixed**, then refined | Badge kept; the agent shrinks to fit, at most 72px (decision 11), with the flex rule spelled out and a `turn-100` checklist item. The arithmetic holds: 308 of 310px at the worst case |
+
+### Agreement between the documents
+
+- **Strings:** the design note, flows.md and the SVGs use copy.md's words for bands, states, the footer at both widths, fold buttons and links. No mismatch found.
+- **Fold lengths:** about 10 lines for briefs, reports and questions; Handoffs briefs 8; note bodies 4; commands 3; fenced code 12. The same in the note, flows (steps 2 and 4, decision 9) and copy.md.
+- **Link rules:** the note's table, flow 3 and copy.md's Links table agree on kinds, tabs, ↗ and the plain-text fallbacks (unknown SHA or task id as written).
+- **Band contents:** desktop shows chip, name, team · role, turn id, `continued`, `on {worker}`, status, tokens, with time and duration in the rail; phone shows chip, name, status, duration, with the rest in the accessible name. The same in all three documents and both Activity wireframes.
+- **Phone footer:** `Led to {turn} · {agent} [· {status}] · Activity ›`, the agent at most 72px and the only item that shrinks. The same everywhere apart from the history rows already accepted.
+
+### Hard rules
+
+- **Flat:** no shadows, glows or gradients in any SVG (the one "shadow" match is the dark note's text saying there are none). No left accent stripes or coloured left edges; the Handoffs timeline is today's neutral line.
+- **Corners:** rects are 0 to 4px; every larger `rx` is half its side (9, 11, 13, 16px dots and icons).
+- **Author in text:** every band and card header names the author; chips are `aria-hidden`; you and Agentry are neutral.
+- **Contrast:** no light text in `ink-faint`; green text `success-ink`; links `link`; linked SHAs have no `surface-3`. The dark frame uses the real dark tokens.
+- **Focus:** visible on the footer and Show less in the drawings; scroll padding top and bottom covered.
+- **390px:** band, card header and both footers fit; tables and fences scroll in their own boxes.
+
+### Scope
+
+No agent filters, compact/detailed toggle, search or logging change. The design note says so under Accessibility and look.
+
+### New findings
+
+None is a blocker, major or minor. Four nits, none of which the build needs to wait for.
+
+**F1. Nit: the Handoffs briefs are drawn shorter than their 8-line fold.** Designer. *handoffs.svg, `Build the author bands` card at 1280 and at 390.* Both show a title and four lines before `Show all · 38 lines`, about half the fold. The same thing as N1 was for Activity. Draw them to 8 lines, or say in note 3 that they're cropped.
+
+**F2. Nit: the fold length for issues and your own messages isn't stated.** Designer. *flows.md flow 2 step 2; the design note, Markdown, folded.* Both say "briefs, reports and questions at about 10 lines", but copy.md's `{kind}` list folds `issue` and `message` too. Say "everything else at about 10 lines" so the builder doesn't guess.
+
+**F3. Nit: a split turn's earlier band has no duration on a phone.** Designer. *activity-mobile.svg, left frame:* the `continued` band shows `RUNNING 18m…`, but the turn's own band below it shows only `RUNNING`. On a phone the duration lives only in the band. Say whether it shows on both (simplest: yes, the same live value) or only on the `continued` one. The desktop rail does the same, and that's fine there.
+
+**F4. Nit: copy.md's Links table names only `//host`.** Writer. *copy.md, Links, External row.* flows.md and the design note list `\\host`, `/\host`, `\/host` too (decision 10). Write "a host written as `//host`, or any mix of `/` and `\`" so the three documents read the same.
+
+### Blockers and majors
+
+None. For the build brief: F1 to F4 are nits, safe to leave or to fold in as written; the site-wide focus outline and the light Badge contrast stay in their follow-up (decision 9).
+
+Verdict (turn 24): approved.
