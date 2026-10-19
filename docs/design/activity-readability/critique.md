@@ -160,4 +160,87 @@ Majors:
 
 Minors 6 (writer) and 7 (designer) are quick and should go in the same pass so copy and wireframes agree before the build.
 
-Verdict: changes requested
+Verdict (turn 8): changes requested. Superseded by the re-check below.
+
+## Re-check (turn 14)
+
+Checked the designer's fixes (c76b5cf: flows.md and the five SVGs, regenerated from `docs/design/source/activity_bands.py`) and the writer's (4c0e066: copy.md) against spec decision 9. I rendered all five wireframes to PNG and read them at full size, recomputed the new ratios from `globals.css`, and read `Markdown.tsx`'s current link fallback to test the URL check.
+
+### Earlier findings
+
+| # | Finding | Status | Checked |
+|---|---|---|---|
+| 1 | Fold `inert` | **Fixed** | Flow 2: `overflow: clip` (fallback `hidden` + reset `scrollTop`), focusables whose first line box isn't above the cut get `tabindex="-1"` with the old value saved, restored on Show all. A link wrapping across the cut stays reachable. Text stays in the accessibility tree on purpose, with `aria-expanded` saying it's folded: sound. Tests listed. Block folding rejected with a good reason |
+| 2 | Phone band height when stuck | **Fixed** | 44px, one line, at every width, stuck or not; no script. Team, role, turn id, `continued`, `on {worker}` live in the accessible name below `md`. `scroll-padding-top: 44px` matches. activity-mobile.svg notes 1 and 4 |
+| 3 | Handoffs lose the author | **Fixed** | Card header sticky inside its `<article>`, 40px fixed, push not overlap, `scroll-padding-top: 40px`; phone header never wraps (names truncate at 96px). The stuck frame in handoffs.svg shows it |
+| 4 | Light `success` text | **Fixed** | `success-ink` = `color-mix(success 70%, ink-primary)` = #197d40, recomputed: 5.19 on `surface-0`, 4.97 on `surface-1`, 4.59 on `surface-2`; dark `success` 7.41 / 7.79. Every green word in the light SVGs is #197d40 (live durations, `Finished, 41k tokens`, `engineer is starting…`, the Handoffs top line); #16a34a remains only on dots and the done icon (3.30 / 3.16, non-text, passes 3:1) |
+| 5 | Linked inline code | **Fixed** | Flow 3 and copy say it drops the code background; `3f2a9c1` is drawn as a mono link with no `surface-3` (5.03:1) on desktop, Handoffs and dark, while `9e1d04b` keeps it |
+| 6 | Copy lacks decision 8 | **Fixed** | Error next-step line in both tabs, task-id tooltip and accessible name `task-21, {title}`, the four questions marked resolved |
+| 7 | Wireframes predate the copy | **Fixed** | Role dropped when it is the name (`reviewer  Software`, `coordinator  Software`); `Couldn't load the …` without a full stop, `Try again`, the muted line; empty bodies; filter-empty state 10; Strings point to copy.md; `Fetched 2 shared files` gone from every SVG |
+| 8 | Handoffs footer | **Fixed** | Phone footer keeps the agent (copy and SVG agree); desktop running footer shows the badge and count, no duration; phone header rule stated. See new nit N5 on the separator |
+| 9 | Landmarks, band headings | **Fixed** | Plain `<li>` sections, every band an `h3`, a turn's `h3` holds its button; copy.md's band names follow. See new nit N6 on the level above |
+| 10 | Newest over the band | **Fixed** for the author: bottom right, drawn at 390. See new minor R2 for focus |
+| 11 | URL check | **Fixed**, with one gap: see new minor R1 |
+| 12 | Language lookup outside the lazy chunk | **Fixed** | `CodeBox` passes the raw string; only `MonacoColorize` calls `languageFor`; an import test or `no-restricted-imports` rule on the five files |
+| 14 | Leads-to target | **Fixed** | 24 × 24 hit box, desktop note 10 |
+| 15 | Footer name vs visible text | **Fixed** | `Led to {turn}, {agent}[, {status}]. Open its activity`, same at every width |
+| 16 | scroll-padding in three engines | **Fixed** | In the Build checklist with the `focusin` fallback |
+| 17 | Green table cells | **Fixed** | Plain |
+| 18 | Report drawn past the fold | **Fixed** | About 230px, cut inside the code box on a whole line |
+| 19 | Note cut off | **Fixed** | |
+| 20 | `javascript:` note in the UI | **Fixed** | Note 11 |
+| 21 | Orange `you` dot | **Fixed** | Slate |
+| 22 | "about N lines" | **Fixed** | Flow 2 and copy.md Notes; tests mustn't expect an exact count |
+| 23 | Monaco #098658 | **Fixed** | Noted, optional `defineTheme` rule (5.8:1) |
+| 13 | Light Badge contrast | Not counted | Follow-up with the focus outline (decision 9). `RUNNING` is still `info` on `info-soft` in the SVGs, as expected |
+
+### New findings
+
+None is a blocker or major.
+
+**R1. Minor: the URL check can still let a same-tab off-site link through the `Markdown` fallback.** Designer. *flows.md, flow 3, "The URL check, exactly", steps 3 and 6, and the test table.*
+Step 3 treats only `//` and `\\` as protocol-relative. Browsers read any mix of the two, so `/\evil.example` and `\/evil.example` also go to `evil.example`. Step 6 then calls them repo paths, which is safe through `linkInto` (it builds the Workspace URL and encodes the path) but not through `Markdown`'s own fallback: today it renders `href={to.href}` with the raw string (`Markdown.tsx` line 295 to 300), and flows doesn't say the fallback renders the normalised value. Result: a same-tab link off the app, with no `noopener`.
+*Why:* the spec's safety constraint ("external links new tab, `rel=noopener noreferrer`") and the purpose of the check.
+*Fix:* step 3: "starts with two characters each `/` or `\`" is external. Say that `safeHref` returns the href to render (the parsed URL's `href` for external, the cleaned relative path for a repo path) and that callers, the fallback included, render that and never the raw string. Add `/\evil.example` and `\/evil.example` (external, new tab) to the test table.
+
+**R2. Minor: on a phone the Newest button can sit over a focused control.** Designer. *flows.md, flow 1 step 7; activity-mobile.svg note 7.*
+At 390 the rail is 56px, and Newest is about 96px wide, 16px in from the right: it covers about 40px of the content column at the bottom of the scroller (x 322 to 375 in the wireframe). Tabbing forward scrolls each new target to exactly that bottom edge, so a link at the end of a line or a fence's Copy button (top right of its box) lands mostly under the button. Not entirely hidden, so 2.4.11 is met by a few pixels, but it reads as focus vanishing. Note 7's "it can only cover rail times" holds on desktop (120px rail), not on a phone.
+*Fix:* give the scroller `scroll-padding-bottom` of the button's height plus its inset (48px; 56px is fine) below `md`, or on every width, and correct note 7. Add it to the Build checklist next to `scroll-padding-top`.
+
+**R3. Minor: the fold's scroll-back offsets twice.** Designer. *flows.md, flow 2 step 4.*
+Closing a long entry scrolls with `scroll-margin-top: 44px` on the entry, but the scroller already has `scroll-padding-top: 44px`; `scrollIntoView` adds both, so the first line lands 88px down, a band's height below where the design says. On Handoffs the band is 40px, not 44.
+*Fix:* drop `scroll-margin-top`; the scroller's `scroll-padding-top` (44 in Activity, 40 in Handoffs) puts the entry just under the band or header in both tabs.
+
+**R4. Minor: the live duration is still `success` in two places.** Designer and writer. *flows.md, flow 1, "The band" ("live in `success` with '…'"); copy.md, Time rail, "Duration, live" ("`success` colour").*
+The tokens table, desktop note 12 and every SVG say `success-ink`; these two lines predate it. A builder reading either will ship 3.3:1 text.
+*Fix:* `success-ink` in both.
+
+**N1. Nit:** *activity-mobile.svg, right frame:* the coordinator's brief is cut after one line (`Read spec.md first. Then:`) before `Show all · 38 lines`; briefs fold at about 10 lines. Draw it to the rule or say it's cropped. Designer.
+
+**N2. Nit:** *states.svg 2 and 8:* `Loading activity…` and `Loading handoffs…` are drawn as visible text (2 overlaps a grey bar), but flows and copy say sr-only. Mark them as sr-only in the frame's note or drop them from the drawing. Designer.
+
+**N3. Nit:** *copy.md, Notes:* "the wireframes' `Fetched 2 shared files` is just a sketch" is stale now the wireframes don't show it. Writer.
+
+**N4. Nit:** *activity-mobile.svg, right frame, note 6:* says a thin scrollbar is shown on the wide table; none is drawn, and the `Where` column is simply cut at the frame. Draw the scrollbar or the box edge. Designer.
+
+**N5. Nit:** *Handoffs footer:* copy.md joins the facts with ` · ` (`Led to turn-4 · engineer · 48m …`); handoffs.svg and flow 5 draw the agent's coloured dot in place of the first separator (`Led to turn-5 ● engineer 48m · …`). Either is fine; pick one so the build doesn't guess. Copy wins by the stated rule, so the designer redraws, or the writer adopts the dot (decorative, `aria-hidden`). Designer and writer.
+
+**N6. Nit:** *Heading levels:* bands are `h3`, but the task page has no `h1` or `h2` above the tab panel today (`TaskPage.tsx` has no heading; only `TaskBoard` has an `h2`). A sr-only `h2` naming the tab (`Activity`, `Handoffs`) keeps the outline from skipping a level. Add it to the component map. Designer.
+
+**N7. Nit:** *Phone Handoffs footer:* the running badge is dropped with the counts, so on a phone a card doesn't show that its turn is still running (the top line does, for the current turn). The badge fits (`RUNNING` ≈ 56px; truncate the agent harder if needed). Optional. Designer and writer.
+
+### Also checked, no change needed
+
+- **Consistency:** copy.md, flows.md and the SVGs now agree on the band contents, role dropping, the h3 structure and accessible names, the footer names, the states' words and the phone cuts, apart from R4, N3 and N5.
+- **Focus under sticky things (2.4.11):** one fixed height for bands (44) and card headers (40), padding to match, three-engine check with a fallback. Newest at the bottom right never covers an author (R2 is about focus only).
+- **390px:** band ≈ 300 of 342px, card header ≈ 285 of 334, footer ≈ 317 of 334; tables and fences scroll in their own boxes; commands wrap. No page scroll sideways.
+- **Light and dark:** dark wireframe on the real dark tokens (surface-0 #1a1d23, surface-1 #16181d, muted #8b919e 5.3:1, link #38bdf8 7.9:1, success #22c55e 7.4:1).
+- **Look rules:** no shadows, glows or gradients in any SVG (the one match for "shadow" is note 6's text saying there are none); no left accent stripes or coloured left borders (the Handoffs timeline line is today's, neutral, not an edge on a card); corners 2 to 4px, the larger radii are round dots and the error icon's circle; Newest is flat.
+- **Link safety:** apart from R1, the steps strip C0 controls and DEL, allow-list `http`, `https`, `mailto` by parsed `protocol`, refuse every other scheme and paths climbing above the root, and run on autolinks too. The test table covers every vector I asked for.
+- **Scope:** no filters, compact/detailed toggle, search or logging change. The new pieces (`success-ink`, Newest's position, the filter-empty copy, `Copy code`) are small fixes inside the existing components, not new features.
+
+### Blockers and majors
+
+None. Majors 1 to 5 are fixed. R1 to R4 are minors to fold into the build; R1 and R3 are a sentence each in flows.md and R4 is two words, so they can be fixed by the designer and writer in a quick pass or taken by Software as written here.
+
+Verdict: approved
