@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,11 +19,16 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/web"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/workspace"
 )
 
 // testCA is a CA in a fresh data folder, which it returns too.
@@ -195,14 +202,34 @@ func TestTheCAKeyIsNeverServed(t *testing.T) {
 	block, _ := pem.Decode(key)
 	const token = "0123456789abcdef0123456789abcdef"
 	s, state := storetest.Open(t, filepath.Join(dataDir, "agentry.db"))
-	server := web.NewServer(s, state, web.Config{UIToken: token, Blobs: sharedfiles.Disk{Dir: filepath.Join(dataDir, "files")},
+	server := web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: t.TempDir(), Blobs: sharedfiles.Disk{Dir: filepath.Join(dataDir, "files")},
 		Worktrees: filepath.Join(dataDir, "worktrees")}, http.NotFoundHandler(), nil)
 	door := frontDoor(server.Handler(), ca)
 	paths := []string{
 		"/tls/ca.key", "/trust/ca.key", "/trust/../tls/ca.key", "/trust/..%2ftls/ca.key", "/trust/%2e%2e/tls/ca.key",
 		"/trust/..%5ctls%5cca.key", "/trust//../../tls/ca.key", "/trust/ca.crt/../ca.key", "/trust/./../tls/ca.key",
 		"/../tls/ca.key", "/static/../../tls/ca.key", "/assets/..%2f..%2ftls%2fca.key",
-		"/api/tasks/task-1/files/..%2f..%2ftls%2fca.key", "/api/tasks/task-1/files/../../tls/ca.key",
+	}
+	// task-1's worktree is dataDir/worktrees/task-1, two folders below the
+	// data folder, and holds a link to the key.
+	worktree := withAWorktree(t, server, s, token, filepath.Join(dataDir, "worktrees", "task-1"))
+	if err := os.Symlink(tlsca.KeyPath(dataDir), filepath.Join(worktree, "key")); err != nil {
+		t.Fatal(err)
+	}
+	read := httptest.NewRequest("GET", "/api/tasks/task-1/file?path=notes.md", nil)
+	read.Header.Set("Authorization", "Bearer "+token)
+	read.TLS = &tls.ConnectionState{}
+	w := httptest.NewRecorder()
+	door.ServeHTTP(w, read)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "notes") {
+		t.Fatalf("a file in the worktree: %d %s", w.Code, w.Body)
+	}
+	for _, climb := range []string{
+		"../../tls/ca.key", "../../../tls/ca.key", "../../../../tls/ca.key", "..%2f..%2ftls%2fca.key", "%2e%2e/%2e%2e/tls/ca.key",
+		"..\\..\\tls\\ca.key", "./../../tls/ca.key", url.QueryEscape(tlsca.KeyPath(dataDir)), "key", "./key",
+	} {
+		paths = append(paths, "/api/tasks/task-1/file?path="+climb,
+			"/api/tasks/task-1/shared/file?name="+climb, "/api/tasks/task-1/shared/file?path="+climb)
 	}
 	for _, path := range paths {
 		for _, from := range []string{"127.0.0.1:5000", "192.168.1.20:5000"} {
@@ -222,10 +249,55 @@ func TestTheCAKeyIsNeverServed(t *testing.T) {
 					if bytes.Contains(body, key) || bytes.Contains(body, block.Bytes) || bytes.Contains(body, []byte("PRIVATE KEY")) {
 						t.Errorf("%s from %s, TLS %v, signed in %v: the key was served", path, from, overTLS, signedIn)
 					}
+					if signedIn && strings.HasPrefix(path, "/api/") && !refused(w) {
+						t.Errorf("%s from %s, TLS %v: %d %s, want it refused", path, from, overTLS, w.Code, body)
+					}
 				}
 			}
 		}
 	}
+}
+
+// refused is whether w hands out nothing from outside the worktree: an
+// error, the front door's redirect to https, or an empty read, since a file
+// route keeps a climbing path inside the worktree, where no such file is.
+func refused(w *httptest.ResponseRecorder) bool {
+	switch w.Code {
+	case http.StatusOK:
+		var read workspace.Contents
+		return json.Unmarshal(w.Body.Bytes(), &read) == nil && read.Now == "" && read.Data == "" && !read.TooBig
+	case http.StatusPermanentRedirect:
+		return strings.HasPrefix(w.Header().Get("Location"), "https://")
+	default:
+		return w.Code >= 400
+	}
+}
+
+// withAWorktree creates task-1 on server and makes dir, with a file in it,
+// its worktree on this machine. It returns dir.
+func withAWorktree(t *testing.T, server *web.Server, s *store.Store, token, dir string) string {
+	t.Helper()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	r := httptest.NewRequest("POST", "/api/tasks", strings.NewReader(`{"title":"Read files"}`))
+	r.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	server.Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("creating task-1: %d %s", w.Code, w.Body)
+	}
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.Worker, ID: workers.Local},
+		Type: events.WorktreeReady, Data: map[string]any{"path": dir, "branch": "b", "port": 7901}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
 
 // The UI cookie is Secure when signing in over TLS.
