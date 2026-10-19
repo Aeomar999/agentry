@@ -651,3 +651,31 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 		}
 	}
 }
+
+// An archived task takes no events, whoever proposes them, and the
+// rejection says why.
+func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
+	state := current.New()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for _, p := range append(agents.SeedProposals(nil), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data}) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	state.Archive("task-1")
+
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
+		{Stream: "task-1", Actor: you, Type: events.TaskRanked, Data: map[string]any{"rank": 1}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "tech-lead"}, Type: events.TaskDone, Data: map[string]any{"summary": "s"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Worker, ID: "local"}, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+	} {
+		if _, rejection, err := s.Propose(p); err != nil || rejection == nil || rejection.Reason != "task-1 is archived: an archived task takes no events" {
+			t.Errorf("%s on an archived task: %v, %v", p.Type, rejection, err)
+		}
+	}
+}

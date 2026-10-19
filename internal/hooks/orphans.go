@@ -11,8 +11,9 @@ import (
 // hook failed closed and the agent was already told no. So each such action
 // is held for you, as one whose hook gave up is: you can still approve it,
 // and its coordinator hands it back.
-// A task the state can't hand out, such as a broken one, is skipped: it can't
-// take an event either, and it must not keep the server from starting.
+// A task the state can't hand out, such as a broken or an archived one, is
+// skipped: it can't take an event either, and it must not keep the server
+// from starting.
 func HoldOrphanedAsks(s *store.Store, state *current.State) error {
 	for _, id := range state.TaskIDs() {
 		task, err := state.Task(id)

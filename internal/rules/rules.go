@@ -5,10 +5,12 @@ package rules
 
 import (
 	"cmp"
+	"errors"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
@@ -66,7 +68,10 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 	}
 
 	task, err := state.Task(p.Stream)
-	if err != nil {
+	switch {
+	case errors.Is(err, current.ErrArchived):
+		return refuse(p.Stream + " is archived: an archived task takes no events")
+	case err != nil:
 		return refuse("could not read the task: " + err.Error())
 	}
 	switch {

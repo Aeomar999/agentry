@@ -41,6 +41,12 @@ func Equal(s *store.Store, state *State) error {
 		return err
 	}
 	for _, id := range index.tasks {
+		if held.archived[id] {
+			// No event archives a task yet, so only a test's Archive makes
+			// one, and the log has nothing to compare it with. Its place in
+			// the order and its stream's position are still compared.
+			continue
+		}
 		if err := equalStream(s, cut, id, tasks.Replay, func() (any, error) { return held.Task(id) }); err != nil {
 			return err
 		}

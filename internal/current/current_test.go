@@ -1,6 +1,7 @@
 package current
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -252,6 +253,26 @@ func TestTheTaskOrderCountsEveryTaskCreated(t *testing.T) {
 		if order := s.TaskIDs(); !slices.Equal(order, want) {
 			t.Errorf("%s: task order %v, want %v", name, order, want)
 		}
+	}
+}
+
+// An archived task says so, leaves the list and still counts in the task
+// order; a broken task keeps its own error.
+func TestAnArchivedTaskIsCountedButNotHandedOut(t *testing.T) {
+	s := loaded(everyStream())
+	s.Archive("task-1")
+	if task, err := s.Task("task-1"); task != nil || !errors.Is(err, ErrArchived) {
+		t.Errorf("archived task-1: %v, %v", task, err)
+	}
+	if ids := idsOf(s.Tasks()); !slices.Equal(ids, []string{"task-2"}) {
+		t.Errorf("the tasks are %v, want only task-2", ids)
+	}
+	if order := s.TaskIDs(); !slices.Equal(order, []string{"task-1", "task-2"}) {
+		t.Errorf("the task order is %v, want both tasks", order)
+	}
+	s.Apply(events.Event{Position: 100, Proposal: proposal("task-2", worker, events.WorktreeMoved, map[string]any{"worker": "laptop", "path": "/w", "port": float64(7901)})})
+	if _, err := s.Task("task-2"); err == nil || errors.Is(err, ErrArchived) {
+		t.Errorf("a broken task's error: %v", err)
 	}
 }
 

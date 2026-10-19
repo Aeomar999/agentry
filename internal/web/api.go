@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -13,6 +14,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -357,8 +359,14 @@ func titleFrom(description string) string {
 	return strings.TrimRight(line[:cut], ",.;:") + "..."
 }
 
+// showTask is a task's detail. An archived task's isn't kept: it answers
+// 410 Gone, so you can tell it from a task that never was.
 func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(r.PathValue("task"))
+	if errors.Is(err, current.ErrArchived) {
+		http.Error(w, r.PathValue("task")+" is archived", http.StatusGone)
+		return
+	}
 	if err != nil || task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return

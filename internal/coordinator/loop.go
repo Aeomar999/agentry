@@ -82,6 +82,9 @@ func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 
 func (l *Loop) act(id string) {
 	task, roster, err := l.load(id)
+	if errors.Is(err, current.ErrArchived) {
+		return // done, and it takes nothing more
+	}
 	if err != nil || task == nil {
 		slog.Error("coordinator loop: reading the task", "task", id, "err", err)
 		return
@@ -540,11 +543,15 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 // portsInUse are the ports of tasks whose work is on the machine and not
 // over: unfinished, or done by you and still wrapping up, since a reopen
 // then works in the same worktree. A broken task's port counts too, read
-// from its stream, since nothing says its worktree has gone.
+// from its stream, since nothing says its worktree has gone. An archived
+// task is done, so it is skipped like one, without reading its stream.
 func (l *Loop) portsInUse(machine string) []int {
 	var ports []int
 	for _, id := range l.state.TaskIDs() {
 		task, err := l.state.Task(id)
+		if errors.Is(err, current.ErrArchived) {
+			continue
+		}
 		if err != nil {
 			if port, ok := l.lastPort(id, machine); ok {
 				ports = append(ports, port)
