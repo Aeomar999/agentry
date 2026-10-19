@@ -209,7 +209,7 @@ func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
 		t.Fatalf("accepting: %+v %v", got, err)
 	}
 	again := startTask(t, s, "task-vision-6", repo, "editor")
-	if brief := readBrief(t, again, "turn-1"); !strings.Contains(brief, "## Ideas already accepted\n\n- Search (idea-2): became " + got.Task) ||
+	if brief := readBrief(t, again, "turn-1"); !strings.Contains(brief, "## Ideas already accepted\n\n- Search (idea-2): became "+got.Task) ||
 		!strings.Contains(brief, `"repeats"`) {
 		t.Errorf("the editor's brief should name the accepted idea and how to repeat one:\n%s", brief)
 	}

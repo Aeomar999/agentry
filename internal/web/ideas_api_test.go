@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -222,5 +223,64 @@ func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
 		if idea.ID != after && idea.ID != plain || idea.About != want.About || idea.AboutTitle != want.AboutTitle {
 			t.Errorf("%s: about %q %q, want %q %q", idea.ID, idea.About, idea.AboutTitle, want.About, want.AboutTitle)
 		}
+	}
+}
+
+// Every open idea says why Agentry wouldn't accept it for you, under your
+// rule, even with accepting turned off; "" when it would.
+func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
+	server, s := newTestServer(t)
+	repo := gitRepo(t)
+	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
+	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
+	for _, p := range agents.AddTeam(visionaries, nil, you) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	every := []string{"product-strategist", "user-advocate", "technologist", "skeptic"}
+	suggest := func(title string, backedBy, doubtedBy []string) string {
+		t.Helper()
+		created, rejection, err := s.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+			"title": title, "problem": "p", "proposal": "f", "size": "M", "repo": repo, "task": "task-1", "kind": "",
+			"backedBy": backedBy, "doubtedBy": doubtedBy}})
+		if rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		return created.Stream
+	}
+	original := suggest("Search the board", every, nil)
+	if code, body := call(t, server, "POST", "/api/ideas/"+original+"/accept", `{}`); code != 200 {
+		t.Fatalf("accept: %d %s", code, body)
+	}
+	doubted := suggest("Dark mode", every, []string{"skeptic"})
+	alone := suggest("Export", []string{"skeptic"}, nil)
+	two := suggest("Undo", []string{"skeptic", "technologist"}, nil)
+	agreed := suggest("Keyboard shortcuts", every, nil)
+	again := suggest("search the Board!", every, nil)
+
+	reasons := func() map[string]string {
+		t.Helper()
+		_, body := call(t, server, "GET", "/api/ideas", "")
+		var list []ideaView
+		if err := json.Unmarshal([]byte(body), &list); err != nil {
+			t.Fatal(err, body)
+		}
+		got := map[string]string{}
+		for _, idea := range list {
+			got[idea.ID] = idea.NotAutoAccepted
+		}
+		return got
+	}
+	strict := map[string]string{original: "", doubted: "doubted by skeptic", alone: "not backed by product-strategist, user-advocate, technologist",
+		two: "not backed by product-strategist, user-advocate", agreed: "", again: "duplicate of " + original + " (task-2)"}
+	if got := reasons(); !maps.Equal(got, strict) {
+		t.Errorf("everyoneBacked, accepting off:\ngot  %v\nwant %v", got, strict)
+	}
+	call(t, server, "PUT", "/api/settings", `{"autoAcceptIdeas":true,"autoAcceptRule":"nobodyDoubted"}`)
+	loose := map[string]string{original: "", doubted: "doubted by skeptic", alone: "only one backer", two: "", agreed: "",
+		again: "duplicate of " + original + " (task-2)"}
+	if got := reasons(); !maps.Equal(got, loose) {
+		t.Errorf("nobodyDoubted:\ngot  %v\nwant %v", got, loose)
 	}
 }
