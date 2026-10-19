@@ -32,6 +32,7 @@ type Loop struct {
 	runner *turns.Runner
 	fleet  *machines.Fleet
 	files  fileWork // shared files being moved (files.go)
+	held   held     // tasks waiting for a slot (slots.go)
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
@@ -63,12 +64,14 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 }
 
-// take acts on each task a batch of the log touched, then follows up the
-// closes in it.
+// take acts on each task a batch of the log touched, then on those waiting
+// for a slot, as the batch may have freed one, then follows up the closes
+// in it.
 func (l *Loop) take(batch []events.Event) {
 	for _, id := range touchedTasks(l.store.Catalogue(), batch) {
 		l.act(id)
 	}
+	l.wakeHeld()
 	l.followUps(batch)
 }
 
@@ -134,6 +137,9 @@ func (l *Loop) act(id string) {
 	case PrepareWorktree:
 		l.prepareWorktree(task)
 	case StartTurn:
+		if l.holdBack(task) {
+			return
+		}
 		l.startTurn(task, roster, move)
 	case ApplyDecision:
 		l.apply(task, roster, move.Decision)
