@@ -127,7 +127,7 @@ No team, role or turn facts on either: there is nothing true to say there.
 
 | Where | Text | Accessible name / aria | Max | Notes |
 |---|---|---|---|---|
-| Row time | `{hh:mm}`: `06:15` | | 5 | Today, from `clockTime()` |
+| Row time | `{hh:mm}`: `06:15` | | 5 | Today, from `clockMinutes()`: 24-hour clock, at every width |
 | Duration, done | `{duration}`: `48m`, `40s`, `1h 12m` | | 7 | Today. `ink-faint` → `ink-muted` |
 | Duration, live | `{duration}…`: `18m…` | | 7 | Today. `success-ink` colour (light #197d40, 5.19:1 on `surface-0`; dark keeps `success`); the ellipsis means "still going" |
 | Now row time | `now` | | 3 | Today |
