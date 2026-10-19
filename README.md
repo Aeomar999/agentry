@@ -221,6 +221,7 @@ An idea is a feature suggested for a repo: the problem, the proposal, why now, a
 - `GET /api/ideas` (`?repo=` for one repo's): newest session first; `autoAccepted` is true for an idea Agentry accepted for you.
 - `POST /api/ideas/{idea}/accept` with `{"kind": "task" or "epic", "note": "..."}`: answers `{"task", "accepted", "refused"}`. A task made but the idea not marked accepted still answers 200, with the reason in `refused`.
 - `POST /api/ideas/{idea}/dismiss` with `{"note": "..."}`.
+- `GET /api/features`: `{"features": [{"name": "ideas", "enabled", "visible", "why", "badge"}]}`. Ideas is enabled while a team made from the Visionaries template has a coordinator, and visible while it is enabled or any idea is left; `why` says which in a line, and `badge` counts the open ideas.
 
 On the page, **Ideas** is in the sidebar under Work. Open ideas are grouped by the session that suggested them, newest first, each with its links to that session and to the epic it follows up; a session that closing an epic started names that epic. Accept asks task or epic (the idea's suggestion is picked), takes an optional note and links to the task it made, which waits in your Backlog; Dismiss takes an optional reason. A refusal, such as an idea someone decided a moment before, shows in the dialog. Ideas you decided stay in the History below, with your note and, for an accepted one, the task it became.
 
