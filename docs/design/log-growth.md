@@ -1,23 +1,51 @@
 # Log growth: bounded startup and disk use
 
-Status: measurements and design (sections 1 to 5), for task-23. The
-projections, recommendation and build plan follow in a later turn.
-Research only: nothing in the server changes with this document.
+Status: the design, for task-23: measurements (section 1), the three
+pieces and privacy (sections 2 to 5), projections and targets (6), the
+recommendation (7) and the build plan (8). Research only: nothing in the
+server changes with this document.
 
 ## In short
 
-To be written with the design. What the measurements already say:
-
-- The log grows about 10 to 12 MB on a busy day, and faster each day,
-  because `agent.learned` copies an agent's whole knowledge file every
-  time, and the files keep growing. Knowledge is 58% of all bytes.
-- Startup with the read model (`docs/design/read-model.md`) replays the
-  log in 0.21 s now, about 0.9 s per 100k events. The state it keeps holds
-  9.2 MB of heap, most of it done tasks' actions and turns.
-- Done tasks hold 77% of the events but only 35% of the bytes. Archiving
-  them alone takes the file from 26.5 MB to 15.3 MB; line diffs of knowledge and plans alone take it
-  from 26.5 MB to 7.2 MB plus 4.9 MB of blobs. Both together leave a live
-  log of 1.9 MB.
+- The log grew 24,180 events, 27.8 MB, in under 3 days: 10 to 12 MB a
+  busy day, 4 to 7 GB a year, and faster each month, because each
+  `agent.learned` copies an agent's whole knowledge file. Knowledge is
+  half the file.
+- With the read model alone (`docs/design/read-model.md`), every startup
+  replays everything: 7.8 s per GB, and the state holds 350 MB of heap per
+  GB, since done tasks stay whole.
+- No piece alone bounds startup (section 6): snapshots save a state that
+  grows with history, slimming halves the bytes but not the events, and
+  archiving can't reach knowledge.
+- **Slimmer knowledge** (section 3): each `agent.learned` stores one hunk
+  against the version before, with a full copy when the hunks outgrow the
+  text: 4.7% of today's knowledge bytes. Old events replay as they are.
+  Plans, commands and reports stay inline.
+- **Snapshots** (section 2): `state.snapshot` beside the database, JSON,
+  tagged with the binary's hash and anchored to a row's hash; any doubt
+  means a full replay. Written every 10,000 events or 10 minutes, off the
+  request path, and proven `Equal` to a full replay at every cut of the
+  fixture logs.
+- **Archiving** (section 4): 30 days after a task is done, a
+  `task.archived` marker with its summary, and its rows moved into one
+  gzipped blob (22%) in the content store, in one transaction; the delete
+  trigger allows only rows a marker covers. Archived tasks open on demand,
+  and reopen by putting their rows back.
+- **Privacy** (section 5): possible. Erasing a task and redacting a secret
+  are events too, and the triggers allow exactly the rows they name;
+  backups stay out of reach.
+- Together, for 20 open tasks and 30 busy days of done work, at 1, 10 and
+  100 GB of history: startup 0.22 to 0.24 s, heap 118 to 174 MB, a live
+  database of 0.20, 0.45 and 3.0 GB.
+- What still grows is the `agents` and `workers` streams, so the full
+  replay after an upgrade is 1.9 s at 1 GB and 27 s at 100 GB (a deferred
+  fix, section 7).
+- Targets (section 6): startup with a snapshot under 0.5 s, the full
+  replay under 2.5 s at 1 GB, heap under 135 MB and a live file under
+  235 MB at that working set, an archived task open in under 100 ms.
+- Order: slimmer knowledge first (it needs nothing from task-21, and every
+  day without it adds bytes nothing can remove), then snapshots, archiving
+  and privacy: [the build plan](#8-build-plan).
 
 ## 1. Measurements
 
@@ -329,9 +357,11 @@ measurements above:
 - **Share by kind:** knowledge 57.6% of bytes, other task texts 38%;
   done tasks 77.3% of events and 35.5% of bytes (with all tasks counted as
   they are now).
-- **Slimming factors on the whole log:** knowledge as diffs keeps 2.9% of
-  its bytes, plans 58%; the log file with diffs is 0.27 of today's, plus
-  0.18 in blobs; archiving done tasks after that leaves 0.07.
+- **Slimming factors on the whole log**, for section 3's pick (knowledge
+  alone, one hunk, a full copy when the hunks outgrow the text): knowledge
+  keeps 4.7% of its bytes, and the log file falls from 27.78 MB to
+  14.46 MB (0.52 of today's); archiving done tasks after that leaves
+  2.64 MB (0.095), plus 2.28 MB of archive blobs.
 - **VACUUM:** about 5 s per GB, with free disk equal to the file.
 
 ### Rerun the measurements
@@ -474,6 +504,8 @@ one, and costs 31 to 34 ms on every read and about 70 ms on every write.
 done task in it, and it keeps `nil` and empty apart, which
 `reflect.DeepEqual`, and so the equivalence test, does not forgive. gob is
 the switch to make if the open work's state ever takes 100 ms to decode.
+Section 6 projects 0.36 s for a month of done work, so the body's entries
+are written one to a line and decoded in parallel (section 7).
 
 The file is one header line, then the body:
 
@@ -535,7 +567,8 @@ so no test has to catch one; a test checks that a snapshot with another
   One write at a time; a failed write is logged and leaves the old file.
 - **Cost now:** about 25 ms of CPU (encode 20 ms, write 3.2 ms) per
   10 MB, about every 3 busy hours at today's rate. With done tasks as
-  summaries, a few ms.
+  summaries, a few ms on the copy, and about 0.3 s at section 6's working
+  set, a month of done work.
 - **The tail it can leave:** at most 10,000 events or 10 minutes, so at
   most about 90 ms of replay (8.9 µs per event, section 1).
 
@@ -1114,6 +1147,314 @@ widely) whose `data` contains it, and shows the user the count first.
   local branch; pushed commits are the user's to rewrite.
 - **The engine's own records**, such as a session's transcript, live
   outside Agentry; the page names them, and does not delete them.
+
+## 6. Projections
+
+### Assumptions
+
+- **History** is counted in GB of database file as today's code writes
+  it: 880,000 events per GB (section 1). At 4 to 7 GB a year of busy use,
+  1 GB is 7 to 13 weeks, 10 GB is 1.4 to 2.5 years and 100 GB is 14 to 25
+  years. Knowledge files keep lengthening, so today's format fills a GB
+  faster each month: these are the longest those sizes last.
+- **The working set, W,** is what archiving leaves whole in the state: 20
+  open tasks and 30 busy days of done tasks (the default age, section 4).
+  A busy day is 11 MB and 9,700 events, 95.5% of them on task streams, and
+  the copy's open tasks have about 700 events each. So W is
+  30 × 9,700 × 0.955 + 20 × 700, about **292,000 events**, and
+  30 × 11 MB × 0.50 + 20 × 0.3 MB, about **0.17 GB** of file.
+- **What a GB holds:** knowledge 0.50 GB (27.78 MB fell to 14.46 MB with
+  0.62 MB kept, section 3), which one hunk per version keeps at 4.7%, so
+  0.024 GB; task streams and the rest 0.50 GB. Never archived: the
+  `agents` stream's 19,400 events, the `workers` stream's 20,200 events
+  and 3.4 MB, and about 900 markers (0.7 MB): 40,500 events and 0.004 GB.
+- **Rates** (section 1): reading and decoding 5.85 s per GB of file read
+  (75% of 7.8 s), folding 2.2 µs per event (25% of 8.9 µs); 400 B of heap
+  and 440 B of JSON snapshot per event in the state (10.59 MB for 24,180
+  events); JSON decode 2.8 ms per MB (29.9 ms for 10.59 MB), encode 1.8 ms
+  per MB, atomic write 0.34 ms per MB; 630 B per summary and 900 tasks per
+  GB, so 0.57 MB of summaries per GB; archive blobs 0.193 bytes per byte of
+  file archived (2.28 MB for the 11.82 MB the rows took); and, with a
+  snapshot, a fixed 0.16 s: 70 ms hashing the binary and at most 90 ms of
+  tail.
+
+### Formulas
+
+H is history in GB.
+
+- **(a) Nothing done:** start = 7.8 s × H; heap = 400 B × 880,000 × H = 352 MB × H; live = H.
+- **(b) Snapshots only:** start = 0.16 s + 440 B × 880,000 × H × 2.8 ms/MB = 0.16 s + 1.08 s × H; after an upgrade, (a)'s start; snapshot = 0.39 GB × H; heap and live as (a).
+- **(c) Slimmer knowledge only:** live = (0.024 + 0.50) × H; start = live × 5.85 s + 880,000 × H × 2.2 µs = 5.0 s × H; heap as (a).
+- **(d) Archiving only:** live = (0.50 + 0.004) × H + 0.17 GB; start = live × 5.85 s + (40,500 × H + 292,000) × 2.2 µs; heap = 292,000 × 400 B + 0.57 MB × H + 0.2 MB of roster; archive = (0.50 × H − 0.17 GB) × 0.193.
+- **(e) All three:** live = (0.024 + 0.004) × H + 0.17 GB; snapshot = 292,000 × 440 B + 0.57 MB × H + 0.2 MB; start = 0.16 s + snapshot × 2.8 ms/MB; after an upgrade = live × 5.85 s + (40,500 × H + 292,000) × 2.2 µs; heap and archive as (d).
+- **(e) on 8 cores:** start = 0.16 s + snapshot × 2.8 ms/MB / 8 + 11 ms, the largest task (4 MB of JSON) decoded alone. An estimate: parallel decoding is not measured.
+
+### The table
+
+Each cell is 1 GB / 10 GB / 100 GB of history, at the working set W.
+
+| | Startup | After an upgrade or a bad snapshot | Heap held by the state | Live database | Archive blobs | Snapshot |
+|---|---|---|---|---|---|---|
+| (a) Nothing done (the read model alone) | 7.8 / 78 / 780 s | the same | 0.35 / 3.5 / 35 GB | 1 / 10 / 100 GB | | |
+| (b) Snapshots only | 1.2 / 11 / 109 s | 7.8 / 78 / 780 s | 0.35 / 3.5 / 35 GB | 1 / 10 / 100 GB | | 0.39 / 3.9 / 39 GB |
+| (c) Slimmer knowledge only | 5.0 / 50 / 502 s | the same | 0.35 / 3.5 / 35 GB | 0.52 / 5.2 / 52 GB | | |
+| (d) Archiving only | 4.7 / 32 / 306 s | the same | 118 / 123 / 174 MB | 0.67 / 5.2 / 51 GB | 0.06 / 0.93 / 9.6 GB | |
+| (e) All three | 0.52 / 0.54 / 0.68 s | 1.9 / 4.2 / 27 s | 118 / 123 / 174 MB | 0.20 / 0.45 / 3.0 GB | 0.06 / 0.93 / 9.6 GB | 129 / 134 / 185 MB |
+| (e), the body decoded on 8 cores (estimate) | **0.22 / 0.22 / 0.24 s** | 1.9 / 4.2 / 27 s | as (e) | as (e) | as (e) | as (e) |
+
+What it says:
+
+- **No piece alone bounds startup.** Snapshots save a state that holds
+  every task (0.39 GB of snapshot per GB); slimming halves the bytes but
+  not the events; archiving leaves knowledge in the live log in full.
+  Together they leave startup to the working set: 0.16 s fixed, the
+  working set's decode, and 0.57 MB of summaries per GB, the one part that
+  still grows (0.16 s more at 100 GB on one core, 20 ms on eight).
+- **One core of JSON misses 0.5 s.** The working set alone is 128 MB of
+  snapshot and 0.36 s to decode, which trips section 2's own switch at
+  100 ms. Decoding the tasks in parallel brings it to about 60 ms; gob
+  would too (0.21 s of startup at 1 GB). Section 7 picks the parallel
+  decode.
+- **Every upgrade replays the live log in full**, since the binary's hash
+  changes. In (e) that is the working set (1.6 s) plus the streams nothing
+  archives: `agents` (slimmed knowledge, 24 MB per GB) and `workers`
+  (20,200 events per GB). It passes 5 s at about 14 GB, 2 to 3.5 years of
+  busy use. Section 7 defers the fix.
+- **Heap** in (d) and (e) is the working set, 117 MB of it; summaries add
+  0.57 MB per GB.
+- **Disk** in (e) grows 28 MB per GB of history in the live file, plus
+  0.1 GB of archive blobs per GB: 100 GB of history becomes 3.0 GB live
+  and 9.6 GB archived, 12.6% of it.
+- **A snapshot write** at W is 128 MB × (1.8 + 0.34) ms/MB, about 0.28 s
+  of CPU, at most once per 10 minutes of activity; 0.4 s at 100 GB.
+
+### If the working set doubles
+
+40 open tasks and 60 busy days, or 30 days at twice today's rate: about
+584,000 events and 0.34 GB.
+
+| | Startup | After an upgrade | Heap | Live database | Snapshot |
+|---|---|---|---|---|---|
+| (d) Archiving only | 6.3 / 34 / 307 s | the same | 234 / 239 / 290 MB | 0.84 / 5.4 / 51 GB | |
+| (e) All three, one core | 0.88 / 0.90 / 1.04 s | 3.5 / 5.8 / 29 s | 234 / 239 / 290 MB | 0.37 / 0.62 / 3.2 GB | 258 / 263 / 314 MB |
+| (e), 8 cores (estimate) | 0.26 / 0.26 / 0.28 s | 3.5 / 5.8 / 29 s | as above | as above | as above |
+
+What depends on the working set doubles, and nothing that depends on
+history moves; (a) to (c) don't depend on it at all. The snapshot write
+doubles too, to 0.55 s. The archive age is the knob: 7 days in place of 30
+cuts the working set, and its heap and decode, by nearly four.
+
+### Targets
+
+Numbers the build must meet, measured at the working set W unless a row
+says otherwise. Each is checked by a benchmark that is skipped unless
+`AGENTRY_BENCH_DB` names a read-only copy of a real database (section 1);
+the benchmark copies it again into its temporary folder and never writes
+to it. `TestStartupBench` (build step 2) grows the copy into a synthetic
+log of `AGENTRY_BENCH_GB` GB of history (1 by default) with the working set
+W, or twice W with `AGENTRY_BENCH_WORKING=2`.
+
+| # | Target | Projected | How it is measured |
+|---|---|---|---|
+| 1 | Startup with a valid snapshot **≤ 0.5 s**, for any history up to 100 GB | 0.22 to 0.24 s on 8 cores | `TestStartupBench` at 1 and 10 GB: `current.Open` to `Loaded`, min of 3; the 100 GB term by adding 90,000 summaries |
+| 2 | Startup after an upgrade or a bad snapshot (full replay of the live log) **≤ 2.5 s** at 1 GB and **≤ 5 s** at 10 GB, with its reason logged | 1.9 s, 4.2 s | the same, with the snapshot deleted |
+| 3 | The snapshot is never more than **10,000 events or 10 minutes** behind; its tail replays in **≤ 0.1 s** | 90 ms | a test with a fake clock; the benchmark with a 10,000-event tail |
+| 4 | Live database **≤ 1 MB per open task + 6 MB per busy day of done work kept + 35 MB per GB of history**: ≤ 235 MB at 1 GB | 198 MB | the benchmark archives its synthetic log at the default age, runs `incremental_vacuum`, and reads the file's size |
+| 5 | Heap held by the state **≤ 450 B per event in the state + 1 KB per archived task**: ≤ 135 MB at 1 GB | 118 MB | `runtime.ReadMemStats` after `runtime.GC`, the state alive and the events dropped, as section 1 measured |
+| 6 | A snapshot write **≤ 0.5 s of CPU**, never on the request path and never under `Store.mu` | 0.28 s | the benchmark; a test that commits a proposal while the writer is held mid-write |
+| 7 | An archived task's history opens in **≤ 100 ms** for the largest task, **≤ 10 ms** from the cache | about 60 ms (17 ms gunzip, 40 ms fold) | `GET /api/tasks/task-8` on the archived copy, a benchmark in `internal/web` |
+| 8 | An archive blob **≤ 25%** of its rows' JSON | 22.3% | the archiver's benchmark on the copy |
+| 9 | Knowledge stored **≤ 6%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file | build step 1's test on the copy |
+| 10 | `Store.mu` held **≤ 200 ms** per task archived or unarchived, the largest included | not measured | a benchmark of `Store.Archive` and `Store.Unarchive` on `task-8` |
+
+Targets 1, 2, 4 and 5 grow only with the working set and, slowly, with
+history (summaries, the `agents` and `workers` streams); the rest don't
+depend on history at all.
+
+## 7. Recommendation
+
+Build all three, in this order: slimmer knowledge, snapshots, archiving.
+Then privacy, on the archive's triggers, when a user needs it.
+
+**Slimmer knowledge first.** It is the one saving that can't be had
+later. Knowledge is half of every GB, it sits in the `agents` stream that
+archiving can't reach, and an append-only log keeps every full copy
+written before the change for ever. Today that is about 6 MB a day, more
+each day as the files lengthen. It is also the smallest piece (one patch
+shape, the hook, a rules check, the history page) and needs nothing from
+task-21.
+
+**Snapshots second.** Alone they help little at scale, (b): 1.1 s and
+0.39 GB of snapshot per GB. But they are what makes startup independent
+of history once archiving bounds the state, and they need only task-21's
+state. The projections add one thing to section 2: the body's `tasks` and
+`archived` arrays are written one entry to a line (still one JSON value,
+since JSON allows a newline between elements), and the loader splits on
+newlines and decodes the entries on up to 8 goroutines. JSON keeps `nil`
+and empty apart for the equivalence test; gob stays the fallback if the
+parallel decode misses Target 1.
+
+**Archiving third.** The biggest piece: a schema migration, store methods
+that delete and restore rows, summaries in the state, the archived view
+and reopening. It is what bounds heap, disk and the full replay. It comes
+after snapshots because each round ends with a snapshot of the smaller
+state, and the snapshot's anchor check is what notices archived rows.
+
+**Privacy last.** Erasing a task reuses the archive's gated delete
+trigger and `Refold`; redaction adds the update trigger. Neither changes
+size or startup.
+
+| | Saves | Costs | Decision |
+|---|---|---|---|
+| Knowledge as one hunk | 95% of knowledge, half of each GB | one patch shape; no task-21 dependency | build, step 1 |
+| Snapshots, JSON decoded in parallel | startup down to the working set | saved forms, a writer, a loader, the fallbacks | build, steps 3 and 4 |
+| Archiving behind a gated delete | heap, disk and the full replay down to the working set | a migration, two store methods, summaries, reopening | build, steps 5 to 9 |
+| Erasing and redacting | privacy | two gated triggers, a rewrite path | build, step 10 |
+| gob snapshots | decodes 6 times faster than JSON | `nil` and empty merge, so `Equal` can't judge a round trip | deferred: only if parallel JSON misses Target 1 |
+| Checkpoints of `agents` and `workers` | the replay after an upgrade at 100 GB, from 27 s to about 2 s | a checkpoint event, and archiving two more streams before it | deferred: when Target 2 fails, at about 14 GB |
+| Paging archived tasks in the list | the list's JSON (57 MB at 100 GB) | API and page paging | deferred: at about 10,000 archived tasks, 11 GB |
+| Blob collection | nothing yet: only a crash leaves a blob unnamed | marking and sweeping | deferred |
+| A bound on a knowledge file's length | brief size, not disk | a check when learning | the user's call (open question) |
+| Plans as diffs | 42% of plans, 3% of the data | a second patch shape | dropped: archiving gzips plans to 22% |
+| Hash references for commands, reports and instructions | nothing: bytes move, they don't go | references, collection rules, a file per read | dropped |
+| Compression inside the rows | 37% of the data | opaque rows, a gunzip per text at every replay | dropped |
+| Log segments | each file's size | startup still reads every segment with open work | dropped |
+| Crypto-shredding | reaches backups | keys, decryption on every read, a key file whose loss loses the log | dropped |
+
+## 8. Build plan
+
+Ten steps, each one reviewable change that leaves the server working and
+carries its own tests. Step 1 needs nothing from task-21; steps 2 to 10
+need task-21's read model (`internal/current`, the store's model) merged,
+with the items in "What task-21 should leave room for" below. Benchmarks
+run with `AGENTRY_BENCH_DB` pointing at a `VACUUM INTO` copy (section 1,
+"Rerun the measurements"), never the live file.
+
+1. **Knowledge as one hunk per version.** No task-21 dependency.
+   - Files: `internal/agents` (a `Patch` with `head`, `tail`, `middle`,
+     `sha256`; `Diff(old, new)` and `Apply(old)`; the roster's apply and
+     `FromEvents` take both shapes), `internal/hooks/handler.go`
+     (`recordWhatWasLearned` proposes a patch, and a full copy for an
+     agent's first version, when the middles since its last full copy
+     outgrow the text, or when the patch is refused), `internal/rules`
+     (refuse a patch whose result's hash isn't `sha256`),
+     `internal/web/agents_api.go` (`knowledgeHistory` rebuilds each
+     version walking forward).
+   - Proves: `Apply(old, Diff(old, new)) == new` on 10,000 random edits;
+     a stale patch is refused and the hook sends a full copy; today's
+     full-copy events replay unchanged; the history page lists the same
+     versions either way; on the copy, every knowledge version rewritten
+     as patches rebuilds byte for byte.
+   - Target 9.
+2. **The startup benchmark.** Depends on task-21.
+   - Files: `internal/store/storetest/synthetic.go` (grows the copy into a
+     synthetic log: its task streams repeated under new ids and later
+     times, its knowledge extended, to `AGENTRY_BENCH_GB` of history and
+     the working set W or 2W), `internal/current/startup_bench_test.go`.
+   - Proves: the synthetic log has the copy's mix (events per GB and bytes
+     by type within 5%); prints today's startup and heap, case (a).
+   - Measures Targets 1 to 5 from here on; none passes yet.
+3. **Saved forms.** Depends on task-21; skip whatever task-21 already
+   built (its item 1).
+   - Files: `internal/tasks` (`Saved`, `Save`, `Restore`), the same in
+     `internal/agents`, `internal/workers`, `internal/connections`.
+   - Proves: a reflection test per package fails if any field, exported or
+     not, has no counterpart; a value with every field set (`fill`) round
+     trips `reflect.DeepEqual`.
+4. **Snapshots.** Depends on task-21 (items 2 and 3) and step 3.
+   - Files: `internal/current/snapshot.go` (header and body, entries one
+     to a line; the writer goroutine; load with every fallback; parallel
+     decode), `internal/store` (`Model.Since`, `Open` replays
+     `After(since)`, a read of one row's hash for the anchor),
+     `cmd/agentry/serve.go` (`state.snapshot` in the data folder, leftover
+     temporary files deleted, a write at clean shutdown).
+   - Proves: section 2's equivalence tests 1 to 5 (every cut of every
+     fixture log, the real copy, every fallback, the sabotages, the forms);
+     a proposal commits while the writer is held mid-write.
+   - Targets 1 (on a log that is only the working set), 3 and 6.
+5. **Schema version 1.** Depends on task-21.
+   - Files: `internal/store/store.go` (the migration in one transaction:
+     the gated delete trigger, `auto_vacuum = INCREMENTAL`,
+     `user_version = 1`), `internal/store/read.go` (`TaskIDs` lists
+     markers too), `internal/events/catalogue.go` (`task.archived`,
+     `task.unarchived`), `internal/rules` (on an archived task, only
+     `task.unarchived`; no `task.created` on a stream with a summary).
+   - Proves: a stray `DELETE` is refused; a delete a marker covers is
+     allowed in the marker's transaction, and refused once
+     `task.unarchived` follows; the migration runs once; a version 0 file
+     opens and migrates; `TaskIDs` lists a task once when archived,
+     unarchived and archived twice.
+6. **Summaries in the state.** Depends on task-21 (items 4 to 8 and 10).
+   - Files: `internal/tasks` (`Summary` from `web.summaryOf`, `DoneAt`,
+     `Archived`, `FromEvents` on the markers), `internal/current` (the
+     `archived` map, `ErrArchived`, `Summaries()`, `Load` and `Refold`
+     keep summaries in `created` order, `Equal` compares them, the
+     snapshot carries them), `internal/web` (the list reads summaries),
+     and the readers of task-21's item 6 (`watchdog`, `hooks/orphans.go`,
+     `coordinator/loop.go`, the agents, questions and workers APIs).
+   - Proves: fixture streams of a marker alone fold to their summary,
+     `Equal` to a replay and through a snapshot; the next id counts
+     archived tasks; each reader skips an archived task without reading
+     its stream.
+   - Target 5's per-summary term.
+7. **The archiver.**
+   - Files: `internal/sharedfiles/blobs.go` (a put that syncs the file and
+     its folder), `internal/store` (`Store.Archive`: under `Store.mu`, the
+     rules' check, the marker and the delete in one transaction, rolled
+     back unless `changes()` is `count`), `internal/archive` (new: at
+     start and hourly, chooses by `DoneAt` and the age, epics after their
+     stories, gzipped JSON-lines blobs, `incremental_vacuum` and
+     `wal_checkpoint(TRUNCATE)`, a snapshot after each round),
+     `cmd/agentry/serve.go` (`archive after`, 30 days by default, 0 for
+     off; the one full `VACUUM` after the first round, retried at the next
+     start if the disk lacks room).
+   - Proves: after archiving, a full replay of blob plus live rows is
+     `Equal` to the state before with the task as its summary; a proposal
+     between the blob and the commit leaves the task for the next round; a
+     crash after the blob makes the same bytes next time; a forced count
+     mismatch (a test trigger) rolls back; an epic with an open story is
+     not chosen; a snapshot whose anchor was archived falls back.
+   - Targets 1, 2, 4 and 5 at 1 and 10 GB; Targets 8 and 10.
+8. **Opening an archived task.**
+   - Files: `internal/store` (one function for a stream's whole history:
+     the blob's rows up to `through`, then the live rows; every reader of
+     a task's events uses it), `internal/web` (`showTask` returns the
+     detail with `archived: true` and when; a cache of the last few, keyed
+     by stream and marker), `internal/mcp` (a test that `show_task` gets
+     it), `ui/` (the task page marks it archived).
+   - Proves: an archived task's detail equals its detail before archiving,
+     but for `archived`; a second open is a cache hit.
+   - Target 7.
+9. **Unarchiving and reopening.**
+   - Files: `internal/store` (`Store.Unarchive`: under `Store.mu`, the rows
+     back with their positions and `task.unarchived` in one transaction,
+     the count checked, then `Refold` with the events below it),
+     `internal/current` (`Refold`), `internal/tasks` (the fold of
+     `task.unarchived`), `internal/web` (Reopen unarchives first; so does a
+     story of an archived epic, and a `task.request_answered` to an
+     archived asker), `internal/rules`.
+   - Proves: archive then reopen gives the state of a log never archived,
+     plus the new events; a restart with `task.unarchived` in the
+     snapshot's tail; archiving twice and reopening; the archiver can't
+     delete restored rows.
+   - Targets 1, 2 and 10 still hold.
+10. **Erasing a task and redacting a secret.**
+    - Files: `internal/store` (`Store.Erase`, `Store.Redact`, the update
+      trigger and the delete trigger's second case, `secure_delete`),
+      `internal/rules`, `internal/tasks` and `internal/agents`
+      (`task.erased` stubs, `event.redacted` through `Refold`, knowledge
+      rewritten as full copies), `internal/sharedfiles` (deleting a blob,
+      on this path only), `internal/web` and `ui/` (marking a text, the
+      count first, the note on backups).
+    - Proves: after erasing, a planted string is in no row, WAL, blob or
+      snapshot (searched in the files' bytes after the checkpoint); a
+      redacted row keeps every other field; the update trigger refuses
+      anything else; every knowledge version after the secret rebuilds
+      without it; a redacted archived task is archived again and its old
+      blob is gone.
+
+Done when Targets 1 to 10 hold on the copy at 1 GB of synthetic history,
+and Targets 1, 2, 4 and 5 at 10 GB.
 
 ## What task-21 should leave room for
 
