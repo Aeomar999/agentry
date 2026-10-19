@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -134,10 +132,8 @@ func TestNoSecondWrapUp(t *testing.T) {
 // An epic you close parks its open stories: a story at work wraps up once,
 // and a story finished later doesn't report to the closed epic.
 func TestClosingAnEpicParksItsStories(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
@@ -145,9 +141,6 @@ func TestClosingAnEpicParksItsStories(t *testing.T) {
 		{"title": "Add the TODO store", "brief": "A store."}, {"title": "Add the TODO command", "brief": "A command."}]}`)
 	epic := waitUntil(t, s, id, "the split", func(task *tasks.Task) bool { return len(task.Stories) == 2 })
 	running, waiting := epic.Stories[0], epic.Stories[1]
-	for _, story := range epic.Stories {
-		defer sessions.Stop(sessions.SocketFor(story))
-	}
 	start(t, s, running)
 	waitForTurn(t, s, running, "turn-1", "tech-lead")
 	waitUntil(t, s, id, "the epic to wait", func(task *tasks.Task) bool { return task.OpenTurn() == nil && task.Handoff == nil })
@@ -186,10 +179,7 @@ func taskWithTheEngineerWorking(t *testing.T, id string) (*store.Store, *current
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	t.Cleanup(func() { sessions.Stop(sessions.SocketFor(id)) })
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go newLoop(s, state, t.TempDir()).Run(ctx)
+	run(t, newLoop(s, state, t.TempDir()), state)
 
 	propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})

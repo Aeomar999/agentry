@@ -11,7 +11,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -30,10 +29,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 		s.Propose(p)
 	}
 	const id = "task-files-1"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go newLoop(s, state, root).Run(ctx)
+	run(t, newLoop(s, state, root), state)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,

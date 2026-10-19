@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,12 +33,9 @@ func TestTheLoopTakesATaskRoundTheCoordinator(t *testing.T) {
 		s.Propose(p)
 	}
 	const id = "task-loop-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	loop := newLoop(s, state, t.TempDir())
-	go loop.Run(ctx)
+	run(t, loop, state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": repo, "coordinator": "tech-lead"}})
@@ -134,10 +130,7 @@ func TestAnAgentWhoseWorkersAreOfflineAsksYou(t *testing.T) {
 		t.Fatal(rejection)
 	}
 	const id = "task-loop-2"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go newLoop(s, state, t.TempDir()).Run(ctx)
+	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Remove the TODOs", "repo": gitRepo(t), "coordinator": "tech-lead"}})
