@@ -92,7 +92,9 @@ const AutoAccepted = "auto-accepted: all Visionaries agreed"
 // just suggested in repo that every Visionary agreed on, as your Accept
 // does, and starts its task when you turned that on too. An idea under the
 // title of one you dismissed, or of one that is a task already, stays open
-// for you, as does one Agentry couldn't accept: the done goes on.
+// for you, as does one Agentry couldn't accept: the done goes on. Agreed
+// trusts backedBy and doubtedBy as the Visionaries coordinator wrote them
+// in its done; nothing checks them against what each viewpoint said.
 func (l *Loop) acceptAgreed(repo string, added []string) {
 	now := l.state.Settings()
 	if !now.AutoAcceptIdeas || len(added) == 0 {
