@@ -50,8 +50,8 @@ func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 	var released sync.Once
 	release := func() { released.Do(func() { close(model.release) }) }
 	t.Cleanup(release) // a failing check must not leave Propose blocked
-	// The blocked Propose holds the store's only connection, so the log is
-	// read through another; in WAL mode it can't see an uncommitted event.
+	// A connection of the test's own shows that event 4 is committed: in WAL
+	// mode it couldn't see an uncommitted one.
 	other, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)

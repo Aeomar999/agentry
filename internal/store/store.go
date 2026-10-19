@@ -5,12 +5,16 @@
 // way in: it runs the checks against the model, appends the event (or a
 // proposal.rejected) and applies it to the model. A mutex makes proposals
 // strictly one at a time, from the check to the apply, so two can never both
-// pass the order check against the same state (proof 05).
+// pass the order check against the same state (proof 05). Reads of the log
+// go through a separate pool of read-only connections, so they never queue
+// behind a write: in WAL mode a reader sees every committed event and none
+// in flight.
 package store
 
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -53,7 +57,8 @@ type Model interface {
 type OrderCheck func(p events.Proposal) *events.Rejection
 
 type Store struct {
-	db      *sql.DB
+	db      *sql.DB // the one connection that writes
+	reads   *sql.DB // read-only connections for the reads in read.go
 	model   Model // nil when nothing keeps state from the log
 	check   OrderCheck
 	changes *changes
@@ -61,6 +66,9 @@ type Store struct {
 	mu      sync.Mutex   // one proposal at a time, from its check to its apply
 	applied atomic.Int64 // the last position in the model; no read of the log goes past it
 }
+
+// readConnections is how many reads of the log can run at once.
+const readConnections = 4
 
 // Open opens the log at path and loads it into model, if there is one.
 func Open(path string, model Model, check OrderCheck) (*Store, error) {
@@ -78,12 +86,19 @@ func Open(path string, model Model, check OrderCheck) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("loading the log: %w", err)
 	}
-	s := &Store{db: db, model: model, check: check, changes: newChanges()}
+	// Opened after the schema, which made the file and switched it to WAL.
+	reads, err := sql.Open("sqlite", path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	reads.SetMaxOpenConns(readConnections)
+	s := &Store{db: db, reads: reads, model: model, check: check, changes: newChanges()}
 	s.applied.Store(last)
 	return s, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error { return errors.Join(s.reads.Close(), s.db.Close()) }
 
 // Propose validates a proposal and appends the result. It returns the stored
 // event and, when the proposal was refused, the rejection (the stored event is

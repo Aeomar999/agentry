@@ -11,19 +11,20 @@ import (
 const columns = `position, at, stream, actor_kind, actor_id, type, correlation, data`
 
 // Every read of the log stops at the applied position, so no reader sees an
-// event before the model has it (Store.applied).
+// event before the model has it (Store.applied). The reads go through the
+// read-only pool: an event at or below applied is committed, so they see it.
 
 // Stream returns a stream's accepted events in order. Rejections are left out:
 // they are in the log for people to read, but they never happened.
 func (s *Store) Stream(name string) ([]events.Event, error) {
-	return queryEvents(s.db, `SELECT `+columns+` FROM events
+	return queryEvents(s.reads, `SELECT `+columns+` FROM events
 		WHERE stream = ? AND type != ? AND position <= ? ORDER BY position`, name, events.ProposalRejected, s.applied.Load())
 }
 
 // After returns up to limit events of any stream after a position, rejections
 // included. Readers use it to pull the log at their own pace (proof 05).
 func (s *Store) After(position int64, limit int) ([]events.Event, error) {
-	return queryEvents(s.db, `SELECT `+columns+` FROM events
+	return queryEvents(s.reads, `SELECT `+columns+` FROM events
 		WHERE position > ? AND position <= ? ORDER BY position LIMIT ?`, position, s.applied.Load(), limit)
 }
 
@@ -31,7 +32,7 @@ func (s *Store) After(position int64, limit int) ([]events.Event, error) {
 func (s *Store) IdeaIDs() ([]string, error) { return s.streamsStartedBy(events.IdeaSuggested) }
 
 func (s *Store) streamsStartedBy(kind events.Type) ([]string, error) {
-	rows, err := s.db.Query(`SELECT stream FROM events WHERE type = ? AND position <= ? ORDER BY position`, kind, s.applied.Load())
+	rows, err := s.reads.Query(`SELECT stream FROM events WHERE type = ? AND position <= ? ORDER BY position`, kind, s.applied.Load())
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func decode(e *events.Event, at, data string) error {
 // Log returns everything written to a stream, rejections included: the
 // whole record, for people to read.
 func (s *Store) Log(name string) ([]events.Event, error) {
-	return queryEvents(s.db, `SELECT `+columns+` FROM events
+	return queryEvents(s.reads, `SELECT `+columns+` FROM events
 		WHERE stream = ? AND position <= ? ORDER BY position`, name, s.applied.Load())
 }
 
