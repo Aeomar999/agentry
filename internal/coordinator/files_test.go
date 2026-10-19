@@ -29,6 +29,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 		s.Propose(p)
 	}
 	repo := gitRepo(t)
+	outsideDir := t.TempDir()
 	const id = "task-files-1"
 	run(t, newLoop(s, state, root), state)
 	blobs := sharedfiles.Disk{Dir: filepath.Join(root, ".files")}
@@ -89,7 +90,7 @@ func TestSharedFilesFollowTheWork(t *testing.T) {
 	}
 
 	// From anywhere else, you are asked.
-	outside := filepath.Join(t.TempDir(), "private.txt")
+	outside := filepath.Join(outsideDir, "private.txt")
 	os.WriteFile(outside, []byte("mine"), 0o644)
 	endTurn(t, s, id, "turn-6", "tech-lead", `{"action": "fetch", "machine": "local", "path": "`+filepath.ToSlash(outside)+`", "as": "notes.txt"}`)
 	task = waitUntil(t, s, id, "the question", func(task *tasks.Task) bool { return task.Asked.Fetch != nil })
