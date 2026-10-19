@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
@@ -171,6 +173,38 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	for _, call := range *calls {
 		if strings.Contains(call, "/approve") || strings.Contains(call, "Close the epic") {
 			t.Errorf("approved without the user: %s", call)
+		}
+	}
+}
+
+// A held action was refused long ago: the user hears that, when, and what
+// approving it does now.
+func TestAHeldApprovalSaysItTimedOut(t *testing.T) {
+	heldAt := time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC)
+	agentry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/questions":
+			fmt.Fprintf(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev",
+				"action":"push-1","tool":"Bash","reason":"pushing asks you","held":true,"heldAt":%q}]`, heldAt.Format(time.RFC3339))
+		case "GET /api/tasks":
+			io.WriteString(w, `[]`)
+		default:
+			io.WriteString(w, `{}`)
+		}
+	}))
+	t.Cleanup(agentry.Close)
+	var asked string
+	c := startOn(t, client.Client{Where: client.Where{URL: agentry.URL}}, true, func(method string, params json.RawMessage) any {
+		var p struct{ Message string }
+		json.Unmarshal(params, &p)
+		asked = p.Message
+		return map[string]any{"action": "decline"}
+	})
+	c.tool("review_approvals", map[string]any{})
+	for _, want := range []string{"Bash: git push origin dev", "timed out at " + heldAt.Local().Format("Mon 2 Jan 15:04"), "deployer was told no",
+		"deployer may run this exact command once, in its next turn"} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the question should say %q:\n%s", want, asked)
 		}
 	}
 }
