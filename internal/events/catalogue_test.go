@@ -91,14 +91,11 @@ func TestNewCatalogueRefusesWhatWouldCollide(t *testing.T) {
 		{"a prefix ideas took", []events.Registration{ideas.Registration(), {Prefix: ideas.Prefix, Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "idea-" is taken`},
 		{"a prefix overlapping another", []events.Registration{notes, {Prefix: "note-pad-", Types: map[events.Type]events.Spec{"pad.written": spec}}}, `prefix "note-pad-" is taken`},
 		{"a prefix a core stream starts with", []events.Registration{{Prefix: "agent", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "agent" is taken`},
-		{"a core type", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{events.TaskCreated: spec}}}, "task.created is taken"},
-		{"another registration's type", []events.Registration{notes, {TaskTypes: map[events.Type]events.Spec{"note.written": spec}}}, "note.written is taken"},
+		{"a type in its streams and in tasks'", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.written": spec}}}, "note.written is taken"},
 		{"a task- prefix", []events.Registration{{Prefix: "task-notes-", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "task-notes-" overlaps task-`},
 		{"a prefix task- starts with", []events.Registration{{Prefix: "task", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "task" overlaps task-`},
 		{"a one-letter prefix task- starts with", []events.Registration{{Prefix: "t", Types: map[events.Type]events.Spec{"note.written": spec}}}, `prefix "t" overlaps task-`},
 		{"stream types with no prefix", []events.Registration{{Types: map[events.Type]events.Spec{"note.written": spec}}}, "need a stream prefix"},
-		{"a task type in task.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"task.pr_opened": spec}}}, "in the task. namespace"},
-		{"a task type in turn.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"turn.paused": spec}}}, "in the turn. namespace"},
 	}
 	for _, c := range cases {
 		_, err := events.NewCatalogue(c.registration...)
@@ -108,6 +105,47 @@ func TestNewCatalogueRefusesWhatWouldCollide(t *testing.T) {
 	}
 	if _, err := events.NewCatalogue(ideas.Registration(), events.Registration{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}); err != nil {
 		t.Errorf("a task type in a namespace of its own: %v", err)
+	}
+}
+
+// A registration's types are all in one namespace of its own: its prefix's,
+// or the one its task types share. Neither the core nor another
+// registration may use it.
+func TestNewCatalogueRefusesATypeOutsideItsNamespace(t *testing.T) {
+	spec := events.Spec{Writers: []events.ActorKind{events.System}}
+	notes := events.Registration{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}}
+	flags := events.Registration{TaskTypes: map[events.Type]events.Spec{"note.flagged": spec}}
+	cases := []struct {
+		name         string
+		registration []events.Registration
+		want         string // in the error
+	}{
+		{"a stream type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"task.noted": spec}}}, "stream type task.noted is outside note-'s namespace note."},
+		{"a stream type in a core task namespace", []events.Registration{{Prefix: "turn-", Types: map[events.Type]events.Spec{"turn.noted": spec}}}, "stream type turn.noted is in the turn. namespace, which the core uses"},
+		{"a stream type in a core fixed-stream namespace", []events.Registration{{Prefix: "policy-", Types: map[events.Type]events.Spec{"policy.noted": spec}}}, "stream type policy.noted is in the policy. namespace, which the core uses"},
+		{"a prefix in a core namespace", []events.Registration{{Prefix: "worker-"}}, "stream prefix worker- is in the worker. namespace, which the core uses"},
+		{"a task type in task.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"task.pr_opened": spec}}}, "task type task.pr_opened is in the task. namespace, which the core uses"},
+		{"a task type in turn.", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"turn.paused": spec}}}, "task type turn.paused is in the turn. namespace, which the core uses"},
+		{"a task type outside its prefix's namespace", []events.Registration{{Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec}}}, "task type git.pr_opened is outside note-'s namespace note."},
+		{"task types in two namespaces", []events.Registration{{TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "pr.merged": spec}}}, "task type pr.merged is outside git.pr_opened's namespace git."},
+		{"a prefix in another's namespace", []events.Registration{flags, notes}, "stream type note.written is in the note. namespace, which note.flagged has"},
+		{"task types in a prefix's namespace", []events.Registration{notes, flags}, "task type note.flagged is in the note. namespace, which note- has"},
+	}
+	for _, c := range cases {
+		_, err := events.NewCatalogue(c.registration...)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: got %v, want an error with %q", c.name, err, c.want)
+		}
+	}
+	accepted := [][]events.Registration{
+		{ideas.Registration()},
+		{ideas.Registration(), {Prefix: "note-", Types: map[events.Type]events.Spec{"note.written": spec}, TaskTypes: map[events.Type]events.Spec{"note.flagged": spec}}},
+		{ideas.Registration(), {TaskTypes: map[events.Type]events.Spec{"git.pr_opened": spec, "git.pr_merged": spec}}},
+	}
+	for _, registrations := range accepted {
+		if _, err := events.NewCatalogue(registrations...); err != nil {
+			t.Errorf("each in a namespace of its own: %v", err)
+		}
 	}
 }
 
