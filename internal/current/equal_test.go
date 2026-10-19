@@ -128,7 +128,7 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	state := New()
 	state.Loaded(0)
 	fromTheLog(t, s, state)
-	state.taskIDs[0], state.taskIDs[1] = state.taskIDs[1], state.taskIDs[0]
+	state.created[0].id, state.created[1].id = state.created[1].id, state.created[0].id
 	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "task order:") {
 		t.Errorf("Equal with task-1 and task-2 swapped: %v", err)
 	}

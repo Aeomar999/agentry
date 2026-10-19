@@ -35,9 +35,8 @@ type State struct {
 	position    int64                  // of the last event applied, rejections included
 	streams     map[string]int64       // each stream's last accepted event applied, by stream
 	tasks       map[string]*tasks.Task // by stream
-	taskIDs     []string               // every task.created applied, oldest first, as the log lists them
+	created     []created              // every task.created applied, in the order of their positions, as the log lists them
 	ideas       map[string]*ideas.Idea // by stream
-	created     []created              // the task.created events Load found, until Loaded puts them in order
 	broken      map[string]error       // streams whose apply panicked: reads fail, as a replay would
 	roster      agents.Roster
 	workers     workers.Roster
@@ -45,7 +44,9 @@ type State struct {
 	settings    settings.Settings
 }
 
-// created is a task.created event's place in the log, which orders taskIDs.
+// created is a task.created event's place in the log. The task order is
+// by these positions, not by when the state took each event, so a state
+// that starts part way and takes the rest keeps the log's order.
 type created struct {
 	position int64
 	id       string
@@ -98,13 +99,11 @@ func (s *State) Load(stream string, accepted []events.Event) {
 func (s *State) Loaded(position int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	slices.SortFunc(s.created, func(a, b created) int { return cmp.Compare(a.position, b.position) })
-	for _, c := range s.created {
-		s.taskIDs = append(s.taskIDs, c.id)
-	}
-	s.created = nil
+	slices.SortFunc(s.created, byPosition)
 	s.position = position
 }
+
+func byPosition(a, b created) int { return cmp.Compare(a.position, b.position) }
 
 // Apply changes the state by one committed event. A proposal.rejected only
 // moves the position, as Store.Stream leaves it out: it never happened.
@@ -118,7 +117,9 @@ func (s *State) Apply(e events.Event) {
 	}
 	s.streams[e.Stream] = e.Position
 	if e.Type == events.TaskCreated {
-		s.taskIDs = append(s.taskIDs, e.Stream)
+		// The store applies in the log's order, after everything Load or
+		// an earlier Apply gave, so appending keeps the positions in order.
+		s.created = append(s.created, created{e.Position, e.Stream})
 	}
 	if s.broken[e.Stream] != nil {
 		return
@@ -210,9 +211,9 @@ func (s *State) Idea(id string) (*ideas.Idea, error) {
 func (s *State) Tasks() []*tasks.Task {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	all := make([]*tasks.Task, 0, len(s.taskIDs))
-	for _, id := range s.taskIDs {
-		if task := s.tasks[id]; task != nil && s.broken[id] == nil {
+	all := make([]*tasks.Task, 0, len(s.created))
+	for _, c := range s.created {
+		if task := s.tasks[c.id]; task != nil && s.broken[c.id] == nil {
 			all = append(all, task)
 		}
 	}
@@ -224,7 +225,11 @@ func (s *State) Tasks() []*tasks.Task {
 func (s *State) TaskIDs() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return slices.Clone(s.taskIDs)
+	ids := make([]string, len(s.created))
+	for i, c := range s.created {
+		ids[i] = c.id
+	}
+	return ids
 }
 
 // Roster is every agent. If the agents stream is broken, it is the roster
