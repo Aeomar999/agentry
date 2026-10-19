@@ -145,6 +145,7 @@ func (t *Task) Apply(e events.Event) {
 		}
 		t.IsDone, t.DoneAt, t.DoneByYou, t.Summary, t.WrapUp = false, time.Time{}, false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
+		t.TurnsBeforeReopen = len(t.Turns)
 		t.step(e, You, t.Coordinator, e.Text("text"))
 		t.moveColumn(e)
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -40,6 +41,7 @@ type Config struct {
 	Binary      string             // this agentry, which a joining machine can download
 	Local       workers.Machine    // what this machine is, as a worker would say it, for the Workers page
 	Blobs       sharedfiles.Disk   // where tasks' shared files are kept
+	Features    []features.Feature // what teams and settings can turn on, for GET /api/features
 }
 
 // PolicySource is the policy in force and any problem with the file on
@@ -96,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
 	api("POST /api/tasks/{task}/actions/{action}/approve", s.approve)
 	api("POST /api/tasks/{task}/actions/{action}/deny", s.deny)
+	api("GET /api/features", s.listFeatures)
 	api("GET /api/ideas", s.listIdeas)
 	api("POST /api/ideas/{idea}/accept", s.acceptIdea)
 	api("POST /api/ideas/{idea}/dismiss", s.dismissIdea)

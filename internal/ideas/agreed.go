@@ -10,9 +10,18 @@ import (
 // VisionariesTeam is the team whose coordinators suggest ideas.
 const VisionariesTeam = "Visionaries"
 
-// Feature is what a team template lists to make its coordinators suggest
-// ideas.
-const Feature = "ideas"
+// Name is the feature's name, which a team template lists to make its
+// coordinators suggest ideas.
+const Name = "ideas"
+
+// Suggests says whether the coordinator's team was made from a template
+// that brings ideas, whatever the team is called. An agent from before
+// templates were recorded has its template from its team's name (the
+// roster sees to that), so an old Visionaries team still suggests them.
+func Suggests(coordinator agents.Agent) bool {
+	template, found := agents.TemplateWithID(coordinator.Template)
+	return found && template.Lists(Name)
+}
 
 // Agreed says whether every viewpoint of team, in any case, backs the idea
 // and none doubts it. The viewpoints are the team's agents that don't

@@ -315,7 +315,8 @@ export function TaskPage() {
             <div className="flex gap-3 rounded-lg border border-success/40 px-4 py-3">
               <span className="flex shrink-0 items-center gap-1.5 self-start text-[13px] font-semibold text-success">
                 <CircleCheck className="size-4" />
-                Done
+                {task.pushed ? "Shipped" : "Done"}
+                {task.doneByYou && <span className="font-normal text-ink-muted">· Moved to Done by you</span>}
               </span>
               <Clamp text={task.summary} lines={2} className="min-w-0 flex-1" />
             </div>

@@ -88,6 +88,8 @@ type Task struct {
 	DoneByYou    bool      // you moved it to Done on the board, rather than its coordinator finishing it
 	LastActiveAt time.Time
 
+	TurnsBeforeReopen int // its number of turns when it was last reopened: only pushes in later ones count
+
 	// What is waiting to happen. The coordinator loop acts on these.
 	Handoff         *Step  // the latest step to an agent, until that agent's turn starts
 	PendingDecision string // a coordinator's reply, until its decision is applied

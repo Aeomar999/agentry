@@ -145,10 +145,11 @@ func TestAnUnknownKeyAtStartPutsTheHintOnItsOwnLine(t *testing.T) {
 		t.Fatal("Agentry must not run without a policy")
 	}
 	lines := strings.Split(err.Error(), "\n")
-	if !strings.HasSuffix(lines[0], " is refused:") || len(lines) < 2 || !strings.HasPrefix(lines[1], "2| ") {
-		t.Errorf("the file's first quoted line starts a line of its own:\n%v", err)
+	if !strings.HasSuffix(lines[0], " is refused:") || len(lines) < 3 || lines[1] != "line 5, column 1: unknown key bogus_key" ||
+		!strings.HasPrefix(lines[2], "2| ") {
+		t.Errorf("the error starts a line of its own, with where the key is, before the file's first quoted line:\n%v", err)
 	}
-	hint := "To go back to its newest backup: cp '" + backup + "' '" + path + "'"
+	hint := "To go back to its newest backup, from before Agentry's last change: cp '" + backup + "' '" + path + "'"
 	if len(lines) < 2 || lines[len(lines)-1] != hint || lines[len(lines)-2] != `7| otherwise = "ask"` {
 		t.Errorf("the hint is the last line and the file's last quoted line is before it:\n%v", err)
 	}

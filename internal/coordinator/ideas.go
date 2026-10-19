@@ -19,13 +19,6 @@ import (
 // Agentry accepts for you each idea every Visionary agreed on, and can
 // start its task too.
 
-// isVisionaries says whether the coordinator's team was made from a
-// template that brings ideas, whatever the team is called.
-func isVisionaries(coordinator agents.Agent) bool {
-	template, found := agents.TemplateWithID(coordinator.Template)
-	return found && template.Lists(ideas.Feature)
-}
-
 // Idea is one feature a done decision suggests.
 type Idea struct {
 	Title     string   `json:"title"`
@@ -110,7 +103,7 @@ func (l *Loop) acceptAgreed(repo string, added []string) {
 			slog.Info("coordinator loop: an agreed idea is left for you", "idea", id, "why", why)
 			continue
 		}
-		got, err := ideas.Accept(l.store, l.state, id, ideas.Choice{Note: AutoAccepted, Budget: l.Budget, By: agentry})
+		got, err := ideas.Accept(l.store, l.state, id, ideas.Choice{Note: AutoAccepted, Defaults: l.Defaults, By: agentry})
 		if err != nil || !got.Accepted {
 			slog.Warn("coordinator loop: accepting an agreed idea", "idea", id, "task", got.Task, "refused", got.Refused, "err", err)
 			continue
@@ -135,7 +128,7 @@ func (l *Loop) startIdea(id string) {
 // dismissedFor are the ideas you dismissed in the task's repo, for a
 // Visionaries coordinator's brief; nil for any other.
 func (l *Loop) dismissedFor(task *tasks.Task, coordinator agents.Agent) []*ideas.Idea {
-	if !isVisionaries(coordinator) {
+	if !ideas.Suggests(coordinator) {
 		return nil
 	}
 	return ideas.Dismissals(ideas.List(l.state, task.Repo))

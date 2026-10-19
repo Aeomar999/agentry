@@ -103,7 +103,9 @@ func decode(text []byte) (policyFile, error) {
 	if err := decoder.Decode(&f); err != nil {
 		var strict *toml.StrictMissingError
 		if errors.As(err, &strict) {
-			return f, errors.New(strict.String())
+			first := strict.Errors[0]
+			row, column := first.Position()
+			return f, fmt.Errorf("line %d, column %d: unknown key %s\n%s", row, column, strings.Join(first.Key(), "."), strict.String())
 		}
 		var syntax *toml.DecodeError
 		if errors.As(err, &syntax) {

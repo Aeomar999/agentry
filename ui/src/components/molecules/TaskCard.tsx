@@ -81,7 +81,7 @@ export function TaskCard({
 }
 
 function nowLine(task: TaskSummary, coordinator: string) {
-  if (task.status === "done") return <span className="text-ink-muted">Done</span>;
+  if (task.status === "done") return <span className="text-ink-muted">{task.pushed ? "Shipped" : "Done"}</span>;
   if (task.status === "needs you") return <span className="text-warning">{task.needsYou}</span>;
   if (task.status === "held") return <span className="text-ink-muted">Waiting until you start it</span>;
   if (waitingLine(task)) return <span className="text-ink-muted">{waitingLine(task)}</span>;
