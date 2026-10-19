@@ -88,6 +88,10 @@ type Client struct {
 	Where
 	Token   string
 	Timeout time.Duration // 0 is 15 seconds
+	// Untrusted, when set, is told when the server's certificate isn't one
+	// CA issued, as when the CA was kept from an earlier check and the
+	// server's has since been regenerated.
+	Untrusted func()
 }
 
 // Local is the server running on this machine, from its data folder: the
@@ -128,6 +132,9 @@ func (c Client) Call(method, path string, body, into any) error {
 	}
 	response, err := c.HTTP(timeout).Do(request)
 	if err != nil {
+		if c.Untrusted != nil && pinned.Untrusted(err) {
+			c.Untrusted()
+		}
 		return fmt.Errorf("can't reach Agentry at %s: %w", c.URL, err)
 	}
 	defer response.Body.Close()

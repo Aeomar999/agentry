@@ -91,7 +91,7 @@ func connect(server, token, fingerprint, dataDir string) (client.Client, error) 
 		if server == "" || token == "" {
 			return client.Client{}, errors.New("give both --server and --token (the page's token, from its link)")
 		}
-		trusted, err := trustServer(server, fingerprint)
+		trusted, err := trustServer(server, fingerprint, trustTimeout)
 		if err != nil {
 			return client.Client{}, err
 		}
@@ -106,9 +106,22 @@ func connect(server, token, fingerprint, dataDir string) (client.Client, error) 
 // connectFromEnv is connect for the hooks and the status line, which Claude
 // Code starts with no flags: AGENTRY_URL, AGENTRY_TOKEN and
 // AGENTRY_CA_FINGERPRINT name a server, or else they find one as connect
-// does.
+// does. A server's CA checked by fingerprint is kept for the next run, and
+// dropped when the server no longer answers with a certificate it issued.
 func connectFromEnv() (client.Client, error) {
-	return connect(os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN"), os.Getenv("AGENTRY_CA_FINGERPRINT"), defaultDataDir())
+	server, token := os.Getenv("AGENTRY_URL"), os.Getenv("AGENTRY_TOKEN")
+	if server == "" || token == "" {
+		return connect(server, token, "", defaultDataDir())
+	}
+	trusted, err := trustServerOnce(server, os.Getenv("AGENTRY_CA_FINGERPRINT"))
+	if err != nil {
+		return client.Client{}, err
+	}
+	agentry := client.Client{Where: client.Where{URL: trusted.server, CA: string(trusted.ca)}, Token: token}
+	if trusted.ca != nil {
+		agentry.Untrusted = forgetKeptCA
+	}
+	return agentry, nil
 }
 
 // connectMachine swaps a code from the Integrations page for this machine's
@@ -122,7 +135,7 @@ func connectMachine(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, mcpUsage)
 		return 2
 	}
-	trusted, err := trustServer(flags.Arg(0), *fingerprint)
+	trusted, err := trustServer(flags.Arg(0), *fingerprint, trustTimeout)
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry mcp connect:", err)
 		return 1

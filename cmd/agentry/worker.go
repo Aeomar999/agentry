@@ -142,7 +142,7 @@ func runJoin(w *workerSetup, args []string, stdout io.Writer) error {
 	var target trustedServer
 	if joined && config.Server == given && config.CA != "" && w.caFingerprint == "" {
 		target = trustedServer{server: given, ca: []byte(config.CA)}
-	} else if target, err = trustServer(given, w.caFingerprint); err != nil {
+	} else if target, err = trustServer(given, w.caFingerprint, trustTimeout); err != nil {
 		return err
 	}
 	if joined && (config.Server == given || config.Server == target.server) {

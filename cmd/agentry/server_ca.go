@@ -22,6 +22,10 @@ import (
 // caPath is where a server served with -https hands out its CA, to anyone.
 const caPath = trustPrefix + "ca.pem"
 
+// trustTimeout is how long joining waits for the server to answer its
+// trust check.
+const trustTimeout = 15 * time.Second
+
 // trustedServer is a server a code may be sent to: its address, https when
 // it is served so, and the CA it is pinned to, nil when it needs none.
 type trustedServer struct {
@@ -35,16 +39,17 @@ type trustedServer struct {
 // an http address then becomes https, as the server would redirect it.
 // Without one, an https address must be trusted by this machine, as one
 // behind a reverse proxy with a public certificate is; if it isn't, it is
-// refused with the fingerprint of the CA the server offered.
-func trustServer(server, fingerprint string) (trustedServer, error) {
+// refused with the fingerprint of the CA the server offered. Each request
+// gives up after timeout.
+func trustServer(server, fingerprint string, timeout time.Duration) (trustedServer, error) {
 	server = strings.TrimSuffix(server, "/")
 	if fingerprint == "" {
 		if !strings.HasPrefix(server, "https://") {
 			return trustedServer{server: server}, nil
 		}
-		return trustedServer{server: server}, trustedWithoutCA(server)
+		return trustedServer{server: server}, trustedWithoutCA(server, timeout)
 	}
-	ca, err := fetchCA(server)
+	ca, err := fetchCA(server, timeout)
 	if err != nil {
 		return trustedServer{}, err
 	}
@@ -53,14 +58,14 @@ func trustServer(server, fingerprint string) (trustedServer, error) {
 			"Check it with `agentry ca` on the server", got, fingerprint)
 	}
 	trusted := trustedServer{server: "https://" + strings.TrimPrefix(strings.TrimPrefix(server, "https://"), "http://"), ca: ca}
-	return trusted, servedWithCA(trusted)
+	return trusted, servedWithCA(trusted, timeout)
 }
 
 // servedWithCA checks that the server answers with a certificate its CA
 // issued. One behind a reverse proxy with a public certificate may hand
 // out the right CA and still not be served with it.
-func servedWithCA(trusted trustedServer) error {
-	response, err := pinned.Client(trusted.ca, 15*time.Second).Get(trusted.server + caPath)
+func servedWithCA(trusted trustedServer, timeout time.Duration) error {
+	response, err := pinned.Client(trusted.ca, timeout).Get(trusted.server + caPath)
 	if pinned.Untrusted(err) {
 		return fmt.Errorf("%s hands out Agentry's CA but answers with another certificate, as a reverse proxy with its own does: "+
 			"run this again without -ca-fingerprint", trusted.server)
@@ -74,8 +79,8 @@ func servedWithCA(trusted trustedServer) error {
 
 // trustedWithoutCA checks that this machine trusts server's certificate as
 // it is, sending nothing but the request for the CA.
-func trustedWithoutCA(server string) error {
-	response, err := (&http.Client{Timeout: 15 * time.Second}).Get(server + caPath)
+func trustedWithoutCA(server string, timeout time.Duration) error {
+	response, err := (&http.Client{Timeout: timeout}).Get(server + caPath)
 	if err == nil {
 		response.Body.Close()
 		return nil
@@ -83,7 +88,7 @@ func trustedWithoutCA(server string) error {
 	if !pinned.Untrusted(err) {
 		return err
 	}
-	if ca, fetchErr := fetchCA(server); fetchErr == nil {
+	if ca, fetchErr := fetchCA(server, timeout); fetchErr == nil {
 		offered := tlsca.FingerprintOf(derOf(ca))
 		return fmt.Errorf("%s is served with its own CA, SHA-256 %s. Check that against `agentry ca` on the server, "+
 			"then run this again with -ca-fingerprint %s", server, offered, offered)
@@ -93,8 +98,8 @@ func trustedWithoutCA(server string) error {
 
 // fetchCA gets the CA server offers, without trusting the connection: the
 // fingerprint check is what makes it trusted.
-func fetchCA(server string) ([]byte, error) {
-	unchecked := &http.Client{Timeout: 15 * time.Second,
+func fetchCA(server string, timeout time.Duration) ([]byte, error) {
+	unchecked := &http.Client{Timeout: timeout,
 		Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, // checked by fingerprint
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := unchecked.Get(server + caPath)

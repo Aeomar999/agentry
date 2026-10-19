@@ -100,3 +100,86 @@ func TestMCPWithServerAndTokenOverHTTPS(t *testing.T) {
 		t.Errorf("without a fingerprint: %v", err)
 	}
 }
+
+// hookServer is connectable's server as the hooks reach it, through
+// AGENTRY_URL and AGENTRY_CA_FINGERPRINT, counting the requests for its CA.
+func hookServer(t *testing.T) (ca *tlsca.CA, address string, caRequests *atomic.Int32) {
+	t.Helper()
+	ca, _ = testCA(t)
+	caRequests = &atomic.Int32{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("{}")) })
+	door := frontDoor(mux, ca)
+	address = serving(t, ca, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == caPath {
+			caRequests.Add(1)
+		}
+		door.ServeHTTP(w, r)
+	}))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("AGENTRY_URL", "https://"+address)
+	t.Setenv("AGENTRY_TOKEN", "m1")
+	t.Setenv("AGENTRY_CA_FINGERPRINT", ca.Fingerprint())
+	return ca, address, caRequests
+}
+
+// The hooks run with every prompt, so the CA they checked once is trusted
+// next time with no request for it, however its fingerprint is written.
+func TestTheHooksCheckTheCAOnce(t *testing.T) {
+	ca, _, caRequests := hookServer(t)
+	for i := range 2 {
+		agentry, err := connectFromEnv()
+		if err != nil {
+			t.Fatalf("run %d: %v", i+1, err)
+		}
+		if err := agentry.Call("GET", "/api/config", nil, nil); err != nil {
+			t.Fatalf("run %d: %v", i+1, err)
+		}
+	}
+	t.Setenv("AGENTRY_CA_FINGERPRINT", strings.ToLower(strings.ReplaceAll(ca.Fingerprint(), ":", "")))
+	if _, err := connectFromEnv(); err != nil {
+		t.Fatal(err)
+	}
+	if got := caRequests.Load(); got != 2 { // the first check: the CA, then the pinned check
+		t.Errorf("%d requests for the CA, want 2", got)
+	}
+	if info, err := os.Stat(keptCAFile()); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("the kept CA: %v, %v", info, err)
+	}
+}
+
+func TestAnotherFingerprintChecksTheCAAgain(t *testing.T) {
+	_, _, caRequests := hookServer(t)
+	if _, err := connectFromEnv(); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := testCA(t)
+	t.Setenv("AGENTRY_CA_FINGERPRINT", other.Fingerprint())
+	if _, err := connectFromEnv(); err == nil || !strings.Contains(err.Error(), "isn't trusted") {
+		t.Errorf("another fingerprint: %v", err)
+	}
+	if got := caRequests.Load(); got != 3 {
+		t.Errorf("%d requests for the CA, want 3: the first check, and the CA again", got)
+	}
+}
+
+// A kept CA the server no longer answers with, as after `agentry ca
+// -regenerate`, is dropped, so the next run checks again.
+func TestAKeptCAIsDroppedWhenTheServerIsNoLongerItsOwn(t *testing.T) {
+	_, address, _ := hookServer(t)
+	old, _ := testCA(t)
+	if err := keepCA(keptCA{Given: "https://" + address, Server: "https://" + address, CA: string(old.PEM())}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTRY_CA_FINGERPRINT", old.Fingerprint())
+	agentry, err := connectFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agentry.Call("GET", "/api/config", nil, nil); err == nil {
+		t.Fatal("trusted a server another CA vouches for")
+	}
+	if _, err := os.Stat(keptCAFile()); !os.IsNotExist(err) {
+		t.Errorf("the kept CA is still there: %v", err)
+	}
+}
