@@ -151,13 +151,18 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 		Coordinates bool   `json:"coordinates"`
 	}
 	type template struct {
+		ID          string   `json:"id"` // what GET /api/agents says an agent was made from
 		Team        string   `json:"team"`
 		Description string   `json:"description"`
+		Features    []string `json:"features"` // what a team made from it turns on, so the page can find that team
 		Agents      []member `json:"agents"`
 	}
 	list := []template{}
 	for _, t := range agents.Templates {
-		view := template{Team: t.Team, Description: t.Description}
+		view := template{ID: t.ID, Team: t.Team, Description: t.Description, Features: t.Features}
+		if view.Features == nil {
+			view.Features = []string{}
+		}
 		for _, a := range t.Agents {
 			view.Agents = append(view.Agents, member{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
 		}
