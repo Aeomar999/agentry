@@ -56,6 +56,8 @@ type State struct {
 	skipped     tally // foreign streams and unknown types
 }
 
+var _ features.Reader = (*State)(nil)
+
 // created is a task.created event's place in the log, or the first event of
 // a feature's stream. The task and owned stream orders are by these
 // positions, not by when the state took each event, so a state that starts

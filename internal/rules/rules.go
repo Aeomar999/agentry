@@ -8,31 +8,18 @@ import (
 	"errors"
 	"slices"
 
-	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
-	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
-	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
-// State is what the rules read: the state the proposal would be appended to.
-// *current.State is one. Broken is why a roster's stream could not be built,
-// or nil: the rules refuse what would be checked against a broken roster.
-// NextTask is the stream Store.Create names for the next task.
-type State interface {
-	Task(id string) (*tasks.Task, error)
-	NextTask() string
-	Owned(stream string) (any, error) // a feature's stream, read through its typed helper: ideas.Get
-	OwnedIDs(prefix string) []string
-	Roster() agents.Roster
-	Settings() settings.Settings
-	Workers() workers.Roster
-	Connections() connections.Roster
-	Broken(stream string) error
-}
+// State is what the rules read: the state the proposal would be appended to,
+// as a feature reads it. *current.State is one. The rules refuse what would
+// be checked against a broken roster, and read a feature's stream through
+// its typed helper, such as ideas.Get.
+type State = features.Reader
 
 // Check is the store's OrderCheck, made with the state it reads and the
 // catalogue the store has, which says which streams are tasks. Nothing goes

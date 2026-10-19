@@ -5,7 +5,11 @@ package features
 
 import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // A Feature is one capability a team or a setting turns on. Every field but
@@ -29,10 +33,21 @@ type Streams struct {
 	Next       func(prev any, e events.Event) any
 }
 
-// Reader is the read side of the state a feature sees: current.State
-// implements it. A feature never holds the store.
+// Reader is the read side of the state, for features and for the rules:
+// current.State implements it, and rules.State is this type. A feature
+// never holds the store. Broken is why a stream could not be built, or nil.
+// NextTask is the stream Store.Create names for the next task.
 type Reader interface {
+	Task(id string) (*tasks.Task, error)
+	TaskIDs() []string
+	NextTask() string
 	Roster() agents.Roster
+	Workers() workers.Roster
+	Connections() connections.Roster
+	Settings() settings.Settings
+	Broken(stream string) error
+	Owned(stream string) (any, error) // a feature's stream, as its Next left it; nil, nil when it holds nothing
+	OwnedIDs(prefix string) []string  // the streams with a prefix, in log order, broken ones too
 }
 
 // Entry is whether the page shows a feature, and why.
