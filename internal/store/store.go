@@ -72,12 +72,16 @@ type Store struct {
 	applied atomic.Int64 // the last position in the model; no read of the log goes past it
 }
 
+// Driver names the database/sql driver Open uses: modernc's SQLite. A test
+// can name a wrapper around it instead, to count the statements sent.
+var Driver = "sqlite"
+
 // readConnections is how many reads of the log can run at once.
 const readConnections = 4
 
 // Open opens the log at path and loads it into model, if there is one.
 func Open(path string, model Model, check OrderCheck) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open(Driver, path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +96,7 @@ func Open(path string, model Model, check OrderCheck) (*Store, error) {
 		return nil, fmt.Errorf("loading the log: %w", err)
 	}
 	// Opened after the schema, which made the file and switched it to WAL.
-	reads, err := sql.Open("sqlite", path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
+	reads, err := sql.Open(Driver, path+"?_pragma=query_only(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		db.Close()
 		return nil, err
