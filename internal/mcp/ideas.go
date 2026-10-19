@@ -28,8 +28,12 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 		State string
 	}
 	json.Unmarshal(arguments, &a)
-	if a.State == "" {
+	switch a.State {
+	case "":
 		a.State = "open"
+	case "open", "accepted", "dismissed", "all":
+	default:
+		return "", fmt.Errorf("no state %q: use open, accepted, dismissed or all", a.State)
 	}
 	repo := s.repo
 	if a.All {
