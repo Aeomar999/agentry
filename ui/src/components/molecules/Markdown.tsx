@@ -286,7 +286,10 @@ function inline(text: string, props: MarkdownProps): ReactNode {
       const to = props.refs && /^\S+$/.test(code) ? props.refs(code) : null;
       if (to) return <Fragment key={i}>{anchor(to, code, props, true)}</Fragment>;
       return (
-        <code key={i} className="rounded-sm bg-surface-3 px-1 py-px font-mono text-[0.88em] text-ink-primary">
+        <code
+          key={i}
+          className={cn("rounded-sm bg-surface-3 px-1 py-px font-mono text-[0.88em] text-ink-primary", /^\S+$/.test(code) && WHOLE)}
+        >
           {code}
         </code>
       );
@@ -341,6 +344,11 @@ function words(text: string, props: MarkdownProps): ReactNode {
   return out;
 }
 
+// A ref (a task id, a commit) or a one-word bit of code, such as a branch,
+// moves to the next line whole rather than breaking at its hyphen; only one
+// longer than the line breaks inside.
+const WHOLE = "inline-block max-w-full";
+
 function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false): ReactNode {
   const marked = props.marks && to.external;
   return (
@@ -361,7 +369,7 @@ function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false
       aria-label={to.name}
       className={cn(
         props.marks ? "text-link underline underline-offset-2" : "text-info underline-offset-2 hover:underline",
-        mono && "font-mono text-[0.88em]",
+        mono && cn("font-mono text-[0.88em]", WHOLE),
       )}
     >
       {label}

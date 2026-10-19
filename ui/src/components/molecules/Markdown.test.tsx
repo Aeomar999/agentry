@@ -145,6 +145,18 @@ describe("Markdown refs", () => {
     expect(a.className).not.toContain("bg-surface-3");
   });
 
+  test("keeps a ref whole: it moves to the next line rather than break at its hyphen", () => {
+    const [bare, code] = links("see task-21 and `task-21`", withRefs);
+    for (const a of [bare, code]) expect(a.className).toContain("inline-block max-w-full");
+  });
+
+  test("keeps one-word inline code whole, such as a branch, but lets code with spaces wrap", () => {
+    const { container } = render(<Markdown text="on `agentry/task-1`, ran `go test ./...`" />);
+    const [branch, command] = container.querySelectorAll("code");
+    expect(branch.className).toContain("inline-block max-w-full");
+    expect(command.className).not.toContain("inline-block");
+  });
+
   test.each([
     ["an unknown task", "task-999"],
     ["an unknown hash", "abcdef1"],
