@@ -83,6 +83,7 @@ type action struct {
 	RequestedAt time.Time `json:"requestedAt"`
 	Asked       bool      `json:"asked"`
 	Held        bool      `json:"held"` // no answer came in time: the agent was told no, and it waits for you still
+	HeldAt      time.Time `json:"heldAt,omitzero"`
 	Decision    string    `json:"decision"`
 	Reason      string    `json:"reason"`
 	Finished    bool      `json:"finished"` // the tool ran and returned
@@ -90,7 +91,7 @@ type action struct {
 
 func actionView(a *tasks.Action) action {
 	return action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command, RequestedAt: a.RequestedAt,
-		Asked: a.Asked, Held: a.Held, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
+		Asked: a.Asked, Held: a.Held, HeldAt: a.HeldAt, Decision: string(a.Decision), Reason: a.Reason, Finished: a.HasResult}
 }
 
 type eventEntry struct {
