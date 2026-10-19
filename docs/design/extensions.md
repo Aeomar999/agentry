@@ -3,8 +3,9 @@
 Status: proposed, for task-46 ("Research how teams contribute features and
 UI: the shape of Agentry's extensions").
 Research only: nothing in the server or the page changes with this document.
-This is part 1: the inventory, what an extension is, how the page learns what
-is on, the options and the core API. Part 2 adds the rest (see the end).
+It covers the inventory, what an extension is, how the page learns what
+is on, the options, the core API, replay, versioning, security, what moves
+first, and a phased plan ready to file as Backlog stories.
 
 ## In short
 
@@ -30,6 +31,24 @@ Out-of-process extensions (option b) can't add rules: rules run inside
 `Store.Propose` under the store's one write lock, so a network call there
 would stall every proposal. They stay possible later as clients of the API
 that read events and write proposals, which the MCP server already is.
+
+Turning a feature off never touches the log. Disabled (no team), its data
+stays readable and actionable; absent (no code), its streams and types are
+skipped on replay, refused for new proposals and counted, by a stated rule
+in place of today's accident (section 7). Event types change only by adding
+optional fields, or by a new name (section 8). Team templates gain an ID
+and a list of features, and each agent records the template it came from,
+which fixes the name matching that misses a second "Visionaries 2" team.
+A feature's agents go through the gate like any other; a feature owns its
+prefix and types, names the core types it writes, and its rules can only
+refuse (section 9). Tasks, the gate, agents and machines stay core
+(section 10).
+
+The plan (section 11) starts small: phase 1 is five stories that make
+Ideas show only while a Visionaries team or an idea exists, through
+`internal/features`, `GET /api/features` and the page's feature registry.
+Phase 2 moves the rest of Ideas onto the API, phase 3 brings the Shipping
+column and team profiles, phase 4 T-019, T-024 and T-036.
 
 ## 1. Where this comes from
 
@@ -72,7 +91,7 @@ generic point. "Core" means a generic change that stays.
 | Task field | `internal/tasks/task.go` (`Task.Idea`), `internal/tasks/apply.go` (`task.created` reads `"idea"`) | A task remembers the idea it was made from | Hook: a feature-neutral "made from" stream |
 | Idea state | `internal/ideas/idea.go` (`Idea`, `State`, `FromEvents`, `Next`, `apply`) | An idea's state from its events, same shape as `tasks` | Own |
 | Accept | `internal/ideas/accept.go` (`Accept`, `madeFrom`, `ideaOf`, `makeTask`, `kindOf`, `description`, `Board`) | Makes one Backlog task per idea, however often accepted, then marks it accepted | Own |
-| Lists | `internal/ideas/list.go` (`Load`, `List`, `Dismissals`) | Reads ideas from the log (`store.IdeaIDs`, `Store.Stream`), not from `current.State` | Own (and should read the state, see "Surprises") |
+| Lists | `internal/ideas/list.go` (`Load`, `List`, `Dismissals`) | Reads ideas from the log (`store.IdeaIDs`, `Store.Stream`), not from `current.State` | Own (and should read the state: section 11, story 1) |
 | Read model | `internal/current/current.go` (`State.ideas`, `Load` and `Apply` branches on `IsIdeaStream`, `State.Idea`) | Keeps each idea in memory | Hook: a state slice per stream prefix |
 | Read model check | `internal/current/equal.go` (`IdeaIDs` loop) | The equivalence test covers ideas | Hook: loop over every slice |
 | Log reads | `internal/store/read.go` (`IdeaIDs`), `internal/store/store.go` (`Create`, `made`) | `idea-N` named under the store lock by counting `idea.suggested` | Core: `Create(prefix, p)` is generic already; `IdeaIDs` becomes `StartedBy(type)` |
@@ -137,7 +156,7 @@ team).
 | Kind | Example | What core must offer |
 |---|---|---|
 | Agents and prompts | The Visionaries template and its five prompts | A template list it can add to (`agents.Templates`), prompts by folder, and a way to say which feature a template turns on |
-| Policy profiles | `read-mostly` | A way to declare a needed profile and its rules, and the existing `unknownProfile` check when the file in force lacks it (part 2, with task-35) |
+| Policy profiles | `read-mostly` | A way to declare a needed profile and its rules, and the existing `unknownProfile` check when the file in force lacks it (section 8, with task-35) |
 | Event types and streams | `idea.suggested`, `idea.accepted`, `idea.dismissed` in `idea-N` | Registering types with their fields and writers (`events.spec`, today unexported), and a stream prefix the core treats as not a task (`IsTaskStream`) |
 | Rules | `checkIdea`: once, while open, from a real task | Check 3 for its own streams, plus a guard on core types it cares about (T-024 needs one on approvals), run inside `Store.Propose` like `rosterRules` |
 | State slice | `current.State.ideas` | A slot in `current.State` for its streams, built by `Load` and changed by `Apply`, under the same lock, guard and broken-stream handling |
@@ -240,7 +259,7 @@ Ctrl K and the board.
 | Event log as the truth | Events go through `Store.Propose` like any other | Same, over HTTP: an extension writes proposals; it can't write past the checks | Same |
 | Rules (extensions "add rules") | A rule runs in `rules.Check`, inside `Store.Propose`, under `Store.mu`, in microseconds | Can't, in practice: a rule would need a network call while the store's one write lock is held, so one slow extension stalls every proposal and every agent. It could only react after the fact. | Rules only from (a) |
 | In-memory read model | A state slice applied by `current.State.Apply` in the one applier, rebuilt at `Load`, checked by `current.Equal` | Keeps its own copy from the event stream: its own replay, its own position, its own bugs, and nothing the core rules can read | Slices only from (a) |
-| Replay of old logs | The feature's code replays its streams; without the code they are skipped (part 2) | The core replays nothing of it; the extension replays its streams itself on every start | Both cases |
+| Replay of old logs | The feature's code replays its streams; without the code they are skipped and counted (section 7) | The core replays nothing of it; the extension replays its streams itself on every start | Both cases |
 | Workers on other machines | No change: workers run agents, not features | No change, but the extension must reach the server like a worker does | Same |
 | Security: agents | Its agents go through the gate and policy as any agent (`Profile`, the hook) | Same | Same |
 | Security: who writes what | The catalogue's `writers` and the feature's rules decide, in process | Needs its own credential and a list of types it may write; today `carriesUIToken` lets a connection's credential do anything the page can, which is too much for third-party code | (a) for writes that need rules; (b) behind scoped credentials |
@@ -450,43 +469,442 @@ export const ideas: FeatureUI = {
   preset is core; the form's theme field is the next thing to move, through
   a "new task for this team" slot, once a second team needs one.
 
-## 7. Enable, disable and replay (part 2)
+## 7. Enable, disable and replay
 
-## 8. Versioning, and templates that declare what they need (part 2)
+### What turning a feature off means
 
-## 9. Security (part 2)
+A feature is turned off in one of two ways, and neither touches the log:
 
-## 10. What moves first, and what stays core (part 2)
+- Disabled: its code is in the binary but its trigger is gone (you removed
+  the Visionaries team, or the GitHub token). Its streams still load, its
+  state is still in `current.State`, its routes and tools still answer, and
+  its manifest entry says `enabled: false` and stays `visible` while it has
+  data. Nothing new is made: no Visionaries coordinator means no done
+  decision with ideas, so no `idea.suggested`.
+- Absent: the binary has no code for it (a build without the feature, or an
+  older binary on a newer log). Its events stay in the log untouched; the
+  core skips them on replay, refuses new ones, and counts them.
 
-## 11. Phased plan (part 2)
+Events are never deleted or rewritten to turn a feature off, as
+`docs/design/log-growth.md` requires of every change. Archiving there moves
+only a done task's rows, under a `task.archived` marker; a feature's
+streams are not tasks and are never archived by it.
 
-## 12. Diagram (part 2)
+### How the core classifies a stream
 
-## Surprises for review
+Today the rule is accidental. `current.Load` sends any stream that is not
+`agents`, `workers`, `connections` or `policy` and does not start with
+`idea-` to `tasks.Replay`, and `Replay` returns nil for a stream with no
+`task.created`, so without the ideas code an `idea-N` stream would load as
+nothing. Three other places would not be so quiet: `events.IsTaskStream`
+would call `idea-3` a task's stream, so `rules.Check` would let a
+`task.renamed` into it; `coordinator.touchedTasks` would hand `idea-3` to
+`Loop.act`, which logs "reading the task" as an error for every idea event;
+and `current.Equal` would never look at it.
 
-- `ideas.List` and `ideas.Load` read the log (`store.IdeaIDs`, then
-  `Store.Stream` and `FromEvents` per idea) on every `GET /api/ideas`, every
-  accept and dismiss (`ideaExists`), and every Visionaries brief
-  (`dismissedFor`), although `current.State` already holds every idea.
-  `State` has `Idea(id)` but no list, so the read model stops halfway for
-  ideas. The `OwnedIDs` read above closes it.
-- The feature is bound to a team by name, in three places that must agree:
-  `coordinator.VisionariesTeam`, `VISIONARIES` in `ui/src/lib/teams.ts`, and
-  the template's `Team`. A team you name "Visionaries" by hand gets ideas;
-  the template's team under another name would not. Part 2 proposes
-  recording which template, and so which features, a team came from.
-- The brief's "addTeam's missingProfiles" does not exist; the check is
-  `web.unknownProfile` in `internal/web/agents_api.go`, used by `addTeam`
-  and by `agentFrom` (for `createAgent` and `changeAgent`).
-- The Shipping column has the same problem as Ideas: `TasksPage.tsx` always
-  shows it, even on an install whose teams have no agent that ships.
-- `GET /api/config` sends `hasTerminal` and `hasDesk`, and the page reads
-  neither.
-- Replay already survives a feature's code being absent, by accident: the
-  store loads events without checking their types, an `idea-N` stream
-  would then count as a task stream with no `task.created`, so
-  `tasks.Replay` gives nil and the stream is skipped. Part 2 makes that a
-  rule rather than a coincidence.
-- The principle that "extensions read events, write proposals and add
-  rules" is not written in PLAN.md or anywhere in the repo; it is in the
-  task's brief only. Part 2 could put it in PLAN.md's decisions.
+The stated rule, in `current` and `events` both:
+
+1. A core stream is one of the fixed names: `agents`, `workers`,
+   `connections`, `policy`.
+2. An owned stream starts with a prefix a feature registered (`idea-`). Its
+   events go to that feature's `Streams`.
+3. A task stream is one whose first accepted event is `task.created`. That
+   is what `tasks.Replay` already checks, so every old log replays the same.
+4. Anything else is a foreign stream: events whose stream or type this
+   binary doesn't know. They stay in the log and are skipped in apply.
+
+`IsTaskStream` changes to match: a stream is a task's when `current.State`
+holds a task for it, and a proposal for a stream that is neither core,
+owned nor an existing task must be `task.created` made by `Store.Create`
+with the `task-` prefix. So `rules.Check` refuses any proposal into a
+foreign stream ("stream idea-3 belongs to a feature this build doesn't
+have"), and the coordinator acts only on task streams. A new proposal of an
+unknown type is refused already, by `events.CheckShape` ("unknown event
+type"); only replay meets unknown types, and it skips them.
+
+The same rule covers a feature's types inside a core stream. T-019 would
+write something like `pr.opened` into a task's stream. `tasks.apply` has no
+case for it and ignores it (it only moves `LastActiveAt`, as every event
+does); that stays true and gets a test: a task stream with an unknown type
+in the middle replays to the same task as without it, apart from
+`LastActiveAt`.
+
+### Counting what was skipped
+
+`current.State` keeps a small tally while it loads and applies: per foreign
+stream prefix (the stream name up to its last `-`) and per unknown type in
+a known stream, the number of events and the last position. It is never
+an error and never breaks a stream. `GET /api/features` returns it beside
+the features:
+
+```
+"unknown": [
+  { "prefix": "idea-", "streams": 12, "events": 31, "last": 48211 },
+  { "type": "pr.opened", "events": 4, "last": 48190 }
+]
+```
+
+The page shows it in one place, as one line ("31 events from a feature
+this build doesn't have: idea-"), so a downgrade is explained rather than
+silent. There is no Settings page yet, so where that line goes is open. The server logs one line per prefix at
+startup, not one per event.
+
+### Re-enabling
+
+Re-enabling is never a migration. Disabled to enabled: the state was kept
+all along, and the manifest flips on the next `agent.created` that brings
+the team back. Absent to present: the next start replays the log, and the
+feature's `FromEvents` builds its streams from every event it ever wrote,
+including the ones the older binary only counted. A feature must therefore
+replay any event it ever wrote, in every version (section 8), exactly as
+`tasks.apply` must.
+
+### The applied gate, snapshots and the equivalence test
+
+- The applied position (`docs/design/read-model.md`, section 4) moves for
+  every committed event, skipped or not, as it does for a
+  `proposal.rejected` today. A reader of the log after position N still
+  sees foreign events, as raw events: `GET /api/changes` and
+  `Store.NewReader` return what the log holds, and each consumer ignores
+  types it doesn't know (the page's `LiveProvider` only uses positions).
+- `current.Equal` loops over every registered prefix with that feature's
+  `FromEvents`, beside tasks and rosters, so a feature's slice is proven
+  equal to a replay like any other. Foreign streams are compared by their
+  tally only.
+- Snapshots (`docs/design/log-growth.md`, section 2) are tagged with the
+  binary's hash, and any doubt means a full replay. That already covers a
+  feature arriving or leaving: a different binary is a different hash. The
+  snapshot also lists the feature names and versions it holds slices for,
+  so a later change to the tag rule can't load a slice its code can't read.
+  A snapshot never holds a foreign stream's state, only its tally.
+
+### Task.Idea becomes Task.MadeFrom
+
+`task.created` carries `"idea": "idea-7"` when you accept an idea, read by
+`tasks.apply` into `Task.Idea`. The field becomes `Task.MadeFrom`, the
+stream of whatever made the task, so the task package names no feature:
+
+- New events carry `"from": "idea-7"`; `apply` reads `"from"`, and falls
+  back to `"idea"` when `"from"` is absent, so every old `task.created`
+  replays to the same task. The fallback stays for as long as old logs
+  exist, which is always.
+- The page shows "Made from" with a link the owning feature supplies (the
+  feature whose prefix starts the stream), and nothing when that feature
+  is absent: the stream name alone.
+- `rules.madeFromIt` (accepting an idea needs the task that says it was
+  made from it) reads `MadeFrom`.
+- The `catalogue` comment on `TaskCreated` says "may carry the stream it
+  was made from".
+
+## 8. Versioning, and templates that declare what they need
+
+### Event types
+
+An event type is a contract with every log ever written: a stored event is
+never rewritten, so `apply` reads every shape a type has had. The rules:
+
+- A type's meaning never changes. Adding an optional data field is a minor
+  change: old events lack it, and `apply` gives it the old default, as
+  `task.created`'s `maxTurns` does today ("a task made before keeps the
+  old limit").
+- A required field is never added to an existing type, because
+  `events.CheckShape` would only enforce it on new proposals while replay
+  still meets events without it. If a type must change its shape, it gets a
+  new name (`idea.suggested` and, say, `idea.proposed`), the old one stays
+  registered for replay with no writers, and `apply` handles both.
+- `events.Spec` gains a `Since` (the feature version that added the type)
+  and a `Retired` flag (registered for replay only: `CheckWriter` refuses
+  it). No version is stored on each event: the type name and the fields
+  present already say which shape it is, and the `events` table stays as
+  it is.
+
+T-036 (a JSON Schema per event type) fits here: the `Spec` a feature
+registers is the place to generate it from, and a schema test per type
+checks that every fixture event still validates, so an incompatible change
+fails in CI rather than on someone's log. With features writing events,
+T-036 moves from "later" to the phase that makes `Spec` public.
+
+### Features
+
+A `Feature` gains `Version int`, raised when its events or state change.
+The manifest carries it, so a page built for a newer version can say so,
+and the snapshot tag lists it (section 7). There is no `feature.enabled`
+event: enabled is worked out from state (a team, a token) on every
+request, so it can't drift from what is there.
+
+### Templates declare what they need
+
+`agents.Template` today has `Team`, `Description`, `Folder` and `Agents`.
+It gains two fields:
+
+```go
+type Template struct {
+	ID          string   // "visionaries": stable, recorded on the agents it makes
+	Team        string   // "Visionaries": the default name, which you may change
+	Description string
+	Folder      string
+	Agents      []Agent
+	Features    []string // "ideas": what a team made from it turns on
+}
+```
+
+- Profiles are already declared, per agent, by `Agent.Profile`. `addTeam`
+  checks each with `web.unknownProfile` and refuses the team with "copy
+  `[profiles.read-mostly]` from `internal/policy/default.toml`". That
+  stays the gate; task-35 (profiles per team) decides how the profile gets
+  into the user's `policy.toml` in one step, for example a button that
+  appends the shipped profile to the file, which reloads it with a
+  `policy.loaded` as any save does. The feature does not bring policy of
+  its own: the policy file stays the user's, and the only thing a template
+  may do is name a profile.
+- `Features` is what makes the manifest's `enabled` true. A feature's
+  `Manifest` asks the roster for a team made from a template that lists
+  it, instead of matching a team name.
+
+### Recording which template a team came from
+
+The feature is bound to a team by name today, in three places that must
+agree: `coordinator.VisionariesTeam` ("Visionaries", compared by
+`isVisionaries` with `strings.EqualFold` on `TeamName()`), `VISIONARIES` in
+`ui/src/lib/teams.ts`, and the template's `Team`. Two bugs follow:
+`agents.AddTeam` names a second copy "Visionaries 2", which `isVisionaries`
+doesn't match, so that team's sessions suggest nothing; and a team you
+build by hand and call "Visionaries" does get ideas.
+
+The fix: `AddTeam` puts `"template": "visionaries"` in each
+`agent.created` it proposes, and `agents.Agent` gains `Template string`.
+`Roster.TemplateOf(team)` is the template of the team's coordinator.
+`isVisionaries` becomes a check that the coordinator's template lists the
+`ideas` feature. `Agent.Proposal` writes the key on every `agent.created` and
+`agent.changed`, empty for an agent you make by hand, so a missing key
+means an event from before the field. Only for those does the roster fall
+back, at replay: a team whose name equals a template's `Team`, or that name
+plus " N", counts as made from it. That keeps today's
+Visionaries teams working with no new event. On the page, "Ask the
+visionaries" finds the team by `template` on `GET /api/agents` and adds one
+from the `visionaries` template when none exists; `VISIONARIES` becomes the
+template ID.
+
+## 9. Security
+
+### A feature's agents
+
+They are agents: every tool call goes through the hook gate and is judged
+with the agent's own `Profile`, as T-041 made it. A feature cannot add
+allow rules, cannot widen a profile and cannot run anything outside an
+agent's turn. The Visionaries' `read-mostly` profile is in the user's
+`policy.toml`, where they can read and change it. Agentry's own files stay
+protected in code, whatever profile is in force.
+
+### Who may write which events
+
+Compiled-in code is trusted code: it is reviewed and built into the
+binary, and nothing in Go stops it calling `Store.Propose` with any type.
+The point of the rules below is legibility and catching mistakes, so a
+reader can see from the registration what a feature can write.
+
+- A feature owns its prefix and its types. `events.Register` panics at
+  start if a prefix or a type name is already taken (by core or another
+  feature) or if a type's name does not start with the feature's
+  namespace (`idea.`). Types it registers for its own streams can go only
+  there (`belongsIn`, as today for ideas).
+- Each type's `writers` (`Human`, `Agent`, `System`, ...) work as now:
+  `events.CheckWriter` refuses an `idea.accepted` from anyone but you.
+- A feature names the core types it writes. Ideas writes `task.created`
+  when you accept one (`ideas.makeTask`). `Core` hands a feature a
+  proposer that refuses any type the feature neither registered nor listed
+  in `Writes`, with the rejection rule "features". A refusal is stored as
+  `proposal.rejected` like any other, so a mistake shows in the log.
+- Guards can only refuse, never change a proposal. A feature may guard
+  core types (T-024 guards approvals) and its own, but not another
+  feature's: one feature depending on another is a reason to merge them or
+  move the shared part to core. Each refusal names its feature ("ideas:
+  ..."), so it is clear whose rule said no.
+- A feature's rule, guard, `FromEvents` and `Next` run under `recover`.
+  Today a panic in `rules.Check` is not recovered: it unwinds through
+  `Store.Propose` and takes down the goroutine that proposed (the loop, or
+  a request). For a feature's code, a panic in a rule is a refusal, and a
+  panic in apply breaks only that stream, as `current.guard` already does.
+
+### HTTP and MCP
+
+A feature's routes are mounted by the core through the same wrappers as
+every route: `api` (behind `requireUI`) or, if the route says `Desk: true`,
+`deskToo` (behind `requireUIOrDesk`). A `Route` can't choose to skip them,
+and no feature route can sit behind `requireRealUIToken`, which hands out
+the token. Every HTTP write is made as `you` (`web.you`), so a feature's
+endpoint has your authority and no more.
+
+That includes connections. A Claude Code session's credential passes
+`carriesUIToken`, so `accept_idea` through MCP writes `idea.accepted` as
+you. The MCP instructions say "never accept or dismiss an idea on your
+own", but that is a prompt, not a check. For first-party code that is the
+accepted trade today; it is the first thing to close for (b).
+
+### What (b) and (c) would need
+
+An out-of-process extension must not get the page's authority. It would
+need:
+
+- A credential of its own (a new `ActorKind`, `Extension`, with an ID), so
+  its events say who wrote them and `writers` can allow or refuse it.
+- A scope on that credential: the types it may propose and the streams it
+  may read, checked in the core before `Store.Propose`. A connection's
+  credential could take the same scopes, which would also close the
+  `accept_idea` gap above.
+- No rules: its checks run after the fact, as proposals of its own.
+- Its UI only in a sandboxed frame (`ui/src/lib/sandbox.ts`), with a
+  message bridge that exposes reads, never the token.
+
+## 10. What moves first, and what stays core
+
+| Feature | When | Why then |
+|---|---|---|
+| Ideas and Visionaries | Phase 1 (visibility), phase 2 (the rest) | The trigger, the clearest case, and the one that touched 27 shared files; everything the API needs, it uses |
+| Shipping column | Phase 3 | Already "on" only when a team has `Column: agents.Ships`, but the column always shows. The manifest's `board.columns` fixes it without moving code: the column logic in `tasks` and `coordinator` stays core, because a task's column is how the board and the coordinator agree |
+| Per-team policy profiles | Phase 3, with task-35 | Template `ID` and `Features` from section 8, plus one-step profile setup; the gate stays core |
+| Integrations (T-019) | Phase 4 | The first feature with a background job and types in a core stream; proves those parts of the API |
+| Senior approval (T-024) | Phase 4 | The first guard on a core type; proves guards |
+| Design, Research, Writing templates | Not features | Data only: they gain an `ID` and no `Features` |
+
+What stays core, and why:
+
+- Tasks, epics and stories, the board's columns and the trail: every
+  feature reads them, and the coordinator loop, the rules and the read
+  model are written around them. A feature adds to a task; it is never one.
+- The gate, the policy and profiles: security must not depend on which
+  features are installed.
+- Agents, teams, templates and the roster: a feature is turned on by a
+  team, so teams can't be a feature.
+- Workers and machines, connections, files and worktrees: how agents run
+  at all.
+- The log, `Store.Propose`, `current.State` and the applied gate: the
+  thing every feature plugs into.
+- Questions and approvals, the waiting list and notifications as
+  mechanisms; features add sources to them.
+
+## 11. Phased plan
+
+Each story is one reviewable change, with a title and what done looks like,
+ready to file as Backlog stories under one epic.
+
+### Phase 1: Ideas shows only when it is useful, on the new mechanism
+
+1. **List ideas from the read model.** `current.State` gains `Ideas()` (in
+   log order, broken ones left out, as `Tasks()`); `ideas.List`, `Load`,
+   `ideaExists` and `dismissedFor` read it; `store.IdeaIDs` leaves the
+   request path. Done: `GET /api/ideas` makes no SQL query (a test with a
+   counting store), the existing ideas tests pass, and `current.Equal`
+   still covers ideas.
+2. **Record the template a team came from.** `Template.ID` and
+   `Template.Features`; `AddTeam` writes `"template"` on each
+   `agent.created`; `Agent.Template`, `Roster.TemplateOf`, the name
+   fallback for old events; `isVisionaries` uses the template. Done:
+   tests for a second team ("Visionaries 2") suggesting ideas, a hand-made
+   team called "Visionaries" not suggesting them, and an old log with no
+   `template` field still treating its Visionaries team as one.
+3. **The features package and `GET /api/features`.** `internal/features`
+   with `Feature{Name, Version, Manifest}` only, the `Reader` over
+   `current.State`, the list in `serve.go`, and Ideas' `manifest`. Done:
+   API tests for no team and no ideas (hidden), a Visionaries team
+   (enabled and visible), the team removed with ideas left (visible, not
+   enabled, `why` says so), and the badge counting open ideas.
+4. **The page's feature registry.** `ui/src/features/` with `FeatureUI`,
+   `FEATURES`, `useFeatures` (through `useResource`, so it refetches as the
+   log moves); Ideas' page, card, dialogs, types and `visionaries.ts` move
+   into `ui/src/features/ideas/`; `App.tsx` mounts feature routes;
+   `Sidebar.tsx` and `AdminShell.tsx`'s `paletteItems` add nav items and
+   commands of visible features. Done: `npm run lint` and `npm run build`
+   clean; on a scratch install, Ideas is absent from the sidebar and Ctrl K,
+   appears when the Visionaries team is added, and stays after removing it
+   while ideas exist; `/ideas` always opens.
+5. **The empty Ideas page.** With the feature off, `/ideas` shows what
+   Ideas is and an "Ask the visionaries" button that adds the team.
+   "Ask the visionaries" finds the team by template, not by name. Done: a
+   bookmark to `/ideas` on a fresh install shows the empty state, not a
+   404, and the button adds the team and opens New task.
+
+### Phase 2: Ideas as a feature package
+
+6. **Event types from features.** `events.Spec` and `events.Register`
+   (prefix, types, namespace check, panic after `store.Open`); ideas
+   registers its three types; `IsIdeaStream` and `IdeaPrefix` leave
+   `events`. Done: the catalogue tests pass with ideas registered in the
+   test setup, and registering a taken prefix or type panics.
+7. **The stream rule and the unknown tally.** Section 7's four kinds of
+   stream in `current`, `rules` and `coordinator.touchedTasks`; the tally in
+   `GET /api/features`; one log line per prefix at startup. Done: a fixture
+   log with `idea-N` streams replays on a build without ideas registered,
+   with the same tasks as before, the tally counting them, no
+   "reading the task" errors, and a proposal into `idea-3` refused.
+8. **Owned state slices.** `current.State.ideas` becomes the owned map;
+   `Load`, `Apply` and `Equal` go through `Streams`; `rules.State.Idea`
+   becomes `Owned`; feature code runs under `recover`. Done: the
+   equivalence test passes over every fixture log, and a feature whose
+   `Next` panics breaks only its stream.
+9. **Task.MadeFrom.** `"from"` on new `task.created` events, `"idea"` read
+   on old ones. Done: an old log's accepted idea and a new one both show
+   "Made from idea-N" on the task.
+10. **Coordinator hooks.** `features.Coordinator`; `Decision.Ideas` and
+    the ideas lines in `coordinatorBrief` and `Loop.apply` go. Done: the
+    coordinator's ideas tests pass through the hook, and a done decision
+    with `ideas` from a non-Visionaries coordinator is reported, not kept.
+11. **Routes, tools and waiting from features.** `Route`, the exported
+    reply kit, `mcp.Tool`, `Waiting`, the MCP instructions per feature,
+    the proposer that checks `Writes`. Done: `internal/web` and
+    `internal/mcp` name no ideas type; the MCP process lists the ideas
+    tools only while the feature is enabled or visible.
+
+### Phase 3: the board and teams
+
+12. **Board columns from the manifest.** `board.columns` lists Shipping
+    while a team ships or a task is in Shipping; `TasksPage.tsx` shows
+    those. Done: an install of only Writing has no Shipping column; adding
+    Software brings it.
+13. **One-step profiles for a template** (with task-35). Done: adding the
+    Visionaries team to an install whose `policy.toml` lacks
+    `read-mostly` offers to add it, and does so with one click.
+14. **Use or drop `hasTerminal` and `hasDesk`.** `GET /api/config` sends
+    both and the page reads neither. Done: either the terminal dock and the
+    desk entry hide when the server has none, or the fields are gone; no
+    flag is sent that nothing reads.
+
+### Phase 4: the next features on the API
+
+15. **T-019 as a feature** (background job after `review.approved`, a
+    type in a task stream, a task page slot). 16. **T-024 as a feature**
+    (a guard on approvals). 17. **T-036 schemas** generated from the
+    registered `Spec`s, checked against every fixture log. Each gets its
+    own design note before it is built.
+
+## 12. Diagram
+
+![How a feature plugs into the core](extensions.svg)
+
+The core (grey panel) owns the log, `Store.Propose` with the rules,
+`current.State`, the coordinator loop, the web server, the MCP process and
+the UI shell. The Ideas feature (right) registers once, in `serve.go`, and
+each of its parts lands in one core slot: its types in the catalogue, its
+rule in `Check`, its state slice in `current.State`, its hook in the loop,
+its routes in `web`, its tools in `mcp`, its manifest entry in
+`GET /api/features`, and its page, nav item and command in the UI
+registry. Nothing in the core names it. The source is
+`docs/design/source/figures.py`.
+
+## 13. What the Visionaries think
+
+To come: a short session with the Visionaries team on this recommendation.
+
+## Still open
+
+- Whether a connection's credential should be scoped now (section 9), or
+  only when (b) arrives. It would stop a Claude Code session from
+  accepting ideas on its own, which today only the MCP instructions do.
+- Where the page shows the unknown tally (section 7): there is no Settings
+  page yet; the Policy page or a small diagnostics view are candidates.
+- The principle is not written in the repo. A proposed line for PLAN.md's
+  decisions: "Extensions are compiled-in features that read events, write
+  proposals and add rules through `internal/features`. They are not
+  read-only, and they never write past the rules. Turning one off never
+  deletes or hides its data, and a log replays whether or not its code is
+  present."
