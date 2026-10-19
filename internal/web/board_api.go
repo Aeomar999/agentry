@@ -24,7 +24,9 @@ import (
 //     work not yet reviewed or tested ships as you chose, and the agent that
 //     ships it still runs its usual checks before it pushes. Once it has
 //     shipped, the coordinator can finish the task without another round of
-//     checks; only a change after that needs checking again
+//     checks; only a change after that needs checking again. A ship turn
+//     that crashed or was stopped hasn't shipped it: the next one ships it,
+//     as you chose, if nothing changed or checked the work in between
 //   - Done: it is done at once, as it is; a turn in progress stops, and the
 //     coordinator only wraps up (an epic closes, and its open stories are
 //     parked in the Backlog)

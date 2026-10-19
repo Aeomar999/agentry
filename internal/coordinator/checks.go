@@ -14,7 +14,10 @@ import (
 // again. So a change made after a review gets another round of review. You
 // can still finish a task as it is, from the board, or ship it: moved to
 // Shipping, the work as it was is yours, and once an agent has shipped it
-// the task can be done; only a change after that needs checking again.
+// the task can be done; only a change after that needs checking again. A
+// ship turn that crashed or that you stopped hasn't shipped it, but your
+// choice stands for the next ship turn if nothing has changed or checked
+// the work in between.
 
 type Verdict string
 
@@ -71,13 +74,15 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 	}
 	last := map[string]check{} // each checker's latest check
 	var order []string
-	change := -1  // the turn that last changed the work
-	shipped := -1 // the last turn that shipped the work because you moved it to Shipping
+	change := -1   // the turn that last changed the work
+	shipped := -1  // the last turn that shipped the work because you moved it to Shipping
+	retry := false // your ship was cut short, and nothing has touched the work since
 	for i, turn := range task.Turns {
 		agent, known := roster.Get(turn.Agent)
 		switch {
 		case !turn.Ended || turn.Agent == task.Coordinator || agent.Coordinates:
 		case known && agent.Column == agents.Reviews:
+			retry = false
 			if _, seen := last[turn.Agent]; !seen {
 				order = append(order, turn.Agent)
 			}
@@ -87,11 +92,13 @@ func unchecked(task *tasks.Task, roster agents.Roster) string {
 			}
 			last[turn.Agent] = check{turn, i, verdict}
 		case known && agent.Column == agents.Ships: // ships the checked work; doesn't change it
-			if turn.Shipped {
+			yours := turn.Shipped || retry
+			retry = yours && (turn.Issue != "" || turn.Stopped)
+			if yours && !retry {
 				shipped = i
 			}
 		default:
-			change = i
+			change, retry = i, false
 		}
 	}
 	if change < 0 || change < shipped { // nothing changed it, or nothing since you had it shipped

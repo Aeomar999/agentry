@@ -334,7 +334,8 @@ func TestTokens(t *testing.T) {
 // Work you moved to Shipping ships as it is: once an agent that ships work
 // has shipped it, the coordinator can finish without another check. Only a
 // change after that needs checking again, and a ship the coordinator chose
-// waives nothing.
+// waives nothing. A ship turn that crashed or that you stopped hasn't
+// shipped it, but the next ship turn is still yours if nothing came between.
 func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 	const finish = `{"action": "done", "summary": "Shipped."}`
 	built := started().
@@ -349,6 +350,21 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 		turn("turn-3", "deployer", "Pushed.")
 	changed := yours.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "One more."}).
 		turn("turn-4", "engineer", "Changed it.")
+	cutShort := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+		add(coordinator, events.TaskAssigned, "", toDeployer).
+		add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "deployer", "hash": "h"})
+	crashed := cutShort.add(watchdog, events.IssueRaised, "", map[string]any{"reason": "the agent's process exited"})
+	stopped := cutShort.add(you, events.TurnStopped, "turn-3", map[string]any{"text": "Wait."})
+	// The coordinator hands it to the deployer again: no "ships" flag, as the
+	// handoff cleared the column you moved it to.
+	again := map[string]any{"agent": "deployer", "instructions": "Ship it."}
+	retried := crashed.turn("turn-4", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "Ship it."}`).
+		add(coordinator, events.TaskAssigned, "", again).
+		turn("turn-5", "deployer", "Pushed.")
+	retriedAfterAChange := crashed.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "One more."}).
+		turn("turn-4", "engineer", "Changed it.").
+		add(coordinator, events.TaskAssigned, "", again).
+		turn("turn-5", "deployer", "Pushed.")
 	cases := []struct {
 		name string
 		h    history
@@ -357,6 +373,10 @@ func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
 		{"shipped as you chose", yours.turn("turn-9", "tech-lead", finish), ApplyDecision},
 		{"shipped as the coordinator chose", theirs.turn("turn-9", "tech-lead", finish), RaiseIssue},
 		{"changed after your ship", changed.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"your ship crashed", crashed.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"you stopped your ship", stopped.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"shipped on the next try", retried.turn("turn-9", "tech-lead", finish), ApplyDecision},
+		{"shipped again after a change", retriedAfterAChange.turn("turn-9", "tech-lead", finish), RaiseIssue},
 	}
 	for _, c := range cases {
 		if move := Next(c.h.task(), defaultRoster()); move.Kind != c.want || c.want == RaiseIssue && !strings.Contains(move.Reason, "the work isn't checked yet") {
