@@ -16,8 +16,10 @@ history.
 
 The recommendation is an in-memory read model: one `current.State` holding
 every stream's state, built once at startup from the log and kept up to
-date by the store itself, which applies each event right after it commits
-and before anyone is told about it. The log stays the only thing stored;
+date by the store itself, which applies each event right after it commits.
+The store keeps the position it has applied up to, and its reads of the log
+never go past it, so no reader sees an event before the state has it. The
+log stays the only thing stored;
 the state is rebuilt from it at every start, so it can't drift. Rules
 checks read the same state, under the store's write lock, so a check sees
 exactly the state the next event is appended to. The page then stops
@@ -218,7 +220,10 @@ event", and none needs a state older than that. The rules check needs the
 state as of the event before the one it checks, with no event slipping in
 between. Readers of the log itself (`Log`, `knowledgeHistory`, the
 workers' history, `/api/changes`, the coordinator's `Reader`) want events,
-not state, and keep reading SQLite.
+not state, and keep reading SQLite, but only up to the position the state
+has applied (section 4, the store): the coordinator acts on the state as
+soon as its reader returns an event, so it must never read an event the
+state doesn't have yet.
 
 ## 3. Options compared
 
@@ -329,17 +334,48 @@ other streams carry on.
 
 ### Changes in the domain packages
 
-- `tasks`: `func (t *Task) Clone() *Task`, a deep copy (the `Turns`,
-  `Actions` and `Trail` elements, `Files`, `collected`, every slice), and
+- `tasks`: `func (t *Task) Clone() *Task`, a deep copy (every field the
+  next bullet lists), and
   `func Next(t *Task, e events.Event) *Task`, which clones and applies:
   copy on write. `FromEvents` stays as it is, applying in place, and stays
   the reference the tests compare with. Optional, for startup only: index
   `Turn(id)` and `Action(id)` with maps, which takes replay of task-8 from
   39 ms to linear time.
-- `agents`, `workers`, `connections`: split each `FromEvents` loop body into
-  `func (r Roster) Next(e events.Event) Roster`, which returns a new roster
-  and leaves `r` untouched. `FromEvents` becomes a loop over `Next` (these
-  streams are small), so there is one apply per package.
+- `agents`, `workers`, `connections`: move each `FromEvents` loop body into
+  an unexported in-place `apply(r *Roster, e events.Event)`, the one apply
+  body per package, and add `func (r Roster) Next(e events.Event) Roster`,
+  which copies before it writes. Those bodies change the roster in place
+  today: agents does `roster[i] = ...`, `roster[i].Name = ...`,
+  `roster[i].Knowledge = ...` and `slices.Delete`; workers writes through
+  `find`'s pointer into `r.Workers` and sets `r.invites[i].used`;
+  connections sets `r.invites[i].used`; both use `slices.DeleteFunc`, which
+  shifts and zeroes the shared array. `append` may write into spare
+  capacity a reader's slice header shares. So `Next` first takes copies:
+
+  ```go
+  func (r Roster) Next(e events.Event) Roster {
+  	r = slices.Clone(r)          // agents: Roster is the slice
+  	apply(&r, e)
+  	return r
+  }
+  // workers and connections: r.Workers (or r.Connections) and r.invites
+  // are both cloned before apply.
+  ```
+
+  A shallow clone is enough: no apply body writes inside an element's own
+  slices (`Agent.Workers`, `Worker.Engines`, `Worker.Missing` are replaced
+  whole, never appended to). `FromEvents` keeps calling `apply` in place,
+  for startup.
+- `tasks.Clone` must copy everything `apply` may write through, which,
+  checked field by field, is: the slices `Labels`, `After`, `Stories`,
+  `StoriesDone`, `Trail` and `Asked.Options`; the maps `Files` and
+  `collected`; the pointers `Worktree`, `Fetching`, `Handoff` and
+  `Asked.Fetch`; and `Turns` and `Actions` element by element, since
+  `apply` changes a `*Turn` or `*Action` found by `Turn(id)` or `Action(id)`
+  in place. `Turn`, `Action`, `Step`, `SharedFile`, `Fetch` and `Worktree`
+  hold only values (strings, numbers, `time.Time`), so a struct copy of
+  each is deep. Copying the slices also covers `append` into spare
+  capacity.
 
 Cloning task-8 copies about 3,000 small structs, a fraction of a
 millisecond, once per event on that task. At startup, `Load` builds each
@@ -350,7 +386,8 @@ quadratic cost.
 
 ```go
 // A Model is state kept from the log. The store fills it at Open and
-// applies each event after it commits, before any reader is told.
+// applies each event after it commits, before any reader of the log can
+// read that event.
 type Model interface {
 	Load(stream string, accepted []events.Event) // at Open, once per stream
 	Loaded(position int64)                      // at Open, the log's last position, rejections included
@@ -367,7 +404,9 @@ func Open(path string, model Model, check OrderCheck) (*Store, error)
   events, in order of each stream's first accepted event (`SELECT stream
   FROM events WHERE type != 'proposal.rejected' GROUP BY stream ORDER BY
   MIN(position)`), so tasks come in creation order, as `TaskIDs` returns
-  them, then `model.Loaded(LastPosition())`.
+  them, then `model.Loaded(last)`, where `last` is `MAX(position)` read in
+  the same pass, and sets `applied` (below) to `last`. Readers are created
+  only after `Open` returns, so none can see the log before that.
 - `Propose` holds a new `sync.Mutex` from the check to the apply:
 
   ```go
@@ -376,7 +415,8 @@ func Open(path string, model Model, check OrderCheck) (*Store, error)
   rejection := s.validate(p)          // shape, writer, then check(p): reads the model
   tx := begin; event := appendEvent(tx, stored); commit
   s.model.Apply(event)                // only after Commit returned nil
-  s.changes.notify()                  // only after Apply
+  s.applied.Store(event.Position)     // only after Apply: reads may now see it
+  s.changes.notify()                  // only after applied moved
   ```
 
   The mutex, not `SetMaxOpenConns(1)`, now makes proposals one at a time,
@@ -384,8 +424,38 @@ func Open(path string, model Model, check OrderCheck) (*Store, error)
   before the previous event is in the model. A refusal stores
   `proposal.rejected`, which `Apply` skips. A failed commit returns before
   `Apply`, so the model never shows an event that was rolled back.
-  `notify` comes after `Apply`, so a page or the coordinator woken by the
-  change reads state that has it.
+- **The applied position.** Calling `notify` after `Apply` is not enough on
+  its own. `Reader.Next` queries SQLite whenever it is called, not only
+  when woken: the coordinator finishes event N-1, calls `Next` again, and
+  could read event N in the moment between N's commit and its `Apply`. It
+  would then act on a state without N, and when N's notify came, `After(N)`
+  would return nothing, so it would never act on N with the right state (a
+  `turn.ended` seen while the turn is still open leaves the task stalled).
+  `/api/changes` has the same gap through `LastPosition`. So the store
+  keeps `applied atomic.Int64`, the last position whose event is in the
+  model, rejections included, set only under `Store.mu` and only after
+  `Apply`, and every read of the log stops there:
+
+  ```go
+  func (s *Store) After(position int64, limit int) ([]events.Event, error) {
+  	return queryEvents(s.db, `SELECT `+columns+` FROM events
+  		WHERE position > ? AND position <= ? ORDER BY position LIMIT ?`,
+  		position, s.applied.Load(), limit)
+  }
+
+  func (s *Store) LastPosition() int64 { return s.applied.Load() }
+  ```
+
+  `Reader.Next` reads through `After`, so it inherits the gate; `Stream`
+  and `Log` add the same `position <= applied`, so a task's events never
+  run ahead of its state. A row at or below `applied` is committed (commit
+  returned before `applied` moved), so every read connection sees it.
+  Reading state after the gate may show *more* than the events read (a
+  later event applied meanwhile); that is fine, because that later event's
+  notify wakes the reader again. At startup `applied` is the log's last
+  position, set in `Open` after `Loaded`. With a nil model (tests and tools
+  that only read or write the log) the store sets `applied` right after
+  the commit, so the gate then means "committed" and nothing else changes.
 - **The stored form.** `appendEvent` returns the event as a reader would
   read it back, not as proposed: `Data` decoded from the JSON it wrote and
   `At` parsed from the text it wrote. Proposals carry Go values (`[]string{}`,
@@ -397,7 +467,8 @@ func Open(path string, model Model, check OrderCheck) (*Store, error)
   construction, and costs a few microseconds.
 - `History`, `txHistory` and the check's reads inside the transaction go.
   `Stream`, `Log`, `After`, `LastPosition` and the `Reader` stay, for the
-  readers of events. `TaskIDs` goes once nothing uses it.
+  readers of events, all gated on `applied`. `LastPosition` no longer
+  queries SQLite and can't fail. `TaskIDs` goes once nothing uses it.
 - Reads of the log get their own `*sql.DB` (read-only, a few connections;
   WAL allows readers beside the writer), so `Log` and `After` don't queue
   behind writes. Writes keep one connection.
@@ -446,7 +517,9 @@ the proposal is checked again against the newest state, under the lock.
 
 ### Locking, in one place
 
-- `Store.mu`: one proposal at a time, from check to apply.
+- `Store.mu`: one proposal at a time, from check to apply, and the only
+  place `applied` is written. Readers of the log load `applied` without a
+  lock (it is atomic).
 - `State.mu` (`RWMutex`): `Apply` and `Load` take the write lock; every
   getter takes the read lock just long enough to read a pointer or a slice
   header.
@@ -457,8 +530,9 @@ the proposal is checked again against the newest state, under the lock.
 
 ### Freshness and the page's position
 
-A reader sees every event committed before it asked, and nothing that
-wasn't committed. To let the page skip refetches, each `GET` reply carries
+A reader sees every event applied before it asked, and nothing that
+wasn't applied: the state and the log reads agree, because both stop at
+`applied`. To let the page skip refetches, each `GET` reply carries
 the position its state was read at, in an `X-Agentry-Position` header,
 taken from `State.Position()` before the handler reads. If an event lands
 between the two, the reply is newer than its header says, which only costs
@@ -519,11 +593,28 @@ it.
    shared with the original. A field added to `Task` and forgotten in
    `Clone` fails it without anyone remembering to update the test. A second
    test checks `Next(t, e)` leaves `t` deep-equal to a copy taken before.
+   The same for the rosters: for every event type of `agents`, `workers`
+   and `connections` (create, change, rename, learn, remove; invite, join,
+   connect, disconnect, remove; invite, make, revoke), build a roster with
+   spare capacity (so an `append` could write in place), take a deep copy,
+   call `Next`, and require the original still deep-equal to the copy,
+   unexported `invites` included. Sabotage check: dropping the
+   `slices.Clone` fails it.
 6. **The stored form.** Proposals with `[]string{}`, `int64` and nested
    values give the same state live as after a restart.
 7. **Races.** Readers calling every getter while proposals run, under
    `go test -race`.
-8. **The page.** A Playwright check: a refresh makes one request per
+8. **No event before its state.** In `store`, a fake `Model` whose
+   `Apply` signals that it has started and then blocks on a channel.
+   Propose event N in a goroutine; once `Apply` has started (N is
+   committed), require that `After(N-1, ...)` returns nothing, that
+   `LastPosition()` is N-1, and that a `Reader` at N-1 does not return
+   within 100 ms. Release `Apply`; the reader must then return N, and
+   `LastPosition()` be N. Sabotage check: moving `applied.Store` before
+   `Apply` fails it. A second case opens a store on an existing log and
+   checks `LastPosition()` equals the last event's position before any
+   proposal, and a third does the same with a nil model.
+9. **The page.** A Playwright check: a refresh makes one request per
    path, and an event refetches each path once.
 
 ### Startup and migration
@@ -555,32 +646,40 @@ new path:
 Each step is one reviewable change, with `go test ./...`, `go vet ./...`
 and, for UI steps, `cd ui && npm run lint && npm run build` passing.
 
-1. **`Clone` and `Next` in the domain packages.** `tasks.Clone`,
-   `tasks.Next`, `Roster.Next` in `agents`, `workers` and `connections`,
-   with `FromEvents` built on the roster `Next`s. Tests 5 (clone shares
-   nothing, `Next` leaves its input alone) and a check that `FromEvents`
-   equals folding `Next` over the same events for every existing test log.
-   Check: no behaviour change; all tests pass.
+1. **`Clone` and `Next` in the domain packages.** `tasks.Clone` (every
+   field listed above), `tasks.Next`; in `agents`, `workers` and
+   `connections` the loop body moves into one in-place `apply`, which
+   `FromEvents` loops over and `Roster.Next` calls after cloning the
+   slices it writes. Test 5 (clone shares nothing; `Next` leaves the task
+   and every roster unchanged, per event type) and a check that
+   `FromEvents` equals folding `Next` over the same events for every
+   existing test log. Check: no behaviour change; all tests pass; removing
+   any `slices.Clone` from a `Next` fails test 5.
 2. **Package `current`.** `State` with `Load`, `Loaded`, `Apply`, the getters,
    `broken`, and `Equal`. Unit tests with hand-built event lists, including
    a rejected event and a panicking apply. Check: `go test -race
    ./internal/current`.
 3. **The store feeds the model.** `store.Model`, `Open(path, model,
-   check)`, `Propose` under `Store.mu` with apply-after-commit and
-   notify-after-apply, the stored form from `appendEvent`, `OrderCheck`
-   without `History`, `rules.Check` reading a `rules.State`, and `serve.go`
-   wiring. Test helpers open stores with a `current.State` and run `Equal`
-   in cleanup (test 2); tests 4 and 6. Check: the whole suite passes with
-   `Equal` in every cleanup; the rules check on the copy is under 1 ms.
+   check)`, `Propose` under `Store.mu` with apply-after-commit, then
+   `applied` moved, then notify; `applied` set in `Open` after `Loaded`
+   (and right after commit with a nil model); `After`, `Stream`, `Log` and
+   `LastPosition` gated on it; the stored form from `appendEvent`,
+   `OrderCheck` without `History`, `rules.Check` reading a `rules.State`,
+   and `serve.go` wiring. Test helpers open stores with a `current.State`
+   and run `Equal` in cleanup (test 2); tests 4, 6 and 8. Check: the whole
+   suite passes with `Equal` in every cleanup; test 8 fails with
+   `applied.Store` moved before `Apply`; the rules check on the copy is
+   under 1 ms.
 4. **Readers use the state.** Every site in section 2 swaps to the
    getters; `TaskIDs` goes once unused. Test 3 on the copy. Check:
    `TestReadModelBench` shows the targets for `/api/tasks`,
    `/api/questions`, `/api/agents` and the load scenario.
-5. **Reads beside the writer.** A read-only pool for `Stream`, `Log`,
-   `After` and `LastPosition`. Check: a test that a `Log` read returns
-   while a proposal holds the write connection; the suite passes.
+5. **Reads beside the writer.** A read-only pool for `Stream`, `Log` and
+   `After`, still gated on `applied`. Check: a test that a `Log` read
+   returns while a proposal holds the write connection; test 8 still
+   passes on the pool; the suite passes.
 6. **The page.** `X-Agentry-Position` on API replies; the shared,
-   position-aware, non-aborting resource cache in `ui/src/live`. Test 8.
+   position-aware, non-aborting resource cache in `ui/src/live`. Test 9.
    Check: in the browser, a refresh of the tasks list makes one request per
    path, and each event one refetch per path shown.
 7. **Optional, may be its own task: the task detail's events on demand.**
@@ -595,6 +694,10 @@ remove the queueing and the wasted refetches; 7 is the task page.
 
 - **`Clone` drift.** A new pointer field in `Task` that `Clone` forgets
   would let a reader see a later change. Test 5 catches it mechanically.
+- **A read past `applied`.** Any new query on `events` that skips the
+  gate lets a reader see an event before its state. Keep every log read in
+  `store/read.go` going through the one `applied` bound; test 8 covers
+  `After`, `LastPosition` and the `Reader`.
 - **Startup grows with the log**, about 1 s per 100k events at today's
   sizes. Snapshots, under the same API, are the answer if that ever
   matters.
