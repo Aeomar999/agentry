@@ -113,7 +113,7 @@ func TestAMissingProfileIsAddedFromThePageAndLogged(t *testing.T) {
 	server := servePolicy(t, withoutReadMostly(t))
 	before := server.hash()
 	for _, refused := range []string{`{}`, `{"hash":"0ld"}`} {
-		if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-mostly/add", refused); code != http.StatusConflict || !strings.Contains(body, "reload") {
+		if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-mostly/add", refused); code != http.StatusConflict || !strings.Contains(body, "now shows the version in force") {
 			t.Errorf("%s: %d %s", refused, code, body)
 		}
 	}

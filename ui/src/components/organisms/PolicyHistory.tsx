@@ -7,7 +7,7 @@ import { revertPolicy } from "@/api/client";
 import type { PolicyVersion } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { dateTime, timeAgo } from "@/lib/time";
-import { usePolicyChange } from "./usePolicyChange";
+import { usePolicyChange } from "@/lib/policy-change";
 
 // Every version of the policy, newest first: who put it in force and what
 // changed. One whose text the log holds can be restored, as a new version;
@@ -15,7 +15,9 @@ import { usePolicyChange } from "./usePolicyChange";
 export function PolicyHistory({ hash, onChanged }: { hash: string; onChanged: () => void }) {
   const { data: history, error } = useResource<PolicyVersion[]>("/api/policy/history");
   const { busy, run } = usePolicyChange(onChanged);
-  const inForce = history?.find((v) => !v.refused)?.position;
+  // The version in force is the newest one put in force with this text:
+  // a later one can be refused, and an older one can share its text.
+  const inForce = history?.find((v) => !v.refused && v.hash === hash)?.position;
   return (
     <Panel flush title="History" aside={<>newest first</>}>
       {error && <p className="px-4 py-2.5 text-[12px] text-danger">{error}</p>}
@@ -26,7 +28,7 @@ export function PolicyHistory({ hash, onChanged }: { hash: string; onChanged: ()
             key={version.position}
             version={version}
             inForce={version.position === inForce}
-            canRevert={version.canRevert && !version.refused && version.hash !== hash}
+            canRevert={version.canRevert && !version.refused && version.position !== inForce}
             busy={busy}
             onRevert={() => run("Restored an earlier version", () => revertPolicy(version.position, hash))}
           />

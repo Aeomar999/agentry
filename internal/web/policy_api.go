@@ -239,7 +239,7 @@ func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit fu
 	var refusal *policy.Refusal
 	switch {
 	case errors.Is(err, policy.ErrStale):
-		http.Error(w, "policy.toml changed since the page loaded it: reload the page and try again", http.StatusConflict)
+		http.Error(w, "policy.toml changed since the page loaded it. The page now shows the version in force: try again", http.StatusConflict)
 		return nil, false
 	case errors.As(err, &refusal):
 		http.Error(w, err.Error(), http.StatusConflict)

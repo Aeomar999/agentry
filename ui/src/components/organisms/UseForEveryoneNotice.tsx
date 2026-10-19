@@ -2,7 +2,7 @@ import { Button } from "@/components/atoms/Button";
 import { Banner } from "@/components/molecules/Banner";
 import { Mono } from "@/components/molecules/Mono";
 import { turnOffUseForEveryone } from "@/api/client";
-import { usePolicyChange } from "./usePolicyChange";
+import { usePolicyChange } from "@/lib/policy-change";
 
 // use_for_everyone puts one profile in place of every agent's own. Wherever
 // agents' profiles show, this says so, with the way to turn it off: the
