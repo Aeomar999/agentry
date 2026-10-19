@@ -168,6 +168,54 @@ func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	}
 }
 
+func TestAPIReadsSayThePositionTheyWereReadAt(t *testing.T) {
+	server, s := newTestServer(t)
+	for _, title := range []string{"one", "two"} {
+		call(t, server, "POST", "/api/tasks", `{"title":"`+title+`"}`)
+	}
+	at := itoa(s.LastPosition())
+	for _, path := range []string{"/api/tasks", "/api/tasks/task-1", "/api/questions", "/api/agents", "/api/config", "/api/tasks/task-9"} {
+		if got := positionOf(t, server, "GET", path); got != at {
+			t.Errorf("GET %s: position %q, want %s", path, got, at)
+		}
+	}
+	for _, request := range [][2]string{{"POST", "/api/tasks"}, {"GET", "/"}} {
+		if got := positionOf(t, server, request[0], request[1]); got != "" {
+			t.Errorf("%s %s: position %q, want none", request[0], request[1], got)
+		}
+	}
+}
+
+func TestThePositionIsTakenBeforeTheRead(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	server := NewServer(s, state, Config{UIToken: token}, http.NotFoundHandler(), nil)
+	before := s.LastPosition()
+	read := server.atPosition(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
+	}))
+	recorder := httptest.NewRecorder()
+	read.ServeHTTP(recorder, httptest.NewRequest("GET", "/api/tasks", nil))
+	if s.LastPosition() == before {
+		t.Fatal("the read proposed nothing")
+	}
+	if got := recorder.Header().Get(positionHeader); got != itoa(before) {
+		t.Errorf("position %q, want %d, the one before the read", got, before)
+	}
+}
+
+func positionOf(t *testing.T, server *httptest.Server, method, path string) string {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(`{"title":"x"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	return response.Header.Get(positionHeader)
+}
+
 func TestHookCallsGoToTheHookHandler(t *testing.T) {
 	server, _ := newTestServer(t)
 	response, err := http.Post(server.URL+"/hooks", "application/json", bytes.NewReader([]byte("{}")))

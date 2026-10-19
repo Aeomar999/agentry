@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,7 +174,27 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
-	return mux
+	return s.atPosition(mux)
+}
+
+// positionHeader is the log position an API read saw everything up to.
+const positionHeader = "X-Agentry-Position"
+
+// atPosition tells each API read the log position it was read at, so the
+// page refetches a path only when the log has moved past it. The position
+// is taken before the handler reads: an event that lands in between makes
+// the reply newer than its header says, which costs the page one extra
+// refetch and never a stale screen. It is the store's applied position,
+// the one /api/changes reports: the state has every event up to it, and
+// so do the log's reads, which the state's own position can be one ahead
+// of while an event is being applied.
+func (s *Server) atPosition(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set(positionHeader, strconv.FormatInt(s.store.LastPosition(), 10))
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 const uiCookie = "agentry_ui"
