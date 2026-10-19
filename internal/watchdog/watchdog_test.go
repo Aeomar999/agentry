@@ -227,3 +227,34 @@ func TestALimitedTurnSkipsTheRepeatCheck(t *testing.T) {
 		t.Errorf("issue %q", issue)
 	}
 }
+
+// resume says turn-1's engine went on after its limit.
+func (w *world) resume() {
+	w.t.Helper()
+	w.propose(worker, events.TurnResumed, "turn-1", map[string]any{"agent": "tech-lead", "reason": "engine"})
+}
+
+func TestAResumedTurnIsWatchedForSilenceAgain(t *testing.T) {
+	w := newWorld(t)
+	w.limit(time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	w.resume()
+	if issue := w.after(11 * time.Minute); !strings.Contains(issue, "stalled") {
+		t.Errorf("a resumed turn quiet for over the silence limit is a stall, not waiting for the reset: %q", issue)
+	}
+}
+
+func TestAResumedTurnCountsRepeatsAgain(t *testing.T) {
+	w := newWorld(t)
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	for i := range DefaultLimits.Repeats {
+		id := fmt.Sprintf("toolu_%d", i)
+		w.propose(coordinator, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": "go test ./..."})
+		w.propose(policy, events.ActionApproved, id, map[string]any{"reason": "ok"})
+		w.propose(worker, events.ActionResult, id, nil)
+	}
+	w.limit("")
+	w.resume()
+	if issue := w.after(time.Second); !strings.Contains(issue, "5 times in a row") {
+		t.Errorf("issue %q", issue)
+	}
+}
