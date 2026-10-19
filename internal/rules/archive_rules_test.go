@@ -2,6 +2,7 @@ package rules
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -143,6 +144,38 @@ func TestOnlyADoneTaskIsArchived(t *testing.T) {
 	}
 	if task, err := state.Task("task-1"); task != nil || !errors.Is(err, current.ErrArchived) {
 		t.Errorf("an accepted marker archives the task: %v, %v", task, err)
+	}
+}
+
+// A marker keeps a summary the state can read: anything else would break
+// the task's stream for good, at the marker.
+func TestAMarkerKeepsASummaryTheStateCanRead(t *testing.T) {
+	s, state := openSeededState(t)
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
+		{Stream: "task-1", Actor: coordinator, Type: events.TaskDone, Data: map[string]any{"summary": "Gone."}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	archiving := func(summary any) *events.Rejection {
+		t.Helper()
+		_, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived,
+			Data: archivedData(func(d map[string]any) { d["summary"] = summary })})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	for _, summary := range []any{"Remove the TODOs", 7, nil, map[string]any{"title": 5}, map[string]any{"labels": "web"}, []any{}} {
+		if rejection := archiving(summary); rejection == nil || !strings.HasPrefix(rejection.Reason, "an archive keeps the task's summary: ") {
+			t.Errorf("a marker with the summary %#v: %v, want refused", summary, rejection)
+		}
+	}
+	task, _ := state.Task("task-1")
+	if rejection := archiving(tasks.SummaryOf(task, state.Roster())); rejection != nil {
+		t.Errorf("a marker with the task's summary: %v", rejection)
 	}
 }
 

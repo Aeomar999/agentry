@@ -21,8 +21,13 @@ func doneToArchive(t *tasks.Task, _ events.Proposal) string {
 }
 
 // aMarker says where the task's rows went: the blob, and the positions it
-// covers, from the task's task.created at "created" to "through".
+// covers, from the task's task.created at "created" to "through"; and what
+// the task keeps, a summary the state can read, or its stream would break
+// for good at the marker.
 func aMarker(_ *tasks.Task, p events.Proposal) string {
+	if _, err := tasks.ReadSummary(p.Data["summary"]); err != nil {
+		return "an archive keeps the task's summary: " + err.Error()
+	}
 	switch {
 	case !isSHA256(p.Text("archive")):
 		return "not an archive's hash"

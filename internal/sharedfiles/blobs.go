@@ -53,6 +53,11 @@ func (d Disk) Open(hash string) (io.ReadCloser, error) {
 	return os.Open(d.path(hash))
 }
 
+// Put keeps a file once it is on disk for good: the file is synced before
+// it is renamed into place, and its folder after, so an event that names
+// it, committed once Put returns, never outlives it in a crash
+// (docs/design/log-growth.md section 3). The same bytes make the same
+// file, so a Put retried after a crash finds it kept.
 func (d Disk) Put(r io.Reader) (string, int64, error) {
 	if err := os.MkdirAll(d.Dir, 0o700); err != nil {
 		return "", 0, err
@@ -64,6 +69,9 @@ func (d Disk) Put(r io.Reader) (string, int64, error) {
 	defer os.Remove(temporary.Name())
 	sum := sha256.New()
 	size, err := io.Copy(io.MultiWriter(temporary, sum), io.LimitReader(r, MaxSize+1))
+	if err == nil {
+		err = syncFile(temporary)
+	}
 	temporary.Close()
 	switch {
 	case err != nil:
@@ -72,14 +80,38 @@ func (d Disk) Put(r io.Reader) (string, int64, error) {
 		return "", 0, ErrTooBig
 	}
 	hash := hex.EncodeToString(sum.Sum(nil))
-	if d.Has(hash) {
-		return hash, size, nil // kept already: the same file, shared again
+	if !d.Has(hash) {
+		if err := os.MkdirAll(filepath.Dir(d.path(hash)), 0o700); err != nil {
+			return "", 0, err
+		}
+		if err := os.Rename(temporary.Name(), d.path(hash)); err != nil {
+			return "", 0, err
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(d.path(hash)), 0o700); err != nil {
-		return "", 0, err
-	}
-	return hash, size, os.Rename(temporary.Name(), d.path(hash))
+	// Kept already, the same file shared again, may be a Put's that failed
+	// before its folders were synced: sync them either way.
+	return hash, size, d.syncFolders(hash)
 }
+
+// syncFolders makes the file's name last: its own folder, and the one
+// holding that folder, which Put may have just made.
+func (d Disk) syncFolders(hash string) error {
+	for _, folder := range []string{filepath.Dir(d.path(hash)), d.Dir} {
+		opened, err := os.Open(folder)
+		if err != nil {
+			return err
+		}
+		err = syncFile(opened)
+		opened.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// syncFile is (*os.File).Sync; a test watches it.
+var syncFile = (*os.File).Sync
 
 // HashOf is the hash a file would be kept by.
 func HashOf(path string) (string, int64, error) {

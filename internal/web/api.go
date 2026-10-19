@@ -45,6 +45,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	slots := s.slots()
 	for i, summary := range summaries {
+		// A task archived since Summaries was read is nil here: it is listed without BlockedBy or Queued.
 		if task, _ := s.state.Task(summary.ID); task != nil {
 			summaries[i].BlockedBy = blockedBy(task, isDone)
 			summaries[i].Queued = slots.Queued(task.ID)

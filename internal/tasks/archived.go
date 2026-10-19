@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"errors"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -29,14 +30,27 @@ func Archived(stream []events.Event) (Summary, bool) {
 // summaryIn reads a marker's summary, as the archiver wrote it from
 // SummaryOf. Its id is the stream's, whatever the summary says.
 func summaryIn(marker events.Event) Summary {
-	data, err := json.Marshal(marker.Data["summary"])
+	summary, err := ReadSummary(marker.Data["summary"])
 	if err != nil {
-		panic(err)
-	}
-	var summary Summary
-	if err := json.Unmarshal(data, &summary); err != nil {
 		panic("the marker's summary: " + err.Error())
 	}
 	summary.ID = marker.Stream
 	return summary
+}
+
+// ReadSummary reads a summary from a marker's data, or says why it isn't
+// one: it must be a JSON object that decodes into a Summary.
+func ReadSummary(value any) (Summary, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return Summary{}, err
+	}
+	var summary *Summary // stays nil for null, which a Summary would take as nothing
+	if err := json.Unmarshal(data, &summary); err != nil {
+		return Summary{}, err
+	}
+	if summary == nil {
+		return Summary{}, errors.New("there is none")
+	}
+	return *summary, nil
 }
