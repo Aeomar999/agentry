@@ -103,6 +103,70 @@ func TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers(t *testing.T) {
 	}
 }
 
+// The viewpoints that weigh in are those of the teams made from the
+// Visionaries template, whatever they are called, never those of a team
+// you made and called Visionaries; an old log's Visionaries, from before
+// agents recorded their template, still weigh in.
+func TestTheViewpointsAreTheTemplateTeams(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed("Visionaries")
+	handMade := []agents.Agent{{Name: "dreamer-lead", Team: "Visionaries", Coordinates: true}, {Name: "dreamer", Team: "Visionaries"}}
+	rosterOf := func(hand, template, old bool) agents.Roster {
+		var log []events.Event
+		add := func(p events.Proposal) { log = append(log, events.Event{Proposal: p}) }
+		for _, p := range agents.SeedProposals(nil) {
+			add(p)
+		}
+		if hand {
+			for _, agent := range handMade {
+				add(agent.Proposal(you, false))
+			}
+		}
+		if template {
+			for _, p := range agents.AddTeam(visionaries, agents.FromEvents(log), you) {
+				if old {
+					delete(p.Data, "template") // as Agentry wrote it before the field
+				}
+				add(p)
+			}
+		}
+		return agents.FromEvents(log)
+	}
+	four := []string{"product-strategist", "user-advocate", "technologist", "skeptic"}
+	cases := []struct {
+		name       string
+		roster     agents.Roster
+		teams      []string
+		disagreed  string
+		nobodyNote string
+	}{
+		{"a second team from the template", rosterOf(true, true, false), []string{"Visionaries 2"}, "",
+			"auto-accepted: nobody doubted it, 4 backed it"},
+		{"a team you called Visionaries", rosterOf(true, false, false), nil, "the Visionaries have no viewpoints",
+			"auto-accepted: nobody doubted it, 0 backed it"},
+		{"an old log", rosterOf(false, true, true), []string{"Visionaries"}, "",
+			"auto-accepted: nobody doubted it, 4 backed it"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := ideas.Visionaries(c.roster); !slices.Equal(got, c.teams) {
+				t.Errorf("the Visionaries teams: %q, want %q", got, c.teams)
+			}
+			idea := &ideas.Idea{State: ideas.Open, BackedBy: append(slices.Clone(four), "dreamer")}
+			for _, rule := range settings.AutoAcceptRules {
+				if got := ideas.Disagreed(idea, c.roster, rule); got != c.disagreed {
+					t.Errorf("%s: disagreed %q, want %q", rule, got, c.disagreed)
+				}
+				if got := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, c.roster, rule); got != c.disagreed {
+					t.Errorf("%s: not auto-accepted %q, want %q", rule, got, c.disagreed)
+				}
+			}
+			if got := ideas.AutoAccepted(idea, c.roster, settings.NobodyDoubted); got != c.nobodyNote {
+				t.Errorf("note %q, want %q", got, c.nobodyNote)
+			}
+		})
+	}
+}
+
 func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
 	at := func(minute int) time.Time { return time.Date(2026, 10, 19, 1, minute, 0, 0, time.UTC) }
 	idea := &ideas.Idea{ID: "idea-9", Title: "Search the board", Repo: "/r", State: ideas.Open, CreatedAt: at(9)}

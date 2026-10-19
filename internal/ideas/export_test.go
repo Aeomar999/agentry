@@ -1,6 +1,10 @@
 package ideas
 
-import "testing"
+import (
+	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/agents"
+)
 
 // BeforeMarking runs f between Accept making the task and marking the idea.
 func BeforeMarking(t *testing.T, f func()) {
@@ -19,6 +23,11 @@ func Similarity(a, b *Idea) float64 {
 		}
 	}
 	return float64(shared) / float64(len(these)+len(those)-shared)
+}
+
+// AutoAccepted is the note on an idea Agentry accepted for you under rule.
+func AutoAccepted(idea *Idea, roster agents.Roster, rule string) string {
+	return autoAccepted(idea, roster, rule)
 }
 
 // View is an idea as GET /api/ideas answers it, and AcceptReply what

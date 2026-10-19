@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
@@ -158,6 +159,66 @@ func TestAnEpicMovedToDoneGetsNoSession(t *testing.T) {
 
 	if found := sessionsAbout(state, epic); len(found) != 0 {
 		t.Errorf("a move to Done isn't a close: %+v", found)
+	}
+}
+
+// The session goes to a team made from the Visionaries template, whatever
+// it is called, never to one you made and called Visionaries; an old log's
+// Visionaries, from before agents recorded their template, still get it.
+func TestTheVisionariesSessionGoesByTemplate(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed("Visionaries")
+	handMade := []agents.Agent{{Name: "dreamer-lead", Team: "Visionaries", Coordinates: true, Engine: "claude", Prompt: "Dream."},
+		{Name: "dreamer", Team: "Visionaries", Engine: "claude", Prompt: "Dream."}}
+	cases := []struct {
+		name        string
+		add         func(roster agents.Roster) []events.Proposal
+		coordinator string // "" for no session
+		team        string // the coordinator's
+	}{
+		{"a second team from the template", func(roster agents.Roster) []events.Proposal {
+			var ps []events.Proposal
+			for _, agent := range handMade {
+				ps = append(ps, agent.Proposal(you, false))
+				roster = append(roster, agent)
+			}
+			return append(ps, agents.AddTeam(visionaries, roster, you)...)
+		}, "visionary-lead", "Visionaries 2"},
+		{"a team you called Visionaries", func(agents.Roster) []events.Proposal {
+			var ps []events.Proposal
+			for _, agent := range handMade {
+				ps = append(ps, agent.Proposal(you, false))
+			}
+			return ps
+		}, "", ""},
+		{"an old log", func(roster agents.Roster) []events.Proposal {
+			ps := agents.AddTeam(visionaries, roster, you)
+			for _, p := range ps {
+				delete(p.Data, "template") // as Agentry wrote it before the field
+			}
+			return ps
+		}, "visionary-lead", "Visionaries"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s, state, repo := withTeams(t, false)
+			for _, p := range c.add(state.Roster()) {
+				mustPropose(t, s, p)
+			}
+			epic, _ := newEpic(t, s, repo)
+			closeEpic(t, s, epic)
+			followUpsOf(t, s, newLoop(s, state, t.TempDir()))
+
+			found := sessionsAbout(state, epic)
+			switch {
+			case c.coordinator == "" && len(found) != 0:
+				t.Errorf("no team from the template, no session: %+v", found[0])
+			case c.coordinator != "" && (len(found) != 1 || found[0].Coordinator != c.coordinator):
+				t.Errorf("want one session for %s: %+v", c.coordinator, found)
+			}
+			if lead, _ := state.Roster().Get(c.coordinator); lead.Team != c.team {
+				t.Errorf("%s is of team %q, want %q", c.coordinator, lead.Team, c.team)
+			}
+		})
 	}
 }
 
