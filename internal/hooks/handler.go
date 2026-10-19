@@ -122,10 +122,11 @@ func failedTurnReason(signal engines.Signal) string {
 }
 
 // resumeIfLimited records that a turn waiting for a usage limit goes on when
-// its engine does anything but stop at the limit again: the session carried
-// on by itself, so the turn is watched as a working one again.
+// its engine works again: the session carried on by itself, so the turn is
+// watched as a working one again. A session starting or ending, or the turn
+// stopping at the limit or an error, isn't work.
 func (h *Handler) resumeIfLimited(call hookcall.Call, signals []engines.Signal) {
-	if len(signals) == 0 || slices.ContainsFunc(signals, func(s engines.Signal) bool { return s.Kind == engines.UsageLimited }) {
+	if !slices.ContainsFunc(signals, isWork) {
 		return
 	}
 	task, err := h.task(call.Task)
@@ -137,6 +138,15 @@ func (h *Handler) resumeIfLimited(call hookcall.Call, signals []engines.Signal) 
 	}
 	h.store.Propose(events.Proposal{Stream: call.Task, Actor: h.machineOf(call.Task), Type: events.TurnResumed,
 		Correlation: call.Turn, Data: map[string]any{"agent": call.Agent, "reason": "engine"}})
+}
+
+// isWork says the signal comes from an engine that is working.
+func isWork(signal engines.Signal) bool {
+	switch signal.Kind {
+	case engines.PromptReceived, engines.ActionRequested, engines.ActionFinished, engines.TurnEnded, engines.Waiting:
+		return true
+	}
+	return false
 }
 
 // recordPlan keeps the turn's plan when the agent has changed it. It goes

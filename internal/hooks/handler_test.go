@@ -340,11 +340,13 @@ func TestEngineActivityResumesALimitedTurn(t *testing.T) {
 		resumes bool
 		then    events.Type // the call's own event, after the resume
 	}{
-		"a tool call": {hookCall("PreToolUse", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"t1"}`), true, events.ActionRequested},
-		"a prompt":    {hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Carry on."}`), true, ""},
-		"the end":     {hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`), true, events.TurnEnded},
-		"idle":        {hookCall("Notification", `{"hook_event_name":"Notification","notification_type":"idle_prompt"}`), false, ""},
-		"the limit":   {limit, false, ""},
+		"a tool call":     {hookCall("PreToolUse", `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"ls"},"tool_use_id":"t1"}`), true, events.ActionRequested},
+		"a prompt":        {hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Carry on."}`), true, ""},
+		"the end":         {hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`), true, events.TurnEnded},
+		"idle":            {hookCall("Notification", `{"hook_event_name":"Notification","notification_type":"idle_prompt"}`), false, ""},
+		"the limit":       {limit, false, ""},
+		"a session start": {hookCall("SessionStart", `{"hook_event_name":"SessionStart","session_id":"s2","source":"resume"}`), false, ""},
+		"a session end":   {hookCall("SessionEnd", `{"hook_event_name":"SessionEnd","reason":"clear"}`), false, ""},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -374,6 +376,22 @@ func TestEngineActivityResumesALimitedTurn(t *testing.T) {
 				t.Errorf("turn %+v", turn)
 			}
 		})
+	}
+}
+
+// An API error on a limited turn is its issue, not a sign the engine goes on.
+func TestAnErrorOnALimitedTurnIsAnIssueNotAResume(t *testing.T) {
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"server_error"}`))
+
+	stream, _ := s.Stream("task-1")
+	if slices.ContainsFunc(stream, func(e events.Event) bool { return e.Type == events.TurnResumed }) {
+		t.Errorf("an error resumed the limited turn: %+v", stream)
+	}
+	if !slices.ContainsFunc(stream, func(e events.Event) bool { return e.Type == events.IssueRaised }) {
+		t.Errorf("the error raised no issue: %+v", stream)
 	}
 }
 
