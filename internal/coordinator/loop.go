@@ -92,6 +92,7 @@ func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 }
 
 func (l *Loop) act(id string) {
+	delete(l.held, id) // held again below if its move is still a turn with no slot
 	task, roster, err := l.load(id)
 	if errors.Is(err, current.ErrArchived) {
 		return // done, and it takes nothing more

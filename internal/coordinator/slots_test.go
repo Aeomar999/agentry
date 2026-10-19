@@ -210,3 +210,32 @@ func turnStartedAt(t *testing.T, s *store.Store, id, turn string) int64 {
 	t.Fatalf("%s has no %s", id, turn)
 	return 0
 }
+
+// A task held for a slot whose next move is then no turn, as when you park
+// it, is let go: waking it later would make that move a second time.
+func TestATaskHeldIsLetGoOnceItsMoveIsNoTurn(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	setLimit(t, s, 1)
+	for i, id := range []string{"task-1", "task-2"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
+			Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady,
+			Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901 + i}})
+	}
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1",
+		Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+	loop := newLoop(s, state, t.TempDir())
+
+	loop.act("task-2")
+	if !loop.held["task-2"] {
+		t.Fatal("task-2 wants a turn and task-1 has the one slot: it should be held")
+	}
+	propose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}})
+	loop.act("task-2")
+	if len(loop.held) != 0 {
+		t.Errorf("task-2 is parked: nothing should be held, got %v", loop.held)
+	}
+}

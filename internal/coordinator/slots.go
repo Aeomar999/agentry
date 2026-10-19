@@ -80,10 +80,11 @@ func wantsATurn(task *tasks.Task, roster agents.Roster) bool {
 type held map[string]bool
 
 // holdBack says whether the task waits for a slot, and if so keeps it to
-// wake. Holding writes nothing: the task just waits for its next pass.
+// wake. Holding writes nothing: the task just waits for its next pass. act
+// lets go of it first, so a task whose move is no longer a turn is never
+// woken for one.
 func (l *Loop) holdBack(task *tasks.Task) bool {
 	if !l.slots().Queued(task.ID) {
-		delete(l.held, task.ID)
 		return false
 	}
 	if l.held == nil {
@@ -113,7 +114,6 @@ func (l *Loop) wakeHeld() {
 	}
 	byRank(ready)
 	for _, task := range ready {
-		delete(l.held, task.ID)
 		l.act(task.ID)
 	}
 }
