@@ -4,6 +4,7 @@
 package features
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,6 +38,10 @@ type Feature struct {
 	Tools        func(agentry API, repo string) []Tool
 	Instructions string
 	Waiting      func(agentry API, repo string) []Waiting
+
+	// Jobs is its background work, which serve starts beside the loop
+	// (StartJobs) and ctx ends. A panic in it stops it, not the server.
+	Jobs func(ctx context.Context, c Core)
 }
 
 // Streams are a feature's own streams, each named Prefix and an ID: how the
@@ -83,12 +88,14 @@ type EventLog interface {
 
 // Core is all a feature's hooks and routes may use: it has no store. Events reads the
 // log and never writes to it. Defaults are the server's limits for a task
-// Agentry makes that comes from no other task.
+// Agentry makes that comes from no other task. Settings are the feature's
+// own table in the settings file; only its jobs are given them so far.
 type Core struct {
 	Log      Proposer // from Checked
 	Events   EventLog
 	Read     Reader
 	Defaults tasks.Limits
+	Settings Settings
 }
 
 // Coordinator is a feature's part in the coordinator loop, for the
