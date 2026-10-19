@@ -510,7 +510,7 @@ func TestAVariableWithTooManyValuesIsJudgedQuickly(t *testing.T) {
 	call := manyValues("git $c")
 	start := time.Now()
 	p.Decide("read-only", call)
-	if took := time.Since(start); took > time.Second {
+	if took := time.Since(start); took > raceSlowdown*time.Second {
 		t.Errorf("a %d-byte command took %v to judge", len(call.Input), took)
 	}
 }
