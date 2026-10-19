@@ -58,8 +58,9 @@ var taskRules = map[events.Type]rule{
 
 	events.ActionRequested: all(byTheWorkingAgent, isNewAction),
 	events.ActionAsked:     all(actionUndecided, notYetAsked, inTheOpenTurn),
-	events.ActionApproved:  all(actionUndecided),
-	events.ActionDenied:    all(actionUndecided),
+	events.ActionApproved:  all(actionUndecided, heldForYouAtWork, aFittingPass),
+	events.ActionDenied:    all(actionUndecided, heldForYouAtWork),
+	events.ActionHeld:      all(actionUndecided, wasAsked, notYetHeld),
 	events.ActionResult:    all(actionApproved, noResultYet),
 
 	events.PlanUpdated:  all(isTheOpenTurn),
@@ -437,6 +438,53 @@ func notYetAsked(t *tasks.Task, p events.Proposal) string {
 func inTheOpenTurn(t *tasks.Task, p events.Proposal) string {
 	if turn := t.OpenTurn(); turn == nil || turn.ID != t.Action(p.Correlation).Turn {
 		return "action " + p.Correlation + "'s turn is over"
+	}
+	return ""
+}
+
+func wasAsked(t *tasks.Task, p events.Proposal) string {
+	if !t.Action(p.Correlation).Asked {
+		return "action " + p.Correlation + " was never asked about"
+	}
+	return ""
+}
+
+func notYetHeld(t *tasks.Task, p events.Proposal) string {
+	if t.Action(p.Correlation).Held {
+		return "action " + p.Correlation + " is held already"
+	}
+	return ""
+}
+
+// heldForYouAtWork: no hook waits on a held action, so only you decide it,
+// and only while the task is at work, as only then does it show in Needs you.
+func heldForYouAtWork(t *tasks.Task, p events.Proposal) string {
+	switch {
+	case !t.Action(p.Correlation).Held:
+		return ""
+	case p.Actor.Kind != events.Human:
+		return "action " + p.Correlation + " is held for the user to decide"
+	case !t.AtWork():
+		return "action " + p.Correlation + " is held, and the task isn't at work: move it back to decide it"
+	}
+	return ""
+}
+
+// aFittingPass: an approval that uses a held action's pass names one you
+// approved, not used yet, for the same tool and command.
+func aFittingPass(t *tasks.Task, p events.Proposal) string {
+	id := p.Text("pass")
+	if id == "" {
+		return ""
+	}
+	pass, action := t.Action(id), t.Action(p.Correlation)
+	switch {
+	case pass == nil || !pass.Held || pass.Decision != tasks.Approved:
+		return "action " + id + " is not a held action the user approved"
+	case pass.PassUsed:
+		return "action " + id + "'s pass was used already"
+	case pass.Tool != action.Tool || pass.Command != action.Command:
+		return "action " + id + " was for another command"
 	}
 	return ""
 }

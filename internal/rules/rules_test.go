@@ -178,11 +178,77 @@ func TestOnlyAskedActionsAndQuestionsNeedYou(t *testing.T) {
 func TestEveryTaskEventHasARule(t *testing.T) {
 	for _, kind := range []events.Type{events.WorktreeReady, events.TaskAssigned, events.TurnStarted,
 		events.PromptAcknowledged, events.SessionStarted, events.ActionRequested, events.ActionAsked,
-		events.ActionApproved, events.ActionDenied, events.ActionResult, events.AgentWaiting, events.TurnEnded,
+		events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult, events.AgentWaiting, events.TurnEnded,
 		events.IssueRaised, events.TaskNeedsYou, events.TaskAnswered, events.TaskDone} {
 		if taskRules[kind] == nil {
 			t.Errorf("%s has no rule", kind)
 		}
+	}
+}
+
+// An engineer's turn whose git push was asked about: toolu_1.
+var askedPush = []step{
+	created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+	{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+	turnStarted("turn-2", "engineer"),
+	{engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push"}, true},
+	{policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}, true},
+}
+
+func TestOnlyYouDecideAHeldAction(t *testing.T) {
+	approve := func(actor events.Actor, id, pass string, accepted bool) step {
+		data := map[string]any{"reason": "approved"}
+		if pass != "" {
+			data["pass"] = pass
+		}
+		return step{actor, events.ActionApproved, id, data, accepted}
+	}
+	request := func(id, command string) step {
+		return step{engineer, events.ActionRequested, id, map[string]any{"tool": "Bash", "command": command}, true}
+	}
+	task := run(t, append(append([]step{}, askedPush...),
+		step{you, events.ActionHeld, "toolu_1", nil, false}, // only the policy holds one
+		step{policy, events.ActionHeld, "toolu_1", nil, true},
+		step{policy, events.ActionHeld, "toolu_1", nil, false}, // held once
+		approve(policy, "toolu_1", "", false),                  // no hook waits: only you decide it
+		request("toolu_2", "ls"),
+		step{policy, events.ActionHeld, "toolu_2", nil, false}, // never asked
+		approve(policy, "toolu_2", "toolu_1", false),           // not approved yet
+		approve(policy, "toolu_2", "", true),
+		turnEnded("turn-2", "engineer", "Pushed? No, it was held."),
+		approve(you, "toolu_1", "", true),
+		turnStarted("turn-3", "tech-lead"), turnEnded("turn-3", "tech-lead", "assign"),
+		step{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "push again"}, true},
+		turnStarted("turn-4", "engineer"),
+		request("toolu_3", "git push --force"),
+		approve(policy, "toolu_3", "toolu_1", false), // another command
+		approve(policy, "toolu_3", "toolu_2", false), // not a held action
+		request("toolu_4", "git push"),
+		approve(policy, "toolu_4", "toolu_1", true),
+		request("toolu_5", "git push"),
+		approve(policy, "toolu_5", "toolu_1", false), // its pass is used
+	))
+	if held := task.Action("toolu_1"); !held.Held || held.Decision != tasks.Approved || !held.PassUsed {
+		t.Errorf("toolu_1: %+v, want held, approved, its pass used", held)
+	}
+}
+
+func TestAHeldActionWaitsWhileTheTaskIsParkedOrDone(t *testing.T) {
+	for name, move := range map[string]step{
+		"to do": {you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},
+		"done":  {you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := run(t, append(append([]step{}, askedPush...),
+				step{policy, events.ActionHeld, "toolu_1", nil, true},
+				move,
+				step{you, events.ActionApproved, "toolu_1", map[string]any{"reason": "late"}, false},
+				step{you, events.ActionDenied, "toolu_1", map[string]any{"reason": "late"}, false},
+			))
+			if len(task.WaitingForYou()) != 0 {
+				t.Errorf("waiting for you: %+v, want none while the task is %s", task.WaitingForYou(), name)
+			}
+		})
 	}
 }
 

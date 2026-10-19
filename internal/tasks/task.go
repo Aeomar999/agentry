@@ -314,7 +314,7 @@ func (t *Task) Pushed(turn string) bool {
 func (t *Task) WaitingForYou() []*Action {
 	var waiting []*Action
 	for _, action := range t.Actions {
-		if action.Asked && action.Decision == Undecided && (!action.Held || t.atWork()) {
+		if action.Asked && action.Decision == Undecided && (!action.Held || t.AtWork()) {
 			waiting = append(waiting, action)
 		}
 	}
@@ -333,8 +333,12 @@ func (t *Task) HooksWaiting() []*Action {
 	return waiting
 }
 
-// atWork is a task that is neither done nor parked.
-func (t *Task) atWork() bool { return !t.IsDone && t.Parked == "" }
+// AtWork is a task that is neither done nor parked.
+func (t *Task) AtWork() bool { return !t.IsDone && t.Parked == "" }
+
+// ApprovalUnheard says you approved a held action while the coordinator was
+// deciding, and it hasn't heard yet.
+func (t *Task) ApprovalUnheard() bool { return t.approvalNews }
 
 // PassFor is the held action you approved whose pass lets this exact tool
 // and command through once without asking, or nil.
