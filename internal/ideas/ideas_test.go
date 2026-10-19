@@ -160,7 +160,7 @@ func TestDismissKeepsYourNote(t *testing.T) {
 	if len(list) != 2 || list[0].ID != dropped || list[1].ID != kept {
 		t.Fatalf("the repo's ideas, newest first: %v", list)
 	}
-	if dismissed := ideas.Dismissals(list); len(dismissed) != 1 || dismissed[0].Title != "Dark mode" || dismissed[0].Note != "Not now" {
+	if dismissed := ideas.InState(list, ideas.Dismissed); len(dismissed) != 1 || dismissed[0].Title != "Dark mode" || dismissed[0].Note != "Not now" {
 		t.Errorf("dismissals: %v", dismissed)
 	}
 	if all := ideas.List(state, ""); len(all) != 3 {

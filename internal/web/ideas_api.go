@@ -13,7 +13,8 @@ import (
 
 // listIdeas answers the ideas, of every repo or of ?repo=, newest session
 // first: by when the task they came from was made, then newest idea first.
-// An idea from a session after an epic closed names that epic.
+// An idea from a session after an epic closed names that epic, and an open
+// one why Agentry wouldn't accept it for you, under your rule.
 func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 	list := ideas.List(s.state, r.URL.Query().Get("repo"))
 	started, about := map[string]time.Time{}, map[string]*tasks.Task{}
@@ -28,9 +29,14 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.SortStableFunc(list, func(a, b *ideas.Idea) int { return started[b.Task].Compare(started[a.Task]) })
+	rule, roster := s.state.Settings().AutoAcceptRule, s.state.Roster()
 	views := []ideaView{}
 	for _, idea := range list {
-		views = append(views, viewOf(idea, about[idea.Task]))
+		why := ""
+		if idea.State == ideas.Open {
+			why = ideas.NotAutoAccepted(idea, list, roster, rule)
+		}
+		views = append(views, viewOf(idea, about[idea.Task], why))
 	}
 	reply(w, views)
 }

@@ -22,6 +22,7 @@ import (
 type State interface {
 	Task(id string) (*tasks.Task, error)
 	Idea(id string) (*ideas.Idea, error)
+	Ideas() []*ideas.Idea
 	Roster() agents.Roster
 	Settings() settings.Settings
 	Workers() workers.Roster

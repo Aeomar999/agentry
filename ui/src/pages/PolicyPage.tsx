@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -11,7 +12,8 @@ import { DefaultProfiles } from "@/components/organisms/DefaultProfiles";
 import { PolicyHistory } from "@/components/organisms/PolicyHistory";
 import { UnshippedMissingProfiles } from "@/components/organisms/MissingProfiles";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
-import type { Policy, PolicyProfile } from "@/api/types";
+import { TryPolicyCall } from "@/components/organisms/TryPolicyCall";
+import type { Policy, PolicyProfile, TriedCall } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 
 type Rule = PolicyProfile["rules"][number] & { order: number };
@@ -97,6 +99,9 @@ export function PolicyPage() {
 function ProfilePanel({ profile, policy }: { profile: PolicyProfile; policy: Policy }) {
   const inUse = policy.useForEveryone ? policy.useForEveryone === profile.name : true;
   const rules = profile.rules.map((rule, i) => ({ ...rule, order: i + 1 }));
+  const [tried, setTried] = useState<TriedCall>();
+  // The rule at that place decided, if the version shown is the one that judged.
+  const matched = tried?.verdict.policy === policy.hash ? rules.find((rule) => rule.order === tried.verdict.order) : undefined;
   return (
     <Panel
       flush
@@ -116,8 +121,14 @@ function ProfilePanel({ profile, policy }: { profile: PolicyProfile; policy: Pol
     >
       <p className="border-b border-divider px-4 py-2.5 text-[13px] text-ink-secondary">{profile.why}</p>
       <ProfileUsers profile={profile.name} policy={policy} />
+      <TryPolicyCall profile={profile.name} onTried={setTried} />
       {rules.length > 0 ? (
-        <ResourceTable columns={RULE_COLUMNS} rows={rules} rowKey={(rule) => String(rule.order)} />
+        <ResourceTable
+          columns={RULE_COLUMNS}
+          rows={rules}
+          rowKey={(rule) => String(rule.order)}
+          activeKey={matched && String(matched.order)}
+        />
       ) : (
         <p className="px-4 py-2.5 text-[12px] text-ink-muted">No rules: every call is decided by otherwise.</p>
       )}

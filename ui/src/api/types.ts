@@ -210,6 +210,25 @@ export interface PolicyChange {
   backup: string;
 }
 
+// What a profile decides about a call, and the rule that decided it:
+// "otherwise" when none matched.
+export interface Verdict {
+  decision: Decision;
+  profile: string;
+  rule: string;
+  why: string;
+  policy: string; // the hash of the version that decided
+  order?: number; // the deciding rule's place in its profile, from 1; absent for built-in verdicts
+}
+
+// A call tried against a profile, run in workspace. override is what
+// decides today, when use_for_everyone names another profile.
+export interface TriedCall {
+  verdict: Verdict;
+  workspace: string;
+  override?: { profile: string; verdict: Verdict };
+}
+
 export interface PolicyProfile {
   name: string;
   why: string;
@@ -371,16 +390,23 @@ export interface Idea {
   state: "open" | "accepted" | "dismissed";
   note: string; // what you said when you accepted or dismissed it
   became: string; // the task an accepted idea became
-  autoAccepted: boolean; // Agentry accepted it, as every Visionary agreed, not you
+  autoAccepted: boolean; // Agentry accepted it, as the Visionaries agreed by your rule, not you
+  repeats: string; // an idea the Visionaries said it raises again, "" for none
+  notAutoAccepted: string; // for an open idea, why Agentry wouldn't accept it for you under your rule; "" when it would
   createdAt: string;
 }
 
 // Your settings for how Agentry works (internal/web/settings_api.go).
 export interface Settings {
   visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
-  autoAcceptIdeas: boolean; // Agentry accepts an idea every Visionary agreed on, as you would
+  autoAcceptIdeas: boolean; // Agentry accepts an idea the Visionaries agreed on, by autoAcceptRule, as you would
   autoStartIdeas: boolean; // and starts the task it made; only with autoAcceptIdeas
+  autoAcceptRule: AutoAcceptRule; // which ideas the Visionaries agreed on
 }
+
+// everyoneBacked: every viewpoint backed the idea and none doubted it.
+// nobodyDoubted: none doubted it and at least two viewpoints backed it.
+export type AutoAcceptRule = "everyoneBacked" | "nobodyDoubted";
 
 // What accepting an idea did: a task can be made and the idea still not be
 // marked accepted, and then refused says why.

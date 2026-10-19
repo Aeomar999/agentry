@@ -149,8 +149,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	// Agents work here, and on any worker that joins and is online.
 	clones := filepath.Join(o.dataDir, "repos")                       // repos named by a git address or an archive link
 	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
+	worktreeRoot := filepath.Join(o.dataDir, "worktrees")
 	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
-		WorktreeRoot: filepath.Join(o.dataDir, "worktrees")}
+		WorktreeRoot: worktreeRoot}
 	fleet := machines.NewFleet(here)
 	if err := workerlink.ForgetConnections(log, state, fleet); err != nil {
 		return err
@@ -215,7 +216,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed},
+		Features: installed, Worktrees: worktreeRoot},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {

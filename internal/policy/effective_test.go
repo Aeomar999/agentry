@@ -114,3 +114,61 @@ func cutProfile(t *testing.T, text, name string) string {
 	}
 	return text[:b.start] + text[b.end:]
 }
+
+func TestDecideAsSkipsUseForEveryone(t *testing.T) {
+	everyone, err := Parse(Default(), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := bash("git push origin feature")
+	if got := everyone.Decide("developer", push); got.Decision != Allow || got.Profile != "allow-everything" {
+		t.Errorf("Decide follows use_for_everyone: got %+v", got)
+	}
+	got := everyone.DecideAs("developer", push)
+	if got.Decision != Ask || got.Profile != "developer" || got.Rule != "every push leaves this machine: you approve it" || got.Policy != everyone.Hash() {
+		t.Errorf("DecideAs judges as developer: got %+v", got)
+	}
+	if got := everyone.DecideAs("haunted", push); got.Decision != Deny || got.Rule != "profile haunted isn't in policy.toml" {
+		t.Errorf("an unknown profile denies: got %+v", got)
+	}
+	for _, profile := range []string{"developer", "allow-everything"} {
+		if got := everyone.DecideAs(profile, file("Read", "/home/dev/.agentry/policy.toml")); got.Decision != Deny || got.Rule != "Agentry's own files are off limits" {
+			t.Errorf("Agentry's own files stay off limits for %q: got %+v", profile, got)
+		}
+	}
+}
+
+func TestAVerdictSaysWhichRuleDecidedByItsPlace(t *testing.T) {
+	shipped, err := Parse(Default(), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := shipped.DecideAs("developer", bash("git push origin feature"))
+	if got.Order == 0 || shipped.profiles["developer"].rules[got.Order-1].name != got.Rule {
+		t.Errorf("the push rule's place should come back: got %+v", got)
+	}
+	if got := shipped.DecideAs("developer", bash("frobnicate")); got.Rule != "otherwise" || got.Order != 0 {
+		t.Errorf("otherwise is no rule of the profile: got %+v", got)
+	}
+	if got := shipped.DecideAs("developer", file("Read", "/home/dev/.agentry/policy.toml")); got.Rule != "Agentry's own files are off limits" || got.Order != 0 {
+		t.Errorf("the built-in own-files deny is no rule of the profile: got %+v", got)
+	}
+
+	// Rule names needn't be unique, so the place tells two of the same name apart.
+	twins, err := Parse([]byte(minimal+`
+[[profiles.p.rules]]
+name = "same"
+decision = "deny"
+runs_any = ['rm *']
+[[profiles.p.rules]]
+name = "same"
+decision = "allow"
+runs_any = ['ls *']
+`), home, protected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := twins.DecideAs("p", bash("ls -l")); got.Decision != Allow || got.Order != 2 {
+		t.Errorf("the second rule named same decided: got %+v", got)
+	}
+}

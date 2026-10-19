@@ -2,9 +2,11 @@ package ideas
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
 // VisionariesTeam is the team whose coordinators suggest ideas.
@@ -23,49 +25,95 @@ func Suggests(coordinator agents.Agent) bool {
 	return found && template.Lists(Name)
 }
 
-// Agreed says whether every viewpoint of team, in any case, backs the idea
-// and none doubts it. The viewpoints are the team's agents that don't
-// coordinate, read from the roster, so a team with other viewpoints works.
-// A viewpoint that didn't weigh in leaves it short, and no such team, or
-// one with no viewpoints, agrees on nothing.
-func Agreed(idea *Idea, roster agents.Roster, team string) bool {
-	viewpoints := slices.DeleteFunc(slices.Clone(roster), func(a agents.Agent) bool {
-		return a.Coordinates || !strings.EqualFold(a.TeamName(), team)
-	})
-	if len(viewpoints) == 0 || len(idea.DoubtedBy) > 0 {
-		return false
-	}
-	for _, viewpoint := range viewpoints {
-		backs := func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), viewpoint.Name) }
-		if !slices.ContainsFunc(idea.BackedBy, backs) {
-			return false
-		}
-	}
-	return true
-}
+// MinBackers is how many viewpoints must back an idea nobody doubted before
+// Agentry accepts it under settings.NobodyDoubted, so an idea one agent
+// floated alone doesn't slip through.
+const MinBackers = 2
 
-// Repeats says why Agentry mustn't accept the idea for you, "" when it
-// may: it isn't open, or list, the ideas about its repo, has one under the
-// same title that you dismissed or that was accepted already. made says
-// whether a task was made from an idea, accepted or not.
-func Repeats(idea *Idea, list []*Idea, made func(id string) bool) string {
+// NotAutoAccepted says why Agentry wouldn't accept the idea for you under
+// rule, "" when it would: it isn't open, it repeats another idea in list
+// (Duplicate), or the Visionaries of the roster don't agree on it as rule
+// asks (Disagreed). The loop, the rules and the Ideas page all ask it.
+func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, rule string) string {
 	if idea.State != Open {
 		return "it was " + string(idea.State) + " already"
 	}
-	for _, other := range list {
-		if other.ID == idea.ID || other.Repo != idea.Repo || !sameTitle(other.Title, idea.Title) {
-			continue
-		}
-		switch {
-		case other.State == Dismissed:
-			return "you dismissed " + other.ID + ", under the same title"
-		case other.State == Accepted || made(other.ID):
-			return other.ID + ", under the same title, is a task already"
-		}
+	if original := Duplicate(idea, list); original != nil {
+		return duplicateText(original)
 	}
-	return ""
+	return Disagreed(idea, roster, VisionariesTeam, rule)
 }
 
-func sameTitle(a, b string) bool {
-	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+// Disagreed says how the viewpoints of team fall short of agreeing on the
+// idea under rule, "" when they agree. The viewpoints are the team's agents
+// that don't coordinate, read from the roster, so a team with other
+// viewpoints works; a name counts in any case and once. Any doubt is
+// enough to disagree. EveryoneBacked then needs every viewpoint to back
+// it, so one that didn't weigh in leaves it short; NobodyDoubted needs
+// MinBackers of them. No such team, or one with no viewpoints, agrees on
+// nothing, and a rule Agentry doesn't know is the strict one.
+func Disagreed(idea *Idea, roster agents.Roster, team, rule string) string {
+	if !slices.ContainsFunc(roster, isViewpointOf(team)) {
+		return "the " + team + " team has no viewpoints"
+	}
+	if doubters := trimmed(idea.DoubtedBy); len(doubters) > 0 {
+		return "doubted by " + strings.Join(doubters, ", ")
+	}
+	backers, missing := backing(idea, roster, team)
+	if rule != settings.NobodyDoubted {
+		if len(missing) > 0 {
+			return "not backed by " + strings.Join(missing, ", ")
+		}
+		return ""
+	}
+	switch {
+	case len(backers) >= MinBackers:
+		return ""
+	case len(backers) == 0:
+		return "no backers"
+	case len(backers) == 1:
+		return "only one backer"
+	}
+	return "only " + strconv.Itoa(len(backers)) + " backers"
+}
+
+// Backers are the viewpoints of team, by their roster names, that back
+// the idea.
+func Backers(idea *Idea, roster agents.Roster, team string) []string {
+	backers, _ := backing(idea, roster, team)
+	return backers
+}
+
+// backing splits the viewpoints of team into those that back the idea and
+// those that don't.
+func backing(idea *Idea, roster agents.Roster, team string) (backers, missing []string) {
+	for _, viewpoint := range roster {
+		if !isViewpointOf(team)(viewpoint) {
+			continue
+		}
+		backs := func(name string) bool { return strings.EqualFold(strings.TrimSpace(name), viewpoint.Name) }
+		if slices.ContainsFunc(idea.BackedBy, backs) {
+			backers = append(backers, viewpoint.Name)
+		} else {
+			missing = append(missing, viewpoint.Name)
+		}
+	}
+	return backers, missing
+}
+
+// isViewpointOf: the agent is one of team's, in any case, and doesn't
+// coordinate it.
+func isViewpointOf(team string) func(agents.Agent) bool {
+	return func(a agents.Agent) bool { return !a.Coordinates && strings.EqualFold(a.TeamName(), team) }
+}
+
+// trimmed are the names, trimmed, without the blank ones.
+func trimmed(names []string) []string {
+	var kept []string
+	for _, name := range names {
+		if name = strings.TrimSpace(name); name != "" {
+			kept = append(kept, name)
+		}
+	}
+	return kept
 }

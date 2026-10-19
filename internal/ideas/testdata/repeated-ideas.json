@@ -1,0 +1,82 @@
+{
+ "idea-11": {
+  "title": "Create the shipment when a Portside order is paid, via one status-change hook",
+  "problem": "Buyers who have paid see no tracking, and ops have nowhere to record vessel, container or ETA. Only fast-api db/seed.py:588 inserts shipments. admin_orders.py:321,351 return 404 'Shipment not found', and admin src/app/orders/[id]/page.tsx:569 shows 'No shipment created for this order yet'. Six routes change order status, none through a shared hook, and editHistory is written only in admin_orders.py.",
+  "proposal": "Add one fast-api on_status_change(before, after, actor) hook, called from all six routes. It stamps statusChangedAt and pushes an editHistory row. On paid, it creates one shipment per order. Each stage's state comes from order.status, and only dates and notes are stored per stage. Ops can edit or skip stages. Backfill orders already past paid, with a dry-run count first."
+ },
+ "idea-21": {
+  "title": "Create the shipment when an order is paid, behind one status-change hook",
+  "problem": "Buyers who have paid see an empty tracker, and ops have nowhere to record the vessel or ETA. Only fast-api db/seed.py:588 inserts shipments. admin_orders.py:321,351 return 'Shipment not found', and admin src/app/orders/[id]/page.tsx:569 shows 'No shipment created'. Six routes change order status with no shared side effects, and editHistory is written only in admin_orders.py.",
+  "proposal": "Add one fast-api on_status_change(before, after, actor) hook, called from all six status writers. It stamps statusChangedAt, pushes an editHistory row, and creates a shipment when an order reaches paid. Each stage's state is worked out from the order status, and only dates and notes are stored. Ops can edit or skip stages. Backfill older orders after a dry-run count."
+ },
+ "idea-12": {
+  "title": "Stop Portside buyers cancelling paid orders and confirming delivery at customs",
+  "problem": "The cancel filter in fast-api routes/orders.py (around 449-459) excludes only shipped and later states, so buyers can cancel paid, balance-paid and processing orders, and no refund is recorded. admin_orders.py:481 says refunds are 'handled externally'. Separately, _CONFIRM_DELIVERY_FROM (orders.py:378) includes customs-held, so a buyer can confirm delivery of a car still held at customs.",
+  "proposal": "Narrow buyer cancel to unpaid states (admins can still cancel), and remove customs-held from the states a buyer can confirm delivery from. Add tests for both."
+ },
+ "idea-22": {
+  "title": "Stop buyers cancelling paid orders or confirming delivery at customs",
+  "problem": "The cancel filter in fast-api routes/orders.py (around 449-459) excludes only shipped and later states, so paid, balance-paid and processing orders can be cancelled with no refund recorded. admin_orders.py:481 says the refund is 'handled externally'. _CONFIRM_DELIVERY_FROM (orders.py:378) includes customs-held.",
+  "proposal": "Narrow the buyer cancel filter to orders that are not yet paid, and remove customs-held from the states where a buyer can confirm delivery. Add tests for both."
+ },
+ "idea-13": {
+  "title": "Notify Portside buyers in-app and by email when their order changes",
+  "problem": "A buyer abroad, in another time zone, has to keep refreshing the order page. Status, issue and shipment changes in fast-api routes/admin_orders.py write audit entries only. Notifications already exist for auctions and reservations (admin_reservations.py:177), and Resend email is wired in. payBy is written (admin_auctions.py:273, auctions.py:349) but never read, so nobody reminds buyers before payment is due.",
+  "proposal": "From the status hook, send an in-app notice plus email for changes that matter to the buyer: status, an issue raised or cleared, an ETA change. Key each notice by order and status so it can't send twice. Add a notify-buyer toggle on admin PATCH for bulk edits. Add a reminder 24h before payBy in the 5-minute sweeper."
+ },
+ "idea-20": {
+  "title": "Text Portside buyers order updates by SMS",
+  "problem": "Buyers and their relatives in Ghana often read SMS before email. Twilio is wired only for sign-in codes (fast-api services/twilio_verify.py).",
+  "proposal": "Add Twilio Messaging with a registered Ghana sender ID, used only for issues and arrival at Tema, on top of the notifications from idea 3."
+ },
+ "idea-16": {
+  "title": "Let Portside buyers file disputes on an order, with a condition snapshot",
+  "problem": "fast-api routes/disputes.py is GET-only. models/dispute.py is a billing receipt with no link to an order and no evidence. Buyers can't upload to support threads, and an order line keeps only refId, so there is no frozen baseline of the car's condition and title to argue from.",
+  "proposal": "First, freeze a snapshot of disclosures, title status and images on each order line when the order is paid. Then add orderId, itemId and kind to the support Conversation, let buyers upload photos, and give admins a queue with statuses. Keep Dispute as the record of the outcome."
+ },
+ "idea-26": {
+  "title": "Disputes on support threads, with a condition snapshot at payment",
+  "problem": "Buyers can't raise a claim about a damaged or misdescribed car. fast-api routes/disputes.py is GET-only, models/dispute.py is a billing receipt with no order link, and buyers can't upload evidence. Order lines keep only a refId, so the car's disclosures can change after the sale.",
+  "proposal": "First, freeze a copy of the car's disclosures, title status and images on the order line at payment. Then add orderId, itemId and kind to the support Conversation, let buyers upload photos, and give admins a dispute queue with statuses. Keep Dispute as the record of the outcome."
+ },
+ "idea-18": {
+  "title": "Attach title, bill of lading and customs papers to Portside orders",
+  "problem": "Buyers and their collectors can't clear or register a car without the title and the bill of lading, and today those travel by WhatsApp and email. models/order.py and models/shipment.py have no document fields, and utils/uploads.py is used only by kyb and admin_support.",
+  "proposal": "Generalise the kyb-volume file store, which the daily backup covers, into typed order documents (title, bill of lading, customs entry, release order). Ops upload them, and buyers download through expiring signed links scoped to their order. Each document type is its own story."
+ },
+ "idea-28": {
+  "title": "Documents on the order: title, bill of lading, customs entry, release",
+  "problem": "The buyer and the relative at Tema can't clear or register the car without the title and the bill of lading, and these papers move by WhatsApp and email. fast-api models/order.py and models/shipment.py have no document fields, and utils/uploads.py is used only by kyb and admin_support.",
+  "proposal": "Generalise the kyb-volume file store. Ops attach typed documents to an order, and the buyer downloads them through signed links that expire and can share them with their collector. Make each document type its own story."
+ },
+ "idea-17": {
+  "title": "Flag Ghana import eligibility with a new Portside sourcing rule kind",
+  "problem": "Buyers can win a car that may not be importable or may be heavily penalised (age, salvage, flood or fire). Year, title status and damage flags are already extracted (workers extract.py), but no rule checks them, and auction_pricing.py:14 charges a flat $3,850 for freight and customs.",
+  "proposal": "Add an eligibility rule kind to the existing sourcing rules engine, with thresholds that ops can edit, and show the flag on the listing. The duty and landed-cost estimate stays out until someone owns the rates."
+ },
+ "idea-27": {
+  "title": "Ghana import eligibility rule in the sourcing rules engine",
+  "problem": "Buyers can bid on cars that may not be importable or may draw heavy age penalties, and nothing warns them. Year, title status and salvage, flood and fire flags are already extracted (workers/extract.py), but no rule checks them against Ghana's import rules.",
+  "proposal": "Add one eligibility rule kind to the existing sourcing rules engine. It flags or blocks cars by age and salvage history, using thresholds ops can edit, and the flag shows on the listing."
+ },
+ "idea-30": {
+  "title": "Ask before Revert",
+  "problem": "Revert in PolicyHistory.tsx:33 runs at once. Going back to 'first loaded' quietly brings back use_for_everyone = \"allow-everything\", which lets every agent do anything again.",
+  "proposal": "Before reverting, show a plain confirm: 'Replace the policy in force with the version of <date>? Check its diff first.' UI only. Revert already goes through applyPolicy, so RefuseRemovingUsed still guards it. Idea 'Revert, done properly' replaces this confirm later."
+ },
+ "idea-39": {
+  "title": "Revert, done properly: diff against the version in force",
+  "problem": "A History row's Diff is against the version before it, not the one in force, so a user can't see what Revert will change. The client can't work it out, because Version has diffs but no text.",
+  "proposal": "Add GET /api/policy/history/{position}: VersionAt (log.go:84), then LineDiff(current.Text(), text), plus whether the target sets use_for_everyone (needs a small exported parse helper). The Revert confirm shows that diff and says in words when the target loosens the policy. About 30 lines of Go and no new events. It replaces the plain confirm."
+ },
+ "idea-36": {
+  "title": "Startup parse error names the line and the newest backup",
+  "problem": "While Agentry runs, a broken edit is refused and the last good version stays in force. After a restart, OpenLive fails and serve exits (serve.go:108), and the page is down too, so the user can't see what went wrong.",
+  "proposal": "Make the startup error name policy.toml's path, the line of the parse error and the newest policy.toml-backup-* file, so the user can fix it or copy the backup back. No change in behaviour."
+ },
+ "idea-40": {
+  "title": "Start with the last good version when policy.toml doesn't parse at start",
+  "problem": "A broken policy.toml stops Agentry at start, though at runtime the last good version stays in force. The rule at start differs from the rule while running.",
+  "proposal": "OpenLive takes a fallback text from the log's last policy.loaded, which stores the full text (log.go:24). If the file doesn't parse but the fallback does, start with the fallback, set problem so the banner shows it, and log the existing policy.Refused event, so no event changes shape. The watcher picks up the fix. Needs a product decision."
+ }
+}
