@@ -95,6 +95,9 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 			resetsAt = signal.ResetsAt.UTC().Format(time.RFC3339)
 		}
 		p.Type, p.Data = events.TurnLimited, map[string]any{"agent": call.Agent, "error": signal.Error, "details": signal.Details, "resetsAt": resetsAt}
+		if reason := h.stillLimited(call); reason != "" {
+			p.Type, p.Correlation, p.Data = events.IssueRaised, "", map[string]any{"reason": reason}
+		}
 	case engines.TurnFailed:
 		// An issue ends whichever turn is open, so a late call from a turn
 		// that already ended must not end the next one.
@@ -109,6 +112,23 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
 		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
 	}
+}
+
+// stillLimited says why a turn that hits the usage limit again, straight
+// after Agentry retried it at the reset, is an issue: it is retried once,
+// never waited for again and again. A turn that called a tool since the
+// retry did work, so its new limit is waited out as any other. "" when
+// the limit is one to wait for.
+func (h *Handler) stillLimited(call hookcall.Call) string {
+	task, err := h.task(call.Task)
+	if err != nil {
+		return ""
+	}
+	turn := task.OpenTurn()
+	if turn == nil || turn.ID != call.Turn || turn.RetriedAt.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%s's %s is still at the usage limit after the retry at ~%s", turn.Agent, turn.ID, turn.RetriedAt.Local().Format("15:04"))
 }
 
 // failedTurnReason says what stopped the turn, in the engine's own words

@@ -300,7 +300,7 @@ func (t *Task) Apply(e events.Event) {
 
 	case events.ActionRequested:
 		turn := t.OpenTurn()
-		turn.Waiting = ""
+		turn.Waiting, turn.RetriedAt = "", time.Time{} // working again after a retry
 		t.Actions = append(t.Actions, &Action{ID: e.Correlation, Turn: turn.ID, Agent: e.Actor.ID,
 			Tool: e.Text("tool"), Command: e.Text("command"), RequestedAt: e.At})
 	case events.ActionAsked:
@@ -352,6 +352,9 @@ func (t *Task) Apply(e events.Event) {
 		if turn := t.Turn(e.Correlation); !turn.Ended && turn.Limited != "" && e.Text("agent") == turn.Agent {
 			turn.Limited, turn.ResetsAt = "", time.Time{}
 			turn.Resumes++
+			if e.Text("reason") == "reset" {
+				turn.RetriedAt = e.At
+			}
 			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator,
 				Text: turn.Agent + "'s " + turn.ID + " resumed after its usage limit"})
 		}

@@ -416,3 +416,45 @@ func TestAnotherStopFailureIsAnIssue(t *testing.T) {
 		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
 	}
 }
+
+// retriedAtTheReset is the engineer's turn-2 stopped at a usage limit and
+// retried by Agentry when it reset.
+func retriedAtTheReset(t *testing.T) (*store.Store, *Handler) {
+	t.Helper()
+	s, state := engineerAtWork(t)
+	h := NewHandler(s, state, judgeByCommand)
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 3am (UTC)"}`))
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: events.Actor{Kind: events.System, ID: "watchdog"},
+		Type: events.TurnResumed, Correlation: "turn-2", Data: map[string]any{"agent": "engineer", "reason": "reset"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	return s, h
+}
+
+// A turn retried at the reset that hits the limit again before doing any
+// work is retried once only: it ends as an issue, not another wait.
+func TestALimitStraightAfterTheRetryIsAnIssue(t *testing.T) {
+	s, h := retriedAtTheReset(t)
+	retried := taskIn(t, s).Turn("turn-2").RetriedAt
+	h.Handle(context.Background(), hookCall("UserPromptSubmit", `{"hook_event_name":"UserPromptSubmit","prompt":"Your Claude usage limit has reset."}`))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 8am (UTC)"}`))
+
+	task := taskIn(t, s)
+	want := "engineer's turn-2 is still at the usage limit after the retry at ~" + retried.Local().Format("15:04")
+	if turn := task.Turn("turn-2"); retried.IsZero() || !turn.Ended || turn.Issue != want || task.IssuesInARow != 1 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
+	}
+}
+
+// A turn that called a tool after the retry did work, so a later limit is a
+// new one, waited out as the first was.
+func TestALimitAfterWorkSinceTheRetryIsWaitedOut(t *testing.T) {
+	s, h := retriedAtTheReset(t)
+	h.Handle(context.Background(), hookCall("PreToolUse", bash("toolu_9", "ls")))
+	h.Handle(context.Background(), hookCall("StopFailure", `{"hook_event_name":"StopFailure","error":"rate_limit","error_details":"You've hit your session limit · resets 8am (UTC)"}`))
+
+	task := taskIn(t, s)
+	if turn := task.OpenTurn(); turn == nil || turn.Limited == "" || !turn.RetriedAt.IsZero() || task.IssuesInARow != 0 {
+		t.Errorf("turn %+v, issues in a row %d", turn, task.IssuesInARow)
+	}
+}
