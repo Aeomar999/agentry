@@ -6,6 +6,7 @@ import { Button } from "@/components/atoms/Button";
 import { AgentName } from "@/components/molecules/AgentName";
 import { Markdown } from "@/components/molecules/Markdown";
 import { Panel } from "@/components/molecules/Panel";
+import { cn } from "@/lib/cn";
 import type { Idea } from "@/api/types";
 
 export const SIZES: Record<Idea["size"], string> = { S: "small", M: "medium", L: "large" };
@@ -56,11 +57,13 @@ export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: 
   );
 }
 
+// TaskLink goes to a task, showing its id in mono or, given children such as
+// its title, those in the normal font.
 export function TaskLink({ id, children }: { id: string; children?: ReactNode }) {
   return (
     <Link
       to={`/tasks/${encodeURIComponent(id)}`}
-      className="font-mono text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline"
+      className={cn("text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline", children === undefined && "font-mono")}
     >
       {children ?? id}
     </Link>

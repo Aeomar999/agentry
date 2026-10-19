@@ -85,7 +85,7 @@ export function IdeasPage() {
                 {ideas[0].about && (
                   <>
                     {" "}
-                    · after you closed <TaskLink id={ideas[0].about}>{ideas[0].aboutTitle || ideas[0].about}</TaskLink>
+                    · after you closed <TaskLink id={ideas[0].about}>{ideas[0].aboutTitle || undefined}</TaskLink>
                   </>
                 )}
               </span>
