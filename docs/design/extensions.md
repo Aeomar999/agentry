@@ -957,11 +957,12 @@ so a reader can see from a `Feature` value what that feature can write.
 ### HTTP and MCP
 
 A feature's routes are mounted by the core through the same wrappers as
-every route, chosen by `Route.Auth`: `features.UI` with `api` (behind
-`requireUI`), `features.Desk` with `deskToo` (behind `requireUIOrDesk`),
-and `features.Signed(verify)` with a new `signed` wrapper, for a git host's
-webhook (T-019), which refuses the request unless `verify` accepts its
-body against that hook's secret from the settings file. A `Route` can't
+every route: `mount` picks each route's wrapper from its `Route.Auth`
+through `wrapperOf`, `signed` for `features.Signed(verify)`,
+`requireUIOrDesk` for `features.Desk` and `requireUI` for `features.UI`.
+`signed` is for a git host's webhook (T-019): it refuses the request
+unless `verify` accepts its body against that hook's secret from the
+settings file. A `Route` can't
 choose to skip them, and no feature route can sit behind
 `requireRealUIToken`, which hands out the token. Every UI or desk write is
 made as `you` (`httpapi.You`), so a feature's endpoint has your authority and
