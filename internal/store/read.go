@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -95,10 +96,12 @@ func (s *Store) Log(name string) ([]events.Event, error) {
 // empty log.
 func (s *Store) LastPosition() int64 { return s.applied.Load() }
 
-// load gives the model each stream's accepted events, streams in the order of
-// their first accepted event (tasks in creation order), and returns the log's
-// last position. It runs in Open, before applied is set and before any reader
-// exists, so it reads everything up to that last position, in one
+// load fills the model and returns the log's last position. A model that
+// holds nothing is given each stream's accepted events, streams in the order
+// of their first accepted event (tasks in creation order); one that starts
+// part way is given each event after its position, rejections included, as
+// Propose gives them. It runs in Open, before applied is set and before any
+// reader exists, so it reads everything up to that last position, in one
 // transaction for one snapshot.
 func load(db *sql.DB, model Model) (int64, error) {
 	tx, err := db.Begin()
@@ -112,6 +115,9 @@ func load(db *sql.DB, model Model) (int64, error) {
 	}
 	if model == nil {
 		return last, nil
+	}
+	if since := model.Since(); since > 0 {
+		return last, applyAfter(tx, model, since, last)
 	}
 	accepted, err := queryEvents(tx, `SELECT `+columns+` FROM events
 		WHERE type != ? AND position <= ? ORDER BY position`, events.ProposalRejected, last)
@@ -131,4 +137,21 @@ func load(db *sql.DB, model Model) (int64, error) {
 	}
 	model.Loaded(last)
 	return last, nil
+}
+
+// applyAfter brings a model that starts part way up to the log's last
+// position. A model past the end was made from some other log.
+func applyAfter(tx *sql.Tx, model Model, since, last int64) error {
+	if since > last {
+		return fmt.Errorf("the model is at position %d, past the log's last, %d", since, last)
+	}
+	tail, err := queryEvents(tx, `SELECT `+columns+` FROM events
+		WHERE position > ? AND position <= ? ORDER BY position`, since, last)
+	if err != nil {
+		return err
+	}
+	for _, e := range tail {
+		model.Apply(e)
+	}
+	return nil
 }

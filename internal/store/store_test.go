@@ -25,6 +25,8 @@ type created struct {
 
 func newCreated() *created { return &created{streams: map[string]bool{}} }
 
+func (c *created) Since() int64 { return 0 }
+
 func (c *created) Load(stream string, accepted []events.Event) {
 	for _, e := range accepted {
 		c.Apply(e)

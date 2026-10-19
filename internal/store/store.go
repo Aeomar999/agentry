@@ -45,10 +45,15 @@ CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 // A Model is state kept from the log. The store fills it at Open and
 // applies each event after it commits, before any reader of the log can
 // read that event.
+//
+// A model may start part way through the log, as one read from a snapshot
+// would: Since says where it is, and Open applies only the events after it
+// instead of loading every stream.
 type Model interface {
-	Load(stream string, accepted []events.Event) // at Open, once per stream
-	Loaded(position int64)                       // at Open, the log's last position, rejections included
-	Apply(e events.Event)                        // after each commit
+	Since() int64                                // the last position the model holds, 0 when it holds nothing
+	Load(stream string, accepted []events.Event) // at Open, once per stream, when Since is 0
+	Loaded(position int64)                       // at Open, the log's last position, rejections included, when Since is 0
+	Apply(e events.Event)                        // after each commit, and at Open each event after Since
 }
 
 // OrderCheck is check 3, order and per-agent who rules: given what happened so

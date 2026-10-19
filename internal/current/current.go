@@ -105,6 +105,10 @@ func (s *State) Loaded(position int64) {
 
 func byPosition(a, b created) int { return cmp.Compare(a.position, b.position) }
 
+// Since is the last position the state holds, for the store to apply the
+// rest of the log from: 0 for a new state.
+func (s *State) Since() int64 { return s.Position() }
+
 // Apply changes the state by one committed event. A proposal.rejected only
 // moves the position, as Store.Stream leaves it out: it never happened.
 // A broken stream takes no more events, as a replay would fail before them.

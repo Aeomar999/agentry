@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 // blocking is a model whose Apply says it has started, then waits to be released.
 type blocking struct{ started, release chan struct{} }
 
+func (blocking) Since() int64                { return 0 }
 func (blocking) Load(string, []events.Event) {}
 func (blocking) Loaded(int64)                {}
 
@@ -124,6 +126,52 @@ func TestOpenStartsAtTheLastPosition(t *testing.T) {
 	}
 	if model.loaded != 3 {
 		t.Errorf("Loaded was given %d, want 3", model.loaded)
+	}
+}
+
+// partWay is a model that starts at a given position, as one read from a
+// snapshot would, and records what Open calls.
+type partWay struct {
+	since   int64
+	calls   []string
+	applied []int64
+}
+
+func (p *partWay) Since() int64                         { return p.since }
+func (p *partWay) Load(stream string, _ []events.Event) { p.calls = append(p.calls, "Load "+stream) }
+func (p *partWay) Loaded(int64)                         { p.calls = append(p.calls, "Loaded") }
+func (p *partWay) Apply(e events.Event)                 { p.applied = append(p.applied, e.Position) }
+
+// A model that starts part way is given only the events after its position,
+// the refusal among them, and no Load or Loaded; the log's reads start at
+// its last position.
+func TestOpenAppliesOnlyWhatComesAfterAModelThatStartsPartWay(t *testing.T) {
+	path := seeded(t)
+	for since, want := range map[int64][]int64{1: {2, 3}, 2: {3}, 3: nil} {
+		model := &partWay{since: since}
+		s, err := Open(path, model, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(model.calls) > 0 {
+			t.Errorf("since %d: Open called %v", since, model.calls)
+		}
+		if !slices.Equal(model.applied, want) {
+			t.Errorf("since %d: Open applied %v, want %v", since, model.applied, want)
+		}
+		if position := s.LastPosition(); position != 3 {
+			t.Errorf("since %d: LastPosition is %d, want 3", since, position)
+		}
+		s.Close()
+	}
+}
+
+// A model past the log's end was made from another log: Open refuses it
+// rather than read on from the wrong place.
+func TestOpenRefusesAModelPastTheLogsEnd(t *testing.T) {
+	if s, err := Open(seeded(t), &partWay{since: 4}, nil); err == nil {
+		s.Close()
+		t.Error("Open took a model at position 4 over a log of 3 events")
 	}
 }
 

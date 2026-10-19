@@ -1,11 +1,62 @@
 package current
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 )
+
+// seededLog writes the proposals to a new log, closes it, and returns its
+// path and its events as read back.
+func seededLog(t *testing.T, proposals ...events.Proposal) (string, []events.Event) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, err := store.Open(path, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range proposals {
+		propose(t, s, p)
+	}
+	log, err := s.After(0, len(proposals))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path, log
+}
+
+// A state filled from the first part of the log says it holds that much,
+// and Open brings it the rest: at every cut, by loading the part or by
+// applying it, it ends identical to a replay of the whole log. Cuts fall
+// between one task.created and the next, before the broken task and after
+// rejections.
+func TestAStateThatStartsPartWayTakesTheRestAtOpen(t *testing.T) {
+	path, log := seededLog(t, someProposals()...)
+	for cut := range len(log) + 1 {
+		part := log[:cut]
+		var since int64
+		if cut > 0 {
+			since = part[cut-1].Position
+		}
+		for name, state := range map[string]*State{"loaded": loaded(part), "applied": applied(part)} {
+			if state.Since() != since {
+				t.Fatalf("%s from %d events: Since is %d, want %d", name, cut, state.Since(), since)
+			}
+			s, err := store.Open(path, state, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := Equal(s, state); err != nil {
+				t.Errorf("%s from %d events, then opened: %v", name, cut, err)
+			}
+			s.Close()
+		}
+	}
+}
 
 // The task order is by each task.created's position, not by when the state
 // took it: a state that loaded its streams in any order, then took the rest
