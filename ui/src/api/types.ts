@@ -428,4 +428,16 @@ export interface FeatureLine {
 export interface FeaturesReply {
   features: FeatureLine[];
   board?: { columns: BoardColumn[] };
+  unknown?: UnknownEvents[] | null;
+}
+
+// Events the server skipped or didn't understand (internal/current Unknown),
+// in GET /api/features: those of one stream prefix from a feature this
+// build doesn't have, or those of one type it doesn't know.
+export interface UnknownEvents {
+  prefix?: string; // the foreign streams' prefix, "idea-"; or
+  type?: string; // the unknown type, "git.pr_opened"
+  streams?: number; // how many foreign streams have the prefix
+  events: number;
+  last: number; // the log position of the last of them
 }
