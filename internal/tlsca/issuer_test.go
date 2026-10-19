@@ -1,0 +1,149 @@
+package tlsca
+
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"net"
+	"slices"
+	"sync"
+	"testing"
+	"time"
+)
+
+// clock and addresses the tests move by hand.
+type world struct {
+	mu    sync.Mutex
+	now   time.Time
+	hosts []string
+}
+
+func (w *world) Now() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.now
+}
+
+func (w *world) Hosts() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Clone(w.hosts)
+}
+
+func (w *world) set(now time.Time, hosts ...string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.now, w.hosts = now, hosts
+}
+
+func newIssuer(t *testing.T) (*Issuer, *world) {
+	ca, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &world{now: time.Now(), hosts: []string{"box", "192.168.1.20"}}
+	return NewIssuer(ca, w.Hosts, w.Now), w
+}
+
+func certificate(t *testing.T, i *Issuer) *tls.Certificate {
+	t.Helper()
+	cert, err := i.GetCertificate(&tls.ClientHelloInfo{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert
+}
+
+func TestTheSameCertificateWhileNothingChanges(t *testing.T) {
+	i, w := newIssuer(t)
+	first := certificate(t, i)
+	w.set(w.Now().Add(300*24*time.Hour), "192.168.1.20", "BOX", "localhost") // same hosts, written otherwise
+	if again := certificate(t, i); again != first {
+		t.Errorf("issued again: serial %v, then %v", first.Leaf.SerialNumber, again.Leaf.SerialNumber)
+	}
+}
+
+func TestANewCertificateWhenTheAddressesChange(t *testing.T) {
+	i, w := newIssuer(t)
+	first := certificate(t, i)
+	w.set(w.Now(), "box", "192.168.1.20", "100.64.0.7") // joined a private network
+	second := certificate(t, i)
+	if second == first || second.Leaf.SerialNumber.Cmp(first.Leaf.SerialNumber) == 0 {
+		t.Fatal("no new certificate for a new address")
+	}
+	if _, err := second.Leaf.Verify(x509.VerifyOptions{DNSName: "100.64.0.7", Roots: i.ca.Pool()}); err != nil {
+		t.Errorf("the new address: %v", err)
+	}
+	w.set(w.Now(), "box") // left the LAN
+	if third := certificate(t, i); third == second || slices.ContainsFunc(third.Leaf.IPAddresses, func(ip net.IP) bool { return ip.String() == "192.168.1.20" }) {
+		t.Errorf("still names an address that is gone: %v", third.Leaf.IPAddresses)
+	}
+}
+
+func TestANewCertificateNearItsEnd(t *testing.T) {
+	i, w := newIssuer(t)
+	first := certificate(t, i)
+	end := first.Leaf.NotAfter
+	w.set(end.Add(-renewBefore-time.Minute), w.Hosts()...)
+	if certificate(t, i) != first {
+		t.Fatal("renewed more than 30 days before the end")
+	}
+	w.set(end.Add(-renewBefore+time.Minute), w.Hosts()...)
+	second := certificate(t, i)
+	if second == first || !second.Leaf.NotAfter.After(end) {
+		t.Errorf("not renewed within 30 days of the end: ends %v", second.Leaf.NotAfter)
+	}
+}
+
+// Run with -race: handshakes ask for the certificate at once, while the
+// addresses change under them.
+func TestConcurrentHandshakes(t *testing.T) {
+	i, w := newIssuer(t)
+	var wg sync.WaitGroup
+	for n := range 16 {
+		wg.Go(func() {
+			for k := range 20 {
+				if n == 0 && k%5 == 0 {
+					w.set(w.Now(), "box", "10.0.0."+string(rune('1'+k/5)))
+				}
+				if cert, err := i.GetCertificate(&tls.ClientHelloInfo{}); err != nil || cert.Leaf == nil {
+					t.Error(err)
+				}
+			}
+		})
+	}
+	wg.Wait()
+}
+
+// A client that trusts only the CA completes a handshake with a server the
+// Issuer serves, by name and by address.
+func TestAClientTrustingTheCAConnects(t *testing.T) {
+	i, _ := newIssuer(t)
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{GetCertificate: i.GetCertificate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.(*tls.Conn).Handshake()
+			conn.Close()
+		}
+	}()
+	_, port, _ := net.SplitHostPort(listener.Addr().String())
+	for _, name := range []string{"localhost", "127.0.0.1"} {
+		conn, err := tls.Dial("tcp", net.JoinHostPort("127.0.0.1", port), &tls.Config{RootCAs: i.ca.Pool(), ServerName: name})
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		conn.Close()
+	}
+	if conn, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{ServerName: "localhost"}); err == nil {
+		conn.Close()
+		t.Error("a client trusting only the system's CAs connected")
+	}
+}

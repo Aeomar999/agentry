@@ -3,10 +3,12 @@ package main
 import (
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 )
 
 // Started from inside a Claude Code session, serve, open and the worker
@@ -81,9 +83,11 @@ func TestNetworkURLs(t *testing.T) {
 			t.Errorf("a network URL: %s", url)
 		}
 	}
-	for name, want := range map[string]bool{"docker0": true, "br-1a2b": true, "veth12": true, "eth0": false, "wlan0": false} {
-		if isBridge(name) != want {
-			t.Errorf("isBridge(%s) = %v", name, !want)
-		}
+	var want []string
+	for _, ip := range hostaddrs.Network() {
+		want = append(want, "http://"+ip.String()+":7800")
+	}
+	if got := networkURLs(every); !slices.Equal(got, want) {
+		t.Errorf("networkURLs = %v, want one for each network address: %v", got, want)
 	}
 }

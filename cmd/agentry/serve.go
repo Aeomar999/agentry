@@ -29,6 +29,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -259,36 +260,17 @@ func localhostURL(addr net.Addr) string {
 
 // networkURLs are the server as other machines on the network reach it,
 // when it listens on every address: one for each of this machine's own
-// IPv4 addresses, leaving out loopback and the bridges containers use, which
-// no other machine reaches.
+// addresses other machines reach.
 func networkURLs(addr net.Addr) []string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() {
 		return nil
 	}
-	interfaces, _ := net.Interfaces()
 	var urls []string
-	for _, i := range interfaces {
-		if i.Flags&net.FlagUp == 0 || i.Flags&net.FlagLoopback != 0 || isBridge(i.Name) {
-			continue
-		}
-		addresses, _ := i.Addrs()
-		for _, address := range addresses {
-			if ip, ok := address.(*net.IPNet); ok && ip.IP.To4() != nil && !ip.IP.IsLinkLocalUnicast() {
-				urls = append(urls, fmt.Sprintf("http://%s:%d", ip.IP, tcp.Port))
-			}
-		}
+	for _, ip := range hostaddrs.Network() {
+		urls = append(urls, fmt.Sprintf("http://%s:%d", ip, tcp.Port))
 	}
 	return urls
-}
-
-func isBridge(name string) bool {
-	for _, prefix := range []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "vEthernet"} {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 func seedAgents(log *store.Store, state *current.State) error {
