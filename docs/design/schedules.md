@@ -4,8 +4,8 @@ Status: proposed, for task-123 (story 21 of `docs/design/extensions.md`
 section 11, phase 6). Design only: nothing in the server or the page
 changes with this document. It covers what a schedule is, its events, its
 state, its rules, the job that fires it, its routes, tools and page, how a
-task links back to it, what happens when a run waits on you, the open
-questions and the build stories.
+task links back to it, what happens when a run waits on you, the
+decisions and the build stories.
 
 Checked against the code at `e54470b` (branch `agentry/task-123`, from
 `dev`).
@@ -36,8 +36,8 @@ Three things decide how safe an unattended run is:
   approval overnight blocks only the next runs of its own schedule. A rule
   refuses the clock's task while one from the schedule is open, so the
   clock makes a task only when no task from the schedule is open, even if
-  two firings race. Run now is yours to ask for and isn't held back (open
-  question 7), and nor is reopening an old task from the schedule
+  two firings race. Run now is yours to ask for and isn't held back (decision
+  7), and nor is reopening an old task from the schedule
   (`internal/rules/task_rules.go:29` checks only that it is done).
 - Missed runs catch up once. A machine that was off or asleep runs the
   latest missed slot when it wakes, however old, and counts the rest; it
@@ -83,8 +83,7 @@ The simple form is the whole rule in this version: no cron string. It
 covers both examples in `extensions.md` section 13 and every schedule the
 Visionaries named. A cron rule can come later as an optional field
 (`"cron"`, with `every: "cron"`), which an old binary's state would still
-read as a schedule it can't compute and so never fires; see open question
-1.
+read as a schedule it can't compute and so never fires; see decision 1.
 
 What a schedule is not: it is not a recurring epic, and it does not carry
 state from one run to the next. Each run is a fresh task; continuity lives
@@ -123,7 +122,7 @@ strings: across a clock change the offsets differ.
 The clock's actor is `events.Actor{Kind: events.System, ID: "schedules"}`,
 beside the other `System` actors (`policy`, `watchdog`, `archiver`...).
 Agents write no schedule type: an agent that wants a schedule tells you,
-and you make it (open question 4).
+and you make it (decision 4).
 
 These types are a contract with every log (`extensions.md` section 8): they
 change only by adding optional fields. `schedule.changed` carrying the
@@ -233,7 +232,7 @@ A feature's rules only refuse. For now they live where Ideas' do, in
 beside `checkIdea` (`internal/rules/rules.go:56`): the generic slot that
 would let a feature carry its own `Check` and guards (`Streams.Check`,
 `Guards` in `extensions.md` section 6) isn't built, and building it means
-moving Ideas' rules too (open question 6).
+moving Ideas' rules too, so a later story does that (decision 6).
 
 On a schedule's own stream, `checkSchedule` refuses:
 
@@ -289,8 +288,8 @@ refused with today's message. `forADueSchedule` refuses unless:
   the schedule is open. That doesn't make it the only open one: you may
   run it now or reopen an old one beside it.
 
-That last check is what makes a double fire impossible in the log, not
-just unlikely in the job (section 5). It walks the live tasks once per
+That last check is what makes two clock tasks from one schedule open at
+once impossible in the log, not just unlikely in the job (section 5). It walks the live tasks once per
 firing, under the store's lock: an estimate of well under a millisecond
 for a thousand live tasks, unmeasured. It is the same walk
 `ideas.madeFrom` makes outside the lock (`internal/ideas/accept.go:146`).
@@ -361,7 +360,7 @@ before the next, so for that hour it is more than a day old.) It bites
 where the gap between slots varies: a weekdays schedule (period a day)
 found on Saturday morning loses Friday's run, and a weekly one on Monday
 and Thursday (period the shorter gap, three days) found on Sunday loses
-Thursday's. That is open question 2.
+Thursday's. So the latest slot always runs (decision 2).
 
 ### Firing one schedule
 
@@ -378,15 +377,16 @@ alike, as `ideas.Accept` holds `accepting`
    and `manual` for a task you made with Run now). That write can be
    refused (the refusal is stored as `proposal.rejected`,
    `internal/store/store.go:260-265`) only when the schedule is paused
-   now, or was changed or resumed after that slot, so `Since` has passed
-   it and the slot isn't due either. A paused schedule never reaches step
-   1, as the job fires only schedules that are on, but it can be paused
-   while step 1 runs. If it is refused, the job writes
+   or removed now, or was changed or resumed after that slot, so `Since`
+   has passed it and the slot isn't due either. A paused or removed
+   schedule never reaches step 1, as the job fires only schedules that
+   are on, but it can be paused or removed while step 1 runs. If it is refused, the job writes
    `schedule.skipped {slot: "", reason: "unrecorded", task, why}` once
    instead, which puts the task in `Named` and says so in `LastRun`, so no
-   later wake tries it again. If even that is refused, the job logs it and
-   moves on. That can't loop or fire twice: the skip is refused only for
-   a removed schedule, which no later wake fires, or a task already in
+   later wake tries it again. On a removed schedule that skip is refused
+   too, and the job logs it and moves on, as it does whenever the skip is
+   refused. That can't loop or fire twice: the skip is refused only for
+   a removed schedule, which is never fired again, or a task already in
    `Named`, which can't be, as Run now and the job, the only writers of
    `fired` and skips, both hold `firing`. Either way it carries on with
    steps 2 to 5 on the same wake.
@@ -540,7 +540,7 @@ The manifest (`schedules.manifest`): `Enabled` always (nothing has to be
 present for schedules to work, so the MCP tools are always listed),
 `Visible` once any schedule exists, `Badge` the schedules whose last run
 was refused. `Why`: "add a schedule to run a task on a clock" while there
-are none. Whether to show it before the first schedule is open question 5.
+are none. It stays hidden until the first schedule exists (decision 5).
 
 ## 7. `task.created` by System, and how the trail shows it
 
@@ -612,50 +612,48 @@ own profiles in your `policy.toml` (`extensions.md` section 9).
 
 Before relying on a nightly run, story 15 (push) should land, and per-team
 profiles (phase 5) cut how many approvals arrive at all. Schedules can
-ship before them: they are only less useful without them (open question
-3).
+ship before them: they are only less useful without them, and are built
+first (decision 3).
 
-## 9. Open questions for you
+## 9. Decisions
 
-1. **The simple form, or cron too?** Recommendation: the simple form only
-   (daily, weekdays, some days of the week, at a time, in a zone). It
-   covers every schedule named so far, and the page can say it in words.
-   Cron can come later as an optional field.
-2. **A missed run: catch up once, always?** Recommendation: yes, the latest
-   missed slot, once, however old, with the count of the rest. The
-   alternative is to skip a missed slot older than one period. It never
-   drops a daily schedule's run (Monday 02:00 is hours old when a laptop
-   shut all weekend opens on Monday morning) or a one-day weekly one's,
-   since the latest due slot is always less than a period old (bar an
-   hour a year, after the autumn clock change). It drops runs where the
-   gap between slots varies: a weekdays schedule found on Saturday loses
+You took all eight recommendations.
+
+1. **The simple form only.** A schedule runs daily, on weekdays or on some
+   days of the week, at a time, in a zone; no cron. It covers every
+   schedule named so far, and the page can say it in words. Cron may come
+   later as an optional field.
+2. **A missed run catches up once.** The latest missed slot runs once,
+   however old, and the rest are counted. The rejected alternative was to
+   skip a missed slot older than one period. It never drops a daily
+   schedule's run (Monday 02:00 is hours old when a laptop shut all
+   weekend opens on Monday morning) or a one-day weekly one's, since the
+   latest due slot is always less than a period old (bar an hour a year,
+   after the autumn clock change). But it drops runs where the gap
+   between slots varies: a weekdays schedule found on Saturday would lose
    Friday's run until Monday, and a Monday-and-Thursday one found on
-   Sunday loses Thursday's.
-3. **Build schedules before Web Push sends (story 15)?** Recommendation:
-   build them now, and say on the page, beside a schedule, that its runs
-   can't reach you while push is off (the same reason
-   `webpush.Available` gives). A nightly run that waits until morning is
-   still a night's work done up to the question.
-4. **May an agent make a schedule?** Recommendation: no. Only you write
-   the schedule types; a coordinator that thinks something should recur
-   says so in its summary. A schedule is standing authority to spend
-   tokens.
-5. **Show Schedules in the sidebar before the first one?**
-   Recommendation: no: hidden until one exists, with "New schedule" on the
-   Settings page and in Ctrl K, as Ideas waits for its team. The MCP tools
-   are listed either way.
-6. **Where do schedules' rules live?** Recommendation: in `internal/rules`
-   beside Ideas' (`schedule_rules.go`), as today's code does, and move
-   both into their features in one later story that adds the `Check` and
-   guard slots. Adding the slots first would make this epic carry a
-   refactor of Ideas.
-7. **Should Run now be refused while a task from the schedule is open?**
-   Recommendation: no, it is your explicit request; the page says the
-   open task is still running and asks you to confirm.
-8. **A scheduled task's title.** Recommendation: the schedule's title as
-   it is, with the slot in the description's first line; the board then
-   shows several "Continue Portside" cards over time, told apart by their
-   number and date. The alternative is to append the date to the title.
+   Sunday would lose Thursday's.
+3. **Schedules are built before Web Push sends (story 15).** The page
+   says, beside a schedule, that its runs can't reach you while push is
+   off (the same reason `webpush.Available` gives). A nightly run that
+   waits until morning is still a night's work done up to the question.
+4. **Agents may not make schedules.** Only you write the schedule types; a
+   coordinator that thinks something should recur says so in its summary.
+   A schedule is standing authority to spend tokens.
+5. **Schedules is hidden in the sidebar until one exists.** "New schedule"
+   is on the Settings page and in Ctrl K, as Ideas waits for its team. The
+   MCP tools are listed either way.
+6. **The rules go in `internal/rules/schedule_rules.go`,** beside Ideas',
+   as today's code does. A later story moves both into their features and
+   adds the `Check` and guard slots; adding the slots first would make
+   this epic carry a refactor of Ideas.
+7. **Run now isn't refused while a task from the schedule is open.** It is
+   your explicit request; the page says the open task is still running
+   and asks you to confirm.
+8. **A scheduled task keeps the schedule's title,** with the slot in the
+   first line of its description; the board shows several "Continue
+   Portside" cards over time, told apart by their number and date. The
+   rejected alternative was to append the date to the title.
 
 ## 10. Build stories
 
@@ -752,9 +750,6 @@ about the size of Ideas' phase 2 stories 8 to 11.
 
 ## Still open
 
-- Whether `Feature` gains `Check` and `Guards` slots before or after
-  schedules (open question 6). Either way, the rules' behaviour is the
-  same; only where the code lives differs.
 - Removing a team a schedule names: the rules can't refuse
   `agent.removed` for a schedule's sake without the feature guarding a
   core type. Today's design records a refused run and lists it as
