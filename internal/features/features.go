@@ -26,6 +26,16 @@ type Feature struct {
 	Coordinator *Coordinator       // its part in coordinators' briefs and decisions
 	Routes      func(Core) []Route // its HTTP API, which web mounts behind each Route's Auth
 	Manifest    func(Reader) Entry // whether the page shows it, and why
+
+	// In agentry mcp, a separate process that reaches the server only over
+	// its API: Tools are its MCP tools for a session in repo ("" outside
+	// one), and Instructions its lines in the server instructions Claude
+	// Code reads, each a "- " bullet; both only while the feature is
+	// enabled or visible. Waiting is what of it waits for you, about repo
+	// ("" when not known), read over the API until the server lists it.
+	Tools        func(agentry API, repo string) []Tool
+	Instructions string
+	Waiting      func(agentry API, repo string) []Waiting
 }
 
 // Streams are a feature's own streams, each named Prefix and an ID: how the
