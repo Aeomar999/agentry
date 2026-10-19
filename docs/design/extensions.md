@@ -523,8 +523,8 @@ How each core package changes, with the real types:
 - `web`: `Handler` mounts each feature's `Route` with `api` for `UI`,
   `deskToo` for `Desk`, and a new `signed` wrapper for `Signed` (with the
   first feature that needs one, T-019); `reply`, `decode`, `failed` and
-  `propose` move to a small exported kit both use. `GET /api/features`
-  calls every `Manifest`.
+  `propose` move to a small exported kit both use, `internal/httpapi`.
+  `GET /api/features` calls every `Manifest`.
 - `mcp`: `tool` becomes `features.Tool`; `tools()` appends every feature's.
   `WaitingFor` reads `GET /api/waiting`, where the server lists the core's
   waiting entries and every feature's `Waiting`. The MCP process reads
@@ -950,7 +950,7 @@ webhook (T-019), which refuses the request unless `verify` accepts its
 body against that hook's secret from the settings file. A `Route` can't
 choose to skip them, and no feature route can sit behind
 `requireRealUIToken`, which hands out the token. Every UI or desk write is
-made as `you` (`web.you`), so a feature's endpoint has your authority and
+made as `you` (`httpapi.You`), so a feature's endpoint has your authority and
 no more; a signed route writes as `System`, and only the types its feature
 declared.
 
