@@ -325,6 +325,45 @@ func TestATaskThatCantBeReplayedTakesNoMoreEvents(t *testing.T) {
 	}
 }
 
+// A turn your move to To do, the Backlog or Done stopped takes no more
+// events: the agent's session may still be going, but its work is over.
+// (Logs written before the move stopped the turn have them; apply replays
+// those, see tasks' stopped_turn_test.go.)
+func TestATurnYourMoveStoppedTakesNoMoreEvents(t *testing.T) {
+	for name, move := range map[string]step{
+		"to do":   {you, events.TaskHeld, "", map[string]any{"place": "todo"}, true},
+		"backlog": {you, events.TaskHeld, "", map[string]any{"place": "backlog"}, true},
+		"done":    {you, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true}, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := openSeeded(t)
+			proposeAll(t, s, []step{
+				created, worktree, turnStarted("turn-1", "tech-lead"), turnEnded("turn-1", "tech-lead", "assign"),
+				{coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}, true},
+				turnStarted("turn-2", "engineer"),
+				{engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "ls"}, true},
+				{policy, events.ActionApproved, "toolu_1", map[string]any{"reason": "otherwise"}, true},
+				{engineer, events.ActionRequested, "toolu_2", map[string]any{"tool": "Bash", "command": "rm x"}, true},
+				move,
+				{worker, events.ActionResult, "toolu_1", nil, true},                             // approved before the move: it ran
+				{policy, events.ActionAsked, "toolu_2", map[string]any{"reason": "ask"}, false}, // no one waits for it
+				{policy, events.ActionDenied, "toolu_2", map[string]any{"reason": "couldn't ask you"}, true},
+				{engineer, events.ActionRequested, "toolu_3", map[string]any{"tool": "Bash", "command": "pwd"}, false},
+				{worker, events.PromptAcknowledged, "turn-2", map[string]any{"hash": "h-turn-2"}, false},
+				{worker, events.SessionStarted, "turn-2", map[string]any{"engineSession": "s"}, false},
+				{worker, events.PlanUpdated, "turn-2", map[string]any{"plan": "- [ ] more"}, false},
+				{worker, events.AgentWaiting, "turn-2", map[string]any{"question": "more?"}, false},
+				{worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "Done more."}, false},
+				{worker, events.TurnStopped, "turn-2", nil, false},
+			})
+			if task := taskIn(s); task.OpenTurn() != nil || !task.Turns[1].Stopped || len(task.WaitingForYou()) != 0 || task.Action("toolu_3") != nil {
+				t.Errorf("open turn %+v, engineer stopped %v, waiting %+v, toolu_3 %+v",
+					task.OpenTurn(), task.Turns[1].Stopped, task.WaitingForYou(), task.Action("toolu_3"))
+			}
+		})
+	}
+}
+
 func TestYourMoveToToDoStands(t *testing.T) {
 	s := openSeeded(t)
 	proposeAll(t, s, []step{
