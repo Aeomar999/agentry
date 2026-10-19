@@ -42,7 +42,7 @@ func TestATurnSaysWhyItsTokensAreUnknown(t *testing.T) {
 		{ID: "turn-1", Ended: true, TokensUnknown: "transcript not saved"},
 		{ID: "turn-2", Ended: true, Tokens: 1234},
 	}}
-	body, _ := json.Marshal(detailOf(task, agents.Roster{}, nil).Turns)
+	body, _ := json.Marshal(detailOf(task, agents.Roster{}).Turns)
 	want := `"tokens":0,"tokensUnknown":"transcript not saved"`
 	if !strings.Contains(string(body), want) || strings.Count(string(body), "tokensUnknown") != 1 {
 		t.Errorf("turns %s, want turn-1 with %s and turn-2 without a reason", body, want)
@@ -69,7 +69,7 @@ func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
 		{withReasons("transcript not saved", "", "transcript not saved", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved"},
 		{withReasons("transcript not saved", "no tokens reported", "transcript not saved"), "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"},
 	} {
-		if got := detailOf(c.task, agents.Roster{}, nil).TokensUnknown; got != c.want {
+		if got := detailOf(c.task, agents.Roster{}).TokensUnknown; got != c.want {
 			t.Errorf("%d turns: %q, want %q", len(c.task.Turns), got, c.want)
 		}
 	}

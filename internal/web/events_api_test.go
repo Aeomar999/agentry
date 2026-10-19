@@ -14,7 +14,8 @@ import (
 )
 
 // withEvents is a test server whose task-1 has many events, task-2's between
-// them and a refusal among them, and task-1's events as its detail has them.
+// them and a refusal among them, and task-1's whole record as a page reads
+// it: the stream itself, through entryOf and JSON.
 func withEvents(t *testing.T, labels int) (*httptest.Server, []eventEntry) {
 	t.Helper()
 	server, s := newTestServer(t)
@@ -30,12 +31,23 @@ func withEvents(t *testing.T, labels int) (*httptest.Server, []eventEntry) {
 			refuseOn(t, s, "task-1")
 		}
 	}
-	_, body := call(t, server, "GET", "/api/tasks/task-1", "")
-	var detail taskDetail
-	if err := json.Unmarshal([]byte(body), &detail); err != nil {
+	log, err := s.Log("task-1")
+	if err != nil {
 		t.Fatal(err)
 	}
-	return server, detail.Events
+	var entries []eventEntry
+	for _, e := range log {
+		entries = append(entries, entryOf(e))
+	}
+	encoded, err := json.Marshal(entries)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record []eventEntry
+	if err := json.Unmarshal(encoded, &record); err != nil {
+		t.Fatal(err)
+	}
+	return server, record
 }
 
 func refuseOn(t *testing.T, s *store.Store, task string) {
@@ -68,9 +80,9 @@ func positionsOf(entries []eventEntry) []int64 {
 }
 
 // Walking the pages from the start, each after the last one's end, gives
-// exactly the events the detail has, in its order, in pages of the default
+// exactly the task's record, in its order, in pages of the default
 // size and of a small one.
-func TestTheEventPagesAddUpToTheDetailsEvents(t *testing.T) {
+func TestTheEventPagesAddUpToTheTasksRecord(t *testing.T) {
 	server, all := withEvents(t, 600)
 	if len(all) <= eventPage {
 		t.Fatalf("the task has %d events, too few to need a second page", len(all))
@@ -90,16 +102,16 @@ func TestTheEventPagesAddUpToTheDetailsEvents(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(walked, all) {
-			t.Errorf("limit %q: %d pages give %d events, the detail has %d; first positions %v, want %v",
+			t.Errorf("limit %q: %d pages give %d events, the record has %d; first positions %v, want %v",
 				limit, pages, len(walked), len(all), positionsOf(walked)[:min(5, len(walked))], positionsOf(all)[:5])
 		}
 	}
 }
 
 // Walking the pages of some types, from the start or from the end, gives
-// exactly the detail's events of those types, in its order: the limit and
+// exactly the record's events of those types, in its order: the limit and
 // "more" count only those types, and a type no event has matches nothing.
-func TestTheEventPagesOfSomeTypesAreTheDetailsEventsOfThoseTypes(t *testing.T) {
+func TestTheEventPagesOfSomeTypesAreTheRecordsEventsOfThoseTypes(t *testing.T) {
 	server, all := withEvents(t, 600)
 	var want []eventEntry
 	for _, e := range all {
@@ -190,7 +202,7 @@ func TestAnEventPageIsBoundedAndSaysWhetherThereIsMore(t *testing.T) {
 		refused = refused || e.Type == events.ProposalRejected
 	}
 	if !refused {
-		t.Error("the refusal on the task should be among its events, as in its detail")
+		t.Error("the refusal on the task should be among its events, as in its record")
 	}
 }
 

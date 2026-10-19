@@ -371,17 +371,12 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	if task == nil {
 		return
 	}
-	log, err := s.store.Log(task.ID)
-	if err != nil {
-		failed(w, err)
-		return
-	}
 	roster, err := s.roster()
 	if err != nil {
 		failed(w, err)
 		return
 	}
-	detail := detailOf(task, roster, log)
+	detail := detailOf(task, roster)
 	detail.BlockedBy = blockedBy(task, s.isDone)
 	if epic, _ := s.task(task.Epic); epic != nil {
 		detail.EpicTitle = epic.Title

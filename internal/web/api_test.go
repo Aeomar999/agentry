@@ -96,7 +96,7 @@ func TestCreateListAndShowATask(t *testing.T) {
 	_, body = call(t, server, "GET", "/api/tasks/task-1", "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" || len(detail.Events) != 1 {
+	if detail.Coordinator != "tech-lead" || detail.Description != "in src/" || len(detail.Trail) != 1 || detail.Trail[0].To != "tech-lead" {
 		t.Errorf("detail: %+v", detail)
 	}
 	if code, _ := call(t, server, "GET", "/api/tasks/task-9", ""); code != http.StatusNotFound {

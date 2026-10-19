@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"testing"
 
@@ -16,10 +17,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
-// TestTaskEventsBench measures, on a copy of a real agentry.db, how much of
-// a task's detail is its events, and which events and which of their fields
-// make it big, for the step that moves the events out of the detail
-// (docs/design/read-model.md section 5 step 7). It is skipped unless
+// TestTaskEventsBench measures, on a copy of a real agentry.db, a task's
+// detail and what makes it big, its events read a page at a time, all of
+// them and the chat's types alone, and which events and which of their
+// fields make them big (docs/design/read-model.md section 5 step 7). It is skipped unless
 // AGENTRY_BENCH_DB names the copy, as for TestReadModelBench; AGENTRY_BENCH_TASKS
 // names the tasks to measure, task-8 and the biggest other one by default.
 func TestTaskEventsBench(t *testing.T) {
@@ -46,27 +47,10 @@ func TestTaskEventsBench(t *testing.T) {
 		defer raw.Close()
 		ids = append(ids, biggestTask(t, raw, ids))
 	}
+	chat := chatTypes(t)
 	for _, id := range ids {
 		var body []byte
 		took := median(func() { body = detailBody(t, server, "/api/tasks/"+id) })
-		var detail struct {
-			Events []json.RawMessage `json:"events"`
-		}
-		if err := json.Unmarshal(body, &detail); err != nil {
-			t.Fatal(err)
-		}
-		var entries []eventEntry
-		eventBytes := 0
-		for _, raw := range detail.Events {
-			var e eventEntry
-			if err := json.Unmarshal(raw, &e); err != nil {
-				t.Fatal(err)
-			}
-			entries = append(entries, e)
-			eventBytes += len(raw)
-		}
-		t.Logf("%s: detail %d bytes in %s (median of 5); %d events, %d bytes of them",
-			id, len(body), took, len(entries), eventBytes)
 		var parts map[string]json.RawMessage
 		if err := json.Unmarshal(body, &parts); err != nil {
 			t.Fatal(err)
@@ -76,21 +60,34 @@ func TestTaskEventsBench(t *testing.T) {
 			partSizes[name] = len(raw)
 		}
 		var largest []string
-		for _, name := range largestFirst(partSizes)[:min(5, len(partSizes))] {
+		for _, name := range largestFirst(partSizes)[:min(6, len(partSizes))] {
 			largest = append(largest, fmt.Sprintf("%s %d", name, partSizes[name]))
 		}
-		t.Logf("  the detail's largest parts: %v", largest)
-		for _, query := range []string{"?after=0", "?before=" + fmt.Sprint(s.LastPosition()+1)} {
-			url := "/api/tasks/" + id + "/events" + query
-			var size int
-			took := median(func() { size = len(detailBody(t, server, url)) })
-			t.Logf("  a page of %d events, %-18s %8s  %8d bytes", eventPage, query+":", took, size)
-		}
+		t.Logf("%s: detail %d bytes in %s (median of 5); its largest parts: %v", id, len(body), took, largest)
 
+		var all eventWalk
+		took = median(func() { all = walkEvents(t, server, id, "") })
+		t.Logf("  every event, from the start: %d events in %d pages, %d bytes, %s", len(all.events), all.pages, all.bytes, took)
+		var chatWalk eventWalk
+		took = median(func() { chatWalk = walkEvents(t, server, id, chat) })
+		t.Logf("  the chat's types, from the start: %d events in %d pages, %d bytes, %s", len(chatWalk.events), chatWalk.pages, chatWalk.bytes, took)
+		newest := "/api/tasks/" + id + "/events?before=" + fmt.Sprint(s.LastPosition()+1)
+		var size int
+		took = median(func() { size = len(detailBody(t, server, newest)) })
+		t.Logf("  the newest page of %d events: %d bytes, %s", eventPage, size, took)
+
+		var entries []eventEntry
+		for _, raw := range all.events {
+			var e eventEntry
+			if err := json.Unmarshal(raw, &e); err != nil {
+				t.Fatal(err)
+			}
+			entries = append(entries, e)
+		}
 		byType := map[string]int{}
 		countOf := map[string]int{}
 		for i, e := range entries {
-			byType[string(e.Type)] += len(detail.Events[i])
+			byType[string(e.Type)] += len(all.events[i])
 			countOf[string(e.Type)]++
 		}
 		types := largestFirst(byType)
@@ -115,6 +112,59 @@ func TestTaskEventsBench(t *testing.T) {
 			t.Logf("  %s data by field: %v", kind, fields)
 		}
 	}
+}
+
+type eventWalk struct {
+	events []json.RawMessage
+	bytes  int // of the pages, as sent
+	pages  int
+}
+
+// walkEvents reads every page of a task's events from the start, as the
+// chat does; query keeps them to some types.
+func walkEvents(t *testing.T, server http.Handler, id, query string) eventWalk {
+	t.Helper()
+	var walk eventWalk
+	for after, more := int64(0), true; more; walk.pages++ {
+		body := detailBody(t, server, fmt.Sprintf("/api/tasks/%s/events?after=%d%s", id, after, query))
+		var page struct {
+			Events []json.RawMessage `json:"events"`
+			More   bool              `json:"more"`
+		}
+		if err := json.Unmarshal(body, &page); err != nil {
+			t.Fatal(err)
+		}
+		walk.bytes += len(body)
+		walk.events = append(walk.events, page.Events...)
+		more = page.More
+		if len(page.Events) > 0 {
+			var last eventEntry
+			if err := json.Unmarshal(page.Events[len(page.Events)-1], &last); err != nil {
+				t.Fatal(err)
+			}
+			after = last.Position
+		}
+	}
+	return walk
+}
+
+// chatTypes is the ?type= query of the types the chat reads, from the
+// page's own list of them (CHAT_TYPES in ui/src/lib/chat.ts).
+func chatTypes(t *testing.T) string {
+	t.Helper()
+	source, err := os.ReadFile(filepath.Join("..", "..", "ui", "src", "lib", "chat.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := regexp.MustCompile(`(?s)export const CHAT_TYPES = \[(.*?)\]`).FindSubmatch(source)
+	if list == nil {
+		t.Fatal("no CHAT_TYPES in chat.ts")
+	}
+	query := ""
+	for _, name := range regexp.MustCompile(`"([^"]+)"`).FindAllSubmatch(list[1], -1) {
+		query += "&type=" + string(name[1])
+	}
+	return query
 }
 
 func detailBody(t *testing.T, server http.Handler, url string) []byte {

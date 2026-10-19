@@ -38,8 +38,7 @@ type taskDetail struct {
 	Turns         []turn        `json:"turnList"`
 	TokensUnknown string        `json:"tokensUnknown"` // on how many turns the tokens couldn't be counted, and why; "" when every turn was
 	Approvals     []action      `json:"approvals"`     // waiting for you
-	Actions       []action      `json:"actions"`
-	Events        []eventEntry  `json:"events"`
+	Actions       []action      `json:"actions"`       // its events are read a page at a time, at /api/tasks/{task}/events
 }
 
 type worktree struct {
@@ -126,7 +125,7 @@ func listOf(items []string) []string {
 	return items
 }
 
-func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetail {
+func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
 	detail.Shared = []sharedFile{}
@@ -148,9 +147,6 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 	}
 	for _, a := range t.WaitingForYou() {
 		detail.Approvals = append(detail.Approvals, actionView(a))
-	}
-	for _, e := range log {
-		detail.Events = append(detail.Events, entryOf(e))
 	}
 	return detail
 }
