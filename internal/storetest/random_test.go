@@ -78,8 +78,9 @@ func (g *generator) turn(task *tasks.Task) string {
 	return pick(g, candidates...)
 }
 
-// action is the task's last action, any of its actions, or an id any task
-// may have used.
+// action is the task's last action, any of its actions, or an id from
+// toolu_0 to the newest: toolu_0 is never requested, so some steps aim at
+// an action no task has.
 func (g *generator) action(task *tasks.Task) string {
 	candidates := []string{actionID(g.rand.IntN(g.actions + 1))}
 	if len(task.Actions) > 0 {
@@ -101,16 +102,17 @@ func (g *generator) agent(task *tasks.Task) string {
 	return pick(g, candidates...)
 }
 
-// coordinator is the roster's coordinator, or any agent.
+// coordinator is the coordinator of the team assignee draws from, or any
+// agent.
 func (g *generator) coordinator() string {
 	candidates := []string{pick(g, agentNames...)}
-	if coordinator, ok := g.state.Roster().Coordinator(""); ok {
+	if coordinator, ok := g.state.Roster().Coordinator(agents.DefaultTeam); ok {
 		candidates = append(candidates, coordinator.Name)
 	}
 	return pick(g, candidates...)
 }
 
-// assignee is an agent of the roster that takes work, or any.
+// assignee is an agent of the coordinator's team that takes work, or any.
 func (g *generator) assignee() string {
 	candidates := []string{pick(g, agentNames...)}
 	if assignees := g.state.Roster().Assignees(agents.DefaultTeam); len(assignees) > 0 {
