@@ -11,6 +11,7 @@ import { AgentsPage } from "@/pages/AgentsPage";
 import { AgentPage } from "@/pages/AgentPage";
 import { AgentEditPage } from "@/pages/AgentEditPage";
 import { PolicyPage } from "@/pages/PolicyPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { WorkersPage } from "@/pages/WorkersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
@@ -42,6 +43,7 @@ const router = createBrowserRouter([
           { path: "/workers", element: <WorkersPage /> },
           { path: "/integrations", element: <IntegrationsPage /> },
           { path: "/policy", element: <PolicyPage /> },
+          { path: "/settings", element: <SettingsPage /> },
           ...FEATURES.flatMap((feature) => feature.routes ?? []),
           { path: "*", element: <NotFoundPage /> },
         ],

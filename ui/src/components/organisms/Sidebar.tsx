@@ -1,4 +1,4 @@
-import { Bot, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
+import { Bot, ListTodo, Map as MapIcon, Plug, Server, Settings, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
 import { Features, visibleFeatures } from "@/features";
@@ -28,6 +28,7 @@ const SECTIONS = [
       { to: "/workers", label: "Workers", icon: <Server /> },
       { to: "/integrations", label: "Integrations", icon: <Plug /> },
       { to: "/policy", label: "Policy", icon: <ShieldCheck /> },
+      { to: "/settings", label: "Settings", icon: <Settings /> },
     ],
   },
 ];
