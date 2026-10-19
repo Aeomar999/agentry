@@ -379,3 +379,13 @@ export interface Settings {
 // everyoneBacked: every viewpoint backed the idea and none doubted it.
 // nobodyDoubted: none doubted it and at least two viewpoints backed it.
 export type AutoAcceptRule = "everyoneBacked" | "nobodyDoubted";
+
+// Whether the page shows one feature, and why (internal/features Line), in
+// GET /api/features.
+export interface FeatureLine {
+  name: string; // the feature's name in the page's registry (features/index.ts)
+  enabled: boolean; // its trigger is present, so it can make new data
+  visible: boolean; // the page shows it: enabled, or it has data to look at
+  why?: string; // one line saying why it is on, kept or off
+  badge?: number; // a count for the sidebar, such as open ideas
+}
