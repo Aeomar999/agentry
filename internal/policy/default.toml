@@ -208,6 +208,66 @@ scratch = ['/tmp/claude-*/**']
   why = "Reading and testing leave the code as it was."
 
 
+[profiles.read-mostly]
+why = "For agents that only think and suggest, such as the Visionaries: read-only, and they may also read the task board."
+otherwise = "ask"
+unreadable = "ask"
+scratch = ['/tmp/claude-*/**']
+
+  [[profiles.read-mostly.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = ['.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519']
+  why = "Keys and passwords never reach a model."
+
+  [[profiles.read-mostly.rules]]
+  name = "keeps its own notes"
+  decision = "allow"
+  tools = ["Edit", "Write", "MultiEdit"]
+  paths = ['**/.agentry/knowledge.md']
+  where = "workspace"
+  why = "Its knowledge file is its notes for later tasks."
+
+  [[profiles.read-mostly.rules]]
+  name = "this agent changes nothing"
+  decision = "deny"
+  tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+  why = "Its job is to suggest, not to change the code."
+
+  [[profiles.read-mostly.rules]]
+  name = "this agent never commits"
+  decision = "deny"
+  runs_any = ['git commit *', 'git push *']
+  why = "It suggests ideas; the engineers commit."
+
+  [[profiles.read-mostly.rules]]
+  name = "reading is always allowed"
+  decision = "allow"
+  tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
+  why = "Reading changes nothing; secrets are denied above."
+
+  [[profiles.read-mostly.rules]]
+  name = "reads the task board"
+  decision = "allow"
+  tools = ["mcp__agentry__status", "mcp__agentry__list_tasks", "mcp__agentry__show_task"]
+  why = "Seeing what is planned and done changes nothing; the tools that write to the board still ask."
+
+  [[profiles.read-mostly.rules]]
+  name = "reads and runs the tests"
+  decision = "allow"
+  where = "workspace"
+  runs_only = [
+    'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
+    'sed -n *', 'true', 'false', 'test *', '[ *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
+    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
+    'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
+    'cargo test *', 'cargo check *', 'cargo clippy *',
+  ]
+  why = "Reading and testing leave the code as it was."
+
 [profiles.autonomous]
 why = "Does anything on this machine, and asks you only before acting outside it. Agentry sees commands, not network traffic, so a script can still reach out unseen (T-030)."
 otherwise = "allow"

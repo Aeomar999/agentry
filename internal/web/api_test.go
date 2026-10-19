@@ -197,7 +197,7 @@ func TestThePolicyShowsWithItsProblem(t *testing.T) {
 	}
 	json.Unmarshal([]byte(body), &shown)
 	if shown.Path != path || shown.Hash != live.Current().Hash() || !strings.Contains(shown.Problem, "version must be 1") ||
-		len(shown.Profiles) != 4 || shown.UseForEveryone != "allow-everything" {
+		len(shown.Profiles) != 5 || shown.UseForEveryone != "allow-everything" {
 		t.Errorf("policy: %+v", shown)
 	}
 }

@@ -116,7 +116,7 @@ func TestTheDeveloperProfile(t *testing.T) {
 
 func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"developer", "read-only", "autonomous", "allow-everything"} {
+	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous", "allow-everything"} {
 		for _, call := range []Call{
 			bash("sqlite3 ~/.agentry/agentry.db 'delete from events'"),
 			bash("cat /home/dev/.agentry/agentry.db-wal"),
@@ -141,6 +141,27 @@ func TestTheReadOnlyProfile(t *testing.T) {
 		{"notes in another folder", file("Write", "/tmp/elsewhere/.agentry/knowledge.md"), Deny},
 		{"commit", bash("git commit -am 'x'"), Ask},
 		{"push", bash("git push origin HEAD:dev"), Ask},
+	})
+}
+
+func TestTheReadMostlyProfile(t *testing.T) {
+	board := func(tool string) Call { return Call{Tool: "mcp__agentry__" + tool, Input: "{}", Workspace: workspace} }
+	check(t, loadDefault(t), "read-mostly", []decisionCase{
+		{"read", file("Read", workspace+"/main.go"), Allow},
+		{"recent commits", bash("git log --oneline -20"), Allow},
+		{"status", board("status"), Allow},
+		{"list the tasks", board("list_tasks"), Allow},
+		{"show a task", board("show_task"), Allow},
+		{"create a task", board("create_task"), Ask},
+		{"answer a question", board("answer_question"), Ask},
+		{"start a story", board("start"), Ask},
+		{"edit", file("Edit", workspace+"/main.go"), Deny},
+		{"write", file("Write", workspace+"/ideas.md"), Deny},
+		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
+		{"commit", bash("git commit -am 'x'"), Deny},
+		{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
+		{"push", bash("git push origin HEAD:dev"), Deny},
+		{"secrets", bash("cat .env"), Deny},
 	})
 }
 
