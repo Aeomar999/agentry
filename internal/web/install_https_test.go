@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -116,6 +117,14 @@ func httpsServer(t *testing.T) (ca *tlsca.CA, url string, requests func() []stri
 	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, WorktreeRoot: t.TempDir()})
 	web := NewServer(s, state, Config{UIToken: token, CA: string(ca.PEM()), Fleet: fleet, Workers: workerlink.NewServer(s, fleet),
 		Binary: binary}, http.NotFoundHandler(), nil).Handler()
+	url, requests = serveTLS(t, ca, ca, web)
+	return ca, url, requests
+}
+
+// serveTLS serves next over https with a certificate issuedBy issues,
+// handing out handedOut at /trust/ca.crt, and records every request.
+func serveTLS(t *testing.T, issuedBy, handedOut *tlsca.CA, next http.Handler) (url string, requests func() []string) {
+	t.Helper()
 	var mu sync.Mutex
 	var seen []string
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,20 +132,35 @@ func httpsServer(t *testing.T) (ca *tlsca.CA, url string, requests func() []stri
 		seen = append(seen, r.URL.RequestURI())
 		mu.Unlock()
 		if r.URL.Path == "/trust/ca.crt" {
-			w.Write(ca.DER())
+			w.Write(handedOut.DER())
 			return
 		}
-		web.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	}))
-	issuer := tlsca.NewIssuer(ca, func() []string { return nil }, time.Now)
+	issuer := tlsca.NewIssuer(issuedBy, func() []string { return nil }, time.Now)
 	server.Listener = tls.NewListener(server.Listener, &tls.Config{GetCertificate: issuer.GetCertificate})
+	server.Config.ErrorLog = discard // the handshakes the pinned commands refuse
 	server.Start()
 	t.Cleanup(server.Close)
-	return ca, "https://" + server.Listener.Addr().String(), func() []string {
+	return "https://" + server.Listener.Addr().String(), func() []string {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]string(nil), seen...)
 	}
+}
+
+var discard = log.New(io.Discard, "", 0)
+
+// impostor is a server that hands out ca, as a server in between could,
+// but can't answer with a certificate ca issued.
+func impostor(t *testing.T, ca *tlsca.CA) (url string, requests func() []string) {
+	other, err := tlsca.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serveTLS(t, other, ca, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("echo the impostor's script\n"))
+	}))
 }
 
 // invite asks the server at url, trusting ca, for an install command.
@@ -225,6 +249,14 @@ func TestThePinnedInstallCommandsRunInSh(t *testing.T) {
 	if sent := withCode(requests()); len(sent) != before {
 		t.Errorf("the code was sent to a server with another CA: %v", sent[before:])
 	}
+
+	// An impostor handing out the same CA gets nothing carrying the code.
+	// (Like curl piped to sh anywhere, the command then exits 0.)
+	fake, faked := impostor(t, ca)
+	out, ran, _ = runShell(t, []string{"sh", "-c"}, commands(fake, "/worker/install", code, ca.Fingerprint())["command"].(string))
+	if !strings.Contains(out, "certificate") || ran[0] != "" || strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
+		t.Errorf("an impostor with the CA: %v\n%s\nits requests: %v", err, out, faked())
+	}
 }
 
 // The PowerShell command, where pwsh and curl.exe are found: on Windows,
@@ -253,6 +285,12 @@ func TestThePinnedInstallCommandRunsInPowerShell(t *testing.T) {
 	}
 	if again := withCode(requests()); len(again) != len(sent) {
 		t.Errorf("the code was sent to a server with another CA: %v", again[len(sent):])
+	}
+
+	fake, faked := impostor(t, ca)
+	out, _, _ = runShell(t, pwsh, commands(fake, "/worker/install", code, ca.Fingerprint())["windowsCommand"].(string))
+	if strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
+		t.Errorf("an impostor with the CA:\n%s\nits requests: %v", out, faked())
 	}
 }
 
