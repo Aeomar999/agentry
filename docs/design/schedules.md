@@ -111,7 +111,7 @@ without them; the rest are optional. Writers are checked by `CheckWriter`
 | `schedule.resumed` | Human | none | none | on again, from now: slots during the pause are not due |
 | `schedule.removed` | Human | none | `note` | gone from the list; the stream takes nothing more |
 | `schedule.fired` | System, Human | `task`, `slot` | `missed` (count of earlier slots not run), `manual` | a run made `task`; `slot` is `""` for a run you asked for ("Run now") |
-| `schedule.skipped` | System | `slot`, `reason` | `task` (the open one), `why`, `missed` | a due run made nothing: `reason` is `open` (its last task is still open) or `refused` (the task was refused; `why` says so) |
+| `schedule.skipped` | System | `slot`, `reason` | `task` (the open one, or the unrecorded one), `why`, `missed` | a due run made nothing: `reason` is `open` (a task from this schedule is still open) or `refused` (the task was refused; `why` says so); or, with `slot` `""` and reason `unrecorded`, step 1 of section 5 couldn't record a run a crash cut short (`why` says so) |
 
 `slot` is an RFC 3339 time with its offset (`2026-10-20T02:00:00+01:00`),
 the instant the run was due. Slots are compared as instants, never as
@@ -155,7 +155,7 @@ type Schedule struct {
 	LastTask           string    // the task its last run made, "" for none
 	LastRun            Run       // what the last firing or skip said, for the page
 	Runs               int       // runs made, Run now included
-	Named              map[string]bool // every task a schedule.fired named
+	Named              map[string]bool // every task a schedule.fired or an unrecorded skip named
 }
 ```
 
@@ -164,7 +164,8 @@ type Schedule struct {
 tasks in order, but a run the job made and didn't record can sit below a
 later Run now's task (section 5, "Why it is idempotent"). It grows by one
 per run, a few hundred a year for a nightly schedule, and `Next` copies it
-on each `fired`: an estimate of microseconds per event, unmeasured.
+on each event that adds to it: an estimate of microseconds per event,
+unmeasured.
 
 How `Next` folds each type (on a copy, as `features.Streams` requires):
 
@@ -176,7 +177,8 @@ How `Next` folds each type (on a copy, as `features.Streams` requires):
 - `paused`, `resumed`, `removed`: `State`; `resumed` also moves `Since`.
 - `fired`: `LastSlot` (when `slot` isn't `""`), `LastTask`, `LastRun`,
   `Runs`, and `task` added to a copy of `Named`.
-- `skipped`: `LastSlot` and `LastRun`.
+- `skipped`: `LastSlot` and `LastRun`; with reason `unrecorded`, `LastRun`
+  and `task` added to a copy of `Named`, and `LastSlot` stays.
 - anything else, such as a type a later version adds: nothing.
 
 `Since` and the times come from each event's `At`, never the clock, so a
@@ -249,15 +251,19 @@ On a schedule's own stream, `checkSchedule` refuses:
   schedule.
 - `fired` by System: a paused or removed schedule; a `slot` that doesn't
   parse, isn't after `LastSlot` or isn't after `Since`; a `task` that
-  doesn't exist or wasn't made from this schedule (`task.MadeFrom` must be
+  doesn't exist, wasn't made from this schedule (`task.MadeFrom` must be
   the stream, as `madeFromIt` checks for ideas,
-  `internal/rules/idea_rules.go:86`). The one System `fired` with `slot`
-  `""` is section 5's step 1 recording a Run now that a crash cut short:
-  it needs `manual` and a task you made (`ByAgentry` false).
+  `internal/rules/idea_rules.go:86`) or is in `Named` already. The one
+  System `fired` with `slot` `""` is section 5's step 1 recording a Run
+  now that a crash cut short: it needs `manual` and a task you made
+  (`ByAgentry` false). Step 1's other records carry the slot the task was
+  made for and meet the same checks as any run's.
 - `fired` by you (Run now): a `slot` that isn't `""`; a `task` not made
   from this schedule; a removed schedule.
 - `skipped`: a `slot` that isn't after `LastSlot`; a `reason` it doesn't
-  know.
+  know. With reason `unrecorded`: a `slot` that isn't `""`, or a `task`
+  that doesn't exist, wasn't made from this schedule or is in `Named`
+  already; a removed schedule.
 
 And one rule on a core type. `rules.Check` sends a `task.created` by
 System with no `"about"` to `forAnOpenIdea` today
@@ -348,16 +354,35 @@ Under one mutex in the package, `firing`, held by the job and by Run now
 alike, as `ideas.Accept` holds `accepting`
 (`internal/ideas/accept.go:68` and `:136`):
 
-1. **Finish a run a crash cut short.** If a task made from this schedule
-   is open and isn't `LastTask`, an earlier firing made it and stopped
-   before `schedule.fired`. The job reads that task's `task.created` from
-   the log (`Core.Events.Stream`) for its `slot` and writes
-   `schedule.fired` for it (with `slot` `""` and `manual` for a task you
-   made with Run now). Nothing else happens on this wake.
+1. **Finish a run a crash cut short.** A task made from this schedule
+   (`task.MadeFrom` is the stream, read for each of `Reader.TaskIDs()`)
+   that isn't in `Named`, open or done, is a run that an earlier firing
+   made and that stopped before `schedule.fired`. The job reads that
+   task's `task.created` from the log (`Core.Events.Stream`) for its
+   `slot` and writes `schedule.fired` for it as System (with `slot` `""`
+   and `manual` for a task you made with Run now). If that write is
+   refused (the refusal is stored as `proposal.rejected`,
+   `internal/store/store.go:258`), it writes `schedule.skipped {slot: "",
+   reason: "unrecorded", task, why}` once instead, which puts the task in
+   `Named` and says so in `LastRun`, so no later wake tries it again; if
+   even that is refused, the job logs it and keeps the task in a set in
+   memory until it restarts, never retrying it every minute. Either way it
+   carries on with steps 2 to 5 on the same wake.
+   This finds only what it should: a Run now made while the clock's task
+   is open names its own task, so both are in `Named` and step 1 does
+   nothing; reopening an old done scheduled task does nothing, as it was
+   named when it ran; and a job that panicked between `task.created` and
+   `schedule.fired` (`features.runJob` recovers and stops the job until
+   the server restarts, `internal/features/jobs.go:21`) leaves a task
+   that may be done by the restart but is still unnamed, so it is
+   recorded once, `LastSlot` moves to its slot, and step 2 doesn't fire
+   that slot again.
 2. **Work out what is due.** None: done.
-3. **Guard against piling up.** If `LastTask` is open, write
-   `schedule.skipped {slot, reason: "open", task, missed}` for the latest
-   due slot and stop. `LastSlot` moves on, so the next wake doesn't try
+3. **Guard against piling up.** If a task made from this schedule is
+   open (the same walk as step 1, and the same check as section 4's rule;
+   usually it is `LastTask`, but a Run now may have made a later one),
+   write `schedule.skipped {slot, reason: "open", task, missed}` for the
+   latest due slot and stop. `LastSlot` moves on, so the next wake doesn't try
    the same slot again.
 4. **Make the task.** `Core.Log.Create("task-", ...)` as
    `{System, "schedules"}`, with `title`, `description`, `repo`,
