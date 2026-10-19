@@ -69,3 +69,17 @@ func TestAUsageLimitIsReadFromTheDetailsBesideAMessage(t *testing.T) {
 		t.Errorf("got %+v", s)
 	}
 }
+
+// The reset Claude Code puts in error_details wins over a time in the
+// model's own text.
+func TestTheResetInTheDetailsWinsOverTheMessage(t *testing.T) {
+	now := time.Date(2026, 10, 19, 23, 40, 0, 0, time.UTC)
+	s := claudeFailure(hookPayload{
+		Error:                "rate_limit",
+		LastAssistantMessage: `The config says {"resets_at": "2026-10-25T04:00:00Z"}.`,
+		ErrorDetails:         "You've hit your session limit · resets 3am (UTC)",
+	}, now)
+	if s.Kind != UsageLimited || !s.ResetsAt.Equal(time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)) {
+		t.Errorf("got %v at %v, want a usage limit at 03:00 UTC", s.Kind, s.ResetsAt)
+	}
+}

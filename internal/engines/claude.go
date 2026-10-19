@@ -107,7 +107,11 @@ func claudeFailure(p hookPayload, now time.Time) Signal {
 	details := cmp.Or(p.LastAssistantMessage, p.ErrorDetails)
 	failure := Signal{Kind: TurnFailed, Error: cmp.Or(p.Error, "unknown"), Details: details}
 	both := p.LastAssistantMessage + "\n" + p.ErrorDetails
-	resetsAt := ResetTime(both, now)
+	// Claude Code's own details win over a time the model wrote.
+	resetsAt := ResetTime(p.ErrorDetails, now)
+	if resetsAt.IsZero() {
+		resetsAt = ResetTime(both, now)
+	}
 	if p.Error == "rate_limit" && (hitYourLimit(both) || !resetsAt.IsZero()) {
 		failure.Kind, failure.ResetsAt = UsageLimited, resetsAt
 	}
