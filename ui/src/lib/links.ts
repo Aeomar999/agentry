@@ -4,7 +4,7 @@
 // else, javascript: above all, reads as plain text.
 
 // LinkTo is a link as it is drawn: where it goes, whether in a new tab, and
-// maybe a tooltip (title) and an accessible name (name).
+// for refs a tooltip (title) and an accessible name (name).
 export interface LinkTo {
   href: string;
   external: boolean; // opens in a new tab
@@ -61,9 +61,36 @@ function repoPath(text: string): string {
   return segments.length ? segments.join("/") + rest : "";
 }
 
+// Refs are what a task's text can name besides the web and its files: the
+// board's tasks, by id, and the task's own commits.
+export interface Refs {
+  titles: Map<string, string>; // every task the board knows: id to title
+  commits: string[]; // the task's commit hashes, in full
+}
+
+// refTo is the link for a word that names a task the board knows, or one of
+// the task's commits by 7 to 40 characters of its hash; null for any other
+// word, which shows as written.
+export function refTo(taskId: string, word: string, refs: Refs): LinkTo | null {
+  const title = refs.titles.get(word);
+  if (title !== undefined)
+    return { href: `/tasks/${encodeURIComponent(word)}`, external: false, ...(title ? { title, name: `${word}, ${title}` } : {}) };
+  if (!/^[0-9a-f]{7,40}$/i.test(word)) return null;
+  const hash = refs.commits.find((commit) => commit.startsWith(word.toLowerCase()));
+  if (!hash) return null;
+  return {
+    href: `/tasks/${encodeURIComponent(taskId)}/workspace?commit=${encodeURIComponent(hash)}`,
+    external: true,
+    name: `commit ${word} (opens in a new tab)`,
+  };
+}
+
 // linkInto is where a link in a task's text goes: the web as it is, a file of
-// the task into its Workspace preview, in a new tab; null when it isn't a link.
-export function linkInto(taskId: string, href: string): LinkTo | null {
+// the task into its Workspace preview, in a new tab, and with refs a task or
+// commit named as the link's target; null when it isn't a link.
+export function linkInto(taskId: string, href: string, refs?: Refs): LinkTo | null {
+  const ref = refs && refTo(taskId, href.trim(), refs);
+  if (ref) return ref;
   const safe = safeHref(href);
   if (!safe) return null;
   if (safe.kind !== "path") return { href: safe.href, external: safe.kind === "external" };

@@ -14,6 +14,7 @@ import type { Agent, Question, ServerConfig, TaskSummary } from "@/api/types";
 import { useLive } from "@/live/LiveProvider";
 import { useResource } from "@/live/use-resource";
 import { AgentColorsProvider } from "@/live/agent-colors";
+import { TaskTitlesProvider } from "@/live/refs";
 import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
@@ -179,50 +180,54 @@ export function AdminShell() {
     <CrumbContext.Provider value={setCrumbs}>
       <QuestionContext.Provider value={openQuestion}>
         <AgentColorsProvider agents={agents}>
-          <div className="flex h-full flex-col">
-            <TopBar
-              crumbs={crumbs}
-              needsYou={needsYou}
-              theme={theme}
-              onToggleTheme={toggleTheme}
-              onToggleSidebar={() => (matchMedia("(min-width: 768px)").matches ? setCollapsed((c) => !c) : setDrawerOpen((open) => !open))}
-              onOpenPalette={() => setPalette(true)}
-            />
-            <div className="flex min-h-0 flex-1">
-              <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
-              <div ref={column} className="flex min-w-0 flex-1 flex-col">
-                <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
-                  <Outlet />
-                  <NewTaskDialog />
-                </main>
-                {dockOpen && (
-                  <TerminalDock
-                    height={dockHeight}
-                    onResize={resizeDock}
-                    selected={dockTab}
-                    question={dockQuestion}
-                    waiting={questions.length}
-                    onSelect={setDockTab}
-                    onOpenTaskTerminal={openTaskTerminal}
-                    onClose={() => setDockOpen(false)}
-                    theme={theme}
-                  />
-                )}
+          <TaskTitlesProvider tasks={tasks}>
+            <div className="flex h-full flex-col">
+              <TopBar
+                crumbs={crumbs}
+                needsYou={needsYou}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+                onToggleSidebar={() =>
+                  matchMedia("(min-width: 768px)").matches ? setCollapsed((c) => !c) : setDrawerOpen((open) => !open)
+                }
+                onOpenPalette={() => setPalette(true)}
+              />
+              <div className="flex min-h-0 flex-1">
+                <Sidebar collapsed={collapsed} drawerOpen={drawerOpen} needsYou={needsYou} onCloseDrawer={() => setDrawerOpen(false)} />
+                <div ref={column} className="flex min-w-0 flex-1 flex-col">
+                  <main className="min-h-0 flex-1 scrollbar-thin overflow-y-auto">
+                    <Outlet />
+                    <NewTaskDialog />
+                  </main>
+                  {dockOpen && (
+                    <TerminalDock
+                      height={dockHeight}
+                      onResize={resizeDock}
+                      selected={dockTab}
+                      question={dockQuestion}
+                      waiting={questions.length}
+                      onSelect={setDockTab}
+                      onOpenTaskTerminal={openTaskTerminal}
+                      onClose={() => setDockOpen(false)}
+                      theme={theme}
+                    />
+                  )}
+                </div>
               </div>
+              <StatusBar
+                connection={connection}
+                position={position}
+                defaultRepo={config?.defaultRepo ?? ""}
+                working={tasks.filter((task) => task.status === "working").length}
+                needsYou={questions.length}
+                onOpenQuestions={() => openDock(QUESTIONS)}
+                terminalOpen={dockOpen}
+                onToggleTerminal={() => toggleDock.current()}
+              />
             </div>
-            <StatusBar
-              connection={connection}
-              position={position}
-              defaultRepo={config?.defaultRepo ?? ""}
-              working={tasks.filter((task) => task.status === "working").length}
-              needsYou={questions.length}
-              onOpenQuestions={() => openDock(QUESTIONS)}
-              terminalOpen={dockOpen}
-              onToggleTerminal={() => toggleDock.current()}
-            />
-          </div>
-          <CommandPalette open={palette} items={paletteItems} onClose={() => setPalette(false)} />
-          <ShortcutOverlay open={overlay} onClose={() => setOverlay(false)} />
+            <CommandPalette open={palette} items={paletteItems} onClose={() => setPalette(false)} />
+            <ShortcutOverlay open={overlay} onClose={() => setOverlay(false)} />
+          </TaskTitlesProvider>
         </AgentColorsProvider>
       </QuestionContext.Provider>
     </CrumbContext.Provider>

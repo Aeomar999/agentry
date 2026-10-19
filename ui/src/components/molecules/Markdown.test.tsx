@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { render } from "@testing-library/react";
 import { Markdown, MarkdownProps } from "./Markdown";
-import { linkInto } from "@/lib/links";
+import { linkInto, refTo, Refs } from "@/lib/links";
 import { OTHER_SITES, UNSAFE } from "@/lib/links.fixtures";
 
 const hook = (href: string) => linkInto("task-75", href);
@@ -94,5 +94,70 @@ describe("Markdown marks", () => {
     expect(a.querySelector("svg")).toBeNull();
     expect(a.textContent).toBe("x");
     expect(a.className).toContain("text-info");
+  });
+});
+
+const refs: Refs = {
+  titles: new Map([["task-21", "Fix the chat links"]]),
+  commits: ["3f2a9c1d0e4b5a6978877665544332211aabbccd"],
+};
+const withRefs: Partial<MarkdownProps> = {
+  link: (href) => linkInto("task-75", href, refs),
+  refs: (word) => refTo("task-75", word, refs),
+  marks: true,
+};
+
+describe("Markdown refs", () => {
+  test.each([
+    ["bare", "see task-21."],
+    ["in inline code", "see `task-21`."],
+    ["linked", "see [task-21](task-21)."],
+  ])("links a task the board knows, %s, in the same tab with its title", (_, text) => {
+    const [a] = links(text, withRefs);
+    expect(a.getAttribute("href")).toBe("/tasks/task-21");
+    expect(a.getAttribute("target")).toBeNull();
+    expect(a.getAttribute("title")).toBe("Fix the chat links");
+    expect(a.getAttribute("aria-label")).toBe("task-21, Fix the chat links");
+    expect(a.querySelector("svg")).toBeNull();
+  });
+
+  test.each(["see 3f2a9c1 there", "see `3f2a9c1` there"])("links a commit of the task in %j to its full hash", (text) => {
+    const [a] = links(text, withRefs);
+    expect(a.getAttribute("href")).toBe("/tasks/task-75/workspace?commit=3f2a9c1d0e4b5a6978877665544332211aabbccd");
+    expect(a.getAttribute("target")).toBe("_blank");
+    expect(a.getAttribute("aria-label")).toBe("commit 3f2a9c1 (opens in a new tab)");
+    expect(a.textContent).toBe("3f2a9c1 "); // the label, then a space before ↗
+    expect(a.querySelector("svg")).not.toBeNull();
+  });
+
+  test("draws linked inline code as a mono link, with no code background", () => {
+    const { container } = render(<Markdown text="see `task-21`" {...withRefs} />);
+    const a = container.querySelector("a")!;
+    expect(container.querySelector("code")).toBeNull();
+    expect(a.className).toContain("font-mono");
+    expect(a.className).not.toContain("bg-surface-3");
+  });
+
+  test.each([
+    ["an unknown task", "task-999"],
+    ["an unknown hash", "abcdef1"],
+    ["a hash too short", "3f2a9c"],
+  ])("shows %s as written", (_, word) => {
+    const { container } = render(<Markdown text={`bare ${word} and \`${word}\``} {...withRefs} />);
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("code")?.textContent).toBe(word);
+    expect(container.textContent).toBe(`bare ${word} and ${word}`);
+  });
+
+  test("keeps the words around a ref", () => {
+    const { container } = render(<Markdown text="before task-21 and task-21, after" {...withRefs} />);
+    expect(container.textContent).toBe("before task-21 and task-21, after");
+    expect(container.querySelectorAll("a")).toHaveLength(2);
+  });
+
+  test("puts no link inside a link's label", () => {
+    const anchors = links("[task-21 notes](https://example.com)", withRefs);
+    expect(anchors).toHaveLength(1);
+    expect(anchors[0].getAttribute("href")).toBe("https://example.com/");
   });
 });
