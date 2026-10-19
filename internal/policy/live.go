@@ -180,9 +180,9 @@ func (l *Live) storeLocked(loaded *Policy, backup string) *Change {
 // An error that quotes the file and the hint after it each go on lines of
 // their own, so neither reads as part of the file or of Agentry's message.
 func refusedAtStart(path string, err error) error {
-	refused, noBackup, goBack := "policy %s is refused: %w", "; there is no backup of it", "; to go back to its newest backup, cp %s %s"
+	refused, noBackup, goBack := "policy %s is refused: %w", "; there is no backup of it", "; to go back to its newest backup, from before Agentry's last change, cp %s %s"
 	if strings.Contains(err.Error(), "\n") {
-		refused, noBackup, goBack = "policy %s is refused:\n%w", "\nThere is no backup of it.", "\nTo go back to its newest backup: cp %s %s"
+		refused, noBackup, goBack = "policy %s is refused:\n%w", "\nThere is no backup of it.", "\nTo go back to its newest backup, from before Agentry's last change: cp %s %s"
 	}
 	backups := listBackups(path)
 	if len(backups) == 0 {
