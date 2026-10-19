@@ -36,7 +36,10 @@ export function useAskVisionaries(): AskVisionaries {
       } catch (failure) {
         const profiles = missingProfilesOf(failure);
         if (profiles && !addingProfiles) setMissingProfiles(profiles);
-        else setError((failure as Error).message);
+        else {
+          setMissingProfiles([]);
+          setError((failure as Error).message);
+        }
         return;
       } finally {
         setAdding(false);

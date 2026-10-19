@@ -119,7 +119,10 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
     } catch (failure) {
       const profiles = missingProfilesOf(failure);
       if (profiles && !addingProfiles) setMissingProfiles(profiles);
-      else setAddError((failure as Error).message);
+      else {
+        setMissingProfiles([]);
+        setAddError((failure as Error).message);
+      }
     }
     setAdding(false);
   }
