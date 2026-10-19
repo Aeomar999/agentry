@@ -163,7 +163,7 @@ type Schedule struct {
 `Named` is how the job tells a recorded run from one a crash cut short
 (section 5, step 1). A task number alone can't: `Store.Create` numbers
 tasks in order, but a run the job made and didn't record can sit below a
-later Run now's task (section 5, "Why it is idempotent"). It grows by one
+later Run now's task (section 5, step 1). It grows by one
 per run, a few hundred a year for a nightly schedule, and `Next` copies it
 on each event that adds to it: an estimate of microseconds per event,
 unmeasured.
@@ -490,9 +490,10 @@ run every night.
 
 `Waiting` (`features.go:40`, read over the API until story 13 brings
 `GET /api/waiting`): one entry per schedule whose last run was refused
-("schedule-3 couldn't run: there is no coordinator in team Software"),
-kind `schedules`, until the schedule is changed or runs. A run skipped
-because its task is open adds nothing: that task is already listed if it
+("schedule-3 couldn't run: there is no coordinator in team Software") or
+whose last run step 1 couldn't record (an `unrecorded` skip), kind
+`schedules`, until the schedule is changed or runs. A run skipped
+because a task from it is open adds nothing: that task is already listed if it
 waits for you.
 
 ### The page
@@ -583,7 +584,7 @@ policy doesn't allow:
    until you next look.
 
 The guard against piling up is section 5's step 3 and section 4's rule:
-while the last run's task is open, every due run is skipped with
+while a task from the schedule is open, every due run is skipped with
 `reason: "open"`, and the page says which task it waits on. A run that
 stalls costs one task's budget, not one per night. Each run also has the
 task limits: a budget and `maxTurns` (the server's defaults unless the
@@ -631,7 +632,7 @@ ship before them: they are only less useful without them (open question
    both into their features in one later story that adds the `Check` and
    guard slots. Adding the slots first would make this epic carry a
    refactor of Ideas.
-7. **Should Run now be refused while the last run's task is open?**
+7. **Should Run now be refused while a task from the schedule is open?**
    Recommendation: no, it is your explicit request; the page says the
    open task is still running and asks you to confirm.
 8. **A scheduled task's title.** Recommendation: the schedule's title as
@@ -657,16 +658,22 @@ Each is one reviewable change, in order. Every story marked **apply** or
 `Rule.Next` tests for daily, weekdays and weekly, both clock changes in
 `Europe/London` and a zone with a half-hour offset; fold tests for every
 type, including an unknown type ignored and a future optional field
-ignored; a fixture log with schedule streams replays equal
+ignored, and `Named` growing by `fired` and by an `unrecorded` skip and
+by nothing else; a fixture log with schedule streams replays equal
 event-by-event and in one go; the same log opened with `events.Core()`
-counts the `schedule-` events in the tally and loads every task the same.
+counts the `schedule-` events in the tally and loads every task the same;
+and `TestARealLogAppliedEventByEventEqualsAReplay` and
+`TestARealLogReplays` pass on a fresh `VACUUM INTO` copy of the live
+log.
 
 **S2. Schedules' rules** (rules only; S). `internal/rules/schedule_rules.go`:
 `checkSchedule` for the schedule types, and `forADueSchedule` with
 `rules.go:91` choosing by the owner of `"from"`. Done: a test per
 refusal in section 4; a System `task.created` from a schedule that is on
-passes, a second one while the first is open is refused, one from a
-paused schedule is refused; an auto-accepted idea's task still passes
+passes, a second one while the first is open is refused (and one while
+a Run now's task is open), one from a paused schedule is refused; a
+`fired` or an `unrecorded` skip naming a task already in `Named` is
+refused; an auto-accepted idea's task still passes
 and an epic follow-up still passes (Ideas' existing rule tests stay
 green).
 
@@ -710,7 +717,9 @@ of a scheduled task links "made from" to its schedule; built into
 `tasks.apply`'s first step uses `From: "Agentry"` (or the loop's name, as
 the trail spells Agentry elsewhere) when `ByAgentry`. Done: a test that a
 scheduled task, an auto-accepted idea's task and an epic follow-up each
-show Agentry as the first step, and yours still shows you.
+show Agentry as the first step, and yours still shows you; and
+`TestARealLogAppliedEventByEventEqualsAReplay` and `TestARealLogReplays`
+pass on a fresh `VACUUM INTO` copy of the live log.
 
 **S8. Push for runs that need you** (depends on story 15). Nothing new if
 story 15 pushes every new waiting key: a scheduled task in Needs you is
