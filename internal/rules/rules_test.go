@@ -466,6 +466,15 @@ func TestATeamHasOneCoordinator(t *testing.T) {
 		{"a coordinator moved into a team that has one",
 			agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Writing"}.Proposal(you, true),
 			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"a new coordinator in the team named in another case",
+			agents.Agent{Name: "chief-editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "writing"}.Proposal(you, false),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"a specialist made a coordinator of the team named in another case",
+			agents.Agent{Name: "writer", Engine: "claude", Prompt: "Write.", Coordinates: true, Team: "WRITING"}.Proposal(you, true),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"a lead moved from a team it leaves leaderless into one that has a lead",
+			agents.Agent{Name: "tech-lead", Engine: "claude", Prompt: "Lead.", Coordinates: true, Team: "Writing"}.Proposal(you, true),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
 		{"a coordinator edited", agents.Agent{Name: "editor", Engine: "codex", Prompt: "Edit hard.", Coordinates: true, Team: "Writing"}.Proposal(you, true), ""},
 		{"a specialist edited", agents.Agent{Name: "writer", Engine: "codex", Prompt: "Write more.", Team: "Writing"}.Proposal(you, true), ""},
 		{"a coordinator moved to a team of its own", agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Scouting"}.Proposal(you, true), ""},
@@ -498,6 +507,21 @@ func TestAnOldTeamOfTwoCoordinatorsCanBeEdited(t *testing.T) {
 	third := agents.Agent{Name: "writer", Engine: "claude", Prompt: "Write.", Coordinates: true, Team: "Writing"}
 	if reason := rosterRules[events.AgentChanged](roster, third.Proposal(you, true)); reason == "" {
 		t.Error("a third coordinator was let in")
+	}
+}
+
+// A log from before the rule may hold twin teams named in different cases,
+// each with a coordinator; both can still be edited.
+func TestAnOldCaseTwinTeamsCoordinatorCanBeEdited(t *testing.T) {
+	roster := agents.Roster{
+		{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"},
+		{Name: "copy-editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "writing"},
+	}
+	for _, a := range roster {
+		edited := agents.Agent{Name: a.Name, Engine: "codex", Prompt: "Edit hard.", Coordinates: true, Team: a.Team}
+		if reason := rosterRules[events.AgentChanged](roster, edited.Proposal(you, true)); reason != "" {
+			t.Errorf("editing %s: refused: %s", a.Name, reason)
+		}
 	}
 }
 

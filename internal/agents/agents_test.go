@@ -427,4 +427,11 @@ func TestATeamIsNamedInAnyCase(t *testing.T) {
 			t.Errorf("TeamNamed(%q) = %q, want %q", asked, got, want)
 		}
 	}
+	// An old log can hold two teams named in different cases: the first made is the one meant.
+	twins := Roster{{Name: "data-lead", Coordinates: true, Team: "data"}, {Name: "chief", Coordinates: true, Team: "Data"}}
+	for _, asked := range []string{"Data", "data", "DATA"} {
+		if got := twins.TeamNamed(asked); got != "data" {
+			t.Errorf("with twins, TeamNamed(%q) = %q, want the first, %q", asked, got, "data")
+		}
+	}
 }

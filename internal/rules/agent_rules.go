@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -18,7 +19,7 @@ type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
 	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, oneCoordinatorPerTeam),
-	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator, oneCoordinatorPerTeam),
+	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, oneCoordinatorPerTeam, keepsACoordinator),
 	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
 	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge, patchFits),
 	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
@@ -100,8 +101,9 @@ func keepsACoordinator(roster agents.Roster, p events.Proposal) string {
 
 // oneCoordinatorPerTeam stops an agent coordinating a team that has a
 // coordinator already: the team's tasks all go to the first, so the second
-// would never get one. An agent that coordinates its team now goes on doing
-// so, even where an old log left the team two.
+// would never get one. A team named in another case is that team, as a task
+// naming it would be. An agent that coordinates its team now goes on doing
+// so, even where an old log left the team two, or a twin in another case.
 func oneCoordinatorPerTeam(roster agents.Roster, p events.Proposal) string {
 	if !p.Flag("coordinates") {
 		return ""
@@ -110,6 +112,7 @@ func oneCoordinatorPerTeam(roster agents.Roster, p events.Proposal) string {
 	if before, exists := roster.Get(p.Text("name")); exists && before.Coordinates && before.TeamName() == team {
 		return ""
 	}
+	team = cmp.Or(roster.TeamNamed(team), team)
 	if lead, ok := roster.Coordinator(team); ok {
 		return "the " + team + " team already has a coordinator, " + lead.Name + ": a team has exactly one"
 	}

@@ -348,6 +348,8 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 	agent.Description, agent.Prompt = strings.TrimSpace(agent.Description), strings.TrimSpace(agent.Prompt)
 	if agent.Team = strings.TrimSpace(agent.Team); strings.EqualFold(agent.Team, agents.DefaultTeam) {
 		agent.Team = "" // the default team, as agents from before teams have it
+	} else if team := s.state.Roster().TeamNamed(agent.Team); team != "" {
+		agent.Team = team // a team named in another case is that team, not a twin of it
 	}
 	if problem := s.unknownProfile(agent.Profile); problem != "" {
 		http.Error(w, problem, http.StatusBadRequest)

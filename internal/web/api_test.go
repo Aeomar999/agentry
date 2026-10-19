@@ -1726,13 +1726,38 @@ func TestEditingAnAgentKeepsItsTeamsOneCoordinator(t *testing.T) {
 	}
 }
 
+// An agent added to or moved into a team named in another case joins that
+// team, with its spelling, instead of starting a twin of it.
+func TestAnAgentJoinsATeamNamedInAnyCase(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	for _, c := range []struct{ method, path, body string }{
+		{"POST", "/api/agents", `{"name":"modeller","engine":"claude","prompt":"Model.","team":"data"}`},
+		{"PUT", "/api/agents/modeller", `{"engine":"claude","prompt":"Model more.","team":" DATA "}`},
+	} {
+		if code, body := call(t, server, c.method, c.path, c.body); code != 200 {
+			t.Fatalf("%s %s: %d %s", c.method, c.path, code, body)
+		}
+		stream, _ := s.Stream(events.AgentsStream)
+		if modeller, _ := agents.FromEvents(stream).Get("modeller"); modeller.Team != "Data" {
+			t.Errorf("%s %s: the agent is in team %q, want %q", c.method, c.path, modeller.Team, "Data")
+		}
+	}
+	if code, body := call(t, server, "PUT", "/api/agents/analyst", `{"engine":"claude","prompt":"Lead.","team":"data","coordinates":true}`); code != http.StatusConflict ||
+		!strings.Contains(body, "the Data team already has a coordinator, data-lead") {
+		t.Errorf("a second coordinator named in another case: %d %s", code, body)
+	}
+}
+
 // A task names its team in any case, and goes to that team's coordinator.
 func TestATaskNamesItsTeamInAnyCase(t *testing.T) {
 	server, _ := newTestServer(t)
 	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
 		t.Fatalf("adding the Data team: %d %s", code, body)
 	}
-	for i, c := range []struct{ team, coordinator string }{{"data", "data-lead"}, {" software ", "tech-lead"}, {"DATA", "data-lead"}} {
+	for i, c := range []struct{ team, coordinator string }{{"data", "data-lead"}, {" software ", "tech-lead"}, {"DATA", "data-lead"}, {"", "tech-lead"}} {
 		if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"`+c.team+`"}`); code != 200 {
 			t.Fatalf("team %q: %d %s", c.team, code, body)
 		}
