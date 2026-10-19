@@ -61,10 +61,18 @@ type Proposer interface {
 	Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error)
 }
 
-// Core is all a feature's hooks may use: it has no store. Defaults are the
-// server's limits for a task Agentry makes that comes from no other task.
+// EventLog reads a stream's accepted events from the log, as *store.Store
+// does. It only reads: a feature writes through its Proposer.
+type EventLog interface {
+	Stream(name string) ([]events.Event, error)
+}
+
+// Core is all a feature's hooks may use: it has no store. Events reads the
+// log and never writes to it. Defaults are the server's limits for a task
+// Agentry makes that comes from no other task.
 type Core struct {
 	Log      Proposer
+	Events   EventLog
 	Read     Reader
 	Defaults tasks.Limits
 }

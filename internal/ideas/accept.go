@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
@@ -43,6 +43,14 @@ type Board interface {
 	Roster() agents.Roster
 }
 
+// Log is what Accept writes to the log and reads of it: a feature's
+// Proposer and its read-only EventLog, as its Core gives them.
+// *store.Store is both.
+type Log interface {
+	features.Proposer
+	features.EventLog
+}
+
 // Accept makes an open idea a task in your Backlog, or started when you
 // chose to start it, in the idea's repo, for the first team's coordinator,
 // then marks the idea accepted with it. The task is made first, and the
@@ -53,7 +61,7 @@ type Board interface {
 // chose; Column says where it is. Accepts run one at a time, so a double
 // click or the UI and MCP at once still make one task. The error is for the
 // log failing, not for a refusal.
-func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
+func Accept(log Log, board Board, id string, choice Choice) (Acceptance, error) {
 	accepting.Lock()
 	defer accepting.Unlock()
 	got, err := accept(log, board, id, choice)
@@ -64,7 +72,7 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 }
 
 // accept is Accept, under its lock, before the column is read.
-func accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
+func accept(log Log, board Board, id string, choice Choice) (Acceptance, error) {
 	idea, err := Get(board, id)
 	switch {
 	case err != nil:
@@ -128,7 +136,7 @@ var beforeMarking = func() {}
 // before marking it. A task the state can't hand out, such as a broken one, is
 // skipped unless its task.created names the idea: then it can't be marked,
 // and Refused says so, but no second task is made from the idea either.
-func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {
+func madeFrom(log features.EventLog, board Board, id string) (Acceptance, error) {
 	for _, taskID := range board.TaskIDs() {
 		task, err := board.Task(taskID)
 		if err == nil {
@@ -150,7 +158,7 @@ func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {
 
 // ideaOf is the stream a task was made from, read from its task.created in
 // the log, "" for none.
-func ideaOf(log *store.Store, taskID string) (string, error) {
+func ideaOf(log features.EventLog, taskID string) (string, error) {
 	stream, err := log.Stream(taskID)
 	if err != nil {
 		return "", err
@@ -168,7 +176,7 @@ func ideaOf(log *store.Store, taskID string) (string, error) {
 // with no second event. The rules refuse Agentry a task that isn't parked:
 // it starts one only by moving it, as you turned on. Task is "" and Refused
 // says why when it can't.
-func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
+func makeTask(log features.Proposer, board Board, idea *Idea, kind tasks.Kind, choice Choice) (Acceptance, error) {
 	if reason := worktrees.IsRepo(idea.Repo); reason != "" {
 		return Acceptance{Refused: "the idea's repo can't take a task: " + reason}, nil
 	}
