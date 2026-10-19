@@ -424,3 +424,10 @@ export interface FeatureLine {
   why?: string; // one line saying why it is on, kept or off
   badge?: number; // a count for the sidebar, such as open ideas
 }
+
+// GET /api/features: the features, and the board's columns, which a server
+// older than them doesn't send.
+export interface FeaturesReply {
+  features: FeatureLine[];
+  board?: { columns: BoardColumn[] };
+}

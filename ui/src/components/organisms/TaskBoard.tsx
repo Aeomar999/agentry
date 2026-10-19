@@ -14,14 +14,15 @@ import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { DONE_DAYS, onBoard } from "@/lib/epics";
 import { COLUMN_TITLES } from "@/lib/columns";
 
-// The board's columns are the stages of the work, the same whichever agents
-// you have: Backlog (shown when you ask), To do, In progress, Review,
-// Shipping, Done. The server says which column a task is in. Moving a card
-// onto another column is final and takes effect at once (direct in
-// internal/web/board_api.go): Done finishes it, To do and the Backlog park
-// it, In progress, Review and Shipping send it to an agent that builds,
-// checks or ships it; a team with no agent that ships work refuses Shipping,
-// so its cards can't be dropped there.
+// The board's columns are the stages of the work: Backlog (shown when you
+// ask), To do, In progress, Review, Shipping, Done. The server says which
+// columns there are (Shipping only while some agent ships work or a task is
+// in it) and which column a task is in. Moving a card onto another column is
+// final and takes effect at once (direct in internal/web/board_api.go): Done
+// finishes it, To do and the Backlog park it, In progress, Review and
+// Shipping send it to an agent that builds, checks or ships it; a team with
+// no agent that ships work refuses Shipping, so its cards can't be dropped
+// there.
 // The card shows in its new column as soon as you send the move. Where in
 // the column you drop it is its place in your priority order. A task waiting
 // for you stays where it is, marked, and its question is in the dock.
@@ -35,8 +36,6 @@ const BACKLOG = "backlog";
 const SHIPPING = "shipping";
 const DONE = "done";
 
-const COLUMNS: Column[] = (Object.keys(COLUMN_TITLES) as BoardColumn[]).map((id) => ({ id, title: COLUMN_TITLES[id] }));
-
 // A move you sent, shown until fresh data for the task comes after it.
 interface Move {
   to: BoardColumn;
@@ -44,6 +43,7 @@ interface Move {
 }
 
 interface TaskBoardProps {
+  columns: BoardColumn[]; // in order: GET /api/features's board
   tasks: TaskSummary[];
   agents: Agent[];
   showBacklog: boolean;
@@ -53,12 +53,12 @@ interface TaskBoardProps {
   everyTask: TaskSummary[]; // unfiltered: for the epics' titles
 }
 
-export function TaskBoard({ tasks, agents, showBacklog, onOpen, onPickLabel, onPickEpic, everyTask }: TaskBoardProps) {
+export function TaskBoard({ columns: listed, tasks, agents, showBacklog, onOpen, onPickLabel, onPickEpic, everyTask }: TaskBoardProps) {
   const byId = new Map(everyTask.map((task) => [task.id, task]));
   const onTheBoard = tasks.filter((task) => task.kind !== "epic" && onBoard(task, byId));
   const older = tasks.filter((task) => task.kind !== "epic").length - onTheBoard.length;
   const notify = useToast();
-  const columns = COLUMNS.filter((column) => showBacklog || column.id !== BACKLOG);
+  const columns: Column[] = listed.filter((id) => showBacklog || id !== BACKLOG).map((id) => ({ id, title: COLUMN_TITLES[id] }));
   const coordinator = agents.find((a) => a.coordinates)?.name ?? "coordinator";
   const [dragged, setDragged] = useState<TaskSummary | null>(null);
   const [over, setOver] = useState("");

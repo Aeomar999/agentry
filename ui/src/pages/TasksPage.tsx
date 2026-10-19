@@ -29,10 +29,12 @@ import { cn } from "@/lib/cn";
 import { grouped, waitingLine } from "@/lib/epics";
 import { stageOf } from "@/lib/columns";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
+import { useFeatures } from "@/features";
 
 // The filter lives in the address (?status=needs-you), so a link can open
 // the list already filtered: the bell in the top bar does. Review and
-// Shipping are the board's columns of work being checked or shipped.
+// Shipping are the board's columns of work being checked or shipped, each
+// shown while the board has it.
 interface Filter {
   id: string;
   label: string;
@@ -180,7 +182,9 @@ export function TasksPage() {
     });
   useKeys({ "1": () => showView("list"), "2": () => showView("board") });
 
-  const filter = FILTERS.find((f) => f.id === params.get("status")) ?? FILTERS[0];
+  const { columns } = useFeatures();
+  const filters = FILTERS.filter((f) => !f.column || columns.includes(f.column));
+  const filter = filters.find((f) => f.id === params.get("status")) ?? filters[0];
   // The Backlog shows when you ask; remembered here.
   const [showBacklog, setShowBacklog] = useState(() => readStored(backlogKey) === "true"); // Plan is where unstarted work is shaped
   const toggleBacklog = () => {
@@ -243,7 +247,7 @@ export function TasksPage() {
         actions={[{ label: "New task", icon: <Plus />, onClick: () => newTask(), primary: true }]}
       />
       <div className="flex flex-wrap items-center gap-2 border-b border-divider px-6 py-3">
-        {FILTERS.map((f) => (
+        {filters.map((f) => (
           <FilterChip
             key={f.id}
             label={f.label}
@@ -280,6 +284,7 @@ export function TasksPage() {
       {!data && !error && <p className="px-6 py-4 text-[12px] text-ink-muted">Loading the tasks…</p>}
       {view === "board" && data && (
         <TaskBoard
+          columns={columns}
           tasks={shown}
           everyTask={tasks}
           agents={agents}

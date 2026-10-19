@@ -1,8 +1,9 @@
 import { ReactNode, useMemo } from "react";
 import type { NavigateFunction, RouteObject } from "react-router-dom";
 import type { PaletteItem } from "@/components/organisms/CommandPalette";
-import type { FeatureLine } from "@/api/types";
+import type { BoardColumn, FeaturesReply } from "@/api/types";
 import { useResource } from "@/live/use-resource";
+import { COLUMN_TITLES } from "@/lib/columns";
 import { ideas } from "./ideas";
 
 // A feature's UI is one folder here whose index exports a FeatureUI. The
@@ -22,20 +23,33 @@ export const FEATURES: FeatureUI[] = [ideas];
 export interface Features {
   visible: (name: string) => boolean;
   badge: (name: string) => number; // 0 for none
+  columns: BoardColumn[]; // the board's, in order
 }
 
 // useFeatures reads GET /api/features, again whenever the log moves, and
 // says which features show. A name only one side knows is ignored, and while
 // the manifest is loading, or has never loaded, no feature shows.
 export function useFeatures(): Features {
-  const { data } = useResource<{ features: FeatureLine[] }>("/api/features");
+  const { data } = useResource<FeaturesReply>("/api/features");
   return useMemo(() => {
     const lines = new Map((data?.features ?? []).map((line) => [line.name, line]));
     return {
       visible: (name) => lines.get(name)?.visible ?? false,
       badge: (name) => lines.get(name)?.badge ?? 0,
+      columns: boardColumns(data),
     };
   }, [data]);
+}
+
+const EVERY_COLUMN = Object.keys(COLUMN_TITLES) as BoardColumn[];
+
+// boardColumns are the columns the manifest lists, those this page knows.
+// Before it loads, Shipping waits like any feature; a server too old to
+// list them gets every column, as it had before.
+export function boardColumns(reply: FeaturesReply | undefined): BoardColumn[] {
+  if (!reply) return EVERY_COLUMN.filter((column) => column !== "shipping");
+  if (!reply.board) return EVERY_COLUMN;
+  return reply.board.columns.filter((column) => column in COLUMN_TITLES);
 }
 
 // visibleFeatures is the FEATURES the manifest says show, in FEATURES' order.
