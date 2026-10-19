@@ -1015,11 +1015,14 @@ commit:
    up to `through`, its last position now. Encode, gzip (Go's gzip writes
    no time into its header, so the same rows always make the same bytes),
    put it in the store with the file and folder synced. No lock is held.
-3. **Marker and delete, in one transaction under `Store.mu`:** the rules
-   check the `task.archived` proposal: the task done for the age, the
-   stream's last position in the database still `through` (anything since,
-   and the round leaves it for the next), and the blob present
-   (`Blobs.Has`). Then one transaction inserts the marker and runs
+3. **Marker and delete, in one transaction under `Store.mu`:** the
+   stream's last position in the database must still be `through`
+   (anything since, and the round leaves it for the next). Then the model
+   holds exactly the rows read, so `Archive` asks the caller's summariser
+   for the marker's summary there. The rules check the `task.archived`
+   proposal, and the blob must be present (`Blobs.Has`). The age is the
+   chooser's (step 1): a task reopened since it was chosen has a changed
+   stream, so the `through` check refuses it. Then one transaction inserts the marker and runs
    `DELETE FROM events WHERE stream = ? AND position <= ?`. The trigger
    sees the marker, uncommitted, inside the same transaction, so it allows
    the delete. If SQLite's `changes()` is not `count`, the transaction

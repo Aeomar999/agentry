@@ -354,7 +354,7 @@ func (b putThen) Put(r io.Reader) (string, int64, error) {
 	return hash, size, err
 }
 
-var summary = map[string]any{"title": "Remove every TODO"}
+func summary() any { return map[string]any{"title": "Remove every TODO"} }
 
 // archivable is a store filled as fill fills it.
 func archivable(t *testing.T) *Store {

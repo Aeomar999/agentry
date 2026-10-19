@@ -28,11 +28,13 @@ type Blobs interface {
 var archiver = events.Actor{Kind: events.System, ID: "archiver"}
 
 // Archive moves a task's rows into a blob and appends its marker, which
-// keeps summary, the task as the list shows it (tasks.SummaryOf). First,
-// with no lock held, it reads the stream's rows, rejections included,
-// and puts them in blobs. Then, under the lock, it checks the marker and,
-// in one transaction, appends it and deletes the rows it covers; the model
-// takes the marker once that commits.
+// keeps the task as the list shows it (tasks.SummaryOf). First, with no
+// lock held, it reads the stream's rows, rejections included, and puts
+// them in blobs. Then, under the lock, it checks the stream took nothing
+// since, so the model holds exactly the rows read, and calls summarise
+// for the summary. It checks the marker and, in one transaction, appends
+// it and deletes the rows it covers; the model takes the marker once that
+// commits. summarise reads the model, so it must not take the store.
 //
 // It returns the marker and, when it is refused, the rejection: by the
 // rules, or because the stream took an event since its rows were read,
@@ -41,7 +43,7 @@ var archiver = events.Actor{Kind: events.System, ID: "archiver"}
 // proposal.rejected each time would itself change the stream. The error
 // is for the database or the blobs failing. A blob put before either is
 // named by no event, and the next round makes the same bytes, so finds it.
-func (s *Store) Archive(stream string, summary any, blobs Blobs) (events.Event, *events.Rejection, error) {
+func (s *Store) Archive(stream string, summarise func() any, blobs Blobs) (events.Event, *events.Rejection, error) {
 	rows, err := rowsOf(s.reads, stream, s.applied.Load())
 	if err != nil {
 		return events.Event{}, nil, err
@@ -57,11 +59,15 @@ func (s *Store) Archive(stream string, summary any, blobs Blobs) (events.Event, 
 	if err != nil {
 		return events.Event{}, nil, fmt.Errorf("archiving %s: %w", stream, err)
 	}
-	marker := events.Proposal{Stream: stream, Actor: archiver, Type: events.TaskArchived, Data: map[string]any{
-		"through": rows[len(rows)-1].Position, "count": len(rows), "archive": hash, "created": createdIn(rows), "summary": summary}}
+	through := rows[len(rows)-1].Position
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if rejection, err := s.unmoved(stream, through); rejection != nil || err != nil {
+		return events.Event{}, rejection, err
+	}
+	marker := events.Proposal{Stream: stream, Actor: archiver, Type: events.TaskArchived, Data: map[string]any{
+		"through": through, "count": len(rows), "archive": hash, "created": createdIn(rows), "summary": summarise()}}
 	rejection, err := s.archivable(marker, blobs)
 	if rejection != nil || err != nil {
 		return events.Event{}, rejection, err
@@ -78,22 +84,27 @@ func (s *Store) Archive(stream string, summary any, blobs Blobs) (events.Event, 
 	return event, nil, nil
 }
 
-// archivable checks a marker under the lock: the rules, the blob it names
-// on disk, and the stream's last row still its "through", since its rows
-// were read without the lock.
+// unmoved checks, under the lock, that the stream's last row is still
+// through, since its rows were read without the lock.
+func (s *Store) unmoved(stream string, through int64) (*events.Rejection, error) {
+	var last int64
+	if err := s.db.QueryRow(`SELECT MAX(position) FROM events WHERE stream = ?`, stream).Scan(&last); err != nil {
+		return nil, err
+	}
+	if last != through {
+		return &events.Rejection{Check: "archive", Reason: stream + " took an event since its rows were read: it waits for the next round"}, nil
+	}
+	return nil, nil
+}
+
+// archivable checks a marker under the lock: the rules, and the blob it
+// names on disk.
 func (s *Store) archivable(marker events.Proposal, blobs Blobs) (*events.Rejection, error) {
 	if rejection := s.validate(marker); rejection != nil {
 		return rejection, nil
 	}
 	if !blobs.Has(marker.Text("archive")) {
 		return &events.Rejection{Check: "archive", Reason: "the blob of " + marker.Stream + "'s rows isn't there"}, nil
-	}
-	var last int64
-	if err := s.db.QueryRow(`SELECT MAX(position) FROM events WHERE stream = ?`, marker.Stream).Scan(&last); err != nil {
-		return nil, err
-	}
-	if last != int64(marker.Number("through")) {
-		return &events.Rejection{Check: "archive", Reason: marker.Stream + " took an event since its rows were read: it waits for the next round"}, nil
 	}
 	return nil, nil
 }
@@ -127,7 +138,9 @@ func (s *Store) commitArchive(marker events.Proposal) (events.Event, error) {
 }
 
 // A row is an event as stored, every column as text: an archive keeps the
-// rows as they were, so the ones it gives back are the same rows.
+// rows as they were, so the ones it gives back are the same rows. Rows are
+// written with encoding/json, which would turn invalid UTF-8 in a column
+// into U+FFFD; none holds any, since every value arrives through JSON.
 type row struct {
 	Position    int64  `json:"position"`
 	At          string `json:"at"`

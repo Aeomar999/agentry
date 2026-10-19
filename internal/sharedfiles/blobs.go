@@ -93,10 +93,10 @@ func (d Disk) Put(r io.Reader) (string, int64, error) {
 	return hash, size, d.syncFolders(hash)
 }
 
-// syncFolders makes the file's name last: its own folder, and the one
-// holding that folder, which Put may have just made.
+// syncFolders makes the file's name last: its own folder, the one holding
+// that folder, and the one holding d.Dir, as Put may have just made either.
 func (d Disk) syncFolders(hash string) error {
-	for _, folder := range []string{filepath.Dir(d.path(hash)), d.Dir} {
+	for _, folder := range []string{filepath.Dir(d.path(hash)), d.Dir, filepath.Dir(d.Dir)} {
 		opened, err := os.Open(folder)
 		if err != nil {
 			return err

@@ -283,9 +283,9 @@ func equalStreamPositions(state *State, inLog map[string]int64) error {
 // It must have gone on from the snapshot, at the last event up to the cut
 // (an archived task's rows are gone from the log), unless a stream breaks
 // after the cut: Resume then replays the whole log, as it can't tell a
-// stream the log breaks from one the snapshot does. The log is opened with catalogue and
-// the state keeps owned, as the store being checked does. It returns the
-// first difference, with its cut.
+// stream the log breaks from one the snapshot does. The log is opened
+// with catalogue and the state keeps owned, as the store being checked
+// does. It returns the first difference, with its cut.
 func EqualThroughSnapshots(path string, catalogue *events.Catalogue, dir string, cuts []int64, owned ...*features.Streams) error {
 	const build = "equal"
 	log, err := store.Open(path, catalogue, nil, nil)

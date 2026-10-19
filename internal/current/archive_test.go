@@ -18,15 +18,20 @@ import (
 // shows of it, and returns its marker.
 func archiveTask(t *testing.T, s *store.Store, state *State, id string, blobs store.Blobs) events.Event {
 	t.Helper()
-	task, err := state.Task(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	marker, rejection, err := s.Archive(id, tasks.SummaryOf(task, state.Roster()), blobs)
+	marker, rejection, err := s.Archive(id, summarise(state, id), blobs)
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}
 	return marker
+}
+
+// summarise is the summariser Archive calls for a task: its summary as the
+// state holds it then. (storetest.Summarise, which imports this package.)
+func summarise(state *State, id string) func() any {
+	return func() any {
+		task, _ := state.Task(id)
+		return tasks.SummaryOf(task, state.Roster())
+	}
 }
 
 // blobAndLive is the log with an archived stream's blob put back: every
@@ -108,5 +113,34 @@ func TestASnapshotAtAnArchivedRowFallsBack(t *testing.T) {
 	restored, logged := opened(t, logPath, snapshot, "build-1")
 	if restored.Resumed() != 0 || !strings.Contains(logged, "the log has no event at its position") {
 		t.Errorf("Open went on from %d and logged %q; want a whole replay, as the anchor row is archived", restored.Resumed(), logged)
+	}
+}
+
+// The marker keeps the summary of every row it covers: a rename between
+// taking the summariser and archiving is in the marker's summary and the
+// list's, as Archive summarises under the store's lock, from the rows it
+// read.
+func TestTheMarkerSummarisesTheRowsItCovers(t *testing.T) {
+	path, _ := seededLog(t, someProposals()...)
+	state := New(withIdeas, ideas.Streams())
+	s, err := store.Open(path, withIdeas, state, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	summariser := summarise(state, "task-1")
+	if _, rejection, err := s.Propose(proposal("task-1", you, events.TaskRenamed, map[string]any{"title": "Renamed in the gap"})); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	marker, rejection, err := s.Archive("task-1", summariser, sharedfiles.Disk{Dir: t.TempDir()})
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if title := marker.Data["summary"].(map[string]any)["title"]; title != "Renamed in the gap" {
+		t.Errorf("the marker's summary has the title %q, want the rename's", title)
+	}
+	listed := slices.IndexFunc(state.Summaries(), func(s tasks.Summary) bool { return s.ID == "task-1" && s.Title == "Renamed in the gap" })
+	if listed < 0 {
+		t.Error("the list should show task-1 with the rename's title")
 	}
 }

@@ -29,7 +29,7 @@ func watchSyncs(t *testing.T, blob func() string) *synced {
 }
 
 // Put syncs the file before it is in its place, then the folder it went
-// into and the folder holding that one, so a crash can't lose a blob an
+// into and the two holding that one, so a crash can't lose a blob an
 // event already names. A blob kept already gets its folders synced again:
 // the Put that kept it may have failed before it synced them.
 func TestPutSyncsTheBlobThenItsFolders(t *testing.T) {
@@ -47,10 +47,11 @@ func TestPutSyncsTheBlobThenItsFolders(t *testing.T) {
 		if _, _, err := blobs.Put(strings.NewReader("rows")); err != nil {
 			t.Fatal(err)
 		}
-		if len(seen.names) != 3 || !strings.HasPrefix(filepath.Base(seen.names[0]), "incoming-") ||
-			!slices.Equal(seen.names[1:], []string{filepath.Dir(blob), blobs.Dir}) || !slices.Equal(seen.inPlace, []bool{kept, true, true}) {
-			t.Errorf("kept already %v: synced %v, the blob in place %v; want the incoming file, then %s and %s with the blob in place",
-				kept, seen.names, seen.inPlace, filepath.Dir(blob), blobs.Dir)
+		folders := []string{filepath.Dir(blob), blobs.Dir, filepath.Dir(blobs.Dir)}
+		if len(seen.names) != 4 || !strings.HasPrefix(filepath.Base(seen.names[0]), "incoming-") ||
+			!slices.Equal(seen.names[1:], folders) || !slices.Equal(seen.inPlace, []bool{kept, true, true, true}) {
+			t.Errorf("kept already %v: synced %v, the blob in place %v; want the incoming file, then %v with the blob in place",
+				kept, seen.names, seen.inPlace, folders)
 		}
 	}
 }

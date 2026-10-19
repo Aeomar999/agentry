@@ -24,11 +24,19 @@ func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 	if !task.IsDone {
 		mustPropose(t, s, events.Proposal{Stream: id, Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskDone,
 			Data: map[string]any{"summary": "Done, to archive.", "moved": true}})
-		task, _ = state.Task(id)
 	}
 	blobs := sharedfiles.Disk{Dir: t.TempDir()}
-	if _, rejection, err := s.Archive(id, tasks.SummaryOf(task, state.Roster()), blobs); rejection != nil || err != nil {
+	if _, rejection, err := s.Archive(id, summarise(state, id), blobs); rejection != nil || err != nil {
 		t.Fatalf("archiving %s: %v, %v", id, rejection, err)
+	}
+}
+
+// summarise is the summariser Archive calls for a task: its summary as the
+// state holds it then.
+func summarise(state *current.State, id string) func() any {
+	return func() any {
+		task, _ := state.Task(id)
+		return tasks.SummaryOf(task, state.Roster())
 	}
 }
 
