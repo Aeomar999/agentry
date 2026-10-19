@@ -123,9 +123,6 @@ func TestARegisteredPrefixIsNotATask(t *testing.T) {
 		if got := catalogue.IsTaskStream(stream); got != want {
 			t.Errorf("IsTaskStream(%q) = %v, want %v", stream, got, want)
 		}
-		if got := events.Core().IsTaskStream(stream); got != (want || stream == "idea-1") {
-			t.Errorf("the core's IsTaskStream(%q) = %v", stream, got)
-		}
 	}
 	agentry := events.Actor{Kind: events.System, ID: "agentry"}
 	if rejection := catalogue.CheckShape(events.Proposal{Stream: "task-1", Actor: agentry, Type: "git.pr_opened"}); rejection != nil {
@@ -136,5 +133,56 @@ func TestARegisteredPrefixIsNotATask(t *testing.T) {
 	}
 	if rejection := events.Core().CheckShape(events.Proposal{Stream: "task-1", Actor: agentry, Type: "git.pr_opened"}); rejection == nil {
 		t.Error("the core knows a type nobody registered")
+	}
+}
+
+// Each stream is core, owned, a task's or foreign, by its name alone: a
+// stream whose feature isn't registered is foreign, not a task.
+func TestEveryStreamHasAKind(t *testing.T) {
+	withIdeas, err := events.NewCatalogue(ideas.Registration())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		stream          string
+		withIdeas, core events.StreamKind
+	}{
+		{events.AgentsStream, events.CoreStream, events.CoreStream},
+		{events.SettingsStream, events.CoreStream, events.CoreStream},
+		{events.PolicyStream, events.CoreStream, events.CoreStream},
+		{"task-1", events.TaskStream, events.TaskStream},
+		{"task-12", events.TaskStream, events.TaskStream},
+		{"idea-3", events.OwnedStream, events.ForeignStream},
+		{"note-1", events.ForeignStream, events.ForeignStream},
+		{"agents-2", events.ForeignStream, events.ForeignStream},
+		{"tasks", events.ForeignStream, events.ForeignStream},
+	}
+	for _, c := range cases {
+		if got := withIdeas.KindOf(c.stream); got != c.withIdeas {
+			t.Errorf("with ideas, KindOf(%q) = %v, want %v", c.stream, got, c.withIdeas)
+		}
+		if got := events.Core().KindOf(c.stream); got != c.core {
+			t.Errorf("the core's KindOf(%q) = %v, want %v", c.stream, got, c.core)
+		}
+	}
+	for stream, want := range map[string]string{"idea-3": "idea-", "git-pr-12": "git-pr-", "notes": "notes", "a-": "a-"} {
+		if got := events.ForeignPrefix(stream); got != want {
+			t.Errorf("ForeignPrefix(%q) = %q, want %q", stream, got, want)
+		}
+	}
+}
+
+// Nothing goes into a foreign stream: not its feature's types, which this
+// build doesn't know, nor a task's.
+func TestAForeignStreamTakesNothing(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	for _, p := range []events.Proposal{
+		{Stream: "idea-3", Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "no"}},
+		{Stream: "idea-3", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "c"}},
+	} {
+		rejection := events.Core().CheckShape(p)
+		if rejection == nil || rejection.Reason != "stream idea-3 belongs to a feature this build doesn't have" {
+			t.Errorf("%s into idea-3: got %v, want the foreign stream's reason", p.Type, rejection)
+		}
 	}
 }
