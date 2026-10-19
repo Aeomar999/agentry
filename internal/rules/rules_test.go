@@ -32,7 +32,9 @@ type step struct {
 	accepted    bool
 }
 
-// openSeeded is a store with the rules and the five default agents.
+// openSeeded is a store with the rules and the five default agents. It
+// wires the state as storetest.Open does (which imports rules, so it can't
+// be used here), the replay check included.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
 	state := current.New()
@@ -41,6 +43,11 @@ func openSeeded(t *testing.T) *store.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() {
+		if err := current.Equal(s, state); err != nil {
+			t.Errorf("the state differs from a replay of the log: %v", err)
+		}
+	})
 	for _, p := range agents.SeedProposals(nil) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatalf("seeding %s: %v %v", p.Text("name"), rejection, err)

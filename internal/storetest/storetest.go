@@ -11,8 +11,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
-// Open opens the log at path with the rules and a state, and closes it when
-// the test ends.
+// Open opens the log at path with the rules and a state. When the test ends
+// it checks the state still equals a replay of the log, then closes it.
 func Open(t testing.TB, path string) (*store.Store, *current.State) {
 	t.Helper()
 	state := current.New()
@@ -21,5 +21,14 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { CheckEqual(t, s, state) }) // cleanups run last first: before the close
 	return s, state
+}
+
+// CheckEqual fails the test if the state differs from a replay of the log.
+func CheckEqual(t testing.TB, s *store.Store, state *current.State) {
+	t.Helper()
+	if err := current.Equal(s, state); err != nil {
+		t.Errorf("the state differs from a replay of the log: %v", err)
+	}
 }
