@@ -225,7 +225,7 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ideasIn(before); len(got) != 1 || got[0].Line != "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas)" || got[0].Task != "task-24" {
+	if got := ideasIn(before); len(got) != 1 || got[0].Line != "2 open ideas from the Visionaries: Faster boot, Retry webhooks (list_ideas all)" || got[0].Task != "task-24" {
 		t.Fatalf("waiting: %+v", before)
 	}
 
@@ -233,7 +233,7 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 	fake.ideas[0]["state"] = "dismissed"
 	fake.mu.Unlock()
 	after, _ := WaitingFor(agentry)
-	if got := ideasIn(after); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas)" || !Seen(before)[got[0].Key] {
+	if got := ideasIn(after); len(got) != 1 || got[0].Line != "1 open idea from the Visionaries: Retry webhooks (list_ideas all)" || !Seen(before)[got[0].Key] {
 		t.Errorf("an idea decided isn't news: %+v, before %+v", after, before)
 	}
 
@@ -243,7 +243,7 @@ func TestOpenIdeasWaitForYou(t *testing.T) {
 		{"id": "idea-7", "title": "Tags", "task": "task-40", "state": "open"}}, fake.ideas...)
 	fake.mu.Unlock()
 	news, _ := WaitingFor(agentry)
-	if got := ideasIn(news); len(got) != 1 || got[0].Line != "4 open ideas from the Visionaries: Undo a move, Bulk start, Tags, and 1 more (list_ideas)" || Seen(before)[got[0].Key] {
+	if got := ideasIn(news); len(got) != 1 || got[0].Line != "4 open ideas from the Visionaries: Undo a move, Bulk start, Tags, and 1 more (list_ideas all)" || Seen(before)[got[0].Key] {
 		t.Errorf("new ideas are news: %+v", news)
 	}
 
@@ -279,9 +279,10 @@ func TestRepliesEndWithTheOpenIdeas(t *testing.T) {
 	}
 }
 
-// The entry points at list_ideas with all only when some open ideas are in
-// another repo, which list_ideas alone doesn't show. Either way the key is
-// the same, so where an idea is isn't news.
+// The entry points at list_ideas with all when some open ideas are in
+// another repo, which list_ideas alone doesn't show, or when the repo isn't
+// known, as in the hook's WaitingFor. Either way the key is the same, so
+// where an idea is isn't news.
 func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
 	fake, agentry := newIdeasAgentry(t)
 	elsewhere, _ := openIdeas(agentry, "/repo")
@@ -297,6 +298,10 @@ func TestOpenIdeasPointAtTheirRepo(t *testing.T) {
 	}
 	if here.Key != "ideas/4" || elsewhere.Key != here.Key {
 		t.Errorf("keys %q and %q, want ideas/4 for both", elsewhere.Key, here.Key)
+	}
+	waiting, _ := WaitingFor(agentry)
+	if len(waiting) != 1 || !strings.HasSuffix(waiting[0].Line, "(list_ideas all)") || waiting[0].Key != here.Key {
+		t.Errorf("repo not known: %+v, want (list_ideas all) and key %q", waiting, here.Key)
 	}
 }
 

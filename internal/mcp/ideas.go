@@ -167,9 +167,9 @@ func ideasOf(agentry client.Client, repo string) ([]idea, error) {
 
 // openIdeas is one entry for every open idea, of every repo: how many, and
 // the newest titles. It points at list_ideas with all when some are in
-// another repo than repo ("" is any). Its key is the number of ideas ever
-// suggested, so a new idea is news and one you accept or dismiss isn't. ok
-// is false with none open.
+// another repo than repo, or when repo is "" (not known). Its key is the
+// number of ideas ever suggested, so a new idea is news and one you accept or
+// dismiss isn't. ok is false with none open.
 func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	all, err := ideasOf(agentry, "")
 	if err != nil {
@@ -177,6 +177,9 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	}
 	var open []idea
 	pointer := "list_ideas"
+	if repo == "" {
+		pointer = "list_ideas all"
+	}
 	for _, i := range all {
 		if i.State != "open" {
 			continue
@@ -207,6 +210,7 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 // aboutIdea is what you read before deciding on an idea.
 func aboutIdea(i idea) string {
 	header := headerOf(i)
+	// header[:1] is a whole letter: headerOf always has the kind, and the parts are ASCII.
 	return fmt.Sprintf("Problem: %s\n\nFeature: %s\n\n%s%s.", i.Problem, i.Proposal, strings.ToUpper(header[:1]), header[1:])
 }
 
