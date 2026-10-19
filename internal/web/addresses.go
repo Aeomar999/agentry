@@ -167,7 +167,9 @@ const TrustPath = "/trust/"
 // url, with the CA's fingerprint to check it by, or nil where url isn't
 // served with it. The trust page is served over plain HTTP too, so a link
 // with a port is http: a device that doesn't trust the CA yet opens it with
-// no warning. Without a port, https is on 443 and plain HTTP isn't.
+// no warning. A url without a port only comes from the page's own Host
+// (networkURLs always has one), so that page already loaded over https and
+// its own https trust page works.
 func (s *Server) trustAt(r *http.Request, url string) map[string]string {
 	if !s.servedWithOwnCA(r, url) {
 		return nil
