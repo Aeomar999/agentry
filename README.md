@@ -50,6 +50,16 @@ It starts Agentry in the background, if it isn't already running, prints a link 
 - **As an app:** Install app, in the page's top bar, installs Agentry as an app with its own window. Browsers install only from a secure page: open it at `http://localhost:7800` on the computer it runs on, or over https (`-public-url`), not at a plain `http://` network address.
 - **The other programs in the folder** (`agentry-linux-amd64` and so on) are what Agentry hands other computers that join as workers. Keep them next to `agentry`.
 
+### Signing in the installed app, or another device
+
+The printed link signs a browser in; the installed app opens without it, and so does a phone you haven't sent the link to. Either one shows a sign-in page:
+
+- **Paste the link or the token** that `agentry serve` printed, and Sign in.
+- **Or use a one-time code.** On a device that is signed in, open the person button in the top bar and pick **Sign in another device**. It shows a code such as `ABCD-EFGH` and a QR code: type the code on the other device, or scan the QR code with its camera, which opens Agentry there and signs it in. Pick the address the other device reaches if the server has several. A code works once, for 5 minutes; **New code** makes another. Wrong codes are limited (five a minute from one address), so codes can't be guessed.
+- **Sign out**, in the same menu, signs that device out: it forgets its token and the server clears its cookie.
+
+The device keeps the token, and a cookie that lasts a year, so it stays signed in; an app that kept only the cookie, as on iOS, stays signed in too. Installing needs a secure page: `http://localhost` on the computer Agentry runs on, or https.
+
 ### From the source
 
 You need Go 1.27 and git.
