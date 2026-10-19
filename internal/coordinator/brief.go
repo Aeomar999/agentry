@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -17,7 +18,8 @@ import (
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
 
-func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File) string {
+func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
+	dismissed []*ideas.Idea) string {
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
@@ -36,6 +38,9 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	otherTeams(&b, task, coordinator, roster)
 	epicSection(&b, task, f)
+	if len(dismissed) > 0 {
+		section(&b, "Ideas the user dismissed", dismissedText(dismissed))
+	}
 
 	var trail strings.Builder
 	for i, step := range task.Trail {
@@ -52,7 +57,11 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 		return b.String()
 	}
 	checks(&b, task, roster)
-	section(&b, "Your decision", DecisionFormat)
+	decision := DecisionFormat
+	if isVisionaries(coordinator) {
+		decision += "\n" + IdeasFormat
+	}
+	section(&b, "Your decision", decision)
 	return b.String()
 }
 

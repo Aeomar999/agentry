@@ -30,6 +30,7 @@ type Decision struct {
 	Path         string   `json:"path,omitempty"`    // for fetch: the file or folder on Machine
 	As           string   `json:"as,omitempty"`      // for fetch: the name to share it by; "" for its own
 	Repo         string   `json:"repo,omitempty"`    // for move: the repo the user named: a folder, a git address or an archive link
+	Ideas        []Idea   `json:"ideas,omitempty"`   // for done, from a Visionaries session: the features it suggests (ideas.go)
 }
 
 // Story is one story a split adds to the epic.

@@ -240,7 +240,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	shared, _ := l.filesFor(task)
 	brief := workerBrief(task, move.Agent, move.Handoff, shared)
 	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared)
+		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.dismissedFor(task, move.Agent))
 	}
 	if err := l.runner.Start(task, move.Agent, brief); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
@@ -342,7 +342,11 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 				"options": []string{CloseEpic}, "closing": decision.Summary, "toYou": decision.ToYou})
 			return
 		}
-		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": decision.Summary, "toYou": decision.ToYou}) {
+		summary := decision.Summary
+		if refused := l.suggest(task, decision.Ideas); refused != "" {
+			summary += "\n\n" + refused
+		}
+		if l.propose(task.ID, coordinator, events.TaskDone, map[string]any{"summary": summary, "toYou": decision.ToYou}) {
 			l.removeWorktree(task)
 		}
 	}
