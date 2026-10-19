@@ -15,7 +15,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-brand text-white hover:bg-brand-hover focus-visible:outline-offset-2",
   secondary: "bg-surface-2 text-ink-primary border border-divider hover:border-divider-2 hover:bg-surface-3",
   ghost: "bg-transparent text-ink-secondary hover:bg-surface-2 hover:text-ink-primary",
-  danger: "bg-transparent text-danger border border-divider hover:border-danger hover:bg-danger-soft",
+  danger: "bg-transparent text-danger-ink border border-divider hover:border-danger hover:bg-danger-soft",
 };
 
 const SIZES: Record<Size, string> = {

@@ -11,6 +11,14 @@ const TONES: Record<Tone, string> = {
   success: "border-success/40 bg-success-soft text-success",
 };
 
+// Titles are words, so they take the darker ink; the icon keeps the tone.
+const TITLES: Record<Tone, string> = {
+  danger: "text-danger-ink",
+  warning: "text-warning-ink",
+  info: "text-info-ink",
+  success: "text-success-ink",
+};
+
 const ICONS = { danger: CircleAlert, warning: TriangleAlert, info: Info, success: CircleCheck };
 
 export function Banner({ tone = "danger", title, children }: { tone?: Tone; title: string; children?: ReactNode }) {
@@ -19,7 +27,7 @@ export function Banner({ tone = "danger", title, children }: { tone?: Tone; titl
     <div role="alert" className={cn("flex gap-2.5 rounded-md border px-3 py-2.5", TONES[tone])}>
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
       <div className="min-w-0 text-[13px]">
-        <p className="font-medium">{title}</p>
+        <p className={cn("font-medium", TITLES[tone])}>{title}</p>
         {children && <div className="mt-1 text-ink-secondary">{children}</div>}
       </div>
     </div>
