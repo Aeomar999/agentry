@@ -96,3 +96,42 @@ func TestClosingAnEpicSkipsItsArchivedStory(t *testing.T) {
 		t.Errorf("the open story should be parked: %+v", story)
 	}
 }
+
+// An archived task is done, so neither the list nor a detail shows it
+// blocking the story after it; the story after one that isn't done waits.
+func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	defer server.Close()
+	call(t, server, "POST", "/api/tasks", `{"title":"Shipped","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Not yet","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","stories":["task-1","task-2"]}`)
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-4", Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskCreated,
+		Data: map[string]any{"title": "After both", "repo": "/r", "coordinator": "tech-lead", "kind": "", "epic": "task-3", "after": []string{"task-1", "task-2"}}}); err != nil || rejection != nil {
+		t.Fatal(rejection, err)
+	}
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {
+		t.Fatalf("task-1 onto Done: %d %s", code, body)
+	}
+	state.Archive("task-1")
+
+	_, body := call(t, server, "GET", "/api/tasks", "")
+	var list []taskSummary
+	json.Unmarshal([]byte(body), &list)
+	at := slices.IndexFunc(list, func(summary taskSummary) bool { return summary.ID == "task-4" })
+	if at < 0 {
+		t.Fatalf("the list has no task-4: %s", body)
+	}
+	if !slices.Equal(list[at].BlockedBy, []string{"task-2"}) {
+		t.Errorf("the list has task-4 blocked by %v, want only task-2", list[at].BlockedBy)
+	}
+	_, body = call(t, server, "GET", "/api/tasks/task-4", "")
+	var detail taskDetail
+	json.Unmarshal([]byte(body), &detail)
+	if !slices.Equal(detail.BlockedBy, []string{"task-2"}) {
+		t.Errorf("task-4's detail has it blocked by %v, want only task-2", detail.BlockedBy)
+	}
+}

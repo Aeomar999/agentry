@@ -288,3 +288,25 @@ func TestAnArchivedTaskHoldsNoPort(t *testing.T) {
 		t.Errorf("ports in use %v: want only the working task's", ports)
 	}
 }
+
+// An archived task is done, so a story after it isn't blocked by it and
+// starts; a story after one that isn't done still waits.
+func TestAStoryAfterAnArchivedTaskStarts(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	for _, id := range []string{"task-1", "task-2"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+	}
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Shipped.", "moved": true}})
+	state.Archive("task-1")
+
+	loop := &Loop{store: s, state: state}
+	if loop.blocked(&tasks.Task{After: []string{"task-1"}}) {
+		t.Error("a story after an archived task is blocked")
+	}
+	if !loop.blocked(&tasks.Task{After: []string{"task-1", "task-2"}}) {
+		t.Error("a story after a task that isn't done isn't blocked")
+	}
+}

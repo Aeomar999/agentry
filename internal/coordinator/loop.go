@@ -488,10 +488,14 @@ func (l *Loop) wakeStories(epic *tasks.Task) {
 }
 
 // blocked is a story whose stories before it aren't done: its worktree
-// would start from a dev without their work.
+// would start from a dev without their work. An archived story is done.
 func (l *Loop) blocked(story *tasks.Task) bool {
 	for _, id := range story.After {
-		if before, _, err := l.load(id); err != nil || before == nil || !before.IsDone {
+		before, _, err := l.load(id)
+		if errors.Is(err, current.ErrArchived) {
+			continue
+		}
+		if err != nil || before == nil || !before.IsDone {
 			return true
 		}
 	}

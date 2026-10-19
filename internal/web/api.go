@@ -38,10 +38,16 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	for _, task := range all {
 		done[task.ID] = task.IsDone
 	}
+	isDone := func(id string) bool {
+		if isDone, listed := done[id]; listed {
+			return isDone
+		}
+		return s.isDone(id)
+	}
 	summaries := []taskSummary{}
 	for _, task := range all {
 		summary := tasks.SummaryOf(task, roster)
-		summary.BlockedBy = blockedBy(task, func(id string) bool { return done[id] })
+		summary.BlockedBy = blockedBy(task, isDone)
 		summaries = append(summaries, summary)
 	}
 	// In your priority order; a new task starts first.
@@ -382,8 +388,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail := detailOf(task, roster, log)
-	isDone := func(id string) bool { other, _ := s.task(id); return other != nil && other.IsDone }
-	detail.BlockedBy = blockedBy(task, isDone)
+	detail.BlockedBy = blockedBy(task, s.isDone)
 	if epic, _ := s.task(task.Epic); epic != nil {
 		detail.EpicTitle = epic.Title
 	}
@@ -391,7 +396,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	for _, id := range task.Stories {
 		if story, _ := s.task(id); story != nil {
 			summary := tasks.SummaryOf(story, roster)
-			summary.BlockedBy = blockedBy(story, isDone)
+			summary.BlockedBy = blockedBy(story, s.isDone)
 			detail.StoryList = append(detail.StoryList, summary)
 		}
 	}
@@ -547,6 +552,16 @@ func (s *Server) propose(w http.ResponseWriter, p events.Proposal) {
 }
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
+
+// isDone says whether a task is done. An archived task is: only a done task
+// is archived. A broken or unknown one isn't.
+func (s *Server) isDone(id string) bool {
+	task, err := s.task(id)
+	if errors.Is(err, current.ErrArchived) {
+		return true
+	}
+	return task != nil && task.IsDone
+}
 
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)
