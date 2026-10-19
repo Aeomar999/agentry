@@ -157,6 +157,22 @@ describe("Markdown refs", () => {
     expect(command.className).not.toContain("inline-block");
   });
 
+  test("keeps a task id, a short hash and a short branch whole, but lets a 40-character path wrap", () => {
+    const path = "ui/src/components/organisms/Activity.tsx";
+    expect(path).toHaveLength(40);
+    const { container } = render(<Markdown text={`see task-21, 3f2a9c1, \`agentry/task-1\` and \`${path}\``} {...withRefs} />);
+    const [task, hash] = container.querySelectorAll("a");
+    const [branch, long] = container.querySelectorAll("code");
+    for (const whole of [task, hash, branch]) expect(whole.className).toContain("inline-block max-w-full");
+    expect(long.className).not.toContain("inline-block");
+  });
+
+  test("lets a long linked word wrap too, such as a full hash", () => {
+    const [a] = links("see 3f2a9c1d0e4b5a6978877665544332211aabbccd there", withRefs);
+    expect(a.className).toContain("font-mono");
+    expect(a.className).not.toContain("inline-block");
+  });
+
   test.each([
     ["an unknown task", "task-999"],
     ["an unknown hash", "abcdef1"],
