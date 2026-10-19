@@ -30,3 +30,15 @@ func TeamHas(roster agents.Roster, coordinator, column string) bool {
 	lead, _ := roster.Get(coordinator)
 	return slices.ContainsFunc(roster.Assignees(lead.TeamName()), func(a agents.Agent) bool { return a.Column == column })
 }
+
+// BoardColumns are the board's columns, in order. Shipping is one only while
+// an agent ships work or one of these tasks is in it: without either it
+// means nothing.
+func BoardColumns(roster agents.Roster, all []*Task) []string {
+	columns := []string{"backlog", "todo", "in-progress", "review", "shipping", "done"}
+	ships := slices.ContainsFunc(roster, func(a agents.Agent) bool { return a.Column == agents.Ships })
+	if ships || slices.ContainsFunc(all, func(t *Task) bool { return t.BoardColumn(roster) == "shipping" }) {
+		return columns
+	}
+	return slices.DeleteFunc(columns, func(column string) bool { return column == "shipping" })
+}

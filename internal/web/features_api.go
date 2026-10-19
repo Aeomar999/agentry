@@ -6,13 +6,19 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // listFeatures answers whether the page shows each feature, and why, worked
-// out from the current state on every request, and what the log holds that
-// this build skipped: a feature's streams it doesn't have, types it doesn't know.
+// out from the current state on every request, the board's columns, and
+// what the log holds that this build skipped: a feature's streams it doesn't
+// have, types it doesn't know.
 func (s *Server) listFeatures(w http.ResponseWriter, r *http.Request) {
-	httpapi.Reply(w, map[string]any{"features": features.Manifest(s.config.Features, s.state), "unknown": s.state.Unknown()})
+	httpapi.Reply(w, map[string]any{
+		"features": features.Manifest(s.config.Features, s.state),
+		"board":    map[string]any{"columns": tasks.BoardColumns(s.state.Roster(), s.state.Tasks())},
+		"unknown":  s.state.Unknown(),
+	})
 }
 
 // mount puts f's routes on mux, each behind the wrapper its Auth names.

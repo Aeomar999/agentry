@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -346,5 +347,56 @@ func TestASignedRouteTakesARequestWithNoBody(t *testing.T) {
 	handler.ServeHTTP(response, &http.Request{Method: "POST", Header: http.Header{}})
 	if response.Code != http.StatusUnauthorized || reached {
 		t.Errorf("no body: %d, handler reached %v; want 401 and not reached", response.Code, reached)
+	}
+}
+
+// The board's columns list Shipping only while an agent ships work or a
+// task is in Shipping: Software's deployer brings it, a Writing team alone
+// doesn't, and a task left in Shipping keeps it after its shipper goes.
+func TestTheBoardShowsShippingOnlyWhileItMeansSomething(t *testing.T) {
+	columns := func(server *httptest.Server) string {
+		t.Helper()
+		code, body := call(t, server, "GET", "/api/features", "")
+		if code != 200 {
+			t.Fatalf("features: %d %s", code, body)
+		}
+		var reply struct{ Board struct{ Columns []string } }
+		if err := json.Unmarshal([]byte(body), &reply); err != nil {
+			t.Fatal(err)
+		}
+		return strings.Join(reply.Board.Columns, " ")
+	}
+	const all, noShipping = "backlog todo in-progress review shipping done", "backlog todo in-progress review done"
+	must := func(server *httptest.Server, method, path, body string) {
+		t.Helper()
+		if code, reply := call(t, server, method, path, body); code != 200 {
+			t.Fatalf("%s %s: %d %s", method, path, code, reply)
+		}
+	}
+
+	writing, _ := newTestServer(t)
+	if got := columns(writing); got != all {
+		t.Errorf("Software, whose deployer ships: %q, want %q", got, all)
+	}
+	must(writing, "POST", "/api/teams", `{"template":"Writing"}`)
+	must(writing, "DELETE", "/api/teams/Software", "")
+	if got := columns(writing); got != noShipping {
+		t.Errorf("Writing only: %q, want %q", got, noShipping)
+	}
+	must(writing, "POST", "/api/teams", `{"template":"Software"}`)
+	if got := columns(writing); got != all {
+		t.Errorf("Software added back: %q, want %q", got, all)
+	}
+
+	shipped, _ := newTestServer(t)
+	must(shipped, "POST", "/api/tasks", `{"title":"Ship it"}`)
+	must(shipped, "POST", "/api/tasks/task-1/direct", `{"to":"shipping"}`)
+	must(shipped, "DELETE", "/api/agents/deployer", "")
+	if got := columns(shipped); got != all {
+		t.Errorf("no agent ships, but task-1 is in Shipping: %q, want %q", got, all)
+	}
+	must(shipped, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`)
+	if got := columns(shipped); got != noShipping {
+		t.Errorf("no agent ships and task-1 is done: %q, want %q", got, noShipping)
 	}
 }
