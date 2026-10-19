@@ -76,18 +76,24 @@ func TestOnlyPushesSinceTheLastReopenCount(t *testing.T) {
 	byLeadDone := said(byLead, events.TaskDone, "", map[string]any{"summary": "Done."})
 	byYouDone := said(byYou, events.TaskDone, "", map[string]any{"summary": "Moved.", "moved": true})
 	for name, c := range map[string]struct {
-		pushAgain bool
-		done      events.Proposal
-		want      bool
+		pushAgain   bool
+		reopenAgain bool
+		done        events.Proposal
+		want        bool
 	}{
-		"no new push, done by its coordinator": {false, byLeadDone, false},
-		"no new push, moved to Done by you":    {false, byYouDone, false},
-		"pushed again":                         {true, byLeadDone, true},
+		"no new push, done by its coordinator":           {false, false, byLeadDone, false},
+		"no new push, moved to Done by you":              {false, false, byYouDone, false},
+		"pushed again":                                   {true, false, byLeadDone, true},
+		"pushed again, reopened again and no third push": {true, true, byLeadDone, false},
 	} {
 		steps := []events.Proposal{said(byYou, events.TaskCreated, "", map[string]any{"title": "t", "coordinator": "tech-lead"})}
 		steps = append(steps, engineerTurn(1, true)...)
 		steps = append(steps, byLeadDone, said(byYou, events.TaskReopened, "", map[string]any{"text": "Again."}))
 		steps = append(steps, engineerTurn(2, c.pushAgain)...)
+		if c.reopenAgain {
+			steps = append(steps, byLeadDone, said(byYou, events.TaskReopened, "", map[string]any{"text": "Once more."}))
+			steps = append(steps, engineerTurn(3, false)...)
+		}
 		task := FromEvents(logOf(append(steps, c.done)...))
 		if !task.IsDone {
 			t.Fatalf("%s: the task isn't done", name)
