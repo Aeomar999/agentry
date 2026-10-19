@@ -291,10 +291,12 @@ func TestAPaddedImportIsSavedTrimmed(t *testing.T) {
 	server, s := newTestServer(t)
 	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
 	_, exported := call(t, server, "GET", "/api/teams/templates/my-software/export", "")
-	padded := strings.Replace(exported, `"description":"Ours."`, `"description":"  Ours.  "`, 1)
-	padded = strings.Replace(padded, `"team":"Software"`, `"team":"  Software  "`, 1)
-	if padded == exported {
-		t.Fatal("nothing padded")
+	padded := exported
+	for target, padding := range map[string]string{`"description":"Ours."`: `"description":"  Ours.  "`, `"team":"Software"`: `"team":"  Software  "`} {
+		if !strings.Contains(padded, target) {
+			t.Fatalf("nothing to pad: no %s in %s", target, exported)
+		}
+		padded = strings.Replace(padded, target, padding, 1)
 	}
 	if code, body := call(t, server, "POST", "/api/teams/templates/import", padded); code != 200 {
 		t.Fatalf("import: %d %s", code, body)
