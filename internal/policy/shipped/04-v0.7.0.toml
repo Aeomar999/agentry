@@ -1,0 +1,299 @@
+# Agentry's policy: what agents may do without asking you.
+#
+# Agentry copies this file to ~/.agentry/policy.toml on first start. Edit that
+# copy; Agentry checks it, and anything it doesn't understand is an error,
+# never a guess.
+#
+# How a call is decided
+#   An agent's call (run a command, edit a file, fetch a page) is judged by
+#   the agent's profile. Its rules are read top to bottom, and the first rule
+#   that matches decides: "allow" runs it, "ask" waits for you on the page,
+#   "deny" refuses it and tells the agent why. If no rule matches, the
+#   profile's `otherwise` decides.
+#
+#   One protection is built in and can't be turned off here: no agent may
+#   touch Agentry's own files (this policy, its log, its sign-in token).
+#
+# What a rule can match. A rule matches when ALL the conditions it has hold;
+# a rule with no conditions matches everything.
+#   tools      the tool's name is one of these: Bash, Read, Edit, Write, WebFetch, ...
+#   runs_any   a shell command runs at least one command matching these patterns
+#              (each command of a chain, and each pipeline as "a | b")
+#   runs_only  a shell command runs nothing but commands matching these patterns,
+#              and nothing in it is unknown until it runs, such as $(...)
+#   paths      the call touches a path matching these patterns
+#   where      "workspace": everything it touches is in the task's worktree or
+#              the profile's scratch places; "outside": something isn't
+#
+# Patterns
+#   commands   * matches anything, spaces included: 'git push *'. A trailing
+#              " *" may match nothing, so 'git push *' also matches 'git push'.
+#   paths      * stays inside one folder, ** crosses folders, ~ is your home.
+#              A pattern with no / matches that name in any folder: '.env'.
+#   Write patterns in 'single quotes': TOML then takes every character as it is.
+#
+# Allow everything, as shipped
+#   use_for_everyone below makes every agent use the "allow-everything"
+#   profile: agents run anything, and only Agentry's own files stay off
+#   limits. To restrict them, comment that line out; each agent then uses its
+#   own profile (developer, read-only, ...), and these rules apply.
+
+version = 1
+
+# Tools whose input is a shell command, judged by runs_any and runs_only.
+shell_tools = ["Bash"]
+
+# The profile of an agent that doesn't name one.
+default_profile = "developer"
+
+# Every agent uses this profile, whatever its own. Comment it out to use each
+# agent's own profile instead.
+use_for_everyone = "allow-everything"
+
+
+[profiles.developer]
+why = "The workspace is the agent's own space and its whole diff is reviewed, so what stays inside it is allowed. What may reach outside asks you."
+otherwise = "ask"
+# What happens to a shell command Agentry can't parse.
+unreadable = "ask"
+# Places outside the workspace the agent may also use freely: Claude Code's own scratch folder.
+scratch = ['/tmp/claude-*/**']
+
+  [[profiles.developer.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = ['.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519']
+  why = "Keys and passwords never reach a model."
+
+  [[profiles.developer.rules]]
+  name = "never sudo"
+  decision = "deny"
+  runs_any = ['sudo *', 'su *', 'doas *']
+  why = "An agent never acts as another user."
+
+  [[profiles.developer.rules]]
+  name = "never rm -rf"
+  decision = "deny"
+  runs_any = ['rm -rf *', 'rm -fr *', 'rm -Rf *', 'rm -fR *', 'rm -r -f *', 'rm -f -r *', 'rm --recursive --force *']
+  why = "One wrong path deletes everything; remove what you mean, file by file."
+
+  [[profiles.developer.rules]]
+  name = "agents never push to main"
+  decision = "deny"
+  runs_any = ['git push * main', 'git push * master', 'git push *:main', 'git push *:master']
+  why = "Work reaches main through dev and review, not straight from an agent."
+
+  [[profiles.developer.rules]]
+  name = "never force push"
+  decision = "deny"
+  runs_any = ['git push * -f *', 'git push -f *', 'git push *--force*', 'git push * +*']
+  why = "A force push can erase other people's work."
+
+  [[profiles.developer.rules]]
+  name = "never pipe the internet into a shell"
+  decision = "deny"
+  runs_any = ['curl * | sh*', 'curl * | bash*', 'curl * | zsh*', 'wget * | sh*', 'wget * | bash*']
+  why = "It runs code nobody has read."
+
+  [[profiles.developer.rules]]
+  name = "edits only inside the workspace"
+  decision = "deny"
+  tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+  where = "outside"
+  why = "Changes outside the workspace aren't in the diff you review."
+
+  [[profiles.developer.rules]]
+  name = "every push leaves this machine: you approve it"
+  decision = "ask"
+  runs_any = ['git push *']
+  why = "You see everything that goes to a remote."
+
+  [[profiles.developer.rules]]
+  name = "commands that run other commands"
+  decision = "ask"
+  runs_any = ['find * -exec *', 'find * -execdir *', 'find * -ok *', 'xargs *', 'eval *', 'sh -c *', 'bash -c *', 'source *', '. *']
+  why = "The command they run is data Agentry can't judge."
+
+  [[profiles.developer.rules]]
+  name = "reaches the internet"
+  decision = "ask"
+  tools = ["WebFetch", "WebSearch"]
+  why = "Pages can carry instructions aimed at the agent."
+
+  [[profiles.developer.rules]]
+  name = "reading is always allowed"
+  decision = "allow"
+  tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
+  why = "Reading changes nothing; secrets are denied above."
+
+  [[profiles.developer.rules]]
+  name = "edit inside the workspace, the diff is reviewed"
+  decision = "allow"
+  tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+  where = "workspace"
+  why = "Every change shows in the task's diff."
+
+  [[profiles.developer.rules]]
+  name = "stays inside the workspace"
+  decision = "allow"
+  where = "workspace"
+  runs_only = [
+    # look around
+    'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'type *', 'sort *', 'uniq *', 'diff *', 'cmp *',
+    'du *', 'df *', 'date *', 'basename *', 'dirname *', 'realpath *', 'readlink *', 'cut *', 'tr *', 'jq *',
+    'sed -n *', 'awk *', 'true', 'false', 'test *', '[ *', 'sleep *', 'set *', 'export *', 'local *', 'unset *',
+    # change files in the workspace
+    'mkdir *', 'touch *', 'cp *', 'mv *', 'rm *', 'tee *', 'chmod *', 'ln *',
+    # git, except push
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git add *',
+    'git commit *', 'git restore *', 'git stash *', 'git checkout *', 'git switch *', 'git fetch *', 'git merge *',
+    'git rebase *', 'git rev-parse *', 'git merge-base *', 'git remote -v', 'git blame *', 'git grep *', 'git rm *',
+    'git mv *', 'git reset *', 'git tag *', 'git describe *', 'git config --get *',
+    # build and test
+    'go build *', 'go test *', 'go vet *', 'go fmt *', 'go mod tidy *', 'go list *', 'gofmt *',
+    'npm test *', 'npm run *', 'npx tsc *', 'npx vitest *', 'npx jest *', 'npx eslint *', 'npx prettier *',
+    'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make', 'make test *', 'make build *', 'make lint *',
+    'cargo test *', 'cargo build *', 'cargo check *', 'cargo fmt *', 'cargo clippy *',
+  ]
+  why = "These read, or change only files in the workspace, which you review as a diff."
+
+
+[profiles.read-only]
+why = "For agents that judge work: the reviewer and the coordinator. They read and run the tests, and change nothing."
+otherwise = "ask"
+unreadable = "ask"
+scratch = ['/tmp/claude-*/**']
+
+  [[profiles.read-only.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = ['.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519']
+  why = "Keys and passwords never reach a model."
+
+  [[profiles.read-only.rules]]
+  name = "keeps its own notes"
+  decision = "allow"
+  tools = ["Edit", "Write", "MultiEdit"]
+  paths = ['**/.agentry/knowledge.md']
+  where = "workspace"
+  why = "Its knowledge file is its notes for later tasks, not the work it judges."
+
+  [[profiles.read-only.rules]]
+  name = "this agent changes nothing"
+  decision = "deny"
+  tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+  why = "Its job is to judge the work, not to change it."
+
+  [[profiles.read-only.rules]]
+  name = "reading is always allowed"
+  decision = "allow"
+  tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
+  why = "Reading changes nothing; secrets are denied above."
+
+  [[profiles.read-only.rules]]
+  name = "reads and runs the tests"
+  decision = "allow"
+  where = "workspace"
+  runs_only = [
+    'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
+    'sed -n *', 'true', 'false', 'test *', '[ *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
+    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
+    'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
+    'cargo test *', 'cargo check *', 'cargo clippy *',
+  ]
+  why = "Reading and testing leave the code as it was."
+
+
+[profiles.read-mostly]
+why = "For agents that only think and suggest, such as the Visionaries: read-only, and they may also read the task board."
+otherwise = "ask"
+unreadable = "ask"
+scratch = ['/tmp/claude-*/**']
+
+  [[profiles.read-mostly.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = ['.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519']
+  why = "Keys and passwords never reach a model."
+
+  [[profiles.read-mostly.rules]]
+  name = "keeps its own notes"
+  decision = "allow"
+  tools = ["Edit", "Write", "MultiEdit"]
+  paths = ['**/.agentry/knowledge.md']
+  where = "workspace"
+  why = "Its knowledge file is its notes for later tasks."
+
+  [[profiles.read-mostly.rules]]
+  name = "this agent changes nothing"
+  decision = "deny"
+  tools = ["Edit", "Write", "MultiEdit", "NotebookEdit"]
+  why = "Its job is to suggest, not to change the code."
+
+  [[profiles.read-mostly.rules]]
+  name = "this agent never commits"
+  decision = "deny"
+  runs_any = ['git commit *', 'git push *', 'git -C * commit *', 'git -C * push *']
+  why = "It suggests ideas; the engineers commit."
+
+  [[profiles.read-mostly.rules]]
+  name = "reading is always allowed"
+  decision = "allow"
+  tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
+  why = "Reading changes nothing; secrets are denied above."
+
+  [[profiles.read-mostly.rules]]
+  name = "reads the task board"
+  decision = "allow"
+  tools = ["mcp__agentry__status", "mcp__agentry__list_tasks", "mcp__agentry__show_task"]
+  why = "Seeing what is planned and done changes nothing; the tools that write to the board still ask."
+
+  [[profiles.read-mostly.rules]]
+  name = "reads and runs the tests"
+  decision = "allow"
+  where = "workspace"
+  runs_only = [
+    'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
+    'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
+    'sed -n *', 'true', 'false', 'test *', '[ *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
+    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
+    'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
+    'cargo test *', 'cargo check *', 'cargo clippy *',
+  ]
+  why = "Reading and testing leave the code as it was."
+
+[profiles.autonomous]
+why = "Does anything on this machine, and asks you only before acting outside it. Agentry sees commands, not network traffic, so a script can still reach out unseen (T-030)."
+otherwise = "allow"
+unreadable = "ask"
+
+  [[profiles.autonomous.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = ['.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519']
+  why = "Keys and passwords never reach a model."
+
+  [[profiles.autonomous.rules]]
+  name = "acts outside this machine: you approve it"
+  decision = "ask"
+  runs_any = ['git push *', 'curl *', 'wget *', 'ssh *', 'scp *', 'rsync *', 'gh *', 'glab *', 'npm publish *',
+              'docker push *', 'kubectl *', 'terraform *', 'aws *', 'gcloud *']
+  why = "You see everything that leaves this machine or changes something elsewhere."
+
+  [[profiles.autonomous.rules]]
+  name = "reaches the internet"
+  decision = "ask"
+  tools = ["WebFetch", "WebSearch"]
+  why = "Pages can carry instructions aimed at the agent."
+
+
+[profiles.allow-everything]
+why = "Allows every call. Only Agentry's own files stay off limits."
+otherwise = "allow"
+unreadable = "allow"

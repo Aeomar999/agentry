@@ -113,7 +113,7 @@ func (l *Loop) act(id string) {
 	}
 	if task.Fetching != nil && !task.IsDone {
 		fetch := *task.Fetching
-		l.beside(task.ID, func(ctx context.Context) { l.fetch(ctx, task, fetch) })
+		l.beside(task, func(ctx context.Context) events.Proposal { return l.fetch(ctx, task, fetch) })
 		return
 	}
 
@@ -349,27 +349,26 @@ func (l *Loop) recoverDecision(task *tasks.Task, decision Decision) {
 // can ask the user.
 func (l *Loop) moveRepo(task *tasks.Task, coordinator events.Actor, repo string) {
 	if !worktrees.IsAddress(repo) {
-		l.movedTo(task, coordinator, repo, repo, worktrees.IsRepo(repo))
+		l.tell(movedTo(task, coordinator, repo, repo, worktrees.IsRepo(repo)))
 		return
 	}
-	l.beside(task.ID, func(context.Context) {
+	l.beside(task, func(context.Context) events.Proposal {
 		folder, err := worktrees.Clone(l.Clones, repo)
 		reason := ""
 		if err != nil {
 			reason = sentence(err) + " Ask the user to give Agentry access to it, or to clone it here themselves."
 		}
-		l.movedTo(task, coordinator, repo, folder, reason)
+		return movedTo(task, coordinator, repo, folder, reason)
 	})
 }
 
 // movedTo tells the move to folder, the repo named as repo, or why it
 // couldn't be made.
-func (l *Loop) movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason string) {
+func movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason string) events.Proposal {
 	if reason != "" {
-		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the task couldn't move to " + repo + ": " + reason})
-		return
+		return told(task, agentry, events.IssueRaised, map[string]any{"reason": "the task couldn't move to " + repo + ": " + reason})
 	}
-	l.propose(task.ID, coordinator, events.RepoChanged, map[string]any{"repo": folder})
+	return told(task, coordinator, events.RepoChanged, map[string]any{"repo": folder})
 }
 
 // request opens a task for another team, for what this one needs from it,
@@ -601,3 +600,6 @@ func (l *Loop) propose(task string, actor events.Actor, kind events.Type, data m
 	}
 	return true
 }
+
+// tell proposes an event made earlier, as work beside the loop ends with.
+func (l *Loop) tell(p events.Proposal) bool { return l.propose(p.Stream, p.Actor, p.Type, p.Data) }

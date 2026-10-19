@@ -10,13 +10,16 @@ import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { Banner } from "@/components/molecules/Banner";
 import { Dialog } from "@/components/molecules/Dialog";
 import { Mono } from "@/components/molecules/Mono";
+import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
+import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
 import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
-import { addTeam, teamOf, teamsOf } from "@/lib/teams";
-import type { Agent } from "@/api/types";
+import { addTeam, missingProfilesOf, teamOf, teamsOf } from "@/lib/teams";
+import { profileInForce } from "@/lib/profiles";
+import type { Agent, Policy } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useRowCursor } from "@/lib/shortcuts";
 import { cn } from "@/lib/cn";
@@ -48,7 +51,15 @@ const COLUMNS: Column<Agent>[] = [
     render: (agent) => <p className="truncate text-ink-secondary">{agent.description}</p>,
   },
   { header: "Engine", className: "w-24 max-md:hidden", render: (agent) => <Mono>{agent.engine}</Mono> },
-  { header: "Profile", className: "w-32 max-md:hidden", render: (agent) => <Mono>{agent.profile || "default"}</Mono> },
+  {
+    header: "Profile",
+    className: "w-44 max-md:hidden",
+    render: (agent) => (
+      <span className="block truncate" title={profileInForce(agent)}>
+        <Mono>{profileInForce(agent)}</Mono>
+      </span>
+    ),
+  },
   {
     header: "Runs on",
     className: "w-36 max-lg:hidden",
@@ -66,6 +77,12 @@ export function AgentsPage() {
   const agents = data ?? [];
   const teams = teamsOf(agents);
   const templates = useResource<Template[]>("/api/teams/templates").data ?? [];
+  const policy = useResource<Policy>("/api/policy");
+  // A change to the policy changes the profiles in force, so both are read again.
+  const reloadAll = () => {
+    reload();
+    policy.reload();
+  };
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
   const canRemoveTeam = teams.length > 1;
@@ -86,6 +103,11 @@ export function AgentsPage() {
       {error && (
         <div className="p-6">
           <Banner title="Couldn't load the agents">{error}</Banner>
+        </div>
+      )}
+      {policy.data?.useForEveryone && (
+        <div className="border-b border-divider px-6 py-4">
+          <UseForEveryoneNotice profile={policy.data.useForEveryone} hash={policy.data.hash} onChanged={reloadAll} />
         </div>
       )}
       <div className="flex items-center gap-3 border-b border-divider px-6 py-2.5">
@@ -151,9 +173,10 @@ export function AgentsPage() {
           <AddTeam
             templates={templates}
             existing={teams.map((t) => t.team)}
+            policyHash={policy.data?.hash ?? ""}
             onAdded={(team) => {
               setAdding(false);
-              reload();
+              reloadAll();
               notify(team);
             }}
           />
@@ -226,7 +249,7 @@ function AgentCard({ agent, onRemove }: { agent: Agent; onRemove: () => void }) 
           {agent.engine}
           {agent.model ? ` · ${agent.model}` : ""}
         </span>
-        <span>{agent.profile || "default"} profile</span>
+        <span>{profileInForce(agent)}</span>
         <span>{runsOn(agent.workers)}</span>
       </span>
     </Link>
@@ -295,18 +318,35 @@ function Node({ agent }: { agent: Agent }) {
 }
 
 // The ready-made teams, to add one: its agents come with prompts written
-// for its kind of work.
-function AddTeam({ templates, existing, onAdded }: { templates: Template[]; existing: string[]; onAdded: (team: string) => void }) {
+// for its kind of work. A team whose profiles policy.toml lacks is refused
+// with the names of those profiles; it can then be added with them, in one
+// change of the policy made against the version the page saw (policyHash).
+interface AddTeamProps {
+  templates: Template[];
+  existing: string[];
+  policyHash: string;
+  onAdded: (team: string) => void;
+}
+
+interface NeedsProfiles {
+  team: string;
+  profiles: string[];
+}
+
+function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
   const notify = useToast();
   const [busy, setBusy] = useState("");
-  async function add(template: Template) {
-    setBusy(template.team);
+  const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
+  async function add(team: string, addMissingProfiles = false) {
+    setBusy(team);
     try {
-      await addTeam(template.team);
-      notify("success", `Added the ${template.team} team`, "Pick it on New task; its coordinator takes the task.");
-      onAdded(template.team);
+      await addTeam(team, addMissingProfiles ? policyHash : undefined);
+      notify("success", `Added the ${team} team`, "Pick it on New task; its coordinator takes the task.");
+      onAdded(team);
     } catch (failure) {
-      notify("danger", "The team wasn't added", (failure as Error).message);
+      const profiles = missingProfilesOf(failure);
+      if (profiles && !addMissingProfiles) setNeeds({ team, profiles });
+      else notify("danger", "The team wasn't added", (failure as Error).message);
       setBusy("");
     }
   }
@@ -316,6 +356,15 @@ function AddTeam({ templates, existing, onAdded }: { templates: Template[]; exis
         Each team comes with a coordinator and its specialists, each with a prompt written for the work. Change any of them afterwards, or
         add agents of your own with New agent.
       </p>
+      {needs && (
+        <MissingProfilesOffer
+          team={needs.team}
+          profiles={needs.profiles}
+          adding={busy === needs.team}
+          disabled={Boolean(busy)}
+          onAdd={() => add(needs.team, true)}
+        />
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {templates.map((template) => {
           const has = existing.includes(template.team);
@@ -341,7 +390,7 @@ function AddTeam({ templates, existing, onAdded }: { templates: Template[]; exis
                 ))}
               </span>
               <span className="mt-auto pt-1">
-                <Button size="sm" variant={has ? "ghost" : "primary"} disabled={Boolean(busy)} onClick={() => add(template)}>
+                <Button size="sm" variant={has ? "ghost" : "primary"} disabled={Boolean(busy)} onClick={() => add(template.team)}>
                   {busy === template.team ? "Adding…" : has ? "Add another" : "Add this team"}
                 </Button>
               </span>

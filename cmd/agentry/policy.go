@@ -28,20 +28,41 @@ func openPolicy(dataDir string, log *store.Store) (*policy.Live, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(history) == 0 || history[len(history)-1].Text("hash") != live.Current().Hash() {
-		recordPolicy(log, live, nil)
+	if last := lastLoaded(history); last == nil || last.Text("hash") != live.Current().Hash() {
+		recordAtStart(log, live, last)
 	}
 	return live, nil
 }
 
-// recordPolicy writes policy.loaded for the policy in force, or
-// policy.refused when the file on disk was refused.
-func recordPolicy(log *store.Store, live *policy.Live, refused error) {
-	agentry := events.Actor{Kind: events.System, ID: "policy"}
-	p := events.Proposal{Stream: events.PolicyStream, Actor: agentry, Type: events.PolicyLoaded,
-		Data: map[string]any{"hash": live.Current().Hash(), "path": live.Path(), "profiles": live.Current().ProfileNames()}}
-	if refused != nil {
-		p.Type, p.Data = events.PolicyRefused, map[string]any{"reason": refused.Error(), "path": live.Path(), "kept": live.Current().Hash()}
+func lastLoaded(history []events.Event) *events.Event {
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].Type == events.PolicyLoaded {
+			return &history[i]
+		}
 	}
-	log.Propose(p)
+	return nil
+}
+
+// recordAtStart records the policy Agentry starts with, which is new to the
+// log: the first, or one changed while Agentry wasn't running. Its diff is
+// from the last version recorded, when the log holds that one's text.
+func recordAtStart(log *store.Store, live *policy.Live, last *events.Event) {
+	loaded, change := &policy.Change{Policy: live.Current()}, "first loaded"
+	if last != nil {
+		change = "noticed on disk"
+		if before := last.Text("text"); before != "" {
+			loaded.Diff = policy.LineDiff("before", "after", before, loaded.Policy.Text())
+		}
+	}
+	log.Propose(policy.Loaded(live.Path(), loaded, change, policy.Agentry))
+}
+
+// recordOnDisk records a change to the file the watcher noticed: the
+// policy it put in force, or the file it refused.
+func recordOnDisk(log *store.Store, live *policy.Live, loaded *policy.Change, refused error) {
+	if refused != nil {
+		log.Propose(policy.Refused(live.Path(), live.Current(), refused))
+		return
+	}
+	log.Propose(policy.Loaded(live.Path(), loaded, "noticed on disk", policy.Agentry))
 }

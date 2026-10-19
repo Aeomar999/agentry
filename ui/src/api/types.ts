@@ -128,6 +128,7 @@ export interface Agent {
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
+  effective?: EffectiveProfile; // the profile in force; none while the policy isn't loaded
 }
 
 export type Decision = "allow" | "ask" | "deny";
@@ -140,6 +141,57 @@ export interface Policy {
   useForEveryone: string;
   profiles: PolicyProfile[];
   text: string;
+  version: string; // this Agentry's, as the defaults it ships are
+  defaults: DefaultProfile[];
+  users: Record<string, ProfileUser[]>; // by each agent's own profile
+  effective: Record<string, EffectiveProfile>; // by agent
+  missing: Record<string, string[]>; // profiles agents have that the file lacks, with those agents
+}
+
+// A profile Agentry ships, as your file has it: missing, the default of
+// this version, the default of an older one you never touched, or changed by you.
+export interface DefaultProfile {
+  name: string;
+  state: "missing" | "current" | "outdated" | "edited";
+  shippedIn?: string; // the version an outdated profile is the default of
+  text: string; // as this version ships it
+  diff?: string; // yours against it, when outdated or edited
+}
+
+// An agent with a profile. One that follows default_profile names none of its own.
+export interface ProfileUser {
+  agent: string;
+  followsDefault: boolean;
+}
+
+// The profile that judges an agent's calls: its own, unless use_for_everyone overrides it.
+export interface EffectiveProfile {
+  profile: string;
+  own: string;
+  overridden: boolean;
+  missing: boolean; // the file has no profile own, so the agent's calls are denied unless overridden
+  text: string; // "read-mostly, overridden by allow-everything", "read-mostly (missing from policy.toml)"
+}
+
+// One entry of the policy's history, newest first.
+export interface PolicyVersion {
+  position: number;
+  at: string;
+  actor: { kind: string; id: string };
+  change: string; // what changed; for a refused file, why it was refused
+  refused?: boolean;
+  hash: string;
+  diff?: string;
+  backup?: string;
+  canRevert: boolean; // the log holds its text
+}
+
+// A change made to the policy from the page.
+export interface PolicyChange {
+  hash: string;
+  change: string;
+  diff: string;
+  backup: string;
 }
 
 export interface PolicyProfile {
@@ -158,6 +210,8 @@ export interface ServerConfig {
   engines: string[];
   workers: string[]; // the machines agents can be given: "local" first, then every worker
   canAddWorkers: boolean;
+  policyProblem: boolean; // policy.toml has a mistake; the Policy page says what
+  missingProfiles: Record<string, string[]>; // profiles agents have that policy.toml lacks, with those agents
 }
 
 // A machine, besides the one Agentry runs on, that agents can run on.

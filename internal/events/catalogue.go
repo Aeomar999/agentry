@@ -84,7 +84,7 @@ var catalogue = map[Type]spec{
 	WorkerDisconnected: {fields: []string{"name"}, writers: []ActorKind{System}},
 	WorkerRemoved:      {fields: []string{"name"}, writers: []ActorKind{Human, System}}, // System: the worker left by itself
 
-	PolicyLoaded:  {fields: []string{"hash", "path"}, writers: []ActorKind{System}},
+	PolicyLoaded:  {fields: []string{"hash", "path"}, writers: []ActorKind{System, Human}}, // "text", "change", "diff", "backup"; Human: a change made on the Policy page
 	PolicyRefused: {fields: []string{"reason", "path"}, writers: []ActorKind{System}},
 
 	IdeaSuggested: {fields: []string{"title", "problem", "proposal", "size", "repo", "task"}, writers: []ActorKind{Agent, System}},

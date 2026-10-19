@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -206,13 +207,25 @@ func turnOf(t *tasks.Task, s tasks.Step) string {
 	return found
 }
 
-func agentsOf(roster agents.Roster) []agents.Agent {
-	list := []agents.Agent{}
+// agentView is an agent with the profile that judges its calls, when there
+// is a policy.
+type agentView struct {
+	agents.Agent
+	Effective *effectiveView `json:"effective,omitempty"`
+}
+
+func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
+	list := []agentView{}
 	for _, a := range roster {
 		if a.Workers == nil {
 			a.Workers = []string{} // the page reads a list, never null
 		}
-		list = append(list, a)
+		view := agentView{Agent: a}
+		if p != nil {
+			effective := effectiveOf(p, a.Profile)
+			view.Effective = &effective
+		}
+		list = append(list, view)
 	}
 	return list
 }

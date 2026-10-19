@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { VISIONARIES, addTeam, teamOf } from "./teams";
+import { VISIONARIES, addTeam, missingProfilesOf, teamOf } from "./teams";
 import { useNewTask } from "./new-task";
 
 export interface AskVisionaries {
@@ -9,7 +9,9 @@ export interface AskVisionaries {
   has: boolean; // you have a Visionaries team
   adding: boolean;
   error: string; // why adding the team failed
+  missingProfiles: string[]; // the profiles policy.toml lacks, when adding the team was refused for them
   ask: () => void; // opens New task with the team picked, adding it first if you don't have it
+  askAddingProfiles: () => void; // ask, adding the missing profiles before the team
 }
 
 // useAskVisionaries starts a Visionaries session: New task with the team
@@ -20,17 +22,21 @@ export function useAskVisionaries(): AskVisionaries {
   const newTask = useNewTask();
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
+  const [missingProfiles, setMissingProfiles] = useState<string[]>([]);
   const has = (data ?? []).some((agent) => teamOf(agent) === VISIONARIES);
 
-  async function ask() {
+  async function ask(addingProfiles = false) {
     if (!has) {
       setAdding(true);
       setError("");
       try {
-        await addTeam(VISIONARIES);
+        await addTeam(VISIONARIES, addingProfiles ? "" : undefined);
+        setMissingProfiles([]);
         reload();
       } catch (failure) {
-        setError((failure as Error).message);
+        const profiles = missingProfilesOf(failure);
+        if (profiles && !addingProfiles) setMissingProfiles(profiles);
+        else setError((failure as Error).message);
         return;
       } finally {
         setAdding(false);
@@ -39,5 +45,13 @@ export function useAskVisionaries(): AskVisionaries {
     newTask("task", "", VISIONARIES);
   }
 
-  return { ready: data !== undefined, has, adding, error, ask };
+  return {
+    ready: data !== undefined,
+    has,
+    adding,
+    error,
+    missingProfiles,
+    ask: () => ask(),
+    askAddingProfiles: () => ask(true),
+  };
 }

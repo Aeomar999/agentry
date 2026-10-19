@@ -5,6 +5,7 @@ import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
 import { Banner } from "@/components/molecules/Banner";
+import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -13,6 +14,7 @@ import { AcceptIdeaDialog, DismissIdeaDialog } from "@/components/organisms/Idea
 import { changeSettings } from "@/api/client";
 import type { Idea, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
+import { VISIONARIES } from "@/lib/teams";
 import { useAskVisionaries } from "@/lib/visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
@@ -52,6 +54,14 @@ export function IdeasPage() {
       />
       <div className="flex flex-col gap-8 p-6">
         {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
+        {visionaries.missingProfiles.length > 0 && (
+          <MissingProfilesOffer
+            team={VISIONARIES}
+            profiles={visionaries.missingProfiles}
+            adding={visionaries.adding}
+            onAdd={visionaries.askAddingProfiles}
+          />
+        )}
         {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
         <FollowUpsSetting />
         {data && ideas.length === 0 && (

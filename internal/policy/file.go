@@ -76,18 +76,8 @@ func Load(path, home string, protected []string) (*Policy, error) {
 // Parse checks a policy and compiles its globs. Anything it doesn't
 // understand is an error, never a guess: a typo must not open the gate.
 func Parse(text []byte, home string, protected []string) (*Policy, error) {
-	var f policyFile
-	decoder := toml.NewDecoder(bytes.NewReader(text)).DisallowUnknownFields()
-	if err := decoder.Decode(&f); err != nil {
-		var strict *toml.StrictMissingError
-		if errors.As(err, &strict) {
-			return nil, errors.New(strict.String())
-		}
-		var syntax *toml.DecodeError
-		if errors.As(err, &syntax) {
-			row, column := syntax.Position()
-			return nil, fmt.Errorf("line %d, column %d: %s", row, column, syntax.Error())
-		}
+	f, err := decode(text)
+	if err != nil {
 		return nil, err
 	}
 	if err := f.check(); err != nil {
@@ -105,6 +95,25 @@ func Parse(text []byte, home string, protected []string) (*Policy, error) {
 		policy.profiles[name] = compiled
 	}
 	return policy, nil
+}
+
+// decode reads a policy's TOML, refusing any key it doesn't know.
+func decode(text []byte) (policyFile, error) {
+	var f policyFile
+	decoder := toml.NewDecoder(bytes.NewReader(text)).DisallowUnknownFields()
+	if err := decoder.Decode(&f); err != nil {
+		var strict *toml.StrictMissingError
+		if errors.As(err, &strict) {
+			return f, errors.New(strict.String())
+		}
+		var syntax *toml.DecodeError
+		if errors.As(err, &syntax) {
+			row, column := syntax.Position()
+			return f, fmt.Errorf("line %d, column %d: %s", row, column, syntax.Error())
+		}
+		return f, err
+	}
+	return f, nil
 }
 
 func (f policyFile) check() error {
