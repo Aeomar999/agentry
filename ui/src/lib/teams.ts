@@ -1,9 +1,13 @@
+import { api } from "@/api/client";
 import type { Agent } from "@/api/types";
 
 // Teams of agents (internal/agents): each has a coordinator, which hands its
 // tasks only to the team's own agents. An agent with no team is in Software.
 
 export const DEFAULT_TEAM = "Software";
+
+// The team whose sessions suggest features to the Ideas page.
+export const VISIONARIES = "Visionaries";
 
 export const teamOf = (agent: Agent) => agent.team || DEFAULT_TEAM;
 
@@ -18,4 +22,9 @@ export function teamsOf(agents: Agent[]): { team: string; agents: Agent[] }[] {
   }
   for (const group of teams) group.agents.sort((a, b) => Number(b.coordinates) - Number(a.coordinates));
   return teams;
+}
+
+// addTeam adds the team made from a template (GET /api/teams/templates).
+export function addTeam(template: string): Promise<unknown> {
+  return api("POST", "/api/teams", { template });
 }

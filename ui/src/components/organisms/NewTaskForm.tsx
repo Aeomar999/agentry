@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Input, TextArea } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
@@ -8,7 +8,8 @@ import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { api } from "@/api/client";
 import type { Agent, CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
-import { teamsOf } from "@/lib/teams";
+import { FilterChip } from "@/components/molecules/FilterChip";
+import { VISIONARIES, addTeam, teamsOf } from "@/lib/teams";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
@@ -26,11 +27,12 @@ import { share, sizeOf } from "@/lib/shared";
 interface NewTaskFormProps {
   start?: "task" | "story" | "epic"; // the kind it starts as
   epic?: string; // for a story: its epic
+  team?: string; // the team it starts with picked
   onCreated: (id: string) => void;
   onCancel: () => void;
 }
 
-export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: NewTaskFormProps) {
+export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCreated, onCancel }: NewTaskFormProps) {
   const notify = useToast();
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
@@ -38,11 +40,16 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
   const [attached, setAttached] = useState<File[]>([]); // shared with the task once it is made
   const [limits, setLimits] = useState<Partial<Record<LimitKind, LimitChoice>>>({}); // only those you changed
   const [where, setWhere] = useState<"default" | "existing" | "new">("default");
-  const teams = teamsOf(useResource<Agent[]>("/api/agents").data ?? []);
-  const [team, setTeam] = useState("");
+  const agents = useResource<Agent[]>("/api/agents");
+  const teams = teamsOf(agents.data ?? []);
+  const [team, setTeam] = useState(preset);
   const [kind, setKind] = useState<"" | "story" | "epic">(epic ? "story" : start === "epic" ? "epic" : "");
   const chosen = teams.find((t) => t.team === team); // none: the coordinators decide
   const lead = chosen?.agents.find((a) => a.coordinates);
+  const asksVisionaries = chosen?.team === VISIONARIES;
+  // Asked for the Visionaries team, and you don't have it yet.
+  const visionariesMissing = preset === VISIONARIES && agents.data !== undefined && !teams.some((t) => t.team === VISIONARIES);
+  const [adding, setAdding] = useState(false);
   const [repo, setRepo] = useState("");
   const config = useResource<ServerConfig>("/api/config").data;
   const tasks = useResource<TaskSummary[]>("/api/tasks").data ?? [];
@@ -96,19 +103,59 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
     }
   }
 
-  return (
-    <form onSubmit={submit} className="flex max-w-3xl flex-col gap-5">
-      {error && <Banner title="The task wasn't created">{error}</Banner>}
+  async function addVisionaries() {
+    setAdding(true);
+    try {
+      await addTeam(VISIONARIES);
+      notify("success", "Added the Visionaries team", "It is picked: give it a theme or a question.");
+      agents.reload();
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+    setAdding(false);
+  }
+
+  // The box you describe the task in, saying what to write in it.
+  function describe(placeholder: string) {
+    return (
       <TextArea
-        aria-label="The task"
+        id="task-description"
+        aria-label={asksVisionaries ? "Theme or question" : "The task"}
         autoFocus
         rows={8}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && submit()}
-        placeholder="Describe what should be done, in your own words. What to change, why, and how you'll know it works."
+        placeholder={placeholder}
         className="text-[14px]"
       />
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="flex max-w-3xl flex-col gap-5">
+      {error && <Banner title="The task wasn't created">{error}</Banner>}
+      {visionariesMissing && (
+        <Banner tone="info" title="You have no Visionaries team yet">
+          <div className="flex flex-col items-start gap-2">
+            <span>Add it from its template: a lead and four viewpoints that argue out what to build next, and change no code.</span>
+            <Button size="sm" icon={<Users />} disabled={adding} onClick={addVisionaries}>
+              {adding ? "Adding…" : "Add the Visionaries team"}
+            </Button>
+          </div>
+        </Banner>
+      )}
+      {asksVisionaries ? (
+        <Field
+          label="Theme or question"
+          htmlFor="task-description"
+          hint="What the visionaries think about together. The ideas they agree are worth it come to the Ideas page, for you to accept or dismiss."
+        >
+          {describe("A theme, a question or a part of the product to think about, such as: what would make reviewing work faster?")}
+        </Field>
+      ) : (
+        describe("Describe what should be done, in your own words. What to change, why, and how you'll know it works.")
+      )}
       <Field label="Title" htmlFor="task-title" hint="Optional. The coordinator names the task once it has read it.">
         <Input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} className="max-w-md" />
       </Field>
@@ -127,14 +174,12 @@ export function NewTaskForm({ start = "task", epic = "", onCreated, onCancel }: 
                 : "This team has no coordinator yet."
           }
         >
-          <Select id="task-team" value={chosen?.team ?? ""} onChange={(e) => setTeam(e.target.value)} className="max-w-xs">
-            <option value="">Let the coordinators decide</option>
+          <div id="task-team" role="group" aria-label="Team" className="flex flex-wrap gap-1.5">
+            <FilterChip label="Let the coordinators decide" active={!chosen} onClick={() => setTeam("")} />
             {teams.map((t) => (
-              <option key={t.team} value={t.team}>
-                {t.team}
-              </option>
+              <FilterChip key={t.team} label={t.team} active={chosen?.team === t.team} onClick={() => setTeam(t.team)} />
             ))}
-          </Select>
+          </div>
         </Field>
       )}
       {epic ? (
