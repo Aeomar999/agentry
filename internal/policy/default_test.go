@@ -176,7 +176,7 @@ func TestTheDeveloperReadsAPipeline(t *testing.T) {
 
 func TestAgentrysOwnFilesAreAlwaysOffLimits(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous", "allow-everything"} {
+	for _, profile := range []string{"developer", "read-only", "read-mostly", "network-diagnosis", "autonomous", "allow-everything"} {
 		for _, call := range []Call{
 			bash("sqlite3 ~/.agentry/agentry.db 'delete from events'"),
 			bash("cat /home/dev/.agentry/agentry.db-wal"),
@@ -424,11 +424,12 @@ func TestTheReadOnlyProfile(t *testing.T) {
 	})
 }
 
-// read-only and read-mostly change no file and no history, from the shell
-// either (task-30). Each form that wrote before is denied under both.
+// read-only, read-mostly and network-diagnosis change no file and no history,
+// from the shell either (task-30). Each form that wrote before is denied under
+// all three.
 func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			// redirects and tee
 			{"redirect", bash("echo hi > notes.md"), Deny},
@@ -544,7 +545,7 @@ func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
 // that run a command. Each denies or asks under both judging profiles.
 func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			// variables set before a command
 			{"GOFLAGS=-mod=mod", bash("GOFLAGS=-mod=mod go test ./..."), Ask},
@@ -617,7 +618,7 @@ func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 // option clusters and in other spellings of jest and vitest (task-30).
 func TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			{"pytest -o first", bash("pytest -o cache_dir=src"), Deny},
 			{"pytest -o first, through python", bash("python3 -m pytest -o cache_dir=src"), Deny},
@@ -671,7 +672,7 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 	check(t, p, "autonomous", []decisionCase{
 		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
 	})
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			{"a loop that hides a push to main", hiddenPush, Deny},
 			{"a loop that hides a commit", bash("for c in status 'commit -qam x'; do git $c; done"), Deny},
@@ -756,7 +757,7 @@ func manyValues(use string) Call {
 
 func TestAVariableWithTooManyValuesIsUnknown(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly", "developer"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis", "developer"} {
 		check(t, p, profile, []decisionCase{
 			{"git $c", manyValues("git $c"), Ask},
 			{"git $c after a push to main", manyValues("git push -f origin main $c"), Deny},
@@ -778,7 +779,7 @@ func TestAVariableWithTooManyValuesIsJudgedQuickly(t *testing.T) {
 // What they are for still runs without asking: reading and testing.
 func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			{"git log --grep commit", bash("git log --grep commit"), Allow},
 			{"git -C . log", bash("git -C . log"), Allow},
@@ -845,6 +846,42 @@ func TestTheReadMostlyProfile(t *testing.T) {
 	})
 }
 
+// network-diagnosis runs its fixed forms and nothing more: another option
+// asks, a live change asks, and a command that prints a WireGuard key is
+// denied whatever runs it.
+func TestTheNetworkDiagnosisProfile(t *testing.T) {
+	check(t, loadDefault(t), "network-diagnosis", []decisionCase{
+		{"ping", bash("ping -c 1 -W 1 example.com"), Allow},
+		{"dig", bash("dig +short example.com"), Allow},
+		{"listening sockets", bash("ss -tlnp"), Allow},
+		{"routes", bash("ip route show"), Allow},
+		{"a docker network", bash("docker network inspect bridge"), Allow},
+		{"the firewall", bash("iptables -L -n -v"), Allow},
+		{"the tunnels", bash("wg show"), Allow},
+
+		{"an option before the arguments", bash("ping -c 1 -W 1 --extra example.com"), Ask},
+		{"an option after them", bash("ping -c 1 -W 1 example.com --extra"), Ask},
+		{"an option before a docker network", bash("docker network inspect --extra bridge"), Ask},
+		{"an option after a docker network", bash("docker network inspect bridge --extra"), Ask},
+		{"an option after an exact form", bash("ss -tlnp --extra"), Ask},
+		{"an option after the firewall rules", bash("iptables -S --extra"), Ask},
+
+		{"open a port", bash("ufw allow 443"), Ask},
+		{"add a route", bash("ip route add 10.9.0.0/24 via 192.168.1.1"), Ask},
+		{"restart the proxy", bash("systemctl restart nginx"), Ask},
+
+		{"dump the tunnel", bash("wg show wg0 dump"), Deny},
+		{"dump it with sudo", bash("sudo wg show wg0 dump"), Deny},
+		{"its config behind timeout", bash("timeout 5 wg showconf wg0"), Deny},
+		{"the tunnel's config", file("Read", "/etc/wireguard/wg0.conf"), Deny},
+		{"the tunnel's private key", bash("wg show wg0 private-key"), Deny},
+		{"every preshared key", bash("wg show all preshared-keys"), Deny},
+		{"a new key", bash("wg genkey"), Deny},
+		{"the ACME store", file("Read", "/srv/traefik/acme.json"), Deny},
+		{"a certificate's key", file("Read", "/etc/letsencrypt/live/example.com/privkey.pem"), Deny},
+	})
+}
+
 func TestTheAutonomousProfile(t *testing.T) {
 	check(t, loadDefault(t), "autonomous", []decisionCase{
 		{"install", bash("npm install left-pad"), Allow},
@@ -905,7 +942,7 @@ var escaped = strings.ReplaceAll(scratch, "/", `\`+"u002f")
 // package.json, a conftest.py or a jest reporter written there (task-89).
 func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			// go
 			{"go test a scratch package", bash("go test " + scratch + "/..."), Ask},
@@ -1000,7 +1037,7 @@ func TestTheJudgingProfilesRunNoTestsFromOutside(t *testing.T) {
 // runners and relative paths after it ask (task-89).
 func TestTheJudgingProfilesFollowCd(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			{"cd in a subshell", bash("(cd " + scratch + " && npm test)"), Ask},
 			{"pushd", bash("pushd " + scratch + " && go test ./..."), Ask},
@@ -1048,7 +1085,7 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 	p := loadDefault(t)
 	up := strings.Repeat(`.\./`, 6)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			// a backslash bash drops
 			{"cd an escaped path, npm test", bash(`cd \` + scratch + " && npm test"), Ask},
@@ -1125,7 +1162,7 @@ func TestAWordWithManyBracesIsJudgedQuickly(t *testing.T) {
 // What the judging profiles are for still runs from the workspace (task-89).
 func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"read-only", "read-mostly"} {
+	for _, profile := range []string{"read-only", "read-mostly", "network-diagnosis"} {
 		check(t, p, profile, []decisionCase{
 			{"go test", bash("go test ./..."), Allow},
 			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
@@ -1181,7 +1218,7 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 // to, under every profile: `cd && cat .netrc` reads ~/.netrc (task-89).
 func TestARelativePathIsCountedFromWhereCdWent(t *testing.T) {
 	p := loadDefault(t)
-	for _, profile := range []string{"developer", "read-only", "read-mostly", "autonomous"} {
+	for _, profile := range []string{"developer", "read-only", "read-mostly", "network-diagnosis", "autonomous"} {
 		check(t, p, profile, []decisionCase{
 			{"a secret read after cd home", bash("cd && cat .netrc"), Deny},
 			{"a secret read after cd ~", bash("cd ~ && cat .git-credentials"), Deny},

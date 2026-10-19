@@ -60,9 +60,9 @@ func TestEnsureFileWritesTheDefaultOnce(t *testing.T) {
 	}
 }
 
-func TestTheDefaultHasTheFiveProfiles(t *testing.T) {
+func TestTheDefaultHasTheSixProfiles(t *testing.T) {
 	names := strings.Join(loadDefault(t).ProfileNames(), " ")
-	if names != "allow-everything autonomous developer read-mostly read-only" {
+	if names != "allow-everything autonomous developer network-diagnosis read-mostly read-only" {
 		t.Errorf("profiles: %s", names)
 	}
 }

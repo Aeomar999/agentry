@@ -2,6 +2,7 @@ package agents
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,6 +78,61 @@ func TestTheVisionariesReadTheBoardAndChangeNothing(t *testing.T) {
 		} {
 			if got := shipped.Decide(agent.Profile, c.call); got.Decision != c.want {
 				t.Errorf("%s (%s) / %s %s: got %s (%s), want %s", agent.Name, agent.Profile, c.call.Tool, c.call.Input, got.Decision, got.Reason(), c.want)
+			}
+		}
+	}
+}
+
+// An agent whose profile isn't in the policy is denied every call, so every
+// template may only name profiles Agentry ships.
+func TestEveryTemplateProfileIsInTheShippedPolicy(t *testing.T) {
+	shipped, err := policy.Parse(policy.Default(), "/home/dev", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, template := range Templates {
+		for _, agent := range template.Agents {
+			if !slices.Contains(shipped.ProfileNames(), agent.Profile) {
+				t.Errorf("%s/%s: profile %q is not in the shipped policy", template.Team, agent.Name, agent.Profile)
+			}
+		}
+	}
+}
+
+// The Networking checkers run the diagnosis commands their prompts name
+// without asking, and a live change asks whoever runs it.
+func TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging(t *testing.T) {
+	rules := strings.Replace(string(policy.Default()), "\nuse_for_everyone = ", "\n# use_for_everyone = ", 1)
+	shipped, err := policy.Parse([]byte(rules), "/home/dev", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	networking, _ := TemplateNamed("Networking")
+	quoted := regexp.MustCompile("`((?:ping|traceroute|mtr|dig|ss|ip|docker|ufw|nft|iptables|wg) [^`]+)`")
+	placeholders := strings.NewReplacer("<host>", "example.com", "<name>", "example.com", "<server>", "1.1.1.1", "<network>", "ingress")
+	var diagnoses []string
+	for _, agent := range networking.prompted() {
+		if agent.Column != Reviews {
+			continue
+		}
+		for _, match := range quoted.FindAllStringSubmatch(agent.Prompt, -1) {
+			diagnoses = append(diagnoses, placeholders.Replace(match[1]))
+		}
+	}
+	if len(diagnoses) < 10 {
+		t.Fatalf("the checkers' prompts should name their diagnosis commands, found %v", diagnoses)
+	}
+	changes := []string{"ufw allow 443", "ip route add 10.9.0.0/24 via 192.168.1.1", "systemctl restart nginx"}
+	for _, agent := range networking.Agents {
+		for _, command := range diagnoses {
+			verdict := shipped.Decide(agent.Profile, policy.Call{Tool: "Bash", Input: command, Workspace: "/w"})
+			if agent.Column == Reviews && verdict.Decision != policy.Allow || verdict.Decision == policy.Deny {
+				t.Errorf("%s (%s) / %q: got %s (%s)", agent.Name, agent.Profile, command, verdict.Decision, verdict.Reason())
+			}
+		}
+		for _, command := range changes {
+			if verdict := shipped.Decide(agent.Profile, policy.Call{Tool: "Bash", Input: command, Workspace: "/w"}); verdict.Decision != policy.Ask {
+				t.Errorf("%s (%s) / %q: got %s (%s), want ask", agent.Name, agent.Profile, command, verdict.Decision, verdict.Reason())
 			}
 		}
 	}
