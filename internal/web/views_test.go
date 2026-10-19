@@ -1,9 +1,12 @@
 package web
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -29,5 +32,19 @@ func TestEveryStepLeadsToItsTurn(t *testing.T) {
 		if got := turnOf(task, c.step); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+// The task page says why a turn's tokens are unknown, and leaves it out
+// where they were counted.
+func TestATurnSaysWhyItsTokensAreUnknown(t *testing.T) {
+	task := &tasks.Task{Turns: []*tasks.Turn{
+		{ID: "turn-1", Ended: true, TokensUnknown: "transcript not saved"},
+		{ID: "turn-2", Ended: true, Tokens: 1234},
+	}}
+	body, _ := json.Marshal(detailOf(task, agents.Roster{}, nil).Turns)
+	want := `"tokens":0,"tokensUnknown":"transcript not saved"`
+	if !strings.Contains(string(body), want) || strings.Count(string(body), "tokensUnknown") != 1 {
+		t.Errorf("turns %s, want turn-1 with %s and turn-2 without a reason", body, want)
 	}
 }

@@ -13,6 +13,7 @@ type Signal struct {
 	Question      string // what the engine is waiting for
 	EngineSession string // the engine's own session id
 	Tokens        int    // tokens the turn used, when the engine says (TurnEnded)
+	TokensUnknown string // why Tokens is 0, when the engine's count couldn't be read (TurnEnded)
 }
 
 type SignalKind string

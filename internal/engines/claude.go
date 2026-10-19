@@ -3,6 +3,8 @@ package engines
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +17,13 @@ type claude struct{}
 func init() { register(claude{}) }
 
 func (claude) Name() string { return "claude" }
+
+// Why a turn's tokens are unknown. Claude Code saves no transcript when it
+// takes itself for another session's child (see IsParentSessionVar).
+const (
+	TranscriptNotSaved  = "transcript not saved"
+	NoUsageInTranscript = "no usage in transcript"
+)
 
 var (
 	claudeGates   = []string{"PreToolUse"}
@@ -75,7 +84,7 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 	}
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
-		signals[0].Tokens = claudeTokens(p.TranscriptPath)
+		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath)
 		if signals[0].Report == "" {
 			// Claude Code before 2.1 has no last_assistant_message.
 			signals[0].Report = claudeLastMessage(p.TranscriptPath)
@@ -124,11 +133,15 @@ func claudeLastMessage(transcript string) string {
 // claudeTokens adds up what a session's transcript says it used: every
 // token the model read (fresh, or from the cache) and wrote. Each turn is
 // its own session, so this is the turn's use. A reply can appear on several
-// lines with the same usage, so each message is counted once.
-func claudeTokens(transcript string) int {
+// lines with the same usage, so each message is counted once. When there is
+// nothing to count, it says why instead.
+func claudeTokens(transcript string) (int, string) {
 	file, err := os.Open(transcript)
+	if errors.Is(err, fs.ErrNotExist) { // also when the path is ""
+		return 0, TranscriptNotSaved
+	}
 	if err != nil {
-		return 0
+		return 0, "transcript unreadable: " + err.Error()
 	}
 	defer file.Close()
 	seen, total := map[string]bool{}, 0
@@ -153,7 +166,10 @@ func claudeTokens(transcript string) int {
 		u := entry.Message.Usage
 		total += u.Input + u.Output + u.CacheWrite + u.CacheRead
 	}
-	return total
+	if len(seen) == 0 {
+		return 0, NoUsageInTranscript
+	}
+	return total, ""
 }
 
 // GateReply: Claude's PreToolUse takes allow and deny as JSON.

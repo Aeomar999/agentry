@@ -44,9 +44,12 @@ type Call struct {
 }
 
 type Ending struct {
-	Tokens    int     `json:"tokens"`
-	Report    string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
-	Knowledge *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
+	Tokens int `json:"tokens"`
+	// Why Tokens is 0, when the transcript couldn't tell; a worker older
+	// than this field sends none.
+	TokensUnknown string  `json:"tokensUnknown,omitempty"`
+	Report        string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
+	Knowledge     *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
 }
 
 // Reply is what the hook prints and exits with.

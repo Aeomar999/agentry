@@ -319,7 +319,7 @@ func (t *Task) Apply(e events.Event) {
 
 	case events.TurnEnded:
 		turn := t.Turn(e.Correlation)
-		turn.Ended, turn.Report, turn.Tokens = true, e.Text("report"), e.Number("tokens")
+		turn.Ended, turn.Report, turn.Tokens, turn.TokensUnknown = true, e.Text("report"), e.Number("tokens"), e.Text("tokensUnknown")
 		t.moveRepo()
 		t.TokensUsed += turn.Tokens
 		t.IssuesInARow = 0

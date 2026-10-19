@@ -172,22 +172,23 @@ type Worktree struct {
 
 // Turn is one agent working once, in its own session, from one prompt.
 type Turn struct {
-	ID           string // also the correlation of its events
-	Agent        string
-	Worker       string // the machine it ran on
-	Hash         string // of the prompt line it was started with
-	StartedAt    time.Time
-	LastEventAt  time.Time
-	Acknowledged bool   // the engine echoed the prompt's hash (proof 02)
-	Waiting      string // what the agent is waiting on, until it does something
-	Plan         string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
-	PlanFrom     string // the turn whose unfinished plan this turn started with, "" for a fresh one
-	Ended        bool
-	Report       string // the agent's final message
-	Issue        string // why the turn was cut short, if it was
-	Stopped      bool   // you ended it, to tell the coordinator something
-	Shipped      bool   // it ships the work because you moved the task to Shipping: you took the work as it was
-	Tokens       int    // what it used, when the engine said
+	ID            string // also the correlation of its events
+	Agent         string
+	Worker        string // the machine it ran on
+	Hash          string // of the prompt line it was started with
+	StartedAt     time.Time
+	LastEventAt   time.Time
+	Acknowledged  bool   // the engine echoed the prompt's hash (proof 02)
+	Waiting       string // what the agent is waiting on, until it does something
+	Plan          string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
+	PlanFrom      string // the turn whose unfinished plan this turn started with, "" for a fresh one
+	Ended         bool
+	Report        string // the agent's final message
+	Issue         string // why the turn was cut short, if it was
+	Stopped       bool   // you ended it, to tell the coordinator something
+	Shipped       bool   // it ships the work because you moved the task to Shipping: you took the work as it was
+	Tokens        int    // what it used, when the engine said
+	TokensUnknown string // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
 }
 
 type Decision string

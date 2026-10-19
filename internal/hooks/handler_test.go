@@ -216,6 +216,32 @@ func TestTheGateUsesTheWorkingAgentsProfile(t *testing.T) {
 	}
 }
 
+// A turn whose tokens couldn't be counted says why, rather than a silent 0:
+// the reason the hook sent, or that it sent none, as an older worker does.
+// A turn.ended from before reasons were kept still applies, with none.
+func TestATurnWithUnknownTokensSaysWhy(t *testing.T) {
+	for _, c := range []struct {
+		ending *hookcall.Ending
+		want   string
+	}{
+		{&hookcall.Ending{TokensUnknown: "transcript not saved"}, "transcript not saved"},
+		{&hookcall.Ending{}, NoTokensReported},
+		{&hookcall.Ending{Tokens: 1234}, ""},
+	} {
+		s, state := engineerAtWork(t)
+		stop := hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`)
+		stop.Ending = c.ending
+		NewHandler(s, state, judgeByCommand).Handle(context.Background(), stop)
+		task := taskIn(t, s)
+		if turn := task.Turn("turn-2"); !turn.Ended || turn.TokensUnknown != c.want {
+			t.Errorf("ending %+v: turn %+v, want the reason %q", c.ending, turn, c.want)
+		}
+		if old := task.Turn("turn-1"); !old.Ended || old.TokensUnknown != "" {
+			t.Errorf("the turn from an old log: %+v", old)
+		}
+	}
+}
+
 // What the agent wrote in its knowledge file, which the hook sends with the
 // call that ends the turn, is kept, and so are the tokens the hook counted.
 func TestWhatTheAgentLearnedIsKept(t *testing.T) {

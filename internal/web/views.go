@@ -56,18 +56,19 @@ type step struct {
 }
 
 type turn struct {
-	ID           string    `json:"id"`
-	Agent        string    `json:"agent"`
-	Worker       string    `json:"worker"` // the machine it ran on
-	StartedAt    time.Time `json:"startedAt"`
-	LastEventAt  time.Time `json:"lastEventAt"` // when it ended, once it has
-	Acknowledged bool      `json:"acknowledged"`
-	Ended        bool      `json:"ended"`
-	Issue        string    `json:"issue"`
-	Tokens       int       `json:"tokens"`
-	Plan         string    `json:"plan"`     // a Markdown checklist, "" until the agent writes one
-	PlanFrom     string    `json:"planFrom"` // the turn whose unfinished plan it started on, "" for a fresh one
-	Stopped      bool      `json:"stopped"`  // you ended it, to tell the coordinator something
+	ID            string    `json:"id"`
+	Agent         string    `json:"agent"`
+	Worker        string    `json:"worker"` // the machine it ran on
+	StartedAt     time.Time `json:"startedAt"`
+	LastEventAt   time.Time `json:"lastEventAt"` // when it ended, once it has
+	Acknowledged  bool      `json:"acknowledged"`
+	Ended         bool      `json:"ended"`
+	Issue         string    `json:"issue"`
+	Tokens        int       `json:"tokens"`
+	TokensUnknown string    `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
+	Plan          string    `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
+	PlanFrom      string    `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
+	Stopped       bool      `json:"stopped"`                 // you ended it, to tell the coordinator something
 }
 
 type action struct {
@@ -130,7 +131,7 @@ func detailOf(t *tasks.Task, roster agents.Roster, log []events.Event) taskDetai
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
-			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
+			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped})
 	}
 	for _, a := range t.Actions {
 		view := action{ID: a.ID, Turn: a.Turn, Agent: a.Agent, Tool: a.Tool, Command: a.Command,

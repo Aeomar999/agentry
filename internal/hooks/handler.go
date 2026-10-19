@@ -60,6 +60,10 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 	return hookcall.Reply{}
 }
 
+// NoTokensReported is why a turn's tokens are unknown when the machine
+// running it didn't say, as a worker older than the reason doesn't.
+const NoTokensReported = "no tokens reported"
+
 // report records what a reporting hook says happened. A refusal is recorded
 // by the store as proposal.rejected; the engine is never blocked by it.
 func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
@@ -74,11 +78,14 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	case engines.Waiting:
 		p.Type, p.Data = events.AgentWaiting, map[string]any{"question": signal.Question}
 	case engines.TurnEnded:
-		tokens, report := signal.Tokens, signal.Report
+		tokens, unknown, report := signal.Tokens, signal.TokensUnknown, signal.Report
 		if call.Ending != nil { // read where the transcript is
-			tokens, report = call.Ending.Tokens, cmp.Or(report, call.Ending.Report)
+			tokens, unknown, report = call.Ending.Tokens, call.Ending.TokensUnknown, cmp.Or(report, call.Ending.Report)
 		}
 		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": report, "tokens": tokens}
+		if tokens == 0 { // a turn always uses some, so 0 is never a count
+			p.Data["tokensUnknown"] = cmp.Or(unknown, NoTokensReported)
+		}
 	default:
 		return
 	}

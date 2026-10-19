@@ -45,7 +45,7 @@ var recorded = []struct {
 	{"claude", "Notification", `{"hook_event_name":"Notification","message":"Claude needs your permission","notification_type":"permission_prompt"}`,
 		engines.Signal{Kind: engines.Waiting, Question: "Claude needs your permission"}},
 	{"claude", "Stop", `{"hook_event_name":"Stop","last_assistant_message":"Removed 3 TODOs.","stop_hook_active":false}`,
-		engines.Signal{Kind: engines.TurnEnded, Report: "Removed 3 TODOs."}},
+		engines.Signal{Kind: engines.TurnEnded, Report: "Removed 3 TODOs.", TokensUnknown: engines.TranscriptNotSaved}},
 
 	{"codex", "SessionStart", `{"hook_event_name":"SessionStart","session_id":"01a14257","model":"gpt-6-luna","source":"startup"}`,
 		engines.Signal{Kind: engines.SessionStarted, EngineSession: "01a14257"}},
@@ -56,7 +56,7 @@ var recorded = []struct {
 	{"codex", "PermissionRequest", `{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"touch x.txt","description":"May I run..."}}`,
 		engines.Signal{Kind: engines.ActionRequested, Tool: "Bash", Command: "touch x.txt"}},
 	{"codex", "Stop", `{"hook_event_name":"Stop","last_assistant_message":"FIRST-OK","turn_id":"t1"}`,
-		engines.Signal{Kind: engines.TurnEnded, Report: "FIRST-OK"}},
+		engines.Signal{Kind: engines.TurnEnded, Report: "FIRST-OK", TokensUnknown: engines.CodexTokensNotRead}},
 }
 
 func TestParseHookGivesTheSameSignalsOnBothEngines(t *testing.T) {
@@ -173,8 +173,30 @@ not json
 `), 0o644)
 	claude, _ := engines.Get("claude")
 	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`))
-	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 {
+	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 || signals[0].TokensUnknown != "" {
 		t.Errorf("signals %+v, err %v", signals, err)
+	}
+}
+
+// With nothing to count, the turn says why rather than a silent 0: Claude
+// Code saves no transcript in a session it takes for another's child.
+func TestClaudeSaysWhyATurnsTokensAreUnknown(t *testing.T) {
+	dir := t.TempDir()
+	noUsage := filepath.Join(dir, "no-usage.jsonl")
+	os.WriteFile(noUsage, []byte(`{"type":"user","message":{"role":"user","content":"go"}}
+{"type":"assistant","message":{"id":"msg_1","content":[{"type":"text","text":"Done."}]}}
+`), 0o644)
+	claude, _ := engines.Get("claude")
+	for transcript, want := range map[string]string{
+		"":                               engines.TranscriptNotSaved,
+		filepath.Join(dir, "gone.jsonl"): engines.TranscriptNotSaved,
+		noUsage:                          engines.NoUsageInTranscript,
+	} {
+		path, _ := json.Marshal(transcript)
+		signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":`+string(path)+`}`))
+		if err != nil || len(signals) != 1 || signals[0].Tokens != 0 || signals[0].TokensUnknown != want {
+			t.Errorf("transcript %q: signals %+v, err %v, want the reason %q", transcript, signals, err, want)
+		}
 	}
 }
 
