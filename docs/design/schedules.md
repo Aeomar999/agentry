@@ -34,8 +34,9 @@ Three things decide how safe an unattended run is:
 - A schedule never piles up. While a task from it is open, a due run is
   skipped and says why (`schedule.skipped`), so a run that stalls on an
   approval overnight blocks only the next runs of its own schedule. A rule
-  refuses the clock's task while one from the schedule is open, so this
-  holds even if two firings race.
+  refuses the clock's task while one from the schedule is open, so at most
+  one open task is one the clock made, even if two firings race. Run now
+  is yours to ask for and isn't held back (open question 7).
 - Missed runs catch up once. A machine that was off or asleep runs the
   latest missed slot when it wakes, however old, and counts the rest; it
   never runs a week of nights back to back.
@@ -279,8 +280,10 @@ refused with today's message. `forADueSchedule` refuses unless:
   (or the defaults the route was given, which the rules can't see, so
   only checked when the schedule sets them), `parked` `""` when `start`
   and `"backlog"` otherwise;
-- no task made from this schedule is open. "Open" is not done, read with
-  `Reader.Task` for each of `Reader.TaskIDs()`; an archived task is done.
+- no task made from this schedule is open, whoever made it. "Open" is
+  not done, read with `Reader.Task` for each of `Reader.TaskIDs()`; an
+  archived task is done. So the clock makes a task only when none from
+  the schedule is open, and at most one open task is one the clock made.
 
 That last check is what makes a double fire impossible in the log, not
 just unlikely in the job (section 5). It walks the live tasks once per
@@ -407,8 +410,9 @@ Each claim, checked against the store:
   event, hands it to `current.State.Apply` and moves `applied` before the
   lock is let go. So the second of two proposals is checked against a
   state that has the first. Two firings of one schedule, from any two
-  goroutines, can't both make a task: the second `task.created` is
-  refused by "no task made from this schedule is open".
+  goroutines, can't both make a task as the clock: the second
+  `task.created` by System is refused by "no task made from this schedule
+  is open".
 - **The job's own reads are only hints.** It reads `Core.Read` outside the
   lock, so what it saw may change before it proposes; whatever it then
   proposes is checked by the rules under the lock. A stale read costs a
@@ -427,7 +431,8 @@ Each claim, checked against the store:
   give. It keeps the job and Run now from interleaving steps 1 to 5 for
   one schedule, so one of them doesn't, for instance, record a skip for a
   slot the other is firing. Without it the log would still hold at most
-  one open task per schedule.
+  one open task the clock made per schedule (Run now's tasks, which you
+  ask for, are not limited).
 - **Only one server per log.** Two `agentry serve` processes on one
   database are not supported today, and a second clock would be the
   least of it; the rules would still refuse the second task.
