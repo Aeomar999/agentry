@@ -61,9 +61,10 @@ and a type whose shape must change gets a new name (extensions section 8).
 What each means:
 
 - `git.pr_opened`: the request for this task's branch is open on the host.
-  A task has at most one open at a time (the check below).
-- `git.pr_changed`: the host says the request was merged, closed, reopened
-  or got a new head.
+  It becomes the task's current request. A task has at most one open at a
+  time (the check below).
+- `git.pr_changed`: the host says the request `number` names was merged,
+  closed, reopened or got a new head. It changes only that request.
 - `git.pipeline`: one pipeline's status, as of `at`. A later event for the
   same `id` and `attempt` replaces the earlier only if its `at` is later,
   so a delivery that arrives late can't undo a newer one. Jobs merge by
@@ -76,6 +77,35 @@ What each means:
 The webhook stores only these fields, never the payload: payloads carry
 names and emails the log has no use for. Strings are cut to a length (a
 URL to 2 KB, a job name to 200 characters) and `jobs` to 100.
+
+### The git slice
+
+A task can have more than one request over its life: a merged one, then a
+new one after the task is reopened and shipped again. The host still sends
+events for an old one (an edit, a label, a late delivery of its merge). So
+the slice keeps its requests by number:
+
+- `requests`: each request it has seen, by `number`, with its state, head
+  `sha`, `base`, `url` and `found`.
+- `current`: the number of the last `git.pr_opened`. The tab, the waiting
+  entry, the Rule's "one open request" and the due rule (section 3) read
+  this request only.
+- `pipelines`: by `id` and `attempt`, as above. A request's pipeline is the
+  latest one on its head `sha`, so a pipeline on an old request's head
+  never shows on the current one. `git.pipeline` needs no `number`.
+- `lastMark`: the position of the last mark (section 3, step 3).
+
+How each event changes it:
+
+- `git.pr_opened`: adds or replaces the request with its number, and makes
+  it `current`.
+- `git.pr_changed` naming the current request: sets its state or head.
+- `git.pr_changed` naming an older request: sets that request's state or
+  head, so its record stays true. It never changes `current` or the
+  current request's state, and it is never a mark.
+- `git.pr_changed` naming a number the slice doesn't hold: the Rule
+  refuses it ("task-121 has no request !7"), and `Next` ignores one
+  anyway, so a log written another way can't change the slice either.
 
 ### The task slice
 
@@ -173,9 +203,10 @@ How the parts change:
   `git.pr_opened` and every pipeline and merge after it arrive on a done
   task. The `afterDone` list stays the core's. `taskRules[p.Type]` gains a
   nil check, so a type with no entry is allowed instead of calling a nil
-  func. The git `Rule` refuses a `git.pr_opened` while the slice holds an
-  open request: never two at once, enforced under the lock rather than
-  hoped for in the job.
+  func. The git `Rule` refuses a `git.pr_opened` while the slice's current
+  request is open: never two at once, enforced under the lock rather than
+  hoped for in the job. It also refuses a `git.pr_changed` for a number the
+  slice doesn't hold.
 - **The API.** `GET /api/tasks/{task}` gains `slices`: the names of the
   features holding a slice for the task. The page uses it to show a
   feature's tab (section 7). The core names no feature.
@@ -238,6 +269,24 @@ push to the branch, or nil. `Pushed` stays as it is for the coordinator. A push 
 bare `git push`) doesn't qualify: the deployer's instructions give the
 exact command, `git push origin HEAD:agentry/task-N`.
 
+Two kinds of push still look finished and pushed nothing:
+
+- A dry run. `plainPushOption` accepts `-n` and `--dry-run`, which is
+  right for the waiting line (it names where the push would go). So story
+  7 splits the reading out: `readPush(command) (push, bool)`, where `push`
+  holds the branch and `dryRun`, and `plainPush` becomes a wrapper that
+  returns `push.branch`, so the waiting line reads as before. `PushTo`
+  skips a push with `dryRun` set.
+- A push that failed. An `Action` only has `HasResult`, and with Codex a
+  failed push still gets one (the comment above `Task.Pushed`). The log
+  can't tell, so the host does: before it opens or reopens, the job asks
+  the host for the branch (section 3, step 6). If the branch isn't there,
+  it writes `git.refused` with `status` 404 and the reason "the branch
+  agentry/task-N isn't on the host", which the tab and the waiting entry
+  show, with "Try again". A failed push onto a branch already there from
+  an earlier push opens or keeps a request on the old head, which the tab
+  shows by its sha; the next push updates it.
+
 A push to dev, which every task shipped before this feature made, never
 qualifies, so turning the feature on opens nothing for old tasks.
 
@@ -271,12 +320,17 @@ What it does:
    `Worktree.Repo`'s origin names the project; the job reads
    `git remote get-url origin` there once per repo and keeps it), and its
    latest qualifying push (section 2) comes later in the log than the
-   slice's last mark. The marks are a `git.pr_opened`, a `git.pr_changed`
-   to `closed` or `merged`, and a `git.refused` that no `git.retry`
-   followed; a `git.retry` clears a refusal, so the push before it counts
-   again. The slice keeps the position of its last mark, and the push's
-   position is its `action.result`'s. So a request you close or merge on
-   the host is left alone until the deployer pushes again.
+   slice's last mark. The marks are a `git.pr_opened`, the job's own
+   `git.pr_changed` for the current request (step 4), and a `git.refused`
+   that no `git.retry` followed; a `git.retry` clears a refusal, so the
+   push before it counts again. A webhook's `git.pr_changed` is never a
+   mark, for any request: a late delivery of an old merge, written after a
+   new push, would otherwise stop that push from opening a request. It
+   isn't needed as one either: the push that opened a request is already
+   before its `git.pr_opened`. The slice keeps the position of its last
+   mark, and the push's position is its `action.result`'s. So a request
+   you close or merge on the host is left alone until the deployer pushes
+   again.
    The job finds the push's position and time in the task's stream.
    `Task.PushTo` gives the push from state, and the job reads
    `Core.Events.Stream(task)` for the `action.result` whose `Correlation`
@@ -289,7 +343,7 @@ What it does:
    feature, and needs the real-log replay test, for a read the job can
    make by itself, so the job reads the stream and the core stays as it
    is.
-4. A new push onto a request the slice holds open may be onto one the host
+4. A new push onto the current request, which the slice holds open, may be onto one the host
    has merged or closed since: without the webhook (section 9) nothing
    told the log. So the job asks the host for that request (GitHub
    `GET /repos/{owner}/{repo}/pulls/{number}`, GitLab
@@ -301,7 +355,9 @@ What it does:
    same pass. The slice counts that change as a mark just before `push`
    (at `push` - 1), not at its own position, so the push still comes
    after it: if the job stops
-   between the two, the next pass goes on from step 5. With the webhook
+   between the two, the next pass goes on from step 5. It names the
+   current request, the one the job asked about, so it is the one it
+   changes. With the webhook
    on, this is one more request per push, and it also covers a delivery
    the host never made.
 5. For a task with a new push and no open request, it asks the host for
@@ -314,17 +370,26 @@ What it does:
    and the write): it writes `git.pr_opened` with `found: true`, then a
    `git.pr_changed` with its state if it is closed or merged, and opens
    nothing.
-6. Otherwise, if the slice's last request is closed and not merged, it
+6. Before it opens or reopens, it asks the host for the branch (GitHub
+   `GET /repos/{owner}/{repo}/branches/{branch}`, GitLab
+   `GET /projects/{id}/repository/branches/{branch}`). A 404 means the
+   push failed: it writes `git.refused` (`action` `reopen` when step 7
+   would reopen, else `open`; `status` 404; reason "the branch
+   agentry/task-N isn't on the host") and opens nothing (section 2).
+   Otherwise it goes on.
+7. Otherwise, if the current request is closed and not merged, it
    reopens that one (GitHub `PATCH .../pulls/{n}` with `state: open`,
    GitLab `PUT .../merge_requests/{iid}` with `state_event: reopen`) and
    writes `git.pr_opened` for it.
-7. Otherwise it opens one from the branch into `base` (dev by default),
+8. Otherwise it opens one from the branch into `base` (dev by default),
    titled with the task's title, its body the task's link and its summary
    when it has one, and writes `git.pr_opened`.
 
 Never two requests for one task:
 
-- The slice's check refuses a second `git.pr_opened` while one is open.
+- The slice's check refuses a second `git.pr_opened` while the current
+  request is open. An event for an older request never makes the current
+  one read closed (section 1).
 - The job asks the host first (step 5), in every state, so a crash after
   the host opened the request and before `git.pr_opened` was written finds
   it on restart and records it, even if it was merged or closed meanwhile.
@@ -334,13 +399,14 @@ Never two requests for one task:
 - A merged request stays merged. If the task is reopened and shipped
   again, the new push opens a new request: one open at a time, never two.
   This holds without the webhook too: step 4 finds the merge on the host
-  and records it before step 7 opens the new one.
+  and records it before step 8 opens the new one.
 
 When the host says no:
 
 - No token, or no project: the feature is off (section 9). The job writes
   nothing, and the Settings page says how to turn it on.
-- 401, 403, 404, or a 422 that is not "already exists": `git.refused` with
+- 401, 403, 404, a 422 that is not "already exists", or no branch (step
+  6): `git.refused` with
   the status and the host's message, cut to 300 characters. The tab shows
   it with "Try again", and it waits for you (section 6). It isn't retried
   by itself: a bad token stays bad.
@@ -407,13 +473,14 @@ server from the slices.
 - Key: `git/<task>/pipeline/<id>/<attempt>` for a failure, so a new
   pipeline or a retried one that fails again is news, and the same failure
   delivered twice is not. `git/<task>/refused/<position>` for a refusal.
-- It clears when a later pipeline on the request's head is anything but
-  failed (a retry that is running counts), when the request is merged or
-  closed, or when the task is archived. A refusal clears on the next
+- It clears when a later pipeline on the current request's head is
+  anything but failed (a retry that is running counts), when the current
+  request is merged or closed, or when the task is archived. A refusal clears on the next
   `git.pr_opened` or `git.retry`.
 
-Only the latest pipeline on the request's head counts: a failure on an
-older head, since replaced, waits for no one.
+Only the latest pipeline on the current request's head counts: a failure
+on an older head, since replaced, or on an older request, waits for no
+one. Likewise only the current request's merge or close clears it.
 
 ## 7. The Merge request tab
 
@@ -440,7 +507,7 @@ feature tab ids. A test checks that no feature tab id repeats a core one.
 `ui/src/features/git/` brings one tab, `merge-request` ("Merge request"),
 not "Shipping", which is the name of a board column:
 
-- The request: its number and link, its state (open, merged, closed) and
+- The current request: its number and link, its state (open, merged, closed) and
   base, and `found` as "found open on GitLab" when the job recorded one it
   didn't open.
 - The latest pipeline on its head: status, link, short sha, when, and its
@@ -496,8 +563,14 @@ What a verified delivery writes, always as System (`httpapi.System`):
   GitLab's `object_attributes.source_branch` or `ref`, or a merge request
   pipeline's `merge_request.source_branch`) must be `agentry/task-N`, and
   task N's `Worktree.Branch` must equal it. Otherwise nothing is written.
-- `pull_request` and `Merge Request Hook`: `git.pr_changed` when the state
-  or head changed (closed with `merged: true` is `merged`).
+- `pull_request` and `Merge Request Hook`: the event names its request
+  (`pull_request.number`, GitLab's `object_attributes.iid`). The handler
+  compares against that request in the slice, not the current one, and
+  writes `git.pr_changed` when that request's state or head changed (closed
+  with `merged: true` is `merged`). A number the slice doesn't hold
+  (a request someone opened by hand from the branch) writes nothing: 202,
+  "not a request of task-121". One for an older request is written and
+  changes only that request's record (section 1).
 - `workflow_run` and `Pipeline Hook`: `git.pipeline`, with GitLab's
   `builds` as `jobs`. `workflow_job`: a `git.pipeline` for its run with one
   job, merged by name.
@@ -556,7 +629,7 @@ webhook = "..."            # the hook's secret: GitHub's signing secret, GitLab'
   and the request's state only as the job last saw it. The job asks the
   host for that state on each new push (section 3, step 4), so a request
   merged or closed on the host never stops the next ship from opening
-  one. Making the webhook secret part of "on" was the other way; it would
+  one. Nor does a webhook's event, late or not, since it is never a mark. Making the webhook secret part of "on" was the other way; it would
   keep the feature off for an Agentry the host can't reach (question 4).
 - The job, the routes' `verify`, the manifest and the coordinator brief
   read the table in force on every call, so an edit applies without a
@@ -705,31 +778,42 @@ real callers.
    `logs` map (without it, the feature gets `features.Unwritable`). Done:
    the catalogue builds with the feature; the rule refuses a second
    `git.pr_opened`, and allows one after a `git.pr_changed` to `merged`;
-   a job-written `git.pr_changed` marks just before its `push`; a build without
+   it refuses a `git.pr_changed` for a number the slice doesn't hold;
+   a job-written `git.pr_changed` marks just before its `push`; a
+   `git.pr_changed` for an older number leaves the current request open
+   and adds no mark; a late merge of the old request, after a push, doesn't
+   stop that push from opening a request; a pipeline on an old request's
+   head doesn't show on the current one; a build without
    the feature replays the fixture with the tally counting it; the
    Settings page shows Git with its `turnOn` while off; the no-secrets
    test (section 10). It registers new types that apply reads, so it runs
    the real-log replay test first. After: 2, 3.
 6. **Host clients.** GitLab and GitHub over `net/http`: find the most
-   recent request by branch in any state, get one by number, open,
-   reopen. Files: `internal/githost/gitlab.go`, `github.go`. Done: tests
-   against `httptest` fakes for opened, found (open, merged and closed),
-   one got by number in each state, "already exists" (GitHub 422, GitLab
+   recent request by branch in any state, get one by number, get a
+   branch, open, reopen. Files: `internal/githost/gitlab.go`, `github.go`.
+   Done: tests against `httptest` fakes for opened, found (open, merged
+   and closed), one got by number in each state, a branch there and not
+   there (404), "already exists" (GitHub 422, GitLab
    409) as found, 401, 404, 429 with `Retry-After`, and 5xx. After: none
    (host order is question 2).
-7. **The job.** `Task.PushTo` over `plainPush`; the push's position and
+7. **The job.** `readPush`, with `plainPush` as its wrapper, and
+   `Task.PushTo` over it, skipping dry runs; the push's position and
    time read from `Core.Events.Stream`; the check of an open request on a
-   new push; `due` by log position, look up, record, reopen or open,
-   refusals, backoff. Files: `internal/tasks/task.go` (`PushTo`, a read
-   of state: `apply` doesn't change), `internal/githost/job.go`. Done:
+   new push; `due` by log position, look up, the branch check, record,
+   reopen or open, refusals, backoff. Files: `internal/tasks/waiting.go`
+   (`readPush`), `internal/tasks/task.go` (`PushTo`, a read of state:
+   `apply` doesn't change), their tests, `internal/githost/job.go`. Done:
    tests with a fake host: one request per task across a restart between
    the host's reply and the write, also when the request was merged or
    closed before the restart; a request closed on the host isn't reopened
    until a new push; a push onto an open request opens nothing; with no
    webhook, a request merged on the host and a task shipped again writes
    `git.pr_changed` merged and opens a new request, also across a restart
-   between the two; a push to dev, and a push `plainPush` can't read,
-   open nothing; an old log opens nothing; no token writes nothing; a 401
+   between the two; a push to dev, a push `plainPush` can't read, and a
+   dry-run push (`-n`, `--dry-run`) open nothing; the waiting line for a
+   dry-run push reads as before; a push whose branch isn't on the host
+   writes one `git.refused` with "the branch agentry/task-N isn't on the
+   host" and opens nothing; an old log opens nothing; no token writes nothing; a 401
    writes one `git.refused` and no more until `git.retry`; an edit to the
    settings file reaches the next pass; each push's stream is read once.
    It changes no replay or apply, so it needs no replay test. After: 4,
@@ -750,7 +834,10 @@ real callers.
    branch name, a branch that is no task's, an archived task, a body that
    isn't JSON and one over 1 MB (each 202, nothing written); the same
    delivery twice (written once); an older status after a newer (the
-   newer stays). After: 5.
+   newer stays); a merge request event for an older request writes nothing
+   that changes the current one (the slice's current request stays open,
+   with its state and head); one for a number the task never had writes
+   nothing. After: 5.
 10. **Read route, show_pipeline and the waiting entry.**
     `GET /api/git/tasks/{task}`, `GET /api/git/waiting`, the retry route,
     the tool and `Waiting`. Files: `internal/githost/routes.go`, `tools.go`.
