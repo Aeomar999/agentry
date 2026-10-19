@@ -43,10 +43,16 @@ func Schema(kind Type, spec Spec) map[string]any {
 		required = append(required, "data")
 		data["required"] = slices.Clone(spec.Fields)
 	}
+	stream := text()
+	if kind == ProposalRejected {
+		// The store writes a rejection for a proposal that failed the shape
+		// check, and that proposal can lack a stream.
+		stream = map[string]any{"type": "string"}
+	}
 	schema := object(map[string]any{
 		"position":    map[string]any{"type": "integer", "minimum": 1},
 		"at":          map[string]any{"type": "string", "format": "date-time"},
-		"stream":      text(),
+		"stream":      stream,
 		"actor":       object(map[string]any{"kind": text(), "id": text()}, "kind", "id"),
 		"type":        map[string]any{"const": kind},
 		"correlation": correlation,

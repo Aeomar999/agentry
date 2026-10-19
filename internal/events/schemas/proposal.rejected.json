@@ -36,7 +36,6 @@
       "type": "integer"
     },
     "stream": {
-      "minLength": 1,
       "type": "string"
     },
     "type": {

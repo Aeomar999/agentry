@@ -41,7 +41,9 @@ func TestAnEventValidatesAgainstItsSchema(t *testing.T) {
 	done := schemaOf(t, events.TaskDone, events.Spec{Fields: []string{"summary"}})
 	started := schemaOf(t, events.TurnStarted, events.Spec{Fields: []string{"agent"}, Correlation: true})
 	held := schemaOf(t, events.TaskHeld, events.Spec{})
+	rejected := schemaOf(t, events.ProposalRejected, events.Spec{})
 	const actor = `"actor":{"kind":"agent","id":"editor"}`
+	const rejection = `"data":{"type":"task.done","by":"agent:editor","check":"shape","reason":"no stream"}`
 
 	for _, c := range []struct {
 		name, event string
@@ -60,6 +62,8 @@ func TestAnEventValidatesAgainstItsSchema(t *testing.T) {
 		{"the wrong type", `{"stream":"task-4",` + actor + `,"type":"task.held","data":{"summary":"Done."}}`, done, `type: want task.done, got "task.held"`},
 		{"fields newer than the schema", `{"stream":"task-4",` + actor + `,"type":"task.done","origin":"web","data":{"summary":"Done.","toYou":"Look."}}`, done, ""},
 		{"no data for a type with no fields", `{"stream":"task-4",` + actor + `,"type":"task.held"}`, held, ""},
+		{"a rejection with no stream", `{"stream":"",` + actor + `,"type":"proposal.rejected",` + rejection + `}`, rejected, ""},
+		{"an empty stream elsewhere", `{"stream":"",` + actor + `,"type":"task.done","data":{"summary":"Done."}}`, done, "stream: want at least 1 characters"},
 		{"an empty actor id", `{"stream":"task-4","actor":{"kind":"agent","id":""},"type":"task.held"}`, held, "actor.id: want at least 1 characters"},
 		{"a position that isn't whole", `{"position":1.5,"stream":"task-4",` + actor + `,"type":"task.held"}`, held, "position: want an integer"},
 		{"a time that isn't one", `{"at":"yesterday","stream":"task-4",` + actor + `,"type":"task.held"}`, held, `at: want a date-time, got "yesterday"`},
