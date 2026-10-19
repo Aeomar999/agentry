@@ -56,7 +56,6 @@ func (s *Server) uploadShared(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.FileAdded,
 		Data: map[string]any{"name": name, "hash": hash, "size": size, "by": "you"}})
-
 }
 
 func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
@@ -85,7 +84,6 @@ func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
 func (s *Server) removeShared(w http.ResponseWriter, r *http.Request) {
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.FileRemoved,
 		Data: map[string]any{"name": r.URL.Query().Get("name"), "by": "you"}})
-
 }
 
 // blobFor sends a worker a file it needs, by its hash.

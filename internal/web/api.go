@@ -88,7 +88,6 @@ func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
 		Data: map[string]any{"repo": made.Repo, "worker": here.Name(), "path": made.Path, "branch": made.Branch, "base": "", "port": made.Port}})
-
 }
 
 // repoFor is the folder a task's work goes in, for a repo named by its
@@ -317,7 +316,6 @@ func (s *Server) label(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskLabeled,
 		Data: map[string]any{"labels": cleanLabels(request.Labels)}})
-
 }
 
 // cleanLabels trims labels, lowercases them so "Bug" and "bug" are one, and
@@ -439,7 +437,6 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request, kind events.Type
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: kind,
 		Correlation: r.PathValue("action"), Data: map[string]any{"reason": request.Reason}})
-
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {

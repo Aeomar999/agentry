@@ -211,7 +211,6 @@ func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 	}
 	httpapi.Reply(w, map[string]any{"code": code, "expiresAt": expires, "expiresIn": int(codeLifetime / time.Second),
 		"addresses": addresses, "address": chosen})
-
 }
 
 // signIn swaps a code, or the token pasted in, for the token and the cookie.

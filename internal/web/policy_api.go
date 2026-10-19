@@ -80,7 +80,6 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
 		"profiles": current.Summary(), "text": current.Text(), "version": s.version(),
 		"defaults": defaults, "users": users, "effective": effective, "missing": current.MissingProfiles(agentProfiles(roster))})
-
 }
 
 func defaultsOf(current *policy.Policy) ([]defaultView, error) {
@@ -196,7 +195,6 @@ func (s *Server) policyVersion(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, map[string]any{"position": position, "at": at,
 		"diff":           policy.LineDiff("in force", "version of "+versionTime(at), current.Text(), text),
 		"useForEveryone": useForEveryone, "inForceUseForEveryone": current.UseForEveryone()})
-
 }
 
 // revertPolicy writes an earlier version back, as a new version.

@@ -27,7 +27,6 @@ func (s *Server) showSettings(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, settingsView{VisionariesOnEpicClose: now.VisionariesOnEpicClose, AutoAcceptIdeas: now.AutoAcceptIdeas,
 		AutoStartIdeas: now.AutoStartIdeas, AutoAcceptRule: now.AutoAcceptRule, MaxRunningTasks: now.MaxRunningTasks,
 		RunningTasks: s.slots().Running})
-
 }
 
 // changeSettings changes the settings the request names, 400 when it names
