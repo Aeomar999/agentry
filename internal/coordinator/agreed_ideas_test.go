@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -149,5 +150,42 @@ func TestWithTheSettingOffEveryIdeaStaysOpen(t *testing.T) {
 	// task-epic, task-earlier, the one Export became and the session
 	if got := len(state.TaskIDs()); got != before+4 {
 		t.Errorf("%d tasks were made, want 4", got-before)
+	}
+}
+
+// Agentry's accept gives the task the server's limits, unlimited ones too,
+// or, for an idea that follows up an epic, the epic's.
+func TestAnAgreedIdeaTakesTheServersLimitsOrItsEpics(t *testing.T) {
+	for _, defaults := range []tasks.Limits{{}, {Budget: 5_000_000, MaxTurns: 24}} {
+		t.Run(fmt.Sprintf("%+v", defaults), func(t *testing.T) {
+			s, state, repo := withTeams(t, true)
+			loop := newLoop(s, state, t.TempDir())
+			loop.Defaults = defaults
+			run(t, loop, state)
+			mustPropose(t, s, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
+				Data: map[string]any{settings.AutoAcceptIdeas: true}})
+			mustPropose(t, s, events.Proposal{Stream: "task-epic", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Improve it",
+				"repo": repo, "coordinator": "tech-lead", "kind": "epic", "parked": "backlog", "budget": 800, "maxTurns": 6}})
+
+			const id = "task-vision-limits"
+			startTask(t, s, id, repo, "editor")
+			endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "Two ideas.", "ideas": [
+				{"title": "Alone", "problem": "p", "proposal": "f", "size": "S", "backedBy": `+everyViewpoint+`},
+				{"title": "Follow", "problem": "p", "proposal": "f", "size": "S", "epic": "task-epic", "backedBy": `+everyViewpoint+`}]}`)
+			waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+			list := ideas.List(state, repo)
+			if len(list) != 2 {
+				t.Fatalf("the ideas: %v", list)
+			}
+			want := map[string]tasks.Limits{"Alone": defaults, "Follow": {Budget: 800, MaxTurns: 6}}
+			for _, idea := range list {
+				if idea.Became == "" {
+					t.Fatalf("%q wasn't accepted: %s", idea.Title, idea.State)
+				}
+				if limits := load(t, s, idea.Became).Limits(); limits != want[idea.Title] {
+					t.Errorf("%q: limits %+v, want %+v", idea.Title, limits, want[idea.Title])
+				}
+			}
+		})
 	}
 }

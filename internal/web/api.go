@@ -169,6 +169,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	defaults := s.config.defaults()
 	parked := ""
 	if request.Epic != "" {
 		parked = "backlog" // with the epic's other stories, until you start it
@@ -176,7 +177,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
 		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
-		"budget": limitOf(request.Budget, s.config.Budget), "maxTurns": limitOf(request.MaxTurns, s.config.MaxTurns),
+		"budget": limitOf(request.Budget, defaults.Budget), "maxTurns": limitOf(request.MaxTurns, defaults.MaxTurns),
 		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
 	switch {
 	case err != nil:
@@ -206,6 +207,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 // noLimit is what a request sends for no limit. At creation 0 takes the
 // server's default, so a task made without one is unlimited only when asked.
 const noLimit = -1
+
+// defaults are the limits a new task gets when it names none.
+func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
 
 // limitOf is a budget or limit of turns as the task keeps it, 0 for no
 // limit, from a request's: 0 takes byDefault (the server's for a new task, no

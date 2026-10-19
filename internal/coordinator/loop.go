@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -34,8 +35,8 @@ type Loop struct {
 
 	startedAt int64 // the log's last position when the loop was made: what came before is history (followups.go)
 
-	Clones string // where repos the user names by a git address are cloned, for a "move"
-	Budget int    // the token budget of a task Agentry makes from an idea it accepts for you, as yours get; 0 is no limit
+	Clones   string       // where repos the user names by a git address are cloned, for a "move"
+	Defaults tasks.Limits // the server's limits, for a task Agentry makes that comes from no other task (tasks.NewLimits)
 }
 
 var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
@@ -316,7 +317,7 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 		summary := decision.Summary
 		if len(decision.Ideas) > 0 {
 			note := "Agentry couldn't keep these ideas, as only a Visionaries coordinator suggests them."
-			if own, _ := roster.Get(task.Coordinator); isVisionaries(own) {
+			if own, _ := roster.Get(task.Coordinator); ideas.Suggests(own) {
 				note = l.suggest(task, decision.Ideas)
 			}
 			if note != "" {
@@ -379,9 +380,10 @@ func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator event
 	asker, _ := roster.Get(task.Coordinator)
 	description := decision.Request + "\n\n(Asked by the " + asker.TeamName() + " team's coordinator, " + task.Coordinator +
 		", for " + task.ID + ": " + task.Title + ". When this is done, your summary goes back to them.)"
+	limits := tasks.NewLimits(l.Defaults, task)
 	child, refused := l.newTask(coordinator, map[string]any{
 		"title": firstLine(decision.Request), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": task.Budget, "maxTurns": task.MaxTurns, "labels": listOf(task.Labels)})
+		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": limits.Budget, "maxTurns": limits.MaxTurns, "labels": listOf(task.Labels)})
 	if refused != "" {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the request to the " + lead.TeamName() + " team failed: " + refused})
 		return
@@ -396,6 +398,7 @@ func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator event
 // can't be made, the ones before it are kept and the coordinator hears why.
 func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.Actor, decision Decision) {
 	own, _ := roster.Get(task.Coordinator)
+	limits := tasks.NewLimits(l.Defaults, task)
 	var ids, titles []string
 	refused := ""
 	for i, story := range decision.Stories {
@@ -414,7 +417,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 		var id string
 		if id, refused = l.newTask(coordinator, map[string]any{
 			"title": strings.TrimSpace(story.Title), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": task.Budget, "maxTurns": task.MaxTurns,
+			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": limits.Budget, "maxTurns": limits.MaxTurns,
 			"labels": listOf(task.Labels)}); refused != "" {
 			refused = fmt.Sprintf("story %d wasn't made: %s", i+1, refused)
 			break

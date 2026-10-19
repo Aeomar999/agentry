@@ -40,6 +40,8 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
 		case "GET /api/tasks/task-3":
 			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","tokensUnknown":"Tokens unknown on 2 turns: transcript not saved"}`)
+		case "GET /api/tasks/task-5":
+			io.WriteString(w, `{"id":"task-5","title":"Login page","repo":"/repo","status":"done","column":"done","pushed":true,"doneByYou":true}`)
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
 				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
@@ -276,6 +278,28 @@ func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
 	c, _ := start(t, false, nil)
 	if text := c.tool("show_task", map[string]any{"task": "task-3"}); !strings.Contains(text, "\nTokens unknown on 2 turns: transcript not saved\n") {
 		t.Errorf("show_task should say where the tokens are unknown:\n%s", text)
+	}
+}
+
+// show_task says a done task whose work an agent pushed is shipped, and
+// that the user moved it to Done when they did.
+func TestTheTaskSaysItShipped(t *testing.T) {
+	c, _ := start(t, false, nil)
+	text := c.tool("show_task", map[string]any{"task": "task-5"})
+	if !strings.Contains(text, "\nStatus: shipped · on the board: Done ·") || !strings.Contains(text, "\nMoved to Done by you.\n") {
+		t.Errorf("show_task should say it shipped and who moved it:\n%s", text)
+	}
+	for _, c := range []struct {
+		task task
+		want string
+	}{
+		{task{Status: "done", Pushed: true}, "shipped"},
+		{task{Status: "done"}, "done"},
+		{task{Status: "working", Pushed: true}, "working"},
+	} {
+		if got := statusOf(c.task); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.task, got, c.want)
+		}
 	}
 }
 

@@ -123,15 +123,15 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 			s, state, repo := openSeeded(t)
 			id := suggest(t, s, repo, map[string]any{"kind": c.suggested})
 
-			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Budget: 500})
+			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Defaults: tasks.Limits{Budget: 500, MaxTurns: 7}})
 			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			task := loadTask(t, s, "task-2")
 			if task.Kind != c.want || !task.KindChosen || task.Parked != "backlog" || task.Status() != tasks.Held ||
-				task.Repo != repo || task.Coordinator != "tech-lead" || task.Budget != 500 || task.Idea != id || task.Title != "Search the board" {
-				t.Errorf("task: kind %q chosen %v parked %q status %s repo %q coordinator %q budget %d idea %q title %q",
-					task.Kind, task.KindChosen, task.Parked, task.Status(), task.Repo, task.Coordinator, task.Budget, task.Idea, task.Title)
+				task.Repo != repo || task.Coordinator != "tech-lead" || task.Budget != 500 || task.MaxTurns != 7 || task.Idea != id || task.Title != "Search the board" {
+				t.Errorf("task: kind %q chosen %v parked %q status %s repo %q coordinator %q budget %d turns %d idea %q title %q",
+					task.Kind, task.KindChosen, task.Parked, task.Status(), task.Repo, task.Coordinator, task.Budget, task.MaxTurns, task.Idea, task.Title)
 			}
 			for _, link := range []string{id, `"Search the board"`, "A search box", "Yes, soon"} {
 				if !strings.Contains(task.Description, link) {

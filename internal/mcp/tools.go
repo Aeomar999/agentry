@@ -26,6 +26,7 @@ type tool struct {
 type task struct {
 	ID, Title, Repo, Status, CurrentAgent, NeedsYou, Kind, Epic, Parked, Closing, Column string
 	Labels, BlockedBy                                                                    []string
+	Pushed, DoneByYou                                                                    bool
 	Stories, StoriesDone                                                                 int
 	Budget, TokensUsed, MaxTurns, Turns, TurnsSinceAnswer                                int // a limit of 0 is none
 	Rank                                                                                 float64
@@ -202,8 +203,11 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, t.Status, columnOf(t.task), t.Coordinator, t.Repo,
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, statusOf(t.task), columnOf(t.task), t.Coordinator, t.Repo,
 		s.agentry.PageURL("/tasks/"+t.ID))
+	if t.Status == "done" && t.DoneByYou {
+		b.WriteString("Moved to Done by you.\n")
+	}
 	if t.Kind == "epic" {
 		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
 	} else if t.Epic != "" {
@@ -235,6 +239,15 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		}
 	}
 	return b.String(), nil
+}
+
+// statusOf is the task's status, with a done task whose work an agent
+// pushed said to be shipped.
+func statusOf(t task) string {
+	if t.Status == "done" && t.Pushed {
+		return "shipped"
+	}
+	return t.Status
 }
 
 // columnOf is where the task shows on the board: "on the board: Shipping".

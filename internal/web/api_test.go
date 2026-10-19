@@ -20,6 +20,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -32,13 +34,20 @@ const token = "ui-secret"
 
 func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
+	return newTestServerWith(t, tasks.Limits{})
+}
+
+// newTestServerWith is newTestServer with the new tasks' limits in limits.
+func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
 	hooks := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("hooks")) })
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
-		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, hooks, nil).Handler())
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}, Budget: limits.Budget, MaxTurns: limits.MaxTurns,
+		Features: []features.Feature{ideas.Feature(state)}}, hooks, nil).Handler())
 	t.Cleanup(server.Close)
 	return server, s
 }

@@ -60,8 +60,11 @@ func TestTheTaskListKeepsItsJSON(t *testing.T) {
 	create(`{"title":"In review"}`) // task-4
 	propose(events.Proposal{Stream: "task-4", Actor: techLead, Type: events.TaskAssigned, Data: map[string]any{"agent": "reviewer", "instructions": "Check it."}})
 
-	create(`{"title":"Done","repo":""}`) // task-5
+	create(`{"title":"Done","repo":""}`) // task-5, shipped
 	work("task-5", "tech-lead")
+	propose(events.Proposal{Stream: "task-5", Actor: techLead, Type: events.ActionRequested, Correlation: "push-1", Data: map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}})
+	propose(events.Proposal{Stream: "task-5", Actor: policy, Type: events.ActionApproved, Correlation: "push-1", Data: map[string]any{"reason": "otherwise"}})
+	propose(events.Proposal{Stream: "task-5", Actor: worker, Type: events.ActionResult, Correlation: "push-1"})
 	endTurn("task-5", "tech-lead")
 	propose(events.Proposal{Stream: "task-5", Actor: techLead, Type: events.TaskDone, Data: map[string]any{"summary": "Shipped."}})
 
@@ -92,6 +95,11 @@ func TestTheTaskListKeepsItsJSON(t *testing.T) {
 
 	create(`{"title":"Shipping"}`) // task-13
 	propose(events.Proposal{Stream: "task-13", Actor: techLead, Type: events.TaskAssigned, Data: map[string]any{"agent": "deployer", "instructions": "Ship it."}})
+
+	create(`{"title":"Moved to Done"}`) // task-14
+	if code, reply := call(t, server, "POST", "/api/tasks/task-14/direct", `{"to":"done"}`); code != 200 {
+		t.Fatalf("move to done: %d %s", code, reply)
+	}
 
 	var got bytes.Buffer
 	for _, path := range []string{"/api/tasks", "/api/tasks/task-10", "/api/tasks/task-1"} {

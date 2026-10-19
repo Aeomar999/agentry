@@ -233,7 +233,7 @@ func TestATeamSuggestsIdeasByItsTemplate(t *testing.T) {
 	roster := agents.FromEvents(log)
 	for name, want := range map[string]bool{"tech-lead": false, "visionary-lead": true, "visionary-lead-2": true, "lead": false,
 		"Old Visionaries": true, "Old Visionaries 2": true} {
-		if coordinator, _ := roster.Get(name); isVisionaries(coordinator) != want {
+		if coordinator, _ := roster.Get(name); ideas.Suggests(coordinator) != want {
 			t.Errorf("%s of team %q (template %q): suggests ideas %v, want %v", name, coordinator.TeamName(), coordinator.Template, !want, want)
 		}
 	}

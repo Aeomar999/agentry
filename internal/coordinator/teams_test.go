@@ -35,7 +35,7 @@ func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 	s, repo := twoTeams(t)
 	const id = "task-ask-1"
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
-		Data: map[string]any{"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true}})
+		Data: map[string]any{"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "budget": 900_000, "maxTurns": 9}})
 
 	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
 	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, "- Writing, coordinated by editor: ") || strings.Contains(brief, "didn't choose a team") {
@@ -48,6 +48,9 @@ func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 	childTask := waitForTurn(t, s, child, "turn-1", "editor")
 	if childTask.Parent != id || childTask.Title != "Write the user guide for the TODO tool." || !strings.Contains(childTask.Description, "for "+id) {
 		t.Errorf("the Writing team's task: parent %q, title %q, description %q", childTask.Parent, childTask.Title, childTask.Description)
+	}
+	if limits := childTask.Limits(); limits != task.Limits() {
+		t.Errorf("the request takes its asker's limits %+v: %+v", task.Limits(), limits)
 	}
 	if task.Status() != tasks.Working || task.OpenTurn() != nil {
 		t.Errorf("the asking task waits, with no turn of its own: %s", task.Status())

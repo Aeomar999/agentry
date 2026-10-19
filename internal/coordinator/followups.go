@@ -10,17 +10,12 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// When you close an epic, Agentry starts one short Visionaries session
-// about it: what it delivered, and what could follow. Its ideas land in
-// Ideas like any session's, each from a task that is "about" the epic. You
-// turn it off on the Ideas page; without a Visionaries team, the epic says
-// how to add one.
-
-// A session after an epic closes is a short one.
-const (
-	FollowUpBudget   = 1_000_000 // tokens
-	FollowUpMaxTurns = 12
-)
+// When you close an epic, Agentry starts one Visionaries session about it:
+// what it delivered, and what could follow. Its ideas land in Ideas like
+// any session's, each from a task that is "about" the epic. The session
+// comes from no task, so it takes the server's limits, as a task you make
+// does. You turn it off on the Ideas page; without a Visionaries team, the
+// epic says how to add one.
 
 // followUps starts a session after each epic the batch closed: your
 // task.done on it, as you approved closing it, not a move to Done on the
@@ -54,10 +49,11 @@ func (l *Loop) followUp(id string, close int64) {
 			"Or turn these sessions off on the Ideas page.")
 		return
 	}
+	limits := tasks.NewLimits(l.Defaults, nil)
 	_, refused := l.newTask(agentry, map[string]any{
 		"title": firstLine("Follow-ups after " + epic.Title), "description": followUpBrief(epic, l.familyOf(epic)),
 		"repo": epic.Repo, "coordinator": lead.Name, "teamChosen": true, "kindChosen": true,
-		"budget": FollowUpBudget, "maxTurns": FollowUpMaxTurns, "labels": listOf(epic.Labels), "about": id, "close": close})
+		"budget": limits.Budget, "maxTurns": limits.MaxTurns, "labels": listOf(epic.Labels), "about": id, "close": close})
 	if refused != "" {
 		slog.Warn("coordinator loop: starting the Visionaries after an epic", "epic", id, "refused", refused)
 		l.skipFollowUp(epic, close, "Agentry couldn't start the Visionaries session about this epic: "+refused)

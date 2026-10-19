@@ -10,6 +10,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 func team(name string, members ...string) agents.Roster {
@@ -143,6 +144,33 @@ func TestATaskFromAnIdeaCarriesItsEpicsLimits(t *testing.T) {
 	id := suggest(t, s, repo, map[string]any{"epic": ""})
 	if got, _ := ideas.Accept(s, state, id, ideas.Choice{}); !got.Accepted || strings.Contains(loadTask(t, s, "task-2").Description, "Limits") {
 		t.Errorf("an idea with no epic has no limits: %+v\n%s", got, loadTask(t, s, "task-2").Description)
+	}
+}
+
+// A task from an idea takes the server's limits, unlimited ones too, whoever
+// accepts it; one from an idea that follows up an epic takes the epic's, as
+// the epic's stories do.
+func TestATaskFromAnIdeaTakesTheDefaultLimitsOrItsEpics(t *testing.T) {
+	for _, defaults := range []tasks.Limits{{}, {Budget: 5_000_000, MaxTurns: 24}} {
+		for _, by := range []events.Actor{you, agentry} {
+			s, state, repo := openSeeded(t)
+			turnOn(t, s, state)
+			mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{
+				"title": "Improve Portside", "repo": repo, "coordinator": "tech-lead", "kind": "epic", "budget": 800, "maxTurns": 6}})
+			for _, c := range []struct {
+				epic string
+				want tasks.Limits
+			}{{"", defaults}, {"task-2", tasks.Limits{Budget: 800, MaxTurns: 6}}} {
+				id := suggestAgreed(t, s, repo, map[string]any{"epic": c.epic, "title": "Follow " + c.epic})
+				got, err := ideas.Accept(s, state, id, ideas.Choice{Defaults: defaults, By: by})
+				if err != nil || !got.Accepted {
+					t.Fatalf("accept by %s: %+v %v", by.ID, got, err)
+				}
+				if limits := loadTask(t, s, got.Task).Limits(); limits != c.want {
+					t.Errorf("defaults %+v, by %s, epic %q: limits %+v, want %+v", defaults, by.ID, c.epic, limits, c.want)
+				}
+			}
+		}
 	}
 }
 
