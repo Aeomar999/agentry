@@ -48,17 +48,25 @@ const IdeasFormat = `Your "done" decision carries the ideas the session agreed o
 // suggest keeps the decision's ideas, each an idea from the task about its
 // repo, and says which were refused and why. An idea already kept from the
 // task under the same title isn't kept again, so a done applied twice, or
-// one naming an idea twice, suggests each once. The ideas it keeps that the
+// one naming an idea twice, suggests each once. An idea that says it
+// repeats one the repo doesn't have is kept as a new idea, as the rules
+// would refuse it and the done can't be redone. The ideas it keeps that the
 // Visionaries agreed on, Agentry may accept for you (acceptAgreed).
 func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
+	list := ideas.List(l.state, task.Repo)
 	kept := map[string]bool{}
-	for _, idea := range ideas.List(l.state, task.Repo) {
+	for _, idea := range list {
 		kept[idea.Title] = kept[idea.Title] || idea.Task == task.ID
 	}
-	var refused, added []string
+	var notes, refused, added []string
 	for _, idea := range suggested {
 		if kept[idea.Title] {
 			continue
+		}
+		idea.Repeats = strings.TrimSpace(idea.Repeats)
+		unknown := unknownRepeat(idea.Repeats, list)
+		if unknown != "" {
+			idea.Repeats = ""
 		}
 		created, rejection, err := l.store.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
 			"title": idea.Title, "problem": idea.Problem, "proposal": idea.Proposal, "whyNow": idea.WhyNow, "size": idea.Size,
@@ -72,13 +80,25 @@ func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
 		default:
 			kept[idea.Title] = true
 			added = append(added, created.Stream)
+			if unknown != "" {
+				notes = append(notes, fmt.Sprintf("%q repeats %s, which doesn't exist; kept as a new idea.", idea.Title, unknown))
+			}
 		}
 	}
 	l.acceptAgreed(task.Repo, added)
-	if len(refused) == 0 {
+	if len(refused) > 0 {
+		notes = append(notes, "Agentry couldn't keep these ideas:\n- "+strings.Join(refused, "\n- "))
+	}
+	return strings.Join(notes, "\n")
+}
+
+// unknownRepeat is the id an idea says it repeats when no idea in list has
+// it, such as a typo or a title, "" when it names one or none.
+func unknownRepeat(repeats string, list []*ideas.Idea) string {
+	if repeats == "" || slices.ContainsFunc(list, func(idea *ideas.Idea) bool { return idea.ID == repeats }) {
 		return ""
 	}
-	return "Agentry couldn't keep these ideas:\n- " + strings.Join(refused, "\n- ")
+	return repeats
 }
 
 // autoAccepted is the note on an idea Agentry accepted for you under rule,

@@ -145,6 +145,29 @@ func TestADoneNamingOneTitleTwiceKeepsOneIdea(t *testing.T) {
 	}
 }
 
+// An idea that says it repeats an idea the repo doesn't have, here a title
+// in place of the id, is kept as a new idea, and the summary says so.
+func TestAnIdeaRepeatingNoIdeaIsKeptAsANewOne(t *testing.T) {
+	s, state, repo := withVisionaries(t)
+	const id = "task-vision-8"
+	startTask(t, s, id, repo, "editor")
+
+	endTurn(t, s, id, "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
+		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M", "repeats": "Board search"}]}`)
+	task := waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
+	const note = `"Search the board" repeats Board search, which doesn't exist; kept as a new idea.`
+	if task.Summary != "One idea.\n\n"+note {
+		t.Errorf("the summary should say the idea was kept as a new one:\n%s", task.Summary)
+	}
+	list := ideas.List(state, repo)
+	if len(list) != 1 {
+		t.Fatalf("ideas: %v", list)
+	}
+	if idea := list[0]; idea.Title != "Search the board" || idea.Repeats != "" || idea.State != ideas.Open {
+		t.Errorf("want the idea kept, open, repeating nothing: %+v", idea)
+	}
+}
+
 // Only a Visionaries session suggests ideas: a Software done carrying some
 // goes through, keeps none and says so.
 func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
