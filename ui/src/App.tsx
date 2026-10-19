@@ -5,6 +5,7 @@ import { ToastProvider } from "@/components/organisms/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/pages/TasksPage";
 import { PlanPage } from "@/pages/PlanPage";
+import { IdeasPage } from "@/pages/IdeasPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { TaskPage } from "@/pages/TaskPage";
 import { AgentsPage } from "@/pages/AgentsPage";
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
           { path: "/tasks", element: <TasksPage /> },
           { path: "/tasks/new", element: <NewTaskLink /> },
           { path: "/plan", element: <PlanPage /> },
+          { path: "/ideas", element: <IdeasPage /> },
           { path: "/tasks/:taskId", element: <TaskPage /> },
           { path: "/agents", element: <AgentsPage /> },
           { path: "/agents/new", element: <AgentEditPage /> },

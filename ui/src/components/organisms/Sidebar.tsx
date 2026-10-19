@@ -1,4 +1,4 @@
-import { Bot, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
+import { Bot, Lightbulb, ListTodo, Map as MapIcon, Plug, Server, ShieldCheck } from "lucide-react";
 import { SidebarItem } from "@/components/molecules/SidebarItem";
 import { cn } from "@/lib/cn";
 
@@ -15,6 +15,7 @@ const SECTIONS = [
     items: [
       { to: "/tasks", label: "Tasks", icon: <ListTodo />, countsNeedsYou: true },
       { to: "/plan", label: "Plan", icon: <MapIcon /> },
+      { to: "/ideas", label: "Ideas", icon: <Lightbulb /> },
     ],
   },
   {

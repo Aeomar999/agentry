@@ -277,3 +277,32 @@ export interface SigninCode {
   addresses: { url: string; label: string }[];
   address: string; // the address this page came from, the one to show first
 }
+
+// A feature a Visionaries session suggested (internal/web/views.go ideaView).
+export interface Idea {
+  id: string;
+  title: string;
+  problem: string;
+  proposal: string;
+  whyNow: string;
+  size: "S" | "M" | "L";
+  risks: string;
+  backedBy: string[];
+  doubtedBy: string[];
+  task: string; // the session it came from
+  repo: string;
+  epic: string; // the epic it follows up, "" for none
+  kind: "" | "epic"; // what it suggests making of it: "" is a story
+  state: "open" | "accepted" | "dismissed";
+  note: string; // what you said when you accepted or dismissed it
+  became: string; // the task an accepted idea became
+  createdAt: string;
+}
+
+// What accepting an idea did: a task can be made and the idea still not be
+// marked accepted, and then refused says why.
+export interface IdeaAcceptance {
+  task: string;
+  accepted: boolean;
+  refused: string;
+}

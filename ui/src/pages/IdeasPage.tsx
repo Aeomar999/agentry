@@ -1,0 +1,143 @@
+import { useState } from "react";
+import { Lightbulb, Users } from "lucide-react";
+import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { Badge } from "@/components/atoms/Badge";
+import { Button } from "@/components/atoms/Button";
+import { Banner } from "@/components/molecules/Banner";
+import { EmptyState } from "@/components/molecules/EmptyState";
+import { PageHeader } from "@/components/molecules/PageHeader";
+import { Panel } from "@/components/molecules/Panel";
+import { IdeaCard, TaskLink } from "@/components/organisms/IdeaCard";
+import { AcceptIdeaDialog, DismissIdeaDialog } from "@/components/organisms/IdeaDialogs";
+import type { Idea, TaskSummary } from "@/api/types";
+import { useResource } from "@/live/use-resource";
+import { useAskVisionaries } from "@/lib/visionaries";
+
+// Ideas are the features Visionaries sessions suggest. The open ones wait
+// here, grouped by the session that suggested them, newest first (the
+// server's order), for you to accept, which makes a task or an epic in your
+// Backlog, or dismiss. What you decided stays below, in the history, with
+// your note. Ask the visionaries starts a new session on a theme or a
+// question, adding the team first if you don't have it.
+
+export function IdeasPage() {
+  useBreadcrumb({ label: "Ideas" });
+  const { data, error } = useResource<Idea[]>("/api/ideas");
+  const ideas = data ?? [];
+  const titles = new Map((useResource<TaskSummary[]>("/api/tasks").data ?? []).map((task) => [task.id, task.title]));
+  const visionaries = useAskVisionaries();
+  const [acting, setActing] = useState<{ idea: Idea; action: "accept" | "dismiss" } | null>(null);
+
+  const open = ideas.filter((idea) => idea.state === "open");
+  const decided = ideas.filter((idea) => idea.state !== "open");
+  const ask = visionaries.has ? "Ask the visionaries" : "Add the Visionaries team";
+
+  return (
+    <>
+      <PageHeader
+        title="Ideas"
+        meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
+        actions={[
+          {
+            label: visionaries.adding ? "Adding the team…" : ask,
+            icon: visionaries.has ? <Lightbulb /> : <Users />,
+            onClick: visionaries.ask,
+            primary: true,
+            disabled: !visionaries.ready || visionaries.adding,
+          },
+        ]}
+      />
+      <div className="flex flex-col gap-8 p-6">
+        {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
+        {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
+        {data && ideas.length === 0 && (
+          <EmptyState icon={<Lightbulb />} title="No ideas yet">
+            <div className="flex flex-col items-center gap-3">
+              <p>
+                Ask the visionaries about a theme or a question. They read what exists, argue it out from several viewpoints, and the ideas
+                that survive come here.
+              </p>
+              <Button
+                icon={visionaries.has ? <Lightbulb /> : <Users />}
+                disabled={!visionaries.ready || visionaries.adding}
+                onClick={visionaries.ask}
+              >
+                {ask}
+              </Button>
+            </div>
+          </EmptyState>
+        )}
+        {data && ideas.length > 0 && open.length === 0 && (
+          <p className="text-[13px] text-ink-muted">No open ideas: you have decided on every one. Ask the visionaries for more.</p>
+        )}
+        {sessionsOf(open).map(({ task, ideas }) => (
+          <section key={task} className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%]">
+                {titles.get(task) ?? "A Visionaries session"}
+              </h2>
+              <span className="text-[12px] text-ink-muted">
+                <TaskLink id={task} /> · {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
+              </span>
+            </div>
+            <div className="grid items-start gap-3 xl:grid-cols-2">
+              {ideas.map((idea) => (
+                <IdeaCard
+                  key={idea.id}
+                  idea={idea}
+                  onAccept={() => setActing({ idea, action: "accept" })}
+                  onDismiss={() => setActing({ idea, action: "dismiss" })}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+        {decided.length > 0 && (
+          <Panel title="History" aside={`${decided.length} decided`} flush>
+            <ul className="divide-y divide-divider">
+              {decided.map((idea) => (
+                <HistoryRow key={idea.id} idea={idea} />
+              ))}
+            </ul>
+          </Panel>
+        )}
+      </div>
+      {acting?.action === "accept" && <AcceptIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
+      {acting?.action === "dismiss" && <DismissIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
+    </>
+  );
+}
+
+// An idea you decided on: what became of it, and what you said.
+function HistoryRow({ idea }: { idea: Idea }) {
+  return (
+    <li className="flex flex-col gap-1 px-4 py-3">
+      <span className="flex flex-wrap items-center gap-2">
+        <Badge variant={idea.state === "accepted" ? "success" : "default"}>{idea.state}</Badge>
+        <span className="text-[13px] font-medium text-ink-primary">{idea.title}</span>
+        <span className="ml-auto flex gap-3 text-[12px] text-ink-muted">
+          {idea.became && (
+            <span>
+              became <TaskLink id={idea.became} />
+            </span>
+          )}
+          <span>
+            from <TaskLink id={idea.task} />
+          </span>
+        </span>
+      </span>
+      {idea.note && <p className="text-[12.5px] whitespace-pre-wrap text-ink-secondary">{idea.note}</p>}
+    </li>
+  );
+}
+
+// sessionsOf groups ideas by the session they came from, keeping their order.
+function sessionsOf(ideas: Idea[]): { task: string; ideas: Idea[] }[] {
+  const sessions: { task: string; ideas: Idea[] }[] = [];
+  for (const idea of ideas) {
+    let session = sessions.find((s) => s.task === idea.task);
+    if (!session) sessions.push((session = { task: idea.task, ideas: [] }));
+    session.ideas.push(idea);
+  }
+  return sessions;
+}
