@@ -21,6 +21,7 @@ type Feature struct {
 	Name        string             // "ideas": its manifest entry, routes and UI folder use it
 	Version     int                // raised when its events or state change
 	Streams     *Streams           // the streams it owns, if any
+	Writes      []events.Type      // the core types it proposes, beside its own: ideas makes a task.created (Checked)
 	Coordinator *Coordinator       // its part in coordinators' briefs and decisions
 	Manifest    func(Reader) Entry // whether the page shows it, and why
 }
@@ -54,8 +55,8 @@ type Reader interface {
 	OwnedIDs(prefix string) []string  // the streams with a prefix, in log order, broken ones too
 }
 
-// Proposer writes to the log, as *store.Store does. A feature is given one
-// in its Core, never the store itself.
+// Proposer writes to the log, as *store.Store does. A feature is given the
+// one Checked made for it, in its Core, never the store itself.
 type Proposer interface {
 	Propose(p events.Proposal) (events.Event, *events.Rejection, error)
 	Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error)
@@ -71,7 +72,7 @@ type EventLog interface {
 // log and never writes to it. Defaults are the server's limits for a task
 // Agentry makes that comes from no other task.
 type Core struct {
-	Log      Proposer
+	Log      Proposer // from Checked
 	Events   EventLog
 	Read     Reader
 	Defaults tasks.Limits
