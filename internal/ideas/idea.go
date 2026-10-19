@@ -50,7 +50,7 @@ type Idea struct {
 func FromEvents(stream []events.Event) *Idea {
 	var idea *Idea
 	for _, e := range stream {
-		if e.Type == events.IdeaSuggested {
+		if e.Type == IdeaSuggested {
 			idea = &Idea{ID: e.Stream, CreatedAt: e.At}
 		}
 		if idea != nil {
@@ -66,7 +66,7 @@ func FromEvents(stream []events.Event) *Idea {
 // replaces fields, never changes a slice, so a shallow copy is enough.
 func Next(idea *Idea, e events.Event) *Idea {
 	switch {
-	case e.Type == events.IdeaSuggested:
+	case e.Type == IdeaSuggested:
 		idea = &Idea{ID: e.Stream, CreatedAt: e.At}
 	case idea == nil:
 		return nil
@@ -80,17 +80,17 @@ func Next(idea *Idea, e events.Event) *Idea {
 
 func (idea *Idea) apply(e events.Event) {
 	switch e.Type {
-	case events.IdeaSuggested:
+	case IdeaSuggested:
 		idea.Title, idea.Problem, idea.Proposal = e.Text("title"), e.Text("problem"), e.Text("proposal")
 		idea.WhyNow, idea.Size, idea.Risks = e.Text("whyNow"), e.Text("size"), e.Text("risks")
 		idea.BackedBy, idea.DoubtedBy = e.List("backedBy"), e.List("doubtedBy")
 		idea.Task, idea.Repo, idea.Epic = e.Text("task"), e.Text("repo"), e.Text("epic")
 		idea.Kind, idea.Repeats = tasks.Kind(e.Text("kind")), e.Text("repeats")
 		idea.State = Open
-	case events.IdeaAccepted:
+	case IdeaAccepted:
 		idea.State, idea.Note, idea.Became = Accepted, e.Text("note"), e.Text("task")
 		idea.AutoAccepted = e.Actor.Kind == events.System
-	case events.IdeaDismissed:
+	case IdeaDismissed:
 		idea.State, idea.Note = Dismissed, e.Text("note")
 	}
 }

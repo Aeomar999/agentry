@@ -320,7 +320,7 @@ func TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow(t *testing.T) {
 	}
 	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "idea": off}})
-	accept := events.Proposal{Stream: off, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}}
+	accept := events.Proposal{Stream: off, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2"}}
 	if _, rejection, err := s.Propose(accept); err != nil || rejection == nil {
 		t.Errorf("marking it accepted with the setting off: want refused, got %v %v", rejection, err)
 	}
@@ -361,7 +361,7 @@ func TestTheRulesRefuseAgentryADuplicate(t *testing.T) {
 		task := "task-" + id
 		mustPropose(t, s, events.Proposal{Stream: task, Actor: you, Type: events.TaskCreated,
 			Data: map[string]any{"title": "From " + id, "repo": repo, "coordinator": "tech-lead", "idea": id}})
-		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: agentry, Type: events.IdeaAccepted, Data: map[string]any{"task": task}})
+		_, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": task}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -416,7 +416,7 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 		{"moving its own to Review", held("task-2", "review", false)},
 		{"sending its own back", held("task-2", "in-progress", true)},
 		{"an agent accepting", events.Proposal{Stream: suggest(t, s, repo, map[string]any{"title": "Third"}), Actor: coordinator,
-			Type: events.IdeaAccepted, Data: map[string]any{"task": "task-2"}}},
+			Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2"}}},
 	}
 	for _, c := range refused {
 		if _, rejection, err := s.Propose(c.p); err != nil || rejection == nil {

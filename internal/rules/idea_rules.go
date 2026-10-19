@@ -22,15 +22,15 @@ func checkIdea(p events.Proposal, state State) *events.Rejection {
 	}
 	reason := ""
 	switch {
-	case p.Type == events.IdeaSuggested && idea != nil:
+	case p.Type == ideas.IdeaSuggested && idea != nil:
 		reason = "idea " + p.Stream + " already exists"
-	case p.Type == events.IdeaSuggested:
+	case p.Type == ideas.IdeaSuggested:
 		reason = aGoodSuggestion(p, state)
 	case idea == nil:
 		reason = "idea " + p.Stream + " doesn't exist"
 	case idea.State != ideas.Open:
 		reason = "idea " + p.Stream + " was " + string(idea.State) + " already"
-	case p.Type == events.IdeaAccepted:
+	case p.Type == ideas.IdeaAccepted:
 		reason = cmp.Or(madeFromIt(idea, p, state), agentryMayAccept(idea, p, state))
 	}
 	if reason != "" {

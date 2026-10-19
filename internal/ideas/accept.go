@@ -74,7 +74,7 @@ func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance
 		}
 	}
 	beforeMarking()
-	_, rejection, err := log.Propose(events.Proposal{Stream: idea.ID, Actor: choice.acceptor(), Type: events.IdeaAccepted,
+	_, rejection, err := log.Propose(events.Proposal{Stream: idea.ID, Actor: choice.acceptor(), Type: IdeaAccepted,
 		Data: map[string]any{"task": made.Task, "note": choice.Note}})
 	switch {
 	case err != nil:

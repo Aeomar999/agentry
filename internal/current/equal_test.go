@@ -8,14 +8,24 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 // openStore is a real store with no order check, so it also takes events
 // the rules would refuse, such as one that breaks a task's apply.
+// withIdeas is the catalogue serve opens the log with.
+var withIdeas = func() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(ideas.Registration())
+	if err != nil {
+		panic(err)
+	}
+	return catalogue
+}()
+
 func openStore(t *testing.T, proposals ...events.Proposal) *store.Store {
 	t.Helper()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), nil, nil)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +146,7 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 }
 
 func TestEqualCatchesTheWrongIdeaOrder(t *testing.T) {
-	s := openStore(t, append(someProposals(), proposal("idea-2", system, events.IdeaSuggested,
+	s := openStore(t, append(someProposals(), proposal("idea-2", system, ideas.IdeaSuggested,
 		map[string]any{"title": "Later", "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"}))...)
 	state := New()
 	state.Loaded(0)
@@ -187,7 +197,7 @@ func (h *heldApply) Apply(e events.Event) {
 // committed while it reads.
 func TestEqualHoldsWhileTheStoreTakesEvents(t *testing.T) {
 	state := &heldApply{State: New(), applied: make(chan struct{}), release: make(chan struct{})}
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, nil)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

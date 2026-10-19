@@ -15,7 +15,7 @@ import (
 func TestTheLiveStateEqualsARestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	live := New()
-	s, err := store.Open(path, live, nil)
+	s, err := store.Open(path, withIdeas, live, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestTheLiveStateEqualsARestart(t *testing.T) {
 	s.Close()
 
 	restarted := New()
-	again, err := store.Open(path, restarted, nil)
+	again, err := store.Open(path, withIdeas, restarted, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

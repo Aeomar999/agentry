@@ -15,7 +15,7 @@ import (
 func seededLog(t *testing.T, proposals ...events.Proposal) (string, []events.Event) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	s, err := store.Open(path, nil, nil)
+	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestAStateThatStartsPartWayTakesTheRestAtOpen(t *testing.T) {
 			if state.Since() != since {
 				t.Fatalf("%s from %d events: Since is %d, want %d", name, cut, state.Since(), since)
 			}
-			s, err := store.Open(path, state, nil)
+			s, err := store.Open(path, withIdeas, state, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +93,7 @@ func TestTheTaskOrderIsByPositionWhateverTheLoadOrder(t *testing.T) {
 // the state took them, and a broken idea is left out of the list.
 func TestTheIdeasAreInLogOrderWithoutBrokenOnes(t *testing.T) {
 	suggested := func(stream, title string) events.Proposal {
-		return proposal(stream, system, events.IdeaSuggested, map[string]any{"title": title, "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"})
+		return proposal(stream, system, ideas.IdeaSuggested, map[string]any{"title": title, "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"})
 	}
 	log := everyStream()
 	log = append(log, logOf(suggested("idea-3", "Third"), suggested("idea-2", "Second"), suggested("idea-4", "Fourth"))...)
@@ -138,7 +138,7 @@ func ideaIDsOf(list []*ideas.Idea) []string {
 func TestAStateThatStartsPartWayTakesWhatComesAfterOpen(t *testing.T) {
 	path, log := seededLog(t, someProposals()...)
 	state := applied(log[:len(log)/2])
-	s, err := store.Open(path, state, nil)
+	s, err := store.Open(path, withIdeas, state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

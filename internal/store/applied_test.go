@@ -44,7 +44,7 @@ func seeded(t *testing.T) string {
 func TestNoEventIsReadBeforeTheModelHasIt(t *testing.T) {
 	model := blocking{started: make(chan struct{}, 1), release: make(chan struct{})}
 	path := seeded(t)
-	s, err := Open(path, model, nil)
+	s, err := Open(path, events.Core(), model, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestOpenStartsAtTheLastPosition(t *testing.T) {
 	path := seeded(t)
 	model := newCreated()
 	for name, model := range map[string]Model{"with a model": model, "without one": nil} {
-		s, err := Open(path, model, nil)
+		s, err := Open(path, events.Core(), model, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,7 +149,7 @@ func TestOpenAppliesOnlyWhatComesAfterAModelThatStartsPartWay(t *testing.T) {
 	path := seeded(t)
 	for since, want := range map[int64][]int64{1: {2, 3}, 2: {3}, 3: nil} {
 		model := &partWay{since: since}
-		s, err := Open(path, model, nil)
+		s, err := Open(path, events.Core(), model, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -169,7 +169,7 @@ func TestOpenAppliesOnlyWhatComesAfterAModelThatStartsPartWay(t *testing.T) {
 // A model past the log's end was made from another log: Open refuses it
 // rather than read on from the wrong place.
 func TestOpenRefusesAModelPastTheLogsEnd(t *testing.T) {
-	if s, err := Open(seeded(t), &partWay{since: 4}, nil); err == nil {
+	if s, err := Open(seeded(t), events.Core(), &partWay{since: 4}, nil); err == nil {
 		s.Close()
 		t.Error("Open took a model at position 4 over a log of 3 events")
 	}

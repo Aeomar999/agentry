@@ -40,7 +40,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 // newTestServerWith is newTestServer with the new tasks' limits in limits.
 func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
@@ -482,10 +482,10 @@ func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, t
 
 // limitsServerChecked is limitsServer with its own rules, to refuse what the
 // real rules would refuse only in a race.
-func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
+func limitsServerChecked(t *testing.T, check func(events.Proposal, rules.State, *events.Catalogue) *events.Rejection) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor, more map[string]any)) {
 	t.Helper()
-	state := current.New()
-	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), state, func(p events.Proposal) *events.Rejection { return check(p, state) })
+	state, catalogue := current.New(), events.Core()
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return check(p, state, catalogue) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -648,11 +648,11 @@ func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
 // A limit is kept though its answer to the task's stop is refused, as when
 // the stop was answered as you saved: the reply says why, with a 200.
 func TestALimitIsKeptThoughItsAnswerIsRefused(t *testing.T) {
-	answeredFirst := func(p events.Proposal, state rules.State) *events.Rejection {
+	answeredFirst := func(p events.Proposal, state rules.State, catalogue *events.Catalogue) *events.Rejection {
 		if p.Type == events.TaskAnswered {
 			return &events.Rejection{Check: "order", Reason: "there's no open question"}
 		}
-		return rules.Check(p, state)
+		return rules.Check(p, state, catalogue)
 	}
 	server, work, ask := limitsServerChecked(t, answeredFirst)
 	call(t, server, "POST", "/api/tasks", `{"description":"Budget","budget":200000,"maxTurns":-1}`)

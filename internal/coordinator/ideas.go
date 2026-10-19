@@ -68,7 +68,7 @@ func (l *Loop) suggest(task *tasks.Task, suggested []Idea) string {
 		if unknown != "" {
 			idea.Repeats = ""
 		}
-		created, rejection, err := l.store.Create(events.IdeaPrefix, events.Proposal{Actor: agentry, Type: events.IdeaSuggested, Data: map[string]any{
+		created, rejection, err := l.store.Create(ideas.Prefix, events.Proposal{Actor: agentry, Type: ideas.IdeaSuggested, Data: map[string]any{
 			"title": idea.Title, "problem": idea.Problem, "proposal": idea.Proposal, "whyNow": idea.WhyNow, "size": idea.Size,
 			"risks": idea.Risks, "backedBy": listOf(idea.BackedBy), "doubtedBy": listOf(idea.DoubtedBy), "epic": idea.Epic,
 			"kind": idea.Kind, "repeats": idea.Repeats, "task": task.ID, "repo": task.Repo}})

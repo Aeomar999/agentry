@@ -36,7 +36,7 @@ func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := store.Open(path, nil, nil)
+	s, err := store.Open(path, withIdeas, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func equalPrefix(state *State, stream string, accepted []events.Event) error {
 	case events.PolicyStream:
 		return nil
 	}
-	if events.IsIdeaStream(stream) {
+	if ideas.IsStream(stream) {
 		return equalReplay(stream, accepted, infallible(ideas.FromEvents), func() (any, error) { return state.Idea(stream) })
 	}
 	return equalReplay(stream, accepted, tasks.Replay, func() (any, error) { return state.Task(stream) })
