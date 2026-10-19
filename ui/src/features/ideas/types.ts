@@ -1,3 +1,5 @@
+import type { BoardColumn } from "@/api/types";
+
 // A feature a Visionaries session suggested (internal/web/views.go ideaView).
 export interface Idea {
   id: string;
@@ -19,6 +21,7 @@ export interface Idea {
   note: string; // what you said when you accepted or dismissed it
   decidedAt?: string; // when it was accepted or dismissed; absent while it is open
   became: string; // the task an accepted idea became
+  becameColumn: BoardColumn | ""; // that task's column now, "" when it can't be read
   autoAccepted: boolean; // Agentry accepted it, as the Visionaries agreed by your rule, not you
   repeats: string; // an idea the Visionaries said it raises again, "" for none
   notAutoAccepted: string; // for an open idea, why Agentry wouldn't accept it for you under your rule; "" when it would
