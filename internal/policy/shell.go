@@ -44,6 +44,9 @@ func inspectShell(command, workspace, home string) shellCall {
 		return shellCall{invalid: true}
 	}
 	inspector := &shellInspector{variables: knownVariables(workspace, home), home: home, dirs: []string{workspace}}
+	if !expandBraces(file) {
+		inspector.call.opaque = true
+	}
 	inspector.learnVariables(file)
 	syntax.Walk(file, inspector.visit)
 	return inspector.call
@@ -216,7 +219,7 @@ func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
 		if variableSetters[name] {
 			return true
 		}
-		if (name == "builtin" || name == "command") && s.setsVariables(withoutOption(args[1:], "-p")) {
+		if (name == "builtin" || name == "command") && s.setsVariables(s.withoutOption(args[1:], "-p")) {
 			return true // they run the builtin after them; command -v only looks it up
 		}
 		if name == "printf" && slices.ContainsFunc(args[1:], s.mayBeVariableOption) {
@@ -230,11 +233,17 @@ func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
 }
 
 // withoutOption is the words after any leading copies of option.
-func withoutOption(words []*syntax.Word, option string) []*syntax.Word {
-	for len(words) > 0 && words[0].Lit() == option {
+func (s *shellInspector) withoutOption(words []*syntax.Word, option string) []*syntax.Word {
+	for len(words) > 0 && s.isText(words[0], option) {
 		words = words[1:]
 	}
 	return words
+}
+
+// isText: the word can only be text, as the shell reads it (-\p is -p).
+func (s *shellInspector) isText(word *syntax.Word, text string) bool {
+	values, ok := s.values(word)
+	return ok && len(values) == 1 && values[0] == text
 }
 
 // mayBeVariableOption: the word may be printf's -v NAME or -vNAME.
@@ -432,13 +441,13 @@ func (s *shellInspector) dirBuiltin(args []*syntax.Word) ([]string, []*syntax.Wo
 }
 
 // cdOptions are cd's and pushd's options that don't change where they go.
-var cdOptions = map[string]bool{"-L": true, "-P": true, "-e": true, "-@": true, "--": true}
+var cdOptions = []string{"-L", "-P", "-e", "-@", "--"}
 
 // moveTo adds the folder cd or pushd goes to, from each folder the shell may
 // be in. With no folder, cd goes home. cd - and a folder that can't be known
 // leave dirs unknown.
 func (s *shellInspector) moveTo(args []*syntax.Word) {
-	for len(args) > 0 && cdOptions[args[0].Lit()] {
+	for len(args) > 0 && slices.ContainsFunc(cdOptions, func(option string) bool { return s.isText(args[0], option) }) {
 		args = args[1:]
 	}
 	targets := []string{s.home}
@@ -864,9 +873,13 @@ func (s *shellInspector) fields(word *syntax.Word) ([][]string, bool) {
 // values is every string a word can expand to, when that can be known without
 // running anything: literals, quotes, and variables learned from the command.
 func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
+	return s.partsValues(word.Parts, false)
+}
+
+func (s *shellInspector) partsValues(parts []syntax.WordPart, quoted bool) ([]string, bool) {
 	results := []string{""}
-	for _, part := range word.Parts {
-		pieces, ok := s.partValues(part)
+	for _, part := range parts {
+		pieces, ok := s.partValues(part, quoted)
 		if !ok || len(results)*len(pieces) > maxValues {
 			return nil, false
 		}
@@ -881,14 +894,22 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 	return results, true
 }
 
-func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
+// partValues is every string one part of a word can be. Inside double quotes
+// a literal loses fewer backslashes than outside, so the parts of a quoted
+// string are read with quoted set. Glob characters (* ? [) are judged as the
+// text they are: a relative glob can't reach .. (bash 5.2 skips dot files'
+// . and .. by default), and an absolute one starts with / and so is outside.
+func (s *shellInspector) partValues(part syntax.WordPart, quoted bool) ([]string, bool) {
 	switch p := part.(type) {
 	case *syntax.Lit:
-		return []string{p.Value}, true
+		return []string{unescaped(p.Value, quoted)}, true
 	case *syntax.SglQuoted:
+		if p.Dollar && strings.Contains(p.Value, `\`) { // $'\x41' is A
+			return nil, false
+		}
 		return []string{p.Value}, true
 	case *syntax.DblQuoted:
-		return s.values(&syntax.Word{Parts: p.Parts})
+		return s.partsValues(p.Parts, true)
 	case *syntax.ParamExp:
 		isPlain := p.Exp == nil && p.Repl == nil && p.Index == nil && p.Slice == nil && !p.Length && !p.Excl && !p.Width && p.Names == 0
 		if values, known := s.variables[p.Param.Value]; isPlain && known && len(values) > 0 {
@@ -896,4 +917,226 @@ func (s *shellInspector) partValues(part syntax.WordPart) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+// unescaped is a literal as the shell hands it on. Outside quotes a backslash
+// keeps the character after it as text (\/tmp is /tmp, --exec\-argv is
+// --exec-argv); inside double quotes only before $ ` " \ or a newline, and
+// stays otherwise ("a\x" is a\x). A backslash and a newline are nothing.
+func unescaped(text string, quoted bool) string {
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\\' || i+1 == len(text) || quoted && !strings.ContainsRune("$`\"\\\n", rune(text[i+1])) {
+			b.WriteByte(text[i])
+			continue
+		}
+		i++
+		if text[i] != '\n' {
+			b.WriteByte(text[i])
+		}
+	}
+	return b.String()
+}
+
+// expandBraces makes each word of the command's calls and loop lists into the
+// words bash's brace expansion makes of it, before anything else reads them,
+// and redirects, as bash does: go test ./{a,b}/ is go test ./a/ ./b/, and
+// > {a,} writes a. A brace that can't be expanded here leaves its word as it
+// is and the call unknown: not ok. So does one that expands in a declaration
+// or a redirect (declare x={a,} sets x to "", while x={a,} sets {a,}).
+func expandBraces(file *syntax.File) (ok bool) {
+	ok = true
+	expandAll := func(words []*syntax.Word) []*syntax.Word {
+		var all []*syntax.Word
+		for _, word := range words {
+			expanded, known := braceWords(word)
+			if !known {
+				ok = false
+				expanded = []*syntax.Word{word}
+			}
+			all = append(all, expanded...)
+		}
+		return all
+	}
+	syntax.Walk(file, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case *syntax.CallExpr:
+			n.Args = expandAll(n.Args)
+		case *syntax.WordIter:
+			n.Items = expandAll(n.Items)
+		case *syntax.DeclClause:
+			for _, assign := range n.Args {
+				if assign.Value != nil && !unbraced(assign.Value) {
+					ok = false
+				}
+			}
+		case *syntax.Redirect:
+			if n.Word != nil && n.Hdoc == nil && n.Op != syntax.WordHdoc && !unbraced(n.Word) {
+				ok = false
+			}
+		}
+		return true
+	})
+	return ok
+}
+
+// unbraced: brace expansion leaves the word as it is.
+func unbraced(word *syntax.Word) bool {
+	words, ok := braceWords(word)
+	return ok && len(words) == 1 && words[0] == word
+}
+
+// braceAtom is one piece of a word for brace expansion: a part that isn't a
+// literal, or one character of a literal's text. brace marks a { , or } the
+// shell reads as brace syntax: not quoted and not after a backslash.
+type braceAtom struct {
+	part  syntax.WordPart
+	text  string
+	brace bool
+}
+
+// braceWords is the words brace expansion makes of word: {a,b}c is ac bc,
+// x{a,} is just xa. Not ok for a sequence ({1..3}), for more than maxValues
+// words, and next to a $name, which bash reads again after expanding, so that
+// $x{y,} is $xy $x.
+func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
+	atoms := braceAtoms(word)
+	if !slices.ContainsFunc(atoms, func(a braceAtom) bool { return a.brace && a.text == "{" }) {
+		return []*syntax.Word{word}, true
+	}
+	ways, ok := expandAtoms(atoms)
+	if !ok || len(ways) > maxValues {
+		return nil, false
+	}
+	if len(ways) == 1 {
+		return []*syntax.Word{word}, true
+	}
+	if slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		p, isVariable := part.(*syntax.ParamExp)
+		return isVariable && p.Short
+	}) {
+		return nil, false
+	}
+	var words []*syntax.Word
+	for _, way := range ways {
+		if len(way) > 0 { // an empty one is no word at all
+			words = append(words, wordOf(way))
+		}
+	}
+	return words, true
+}
+
+func braceAtoms(word *syntax.Word) []braceAtom {
+	var atoms []braceAtom
+	for _, part := range word.Parts {
+		lit, isLit := part.(*syntax.Lit)
+		if !isLit {
+			atoms = append(atoms, braceAtom{part: part})
+			continue
+		}
+		for i := 0; i < len(lit.Value); i++ {
+			if lit.Value[i] == '\\' && i+1 < len(lit.Value) {
+				atoms = append(atoms, braceAtom{text: lit.Value[i : i+2]}) // kept for values to unescape
+				i++
+				continue
+			}
+			char := lit.Value[i : i+1]
+			atoms = append(atoms, braceAtom{text: char, brace: strings.Contains("{,}", char)})
+		}
+	}
+	return atoms
+}
+
+// expandAtoms expands the first {…} holding a comma at its own level, and
+// the rest after it, as bash does. A {…} without one stays text, but a
+// brace inside it may still expand ({x{a,b}} is {xa} {xb}).
+func expandAtoms(atoms []braceAtom) ([][]braceAtom, bool) {
+	for open, a := range atoms {
+		if !a.brace || a.text != "{" {
+			continue
+		}
+		end, commas := closingBrace(atoms, open)
+		if end < 0 {
+			continue
+		}
+		if len(commas) == 0 {
+			if strings.Contains(atomsText(atoms[open+1:end]), "..") {
+				return nil, false // maybe a sequence: {1..3}, {a..c}
+			}
+			continue
+		}
+		rest, ok := expandAtoms(atoms[end+1:])
+		if !ok {
+			return nil, false
+		}
+		var ways [][]braceAtom
+		for i, start := range append([]int{open}, commas...) {
+			stop := end
+			if i < len(commas) {
+				stop = commas[i]
+			}
+			choices, ok := expandAtoms(atoms[start+1 : stop])
+			if !ok || len(ways)+len(choices)*len(rest) > maxValues {
+				return nil, false
+			}
+			for _, choice := range choices {
+				for _, after := range rest {
+					ways = append(ways, slices.Concat(atoms[:open], choice, after))
+				}
+			}
+		}
+		return ways, true
+	}
+	return [][]braceAtom{atoms}, true
+}
+
+// closingBrace is where the { at open closes, -1 when it doesn't, and the
+// commas at its own level.
+func closingBrace(atoms []braceAtom, open int) (end int, commas []int) {
+	depth := 0
+	for i := open; i < len(atoms); i++ {
+		switch {
+		case !atoms[i].brace:
+		case atoms[i].text == "{":
+			depth++
+		case atoms[i].text == "}":
+			depth--
+			if depth == 0 {
+				return i, commas
+			}
+		case depth == 1:
+			commas = append(commas, i)
+		}
+	}
+	return -1, nil
+}
+
+func atomsText(atoms []braceAtom) string {
+	var b strings.Builder
+	for _, a := range atoms {
+		b.WriteString(a.text)
+	}
+	return b.String()
+}
+
+// wordOf joins atoms back into a word, each run of text into one literal.
+func wordOf(atoms []braceAtom) *syntax.Word {
+	word := &syntax.Word{}
+	var text strings.Builder
+	flush := func() {
+		if text.Len() > 0 {
+			word.Parts = append(word.Parts, &syntax.Lit{Value: text.String()})
+			text.Reset()
+		}
+	}
+	for _, a := range atoms {
+		if a.part != nil {
+			flush()
+			word.Parts = append(word.Parts, a.part)
+			continue
+		}
+		text.WriteString(a.text)
+	}
+	flush()
+	return word
 }

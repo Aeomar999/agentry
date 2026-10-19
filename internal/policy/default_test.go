@@ -783,6 +783,53 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 	}
 }
 
+// Words are judged as bash hands them on: with its backslashes gone and its
+// braces expanded, so a runner pointed outside, or a flag a rule denies, is
+// caught in any spelling (task-89, review round 3).
+func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
+	p := loadDefault(t)
+	up := strings.Repeat(`.\./`, 6)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// a backslash bash drops
+			{"cd an escaped path, npm test", bash(`cd \` + scratch + " && npm test"), Ask},
+			{"cd an escaped path, jest", bash(`cd \` + scratch + " && npx jest --ci"), Ask},
+			{"go test an escaped path", bash(`go test \` + scratch + "/..."), Ask},
+			{"go test up an escaped ..", bash("go test " + up + scratch[1:] + "/..."), Ask},
+			{"cd up an escaped .., go test", bash("cd " + up + scratch[1:] + " && go test ./..."), Ask},
+			{"pytest an escaped path", bash(`pytest \` + scratch), Ask},
+			{"jest an escaped reporter", bash(`npx jest --reporters=\` + scratch + "/r.js"), Ask},
+			{"vitest --exec\\-argv", bash(`npx vitest run --exec\-argv=--import=data:text/javascript,1`), Deny},
+			{"vitest --exec\\Argv", bash(`npx vitest run --exec\Argv=--import=data:text/javascript,1`), Deny},
+			{"vitest --e\\xecArgv", bash(`npx vitest run --e\xecArgv=--import=data:text/javascript,1`), Deny},
+			{"vitest --outp\\utFile", bash(`npx vitest run --outp\utFile=x`), Deny},
+			{"rg --p\\re", bash(`rg --p\re x .`), Deny},
+			{"a backslash and a newline", bash("npx vitest run --exec-\\\nargv=--import=data:text/javascript,1"), Deny},
+			{"an escape in double quotes", bash(`npx vitest run "--exec\-argv=1"`), Allow}, // bash keeps that backslash
+			{"an escaped quote in double quotes", bash(`npx vitest run "--exec-argv=\"1\""`), Deny},
+			{"ANSI-C quoting with an escape", bash(`cd $'\x2ftmp/claude-1000/x/s' && npm test`), Ask},
+
+			// a brace bash expands
+			{"cd a brace", bash("cd {/tmp,/tmp}/claude-1000/x/s && npm test"), Ask},
+			{"go test a brace", bash("go test {./internal/policy," + scratch + "}/"), Ask},
+			{"vitest --exec-arg{v,v}", bash("npx vitest run --exec-arg{v,v}=--import=data:text/javascript,1"), Deny},
+			{"vitest --exec-argv{,}", bash("npx vitest run --exec-argv{,}=1"), Deny},
+			{"a brace in a loop list", bash("for d in {internal," + scratch + "}; do cd $d; done; go test ./..."), Ask},
+			{"a brace in a redirect", bash("echo x > {" + scratch + "/../../../../../home/f,}"), Deny},
+			{"a brace in a declaration", bash("declare d={a,}; ls"), Ask},
+			{"a sequence", bash("go test ./x{1..3}/"), Ask},
+			{"a brace next to $name", bash("x=.; xy=" + scratch + "; go test $x{y,}/..."), Ask},
+
+			// a brace bash leaves as text, and a backslash that changes nothing
+			{"an escaped brace", bash(`ls \{a,b}`), Allow},
+			{"a quoted brace", bash(`ls "{a,b}" '{c,d}'`), Allow},
+			{"a brace in an assignment", bash("d={" + scratch + ",}; ls $d"), Allow}, // ls {/tmp/…,}
+			{"find an escaped glob", bash(`find . -name \*.go`), Allow},
+			{"go test a brace in the workspace", bash("go test ./internal/{policy,tasks}/"), Allow},
+		})
+	}
+}
+
 // What the judging profiles are for still runs from the workspace (task-89).
 func TestTheJudgingProfilesStillRunTheirTests(t *testing.T) {
 	p := loadDefault(t)
@@ -822,6 +869,8 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"vitest --execArgv", bash("npx vitest run --execArgv=--import=data:text/javascript,1"), Allow},
 		{"vitest --exec-argv", bash("npx vitest run --exec-argv=--import=data:text/javascript,1"), Allow},
 		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
+		{"go test an escaped scratch path", bash(`go test \` + scratch + "/..."), Allow},
+		{"go test a brace", bash("go test ./internal/{policy,tasks}/"), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {
 		check(t, p, profile, []decisionCase{
