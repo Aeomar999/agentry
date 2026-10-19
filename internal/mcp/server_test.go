@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
-	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
 
@@ -316,12 +315,6 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 		if !strings.Contains(text, try.says) || len(asked) != 1 || !slices.Equal(sent, try.sent) {
 			t.Errorf("answered %s: %q, asked %d times, sent %v", try.decision, text, len(asked), sent)
 		}
-	}
-}
-
-func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
-	if closeEpic != coordinator.CloseEpic || copyFile != coordinator.CopyFile {
-		t.Errorf("the approving answers differ: %q/%q here, %q/%q in the coordinator", closeEpic, copyFile, coordinator.CloseEpic, coordinator.CopyFile)
 	}
 }
 

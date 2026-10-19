@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/waitlist"
 )
 
 // What waits for you, from any task, as one line each (a feature's lines as
@@ -32,7 +33,7 @@ func WaitingFor(agentry client.Client, list []features.Feature) ([]Waiting, erro
 	}
 	var all []Waiting
 	for _, q := range questions {
-		all = append(all, Waiting{Key: q.Task + "/" + q.Kind + "/" + q.Action + "/" + q.Text, Task: q.Task, Line: describe(q), Kind: "needs you"})
+		all = append(all, waitlist.Entry(q.Question))
 	}
 	return append(all, featuresWaiting(agentry, list, "")...), nil
 }

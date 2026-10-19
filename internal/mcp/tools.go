@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/schema"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/waitlist"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -38,10 +39,10 @@ type detail struct {
 }
 
 type question struct {
-	Kind, Task, TaskTitle, Agent, Text, Action, Tool, Reason string
-	Options                                                  []string
-	Held                                                     bool // approval: no answer came in time, so the agent was told no
-	HeldAt                                                   time.Time
+	waitlist.Question
+	Tool, Reason string
+	Held         bool // approval: no answer came in time, so the agent was told no
+	HeldAt       time.Time
 }
 
 // tools are the core's tools, then those of every feature shown.
@@ -112,9 +113,9 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 	}
 	section(&b, "Needs you", lines(waiting, func(q question) (string, bool) {
 		if repo := repoOf[q.Task]; s.repo != "" && repo != s.repo {
-			return describe(q) + " [in " + repo + "]", true
+			return waitlist.Line(q.Question) + " [in " + repo + "]", true
 		}
-		return describe(q), true
+		return waitlist.Line(q.Question), true
 	}))
 	section(&b, "Running", lines(shown, func(t task) (string, bool) {
 		if t.Status != "working" || t.Kind == "epic" {
@@ -414,7 +415,7 @@ func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (stri
 	if !ok || answer["decision"] != "close" {
 		return "The user kept " + a.Epic + " open. Ask them what else it needs, and send it with answer_question.", nil
 	}
-	if err := s.agentry.Call("POST", "/api/tasks/"+a.Epic+"/answer", map[string]string{"answer": closeEpic}, nil); err != nil {
+	if err := s.agentry.Call("POST", "/api/tasks/"+a.Epic+"/answer", map[string]string{"answer": waitlist.CloseEpic}, nil); err != nil {
 		return "", err
 	}
 	return "The user closed " + a.Epic + ".", nil
@@ -423,7 +424,7 @@ func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (stri
 // closable gives the epic's title and what to show you before closing it,
 // if it can close: it asks to, or every story is done and you left it open.
 func (s *Server) closable(id string) (title, text string, ok bool) {
-	if q, asking := s.questionOf(id); asking && slices.Contains(q.Options, closeEpic) {
+	if q, asking := s.questionOf(id); asking && slices.Contains(q.Options, waitlist.CloseEpic) {
 		return q.TaskTitle, q.Text, true
 	}
 	var epic task
@@ -497,15 +498,8 @@ func approvalText(q question) string {
 	return text
 }
 
-// closeEpic is the answer that approves closing an epic (coordinator.CloseEpic).
-const closeEpic = "Close the epic"
-
-// copyFile is the answer that lets a file be copied from outside a
-// machine's worktrees (coordinator.CopyFile).
-const copyFile = "Copy it"
-
 func copies(q question, answer string) bool {
-	return slices.Contains(q.Options, copyFile) && strings.EqualFold(strings.TrimSpace(answer), copyFile)
+	return slices.Contains(q.Options, waitlist.CopyFile) && strings.EqualFold(strings.TrimSpace(answer), waitlist.CopyFile)
 }
 
 // approveCopy asks you, in Claude Code, whether to let the file be copied.
@@ -520,14 +514,14 @@ func (s *Server) approveCopy(ctx context.Context, q question) (string, error) {
 	if !ok || answer["decision"] != "copy" {
 		return "The user didn't allow it. Send their reason, if they give one, with answer_question.", nil
 	}
-	if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/answer", map[string]string{"answer": copyFile}, nil); err != nil {
+	if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/answer", map[string]string{"answer": waitlist.CopyFile}, nil); err != nil {
 		return "", err
 	}
 	return "The user allowed it: the file is in " + q.Task + "'s shared files.", nil
 }
 
 func closes(answer string) bool {
-	return strings.EqualFold(strings.TrimSpace(answer), closeEpic)
+	return strings.EqualFold(strings.TrimSpace(answer), waitlist.CloseEpic)
 }
 
 // ---- the board -----------------------------------------------------------------
@@ -585,7 +579,7 @@ func (s *Server) waitingNote() string {
 	if err != nil {
 		return ""
 	}
-	notes := lines(waiting, func(q question) (string, bool) { return describe(q), true })
+	notes := lines(waiting, func(q question) (string, bool) { return waitlist.Line(q.Question), true })
 	for _, w := range featuresWaiting(s.agentry, s.features, s.repo) {
 		notes = append(notes, w.Line)
 	}
@@ -598,26 +592,6 @@ func (s *Server) waitingNote() string {
 		b.WriteString("\n- " + note)
 	}
 	return b.String()
-}
-
-func describe(q question) string {
-	switch q.Kind {
-	case "approval":
-		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, tasks.OneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
-	case "waiting":
-		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, tasks.OneLine(q.Text, 120))
-	}
-	if slices.Contains(q.Options, closeEpic) {
-		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", q.Task, q.TaskTitle)
-	}
-	if slices.Contains(q.Options, copyFile) {
-		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, tasks.OneLine(q.Text, 200), copyFile)
-	}
-	asker := q.Agent
-	if asker == tasks.Loop {
-		asker = "Agentry" // its own stops: a budget, a limit of turns
-	}
-	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, tasks.OneLine(q.Text, 160))
 }
 
 // ---- small helpers -------------------------------------------------------------
