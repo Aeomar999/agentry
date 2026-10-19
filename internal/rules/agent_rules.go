@@ -17,8 +17,8 @@ var KnownEngines = []string{"claude", "codex"}
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown),
-	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator),
+	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, oneCoordinatorPerTeam),
+	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, keepsACoordinator, oneCoordinatorPerTeam),
 	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
 	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge, patchFits),
 	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
@@ -96,6 +96,24 @@ func keepsACoordinator(roster agents.Roster, p events.Proposal) string {
 	}
 	changed, _ := after.Get(before.Name)
 	return teamsKeepCoordinators(after, before.TeamName(), changed.TeamName())
+}
+
+// oneCoordinatorPerTeam stops an agent coordinating a team that has a
+// coordinator already: the team's tasks all go to the first, so the second
+// would never get one. An agent that coordinates its team now goes on doing
+// so, even where an old log left the team two.
+func oneCoordinatorPerTeam(roster agents.Roster, p events.Proposal) string {
+	if !p.Flag("coordinates") {
+		return ""
+	}
+	team := agents.Agent{Team: p.Text("team")}.TeamName()
+	if before, exists := roster.Get(p.Text("name")); exists && before.Coordinates && before.TeamName() == team {
+		return ""
+	}
+	if lead, ok := roster.Coordinator(team); ok {
+		return "the " + team + " team already has a coordinator, " + lead.Name + ": a team has exactly one"
+	}
+	return ""
 }
 
 func teamsKeepCoordinators(after agents.Roster, teams ...string) string {

@@ -171,7 +171,9 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	coordinator, ok := roster.Coordinator(request.Team)
+	// A team you name is matched without case; one there isn't keeps its
+	// name, and has no coordinator.
+	coordinator, ok := roster.Coordinator(cmp.Or(roster.TeamNamed(request.Team), request.Team))
 	if !ok {
 		http.Error(w, "there is no coordinator in the "+cmp.Or(request.Team, "first")+" team", http.StatusConflict)
 		return

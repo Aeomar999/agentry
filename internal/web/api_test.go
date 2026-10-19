@@ -1696,6 +1696,91 @@ func TestACustomTeamCanRunOnThisMachine(t *testing.T) {
 	}
 }
 
+// dataTeam is a custom team: its lead and two specialists.
+const dataTeam = `{"team":"Data","agents":[
+	{"name":"data-lead","engine":"claude","coordinates":true},
+	{"name":"analyst","engine":"claude","description":"Analyse the numbers."},
+	{"name":"charter","engine":"claude","description":"Draw the charts."}]}`
+
+// Editing one agent never breaks its team: the lead can't stop
+// coordinating or go while the team has others, and no one else can
+// become a second coordinator.
+func TestEditingAnAgentKeepsItsTeamsOneCoordinator(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	before, _ := s.Stream(events.AgentsStream)
+	for _, c := range []struct{ method, path, body, refusal string }{
+		{"PUT", "/api/agents/analyst", `{"engine":"claude","prompt":"Lead.","team":"Data","coordinates":true}`,
+			"the Data team already has a coordinator, data-lead: a team has exactly one"},
+		{"PUT", "/api/agents/data-lead", `{"engine":"claude","prompt":"Lead.","team":"Data"}`, "this would leave the Data team with no coordinator"},
+		{"DELETE", "/api/agents/data-lead", "", "this would leave the Data team with no coordinator"},
+	} {
+		if code, body := call(t, server, c.method, c.path, c.body); code != http.StatusConflict || !strings.Contains(body, c.refusal) {
+			t.Errorf("%s %s: %d %s, want a 409 saying %q", c.method, c.path, code, body, c.refusal)
+		}
+	}
+	if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
+		t.Errorf("%d agent events written", len(after)-len(before))
+	}
+}
+
+// A task names its team in any case, and goes to that team's coordinator.
+func TestATaskNamesItsTeamInAnyCase(t *testing.T) {
+	server, _ := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	for i, c := range []struct{ team, coordinator string }{{"data", "data-lead"}, {" software ", "tech-lead"}, {"DATA", "data-lead"}} {
+		if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"`+c.team+`"}`); code != 200 {
+			t.Fatalf("team %q: %d %s", c.team, code, body)
+		}
+		_, body := call(t, server, "GET", "/api/tasks/task-"+strconv.Itoa(i+1), "")
+		var detail taskDetail
+		json.Unmarshal([]byte(body), &detail)
+		if detail.Coordinator != c.coordinator {
+			t.Errorf("team %q: the task went to %q, want %q", c.team, detail.Coordinator, c.coordinator)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/tasks", `{"title":"x","team":"Datta"}`); code != http.StatusConflict || !strings.Contains(body, "there is no coordinator in the Datta team") {
+		t.Errorf("an unknown team: %d %s", code, body)
+	}
+}
+
+// A custom team is removed as a template's is: refused while a task needs
+// it, then with all its agents, its coordinator last.
+func TestACustomTeamIsRemovedWithItsAgents(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	if code, body := call(t, server, "DELETE", "/api/teams/data", ""); code != http.StatusConflict || !strings.Contains(body, "task-1") {
+		t.Errorf("a team a task needs: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {
+		t.Fatalf("finishing task-1: %d %s", code, body)
+	}
+	before, _ := s.Stream(events.AgentsStream)
+	if code, body := call(t, server, "DELETE", "/api/teams/data", ""); code != 200 {
+		t.Fatalf("removing Data: %d %s", code, body)
+	}
+	after, _ := s.Stream(events.AgentsStream)
+	var removed []string
+	for _, e := range after[len(before):] {
+		if e.Type == events.AgentRemoved {
+			removed = append(removed, e.Text("name"))
+		}
+	}
+	if strings.Join(removed, ",") != "analyst,charter,data-lead" {
+		t.Errorf("removed %v, want the specialists, then the lead", removed)
+	}
+	if slices.Contains(agents.FromEvents(after).Teams(), "Data") {
+		t.Error("the Data team is still there")
+	}
+}
+
 func TestRenamingAnAgentKeepsItsTasksGoing(t *testing.T) {
 	server, s := newTestServer(t)
 	stream, _ := s.Stream(events.AgentsStream)

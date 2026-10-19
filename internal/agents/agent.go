@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -226,6 +227,17 @@ func (r Roster) Teams() []string {
 		}
 	}
 	return teams
+}
+
+// TeamNamed is the team's name as the roster has it, matched without case or
+// the spaces around it; "" when no team is called that.
+func (r Roster) TeamNamed(team string) string {
+	for _, t := range r.Teams() {
+		if strings.EqualFold(t, strings.TrimSpace(team)) {
+			return t
+		}
+	}
+	return ""
 }
 
 // Coordinator is the coordinator of team, the one its tasks go to: the first

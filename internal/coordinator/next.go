@@ -136,7 +136,7 @@ func otherTeam(task *tasks.Task, roster agents.Roster, d Decision) string {
 	case d.Action == Request && task.Depth >= MaxRequestDepth:
 		return fmt.Sprintf("this task is already %d requests deep; do the work in this team, or ask the user", task.Depth)
 	}
-	if _, ok := roster.Coordinator(teamNamed(roster, d.Team)); !ok {
+	if _, ok := roster.Coordinator(roster.TeamNamed(d.Team)); !ok {
 		return "the " + d.Team + " team has no coordinator"
 	}
 	return ""
@@ -203,17 +203,7 @@ func openStories(task *tasks.Task) []string {
 	return open
 }
 
-func hasTeam(roster agents.Roster, team string) bool { return teamNamed(roster, team) != "" }
-
-// teamNamed is the team's name as the roster has it, matched without case.
-func teamNamed(roster agents.Roster, team string) string {
-	for _, t := range roster.Teams() {
-		if strings.EqualFold(t, strings.TrimSpace(team)) {
-			return t
-		}
-	}
-	return ""
-}
+func hasTeam(roster agents.Roster, team string) bool { return roster.TeamNamed(team) != "" }
 
 func decide(task *tasks.Task, roster agents.Roster) Move {
 	decision, err := ParseDecision(task.PendingDecision)

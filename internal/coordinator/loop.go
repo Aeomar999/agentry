@@ -316,7 +316,7 @@ func (l *Loop) apply(task *tasks.Task, roster agents.Roster, decision Decision) 
 		l.propose(task.ID, coordinator, events.TaskNeedsYou, map[string]any{"question": decision.Question,
 			"options": decision.Options, "page": decision.Page, "toYou": decision.ToYou})
 	case Transfer:
-		lead, _ := roster.Coordinator(teamNamed(roster, decision.Team))
+		lead, _ := roster.Coordinator(roster.TeamNamed(decision.Team))
 		l.propose(task.ID, coordinator, events.TaskTransferred, map[string]any{"coordinator": lead.Name,
 			"team": lead.TeamName(), "reason": decision.Reason})
 	case Request:
@@ -397,7 +397,7 @@ func movedTo(task *tasks.Task, coordinator events.Actor, repo, folder, reason st
 // request opens a task for another team, for what this one needs from it,
 // in the same repo, and makes this one wait for it.
 func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator events.Actor, decision Decision) {
-	lead, _ := roster.Coordinator(teamNamed(roster, decision.Team))
+	lead, _ := roster.Coordinator(roster.TeamNamed(decision.Team))
 	asker, _ := roster.Get(task.Coordinator)
 	description := decision.Request + "\n\n(Asked by the " + asker.TeamName() + " team's coordinator, " + task.Coordinator +
 		", for " + task.ID + ": " + task.Title + ". When this is done, your summary goes back to them.)"
@@ -423,7 +423,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 	var ids, titles []string
 	refused := ""
 	for i, story := range decision.Stories {
-		team := cmp.Or(teamNamed(roster, story.Team), own.TeamName())
+		team := cmp.Or(roster.TeamNamed(story.Team), own.TeamName())
 		lead, ok := roster.Coordinator(team)
 		if !ok {
 			refused = fmt.Sprintf("story %d is for the %s team, which has no coordinator", i+1, team)

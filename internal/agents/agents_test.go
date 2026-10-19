@@ -419,3 +419,12 @@ var you = events.Actor{Kind: events.Human, ID: "you"}
 func agent(name, team, template string) Agent {
 	return Agent{Name: name, Team: team, Template: template, Engine: "claude", Prompt: "Work."}
 }
+
+func TestATeamIsNamedInAnyCase(t *testing.T) {
+	roster := Roster{{Name: "tech-lead", Coordinates: true}, {Name: "data-lead", Coordinates: true, Team: "Data"}}
+	for asked, want := range map[string]string{"Data": "Data", " data ": "Data", "SOFTWARE": "Software", "Datta": "", "": ""} {
+		if got := roster.TeamNamed(asked); got != want {
+			t.Errorf("TeamNamed(%q) = %q, want %q", asked, got, want)
+		}
+	}
+}

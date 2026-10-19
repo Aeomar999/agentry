@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"cmp"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -429,6 +430,92 @@ func TestAgentRules(t *testing.T) {
 		}
 		if (rejection == nil) != c.accepted {
 			t.Errorf("%s: accepted=%v (%v), want %v", c.name, rejection == nil, rejection, c.accepted)
+		}
+	}
+}
+
+// A team's tasks all go to its first coordinator, so no change gives a team
+// a second one: not a new agent, a specialist made a coordinator, or a
+// coordinator moved in from another team.
+func TestATeamHasOneCoordinator(t *testing.T) {
+	s := openSeeded(t)
+	writing := []agents.Agent{
+		{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"},
+		{Name: "writer", Engine: "claude", Prompt: "Write.", Team: "Writing"},
+		{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Solo"},
+	}
+	for _, a := range writing {
+		if _, rejection, err := s.Propose(a.Proposal(you, false)); rejection != nil || err != nil {
+			t.Fatalf("adding %s: %v %v", a.Name, rejection, err)
+		}
+	}
+	cases := []struct {
+		name     string
+		proposal events.Proposal
+		reason   string
+	}{
+		{"a new coordinator in a team that has one",
+			agents.Agent{Name: "chief-editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"}.Proposal(you, false),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"one in the team that names none",
+			agents.Agent{Name: "lead", Engine: "claude", Prompt: "Lead.", Coordinates: true}.Proposal(you, false),
+			"the Software team already has a coordinator, tech-lead: a team has exactly one"},
+		{"a specialist made a coordinator",
+			agents.Agent{Name: "writer", Engine: "claude", Prompt: "Write.", Coordinates: true, Team: "Writing"}.Proposal(you, true),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"a coordinator moved into a team that has one",
+			agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Writing"}.Proposal(you, true),
+			"the Writing team already has a coordinator, editor: a team has exactly one"},
+		{"a coordinator edited", agents.Agent{Name: "editor", Engine: "codex", Prompt: "Edit hard.", Coordinates: true, Team: "Writing"}.Proposal(you, true), ""},
+		{"a specialist edited", agents.Agent{Name: "writer", Engine: "codex", Prompt: "Write more.", Team: "Writing"}.Proposal(you, true), ""},
+		{"a coordinator moved to a team of its own", agents.Agent{Name: "scout", Engine: "claude", Prompt: "Scout.", Coordinates: true, Team: "Scouting"}.Proposal(you, true), ""},
+	}
+	for _, c := range cases {
+		_, rejection, err := s.Propose(c.proposal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reason := cmp.Or(rejection, &events.Rejection{}).Reason; reason != c.reason {
+			t.Errorf("%s: refused with %q, want %q", c.name, reason, c.reason)
+		}
+	}
+}
+
+// A log from before the rule may hold a team with two coordinators; either
+// can still be edited, though neither can be made a third.
+func TestAnOldTeamOfTwoCoordinatorsCanBeEdited(t *testing.T) {
+	roster := agents.Roster{
+		{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"},
+		{Name: "chief-editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Writing"},
+		{Name: "writer", Engine: "claude", Prompt: "Write.", Team: "Writing"},
+	}
+	for _, name := range []string{"editor", "chief-editor"} {
+		edited := agents.Agent{Name: name, Engine: "codex", Prompt: "Edit hard.", Coordinates: true, Team: "Writing"}
+		if reason := rosterRules[events.AgentChanged](roster, edited.Proposal(you, true)); reason != "" {
+			t.Errorf("editing %s: refused: %s", name, reason)
+		}
+	}
+	third := agents.Agent{Name: "writer", Engine: "claude", Prompt: "Write.", Coordinates: true, Team: "Writing"}
+	if reason := rosterRules[events.AgentChanged](roster, third.Proposal(you, true)); reason == "" {
+		t.Error("a third coordinator was let in")
+	}
+}
+
+// A custom team CheckCustomTeam allows is never refused halfway through
+// adding it: its coordinator comes first, and no other member coordinates.
+func TestACheckedCustomTeamIsAddedWhole(t *testing.T) {
+	s, state := openSeededState(t)
+	members := []agents.Agent{
+		{Name: "analyst", Engine: "claude"},
+		{Name: "data-lead", Engine: "claude", Coordinates: true},
+		{Name: "charter", Engine: "codex"},
+	}
+	if problem := agents.CheckCustomTeam("Data", members, state.Roster()); problem != "" {
+		t.Fatal(problem)
+	}
+	for _, p := range agents.CustomTeam("Data", members, you) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Errorf("adding %s: %v %v", p.Text("name"), rejection, err)
 		}
 	}
 }
