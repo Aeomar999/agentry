@@ -7,7 +7,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { Markdown } from "@/components/molecules/Markdown";
 import { Panel } from "@/components/molecules/Panel";
 import { cn } from "@/lib/cn";
-import type { Idea } from "@/api/types";
+import type { Idea } from "./types";
 
 export const SIZES: Record<Idea["size"], string> = { S: "small", M: "medium", L: "large" };
 

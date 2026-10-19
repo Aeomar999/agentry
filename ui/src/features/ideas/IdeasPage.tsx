@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Lightbulb, Users } from "lucide-react";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
 import { Checkbox } from "@/components/atoms/Checkbox";
@@ -10,13 +10,14 @@ import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffe
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
-import { IdeaCard, TaskLink } from "@/components/organisms/IdeaCard";
-import { AcceptIdeaDialog, DismissIdeaDialog } from "@/components/organisms/IdeaDialogs";
 import { changeSettings } from "@/api/client";
-import type { AutoAcceptRule, Idea, Settings, TaskSummary } from "@/api/types";
+import type { AutoAcceptRule, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { VISIONARIES } from "@/lib/teams";
-import { useAskVisionaries } from "@/lib/visionaries";
+import { IdeaCard, TaskLink } from "./IdeaCard";
+import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
+import type { Idea } from "./types";
+import { useAskVisionaries } from "./visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
 // here, grouped by the session that suggested them, newest first (the

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { VISIONARIES, addTeam, missingProfilesOf, teamOf } from "./teams";
-import { useNewTask } from "./new-task";
+import { VISIONARIES, addTeam, missingProfilesOf, teamOf } from "@/lib/teams";
+import { useNewTask } from "@/lib/new-task";
 
 export interface AskVisionaries {
   ready: boolean; // the agents are read, so has says what you have

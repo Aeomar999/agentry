@@ -249,8 +249,9 @@ No new mechanism. The page already long-polls `GET /api/changes?after=`
 log position moves (`ui/src/live/use-resource.ts`). Adding a team writes
 `agent.created` events, and a new idea writes `idea.suggested`, so the
 manifest is refetched exactly when it can change. `AdminShell` reads it
-once, through `useResource`, and passes it down by context to the sidebar,
-Ctrl K and the board.
+once, through `useResource`, and passes it to the sidebar and Ctrl K as a
+prop. A context comes with the board story (task-118), when a reader under
+`<Outlet>` needs it.
 
 ## 5. Options compared
 

@@ -5,7 +5,6 @@ import { ToastProvider } from "@/components/organisms/Toasts";
 import { LiveProvider } from "@/live/LiveProvider";
 import { TasksPage } from "@/pages/TasksPage";
 import { PlanPage } from "@/pages/PlanPage";
-import { IdeasPage } from "@/pages/IdeasPage";
 import { IntegrationsPage } from "@/pages/IntegrationsPage";
 import { TaskPage } from "@/pages/TaskPage";
 import { AgentsPage } from "@/pages/AgentsPage";
@@ -16,10 +15,12 @@ import { WorkersPage } from "@/pages/WorkersPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ErrorPage } from "@/pages/ErrorPage";
 import { WorkspacePage } from "@/pages/WorkspacePage";
+import { FEATURES } from "@/features";
 
 // Every page renders inside the one shell. The Go server answers any path
 // that isn't the API or a file with index.html, so these addresses can be
-// bookmarked and reloaded.
+// bookmarked and reloaded. A feature's routes are there whether or not it
+// shows, so a bookmark to one still opens.
 const router = createBrowserRouter([
   // A task's Workspace is its own page, in its own tab.
   { path: "/tasks/:taskId/workspace", element: <WorkspacePage />, errorElement: <ErrorPage /> },
@@ -33,7 +34,6 @@ const router = createBrowserRouter([
           { path: "/tasks", element: <TasksPage /> },
           { path: "/tasks/new", element: <NewTaskLink /> },
           { path: "/plan", element: <PlanPage /> },
-          { path: "/ideas", element: <IdeasPage /> },
           { path: "/tasks/:taskId", element: <TaskPage /> },
           { path: "/agents", element: <AgentsPage /> },
           { path: "/agents/new", element: <AgentEditPage /> },
@@ -42,6 +42,7 @@ const router = createBrowserRouter([
           { path: "/workers", element: <WorkersPage /> },
           { path: "/integrations", element: <IntegrationsPage /> },
           { path: "/policy", element: <PolicyPage /> },
+          ...FEATURES.flatMap((feature) => feature.routes ?? []),
           { path: "*", element: <NotFoundPage /> },
         ],
       },

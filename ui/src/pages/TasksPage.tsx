@@ -1,7 +1,7 @@
 import { ReactNode, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Columns3, Inbox, List, Plus } from "lucide-react";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { FilterChip } from "@/components/molecules/FilterChip";
 import { SearchField } from "@/components/molecules/SearchField";
