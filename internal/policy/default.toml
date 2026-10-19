@@ -24,12 +24,19 @@
 #   paths      the call touches a path matching these patterns
 #   where      "workspace": everything it touches is in the task's worktree or
 #              the profile's scratch places; "outside": something isn't
+#   redirects_to_file
+#              true: a shell command writes a file through a redirect (> f,
+#              >> f, &> f). > /dev/null, 2>&1 and the scratch places don't count
 #
 # Patterns
 #   commands   * matches anything, spaces included: 'git push *'. A trailing
 #              " *" may match nothing, so 'git push *' also matches 'git push'.
 #   paths      * stays inside one folder, ** crosses folders, ~ is your home.
 #              A pattern with no / matches that name in any folder: '.env'.
+#   git        git's options before its subcommand are left out, so 'git commit *'
+#              also matches `git -C dir commit`; dir still counts for where and
+#              paths. A setting (git -c k=v) can make git run a command, so it
+#              counts as unknown until it runs, like $(...).
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
 # Allow everything, as shipped
@@ -186,6 +193,32 @@ scratch = ['/tmp/claude-*/**']
   why = "Its job is to judge the work, not to change it."
 
   [[profiles.read-only.rules]]
+  name = "writes no files from the shell"
+  decision = "deny"
+  redirects_to_file = true
+  why = "Its job is to judge the work, not to change it. Send output to /dev/null, or to a file in your scratch folder."
+
+  [[profiles.read-only.rules]]
+  name = "runs nothing that changes files"
+  decision = "deny"
+  runs_any = [
+    'rm *', 'rmdir *', 'mv *', 'cp *', 'touch *', 'mkdir *', 'chmod *', 'ln *', 'truncate *', 'dd *', 'tee *',
+    'sed *-i*', 'perl *-i*', 'perl *-pi*', 'sort *-o*', 'git * --output*',
+    'find *-delete*', 'find *-exec*', 'find *-ok*', 'find *-fprint*', 'find *-fls *',
+  ]
+  why = "Its job is to judge the work, not to change it. Read with cat, head or the Read tool, and search with grep -r."
+
+  [[profiles.read-only.rules]]
+  name = "go writes no files"
+  decision = "deny"
+  runs_any = [
+    'go build *', 'go install *', 'go test *-o *', 'go test *-o=*', 'go test *-c *', 'go test *profile*',
+    'go test *-trace*', 'go test *-outputdir*', 'go test *-fuzz*', 'go *-exec*', 'go *-toolexec*', 'go *-vettool*',
+    'go *-mod=mod*',
+  ]
+  why = "These write a binary, a profile or go.mod into the repo, or run a program of their choosing. go vet checks what go build would; go test runs the tests (its build cache is Go's own, outside the repo)."
+
+  [[profiles.read-only.rules]]
   name = "reading is always allowed"
   decision = "allow"
   tools = ["Read", "Glob", "Grep", "LS", "NotebookRead", "TodoWrite"]
@@ -199,13 +232,28 @@ scratch = ['/tmp/claude-*/**']
     'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
     'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
     'sed -n *', 'true', 'false', 'test *', '[ *',
-    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git ls-files *', 'git rev-parse *',
     'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
-    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
+    # listing only: any of these puts git branch, tag or config in a mode that refuses changes
+    'git branch', 'git branch -a', 'git branch -r', 'git branch -v', 'git branch -vv', 'git branch --show-current',
+    'git branch *--list*', 'git branch *--contains*', 'git branch *--merged*', 'git branch *--no-merged*',
+    'git branch *--points-at*', 'git tag', 'git config --get *', 'git config --get-all *', 'git config --list',
+    'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
     'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
     'cargo test *', 'cargo check *', 'cargo clippy *',
   ]
   why = "Reading and testing leave the code as it was."
+
+  [[profiles.read-only.rules]]
+  name = "never commits or changes branches"
+  decision = "deny"
+  runs_any = [
+    'git commit *', 'git push *', 'git pull *', 'git add *', 'git rm *', 'git mv *', 'git reset *', 'git restore *',
+    'git checkout *', 'git switch *', 'git stash *', 'git clean *', 'git merge *', 'git rebase *', 'git cherry-pick *',
+    'git revert *', 'git apply *', 'git am *', 'git update-ref *', 'git worktree *', 'git notes *',
+    'git branch ?*', 'git tag ?*', 'git config *',
+  ]
+  why = "It judges the work; the engineer commits. Branches, tags and settings stay as they are: the reading forms (git branch -a, git tag, git config --get) are allowed above."
 
 
 [profiles.read-mostly]
@@ -235,10 +283,30 @@ scratch = ['/tmp/claude-*/**']
   why = "Its job is to suggest, not to change the code."
 
   [[profiles.read-mostly.rules]]
-  name = "this agent never commits"
+  name = "writes no files from the shell"
   decision = "deny"
-  runs_any = ['git commit *', 'git push *', 'git -C * commit *', 'git -C * push *']
-  why = "It suggests ideas; the engineers commit."
+  redirects_to_file = true
+  why = "Its job is to suggest, not to change the code. Send output to /dev/null, or to a file in your scratch folder."
+
+  [[profiles.read-mostly.rules]]
+  name = "runs nothing that changes files"
+  decision = "deny"
+  runs_any = [
+    'rm *', 'rmdir *', 'mv *', 'cp *', 'touch *', 'mkdir *', 'chmod *', 'ln *', 'truncate *', 'dd *', 'tee *',
+    'sed *-i*', 'perl *-i*', 'perl *-pi*', 'sort *-o*', 'git * --output*',
+    'find *-delete*', 'find *-exec*', 'find *-ok*', 'find *-fprint*', 'find *-fls *',
+  ]
+  why = "Its job is to suggest, not to change the code. Read with cat, head or the Read tool, and search with grep -r."
+
+  [[profiles.read-mostly.rules]]
+  name = "go writes no files"
+  decision = "deny"
+  runs_any = [
+    'go build *', 'go install *', 'go test *-o *', 'go test *-o=*', 'go test *-c *', 'go test *profile*',
+    'go test *-trace*', 'go test *-outputdir*', 'go test *-fuzz*', 'go *-exec*', 'go *-toolexec*', 'go *-vettool*',
+    'go *-mod=mod*',
+  ]
+  why = "These write a binary, a profile or go.mod into the repo, or run a program of their choosing. go vet checks what go build would; go test runs the tests (its build cache is Go's own, outside the repo)."
 
   [[profiles.read-mostly.rules]]
   name = "reading is always allowed"
@@ -260,13 +328,28 @@ scratch = ['/tmp/claude-*/**']
     'ls *', 'pwd', 'cd *', 'echo *', 'printf *', 'cat *', 'head *', 'tail *', 'wc *', 'grep *', 'rg *', 'find *',
     'tree *', 'stat *', 'file *', 'which *', 'command -v *', 'sort *', 'uniq *', 'diff *', 'cut *', 'tr *', 'jq *',
     'sed -n *', 'true', 'false', 'test *', '[ *',
-    'git status *', 'git diff *', 'git log *', 'git show *', 'git branch *', 'git ls-files *', 'git rev-parse *',
+    'git status *', 'git diff *', 'git log *', 'git show *', 'git ls-files *', 'git rev-parse *',
     'git merge-base *', 'git blame *', 'git grep *', 'git describe *',
-    'go build *', 'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
+    # listing only: any of these puts git branch, tag or config in a mode that refuses changes
+    'git branch', 'git branch -a', 'git branch -r', 'git branch -v', 'git branch -vv', 'git branch --show-current',
+    'git branch *--list*', 'git branch *--contains*', 'git branch *--merged*', 'git branch *--no-merged*',
+    'git branch *--points-at*', 'git tag', 'git config --get *', 'git config --get-all *', 'git config --list',
+    'go test *', 'go vet *', 'gofmt -l *', 'npm test *', 'npx tsc *', 'npx vitest *', 'npx jest *',
     'npx eslint *', 'pytest *', 'python -m pytest *', 'python3 -m pytest *', 'make test *', 'make lint *',
     'cargo test *', 'cargo check *', 'cargo clippy *',
   ]
   why = "Reading and testing leave the code as it was."
+
+  [[profiles.read-mostly.rules]]
+  name = "never commits or changes branches"
+  decision = "deny"
+  runs_any = [
+    'git commit *', 'git push *', 'git pull *', 'git add *', 'git rm *', 'git mv *', 'git reset *', 'git restore *',
+    'git checkout *', 'git switch *', 'git stash *', 'git clean *', 'git merge *', 'git rebase *', 'git cherry-pick *',
+    'git revert *', 'git apply *', 'git am *', 'git update-ref *', 'git worktree *', 'git notes *',
+    'git branch ?*', 'git tag ?*', 'git config *',
+  ]
+  why = "It suggests ideas; the engineers commit. Branches, tags and settings stay as they are: the reading forms (git branch -a, git tag, git config --get) are allowed above."
 
 [profiles.autonomous]
 why = "Does anything on this machine, and asks you only before acting outside it. Agentry sees commands, not network traffic, so a script can still reach out unseen (T-030)."

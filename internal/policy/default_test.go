@@ -111,6 +111,15 @@ func TestTheDeveloperProfile(t *testing.T) {
 		{"ssh key by tilde", bash("cat ~/.ssh/id_rsa"), Deny},
 		{"edit outside", file("Write", "/etc/hosts"), Deny},
 		{"edit sneaky", file("Write", workspace+"/../escape.txt"), Deny},
+
+		// git's own options are left out before matching (task-30)
+		{"git -C . log", bash("git -C . log --oneline -5"), Allow},
+		{"git -C . commit", bash("git -C . commit -m x"), Allow},
+		{"git -C elsewhere is outside", bash("git -C /elsewhere log"), Ask},
+		{"--git-dir elsewhere is outside", bash("git --git-dir=/elsewhere/.git log"), Ask},
+		{"a setting can run a command, so it asks as before", bash("git -c k=v commit -m x"), Ask},
+		{"push to main from another folder", bash("git -C . push origin main"), Deny},
+		{"force push with a setting", bash("git -c k=v push -f origin dev"), Deny},
 	})
 }
 
@@ -139,9 +148,160 @@ func TestTheReadOnlyProfile(t *testing.T) {
 		{"edit", file("Edit", workspace+"/main.go"), Deny},
 		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
 		{"notes in another folder", file("Write", "/tmp/elsewhere/.agentry/knowledge.md"), Deny},
-		{"commit", bash("git commit -am 'x'"), Ask},
-		{"push", bash("git push origin HEAD:dev"), Ask},
+		{"commit", bash("git commit -am 'x'"), Deny},
+		{"push", bash("git push origin HEAD:dev"), Deny},
 	})
+}
+
+// read-only and read-mostly change no file and no history, from the shell
+// either (task-30). Each form that wrote before is denied under both.
+func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// redirects and tee
+			{"redirect", bash("echo hi > notes.md"), Deny},
+			{"append", bash("echo hi >> notes.md"), Deny},
+			{"both outputs", bash("go test ./... &> out.txt"), Deny},
+			{"clobber", bash("echo hi >| notes.md"), Deny},
+			{"bash's >&file", bash("echo hi >&notes.md"), Deny},
+			{"read and write", bash("cat <> notes.md"), Deny},
+			{"a heredoc into a file", bash("cat > notes.md <<'EOF'\nhi\nEOF"), Deny},
+			{"a redirect to an unknown file", bash("echo hi > $OUT"), Deny},
+			{"a redirect outside", bash("echo hi > /tmp/notes.md"), Deny},
+			{"a redirect after a pipe", bash("go test ./... 2>&1 | head > out.txt"), Deny},
+			{"tee", bash("echo hi | tee notes.md"), Deny},
+			{"tee -a", bash("echo hi | tee -a notes.md"), Deny},
+			{"tests through tee", bash("go test ./... | tee out.txt"), Deny},
+
+			// commands that change files
+			{"sort -o", bash("sort -o out.txt in.txt"), Deny},
+			{"sort --output", bash("sort --output=out.txt in.txt"), Deny},
+			{"sort -o joined", bash("sort -oout.txt in.txt"), Deny},
+			{"find -delete", bash("find . -name '*.log' -delete"), Deny},
+			{"find -exec rm", bash(`find . -exec rm {} \;`), Deny},
+			{"find -execdir", bash("find . -execdir rm {} +"), Deny},
+			{"find -ok", bash(`find . -ok rm {} \;`), Deny},
+			{"find -fprint", bash("find . -fprint list.txt"), Deny},
+			{"sed -i", bash("sed -i 's/a/b/' main.go"), Deny},
+			{"sed -n -i", bash("sed -n -i 's/a/b/p' main.go"), Deny},
+			{"sed --in-place", bash("sed --in-place 's/a/b/' main.go"), Deny},
+			{"perl -pi", bash("perl -pi -e 's/a/b/' main.go"), Deny},
+			{"rm", bash("rm main.go"), Deny},
+			{"mv", bash("mv a.go b.go"), Deny},
+			{"cp", bash("cp a.go b.go"), Deny},
+			{"touch", bash("touch new.go"), Deny},
+			{"mkdir", bash("mkdir -p docs"), Deny},
+			{"chmod", bash("chmod +x test.sh"), Deny},
+			{"ln", bash("ln -s a b"), Deny},
+			{"truncate", bash("truncate -s 0 main.go"), Deny},
+			{"dd", bash("dd if=/dev/zero of=main.go count=1"), Deny},
+			{"git log --output", bash("git log --output=log.txt"), Deny},
+
+			// go
+			{"go build", bash("go build ./..."), Deny},
+			{"go build -o", bash("go build -o bin/agentry ./cmd/agentry"), Deny},
+			{"go build -o late", bash("go build ./cmd/agentry -o agentry"), Deny},
+			{"go install", bash("go install ./cmd/agentry"), Deny},
+			{"go test -o", bash("go test -o policy.test ./internal/policy"), Deny},
+			{"go test -o=", bash("go test -o=policy.test ./internal/policy"), Deny},
+			{"go test -c", bash("go test -c ./internal/policy"), Deny},
+			{"go test -coverprofile", bash("go test -coverprofile=c.out ./..."), Deny},
+			{"go test -cpuprofile", bash("go test -cpuprofile cpu.out ./internal/policy"), Deny},
+			{"go test -trace", bash("go test -trace=t.out ./internal/policy"), Deny},
+			{"go test -fuzz", bash("go test -fuzz FuzzParse ./internal/policy"), Deny},
+			{"go test -exec", bash("go test -exec 'rm main.go' ./..."), Deny},
+			{"go test -mod=mod", bash("go test -mod=mod ./..."), Deny},
+			{"go vet -vettool", bash("go vet -vettool=./x ./..."), Deny},
+
+			// branches
+			{"git branch -D", bash("git branch -D old"), Deny},
+			{"git branch -d", bash("git branch -d old"), Deny},
+			{"git branch --delete", bash("git branch --delete old"), Deny},
+			{"git branch -m", bash("git branch -m old new"), Deny},
+			{"git branch -M", bash("git branch -M old new"), Deny},
+			{"git branch --move", bash("git branch --move old new"), Deny},
+			{"git branch -c", bash("git branch -c old new"), Deny},
+			{"git branch -C", bash("git branch -C old new"), Deny},
+			{"git branch --copy", bash("git branch --copy old new"), Deny},
+			{"git branch -f", bash("git branch -f old HEAD"), Deny},
+			{"git branch --set-upstream-to", bash("git branch --set-upstream-to=origin/dev"), Deny},
+			{"git branch -u", bash("git branch -u origin/dev"), Deny},
+			{"git branch makes one", bash("git branch new"), Deny},
+			{"git branch -v makes one", bash("git branch -v new"), Deny},
+			{"git branch -D after a listing", bash("git branch -a && git branch -D old"), Deny},
+
+			// commits and history, in every spelling git takes
+			{"commit", bash("git commit -m x"), Deny},
+			{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
+			{"commit with a setting", bash("git -c user.name=x commit -m x"), Deny},
+			{"commit with --git-dir=", bash("git --git-dir=.git commit -m x"), Deny},
+			{"commit with --git-dir", bash("git --git-dir .git commit -m x"), Deny},
+			{"commit with --work-tree", bash("git --work-tree . commit -m x"), Deny},
+			{"commit from a folder", bash("git -C . commit -m x"), Deny},
+			{"commit without a pager", bash("git --no-pager commit -m x"), Deny},
+			{"push", bash("git push origin HEAD:dev"), Deny},
+			{"push with a setting", bash("git -c k=v push origin HEAD:dev"), Deny},
+			{"push with --git-dir=", bash("git --git-dir=.git push"), Deny},
+			{"push from a folder", bash("git -C /w push origin HEAD:dev"), Deny},
+			{"add", bash("git add -A"), Deny},
+			{"reset", bash("git reset --hard HEAD~1"), Deny},
+			{"checkout a file", bash("git checkout -- main.go"), Deny},
+			{"restore", bash("git restore main.go"), Deny},
+			{"switch", bash("git switch dev"), Deny},
+			{"stash", bash("git stash"), Deny},
+			{"clean", bash("git clean -fd"), Deny},
+			{"merge", bash("git merge origin/dev"), Deny},
+			{"rebase", bash("git rebase dev"), Deny},
+			{"cherry-pick", bash("git cherry-pick abc123"), Deny},
+			{"revert", bash("git revert HEAD"), Deny},
+			{"apply", bash("git apply fix.patch"), Deny},
+			{"am", bash("git am fix.patch"), Deny},
+			{"tag", bash("git tag v1"), Deny},
+			{"update-ref", bash("git update-ref refs/heads/x HEAD"), Deny},
+			{"worktree", bash("git worktree add ../x"), Deny},
+			{"config", bash("git config user.name x"), Deny},
+		})
+	}
+}
+
+// What they are for still runs without asking: reading and testing.
+func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"git log --grep commit", bash("git log --grep commit"), Allow},
+			{"git -C . log", bash("git -C . log"), Allow},
+			{"git -C . log --grep commit", bash("git -C . log --grep commit"), Allow},
+			{"git --no-pager log", bash("git --no-pager log -1"), Allow},
+			{"git diff", bash("git diff"), Allow},
+			{"git branch", bash("git branch"), Allow},
+			{"git branch -a", bash("git branch -a"), Allow},
+			{"git branch --list", bash("git branch --list 'agentry/*'"), Allow},
+			{"git branch -r --contains", bash("git branch -r --contains HEAD"), Allow},
+			{"git branch --show-current", bash("git branch --show-current"), Allow},
+			{"git tag", bash("git tag"), Allow},
+			{"git config --get", bash("git config --get user.name"), Allow},
+			{"grep -r", bash("grep -r foo ."), Allow},
+			{"find -name", bash("find . -name x"), Allow},
+			{"sort in a pipe", bash("git log --format=%an | sort | uniq -c"), Allow},
+			{"sed -n", bash("sed -n '1,5p' main.go"), Allow},
+			{"go vet", bash("go vet ./..."), Allow},
+			// go test writes only to Go's build cache, outside the repo: that
+			// changes no file anyone reviews, so it doesn't count as a write.
+			{"go test", bash("go test ./..."), Allow},
+			{"go test with flags that aren't -c or -o", bash("go test -count=1 -cover -run TestX -v ./internal/policy"), Allow},
+			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"output merged into a pipe", bash("go test ./... 2>&1 | head"), Allow},
+			{"output thrown away", bash("go test ./... > /dev/null"), Allow},
+			{"output to the scratch folder", bash("go test ./... > /tmp/claude-1000/x/scratchpad/out.txt"), Allow},
+			{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
+
+			// can't be judged before it runs, so asks rather than allows
+			{"a setting can run a command", bash("git -c core.pager=less log"), Ask},
+			{"git -C elsewhere", bash("git -C /elsewhere log"), Ask},
+		})
+	}
 }
 
 func TestTheReadMostlyProfile(t *testing.T) {
@@ -159,10 +319,6 @@ func TestTheReadMostlyProfile(t *testing.T) {
 		{"write", file("Write", workspace+"/ideas.md"), Deny},
 		{"its own notes", file("Edit", workspace+"/.agentry/knowledge.md"), Allow},
 		{"commit", bash("git commit -am 'x'"), Deny},
-		{"commit in a chain", bash("git add -A && git commit -m x"), Deny},
-		{"push", bash("git push origin HEAD:dev"), Deny},
-		{"commit in another folder", bash("git -C . commit -m x"), Deny},
-		{"push from another folder", bash("git -C /w push origin HEAD:dev"), Deny},
 		{"secrets", bash("cat .env"), Deny},
 	})
 }
