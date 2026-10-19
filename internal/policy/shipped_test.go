@@ -61,7 +61,7 @@ func TestDefaultProfilesSaysWhatEachFileHas(t *testing.T) {
 	}{
 		"this version's": {Default(), map[string]string{"developer": "current ", "read-only": "current ",
 			"read-mostly": "current ", "autonomous": "current ", "allow-everything": "current "}},
-		"v0.1.0, before read-mostly": {firstRelease, map[string]string{"developer": "current ", "read-only": "current ",
+		"v0.1.0, before read-mostly": {firstRelease, map[string]string{"developer": "current ", "read-only": "outdated v0.7.0",
 			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
 		"before v0.1.0": {beforeIt, map[string]string{"developer": "current ", "read-only": "outdated v0.1.0-dev",
 			"read-mostly": "missing ", "autonomous": "current ", "allow-everything": "current "}},
@@ -175,6 +175,40 @@ func TestUpdateProfileReplacesOnlyAnUntouchedProfile(t *testing.T) {
 	}
 	if _, err := UpdateProfile(text, "read-mostly", "v0.9.0"); err == nil || !strings.Contains(err.Error(), "no default profile") {
 		t.Errorf("updating a missing profile: %v", err)
+	}
+}
+
+// v0.9.2 closed read-only's and read-mostly's shell write loopholes: an
+// install that kept v0.7.0's must be offered them, unless the user changed it.
+func TestV070sReadOnlyProfilesAreOfferedV092s(t *testing.T) {
+	text := shippedFile(t, "04-v0.7.0.toml")
+	for _, name := range []string{"read-only", "read-mostly"} {
+		statuses, err := DefaultProfiles(text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range statuses {
+			if s.Name == name && (s.State != ProfileOutdated || s.ShippedIn != "v0.7.0") {
+				t.Errorf("v0.7.0's %s: %s %s, want outdated v0.7.0", name, s.State, s.ShippedIn)
+			}
+		}
+		if text, err = UpdateProfile(text, name, "v0.9.2"); err != nil {
+			t.Fatalf("updating %s: %v", name, err)
+		}
+		if state := stateOf(t, text, name); state != ProfileCurrent {
+			t.Errorf("%s is %s after the update", name, state)
+		}
+	}
+	if _, err := Parse(text, "/home/dev", nil); err != nil {
+		t.Fatalf("the updated policy doesn't load: %v", err)
+	}
+	if n := bytes.Count(text, []byte("# sed only prints lines by number")); n != 2 {
+		t.Errorf("both profiles should have v0.9.2's sed rule, found it %d times", n)
+	}
+
+	edited := replaceOnce(t, shippedFile(t, "04-v0.7.0.toml"), `why = "For agents that judge work`, `why = "Mine: for agents that judge work`)
+	if _, err := UpdateProfile(edited, "read-only", "v0.9.2"); !errors.Is(err, ErrProfileEdited) {
+		t.Errorf("updating an edited v0.7.0 read-only: got %v, want ErrProfileEdited", err)
 	}
 }
 
