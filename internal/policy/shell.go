@@ -503,11 +503,15 @@ func (s *shellInspector) inSubshell(n *syntax.Subshell) {
 }
 
 // enterLoop: a cd in a loop moves the commands of its next round, which the
-// walk has already passed, so with one the folder can't be known.
+// walk has already passed, so with one the folder can't be known. A cd in a
+// subshell ends with it, so it moves no later round.
 func (s *shellInspector) enterLoop(loop syntax.Node) {
 	syntax.Walk(loop, func(node syntax.Node) bool {
-		if call, ok := node.(*syntax.CallExpr); ok {
-			if names, _ := s.dirBuiltin(call.Args); len(names) > 0 {
+		switch n := node.(type) {
+		case *syntax.Subshell:
+			return false
+		case *syntax.CallExpr:
+			if names, _ := s.dirBuiltin(n.Args); len(names) > 0 {
 				s.dirs = nil
 			}
 		}

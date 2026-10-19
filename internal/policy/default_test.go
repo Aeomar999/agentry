@@ -758,6 +758,7 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 			{"a cd that may fail", bash("cd internal/policy || true; go test ../../..."), Ask},
 			{"a cd in a loop", bash("for i in 1 2; do go test ./...; cd " + scratch + "; done"), Ask},
 			{"a cd in a while loop", bash("while true; do go test ./...; cd ..; done"), Ask},
+			{"a cd in a loop beside a subshell", bash("for m in api web; do (cd $m && npm test); cd $m; done; npm test"), Ask},
 			{"a cd in a function", bash("f() { cd " + scratch + "; }; f; go test ./..."), Ask},
 			{"a cd in an if", bash("if true; then cd " + scratch + "; fi; npm test"), Ask},
 			{"a relative path from scratch", bash("cd " + scratch + " && cat ../../../../etc/hostname"), Ask},
@@ -770,6 +771,9 @@ func TestTheJudgingProfilesFollowCd(t *testing.T) {
 			{"cd back up into the workspace asks", bash("cd internal/policy && cd ../.. && go test ./..."), Ask},
 			{"cd to the workspace by its path", bash("cd " + workspace + " && go test ./..."), Allow},
 			{"cd into scratch only to read", bash("cd " + scratch + " && cat out.txt"), Allow},
+			// a subshell's cd ends with it, in a loop too
+			{"a cd in a subshell in a loop", bash("for m in api web; do (cd $m && npm test); done"), Allow},
+			{"a cd in a subshell in a loop, then go test", bash("for m in api web; do (cd $m && go test ./...); done; go test ./..."), Allow},
 		})
 	}
 }
@@ -808,6 +812,8 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"go test a scratch package", bash("go test " + scratch + "/..."), Allow},
 		{"jest with a scratch reporter", bash("npx jest --reporters " + scratch + "/r.js"), Allow},
 		{"go test elsewhere", bash("go test /elsewhere/..."), Ask},
+		{"a cd in a subshell in a loop", bash("for m in api web; do (cd $m && npm test); done"), Allow},
+		{"a cd in a subshell in a loop, go test", bash("for m in api web; do (cd $m && go test ./...); done"), Allow},
 		{"vitest --execArgv", bash("npx vitest run --execArgv=--import=data:text/javascript,1"), Allow},
 		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
 	})
