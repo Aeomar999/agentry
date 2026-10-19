@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -157,9 +158,12 @@ func mustStream(t *testing.T, s *store.Store, name string) []events.Event {
 	return stream
 }
 
+// fakeClaudeOnPath puts a `claude` on PATH that just waits, and gives the
+// test sessions of its own, stopped when it ends.
 func fakeClaudeOnPath(t *testing.T) {
+	sessionstest.Isolate(t)
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nsleep 60\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"+sessionstest.Wait()+"\n"), 0o755)
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 }
 

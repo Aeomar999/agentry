@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -18,14 +19,16 @@ import (
 )
 
 // fakeClaude puts a `claude` on PATH that writes its arguments and
-// environment to a file, then waits like a real session.
+// environment to a file, then waits like a real session, in sessions of
+// the test's own.
 func fakeClaude(t *testing.T) (record string) {
 	t.Helper()
+	sessionstest.Isolate(t)
 	bin := t.TempDir()
 	record = filepath.Join(bin, "record.txt")
 	// Written whole, then moved into place: the test reads it the moment it exists.
 	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; env | grep -E '^(AGENTRY_|PORT=)' | sort; } > " + record + ".part && mv " +
-		record + ".part " + record + "\nsleep 30\n"
+		record + ".part " + record + "\n" + sessionstest.Wait() + "\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

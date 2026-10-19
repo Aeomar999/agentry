@@ -40,6 +40,12 @@ func Run(m *testing.M) int {
 	return code
 }
 
+// Wait is a shell line for a fake program in a test's session: it waits as
+// a real one would, but ends with the test run, and after a minute at most.
+func Wait() string {
+	return fmt.Sprintf("i=0; while [ $i -lt 60 ] && kill -0 %d 2>/dev/null; do sleep 1; i=$((i+1)); done", os.Getpid())
+}
+
 var isolated sync.Map // the tests that have their own folder
 
 // Isolate gives the test a sessions folder of its own, inside the run's,

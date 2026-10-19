@@ -13,6 +13,7 @@ import (
 	"github.com/coder/websocket"
 
 	"gitlab.com/dev.chempa/agentry/internal/sessions"
+	"gitlab.com/dev.chempa/agentry/internal/sessions/sessionstest"
 )
 
 // watcher is one browser tab: it collects what the server sends.
@@ -56,6 +57,7 @@ func (w *watcher) send(ctx context.Context, kind websocket.MessageType, message 
 
 // Proof 04's rules: everyone sees the same output, only the one in control types.
 func TestOnlyTheViewerInControlCanType(t *testing.T) {
+	sessionstest.Isolate(t)
 	task := fmt.Sprintf("terminal-test-%d", time.Now().UnixNano())
 	socket := sessions.SocketFor(task)
 	defer sessions.Stop(socket)
@@ -124,6 +126,7 @@ func TestNoSessionNoWatch(t *testing.T) {
 // The session has one size: a viewer may set it while nobody else is in
 // control, and every viewer is told the new size.
 func TestAViewerResizesTheSession(t *testing.T) {
+	sessionstest.Isolate(t)
 	task := fmt.Sprintf("terminal-resize-%d", time.Now().UnixNano())
 	socket := sessions.SocketFor(task)
 	defer sessions.Stop(socket)
