@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 )
 
@@ -123,7 +124,7 @@ func field(schema map[string]any, name string) map[string]any {
 // Every committed schema is one Validate can check: an event with just what
 // its Spec needs passes it. An unknown type has neither a Spec nor a file.
 func TestEveryCommittedSchemaChecksAnEvent(t *testing.T) {
-	catalogue, err := events.NewCatalogue(ideas.Registration())
+	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
 	if err != nil {
 		t.Fatal(err)
 	}

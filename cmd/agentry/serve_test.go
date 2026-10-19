@@ -290,7 +290,7 @@ func openLog(t *testing.T, dataDir string) (*store.Store, *current.State) {
 	t.Helper()
 	catalogue := storetest.WithIdeas()
 	state := storetest.NewState(catalogue)
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
 	if err != nil {
 		t.Fatal(err)
 	}
