@@ -276,8 +276,9 @@ func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
 	}
 }
 
-// What the reviewer of task-30 found still got through. Each denies or asks
-// under both judging profiles.
+// What the reviewer of task-30 found still got through: variables before a
+// command, sed scripts, writing flags of tools on the allow lists, and flags
+// that run a command. Each denies or asks under both judging profiles.
 func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 	p := loadDefault(t)
 	for _, profile := range []string{"read-only", "read-mostly"} {
@@ -290,6 +291,61 @@ func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 			{"PATH on its own", bash("PATH=.; ls"), Ask},
 			{"printf -v", bash("printf -v PATH %s .; ls"), Ask},
 			{"export", bash("export GIT_PAGER='touch x'; git log"), Ask},
+
+			// sed scripts
+			{"sed -n w", bash("sed -n 'w out' f"), Ask},
+			{"sed -n 1w", bash("sed -n '1w out' f"), Ask},
+			{"sed -n s///w", bash("sed -n 's/a/b/w out' f"), Ask},
+			{"sed -n e runs a command", bash("sed -n '1e touch x' f"), Ask},
+			{"sed -n with another script", bash("sed -n 1p f -e 'w out'"), Ask},
+			{"sed -n with a script file", bash("sed -n 1p --file=x.sed f"), Ask},
+			{"sed -ni", bash("sed -n 1p -ni f"), Ask},
+
+			// tools on the allow lists that write
+			{"uniq in out", bash("uniq in.txt out.txt"), Ask},
+			{"tree -o", bash("tree -o out.txt"), Deny},
+			{"tree -o in a cluster", bash("tree -ao out.txt"), Deny},
+			{"tree -R", bash("tree -R -H . ."), Deny},
+			{"sort -uo", bash("sort -uo out.txt in.txt"), Deny},
+			{"sort -o in a cluster, joined", bash("sort -nuoout.txt in.txt"), Deny},
+			{"file -C", bash("file -C -m magic"), Deny},
+
+			// fix and update flags
+			{"gofmt -w", bash("gofmt -w ."), Deny},
+			{"gofmt -l -w", bash("gofmt -l -w ."), Deny},
+			{"gofmt -w=true", bash("gofmt -l -w=true ."), Deny},
+			{"gofmt -cpuprofile", bash("gofmt -l -cpuprofile=c.out ."), Deny},
+			{"eslint --fix", bash("npx eslint --fix ."), Deny},
+			{"eslint --fix late", bash("npx eslint . --fix"), Deny},
+			{"eslint --cache", bash("npx eslint --cache ."), Deny},
+			{"vitest -u", bash("npx vitest run -u"), Deny},
+			{"vitest --update", bash("npx vitest run --update"), Deny},
+			{"jest -u", bash("npx jest -u"), Deny},
+			{"jest --updateSnapshot", bash("npx jest --updateSnapshot"), Deny},
+			{"jest --coverage", bash("npx jest --coverage"), Deny},
+			{"cargo clippy --fix", bash("cargo clippy --fix"), Deny},
+			{"cargo --config can run a wrapper", bash("cargo test --config 'build.rustc-wrapper=\"sh\"'"), Deny},
+			{"pytest --junitxml", bash("pytest --junitxml=report.xml"), Deny},
+			{"pytest --basetemp clears a folder", bash("python3 -m pytest --basetemp=src"), Deny},
+			{"tsc without --noEmit", bash("npx tsc"), Ask},
+			{"tsc -p without --noEmit", bash("npx tsc -p ."), Ask},
+			{"tsc --noEmit --init", bash("npx tsc --noEmit -p . --init"), Ask},
+			{"tsc --build", bash("npx tsc --build --noEmit"), Ask},
+			{"npm test with npm settings", bash("npm test --script-shell=./x.sh"), Ask},
+			{"make test with a variable", bash("make test GO=./x.sh"), Ask},
+			{"go test -c=true", bash("go test -c=true ./internal/policy"), Deny},
+			{"go test -ldflags can name a linker", bash("go test -ldflags=-linkmode=external -ldflags=-extld=./x.sh ./..."), Deny},
+			{"go test -test.testlogfile", bash("go test ./internal/policy -args -test.testlogfile=log.txt"), Deny},
+
+			// flags that run a command
+			{"git grep -O", bash("git grep -O'touch x' foo"), Deny},
+			{"git grep -O in a cluster", bash("git grep -nO'touch x' foo"), Deny},
+			{"git grep --open-files-in-pager", bash("git grep --open-files-in-pager=sh foo"), Deny},
+			{"git grep --open, abbreviated", bash("git grep --open=sh foo"), Deny},
+			{"rg --pre", bash("rg --pre ./x.sh foo"), Deny},
+			{"rg --pre=", bash("rg --pre=./x.sh foo"), Deny},
+			{"rg --hostname-bin", bash("rg --hostname-bin=./x.sh foo"), Deny},
+			{"sort --compress-program", bash("sort --compress-program=./x.sh in.txt"), Deny},
 		})
 	}
 }
@@ -314,7 +370,17 @@ func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 			{"grep -r", bash("grep -r foo ."), Allow},
 			{"find -name", bash("find . -name x"), Allow},
 			{"sort in a pipe", bash("git log --format=%an | sort | uniq -c"), Allow},
+			{"sort with options", bash("sort -rn -k2 counts.txt"), Allow},
 			{"sed -n", bash("sed -n '1,5p' main.go"), Allow},
+			{"sed -n one line", bash("sed -n 12p main.go"), Allow},
+			{"sed -n to the end", bash("sed -n '40,$p' main.go"), Allow},
+			{"git grep", bash("git grep -n TODO"), Allow},
+			{"rg", bash("rg -n --glob '*.go' Decide"), Allow},
+			{"tree", bash("tree -L 2 internal"), Allow},
+			{"gofmt -l", bash("gofmt -l ."), Allow},
+			{"tsc --noEmit", bash("npx tsc --noEmit -p ui"), Allow},
+			{"eslint", bash("npx eslint ."), Allow},
+			{"npm test", bash("npm test"), Allow},
 			{"go vet", bash("go vet ./..."), Allow},
 			// go test writes only to Go's build cache, outside the repo: that
 			// changes no file anyone reviews, so it doesn't count as a write.

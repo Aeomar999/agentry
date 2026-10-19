@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"slices"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -223,7 +224,41 @@ func (s *shellInspector) commandText(args []*syntax.Word) string {
 	if words[0] == "git" {
 		words = s.withoutGitOptions(words)
 	}
-	return strings.Join(words, " ")
+	return strings.Join(withShortOptionsApart(words), " ")
+}
+
+// Tools whose short options cluster, getopt style, and that have one which
+// writes a file or runs a program: `sort -uo out` is `sort -u -o out`, and
+// `git grep -nO'cmd'` opens its files with cmd. Their options are split apart
+// so a rule for -o sees it. Only these: find's -name and go's -run are single
+// options, not clusters. The number is how many words name the tool.
+var clusteringTools = map[string]int{"sort": 1, "tree": 1, "file": 1, "git grep": 2}
+
+// withShortOptionsApart writes each cluster of a clustering tool's short
+// options as one option per letter, up to "--". A value joined to its option
+// (-oout) splits too; the letters it leaves only matter to a rule naming them.
+func withShortOptionsApart(words []string) []string {
+	start := clusteringTools[words[0]]
+	if len(words) > 1 && clusteringTools[words[0]+" "+words[1]] > 0 {
+		start = clusteringTools[words[0]+" "+words[1]]
+	}
+	if start == 0 {
+		return words
+	}
+	apart := slices.Clone(words[:start])
+	for i, word := range words[start:] {
+		if word == "--" {
+			return append(apart, words[start+i:]...)
+		}
+		if len(word) < 3 || word[0] != '-' || word[1] == '-' {
+			apart = append(apart, word)
+			continue
+		}
+		for _, letter := range word[1:] {
+			apart = append(apart, "-"+string(letter))
+		}
+	}
+	return apart
 }
 
 // git's options before its subcommand that take a value: -C dir, -c k=v,

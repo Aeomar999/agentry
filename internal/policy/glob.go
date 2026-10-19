@@ -9,6 +9,7 @@ import (
 //
 //	commands  `*` matches anything, spaces included: 'git push *'. A trailing
 //	          " *" may match nothing, so 'git push *' also matches 'git push'.
+//	          `#` matches a number: 'sed -n #,#p *'.
 //	paths     `*` stays inside one folder, `**` crosses folders, `~` is your home.
 //	          A pattern with no "/" matches that name in any folder: '.env'.
 type glob struct {
@@ -40,6 +41,8 @@ func commandGlob(text string) (glob, error) {
 			re.WriteString(".*")
 		case '?':
 			re.WriteString(".")
+		case '#':
+			re.WriteString("[0-9]+")
 		default:
 			re.WriteString(regexp.QuoteMeta(string(r)))
 		}
