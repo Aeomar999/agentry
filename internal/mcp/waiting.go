@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // What waits for you, from any task, as one line each (open ideas share
@@ -48,17 +49,17 @@ func News(agentry client.Client) ([]Waiting, error) {
 	if err != nil {
 		return nil, err
 	}
-	var tasks []task
-	if err := agentry.Call("GET", "/api/tasks", nil, &tasks); err != nil {
+	var board []task
+	if err := agentry.Call("GET", "/api/tasks", nil, &board); err != nil {
 		return nil, err
 	}
-	for _, t := range tasks {
+	for _, t := range board {
 		if t.Status == "done" {
 			all = append(all, Waiting{Key: "done/" + t.ID, Task: t.ID, Line: t.ID + " is done: " + t.Title, Kind: "done"})
 		}
 		if t.Told != nil {
 			all = append(all, Waiting{Key: "said/" + t.ID + "/" + t.Told.At, Task: t.ID, Kind: "said",
-				Line: fmt.Sprintf("%s (%s): %s says: %s", t.ID, t.Title, t.Told.From, oneLine(t.Told.Text, 400))})
+				Line: fmt.Sprintf("%s (%s): %s says: %s", t.ID, t.Title, t.Told.From, tasks.OneLine(t.Told.Text, 400))})
 		}
 	}
 	var fleet struct {
@@ -114,7 +115,7 @@ func WaitForNew(ctx context.Context, agentry client.Client, seen map[string]bool
 func withSummary(agentry client.Client, w Waiting) Waiting {
 	var t detail
 	if w.Kind == "done" && agentry.Call("GET", "/api/tasks/"+w.Task, nil, &t) == nil && t.Summary != "" {
-		w.Line += ". " + oneLine(t.Summary, 300)
+		w.Line += ". " + tasks.OneLine(t.Summary, 300)
 	}
 	return w
 }

@@ -23,3 +23,20 @@ func TestShortenCutsBetweenCharacters(t *testing.T) {
 		t.Errorf("long text cut mid-character: %q", got)
 	}
 }
+
+// OneLine joins lines and spaces, and cuts by characters, not bytes.
+func TestOneLineCountsCharacters(t *testing.T) {
+	for _, c := range []struct {
+		text  string
+		limit int
+		want  string
+	}{
+		{"  two\n\tlines ", 20, "two lines"},
+		{"€€€€", 4, "€€€€"},
+		{"€€€€€", 4, "€€€…"},
+	} {
+		if got := OneLine(c.text, c.limit); got != c.want {
+			t.Errorf("OneLine(%q, %d) = %q, want %q", c.text, c.limit, got, c.want)
+		}
+	}
+}

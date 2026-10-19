@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // Ideas are features the Visionaries suggest. Claude only relays them: you
@@ -49,7 +50,7 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 			continue
 		}
 		fmt.Fprintf(&b, "%s [%s] %s (%s)\n", i.ID, i.State, i.Title, headerOf(i))
-		fmt.Fprintf(&b, "    problem: %s\n    feature: %s\n", oneLine(i.Problem, 300), oneLine(i.Proposal, 300))
+		fmt.Fprintf(&b, "    problem: %s\n    feature: %s\n", tasks.OneLine(i.Problem, 300), tasks.OneLine(i.Proposal, 300))
 		if len(i.BackedBy)+len(i.DoubtedBy) > 0 {
 			fmt.Fprintf(&b, "    backed by: %s · doubted by: %s\n", namesOf(i.BackedBy), namesOf(i.DoubtedBy))
 		}
@@ -62,7 +63,7 @@ func (s *Server) listIdeas(_ context.Context, arguments json.RawMessage) (string
 			continue
 		}
 		if i.Note != "" {
-			b.WriteString(": " + oneLine(i.Note, 200))
+			b.WriteString(": " + tasks.OneLine(i.Note, 200))
 		}
 		b.WriteString("\n")
 	}
@@ -166,11 +167,11 @@ func placeOf(column string) string {
 	case "backlog":
 		return ", in the user's Backlog until they start it"
 	case "in-progress", "review", "shipping":
-		return ", started (" + boardName(column) + ")"
+		return ", started (" + tasks.ColumnName(column) + ")"
 	case "done":
-		return ", " + boardName(column)
+		return ", " + tasks.ColumnName(column)
 	}
-	return ", in " + boardName(column)
+	return ", in " + tasks.ColumnName(column)
 }
 
 // startOf is the elicitation's answer for start.
@@ -240,7 +241,7 @@ func openIdeas(agentry client.Client, repo string) (w Waiting, ok bool) {
 	}
 	var titles []string
 	for _, i := range open[:min(3, len(open))] {
-		titles = append(titles, oneLine(i.Title, 60))
+		titles = append(titles, tasks.OneLine(i.Title, 60))
 	}
 	if more := len(open) - len(titles); more > 0 {
 		titles = append(titles, fmt.Sprintf("and %d more", more))

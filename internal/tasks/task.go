@@ -166,6 +166,12 @@ type WrapUp struct {
 	Turn string // the coordinator's wrap-up turn, once it has started
 }
 
+// ColumnName is a board column as the board names it: "Shipping".
+func ColumnName(column string) string {
+	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
+	return cmp.Or(names[column], column)
+}
+
 // PlaceName is the board's name for a place a task is parked in.
 func PlaceName(place string) string {
 	if place == "todo" {

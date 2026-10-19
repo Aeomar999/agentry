@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -132,7 +131,7 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 			what = t.CurrentAgent + " is working"
 		}
 		if t.Column != "" {
-			what += " (" + boardName(t.Column) + ")"
+			what += " (" + tasks.ColumnName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
 			what = "waits for " + strings.Join(t.BlockedBy, ", ")
@@ -172,7 +171,7 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		}
 		status := t.Status
 		if t.Column != "" && t.Column != "done" { // done says it already
-			status += " · " + boardName(t.Column)
+			status += " · " + tasks.ColumnName(t.Column)
 		}
 		fmt.Fprintf(&b, "%s [%s] %s", t.ID, status, t.Title)
 		switch {
@@ -188,7 +187,7 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 			fmt.Fprintf(&b, " {%s}", strings.Join(t.Labels, ", "))
 		}
 		if t.NeedsYou != "" {
-			fmt.Fprintf(&b, "\n    needs you: %s", oneLine(t.NeedsYou, 200))
+			fmt.Fprintf(&b, "\n    needs you: %s", tasks.OneLine(t.NeedsYou, 200))
 		}
 		b.WriteString("\n")
 	}
@@ -238,7 +237,7 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	if len(t.Trail) > 0 {
 		b.WriteString("\nLatest steps:\n")
 		for _, step := range t.Trail[max(0, len(t.Trail)-8):] {
-			fmt.Fprintf(&b, "- %s → %s: %s\n", step.From, step.To, oneLine(step.Text, 300))
+			fmt.Fprintf(&b, "- %s → %s: %s\n", step.From, step.To, tasks.OneLine(step.Text, 300))
 		}
 	}
 	return b.String(), nil
@@ -255,13 +254,7 @@ func statusOf(t task) string {
 
 // columnOf is where the task shows on the board: "on the board: Shipping".
 func columnOf(t task) string {
-	return "on the board: " + boardName(t.Column)
-}
-
-// boardName is a column as the board names it: "Shipping".
-func boardName(column string) string {
-	names := map[string]string{"backlog": "Backlog", "todo": "To do", "in-progress": "In progress", "review": "Review", "shipping": "Shipping", "done": "Done"}
-	return cmp.Or(names[column], column)
+	return "on the board: " + tasks.ColumnName(t.Column)
 }
 
 // usageOf is what the task has used of its budget and its turns, shown
@@ -616,21 +609,21 @@ func (s *Server) waitingNote() string {
 func describe(q question) string {
 	switch q.Kind {
 	case "approval":
-		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, oneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
+		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, tasks.OneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
 	case "waiting":
-		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, oneLine(q.Text, 120))
+		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, tasks.OneLine(q.Text, 120))
 	}
 	if slices.Contains(q.Options, closeEpic) {
 		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", q.Task, q.TaskTitle)
 	}
 	if slices.Contains(q.Options, copyFile) {
-		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, oneLine(q.Text, 200), copyFile)
+		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, tasks.OneLine(q.Text, 200), copyFile)
 	}
 	asker := q.Agent
 	if asker == tasks.Loop {
 		asker = "Agentry" // its own stops: a budget, a limit of turns
 	}
-	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, oneLine(q.Text, 160))
+	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, tasks.OneLine(q.Text, 160))
 }
 
 // ---- small helpers -------------------------------------------------------------
@@ -688,12 +681,4 @@ func firstOf(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func oneLine(text string, limit int) string {
-	text = strings.Join(strings.Fields(text), " ")
-	if len([]rune(text)) > limit {
-		text = string([]rune(text)[:limit-1]) + "…"
-	}
-	return text
 }
