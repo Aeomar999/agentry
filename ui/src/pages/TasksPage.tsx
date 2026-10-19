@@ -274,6 +274,7 @@ export function TasksPage() {
           <Banner title="Couldn't load the tasks">{error}</Banner>
         </div>
       )}
+      {!data && !error && <p className="px-6 py-4 text-[12px] text-ink-muted">Loading the tasks…</p>}
       {view === "board" && data && (
         <TaskBoard
           tasks={shown}
@@ -285,7 +286,7 @@ export function TasksPage() {
           onPickEpic={pickEpic}
         />
       )}
-      {view === "list" && (
+      {view === "list" && data && (
         <ResourceTable
           columns={columnsFor(pickLabel, folding)}
           rows={rows}
@@ -294,11 +295,9 @@ export function TasksPage() {
           activeKey={rows[cursor]?.id}
           onReorder={reorder}
           empty={
-            data && (
-              <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
-                {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
-              </EmptyState>
-            )
+            <EmptyState icon={<Inbox />} title={tasks.length ? "No task matches" : "No tasks yet"}>
+              {tasks.length ? "Try another filter." : "Add one and the coordinator picks it up. Press N."}
+            </EmptyState>
           }
         />
       )}
