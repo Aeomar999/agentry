@@ -3,6 +3,7 @@
 package rules
 
 import (
+	"cmp"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -61,6 +62,9 @@ func Check(p events.Proposal, history store.History) *events.Rejection {
 		}
 		if p.Actor.Kind == events.Agent && p.Text("parent") == "" && p.Text("epic") == "" {
 			return refuse("an agent makes a task only for another task: a request to another team, or a story of an epic")
+		}
+		if reason := cmp.Or(aBudget(nil, p), aTurnLimit(nil, p)); reason != "" {
+			return refuse(reason)
 		}
 		if kind := tasks.Kind(p.Text("kind")); kind != tasks.Story && kind != tasks.Epic {
 			return refuse(`a task is a story ("") or an epic ("epic"), not ` + string(kind))

@@ -23,6 +23,7 @@ const (
 	TaskDirected       Type = "task.directed"      // you tell the coordinator what you want next, as when you move a card on the board
 	TaskLabeled        Type = "task.labeled"       // the task's labels, all of them, replacing the ones before
 	TaskBudgeted       Type = "task.budgeted"      // a new token budget for the task, as when you raise it
+	TaskTurnsLimited   Type = "task.turns_limited" // a new limit of turns without your answer, as when you raise it
 	TaskRanked         Type = "task.ranked"        // where the task sits in your priority order: lower is first
 	TaskHeld           Type = "task.held"          // parked in a place ("todo", "backlog") until you move it on ("")
 	TaskReopened       Type = "task.reopened"      // a finished task back to work, with what you want done

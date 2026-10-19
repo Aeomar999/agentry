@@ -45,6 +45,7 @@ type serveOptions struct {
 	repo      string // the default repo for new tasks
 	dataDir   string // the log and the worktrees
 	budget    int    // tokens a new task may use before it asks you; 0 is no limit
+	maxTurns  int    // turns a new task may have without your answer before it asks you; 0 is no limit
 	publicURL string // the address people open; "" for the address listened on
 }
 
@@ -59,7 +60,12 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
+	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
 	if flags.Parse(args) != nil {
+		return 2
+	}
+	if options.budget < 0 || options.maxTurns < 0 {
+		fmt.Fprintln(stderr, "agentry serve: -budget and -max-turns are 0 or above, 0 for no limit")
 		return 2
 	}
 
@@ -187,7 +193,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	defer desk.Stop()
 
 	server := web.NewServer(log, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
-		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, Policy: agentPolicy, Desk: deskTerminal,
+		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs},
 		hooks.HTTP(hooks.NewHandler(log, agentPolicy.Decide), hookToken), taskTerminal)

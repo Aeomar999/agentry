@@ -12,10 +12,12 @@ import (
 )
 
 // The loop's safety stops: without them a coordinator that keeps sending work
-// back, or an agent that keeps failing, would loop forever.
+// back, or an agent that keeps failing, would loop forever. Each task has its
+// own limit of turns, tasks.Task.MaxTurns; a new one gets DefaultMaxTurns
+// unless the server or you say otherwise.
 const (
-	MaxTurns     = 24 // about 12 handoffs there and back, then you decide
-	MaxIssuesRun = 3  // issues in a row with no turn ending normally
+	DefaultMaxTurns = tasks.DefaultMaxTurns
+	MaxIssuesRun    = 3 // issues in a row with no turn ending normally
 )
 
 // Move is the one thing the loop should do next for a task.
@@ -51,10 +53,11 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 		return decide(task, roster)
 	case task.Handoff == nil:
 		return Move{Kind: Wait}
-	case task.TurnsSinceAnswer >= MaxTurns:
+	case task.AtTurnLimit():
 		return Move{Kind: AskYou, Reason: fmt.Sprintf(
-			"This task has had %d turns without finishing. Answer with any guidance and the coordinator carries on.", task.TurnsSinceAnswer)}
-	case task.Budget > 0 && task.TokensUsed >= task.Budget && task.TurnsSinceAnswer > 0:
+			"This task has had %d of its %d turns without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on.",
+			task.TurnsSinceAnswer, task.MaxTurns)}
+	case task.AtBudget() && task.TurnsSinceAnswer > 0:
 		// Once you answer, one more turn runs, so "wrap up" can be done.
 		return Move{Kind: AskYou, Reason: fmt.Sprintf(
 			"This task has used %s tokens of its %s budget. Raise the budget to go on, or tell the coordinator to wrap up.",

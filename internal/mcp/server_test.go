@@ -141,7 +141,7 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 		!strings.Contains(created, "Waiting for the user (2)") {
 		t.Errorf("create: %s", created)
 	}
-	if !strings.Contains(strings.Join(*calls, "\n"), `POST /api/tasks {"description":"Retry on 503.","epic":"","kind":"","labels":null,"repo":"/repo"`) {
+	if !strings.Contains(strings.Join(*calls, "\n"), `POST /api/tasks {"budget":0,"description":"Retry on 503.","epic":"","kind":"","labels":null,"maxTurns":0,"repo":"/repo"`) {
 		t.Errorf("the task should be made in this repo: %v", *calls)
 	}
 
@@ -236,5 +236,17 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 func TestTheCloseAnswerIsTheCoordinators(t *testing.T) {
 	if closeEpic != coordinator.CloseEpic || copyFile != coordinator.CopyFile {
 		t.Errorf("the approving answers differ: %q/%q here, %q/%q in the coordinator", closeEpic, copyFile, coordinator.CloseEpic, coordinator.CopyFile)
+	}
+}
+
+// show_task says what a task has used of its budget and its turns.
+func TestTheTaskSaysItsLimits(t *testing.T) {
+	limited := detail{Budget: 5_000_000, TokensUsed: 1_200_000, MaxTurns: 24, TurnsSinceAnswer: 18}
+	if got := budgetOf(limited) + " · " + turnsOf(limited); got != "1.2M of 5M tokens · 18 of 24 turns" {
+		t.Errorf("limited: %q", got)
+	}
+	unlimited := detail{TokensUsed: 950, TurnsSinceAnswer: 3}
+	if got := budgetOf(unlimited) + " · " + turnsOf(unlimited); got != "950 tokens, no limit · 3 turns, no limit" {
+		t.Errorf("unlimited: %q", got)
 	}
 }

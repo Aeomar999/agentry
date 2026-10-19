@@ -26,6 +26,7 @@ var catalogue = map[Type]spec{
 	TaskDirected:       {fields: []string{"text"}, writers: []ActorKind{Human}},
 	TaskLabeled:        {writers: []ActorKind{Human}}, // "labels" may be empty: that removes them all
 	TaskBudgeted:       {fields: []string{"budget"}, writers: []ActorKind{Human}},
+	TaskTurnsLimited:   {fields: []string{"maxTurns"}, writers: []ActorKind{Human}},
 	TaskRanked:         {fields: []string{"rank"}, writers: []ActorKind{Human}},
 	TaskHeld:           {writers: []ActorKind{Human}}, // "place" "" lets it go
 	TaskReopened:       {fields: []string{"text"}, writers: []ActorKind{Human}},

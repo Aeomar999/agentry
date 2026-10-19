@@ -415,42 +415,156 @@ func TestTasksCarryLabels(t *testing.T) {
 	}
 }
 
-// A task gets the default budget, or its own; raising it on a task stopped
-// at its budget answers for you, and the task carries on.
-func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
+// limitsServer is a server whose new tasks get a 5M budget and 2 turns, and
+// ways to give a task turns and to stop it with a question.
+func limitsServer(t *testing.T) (server *httptest.Server, work func(id string, turns, tokens int), ask func(id string, by events.Actor)) {
+	t.Helper()
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
+	t.Cleanup(func() { s.Close() })
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000}, http.NotFoundHandler(), nil).Handler())
-	defer server.Close()
-
-	call(t, server, "POST", "/api/tasks", `{"description":"Default budget"}`)
-	call(t, server, "POST", "/api/tasks", `{"description":"Its own budget","budget":200000}`)
-	_, body := call(t, server, "GET", "/api/tasks", "")
-	var list []taskSummary
-	json.Unmarshal([]byte(body), &list)
-	if list[1].Budget != 5_000_000 || list[0].Budget != 200_000 {
-		t.Errorf("budgets: %d, %d", list[1].Budget, list[0].Budget)
+	server = httptest.NewServer(NewServer(s, Config{UIToken: token, DefaultRepo: "/r", Budget: 5_000_000, MaxTurns: 2}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	propose := func(p events.Proposal) {
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatalf("%s: %v %v", p.Type, err, rejection)
+		}
 	}
-
-	s.Propose(events.Proposal{Stream: "task-2", Actor: events.Actor{Kind: events.System, ID: "coordinator-loop"}, Type: events.TaskNeedsYou,
-		Data: map[string]any{"question": "This task has used 210k tokens of its 200k budget."}})
-	if code, body := call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":1000000}`); code != 200 {
-		t.Fatalf("raise: %d %s", code, body)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	work = func(id string, turns, tokens int) {
+		propose(events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901}})
+		for i := range turns {
+			turn := fmt.Sprintf("turn-%d", i+1)
+			propose(events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+			propose(events.Proposal{Stream: id, Actor: worker, Type: events.TurnEnded, Correlation: turn,
+				Data: map[string]any{"agent": "tech-lead", "report": "r", "tokens": tokens / turns}})
+		}
 	}
-	_, body = call(t, server, "GET", "/api/tasks/task-2", "")
+	ask = func(id string, by events.Actor) {
+		propose(events.Proposal{Stream: id, Actor: by, Type: events.TaskNeedsYou, Data: map[string]any{"question": "Go on?"}})
+	}
+	return server, work, ask
+}
+
+var (
+	theLoop  = events.Actor{Kind: events.System, ID: "coordinator-loop"}
+	techLead = events.Actor{Kind: events.Agent, ID: "tech-lead"}
+)
+
+func detailOfTask(t *testing.T, server *httptest.Server, id string) taskDetail {
+	t.Helper()
+	_, body := call(t, server, "GET", "/api/tasks/"+id, "")
 	var detail taskDetail
 	json.Unmarshal([]byte(body), &detail)
-	if detail.Budget != 1_000_000 || detail.Status != "working" || detail.Trail[len(detail.Trail)-1].Text != "I raised the budget to 1M tokens. Carry on." {
-		t.Errorf("after raising: budget %d, status %s, trail %+v", detail.Budget, detail.Status, detail.Trail)
+	return detail
+}
+
+func lastSaid(d taskDetail) string { return d.Trail[len(d.Trail)-1].Text }
+
+// A new task gets the server's budget and limit of turns, its own, or none.
+func TestANewTaskHasItsLimits(t *testing.T) {
+	server, _, _ := limitsServer(t)
+	for _, body := range []string{
+		`{"description":"Defaults"}`,
+		`{"description":"Its own","budget":200000,"maxTurns":50}`,
+		`{"description":"Unlimited","budget":-1,"maxTurns":-1}`,
+		`{"description":"Defaults again","budget":0,"maxTurns":0}`,
+	} {
+		if code, reply := call(t, server, "POST", "/api/tasks", body); code != 200 {
+			t.Fatalf("%s: %d %s", body, code, reply)
+		}
 	}
-	if code, _ := call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":0}`); code != http.StatusConflict {
-		t.Errorf("a budget of 0: %d", code)
+	want := map[string][2]int{"task-1": {5_000_000, 2}, "task-2": {200_000, 50}, "task-3": {0, 0}, "task-4": {5_000_000, 2}}
+	for id, limits := range want {
+		if d := detailOfTask(t, server, id); d.Budget != limits[0] || d.MaxTurns != limits[1] {
+			t.Errorf("%s: budget %d, max turns %d, want %v", id, d.Budget, d.MaxTurns, limits)
+		}
+	}
+	if code, _ := call(t, server, "POST", "/api/tasks", `{"description":"x","maxTurns":-5}`); code != http.StatusConflict {
+		t.Errorf("a limit of -5 turns: %d", code)
+	}
+	_, body := call(t, server, "GET", "/api/config", "")
+	if !strings.Contains(body, `"budget":5000000`) || !strings.Contains(body, `"maxTurns":2`) {
+		t.Errorf("config: %s", body)
+	}
+}
+
+// Raising the budget, or making it unlimited, on a task stopped at its
+// budget answers for you, and the task carries on. A coordinator's own
+// question still waits for your answer.
+func TestRaisingTheBudgetLetsATaskGoOn(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	for range 3 {
+		call(t, server, "POST", "/api/tasks", `{"description":"Small budget","budget":200000,"maxTurns":-1}`)
+	}
+	for _, id := range []string{"task-1", "task-2", "task-3"} {
+		work(id, 1, 210_000)
+	}
+
+	ask("task-1", theLoop)
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/budget", `{"budget":1000000}`); code != 200 {
+		t.Fatalf("raise: %d %s", code, body)
+	}
+	if d := detailOfTask(t, server, "task-1"); d.Budget != 1_000_000 || d.Status != "working" || lastSaid(d) != "I raised the budget to 1M tokens. Carry on." {
+		t.Errorf("after raising: budget %d, status %s, said %q", d.Budget, d.Status, lastSaid(d))
+	}
+
+	ask("task-2", theLoop)
+	call(t, server, "PUT", "/api/tasks/task-2/budget", `{"budget":0}`)
+	if d := detailOfTask(t, server, "task-2"); d.Budget != 0 || d.Status != "working" || lastSaid(d) != "I made the budget unlimited. Carry on." {
+		t.Errorf("after unlimiting: budget %d, status %s, said %q", d.Budget, d.Status, lastSaid(d))
+	}
+
+	ask("task-3", techLead)
+	call(t, server, "PUT", "/api/tasks/task-3/budget", `{"budget":-1}`)
+	if d := detailOfTask(t, server, "task-3"); d.Budget != 0 || d.Status != "needs you" {
+		t.Errorf("the coordinator's question: budget %d, status %s", d.Budget, d.Status)
+	}
+	if code, _ := call(t, server, "PUT", "/api/tasks/task-3/budget", `{"budget":-2}`); code != http.StatusConflict {
+		t.Errorf("a budget of -2: %d", code)
+	}
+}
+
+// Raising the limit of turns above the turns had, or making it unlimited,
+// on a task stopped at it answers for you, and the task carries on.
+func TestRaisingTheTurnLimitLetsATaskGoOn(t *testing.T) {
+	server, work, ask := limitsServer(t)
+	for range 3 {
+		call(t, server, "POST", "/api/tasks", `{"description":"Two turns"}`)
+	}
+	for _, id := range []string{"task-1", "task-2", "task-3"} {
+		work(id, 2, 1000)
+	}
+
+	ask("task-1", theLoop)
+	call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":2}`)
+	if d := detailOfTask(t, server, "task-1"); d.Status != "needs you" || d.TurnsSinceAnswer != 2 || !d.AtTurnLimit {
+		t.Errorf("not raised above the turns had: status %s, turns %d", d.Status, d.TurnsSinceAnswer)
+	}
+	if code, body := call(t, server, "PUT", "/api/tasks/task-1/turns", `{"maxTurns":5}`); code != 200 {
+		t.Fatalf("raise: %d %s", code, body)
+	}
+	if d := detailOfTask(t, server, "task-1"); d.MaxTurns != 5 || d.Status != "working" || lastSaid(d) != "I raised the turn limit to 5. Carry on." {
+		t.Errorf("after raising: max turns %d, status %s, said %q", d.MaxTurns, d.Status, lastSaid(d))
+	}
+
+	ask("task-2", theLoop)
+	call(t, server, "PUT", "/api/tasks/task-2/turns", `{"maxTurns":-1}`)
+	if d := detailOfTask(t, server, "task-2"); d.MaxTurns != 0 || d.Status != "working" || lastSaid(d) != "I made the turns unlimited. Carry on." {
+		t.Errorf("after unlimiting: max turns %d, status %s, said %q", d.MaxTurns, d.Status, lastSaid(d))
+	}
+
+	ask("task-3", techLead)
+	call(t, server, "PUT", "/api/tasks/task-3/turns", `{"maxTurns":0}`)
+	if d := detailOfTask(t, server, "task-3"); d.MaxTurns != 0 || d.Status != "needs you" {
+		t.Errorf("the coordinator's question: max turns %d, status %s", d.MaxTurns, d.Status)
+	}
+	if code, _ := call(t, server, "PUT", "/api/tasks/task-3/turns", `{"maxTurns":-2}`); code != http.StatusConflict {
+		t.Errorf("a limit of -2: %d", code)
 	}
 }
 

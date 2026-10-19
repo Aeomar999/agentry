@@ -107,7 +107,8 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		Stories                  []string // for an epic: tasks there already, to file under it as its stories
 		Epic                     string   // for a story: the epic to file it under
 		Labels                   []string
-		Budget                   int // tokens; 0 takes the default
+		Budget                   int // tokens; 0 takes the default, -1 is no limit
+		MaxTurns                 int // turns without your answer; 0 takes the default, -1 is no limit
 	}
 	if !decode(w, r, &request) {
 		return
@@ -157,10 +158,6 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		}
 		request.Repo = repo
 	}
-	budget := request.Budget
-	if budget <= 0 {
-		budget = s.config.Budget
-	}
 	roster, err := s.roster()
 	if err != nil {
 		failed(w, err)
@@ -186,7 +183,8 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	created, rejection, err := s.store.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
-		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels), "budget": budget,
+		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
+		"budget": limitOf(request.Budget, s.config.Budget), "maxTurns": limitOf(request.MaxTurns, s.config.MaxTurns),
 		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
 	switch {
 	case err != nil:
@@ -212,8 +210,25 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"stream": created.Stream, "position": created.Position, "notFiled": refused})
 }
 
-// setBudget gives the task a new token budget. A task stopped at its budget
-// takes it as your answer and carries on.
+// noLimit is what a request sends for no limit. At creation 0 takes the
+// server's default, so a task made without one is unlimited only when asked.
+const noLimit = -1
+
+// limitOf is a budget or limit of turns as the task keeps it, 0 for no
+// limit, from a request's: 0 takes byDefault (the server's for a new task, no
+// limit for a change), and noLimit is none.
+func limitOf(asked, byDefault int) int {
+	switch asked {
+	case 0:
+		return byDefault
+	case noLimit:
+		return 0
+	}
+	return asked // below -1, the rules refuse it
+}
+
+// setBudget gives the task a new token budget, 0 (or -1) for no limit. A
+// task stopped at its budget takes it as your answer and carries on.
 func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Budget int }
 	if !decode(w, r, &request) {
@@ -224,15 +239,52 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": request.Budget}}) {
+	budget := limitOf(request.Budget, 0)
+	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
 		return
 	}
-	if task.Question != "" && task.TokensUsed < request.Budget {
-		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{
-			"answer": "I raised the budget to " + coordinator.Tokens(request.Budget) + " tokens. Carry on."}})
+	if coordinator.AsksForItself(task) && task.AtBudget() && (budget == 0 || task.TokensUsed < budget) {
+		answer := "I raised the budget to " + coordinator.Tokens(budget) + " tokens. Carry on."
+		if budget == 0 {
+			answer = "I made the budget unlimited. Carry on."
+		}
+		s.carryOn(w, task, answer)
 		return
 	}
-	reply(w, map[string]int{"budget": request.Budget})
+	reply(w, map[string]int{"budget": budget})
+}
+
+// setMaxTurns gives the task a new limit of turns without your answer, 0 (or
+// -1) for no limit. A task stopped at its limit takes it as your answer and
+// carries on.
+func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
+	var request struct{ MaxTurns int }
+	if !decode(w, r, &request) {
+		return
+	}
+	task, err := s.task(r.PathValue("task"))
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	maxTurns := limitOf(request.MaxTurns, 0)
+	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
+		return
+	}
+	if coordinator.AsksForItself(task) && task.AtTurnLimit() && (maxTurns == 0 || task.TurnsSinceAnswer < maxTurns) {
+		answer := fmt.Sprintf("I raised the turn limit to %d. Carry on.", maxTurns)
+		if maxTurns == 0 {
+			answer = "I made the turns unlimited. Carry on."
+		}
+		s.carryOn(w, task, answer)
+		return
+	}
+	reply(w, map[string]int{"maxTurns": maxTurns})
+}
+
+// carryOn answers the loop's stop for you, so the coordinator goes on.
+func (s *Server) carryOn(w http.ResponseWriter, task *tasks.Task, answer string) {
+	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
 }
 
 // rank puts the task in your priority order: the page sends a rank between
@@ -385,7 +437,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 // showConfig is what the page needs to know about the server.
 func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
+	reply(w, map[string]any{"defaultRepo": s.config.DefaultRepo, "budget": s.config.Budget, "maxTurns": s.config.MaxTurns, "hasTerminal": s.terminal != nil, "hasDesk": s.config.Desk != nil,
 		"engines": rules.KnownEngines, "workers": s.workerChoices(), "colors": agents.Colors, "canAddWorkers": s.config.Workers != nil})
 }
 

@@ -14,33 +14,36 @@ import (
 // change shape without breaking the page, and the page sees only what it shows.
 
 type taskSummary struct {
-	ID           string       `json:"id"`
-	Title        string       `json:"title"`
-	Repo         string       `json:"repo"`
-	Status       tasks.Status `json:"status"`
-	CurrentAgent string       `json:"currentAgent"`
-	Stage        string       `json:"stage"` // the agent the coordinator last handed it to: its column on the board
-	Turns        int          `json:"turns"`
-	NeedsYou     string       `json:"needsYou"`    // what you are asked, "" when nothing
-	HasQuestion  bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
-	Labels       []string     `json:"labels"`
-	Budget       int          `json:"budget"`     // tokens; 0 is no limit
-	TokensUsed   int          `json:"tokensUsed"` // by every turn that has ended
-	OverBudget   bool         `json:"overBudget"` // stopped, or about to stop, for its budget
-	Rank         float64      `json:"rank"`       // your priority order, lower first
-	Parked       string       `json:"parked"`     // "todo" or "backlog" while you hold it there
-	Parent       string       `json:"parent"`     // the task, of another team, that asked for this one
-	WaitingOn    string       `json:"waitingOn"`  // another team's task this one waits for
-	Kind         tasks.Kind   `json:"kind"`       // "" for a story, "epic"
-	Epic         string       `json:"epic"`       // a story's epic
-	After        []string     `json:"after"`      // the stories it builds on
-	BlockedBy    []string     `json:"blockedBy"`  // of those, the ones not done, so it hasn't started
-	Stories      int          `json:"stories"`    // an epic's
-	StoriesDone  int          `json:"storiesDone"`
-	Closing      string       `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
-	Told         *told        `json:"told"`    // the coordinator's latest word to you besides questions and summaries
-	CreatedAt    time.Time    `json:"createdAt"`
-	LastActiveAt time.Time    `json:"lastActiveAt"`
+	ID               string       `json:"id"`
+	Title            string       `json:"title"`
+	Repo             string       `json:"repo"`
+	Status           tasks.Status `json:"status"`
+	CurrentAgent     string       `json:"currentAgent"`
+	Stage            string       `json:"stage"` // the agent the coordinator last handed it to: its column on the board
+	Turns            int          `json:"turns"`
+	NeedsYou         string       `json:"needsYou"`    // what you are asked, "" when nothing
+	HasQuestion      bool         `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
+	Labels           []string     `json:"labels"`
+	Budget           int          `json:"budget"`           // tokens; 0 is no limit
+	TokensUsed       int          `json:"tokensUsed"`       // by every turn that has ended
+	OverBudget       bool         `json:"overBudget"`       // stopped, or about to stop, for its budget
+	MaxTurns         int          `json:"maxTurns"`         // turns it may have without your answer; 0 is no limit
+	TurnsSinceAnswer int          `json:"turnsSinceAnswer"` // turns since it started or you last answered
+	AtTurnLimit      bool         `json:"atTurnLimit"`      // stopped, or about to stop, for its limit of turns
+	Rank             float64      `json:"rank"`             // your priority order, lower first
+	Parked           string       `json:"parked"`           // "todo" or "backlog" while you hold it there
+	Parent           string       `json:"parent"`           // the task, of another team, that asked for this one
+	WaitingOn        string       `json:"waitingOn"`        // another team's task this one waits for
+	Kind             tasks.Kind   `json:"kind"`             // "" for a story, "epic"
+	Epic             string       `json:"epic"`             // a story's epic
+	After            []string     `json:"after"`            // the stories it builds on
+	BlockedBy        []string     `json:"blockedBy"`        // of those, the ones not done, so it hasn't started
+	Stories          int          `json:"stories"`          // an epic's
+	StoriesDone      int          `json:"storiesDone"`
+	Closing          string       `json:"closing"` // an epic with every story done: the summary you can close it with, "" otherwise
+	Told             *told        `json:"told"`    // the coordinator's latest word to you besides questions and summaries
+	CreatedAt        time.Time    `json:"createdAt"`
+	LastActiveAt     time.Time    `json:"lastActiveAt"`
 }
 
 type told struct {
@@ -140,7 +143,7 @@ func summaryOf(t *tasks.Task) taskSummary {
 		said = &told{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
 	return taskSummary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: stageOf(t), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
-		OverBudget: t.Budget > 0 && t.TokensUsed >= t.Budget, Rank: t.Rank, Parked: t.Parked,
+		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
 		Turns: len(t.Turns), NeedsYou: needsYou, CreatedAt: t.CreatedAt, LastActiveAt: t.LastActiveAt}

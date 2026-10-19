@@ -20,7 +20,8 @@ var taskRules = map[events.Type]rule{
 	events.TaskRenamed:        all(byTheCoordinatorOrYou, aNewTitle),
 	events.TaskDirected:       all(noQuestionOpen), // an open question takes an answer instead
 	events.TaskLabeled:        all(labelsAreValid),
-	events.TaskBudgeted:       all(aPositiveBudget),
+	events.TaskBudgeted:       all(aBudget),
+	events.TaskTurnsLimited:   all(aTurnLimit),
 	events.TaskRanked:         all(),
 	events.TaskHeld:           all(aKnownPlace),
 	events.TaskReopened:       all(isDone),
@@ -109,9 +110,18 @@ func aNewTitle(t *tasks.Task, p events.Proposal) string {
 	return ""
 }
 
-func aPositiveBudget(_ *tasks.Task, p events.Proposal) string {
-	if p.Number("budget") <= 0 {
-		return "a budget is a number of tokens above 0"
+// aBudget is a number of tokens, or 0 for no limit.
+func aBudget(_ *tasks.Task, p events.Proposal) string {
+	if p.Number("budget") < 0 {
+		return "a budget is a number of tokens, or 0 for no limit"
+	}
+	return ""
+}
+
+// aTurnLimit is a number of turns, or 0 for no limit.
+func aTurnLimit(_ *tasks.Task, p events.Proposal) string {
+	if p.Number("maxTurns") < 0 {
+		return "a limit of turns is a number of turns, or 0 for no limit"
 	}
 	return ""
 }

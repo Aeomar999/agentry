@@ -143,13 +143,13 @@ func TestWhenAnEpicMayWait(t *testing.T) {
 
 func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 	h := started()
-	for i := 0; i < MaxTurns/2; i++ {
+	for i := 0; i < DefaultMaxTurns/2; i++ {
 		h = h.turn(turnID(len(h)), "tech-lead", `{"action":"assign","agent":"engineer","instructions":"again"}`).
 			add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}).
 			turn(turnID(len(h)+1), "engineer", "still broken")
 	}
-	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "24 turns") {
-		t.Errorf("after %d turns: %+v", MaxTurns, move)
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "24 of its 24 turns") {
+		t.Errorf("after %d turns: %+v", DefaultMaxTurns, move)
 	}
 	h = h.add(watchdog, events.TaskNeedsYou, "", map[string]any{"question": "?"}).add(you, events.TaskAnswered, "", map[string]any{"answer": "try X"})
 	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn {
@@ -162,6 +162,40 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 	}
 	if move := Next(issues.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "engine is missing") {
 		t.Errorf("after %d issues in a row: %+v", MaxIssuesRun, move)
+	}
+}
+
+// A task made with its own limit of turns stops at it; made unlimited, or
+// limited to 0 later, it doesn't stop. One made before limits were each
+// task's own keeps the old one.
+func TestEachTaskHasItsOwnLimitOfTurns(t *testing.T) {
+	if old := started().task(); old.MaxTurns != DefaultMaxTurns {
+		t.Errorf("a task created without maxTurns: %d", old.MaxTurns)
+	}
+	withLimit := func(maxTurns int) history {
+		return history{}.
+			add(you, events.TaskCreated, "", map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "maxTurns": maxTurns}).
+			add(worker, events.WorktreeReady, "", map[string]any{"path": "/w", "branch": "b", "port": 7901})
+	}
+	busy := func(h history, turns int) history {
+		for range turns / 2 {
+			h = h.turn(turnID(len(h)), "tech-lead", `{"action":"assign","agent":"engineer","instructions":"again"}`).
+				add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"}).
+				turn(turnID(len(h)+1), "engineer", "still broken")
+		}
+		return h
+	}
+
+	h := busy(withLimit(4), 4)
+	if move := Next(h.task(), defaultRoster()); move.Kind != AskYou || !strings.Contains(move.Reason, "4 of its 4 turns") {
+		t.Errorf("at its own limit: %+v", move)
+	}
+	h = h.add(you, events.TaskTurnsLimited, "", map[string]any{"maxTurns": 0})
+	if move := Next(h.task(), defaultRoster()); move.Kind != StartTurn {
+		t.Errorf("made unlimited: %+v", move)
+	}
+	if move := Next(busy(withLimit(0), 40).task(), defaultRoster()); move.Kind != StartTurn {
+		t.Errorf("created unlimited, after 40 turns: %+v", move)
 	}
 }
 

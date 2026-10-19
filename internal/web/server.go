@@ -26,6 +26,7 @@ type Config struct {
 	DefaultRepo string // the repo a new task gets when it names none
 	Clones      string // where repos named by a git address are cloned
 	Budget      int    // the token budget a new task gets when it names none; 0 is no limit
+	MaxTurns    int    // the limit of turns without your answer a new task gets when it names none; 0 is no limit
 	Policy      PolicySource
 	Desk        http.Handler       // the desk's terminal websocket; nil when there is no desk
 	Helper      http.Handler       // the terminal of the Claude session beside a task, started on the way; nil for none
@@ -82,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	api("DELETE /api/tasks/{task}/shared", s.removeShared)
 	api("PUT /api/tasks/{task}/labels", s.label)
 	api("PUT /api/tasks/{task}/budget", s.setBudget)
+	api("PUT /api/tasks/{task}/turns", s.setMaxTurns)
 	api("PUT /api/tasks/{task}/repo", s.changeRepo)
 	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("GET /api/tasks/{task}/files", s.listFiles)

@@ -61,7 +61,7 @@ func questionsOf(t *tasks.Task) []question {
 	if t.Question != "" {
 		q := base("question", "open")
 		q.Agent, q.At, q.Text, q.Options, q.Page = t.Asked.By, t.Asked.At, t.Question, t.Asked.Options, t.Asked.Page
-		if t.Budget > 0 && t.TokensUsed >= t.Budget {
+		if t.AtBudget() {
 			q.Kind, q.TokensUsed, q.Budget = "budget", t.TokensUsed, t.Budget
 		}
 		questions = append(questions, q)

@@ -34,6 +34,10 @@ type Loop struct {
 
 var agentry = events.Actor{Kind: events.System, ID: "coordinator-loop"}
 
+// AsksForItself says whether the task's open question is the loop's own, one
+// of its stops, rather than one a coordinator asked.
+func AsksForItself(task *tasks.Task) bool { return task.Question != "" && task.Asked.By == agentry.ID }
+
 func NewLoop(s *store.Store, runner *turns.Runner, fleet *machines.Fleet) *Loop {
 	return &Loop{store: s, runner: runner, fleet: fleet}
 }
@@ -323,7 +327,7 @@ func (l *Loop) request(task *tasks.Task, roster agents.Roster, coordinator event
 		", for " + task.ID + ": " + task.Title + ". When this is done, your summary goes back to them.)"
 	child, refused := l.newTask(coordinator, map[string]any{
 		"title": firstLine(decision.Request), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": task.Budget, "labels": listOf(task.Labels)})
+		"teamChosen": true, "parent": task.ID, "depth": task.Depth + 1, "budget": task.Budget, "maxTurns": task.MaxTurns, "labels": listOf(task.Labels)})
 	if refused != "" {
 		l.propose(task.ID, agentry, events.IssueRaised, map[string]any{"reason": "the request to the " + lead.TeamName() + " team failed: " + refused})
 		return
@@ -356,7 +360,7 @@ func (l *Loop) split(task *tasks.Task, roster agents.Roster, coordinator events.
 		var id string
 		if id, refused = l.newTask(coordinator, map[string]any{
 			"title": strings.TrimSpace(story.Title), "description": description, "repo": task.Repo, "coordinator": lead.Name,
-			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": task.Budget,
+			"teamChosen": true, "kindChosen": true, "epic": task.ID, "after": after, "parked": "backlog", "budget": task.Budget, "maxTurns": task.MaxTurns,
 			"labels": listOf(task.Labels)}); refused != "" {
 			refused = fmt.Sprintf("story %d wasn't made: %s", i+1, refused)
 			break

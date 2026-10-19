@@ -31,6 +31,7 @@ type Task struct {
 	FirstTitle  string // the title it was created with, when it has been renamed
 	Labels      []string
 	Budget      int     // tokens the task may use before it asks you; 0 is no limit
+	MaxTurns    int     // turns the task may have without your answer before it asks you; 0 is no limit
 	Rank        float64 // your priority order, lower first; a new task starts above every older one
 	Parked      string  // "todo" or "backlog" while you hold it there; the coordinator leaves it alone
 	TokensUsed  int     // by every turn that has ended
@@ -81,6 +82,16 @@ type Task struct {
 	TurnsSinceAnswer int // turns since the task started or you last answered
 	IssuesInARow     int // issues with no normal turn end between them
 }
+
+// DefaultMaxTurns is the limit of turns of a task made before each task had
+// its own: about 12 handoffs there and back, then you decide.
+const DefaultMaxTurns = 24
+
+// AtBudget says whether the task has used all the tokens it may.
+func (t *Task) AtBudget() bool { return t.Budget > 0 && t.TokensUsed >= t.Budget }
+
+// AtTurnLimit says whether the task has had all the turns it may without your answer.
+func (t *Task) AtTurnLimit() bool { return t.MaxTurns > 0 && t.TurnsSinceAnswer >= t.MaxTurns }
 
 type Worktree struct {
 	Repo   string // the main checkout it was made from, on the machine Agentry runs on

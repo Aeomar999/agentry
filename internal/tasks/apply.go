@@ -40,7 +40,10 @@ func (t *Task) apply(e events.Event) {
 	case events.TaskCreated:
 		t.Title, t.Description, t.Repo = e.Text("title"), e.Text("description"), e.Text("repo")
 		t.Labels = e.List("labels")
-		t.Budget = e.Number("budget")
+		t.Budget, t.MaxTurns = e.Number("budget"), DefaultMaxTurns
+		if _, given := e.Data["maxTurns"]; given { // a task made before keeps the old limit
+			t.MaxTurns = e.Number("maxTurns")
+		}
 		t.Rank = -float64(e.Position) // newest first until you reorder; positions never repeat
 		if e.Text("epic") != "" {
 			t.Rank = float64(e.Position) // a story: after its epic's others, so a split keeps its planned order
@@ -65,6 +68,9 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TaskBudgeted:
 		t.Budget = e.Number("budget")
+
+	case events.TaskTurnsLimited:
+		t.MaxTurns = e.Number("maxTurns")
 
 	case events.TaskHeld:
 		t.Parked = e.Text("place")

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -30,9 +31,10 @@ type task struct {
 
 type detail struct {
 	task
-	Description, Summary, Coordinator string
-	Trail                             []struct{ From, To, Text string }
-	Shared                            []struct {
+	Description, Summary, Coordinator              string
+	Budget, TokensUsed, MaxTurns, TurnsSinceAnswer int // a limit of 0 is none
+	Trail                                          []struct{ From, To, Text string }
+	Shared                                         []struct {
 		Name, By, From string
 		Size           int64
 	}
@@ -61,6 +63,8 @@ func (s *Server) tools() []tool {
 				"epic":        text("for a new story of an epic: the epic's id"),
 				"stories":     texts("for a new epic: ids of tasks there already, to file under it"),
 				"repo":        text("when not this one: the repo's absolute path, a git address to clone (git@host:team/app.git, https://...), or a link to a .zip or .tar.gz of it"),
+				"budget":      integer("the tokens it may use before it asks the user, such as 2000000; -1 for no limit; leave it out for the server's default"),
+				"maxTurns":    integer("the turns it may have without the user's answer before it asks them; -1 for no limit; leave it out for the server's default"),
 			}, "title"), s.createTask},
 		{"tell_coordinator", "Tell a task's coordinator what the user said: a change of direction, more context, or a request. The turn in progress stops so it reads it at once.",
 			object(props{"task": text("its id"), "text": text("the user's words, with what the coordinator needs to act on them")}, "task", "text"), s.tell},
@@ -186,6 +190,7 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	} else if t.Epic != "" {
 		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
 	}
+	fmt.Fprintf(&b, "Budget: %s · %s\n", budgetOf(t), turnsOf(t))
 	if t.Description != "" {
 		fmt.Fprintf(&b, "\n%s\n", t.Description)
 	}
@@ -210,12 +215,30 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	return b.String(), nil
 }
 
+// budgetOf is what the task has used of its budget: "1.2M of 5M tokens".
+func budgetOf(t detail) string {
+	if t.Budget == 0 {
+		return coordinator.Tokens(t.TokensUsed) + " tokens, no limit"
+	}
+	return coordinator.Tokens(t.TokensUsed) + " of " + coordinator.Tokens(t.Budget) + " tokens"
+}
+
+// turnsOf is how many turns the task has had since the user last answered,
+// against its limit: "18 of 24 turns".
+func turnsOf(t detail) string {
+	if t.MaxTurns == 0 {
+		return fmt.Sprintf("%d turns, no limit", t.TurnsSinceAnswer)
+	}
+	return fmt.Sprintf("%d of %d turns", t.TurnsSinceAnswer, t.MaxTurns)
+}
+
 // ---- handing over work ---------------------------------------------------------
 
 func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct {
 		Title, Description, Kind, Team, Epic, Repo string
 		Labels, Stories                            []string
+		Budget, MaxTurns                           int // 0, left out, takes the server's default; -1 is no limit
 	}
 	if err := json.Unmarshal(arguments, &a); err != nil {
 		return "", err
@@ -233,7 +256,8 @@ func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (strin
 	agentry := s.agentry
 	agentry.Timeout = worktrees.CloneTimeout + time.Minute // a repo named by its address is cloned before the task is made
 	err := agentry.Call("POST", "/api/tasks", map[string]any{"title": a.Title, "description": a.Description, "kind": a.Kind,
-		"team": a.Team, "labels": a.Labels, "epic": a.Epic, "stories": a.Stories, "repo": a.Repo}, &created)
+		"team": a.Team, "labels": a.Labels, "epic": a.Epic, "stories": a.Stories, "repo": a.Repo,
+		"budget": a.Budget, "maxTurns": a.MaxTurns}, &created)
 	if err != nil {
 		return "", err
 	}
@@ -551,6 +575,9 @@ func text(description string) map[string]any {
 }
 func texts(description string) map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": description}
+}
+func integer(description string) map[string]any {
+	return map[string]any{"type": "integer", "description": description}
 }
 func boolean(description string) map[string]any {
 	return map[string]any{"type": "boolean", "description": description}

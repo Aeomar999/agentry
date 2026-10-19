@@ -226,6 +226,24 @@ func TestTheTaskCanBeRenamed(t *testing.T) {
 	}
 }
 
+// A budget and a limit of turns are 0 or above, 0 for no limit.
+func TestBudgetsAndLimitsOfTurns(t *testing.T) {
+	task := run(t, []step{
+		{you, events.TaskCreated, "", map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "maxTurns": -1}, false},
+		{you, events.TaskCreated, "", map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "budget": -1}, false},
+		{you, events.TaskCreated, "", map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "budget": 0, "maxTurns": 50}, true},
+		{you, events.TaskTurnsLimited, "", map[string]any{"maxTurns": -3}, false},
+		{coordinator, events.TaskTurnsLimited, "", map[string]any{"maxTurns": 100}, false}, // only you
+		{you, events.TaskTurnsLimited, "", map[string]any{"maxTurns": 0}, true},
+		{you, events.TaskBudgeted, "", map[string]any{"budget": -1}, false},
+		{you, events.TaskBudgeted, "", map[string]any{"budget": 2_000_000}, true},
+		{you, events.TaskBudgeted, "", map[string]any{"budget": 0}, true},
+	})
+	if task.MaxTurns != 0 || task.Budget != 0 {
+		t.Errorf("max turns %d, budget %d", task.MaxTurns, task.Budget)
+	}
+}
+
 // Directions from the board are noted; a question takes an answer instead.
 func TestDirectionsWaitForNoQuestion(t *testing.T) {
 	task := run(t, []step{
