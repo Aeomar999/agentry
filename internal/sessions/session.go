@@ -76,6 +76,7 @@ func Start(spec Spec) error {
 		default:
 		}
 	}
+	host.Process.Kill() // else it runs on, with nobody able to reach it
 	return fmt.Errorf("starting the session: its host didn't answer")
 }
 
