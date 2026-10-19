@@ -6,6 +6,7 @@ package features
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/connections"
@@ -23,6 +24,7 @@ type Feature struct {
 	Streams     *Streams           // the streams it owns, if any
 	Writes      []events.Type      // the core types it proposes, beside its own: ideas makes a task.created (Checked)
 	Coordinator *Coordinator       // its part in coordinators' briefs and decisions
+	Routes      func(Core) []Route // its HTTP API, which web mounts behind each Route's Auth
 	Manifest    func(Reader) Entry // whether the page shows it, and why
 }
 
@@ -68,7 +70,7 @@ type EventLog interface {
 	Stream(name string) ([]events.Event, error)
 }
 
-// Core is all a feature's hooks may use: it has no store. Events reads the
+// Core is all a feature's hooks and routes may use: it has no store. Events reads the
 // log and never writes to it. Defaults are the server's limits for a task
 // Agentry makes that comes from no other task.
 type Core struct {
@@ -89,6 +91,24 @@ type Coordinator struct {
 	Check    func(field json.RawMessage) error                            // optional: refuses a done whose field it can't read, so the coordinator is asked again; it never writes
 	OnDone   func(c Core, task *tasks.Task, field json.RawMessage) string // acts on it; returns a note for the summary
 }
+
+// A Route is one endpoint of a feature's HTTP API. Web mounts it behind the
+// wrapper its Auth names; there is no way to mount one without, and none
+// sits behind the wrapper that hands out the UI token. Every write it makes
+// is as you (httpapi.You), with your authority and no more.
+type Route struct {
+	Pattern string // as http.ServeMux takes it: "GET /api/ideas"
+	Auth    Auth
+	Handler http.HandlerFunc
+}
+
+// Auth says who may call a Route: UI or Desk. The zero Auth is UI.
+type Auth struct{ deskToo bool }
+
+var (
+	UI   = Auth{}              // the page, and Claude Code connections, which carry the UI token
+	Desk = Auth{deskToo: true} // those, and the desk with its own token
+)
 
 // Section is one more part of a coordinator's brief.
 type Section struct{ Heading, Text string }

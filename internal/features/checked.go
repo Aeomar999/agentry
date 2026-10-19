@@ -55,3 +55,21 @@ func (c checked) refuse(t events.Type) *events.Rejection {
 	return &events.Rejection{Check: "features",
 		Reason: fmt.Sprintf("the %s feature may not write %s: it neither registers it nor lists it in Writes", c.feature, t)}
 }
+
+// Unwritable is the log of a feature that was given none: Checked with no
+// types to write, onto a log that refuses everything itself, so nothing it
+// proposes can reach a log that isn't there.
+func Unwritable(name string) Proposer {
+	return Checked(Feature{Name: name}, events.Registration{}, nowhere{name: name})
+}
+
+// nowhere refuses every proposal, for Unwritable.
+type nowhere struct{ name string }
+
+func (n nowhere) Propose(events.Proposal) (events.Event, *events.Rejection, error) {
+	return events.Event{}, &events.Rejection{Check: "features", Reason: "the " + n.name + " feature has no log to write to"}, nil
+}
+
+func (n nowhere) Create(_ string, p events.Proposal) (events.Event, *events.Rejection, error) {
+	return n.Propose(p)
+}

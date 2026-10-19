@@ -128,3 +128,18 @@ func TestARefusedProposalLeavesTheLogAsItWas(t *testing.T) {
 		t.Errorf("a declared task.created: got %+v %+v %v at %d", created, rejection, err, s.LastPosition())
 	}
 }
+
+// A feature with no log writes nothing: Unwritable refuses every type, even
+// one the feature lists in Writes, and the log under it refuses too.
+func TestUnwritableRefusesEverything(t *testing.T) {
+	log := features.Unwritable("votes")
+	p := events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated}
+	for name, propose := range map[string]func() (events.Event, *events.Rejection, error){
+		"Propose": func() (events.Event, *events.Rejection, error) { return log.Propose(p) },
+		"Create":  func() (events.Event, *events.Rejection, error) { return log.Create("task-", p) },
+	} {
+		if _, rejection, err := propose(); err != nil || rejection == nil || rejection.Check != "features" || !strings.Contains(rejection.Reason, "votes") {
+			t.Errorf("%s: got %+v %v, want a features rejection naming votes", name, rejection, err)
+		}
+	}
+}

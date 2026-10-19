@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -120,19 +119,7 @@ func (l *Loop) logOf(f features.Feature) features.Proposer {
 	if log, found := l.Logs[f.Name]; found {
 		return log
 	}
-	return features.Checked(features.Feature{Name: f.Name}, events.Registration{}, writesNothing{name: f.Name})
-}
-
-// writesNothing is the log under logOf's fallback: it refuses every
-// proposal, so nothing past the check can reach a log that isn't there.
-type writesNothing struct{ name string }
-
-func (w writesNothing) Propose(events.Proposal) (events.Event, *events.Rejection, error) {
-	return events.Event{}, &events.Rejection{Check: "features", Reason: "the loop has no log for the " + w.name + " feature"}, nil
-}
-
-func (w writesNothing) Create(_ string, p events.Proposal) (events.Event, *events.Rejection, error) {
-	return w.Propose(p)
+	return features.Unwritable(f.Name)
 }
 
 // guarded runs one of f's hooks, a panic in it turned into why it failed:

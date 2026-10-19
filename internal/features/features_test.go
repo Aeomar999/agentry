@@ -28,3 +28,11 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 		t.Errorf("lines:\n got %+v\nwant %+v", lines, want)
 	}
 }
+
+// A Route that names no Auth is the page's only, never unguarded.
+func TestTheZeroAuthIsUI(t *testing.T) {
+	var route Route
+	if route.Auth != UI || UI == Desk {
+		t.Errorf("the zero Auth %+v should be UI %+v, and UI not Desk %+v", route.Auth, UI, Desk)
+	}
+}
