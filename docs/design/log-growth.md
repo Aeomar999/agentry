@@ -1039,7 +1039,8 @@ never stands beside its rows, and rows never go without their marker.
 ### The age
 
 A server option, `archive after`, 30 days by default; 0 turns archiving
-off. It counts from the `task.done` event. `tasks.Task` has `IsDone` but
+off. It counts from the `task.done` event, or from the task's last
+`task.unarchived` when that is later (step 9b). `tasks.Task` has `IsDone` but
 not when (`internal/tasks/apply.go`, the `task.done` case), so it gains
 `DoneAt`, cleared on reopening. Nothing in the copy is even 3 days done
 yet (section 1), so with the default the first task is archived a month
@@ -1134,12 +1135,18 @@ reads its stories' states (`read-model.md` section 2).
 - **Before or after:** each is its own stream with its own marker, so the
   order is free. An open story whose `After` names an archived story reads
   "done" from the summary.
-- **Reopening a story of an archived epic** unarchives the epic first, in
-  the same request: a reopened story's news goes to the epic's stream
-  (`task.story_done`), which an archived epic would refuse.
+- **Reopening a story of an archived epic** leaves the epic archived. An
+  archived epic is done, and a done epic hears no more news from its
+  stories (`storyDone`, `internal/coordinator/loop.go`) and takes no new
+  one (`fileUnder`, `internal/web/epics_api.go`), so unarchiving it would
+  change nothing. Reopening the epic unarchives it, and then it takes
+  stories again.
 - Across teams: a task waiting on another team's (`WaitingOn`) is open, so
-  never archived; a done request whose asker is archived still posts
-  `task.request_answered`, and that asker is unarchived first, as above.
+  never archived, and a done task waits on none: moved to Done it stops
+  waiting, and its coordinator finishes it only from a turn, which a
+  waiting task doesn't get. So a request finished after its asker was
+  archived answers nothing, as for any done asker, and the rules refuse
+  `task.request_answered` to a done task anyway.
 
 ### Done tasks leave the state, not just the disk
 
@@ -1714,6 +1721,36 @@ since the steps cite section 2's equivalence tests and the task-21 items.
    `internal/web` unarchiving before a reopen, an archived epic's story
    and a `task.request_answered` to an archived asker, and the
    archiver's default.
+
+   **Built in step 9b (the callers).** Every route that reopens a done
+   task unarchives an archived one first, in the same request: the board
+   move to any column but Done, and what you say to it in the chat or
+   through Claude in the Workspace (`web.reopenable`). It calls
+   `Store.Unarchive` with the blobs `FromBlobs` reads, then proposes
+   `task.reopened` as for any done task; when the store refuses, its
+   reason is the answer with 409, and when it fails (a blob missing), 500,
+   and nothing is written. A request that finds the task unarchived by
+   another since it looked carries on with it. Moving an archived task to
+   Done, or to a column that isn't one, is refused as before. A reopen
+   while the archiver archives the task is safe: the archive read the
+   rows before the reopen, so `Store.Archive`'s stale-stream check refuses
+   it. The other way round, an unarchived task that isn't reopened yet
+   keeps its old `DoneAt`, so `tasks.Task` gains `UnarchivedAt`, set by
+   the fold of `task.unarchived`, and the archiver counts the age from the
+   later of the two: the task waits the whole age again, and a done task
+   that only takes a label keeps its timing. The field rides the saved
+   form and the snapshot as any other; a snapshot is tied to the build
+   that wrote it, so one from before is refused and the log replayed. Two
+   callers the plan names turned out to have nothing to unarchive for: a
+   done epic takes no stories, so a story made under an archived epic is
+   made but not filed, with a done epic's words, and the epic stays
+   archived; and a done asker never waits on a request (section 4, "Epics
+   and their stories"), which `coordinator.answer` says and a test pins.
+   `-archive-after` is 30 days by default, 0 still turns it off, and
+   `agentry open` passes it on. Tests: `internal/web/unarchive_test.go`,
+   the archiver's `TestAnUnarchivedTaskWaitsTheAgeAgain`, and
+   `TestARequestFinishedAfterItsAskerWasArchivedAnswersNothing` in
+   `internal/coordinator`.
 10. **Erasing a task and redacting a secret.** Depends on steps 5 and 9.
     - Files: `internal/store` (`Store.Erase`, `Store.Redact`, the update
       trigger and the delete trigger's second case, `secure_delete`),
