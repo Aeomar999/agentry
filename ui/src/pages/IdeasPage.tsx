@@ -22,8 +22,10 @@ import { useAskVisionaries } from "@/lib/visionaries";
 // server's order), for you to accept, which makes a task or an epic in your
 // Backlog, or dismiss. What you decided stays below, in the history, with
 // your note. Ask the visionaries starts a new session on a theme or a
-// question, adding the team first if you don't have it. A setting here says
-// whether closing an epic starts a session about its follow-ups.
+// question, adding the team first if you don't have it. Settings here say
+// whether closing an epic starts a session about its follow-ups, and whether
+// Agentry accepts, and starts, the ideas every Visionary agreed on; those
+// show in the history as Agentry's.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -63,7 +65,7 @@ export function IdeasPage() {
           />
         )}
         {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
-        <FollowUpsSetting />
+        <IdeaSettings />
         {data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
             <div className="flex flex-col items-center gap-3">
@@ -128,14 +130,20 @@ export function IdeasPage() {
   );
 }
 
-// FollowUpsSetting turns on or off the Visionaries session that starts when
-// you close an epic. It waits for the setting before you can change it,
-// shows what you chose while the server saves it and what it saved until the
-// setting loads again (it only reloads when the event log moves), and on when
-// the setting can't be read.
-function FollowUpsSetting() {
+// The settings' values before you change any, and while they can't be read.
+const DEFAULTS: Settings = { visionariesOnEpicClose: true, autoAcceptIdeas: false, autoStartIdeas: false };
+
+// IdeaSettings are the settings about ideas: whether closing an epic starts
+// a Visionaries session about its follow-ups, and whether Agentry accepts,
+// and starts, the ideas every Visionary agreed on. Each change names only
+// its setting. They wait for the settings before you can change them, show
+// what you chose while the server saves it and what it saved until the
+// settings load again (they only reload when the event log moves), and the
+// defaults when the settings can't be read. Starting them counts only with
+// accepting them, so it reads as off and can't be changed while that is off.
+function IdeaSettings() {
   const { data, error } = useResource<Settings>("/api/settings");
-  const [saving, setSaving] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState<Partial<Settings> | null>(null);
   const [saved, setSaved] = useState<Settings | null>(null);
   const [failed, setFailed] = useState("");
   const [seen, setSeen] = useState(data);
@@ -144,11 +152,14 @@ function FollowUpsSetting() {
     setSaved(null);
   }
 
-  async function change(on: boolean) {
-    setSaving(on);
+  const value = (name: keyof Settings) => saving?.[name] ?? saved?.[name] ?? data?.[name] ?? DEFAULTS[name];
+  const busy = saving !== null || (!data && !error);
+
+  async function change(name: keyof Settings, on: boolean) {
+    setSaving({ [name]: on });
     setFailed("");
     try {
-      setSaved(await changeSettings({ visionariesOnEpicClose: on }));
+      setSaved(await changeSettings({ [name]: on }));
     } catch (failure) {
       setSaved(null);
       setFailed((failure as Error).message);
@@ -160,27 +171,47 @@ function FollowUpsSetting() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-start gap-x-3">
-        <Checkbox
-          checked={saving ?? saved?.visionariesOnEpicClose ?? data?.visionariesOnEpicClose ?? true}
-          onChange={change}
-          disabled={saving !== null || (!data && !error)}
-          label="Ask the visionaries for follow-ups when you close an epic"
-          hint="A small session about what the epic delivered and what could come next: a 1M-token budget and 12 turns. Its ideas show here, linked to the epic."
-        />
+        <div className="flex flex-col gap-3">
+          <Checkbox
+            checked={value("visionariesOnEpicClose")}
+            onChange={(on) => change("visionariesOnEpicClose", on)}
+            disabled={busy}
+            label="Ask the visionaries for follow-ups when you close an epic"
+            hint="A small session about what the epic delivered and what could come next: a 1M-token budget and 12 turns. Its ideas show here, linked to the epic."
+          />
+          <Checkbox
+            checked={value("autoAcceptIdeas")}
+            onChange={(on) => change("autoAcceptIdeas", on)}
+            disabled={busy}
+            label="Auto-accept ideas all Visionaries agree on"
+            hint="Agentry accepts for you an idea every viewpoint backed and none doubted, into your Backlog, unless you dismissed or accepted one like it before. The others wait here for you."
+          />
+          <div className="pl-6.5">
+            <Checkbox
+              checked={value("autoAcceptIdeas") && value("autoStartIdeas")}
+              onChange={(on) => change("autoStartIdeas", on)}
+              disabled={busy || !value("autoAcceptIdeas")}
+              label="and start them"
+              hint="Moves each task it accepted to In progress, as Start does, instead of leaving it in your Backlog."
+            />
+          </div>
+        </div>
         {saving !== null && <span className="text-[12px] text-ink-muted">Saving…</span>}
       </div>
-      {error && <Banner title="Couldn't read the setting">{error}</Banner>}
+      {error && <Banner title="Couldn't read the settings">{error}</Banner>}
       {failed && <Banner title="The setting wasn't saved">{failed}</Banner>}
     </div>
   );
 }
 
-// An idea you decided on: what became of it, and what you said.
+// An idea decided on, by you or, when every Visionary agreed, by Agentry:
+// what became of it, and what was said.
 function HistoryRow({ idea }: { idea: Idea }) {
   return (
     <li className="flex flex-col gap-1 px-4 py-3">
       <span className="flex flex-wrap items-center gap-2">
         <Badge variant={idea.state === "accepted" ? "success" : "default"}>{idea.state}</Badge>
+        {idea.autoAccepted && <Badge variant="info">Auto-accepted: all agreed</Badge>}
         <span className="text-[13px] font-medium text-ink-primary">{idea.title}</span>
         <span className="ml-auto flex gap-3 text-[12px] text-ink-muted">
           {idea.became && (
