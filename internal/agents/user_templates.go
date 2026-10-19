@@ -17,6 +17,13 @@ type UserTemplate struct {
 	Agents      []Agent `json:"agents"`
 }
 
+// Template is the saved template as one AddTeam adds, with the prompts
+// you saved. Lookups by ID or team, as the Visionaries' are, still find only
+// the built-in templates.
+func (u UserTemplate) Template() Template {
+	return Template{ID: u.ID, Team: u.Team, Description: u.Description, Agents: u.Agents, Given: true}
+}
+
 // UserTemplates are the templates you saved and haven't removed, in the
 // order you first saved them. Saving one again keeps its place.
 type UserTemplates []UserTemplate

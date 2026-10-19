@@ -19,6 +19,9 @@ type Template struct {
 	Folder      string   `json:"-"`           // where its prompts are, under defaults/
 	Agents      []Agent  `json:"agents"`
 	Features    []string `json:"features"` // what a team made from it turns on, such as "ideas"
+	// Given says its agents carry their own prompts, as a template you
+	// saved does, instead of reading them from defaults/.
+	Given bool `json:"-"`
 }
 
 // Templates are the teams Agentry offers. Software is what a new install
@@ -94,6 +97,11 @@ var Templates = []Template{
 func (t Template) prompted() []Agent {
 	agents := make([]Agent, len(t.Agents))
 	for i, agent := range t.Agents {
+		agent.Template = t.ID
+		if t.Given {
+			agents[i] = agent
+			continue
+		}
 		path := "defaults/" + agent.Name + ".md"
 		if t.Folder != "" {
 			path = "defaults/" + t.Folder + "/" + agent.Name + ".md"
@@ -104,7 +112,6 @@ func (t Template) prompted() []Agent {
 			panic("missing default prompt: " + err.Error()) // caught by the tests
 		}
 		agent.Prompt = strings.TrimSpace(string(prompt))
-		agent.Template = t.ID
 		agents[i] = agent
 	}
 	return agents
