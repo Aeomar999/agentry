@@ -66,7 +66,7 @@ func TestTheDeveloperProfile(t *testing.T) {
 		{"make a folder", bash("mkdir -p src/refunds && touch src/refunds/index.ts"), Allow},
 		{"remove a file in the workspace", bash("rm notes.md"), Allow},
 		{"a loop over known words", bash("for t in go gofmt git; do printf '%s: ' $t; command -v $t; done"), Allow},
-		{"a variable set in the command", bash("S=build/out; mkdir -p $S && ls $S"), Allow},
+		{"a variable set in the command", bash("out=build/out; mkdir -p $out && ls $out"), Allow},
 		{"set -e", bash("set -e\ngo vet ./...\ngo test ./..."), Allow},
 		{"Claude's scratch folder", bash("mkdir -p /tmp/claude-1000/x/scratchpad && ls /tmp/claude-1000/x/scratchpad"), Allow},
 		{"read the brief", file("Read", workspace+"/.agentry/turn-1.md"), Allow},
@@ -120,6 +120,17 @@ func TestTheDeveloperProfile(t *testing.T) {
 		{"a setting can run a command, so it asks as before", bash("git -c k=v commit -m x"), Ask},
 		{"push to main from another folder", bash("git -C . push origin main"), Deny},
 		{"force push with a setting", bash("git -c k=v push -f origin dev"), Deny},
+
+		// an upper-case variable can make a program run a command, so it asks
+		// like git -c; a few that only pick a toolchain or a platform don't (task-30)
+		{"the agents' own settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+		{"a variable before git", bash("GIT_EXTERNAL_DIFF=./x.sh git diff"), Ask},
+		{"GOFLAGS", bash("GOFLAGS=-toolexec=./x.sh go test ./..."), Ask},
+		{"an upper-case variable on its own", bash("PATH=.; ls"), Ask},
+		{"export", bash("export PAGER=./x.sh; git log"), Ask},
+		{"declare -x", bash("declare -x PAGER=./x.sh; git log"), Ask},
+		{"a for loop", bash("for PATH in .; do ls; done"), Ask},
+		{"printf -v", bash("printf -v PATH %s .; ls"), Ask},
 	})
 }
 
@@ -265,6 +276,24 @@ func TestTheJudgingProfilesWriteNothingFromTheShell(t *testing.T) {
 	}
 }
 
+// What the reviewer of task-30 found still got through. Each denies or asks
+// under both judging profiles.
+func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			// variables set before a command
+			{"GOFLAGS=-mod=mod", bash("GOFLAGS=-mod=mod go test ./..."), Ask},
+			{"GOFLAGS=-toolexec", bash("GOFLAGS=-toolexec=sh go test ./..."), Ask},
+			{"GIT_EXTERNAL_DIFF", bash("GIT_EXTERNAL_DIFF='touch x; true' git diff"), Ask},
+			{"GIT_CONFIG_*", bash("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0='touch x; true' git status"), Ask},
+			{"PATH on its own", bash("PATH=.; ls"), Ask},
+			{"printf -v", bash("printf -v PATH %s .; ls"), Ask},
+			{"export", bash("export GIT_PAGER='touch x'; git log"), Ask},
+		})
+	}
+}
+
 // What they are for still runs without asking: reading and testing.
 func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 	p := loadDefault(t)
@@ -292,6 +321,8 @@ func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 			{"go test", bash("go test ./..."), Allow},
 			{"go test with flags that aren't -c or -o", bash("go test -count=1 -cover -run TestX -v ./internal/policy"), Allow},
 			{"go test with settings", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
+			{"go test with a toolchain", bash("GOTOOLCHAIN=local go test ./..."), Allow},
+			{"a lower-case variable", bash("for f in a.go b.go; do head -5 $f; done"), Allow},
 			{"output merged into a pipe", bash("go test ./... 2>&1 | head"), Allow},
 			{"output thrown away", bash("go test ./... > /dev/null"), Allow},
 			{"output to the scratch folder", bash("go test ./... > /tmp/claude-1000/x/scratchpad/out.txt"), Allow},
@@ -332,6 +363,7 @@ func TestTheAutonomousProfile(t *testing.T) {
 		{"create a repo", bash("glab repo create hello --private"), Ask},
 		{"curl", bash("curl -s https://example.com"), Ask},
 		{"secrets", bash("cat .env"), Deny},
+		{"a variable before a command still runs", bash("GOFLAGS=-mod=mod go test ./..."), Allow},
 	})
 }
 

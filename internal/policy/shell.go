@@ -47,7 +47,7 @@ func (s *shellInspector) learnVariables(file *syntax.File) {
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.Assign:
-			if n.Value != nil && !n.Append && n.Index == nil {
+			if n.Name != nil && n.Value != nil && !n.Append && n.Index == nil { // no name: an option, declare -x
 				if values, ok := s.values(n.Value); ok {
 					s.variables[n.Name.Value] = append(s.variables[n.Name.Value], values...)
 				}
@@ -73,6 +73,14 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 	switch n := node.(type) {
 	case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.FuncDecl, *syntax.CoprocClause:
 		s.call.opaque = true
+	case *syntax.Assign:
+		if n.Name != nil {
+			s.setVariable(n.Name.Value)
+		}
+	case *syntax.ForClause:
+		if iteration, ok := n.Loop.(*syntax.WordIter); ok {
+			s.setVariable(iteration.Name.Value)
+		}
 	case *syntax.CallExpr:
 		s.addCommand(n.Args, n.Assigns)
 	case *syntax.DeclClause:
@@ -96,7 +104,11 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	if len(args) == 0 {
 		return
 	}
-	s.call.commands = append(s.call.commands, s.commandText(args))
+	text := s.commandText(args)
+	if name, found := printfVariable(text); found {
+		s.setVariable(name)
+	}
+	s.call.commands = append(s.call.commands, text)
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
 		s.addPath(args[0]) // ./test.sh runs a file
 	}
@@ -108,6 +120,10 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
 	words := []string{n.Variant.Value}
 	for _, assign := range n.Args {
+		if assign.Name == nil { // an option: declare -x
+			words = append(words, s.wordText(assign.Value))
+			continue
+		}
 		text := assign.Name.Value
 		if assign.Value != nil {
 			value := s.wordText(assign.Value)
@@ -139,6 +155,41 @@ func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 		}
 		s.call.writes = append(s.call.writes, values...)
 	}
+}
+
+// Variables a command may be given without being judged differently. The
+// programs agents run read their settings from upper-case variables, and some
+// of those run a command or write a file: GIT_EXTERNAL_DIFF, GIT_CONFIG_*,
+// GOFLAGS=-toolexec, PATH, PAGER, LD_PRELOAD. So setting any other upper-case
+// variable makes the call unknown until it runs, as git -c does. These only
+// choose a toolchain, a platform or how output looks. Lower-case names are the
+// command's own variables, as in `for f in a b`.
+var harmlessVariables = map[string]bool{
+	"GOTOOLCHAIN": true, "GOPROXY": true, "CGO_ENABLED": true, "GOOS": true, "GOARCH": true,
+	"NO_COLOR": true, "LC_ALL": true, "LANG": true, "TZ": true,
+}
+
+// setVariable judges a variable the command sets: before a command
+// (FOO=1 cmd), on its own, with export or declare, by a for loop or by
+// printf -v. Any of them can reach the programs it runs.
+func (s *shellInspector) setVariable(name string) {
+	if !harmlessVariables[name] && strings.ToLower(name) != name {
+		s.call.opaque = true
+	}
+}
+
+// printfVariable is the variable printf -v sets, if it is given one.
+func printfVariable(command string) (string, bool) {
+	words := strings.Fields(command)
+	for i := 1; i < len(words) && words[0] == "printf"; i++ {
+		switch {
+		case words[i] == "-v" && i+1 < len(words):
+			return words[i+1], true
+		case strings.HasPrefix(words[i], "-v"):
+			return strings.TrimPrefix(words[i], "-v"), true
+		}
+	}
+	return "", false
 }
 
 // isDescriptor: the target of >& is a file descriptor (2>&1) or "-" (close).

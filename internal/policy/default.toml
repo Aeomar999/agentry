@@ -37,6 +37,10 @@
 #              also matches `git -C dir commit`; dir still counts for where and
 #              paths. A setting (git -c k=v) can make git run a command, so it
 #              counts as unknown until it runs, like $(...).
+#   variables  setting an upper-case variable (GOFLAGS=x go test, export PAGER=x)
+#              counts as unknown too, since programs read their settings from
+#              them, except GOTOOLCHAIN, GOPROXY, CGO_ENABLED, GOOS, GOARCH,
+#              NO_COLOR, LC_ALL, LANG and TZ.
 #   Write patterns in 'single quotes': TOML then takes every character as it is.
 #
 # Allow everything, as shipped
