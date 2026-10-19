@@ -66,7 +66,9 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 }
 
-// touchedTasks are the tasks a batch changed, each once, in order.
+// touchedTasks are the tasks a batch changed, each once, in order. A
+// foreign stream is no task's, so the loop never reads one as a task. When
+// tasks can be archived, an archived task is skipped here too.
 func touchedTasks(catalogue *events.Catalogue, batch []events.Event) []string {
 	seen := map[string]bool{}
 	var ids []string

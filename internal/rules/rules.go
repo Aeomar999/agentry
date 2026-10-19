@@ -33,8 +33,12 @@ type State interface {
 }
 
 // Check is the store's OrderCheck, made with the state it reads and the
-// catalogue the store has, which says which streams are tasks.
+// catalogue the store has, which says which streams are tasks. Nothing goes
+// into a foreign stream: its feature isn't in this build.
 func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.Rejection {
+	if catalogue.KindOf(p.Stream) == events.ForeignStream {
+		return refuse(events.ForeignReason(p.Stream))
+	}
 	if err := state.Broken(events.AgentsStream); err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
@@ -103,6 +107,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		}
 		return nil
 	case task == nil:
+		// When tasks can be archived (docs/design/log-growth.md section 4),
+		// an archived task's unarchiving goes through here too.
 		return refuse("task " + p.Stream + " doesn't exist")
 	case task.IsDone && task.WrapUp != nil && slices.Contains(duringWrapUp, p.Type):
 	case task.IsDone && !slices.Contains(afterDone, p.Type):

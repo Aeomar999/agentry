@@ -679,3 +679,23 @@ func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
 		}
 	}
 }
+
+// On a build without ideas, idea-3 is a foreign stream: the rules refuse
+// anything in it, a task.created too, even where the shape check would not.
+func TestNothingGoesIntoAForeignStream(t *testing.T) {
+	state := current.New(events.Core())
+	state.Loaded(0)
+	created := events.Proposal{Stream: "idea-3", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "x", "repo": "/r", "coordinator": "tech-lead", "budget": 0, "maxTurns": 0}}
+	renamed := events.Proposal{Stream: "idea-3", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "y"}}
+	dismissed := events.Proposal{Stream: "idea-3", Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": "no"}}
+	for _, p := range []events.Proposal{created, renamed, dismissed} {
+		rejection := Check(p, state, events.Core())
+		if rejection == nil || rejection.Reason != "stream idea-3 belongs to a feature this build doesn't have" {
+			t.Errorf("%s into idea-3: %v, want the foreign stream's refusal", p.Type, rejection)
+		}
+	}
+	if rejection := Check(dismissed, state, withIdeas); rejection != nil && rejection.Reason == events.ForeignReason("idea-3") {
+		t.Errorf("with ideas registered, idea-3 is refused as foreign: %v", rejection)
+	}
+}
