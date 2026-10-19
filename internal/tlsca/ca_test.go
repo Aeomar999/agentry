@@ -161,6 +161,24 @@ func TestAHalfMadeOrMismatchedCAIsRefused(t *testing.T) {
 	}
 }
 
+func TestACorruptCertificateSaysToRegenerate(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Open(dir); err != nil {
+		t.Fatal(err)
+	}
+	certPath := filepath.Join(dir, certFile)
+	for name, data := range map[string][]byte{
+		"not PEM":       []byte("garbage"),
+		"not a cert":    pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage")}),
+		"the wrong PEM": pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: []byte("garbage")}),
+	} {
+		os.WriteFile(certPath, data, 0o644)
+		if _, err := Open(dir); err == nil || !strings.Contains(err.Error(), certFile+" is corrupt") || !strings.Contains(err.Error(), "regenerate the CA") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestRegenerateMakesANewCA(t *testing.T) {
 	dir := t.TempDir()
 	old, err := Open(dir)

@@ -277,13 +277,9 @@ func load(keyPath, certPath string) (*CA, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s: not an ECDSA key", keyPath)
 	}
-	certBlock, err := readPEM(certPath, "CERTIFICATE")
+	cert, err := readCert(certPath)
 	if err != nil {
 		return nil, err
-	}
-	cert, err := x509.ParseCertificate(certBlock)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", certPath, err)
 	}
 	if !cert.IsCA {
 		return nil, fmt.Errorf("%s: not a CA certificate", certPath)
@@ -327,12 +323,22 @@ func linkedKeyError(path string) error {
 	return fmt.Errorf("%s is a symbolic link: the CA key must be a plain file", path)
 }
 
-func readPEM(path, kind string) ([]byte, error) {
+// readCert reads the CA certificate, telling the user to regenerate the CA
+// when the file is there but holds no certificate that parses.
+func readCert(path string) (*x509.Certificate, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return decodePEM(path, data, kind)
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("%s is corrupt, no certificate in it: regenerate the CA", path)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("%s is corrupt (%v): regenerate the CA", path, err)
+	}
+	return cert, nil
 }
 
 func decodePEM(path string, data []byte, kind string) ([]byte, error) {
