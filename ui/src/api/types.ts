@@ -293,11 +293,18 @@ export interface Idea {
   task: string; // the session it came from
   repo: string;
   epic: string; // the epic it follows up, "" for none
+  about: string; // the epic whose close started its session, "" for none
+  aboutTitle: string; // that epic's title
   kind: "" | "epic"; // what it suggests making of it: "" is a story
   state: "open" | "accepted" | "dismissed";
   note: string; // what you said when you accepted or dismissed it
   became: string; // the task an accepted idea became
   createdAt: string;
+}
+
+// Your settings for how Agentry works (internal/web/settings_api.go).
+export interface Settings {
+  visionariesOnEpicClose: boolean; // a Visionaries session starts after you close an epic
 }
 
 // What accepting an idea did: a task can be made and the idea still not be

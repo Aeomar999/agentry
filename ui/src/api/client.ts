@@ -5,7 +5,7 @@
 // in: the server sets a cookie too, and an installed app, on iOS
 // especially, may keep only that. So only a 401 means signed out.
 
-import type { SigninCode } from "@/api/types";
+import type { Settings, SigninCode } from "@/api/types";
 
 const tokenKey = "agentry-token";
 
@@ -131,6 +131,11 @@ export async function signOut(): Promise<void> {
 // newSigninCode is a one-time code that signs in another device.
 export function newSigninCode(): Promise<SigninCode> {
   return api<SigninCode>("POST", "/api/signin/codes");
+}
+
+// changeSettings changes the settings named, and answers with all of them.
+export function changeSettings(change: Partial<Settings>): Promise<Settings> {
+  return api<Settings>("PUT", "/api/settings", change);
 }
 
 // Websockets can't send headers, so the terminal's carries the token in its address.

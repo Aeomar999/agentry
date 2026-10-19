@@ -3,13 +3,15 @@ import { Lightbulb, Users } from "lucide-react";
 import { useBreadcrumb } from "@/components/templates/AdminShell";
 import { Badge } from "@/components/atoms/Badge";
 import { Button } from "@/components/atoms/Button";
+import { Checkbox } from "@/components/atoms/Checkbox";
 import { Banner } from "@/components/molecules/Banner";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
 import { IdeaCard, TaskLink } from "@/components/organisms/IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "@/components/organisms/IdeaDialogs";
-import type { Idea, TaskSummary } from "@/api/types";
+import { changeSettings } from "@/api/client";
+import type { Idea, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { useAskVisionaries } from "@/lib/visionaries";
 
@@ -18,7 +20,8 @@ import { useAskVisionaries } from "@/lib/visionaries";
 // server's order), for you to accept, which makes a task or an epic in your
 // Backlog, or dismiss. What you decided stays below, in the history, with
 // your note. Ask the visionaries starts a new session on a theme or a
-// question, adding the team first if you don't have it.
+// question, adding the team first if you don't have it. A setting here says
+// whether closing an epic starts a session about its follow-ups.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -50,6 +53,7 @@ export function IdeasPage() {
       <div className="flex flex-col gap-8 p-6">
         {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
         {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
+        <FollowUpsSetting />
         {data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
             <div className="flex flex-col items-center gap-3">
@@ -78,6 +82,12 @@ export function IdeasPage() {
               </h2>
               <span className="text-[12px] text-ink-muted">
                 <TaskLink id={task} /> · {ideas.length} {ideas.length === 1 ? "idea" : "ideas"}
+                {ideas[0].about && (
+                  <>
+                    {" "}
+                    · after you closed <TaskLink id={ideas[0].about}>{ideas[0].aboutTitle || ideas[0].about}</TaskLink>
+                  </>
+                )}
               </span>
             </div>
             <div className="grid items-start gap-3 xl:grid-cols-2">
@@ -105,6 +115,45 @@ export function IdeasPage() {
       {acting?.action === "accept" && <AcceptIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
       {acting?.action === "dismiss" && <DismissIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
     </>
+  );
+}
+
+// FollowUpsSetting turns on or off the Visionaries session that starts when
+// you close an epic. It waits for the setting before you can change it,
+// shows what you chose while the server saves it, and on when the setting
+// can't be read.
+function FollowUpsSetting() {
+  const { data, error } = useResource<Settings>("/api/settings");
+  const [saving, setSaving] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState("");
+
+  async function change(on: boolean) {
+    setSaving(on);
+    setFailed("");
+    try {
+      await changeSettings({ visionariesOnEpicClose: on });
+    } catch (failure) {
+      setFailed((failure as Error).message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-start gap-x-3">
+        <Checkbox
+          checked={saving ?? data?.visionariesOnEpicClose ?? true}
+          onChange={change}
+          disabled={saving !== null || (!data && !error)}
+          label="Ask the visionaries for follow-ups when you close an epic"
+          hint="A small session about what the epic delivered and what could come next: a 1M-token budget and 12 turns. Its ideas show here, linked to the epic."
+        />
+        {saving !== null && <span className="text-[12px] text-ink-muted">Saving…</span>}
+      </div>
+      {error && <Banner title="Couldn't read the setting">{error}</Banner>}
+      {failed && <Banner title="The setting wasn't saved">{failed}</Banner>}
+    </div>
   );
 }
 
