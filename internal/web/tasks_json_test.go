@@ -90,6 +90,9 @@ func TestTheTaskListKeepsItsJSON(t *testing.T) {
 	propose(events.Proposal{Stream: "task-12", Actor: techLead, Type: events.TaskNeedsYou, Data: map[string]any{
 		"question": "Close it?", "options": []string{"Close the epic"}, "closing": "All shipped."}})
 
+	create(`{"title":"Shipping"}`) // task-13
+	propose(events.Proposal{Stream: "task-13", Actor: techLead, Type: events.TaskAssigned, Data: map[string]any{"agent": "deployer", "instructions": "Ship it."}})
+
 	var got bytes.Buffer
 	for _, path := range []string{"/api/tasks", "/api/tasks/task-10", "/api/tasks/task-1"} {
 		code, body := call(t, server, "GET", path, "")
