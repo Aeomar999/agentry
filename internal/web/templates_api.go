@@ -77,6 +77,7 @@ func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &template) {
 		return
 	}
+	template.Team, template.Description = strings.TrimSpace(template.Team), strings.TrimSpace(template.Description)
 	s.proposeTemplate(w, template.Save(httpapi.You), template.ID)
 }
 

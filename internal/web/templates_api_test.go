@@ -259,6 +259,24 @@ func TestImportingATemplateYouHaveReplacesIt(t *testing.T) {
 	}
 }
 
+// An imported team and description are trimmed, as a saved description is.
+func TestAPaddedImportIsSavedTrimmed(t *testing.T) {
+	server, s := newTestServer(t)
+	call(t, server, "POST", "/api/teams/Software/template", `{"id":"my-software","description":"Ours."}`)
+	_, exported := call(t, server, "GET", "/api/teams/templates/my-software/export", "")
+	padded := strings.Replace(exported, `"description":"Ours."`, `"description":"  Ours.  "`, 1)
+	padded = strings.Replace(padded, `"team":"Software"`, `"team":"  Software  "`, 1)
+	if code, body := call(t, server, "POST", "/api/teams/templates/import", padded); code != 200 {
+		t.Fatalf("import: %d %s", code, body)
+	}
+	if saved, _ := savedTemplates(t, s).WithID("my-software"); saved.Team != "Software" || saved.Description != "Ours." {
+		t.Errorf("saved team %q, description %q", saved.Team, saved.Description)
+	}
+	if _, reexported := call(t, server, "GET", "/api/teams/templates/my-software/export", ""); reexported != exported {
+		t.Errorf("exported again:\n%s\nwant:\n%s", reexported, exported)
+	}
+}
+
 func TestExportingATemplateYouHaventIsRefused(t *testing.T) {
 	server, _ := newTestServer(t)
 	if code, body := call(t, server, "GET", "/api/teams/templates/nobody/export", ""); code != http.StatusNotFound {
