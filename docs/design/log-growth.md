@@ -1657,6 +1657,22 @@ since the steps cite section 2's equivalence tests and the task-21 items.
    coordinator's `lastPort` reads only a broken task's stream, and an
    archived task is never broken, so it keeps `Stream`. `show_task` says
    when a task was archived. Left for step 8b: the page, and Target 7.
+
+   **Built in step 8b (the page, and Target 7).** The task page marks an
+   archived task "Archived" with the date beside its title and offers
+   nothing that writes to it: the labels, the repo, the epic and the
+   shared files only show, and the chat takes no message. `POST
+   /api/tasks/{id}/direct` refuses an archived task with 409 and the
+   rules' own words (`rules.ArchivedRefusal`), as labels, answers and
+   ranks are refused; an unknown task is still 404. Target 7 is measured
+   in `internal/web/archived_bench_test.go`: `TestArchivedTaskOpensBench`
+   archives the copy's largest task and times its detail cold and warm
+   (skipped unless `AGENTRY_BENCH_DB` is set), and
+   `TestAnArchivedTaskOpensInTime`, a stand-in of about 4,000 events that
+   always runs, checks both bounds: 28 to 37 ms cold and about 2.5 ms
+   warm, and 70 ms and 4.3 ms at task-8's 8,000 events. Half of a cold
+   read is `tasks.(*Task).Action`'s scan, once per action event, so the
+   fold grows faster than the events.
 9. **Unarchiving and reopening.** Depends on steps 7 and 8.
    - Files: `internal/store` (`Store.Unarchive`: under `Store.mu`, the rows
      back with their positions and `task.unarchived` in one transaction,
