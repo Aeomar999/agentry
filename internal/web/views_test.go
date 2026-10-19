@@ -49,6 +49,21 @@ func TestATurnSaysWhyItsTokensAreUnknown(t *testing.T) {
 	}
 }
 
+// The task page says which turn waits for a usage limit, and until when when
+// the engine said.
+func TestATurnSaysItWaitsForAUsageLimit(t *testing.T) {
+	task := &tasks.Task{Turns: []*tasks.Turn{
+		{ID: "turn-1", Limited: "limit reached", ResetsAt: time.Date(2026, 10, 20, 3, 0, 0, 0, time.UTC)},
+		{ID: "turn-2", Limited: "limit reached"},
+		{ID: "turn-3"},
+	}}
+	body, _ := json.Marshal(detailOf(task, agents.Roster{}, nil).Turns)
+	want := `"limited":"limit reached","resetsAt":"2026-10-20T03:00:00Z"`
+	if !strings.Contains(string(body), want) || strings.Count(string(body), "resetsAt") != 1 || strings.Count(string(body), "limited") != 2 {
+		t.Errorf("turns %s, want turn-1 with %s, turn-2 limited with no reset and turn-3 neither", body, want)
+	}
+}
+
 // The task page says on how many turns the tokens couldn't be counted, and
 // why, grouped by reason.
 func TestTheTaskSaysWhereItsTokensAreUnknown(t *testing.T) {
