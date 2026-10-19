@@ -87,17 +87,20 @@ func hostOf(hostPort string) string {
 
 // httpsHost is the host and port to send a request on to over https: the
 // host it asked at, and the port it asked at when that is a port number,
-// else the port it arrived on. Nothing else in Host reaches a link.
+// else the port it arrived on. Nothing else in Host reaches a link. A Host
+// without a port asked at the scheme's own: 443 over TLS, and over plain
+// HTTP 80, which https is on too, as one port serves both. It is only for
+// a Host the certificate covers: callers check Covers first.
 func httpsHost(r *http.Request) string {
 	host := hostOf(r.Host)
 	_, port, err := net.SplitHostPort(r.Host)
-	if err != nil {
-		port = "" // Host has none
-	} else if _, err := strconv.ParseUint(port, 10, 16); err != nil {
-		port = ""
-		if local := arrivedOn(r); local != nil {
-			_, port, _ = net.SplitHostPort(local.String())
-		}
+	switch {
+	case err != nil && r.TLS != nil:
+		port = "" // https's own
+	case err != nil:
+		port = portArrivedOn(r, "80")
+	case !isPortNumber(port):
+		port = portArrivedOn(r, "")
 	}
 	switch {
 	case port != "":
@@ -107,6 +110,22 @@ func httpsHost(r *http.Request) string {
 	default:
 		return host
 	}
+}
+
+func isPortNumber(port string) bool {
+	_, err := strconv.ParseUint(port, 10, 16)
+	return err == nil
+}
+
+// portArrivedOn is the port a request arrived on, or otherwise when that
+// isn't known.
+func portArrivedOn(r *http.Request, otherwise string) string {
+	if local := arrivedOn(r); local != nil {
+		if _, port, err := net.SplitHostPort(local.String()); err == nil {
+			return port
+		}
+	}
+	return otherwise
 }
 
 // arrivedOn is the local address a request arrived on, or nil.

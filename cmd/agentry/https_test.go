@@ -237,6 +237,45 @@ func TestTheFrontDoorTakesOnlyAPortNumberFromTheHost(t *testing.T) {
 	}
 }
 
+// A Host without a port asked at http's own port, 80, over plain HTTP, so
+// it is sent on to https there, at the port the request arrived on, and not
+// to https's own port, 443, which Agentry doesn't serve. Over TLS it asked
+// at 443.
+func TestAHostWithoutAPortIsSentToThePortItCameTo(t *testing.T) {
+	cases := []struct {
+		name, arrivedOn string
+		overTLS         bool
+		want            string
+	}{
+		{"over plain HTTP", "192.168.1.160:80", false, "192.168.1.160:80"},
+		{"over plain HTTP, forwarded to another port", "192.168.1.160:7800", false, "192.168.1.160:7800"},
+		{"over plain HTTP, arrival unknown", "", false, "192.168.1.160:80"},
+		{"over TLS", "192.168.1.160:443", true, "192.168.1.160"},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest("GET", "/tasks/task-1", nil)
+		r.Host = "192.168.1.160"
+		if c.arrivedOn != "" {
+			r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, net.TCPAddrFromAddrPort(netip.MustParseAddrPort(c.arrivedOn))))
+		}
+		if c.overTLS {
+			r.TLS = &tls.ConnectionState{}
+		}
+		if got := httpsHost(r); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	ca, _ := testCA(t)
+	handler := frontDoor(http.NotFoundHandler(), doorOf(ca, "192.168.1.160"))
+	r := httptest.NewRequest("GET", "/tasks/task-1", nil)
+	r.Host, r.RemoteAddr = "192.168.1.160", "192.168.1.20:5000"
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if got := w.Header().Get("Location"); got != "https://192.168.1.160:80/tasks/task-1" {
+		t.Errorf("sent to %q", got)
+	}
+}
+
 // downloadTypes are the trust page's downloads' content types, by extension.
 var downloadTypes = map[string]string{".crt": "application/x-x509-ca-cert", ".pem": "application/x-pem-file",
 	".mobileconfig": "application/x-apple-aspen-config"}
