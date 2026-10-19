@@ -48,7 +48,7 @@ func (s *Store) History(stream string, archived Archived) ([]events.Event, error
 	if err != nil {
 		return nil, err
 	}
-	marker, ok := markerOf(live)
+	marker, ok := MarkerOf(live)
 	if !ok {
 		return live, nil
 	}
@@ -61,9 +61,10 @@ func (s *Store) History(stream string, archived Archived) ([]events.Event, error
 	return slices.CompactFunc(all, func(a, b events.Event) bool { return a.Position == b.Position }), nil
 }
 
-// markerOf is the marker of a stream archived now: its last task.archived,
-// unless a task.unarchived came after it.
-func markerOf(live []events.Event) (events.Event, bool) {
+// MarkerOf is the marker of a stream archived now, from its live rows or
+// its history: its last task.archived, unless a task.unarchived came after
+// it.
+func MarkerOf(live []events.Event) (events.Event, bool) {
 	for _, e := range slices.Backward(live) {
 		switch e.Type {
 		case events.TaskUnarchived:

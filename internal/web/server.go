@@ -72,11 +72,13 @@ type Server struct {
 	hooks    http.Handler
 	terminal http.Handler // the live terminal websocket, T-018
 
-	signins *signins // the one-time codes that sign in another device
+	signins  *signins  // the one-time codes that sign in another device
+	archives *archives // archived tasks read back from their blobs, the last few kept
 }
 
 func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, events: features.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
+	return &Server{store: s, events: features.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now),
+		archives: &archives{blobs: config.Blobs}}
 }
 
 func (s *Server) Handler() http.Handler {

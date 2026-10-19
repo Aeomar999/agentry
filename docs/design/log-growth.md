@@ -1641,6 +1641,22 @@ since the steps cite section 2's equivalence tests and the task-21 items.
    - Proves: an archived task's detail equals its detail before archiving,
      but for `archived`; a second open is a cache hit.
    - Target 7.
+
+   **Built in step 8a (the server).** `Store.History(stream, archived)`
+   is a stream's whole record, rejections included: for a stream archived
+   now (`MarkerOf`: its last `task.archived` with no `task.unarchived`
+   after it), the rows `archived` reads for the marker, then the live
+   rows, in position order and each position once. `FromBlobs` reads them
+   from the blob; `internal/web`'s `archives` stands in front of it,
+   keeping the last 8 by stream and marker position with the task they
+   fold to, so a second open neither gunzips nor folds again. `showTask`
+   and the Events tab read an archived task this way, with `archived`
+   and `archivedAt` on the detail; a blob missing or corrupt answers 500.
+   The routes that act on a task still refuse it. `ideas`' Accept reads
+   an archived task's `madeFrom` from its marker's summary. The
+   coordinator's `lastPort` reads only a broken task's stream, and an
+   archived task is never broken, so it keeps `Stream`. `show_task` says
+   when a task was archived. Left for step 8b: the page, and Target 7.
 9. **Unarchiving and reopening.** Depends on steps 7 and 8.
    - Files: `internal/store` (`Store.Unarchive`: under `Store.mu`, the rows
      back with their positions and `task.unarchived` in one transaction,

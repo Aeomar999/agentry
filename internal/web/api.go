@@ -19,6 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
@@ -347,9 +348,10 @@ func titleFrom(description string) string {
 	return strings.TrimRight(line[:cut], ",.;:") + "..."
 }
 
-// showTask is a task's detail.
+// showTask is a task's detail; an archived task's as it was before it
+// was archived, and when that was.
 func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
-	task := s.shownTask(w, r)
+	task, archived := s.shownTask(w, r)
 	if task == nil {
 		return
 	}
@@ -373,6 +375,9 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 			summary.Queued = slots.Queued(story.ID)
 			detail.StoryList = append(detail.StoryList, summary)
 		}
+	}
+	if archived != nil {
+		detail.Archived, detail.ArchivedAt = true, &archived.marker.At
 	}
 	httpapi.Reply(w, detail)
 }
@@ -518,19 +523,52 @@ func (s *Server) waitForChanges(w http.ResponseWriter, r *http.Request) {
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
 
 // shownTask is the task a read of its own is about, or nil once it has
-// answered that there is none. An archived task's detail isn't kept: it
-// answers 410 Gone, so you can tell it from a task that never was.
-func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) *tasks.Task {
-	task, err := s.task(r.PathValue("task"))
+// answered that there is none, or that it can't be read. The state keeps
+// an archived task as its summary alone, so it is read back from its
+// history, and archived says what it was read from.
+func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.Task, archived *archivedRead) {
+	id := r.PathValue("task")
+	task, err := s.task(id)
 	if errors.Is(err, current.ErrArchived) {
-		http.Error(w, r.PathValue("task")+" is archived", http.StatusGone)
-		return nil
+		if archived, err = s.readArchived(id); err != nil {
+			httpapi.Failed(w, err)
+			return nil, nil
+		}
+		return archived.task, archived
 	}
 	if err != nil || task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
-		return nil
+		return nil, nil
 	}
-	return task
+	return task, nil
+}
+
+// archivedRead is an archived task read back from its history.
+type archivedRead struct {
+	task    *tasks.Task    // as it was before it was archived
+	marker  events.Event   // its task.archived
+	history []events.Event // its whole record, rejections included
+}
+
+// readArchived reads an archived task back from its history, through the
+// cache of the last few read.
+func (s *Server) readArchived(id string) (*archivedRead, error) {
+	history, err := s.archives.history(s.store, id)
+	if err != nil {
+		return nil, err
+	}
+	marker, archived := store.MarkerOf(history)
+	if !archived { // unarchived since the state was read
+		return nil, fmt.Errorf("%s was unarchived as it was read: read it again", id)
+	}
+	task, err := s.archives.task(marker, history)
+	if err != nil {
+		return nil, fmt.Errorf("%s's archived events can't be replayed: %w", id, err)
+	}
+	if task == nil {
+		return nil, fmt.Errorf("%s's archived events have no task.created", id)
+	}
+	return &archivedRead{task: task, marker: marker, history: history}, nil
 }
 
 // isDone says whether a task is done. An archived task is: only a done task

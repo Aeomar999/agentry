@@ -18,7 +18,8 @@ import (
 )
 
 // An archived task is in the list as its summary and still counts for the
-// next id; its detail says it is archived, and no other reader shows it.
+// next id; no other reader shows it, but its own (archives_test.go), and
+// it takes no events.
 // task-2 waited for your answer with a worktree here before it was moved to
 // Done and archived; the live tasks' summaries are as before.
 func TestAnArchivedTaskIsListedAsItsSummary(t *testing.T) {
@@ -63,12 +64,6 @@ func TestAnArchivedTaskIsListedAsItsSummary(t *testing.T) {
 	}
 	if list[1].Status != tasks.Done || list[1].Title != "Two" || !reflect.DeepEqual(list[1], archived) {
 		t.Errorf("task-2 is listed as %+v, want its marker's summary %+v", list[1], archived)
-	}
-	if code, body := call(t, server, "GET", "/api/tasks/task-2", ""); code != http.StatusGone || !strings.Contains(body, "task-2 is archived") {
-		t.Errorf("an archived task's detail: %d %s", code, body)
-	}
-	if code, body := call(t, server, "GET", "/api/tasks/task-2/events", ""); code != http.StatusGone || !strings.Contains(body, "task-2 is archived") {
-		t.Errorf("an archived task's events: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-2") {
 		t.Errorf("an archived task asks nothing: %s", body)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -31,7 +32,7 @@ type eventsPage struct {
 // only ?before= is given, so the newest page is ?before= the position in
 // the X-Agentry-Position header of the read it goes with, plus one.
 func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
-	task := s.shownTask(w, r)
+	task, archived := s.shownTask(w, r)
 	if task == nil {
 		return
 	}
@@ -47,7 +48,10 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	fromEnd := r.URL.Query().Has("before") && !r.URL.Query().Has("after")
 	read := s.store.LogAfter
-	if fromEnd {
+	switch {
+	case archived != nil:
+		read = pageIn(archived.history, fromEnd)
+	case fromEnd:
 		read = s.store.LogBefore
 	}
 	found, err := read(task.ID, types, after, before, limit+1) // one more, to tell whether there is more
@@ -103,4 +107,22 @@ func typesOf(r *http.Request) ([]events.Type, error) {
 		types = append(types, events.Type(name))
 	}
 	return types, nil
+}
+
+// pageIn reads a page from a task's whole record held in memory, as an
+// archived task's is, the way the store's LogAfter reads one from the log,
+// or LogBefore when fromEnd.
+func pageIn(record []events.Event, fromEnd bool) func(string, []events.Type, int64, int64, int) ([]events.Event, error) {
+	return func(_ string, types []events.Type, after, before int64, limit int) ([]events.Event, error) {
+		var found []events.Event
+		for _, e := range record {
+			if e.Position > after && e.Position < before && (len(types) == 0 || slices.Contains(types, e.Type)) {
+				found = append(found, e)
+			}
+		}
+		if fromEnd {
+			return found[max(len(found)-limit, 0):], nil
+		}
+		return found[:min(limit, len(found))], nil
+	}
 }

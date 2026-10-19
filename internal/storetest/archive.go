@@ -17,6 +17,13 @@ import (
 // is moved to Done first.
 func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 	t.Helper()
+	ArchiveIn(t, s, state, id, sharedfiles.Disk{Dir: t.TempDir()})
+}
+
+// ArchiveIn is Archive with the blob put in blobs, where a reader of the
+// task's history finds it.
+func ArchiveIn(t testing.TB, s *store.Store, state *current.State, id string, blobs store.Blobs) {
+	t.Helper()
 	task, err := state.Task(id)
 	if err != nil || task == nil {
 		t.Fatalf("archiving %s: %v, %v", id, task, err)
@@ -25,7 +32,6 @@ func Archive(t testing.TB, s *store.Store, state *current.State, id string) {
 		mustPropose(t, s, events.Proposal{Stream: id, Actor: events.Actor{Kind: events.Human, ID: "you"}, Type: events.TaskDone,
 			Data: map[string]any{"summary": "Done, to archive.", "moved": true}})
 	}
-	blobs := sharedfiles.Disk{Dir: t.TempDir()}
 	if _, rejection, err := s.Archive(id, summarise(state, id), blobs); rejection != nil || err != nil {
 		t.Fatalf("archiving %s: %v, %v", id, rejection, err)
 	}

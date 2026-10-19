@@ -35,9 +35,11 @@ type taskDetail struct {
 	Worktree      *worktree     `json:"worktree"`
 	Trail         []step        `json:"trail"`
 	Turns         []turn        `json:"turnList"`
-	TokensUnknown string        `json:"tokensUnknown"` // on how many turns the tokens couldn't be counted, and why; "" when every turn was
-	Approvals     []action      `json:"approvals"`     // waiting for you
-	Actions       []action      `json:"actions"`       // its events are read a page at a time, at /api/tasks/{task}/events
+	TokensUnknown string        `json:"tokensUnknown"`        // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+	Approvals     []action      `json:"approvals"`            // waiting for you
+	Actions       []action      `json:"actions"`              // its events are read a page at a time, at /api/tasks/{task}/events
+	Archived      bool          `json:"archived,omitempty"`   // read back from its archive: it takes no events until it is reopened
+	ArchivedAt    *time.Time    `json:"archivedAt,omitempty"` // when it was archived
 }
 
 type worktree struct {
