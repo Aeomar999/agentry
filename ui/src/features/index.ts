@@ -26,16 +26,16 @@ export interface Features {
 
 // useFeatures reads GET /api/features, again whenever the log moves, and
 // says which features show. A name only one side knows is ignored, and while
-// the manifest is loading or failed to load, no feature shows.
+// the manifest is loading, or has never loaded, no feature shows.
 export function useFeatures(): Features {
-  const { data, error } = useResource<{ features: FeatureLine[] }>("/api/features");
+  const { data } = useResource<{ features: FeatureLine[] }>("/api/features");
   return useMemo(() => {
-    const lines = new Map((error ? [] : (data?.features ?? [])).map((line) => [line.name, line]));
+    const lines = new Map((data?.features ?? []).map((line) => [line.name, line]));
     return {
       visible: (name) => lines.get(name)?.visible ?? false,
       badge: (name) => lines.get(name)?.badge ?? 0,
     };
-  }, [data, error]);
+  }, [data]);
 }
 
 // visibleFeatures is the FEATURES the manifest says show, in FEATURES' order.
