@@ -1082,7 +1082,8 @@ func braceAtoms(word *syntax.Word) []braceAtom {
 }
 
 // maxBraces and maxBracedLength bound a word brace expansion reads, whose
-// time grows with their product.
+// time grows with their product. The length counts the word's pieces, not its
+// characters: an escape, a $x or a whole "…" is one piece.
 const (
 	maxBraces       = 256
 	maxBracedLength = 4096
@@ -1093,7 +1094,10 @@ const (
 // text, but a brace after it may still expand ({x{a,b}} is {xa} {xb}).
 func expandAtoms(atoms []braceAtom) ([][]braceAtom, bool) {
 	for open, a := range atoms {
-		if !a.brace || a.text != "{" || open == 0 && isBrace(atoms, 1, "}") { // a word's first {} is text, as in find -exec
+		// bash passes a {} that starts the word through as text, so find
+		// -exec's {} survives; after other text the { opens a brace (x{},a}
+		// is x} xa).
+		if !a.brace || a.text != "{" || open == 0 && isBrace(atoms, 1, "}") {
 			continue
 		}
 		end, commas := closingBrace(atoms, open)
