@@ -44,6 +44,7 @@ func TestACustomTeamIsRefused(t *testing.T) {
 		{"a team in the roster, in other case", "wRiTiNg", nil, "a team called wRiTiNg already"},
 		{"the default team", "software", nil, "a team called software already"},
 		{"a template's team", "visionaries", nil, "the Visionaries template's team"},
+		{"the Networking template's team, in other case", "NETWORKING", nil, "NETWORKING is the name of the Networking template's team"},
 		{"no agents", "Kitchen", func([]Agent) []Agent { return nil }, "the Kitchen team needs agents"},
 		{"no coordinator", "Kitchen", func(a []Agent) []Agent { a[0].Coordinates = false; return a },
 			"exactly one coordinator; it has none"},
