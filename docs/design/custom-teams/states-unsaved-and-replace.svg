@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="t d">
+<title id="t">Unsaved changes on close, leaving for an agent's page, and replacing changed agents when switching template</title>
+<desc id="d">A: Edit team on Docs with changes; Esc or Close turns the panel footer into the question Discard your changes to Docs, with Keep editing focused and Discard. B: the same question when following Open drafter's page, worded Discard and open. C: New team copying Writing with three changed agents; picking Research in the template select asks in place under Start from: Replace your 3 changed agents with Research's, Keep mine focused and Replace. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .q { font-size: 13px; font-weight: 600; fill: #1f2329; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .danger { fill: #9c3739; font-size: 13px; font-weight: 600; }
+  .link { fill: #0675af; font-size: 12px; text-decoration: underline; }
+  .badge { font-size: 11.5px; font-weight: 600; fill: #424854; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<rect width="1600" height="1000" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Unsaved changes and replacing a template</text>
+<text x="40" y="72" class="sub">Every question is asked in place, on the safe answer first; no second dialog over the panel. Words from copy.md.</text>
+
+<!-- ============ A: close with changes ============ -->
+<text x="40" y="112" class="cap">A · ESC OR CLOSE, WITH CHANGES (EDIT TEAM ON DOCS)</text>
+<rect x="40" y="124" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="164" class="h2">Edit the Docs team</text>
+<rect x="676" y="140" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M686,150 L698,162 M698,150 L686,162" stroke="#424854" stroke-width="1.5"/>
+<line x1="40" y1="188" x2="720" y2="188" class="rule"/>
+<text x="64" y="220" class="hint">… the body, unchanged: drafter "edited", researcher "will be removed when you save", critic "new" …</text>
+<rect x="64" y="236" width="632" height="52" class="box"/>
+<circle cx="106" cy="262" r="5" fill="#2563eb"/>
+<text x="120" y="266" class="mono">drafter</text>
+<text x="184" y="266" class="hint">was writer</text>
+<rect x="254" y="252" width="52" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="280" y="266" class="badge" text-anchor="middle">edited</text>
+<line x1="40" y1="330" x2="720" y2="330" class="rule"/>
+<rect x="40" y="331" width="680" height="92" fill="#fafafa"/>
+<text x="64" y="362" class="q">Discard your changes to Docs?</text>
+<text x="64" y="382" class="hint">The team renamed, 1 agent changed, 1 added</text>
+<text x="64" y="398" class="hint">and 1 removed. They aren't saved.</text>
+<rect x="472" y="350" width="112" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="469" y="347" width="118" height="42" rx="4" class="focus"/>
+<text x="528" y="373" class="btn" text-anchor="middle">Keep editing</text>
+<rect x="596" y="350" width="100" height="36" rx="3" fill="#ffffff" stroke="#9c3739"/>
+<text x="646" y="373" class="danger" text-anchor="middle">Discard</text>
+<circle cx="710" cy="368" r="9" class="mark"/><text x="710" y="372" class="num" text-anchor="middle">1</text>
+
+<text x="40" y="456" class="noteh">1 · The footer becomes the question</text>
+<text x="40" y="472" class="note">Esc, Close (×) or a click on the scrim with changes: the footer's actions are replaced by the question, as Remove</text>
+<text x="40" y="488" class="note">team's confirm does, and focus moves to Keep editing. The footer is a group named by the question, so a</text>
+<text x="40" y="504" class="note">screen reader hears it. Esc again, or Keep editing, puts the footer back and focus where it was. Discard</text>
+<text x="40" y="520" class="note">closes without saving; focus returns to the button that opened the panel. With no changes, all three close at</text>
+<text x="40" y="536" class="note">once. The second line counts edited, added and removed agents apart. New team: "Discard this new team?".</text>
+<text x="40" y="552" class="note">"Changed" means differs from what was loaded (or copied): typing a change back undoes it.</text>
+<text x="40" y="582" class="noteh">Leaving the page</text>
+<text x="40" y="598" class="note">A link elsewhere in the app (the sidebar is behind the scrim, so only links inside the panel, such as a task) asks</text>
+<text x="40" y="614" class="note">the same question with "Discard and open"; reload or closing the tab gets the browser's own beforeunload prompt.</text>
+<text x="40" y="630" class="note">Browser Back and the phone's back gesture ask this question in the footer (states-url.svg F).</text>
+
+<!-- ============ B: open on its own page ============ -->
+<text x="760" y="112" class="cap">B · "OPEN DRAFTER'S PAGE" WITH CHANGES</text>
+<rect x="760" y="124" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="784" y="144" width="632" height="120" class="box"/>
+<circle cx="826" cy="170" r="5" fill="#2563eb"/>
+<text x="840" y="174" class="mono" font-weight="600">drafter</text>
+<line x1="785" y1="196" x2="1415" y2="196" class="rule"/>
+<text x="804" y="222" class="hint">… its fields …</text>
+<text x="804" y="250" class="hint">Knowledge, where it runs and a taller prompt editor:</text>
+<text x="1110" y="250" class="link">Open drafter's page</text>
+<line x1="760" y1="330" x2="1440" y2="330" class="rule"/>
+<rect x="760" y="331" width="680" height="92" fill="#fafafa"/>
+<text x="784" y="362" class="q">Open drafter's page and discard your changes?</text>
+<text x="784" y="382" class="hint">Save first to keep them; the page shows what is saved.</text>
+<rect x="1164" y="350" width="112" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="1161" y="347" width="118" height="42" rx="4" class="focus"/>
+<text x="1220" y="373" class="btn" text-anchor="middle">Keep editing</text>
+<rect x="1284" y="350" width="132" height="36" rx="3" fill="#ffffff" stroke="#9c3739"/>
+<text x="1350" y="373" class="danger" text-anchor="middle">Discard and open</text>
+<circle cx="1430" cy="368" r="9" class="mark"/><text x="1430" y="372" class="num" text-anchor="middle">2</text>
+
+<text x="760" y="456" class="noteh">2 · Same question, saying where you'd go</text>
+<text x="760" y="472" class="note">The link is a real link (/agents/drafter), so with no changes it simply goes there and the panel closes; with</text>
+<text x="760" y="488" class="note">changes it asks first, in the footer. drafter's page is reached by its saved name: a renamed, unsaved agent's</text>
+<text x="760" y="504" class="note">link goes to its old name's page. A new, unsaved agent has no page: its row shows the New team line instead</text>
+<text x="760" y="520" class="note">("Knowledge and where it runs: on its own page, once you save.").</text>
+<text x="760" y="536" class="note">Opening in a new tab (middle click, Ctrl+click) doesn't ask: nothing is lost.</text>
+
+<!-- ============ C: replace on switching template ============ -->
+<text x="40" y="672" class="cap">C · NEW TEAM: PICKING RESEARCH AFTER CHANGING THREE OF WRITING'S AGENTS</text>
+<rect x="40" y="684" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="716" class="lbl">Start from</text>
+<rect x="64" y="724" width="260" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="108" y="747" class="sub btn">Blank</text>
+<rect x="168" y="727" width="153" height="30" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="192" y="747" class="btn">Copy a template</text>
+<rect x="340" y="724" width="356" height="36" rx="3" class="box"/>
+<text x="352" y="747">Research</text>
+<path d="M676,738 l5,5 l5,-5" class="caret"/>
+<rect x="64" y="776" width="632" height="96" fill="#fafafa" stroke="#cdd1d8"/>
+<text x="84" y="804" class="q">Replace your 3 changed agents with Research's?</text>
+<text x="84" y="824" class="hint">Research's 4 agents replace Writing's; your changes to writer, researcher and fact-checker go.</text>
+<rect x="472" y="834" width="104" height="30" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="469" y="831" width="110" height="36" rx="4" class="focus"/>
+<text x="524" y="854" class="btn" text-anchor="middle">Keep mine</text>
+<rect x="588" y="834" width="96" height="30" rx="3" fill="#ffffff" stroke="#9c3739"/>
+<text x="636" y="854" class="danger" text-anchor="middle">Replace</text>
+<text x="64" y="902" class="hint">… the rows below stay as they are, and editable, until you answer …</text>
+<text x="64" y="926" class="lbl">Agents · one coordinates</text>
+<text x="64" y="950" class="hint">… editor, writer "edited", researcher "edited", fact-checker "edited" …</text>
+<circle cx="50" cy="804" r="9" class="mark"/><text x="50" y="808" class="num" text-anchor="middle">3</text>
+
+<text x="760" y="700" class="noteh">3 · Ask before replacing, in place under the control</text>
+<text x="760" y="716" class="note">Shown only when rows differ from the template they were copied from (edited, added or removed). With no</text>
+<text x="760" y="732" class="note">changes, picking another template, or Blank, replaces the rows at once. Focus moves to Keep mine.</text>
+<text x="760" y="748" class="note">Keep mine (or Esc) puts the select back to Writing, the question goes, and focus returns to the select.</text>
+<text x="760" y="764" class="note">Replace fills the rows from Research (names numbered where taken), closes them all, and focus returns</text>
+<text x="760" y="780" class="note">to the select; a polite live region says "Replaced with Research's 4 agents".</text>
+<text x="760" y="796" class="note">Team name: if it still holds the old template's suggestion ("Writing 2"), it follows ("Research 2");</text>
+<text x="760" y="812" class="note">a name you typed is kept.</text>
+<text x="760" y="842" class="noteh">Switching to Blank</text>
+<text x="760" y="858" class="note">The same question: "Replace your 3 changed agents with a blank team?" (Blank leaves one</text>
+<text x="760" y="874" class="note">coordinator row). The segmented control shows the pending choice until you answer.</text>
+<text x="760" y="904" class="noteh">Why not undo instead of asking</text>
+<text x="760" y="920" class="note">An undo would need the whole set of rows kept and a place to offer it; replacing is rare and costly to</text>
+<text x="760" y="936" class="note">redo by hand, so one question is the cheaper, clearer guard. Removing a single agent keeps its Undo stub.</text>
+</svg>

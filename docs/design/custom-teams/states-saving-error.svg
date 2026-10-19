@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1030" viewBox="0 0 1600 1030" role="img" aria-labelledby="t d">
+<title id="t">Saving and server errors: Saving…, a failed save that keeps everything, refused agent and team removals</title>
+<desc id="d">A: Edit team on Docs while saving: the footer button reads Saving… and is off, Cancel and Close are off, the fields are read-only. B: the save failed for a reason that isn't a field: a danger summary at the top with the server's words, focus on it, everything typed kept, Save changes on to try again. C: the save refused because a removed agent is still needed by a task: the summary names the task and the removed stub shows the same reason with Undo. D: Remove team refused in the footer confirm, naming the tasks. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .err { font-size: 12px; fill: #9c3739; }
+  .sumh { font-size: 13px; font-weight: 600; fill: #9c3739; }
+  .body { font-size: 12.5px; fill: #424854; }
+  .sum { font-size: 12.5px; fill: #1f2329; text-decoration: underline; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .off { font-size: 13px; font-weight: 600; fill: #6b7280; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .danger { fill: #9c3739; font-size: 13px; font-weight: 600; }
+  .link { fill: #0675af; font-size: 12px; text-decoration: underline; }
+  .badge { font-size: 11.5px; font-weight: 600; fill: #424854; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .ico { fill: none; stroke: #9c3739; stroke-width: 1.4; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<defs>
+  <g id="alert"><circle cx="6" cy="6" r="5.5" class="ico"/><path d="M6,3.2 v3.4 M6,8.4 v0.6" class="ico"/></g>
+</defs>
+<rect width="1600" height="1030" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Saving and server errors</text>
+<text x="40" y="72" class="sub">Edit team on Docs. One request saves the whole team, so it lands whole or not at all. Words from copy.md; the server's own words are quoted as it sends them.</text>
+
+<!-- ============ A: saving ============ -->
+<text x="40" y="112" class="cap">A · SAVING</text>
+<rect x="40" y="124" width="680" height="250" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="164" class="h2">Edit the Docs team</text>
+<rect x="676" y="140" width="32" height="32" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<path d="M686,150 L698,162 M698,150 L686,162" stroke="#9aa0ac" stroke-width="1.5"/>
+<line x1="40" y1="188" x2="720" y2="188" class="rule"/>
+<text x="64" y="218" class="lbl">Team name</text>
+<rect x="64" y="226" width="320" height="36" rx="3" fill="#fafafa" stroke="#e3e5ea"/>
+<text x="76" y="249">Handbook</text>
+<text x="64" y="290" class="hint">… rows as before, read-only until the save answers …</text>
+<line x1="40" y1="310" x2="720" y2="310" class="rule"/>
+<text x="64" y="347" class="hint">Saving the team…</text>
+<rect x="452" y="326" width="84" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="494" y="349" class="off" text-anchor="middle">Cancel</text>
+<rect x="548" y="326" width="148" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<circle cx="570" cy="344" r="6" fill="none" stroke="#cdd1d8" stroke-width="2"/>
+<path d="M570,338 a6,6 0 0 1 6,6" fill="none" stroke="#6b7280" stroke-width="2"/>
+<text x="632" y="349" class="off" text-anchor="middle">Saving…</text>
+<circle cx="710" cy="344" r="9" class="mark"/><text x="710" y="348" class="num" text-anchor="middle">1</text>
+<circle cx="394" cy="244" r="9" class="mark"/><text x="394" y="248" class="num" text-anchor="middle">2</text>
+
+<text x="40" y="404" class="noteh">1 · Saving… / Creating…</text>
+<text x="40" y="420" class="note">The primary button reads "Saving…" (Edit) or "Creating…" (New), with a spinner, and is off; Cancel, Close</text>
+<text x="40" y="436" class="note">and Esc are off too, so the result is never lost. "Saving the team…" in the footer is a polite live region.</text>
+<text x="40" y="466" class="noteh">2 · Fields are read-only while saving</text>
+<text x="40" y="482" class="note">Inputs and the prompt are readonly, not disabled: still readable, focusable and read out, but they take no</text>
+<text x="40" y="498" class="note">typing; radios, swatches, selects, Add agent, remove and Undo are aria-disabled. The request is short, so the</text>
+<text x="40" y="514" class="note">result is always the team you saw. On success the panel closes; on a failure every field is editable again.</text>
+
+<!-- ============ B: server error ============ -->
+<text x="40" y="566" class="cap">B · THE SAVE FAILED, NOT BECAUSE OF A FIELD</text>
+<rect x="40" y="578" width="680" height="326" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="618" class="h2">Edit the Docs team</text>
+<rect x="676" y="594" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M686,604 L698,616 M698,604 L686,616" stroke="#424854" stroke-width="1.5"/>
+<line x1="40" y1="642" x2="720" y2="642" class="rule"/>
+<rect x="64" y="662" width="632" height="76" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<rect x="61" y="659" width="638" height="82" rx="4" class="focus"/>
+<use href="#alert" x="78" y="674"/>
+<text x="98" y="685" class="sumh">Couldn't save the team</text>
+<text x="98" y="707" class="body">Couldn't reach Agentry. Check it's running, then try again.</text>
+<text x="64" y="770" class="lbl">Team name</text>
+<rect x="64" y="778" width="320" height="36" rx="3" class="box"/>
+<text x="76" y="801">Handbook</text>
+<text x="64" y="840" class="hint">… every row as you left it, open rows still open …</text>
+<line x1="40" y1="856" x2="720" y2="856" class="rule"/>
+<rect x="452" y="864" width="84" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="494" y="885" class="btn" text-anchor="middle">Cancel</text>
+<rect x="548" y="864" width="148" height="32" rx="3" fill="#fc6d26"/>
+<text x="622" y="885" class="pri" text-anchor="middle">Save changes</text>
+<circle cx="50" cy="686" r="9" class="mark"/><text x="50" y="690" class="num" text-anchor="middle">3</text>
+
+<text x="40" y="934" class="noteh">3 · Everything typed is kept; Save is on to try again</text>
+<text x="40" y="950" class="note">The same summary as for field errors, with no links: its title and the server's message as sent (a 5xx's</text>
+<text x="40" y="966" class="note">body, or the network line). Focus moves to it. Nothing is reset, no row closes, the draft marks stay. The</text>
+<text x="40" y="982" class="note">request is all-or-nothing, so there is never a half-saved team to explain. Retrying sends the same team.</text>
+<text x="40" y="998" class="note">Title in danger-ink on danger-soft, 5.9:1; today's Banner title is text-danger, 3.2:1 (decision 10).</text>
+
+<!-- ============ C: removed agent still needed ============ -->
+<text x="760" y="112" class="cap">C · SAVE REFUSED: A REMOVED AGENT IS STILL NEEDED BY A TASK</text>
+<rect x="760" y="124" width="680" height="330" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="784" y="144" width="632" height="96" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<rect x="781" y="141" width="638" height="102" rx="4" class="focus"/>
+<use href="#alert" x="798" y="156"/>
+<text x="818" y="167" class="sumh">Couldn't save the team: 1 thing to fix</text>
+<text x="818" y="192" class="sum">researcher: still needed by task-182</text>
+<text x="818" y="214" class="body">"researcher is still needed by task-182: finish those first (dragging a task</text>
+<text x="818" y="230" class="body">to Done on the board finishes it as it is)"</text>
+<text x="784" y="270" class="lbl">Agents · one coordinates</text>
+<rect x="784" y="280" width="632" height="96" fill="#fafafa" stroke="#cdd1d8" stroke-dasharray="4 3"/>
+<text x="804" y="306" class="sub"><tspan class="mono" style="fill:#6b7280">researcher</tspan> will be removed when you save</text>
+<rect x="1330" y="288" width="70" height="26" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="1365" y="306" class="btn" text-anchor="middle">Undo</text>
+<use href="#alert" x="804" y="320"/>
+<text x="822" y="331" class="err">Still needed by <tspan class="link">task-182</tspan>. Finish it first, or undo to keep researcher.</text>
+<text x="804" y="360" class="hint">The other changes (the rename, the new agent) wait with it: nothing is saved yet.</text>
+<text x="784" y="404" class="hint">Undo puts the row back and clears the problem; Save changes then saves the rest.</text>
+<circle cx="1430" cy="306" r="9" class="mark"/><text x="1430" y="310" class="num" text-anchor="middle">4</text>
+
+<text x="760" y="484" class="noteh">4 · The refusal goes where the change is</text>
+<text x="760" y="500" class="note">The server's 409 names the agent and the tasks; the summary links to the stub (Undo takes focus) and the stub</text>
+<text x="760" y="516" class="note">says it again in a line. task-182 links to the task; following it with unsaved changes asks first</text>
+<text x="760" y="532" class="note">(states-unsaved-and-replace.svg). The full server message is quoted in the summary, so its advice</text>
+<text x="760" y="548" class="note">(drag to Done) isn't lost. If an agent's rename is refused the same way, the error sits under its Name.</text>
+
+<!-- ============ D: Remove team refused ============ -->
+<text x="760" y="604" class="cap">D · REMOVE TEAM REFUSED, IN THE FOOTER CONFIRM</text>
+<rect x="760" y="616" width="680" height="200" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="784" y="644" class="hint">… the panel body …</text>
+<line x1="760" y1="660" x2="1440" y2="660" class="rule"/>
+<text x="784" y="688" class="danger">Remove the Docs team and its 4 agents?</text>
+<text x="784" y="708" class="hint">Their prompts and what they learned go too.</text>
+<use href="#alert" x="784" y="722"/>
+<rect x="781" y="717" width="500" height="58" rx="3" class="focus"/>
+<text x="802" y="733" class="err">It wasn't removed: "the Docs team is still needed by task-182, task-190:</text>
+<text x="802" y="751" class="err">finish those first (dragging a task to Done on the board finishes it as it is)"</text>
+<text x="802" y="769" class="hint">Tasks: <tspan class="link">task-182</tspan>, <tspan class="link">task-190</tspan></text>
+<rect x="1294" y="726" width="56" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="1322" y="747" class="btn" text-anchor="middle">Keep</text>
+<rect x="1356" y="726" width="68" height="32" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="1390" y="747" class="off" text-anchor="middle">Remove</text>
+<circle cx="1430" cy="688" r="9" class="mark"/><text x="1430" y="692" class="num" text-anchor="middle">5</text>
+
+<text x="760" y="846" class="noteh">5 · Removal refused: say it in the confirm, keep the way back</text>
+<text x="760" y="862" class="note">Remove team is its own request (DELETE /api/teams/Docs, as today), not part of Save. On a 409 the confirm stays,</text>
+<text x="760" y="878" class="note">the server's words appear under the question with focus on them (tabindex -1), the tasks as links, and</text>
+<text x="760" y="894" class="note">Remove turns off until something changes; Keep (or Esc) returns the footer to normal. Unsaved edits in the</text>
+<text x="760" y="910" class="note">panel are untouched. Same words as RemoveDialog's "It wasn't removed" banner.</text>
+<text x="760" y="940" class="noteh">Your only team</text>
+<text x="760" y="956" class="note">Remove team is off, with its reason beside it in text: "Can't remove your only team: tasks need its coordinator."</text>
+<text x="760" y="972" class="note">(the server's rule, said before you try).</text>
+</svg>

@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1360" viewBox="0 0 1600 1360" role="img" aria-labelledby="t d">
+<title id="t">Validation errors: the error summary, each error by its field, problem counts on closed rows, two coordinators</title>
+<desc id="d">A: the New team panel after Create team with five problems. A danger summary at the top of the body has focus and links to each problem: team name taken, no coordinator, a second agent called writer, an agent named reviewer like one in the Software team, and a profile policy.toml lacks. Each error also shows in text under its field, and closed rows show 1 problem. B: following the last link opens fact-checker and focuses its Policy profile with the error under it. C: an existing team that has two coordinators opens in Edit team with no radio checked and the error under the agents legend. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .err { font-size: 12px; fill: #9c3739; }
+  .errb { font-size: 12px; font-weight: 600; fill: #9c3739; }
+  .sumh { font-size: 13px; font-weight: 600; fill: #9c3739; }
+  .sum { font-size: 12.5px; fill: #1f2329; text-decoration: underline; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .link { fill: #0675af; font-size: 12px; text-decoration: underline; }
+  .badge { font-size: 11.5px; font-weight: 600; fill: #424854; }
+  .lead { font-size: 11.5px; font-weight: 600; fill: #994c27; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .bad { fill: #ffffff; stroke: #ef4444; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .trash { fill: none; stroke: #424854; stroke-width: 1.3; }
+  .ico { fill: none; stroke: #9c3739; stroke-width: 1.4; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<defs>
+  <!-- the error icon (lucide CircleAlert), 12px, danger-ink -->
+  <g id="alert"><circle cx="6" cy="6" r="5.5" class="ico"/><path d="M6,3.2 v3.4 M6,8.4 v0.6" class="ico"/></g>
+</defs>
+<rect width="1600" height="1360" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Validation errors</text>
+<text x="40" y="72" class="sub">Checked on leaving a field and all again on save, client first, then the server's answer in the same places. Words from copy.md.</text>
+
+<!-- ============ A: after Create team ============ -->
+<text x="40" y="112" class="cap">A · CREATE TEAM PRESSED WITH FIVE PROBLEMS: FOCUS ON THE SUMMARY</text>
+<rect x="40" y="124" width="680" height="1076" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="164" class="h2">New team</text>
+<rect x="676" y="140" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M686,150 L698,162 M698,150 L686,162" stroke="#424854" stroke-width="1.5"/>
+<line x1="40" y1="188" x2="720" y2="188" class="rule"/>
+
+<!-- the summary, focused -->
+<rect x="64" y="208" width="632" height="166" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<rect x="61" y="205" width="638" height="172" rx="4" class="focus"/>
+<use href="#alert" x="78" y="220"/>
+<text x="98" y="231" class="sumh">Couldn't create the team: 5 things to fix</text>
+<text x="98" y="258" class="sum">Team name: you have a team called Docs already</text>
+<text x="98" y="282" class="sum">Agents: pick one agent to coordinate</text>
+<text x="98" y="306" class="sum">writer (second one): another agent in this team is called writer</text>
+<text x="98" y="330" class="sum">reviewer: you have an agent called reviewer already, in Software</text>
+<text x="98" y="354" class="sum">fact-checker: policy.toml has no profile called research-only</text>
+
+<text x="64" y="406" class="lbl">Team name</text>
+<rect x="64" y="414" width="320" height="36" rx="3" class="bad"/>
+<text x="76" y="437">Docs</text>
+<use href="#alert" x="64" y="458"/>
+<text x="82" y="468" class="err">You have a team called Docs already. Pick another name.</text>
+<text x="64" y="488" class="hint">Shown on the Agents page and on New task.</text>
+
+<text x="64" y="522" class="lbl">Start from</text>
+<rect x="64" y="530" width="260" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="108" y="553" class="sub btn">Blank</text>
+<rect x="168" y="533" width="153" height="30" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="192" y="553" class="btn">Copy a template</text>
+<rect x="340" y="530" width="356" height="36" rx="3" class="box"/>
+<text x="352" y="553">Writing</text>
+<path d="M676,544 l5,5 l5,-5" class="caret"/>
+
+<text x="64" y="602" class="lbl">Agents · one coordinates</text>
+<text x="696" y="602" class="hint" text-anchor="end">5 agents</text>
+<use href="#alert" x="64" y="610"/>
+<text x="82" y="620" class="err">Pick one agent to coordinate.</text>
+
+<!-- editor removed: no coordinator left -->
+<rect x="64" y="634" width="632" height="44" fill="#fafafa" stroke="#cdd1d8" stroke-dasharray="4 3"/>
+<text x="84" y="661" class="sub"><tspan class="mono" style="fill:#6b7280">editor</tspan> removed</text>
+<rect x="610" y="643" width="70" height="26" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="645" y="661" class="btn" text-anchor="middle">Undo</text>
+
+<!-- writer, fine -->
+<rect x="64" y="678" width="632" height="52" class="box"/>
+<path d="M80,698 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="704" r="5" fill="#2563eb"/>
+<text x="120" y="708" class="mono">writer</text>
+<text x="178" y="708" class="hint">Outlines and drafts the piece for its…</text>
+<circle cx="556" cy="704" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="708" class="lbl">Coordinator</text>
+<rect x="662" y="690" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,698 h12 M672,698 v12 h8 v-12 M674,695 h4" class="trash"/>
+
+<!-- second writer, added, open with its error -->
+<rect x="64" y="730" width="632" height="216" class="box"/>
+<path d="M78,752 l5,5 l5,-5" class="caret"/>
+<circle cx="106" cy="756" r="5" fill="#0d9488"/>
+<text x="120" y="760" class="mono" font-weight="600">writer</text>
+<rect x="176" y="746" width="38" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="195" y="760" class="badge" text-anchor="middle">new</text>
+<circle cx="556" cy="756" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="760" class="lbl">Coordinator</text>
+<rect x="662" y="742" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,750 h12 M672,750 v12 h8 v-12 M674,747 h4" class="trash"/>
+<line x1="65" y1="782" x2="695" y2="782" class="rule"/>
+<text x="84" y="808" class="lbl">Name</text>
+<rect x="84" y="816" width="280" height="36" rx="3" class="bad"/>
+<text x="96" y="839" class="mono">writer</text>
+<use href="#alert" x="84" y="860"/>
+<text x="102" y="870" class="err">Another agent in this team is called</text>
+<text x="102" y="886" class="err">writer. Pick another name.</text>
+<text x="84" y="906" class="hint">Lowercase letters, digits and dashes.</text>
+<text x="384" y="808" class="lbl">Description</text>
+<rect x="384" y="816" width="292" height="36" rx="3" class="box"/>
+<text x="84" y="934" class="hint">Prompt, colour and the settings follow as in every open row.</text>
+
+<!-- reviewer: name another team's agent has -->
+<rect x="64" y="946" width="632" height="52" class="box"/>
+<path d="M80,966 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="972" r="5" fill="#7c3aed"/>
+<text x="120" y="976" class="mono">reviewer</text>
+<use href="#alert" x="194" y="964"/>
+<text x="212" y="976" class="errb">1 problem</text>
+<text x="284" y="976" class="hint">Reads the draft as its…</text>
+<circle cx="556" cy="972" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="976" class="lbl">Coordinator</text>
+<rect x="662" y="958" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,966 h12 M672,966 v12 h8 v-12 M674,963 h4" class="trash"/>
+
+<!-- fact-checker: unknown profile -->
+<rect x="64" y="998" width="632" height="52" class="box"/>
+<path d="M80,1018 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="1024" r="5" fill="#db2777"/>
+<text x="120" y="1028" class="mono">fact-checker</text>
+<rect x="222" y="1014" width="62" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="253" y="1028" class="badge" text-anchor="middle">review</text>
+<use href="#alert" x="294" y="1016"/>
+<text x="312" y="1028" class="errb">1 problem</text>
+<circle cx="556" cy="1024" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="1028" class="lbl">Coordinator</text>
+<rect x="662" y="1010" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,1018 h12 M672,1018 v12 h8 v-12 M674,1015 h4" class="trash"/>
+
+<rect x="64" y="1066" width="120" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="124" y="1087" class="btn" text-anchor="middle">+ Add agent</text>
+
+<line x1="40" y1="1120" x2="720" y2="1120" class="rule"/>
+<use href="#alert" x="64" y="1148"/>
+<text x="82" y="1159" class="err">5 things to fix, listed at the top.</text>
+<rect x="480" y="1136" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="522" y="1159" class="btn" text-anchor="middle">Cancel</text>
+<rect x="576" y="1136" width="120" height="36" rx="3" fill="#fc6d26"/>
+<text x="636" y="1159" class="pri" text-anchor="middle">Create team</text>
+
+<circle cx="50" cy="232" r="9" class="mark"/><text x="50" y="236" class="num" text-anchor="middle">1</text>
+<circle cx="398" cy="432" r="9" class="mark"/><text x="398" y="436" class="num" text-anchor="middle">2</text>
+<circle cx="50" cy="616" r="9" class="mark"/><text x="50" y="620" class="num" text-anchor="middle">3</text>
+<circle cx="378" cy="834" r="9" class="mark"/><text x="378" y="838" class="num" text-anchor="middle">4</text>
+<circle cx="50" cy="972" r="9" class="mark"/><text x="50" y="976" class="num" text-anchor="middle">5</text>
+<circle cx="50" cy="1154" r="9" class="mark"/><text x="50" y="1158" class="num" text-anchor="middle">6</text>
+
+<text x="760" y="140" class="noteh">1 · The summary takes focus</text>
+<text x="760" y="158" class="note">After a failed save the panel body scrolls to its top and focus moves to the summary</text>
+<text x="760" y="174" class="note">(tabindex -1, a heading inside it), so a screen reader hears the count and the list.</text>
+<text x="760" y="190" class="note">One link per problem, in screen order, each "where: what". A link opens its row if</text>
+<text x="760" y="206" class="note">closed and moves focus into the field (B). The summary stays until the next save;</text>
+<text x="760" y="222" class="note">a problem fixed meanwhile is struck from it as you leave the field.</text>
+<text x="760" y="238" class="note">Colours: title danger-ink on danger-soft 5.9:1; links ink-primary, underlined (the</text>
+<text x="760" y="254" class="note">link blue is 4.3:1 on danger-soft, so it is not used here).</text>
+<text x="760" y="284" class="noteh">2 · Under each field, in words</text>
+<text x="760" y="302" class="note">A danger border (#ef4444, 3.8:1 against white) plus the icon plus the sentence in</text>
+<text x="760" y="318" class="note">danger-ink, tied with aria-describedby and aria-invalid. The hint stays under it.</text>
+<text x="760" y="334" class="note">The error says what is wrong and what to do; colour is never the only signal.</text>
+<text x="760" y="364" class="noteh">3 · No coordinator</text>
+<text x="760" y="382" class="note">editor (the coordinator) was removed, so no radio is checked. The error sits under</text>
+<text x="760" y="398" class="note">the fieldset's legend, described by the fieldset. Undo on the stub or a radio fixes it.</text>
+<text x="760" y="428" class="noteh">4 · Duplicate name inside the team</text>
+<text x="760" y="446" class="note">Only the later row is marked, so the agent you meant to keep is left alone.</text>
+<text x="760" y="462" class="note">An open row with an error stays open when another row is opened.</text>
+<text x="760" y="492" class="noteh">5 · Closed rows count their problems</text>
+<text x="760" y="510" class="note">"1 problem" / "2 problems", icon plus text, beside the name; the row's name button</text>
+<text x="760" y="526" class="note">reads "reviewer, 1 problem, collapsed". reviewer clashes with Software's reviewer</text>
+<text x="760" y="542" class="note">(names are global): "You have an agent called reviewer already, in the Software</text>
+<text x="760" y="558" class="note">team. Pick another name."</text>
+<text x="760" y="588" class="noteh">6 · The footer repeats the count</text>
+<text x="760" y="604" class="note">In text, so it is seen at the bottom too. Create team stays on: pressing it again</text>
+<text x="760" y="620" class="note">re-checks and moves focus back to the summary.</text>
+
+<!-- ============ B: following a link ============ -->
+<text x="760" y="672" class="cap">B · "fact-checker: policy.toml has no profile…" FOLLOWED</text>
+<rect x="760" y="684" width="680" height="226" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="784" y="700" width="632" height="194" class="box"/>
+<path d="M798,722 l5,5 l5,-5" class="caret"/>
+<circle cx="826" cy="726" r="5" fill="#db2777"/>
+<text x="840" y="730" class="mono" font-weight="600">fact-checker</text>
+<line x1="785" y1="752" x2="1415" y2="752" class="rule"/>
+<text x="804" y="770" class="hint">… Name, Description, Prompt, Colour …</text>
+<text x="1104" y="796" class="lbl">Policy profile</text>
+<rect x="1104" y="804" width="292" height="36" rx="3" class="bad"/>
+<rect x="1101" y="801" width="298" height="42" rx="4" class="focus"/>
+<text x="1116" y="827">research-only (not in policy.toml)</text>
+<path d="M1376,818 l5,5 l5,-5" class="caret"/>
+<use href="#alert" x="1104" y="852"/>
+<text x="1122" y="862" class="err">policy.toml has no profile called</text>
+<text x="1122" y="878" class="err">research-only. Pick one it has.</text>
+<circle cx="1090" cy="822" r="9" class="mark"/><text x="1090" y="826" class="num" text-anchor="middle">7</text>
+<text x="760" y="940" class="noteh">7 · Where focus lands</text>
+<text x="760" y="958" class="note">The row opens and focus goes to the field itself. The body is its own scroller between</text>
+<text x="760" y="974" class="note">header and footer, so no scroll offset is needed. Unknown profile is a name no default</text>
+<text x="760" y="990" class="note">profile has (a typo, or a profile since removed), so there is nothing to add for you:</text>
+<text x="760" y="1006" class="note">only picking another fixes it. A default profile policy.toml lacks gets the offer</text>
+<text x="760" y="1022" class="note">instead (states-missing-profile.svg).</text>
+
+<!-- ============ C: two coordinators ============ -->
+<text x="760" y="1070" class="cap">C · EDIT TEAM ON A TEAM THAT HAS TWO COORDINATORS</text>
+<rect x="760" y="1082" width="680" height="200" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="784" y="1108" class="lbl">Agents · one coordinates</text>
+<use href="#alert" x="784" y="1116"/>
+<text x="802" y="1126" class="err">editor and lead both coordinate. Pick the one that takes the team's tasks.</text>
+<rect x="784" y="1140" width="632" height="52" class="box"/>
+<circle cx="826" cy="1166" r="5" fill="#ea580c"/>
+<text x="840" y="1170" class="mono">editor</text>
+<rect x="894" y="1156" width="80" height="20" rx="2" fill="#fff4ee"/>
+<text x="934" y="1170" class="lead" text-anchor="middle">coordinator</text>
+<circle cx="1276" cy="1166" r="8" fill="#ffffff" stroke="#ef4444" stroke-width="1.5"/>
+<text x="1290" y="1170" class="lbl">Coordinator</text>
+<rect x="784" y="1192" width="632" height="52" class="box"/>
+<circle cx="826" cy="1218" r="5" fill="#b45309"/>
+<text x="840" y="1222" class="mono">lead</text>
+<rect x="880" y="1208" width="80" height="20" rx="2" fill="#fff4ee"/>
+<text x="920" y="1222" class="lead" text-anchor="middle">coordinator</text>
+<circle cx="1276" cy="1218" r="8" fill="#ffffff" stroke="#ef4444" stroke-width="1.5"/>
+<text x="1290" y="1222" class="lbl">Coordinator</text>
+<text x="784" y="1268" class="hint">Shown as the panel opens, before any save; a radio fixes it.</text>
+<circle cx="1450" cy="1122" r="9" class="mark"/><text x="1450" y="1126" class="num" text-anchor="middle">8</text>
+<text x="760" y="1306" class="noteh">8 · Two coordinators can't be made here, only found</text>
+<text x="760" y="1322" class="note">A radio group can't check two, but today's agent form can leave a team with two. The panel opens it with</text>
+<text x="760" y="1338" class="note">neither checked, both badged, the error shown at once. The server refuses two the same way.</text>
+</svg>

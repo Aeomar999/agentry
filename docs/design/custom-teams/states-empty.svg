@@ -1,0 +1,253 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1800" viewBox="0 0 1600 1800" role="img" aria-labelledby="t d">
+<title id="t">Empty states: a blank New team, the Agents page before any team of your own, Add a team without your templates</title>
+<desc id="d">A: the New team panel with Blank chosen: the team name empty and focused, one agent row called coordinator, open, its prompt empty and using the default coordinator prompt. B: the Agents page with only teams added from built-in templates; every team heading has Edit team. C: the Add a team dialog when you have no templates of your own: Build your own, then Built in, no Your templates group. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .chip { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; fill: #424854; }
+  .lead { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; fill: #994c27; }
+  .ph { fill: #6b7280; font-style: italic; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .link { fill: #0675af; font-size: 12px; text-decoration: underline; }
+  .quiet { font-size: 12px; fill: #6b7280; }
+  .badge { font-size: 11.5px; font-weight: 600; fill: #994c27; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .card { fill: #ffffff; stroke: #e3e5ea; stroke-width: 1; }
+  .ghost { fill: #ffffff; stroke: #cdd1d8; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .trash { fill: none; stroke: #424854; stroke-width: 1.3; }
+  .mark { fill: #424854; }
+</style>
+<rect width="1600" height="1800" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Empty states · first use</text>
+<text x="40" y="72" class="sub">What you see before you have a team or a template of your own. Words from copy.md.</text>
+
+<!-- ============ A: New team, Blank ============ -->
+<text x="40" y="112" class="cap">A · NEW TEAM, BLANK CHOSEN (from "Build a team")</text>
+<rect x="40" y="124" width="680" height="1000" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="164" class="h2">New team</text>
+<rect x="676" y="140" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M686,150 L698,162 M698,150 L686,162" stroke="#424854" stroke-width="1.5"/>
+<line x1="40" y1="188" x2="720" y2="188" class="rule"/>
+
+<text x="64" y="218" class="lbl">Team name</text>
+<rect x="64" y="226" width="320" height="36" rx="3" fill="#ffffff" stroke="#d05e27" stroke-width="2"/>
+<line x1="76" y1="234" x2="76" y2="254" stroke="#1f2329"/>
+<text x="64" y="280" class="hint">Shown on the Agents page and on New task.</text>
+
+<text x="64" y="314" class="lbl">Start from</text>
+<rect x="64" y="322" width="260" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<rect x="67" y="325" width="100" height="30" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="117" y="345" class="btn" text-anchor="middle">Blank</text>
+<text x="244" y="345" class="sub btn" text-anchor="middle">Copy a template</text>
+<text x="64" y="376" class="hint">A coordinator to start; add the agents it hands work to.</text>
+
+<text x="64" y="412" class="lbl">Agents · one coordinates</text>
+<text x="696" y="412" class="hint" text-anchor="end">1 agent</text>
+
+<!-- the one row, open -->
+<rect x="64" y="422" width="632" height="552" class="box"/>
+<path d="M78,444 l5,5 l5,-5" class="caret"/>
+<circle cx="106" cy="448" r="5" fill="#ea580c"/>
+<text x="120" y="452" class="mono" font-weight="600">coordinator</text>
+<rect x="216" y="438" width="80" height="20" rx="2" fill="#fff4ee"/>
+<text x="256" y="452" class="badge" text-anchor="middle">coordinator</text>
+<circle cx="556" cy="448" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<circle cx="556" cy="448" r="4" fill="#1f2329"/>
+<text x="570" y="452" class="lbl">Coordinator</text>
+<rect x="662" y="434" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,442 h12 M672,442 v12 h8 v-12 M674,439 h4" class="trash"/>
+<line x1="65" y1="474" x2="695" y2="474" class="rule"/>
+
+<text x="84" y="500" class="lbl">Name</text>
+<rect x="84" y="508" width="280" height="36" rx="3" class="box"/>
+<text x="96" y="531" class="mono">coordinator</text>
+<text x="84" y="562" class="hint">Lowercase letters, digits and dashes.</text>
+<text x="384" y="500" class="lbl">Description</text>
+<rect x="384" y="508" width="292" height="36" rx="3" class="box"/>
+<text x="384" y="562" class="hint">One line. The coordinator reads it to</text>
+<text x="384" y="578" class="hint">choose who works next.</text>
+<text x="84" y="610" class="lbl">Prompt</text>
+<rect x="84" y="618" width="592" height="120" rx="3" fill="#fafafa" stroke="#cdd1d8"/>
+<text x="96" y="642" class="ph">Empty: it uses Agentry's coordinator prompt for a team of these agents.</text>
+<text x="84" y="756" class="hint">Empty: it uses Agentry's coordinator prompt for a team of these agents.</text>
+<text x="84" y="780" class="link">See the default</text>
+<text x="84" y="814" class="lbl">Colour</text>
+<rect x="84" y="822" width="24" height="24" rx="2" fill="#2563eb"/>
+<rect x="114" y="822" width="24" height="24" rx="2" fill="#7c3aed"/>
+<rect x="144" y="822" width="24" height="24" rx="2" fill="#0d9488"/>
+<rect x="174" y="822" width="24" height="24" rx="2" fill="#16a34a"/>
+<rect x="204" y="822" width="24" height="24" rx="2" fill="#b45309"/>
+<rect x="234" y="822" width="24" height="24" rx="2" fill="#ea580c"/>
+<rect x="231" y="819" width="30" height="30" rx="3" fill="none" stroke="#1f2329" stroke-width="2"/>
+<rect x="264" y="822" width="24" height="24" rx="2" fill="#dc2626"/>
+<rect x="294" y="822" width="24" height="24" rx="2" fill="#db2777"/>
+<rect x="324" y="822" width="24" height="24" rx="2" fill="#64748b"/>
+<text x="84" y="870" class="hint">Orange. Agents can share a colour.</text>
+<text x="384" y="814" class="lbl">Its work counts as</text>
+<rect x="384" y="822" width="292" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="396" y="845" fill="#6b7280">Building</text>
+<text x="384" y="876" class="hint">Not used: a coordinator hands the work out.</text>
+<text x="84" y="906" class="lbl">Engine</text>
+<rect x="84" y="914" width="132" height="36" rx="3" class="box"/>
+<text x="96" y="937">claude</text>
+<path d="M196,928 l5,5 l5,-5" class="caret"/>
+<text x="232" y="906" class="lbl">Model</text>
+<rect x="232" y="914" width="132" height="36" rx="3" class="box"/>
+<text x="244" y="937" class="ph">default</text>
+<text x="384" y="906" class="lbl">Policy profile</text>
+<rect x="384" y="914" width="292" height="36" rx="3" class="box"/>
+<text x="396" y="937">default (read-only)</text>
+<path d="M656,928 l5,5 l5,-5" class="caret"/>
+
+<rect x="64" y="990" width="120" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="124" y="1011" class="btn" text-anchor="middle">+ Add agent</text>
+<text x="196" y="1011" class="hint">Add the agents it hands work to.</text>
+
+<line x1="40" y1="1060" x2="720" y2="1060" class="rule"/>
+<text x="64" y="1099" class="hint">Creates the team and its coordinator.</text>
+<rect x="480" y="1076" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="522" y="1099" class="btn" text-anchor="middle">Cancel</text>
+<rect x="576" y="1076" width="120" height="36" rx="3" fill="#fc6d26"/>
+<text x="636" y="1099" class="pri" text-anchor="middle">Create team</text>
+
+<circle cx="396" cy="244" r="9" class="mark"/><text x="396" y="248" class="num" text-anchor="middle">1</text>
+<circle cx="336" cy="340" r="9" class="mark"/><text x="336" y="344" class="num" text-anchor="middle">2</text>
+<circle cx="54" cy="448" r="9" class="mark"/><text x="54" y="452" class="num" text-anchor="middle">3</text>
+<circle cx="54" cy="660" r="9" class="mark"/><text x="54" y="664" class="num" text-anchor="middle">4</text>
+<circle cx="708" cy="1094" r="9" class="mark"/><text x="708" y="1098" class="num" text-anchor="middle">5</text>
+
+<text x="760" y="140" class="noteh">1 · Team name, empty and focused</text>
+<text x="760" y="158" class="note">No suggestion on Blank: nothing to name it after. No placeholder text;</text>
+<text x="760" y="174" class="note">the label and hint say what it is. Empty is an error only on leaving it</text>
+<text x="760" y="190" class="note">after typing, or on Create team; never while the panel first opens.</text>
+<text x="760" y="220" class="noteh">2 · Blank chosen</text>
+<text x="760" y="238" class="note">The template select is not shown, so nothing on screen asks for a</text>
+<text x="760" y="254" class="note">choice you didn't make. Choosing Copy a template shows it; with rows</text>
+<text x="760" y="270" class="note">changed it asks first (states-unsaved-and-replace.svg).</text>
+<text x="760" y="300" class="noteh">3 · One row, open, already the coordinator</text>
+<text x="760" y="318" class="note">Named "coordinator", or "coordinator-2", "-3" if taken (numbered as copies</text>
+<text x="760" y="334" class="note">are), orange, its radio checked: valid from the start. Open, the only row;</text>
+<text x="760" y="350" class="note">its Name is not focused (Team name is). Remove works as on any row:</text>
+<text x="760" y="366" class="note">it leaves no coordinator and an empty list (see the empty list below).</text>
+<text x="760" y="396" class="noteh">4 · The default coordinator prompt</text>
+<text x="760" y="412" class="note">The empty box's placeholder, in ink-muted (4.8:1 on surface-1), and the</text>
+<text x="760" y="428" class="note">hint under it both say the default applies; the placeholder alone</text>
+<text x="760" y="444" class="note">would vanish on typing and isn't read by every screen reader.</text>
+<text x="760" y="474" class="noteh">5 · Create team is on, not disabled</text>
+<text x="760" y="492" class="note">A disabled button can't say why. Pressing it with an empty name shows</text>
+<text x="760" y="508" class="note">the error summary (states-validation.svg).</text>
+
+<text x="760" y="548" class="noteh">The list with no agents (after removing the only row)</text>
+<rect x="760" y="560" width="632" height="76" fill="#ffffff" stroke="#cdd1d8" stroke-dasharray="4 3"/>
+<text x="780" y="590" class="sub"><tspan class="mono" style="fill:#6b7280">coordinator</tspan> removed</text>
+<rect x="1306" y="572" width="70" height="26" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="1341" y="590" class="btn" text-anchor="middle">Undo</text>
+<text x="780" y="618" class="hint">No agents yet. Add one: it coordinates the team.</text>
+<text x="760" y="660" class="note">The stub keeps Undo; the line under it replaces the list. "+ Add agent"</text>
+<text x="760" y="676" class="note">stays below. The first agent added after this is checked as the</text>
+<text x="760" y="692" class="note">coordinator, since a team of one has nobody else to pick.</text>
+
+<!-- ============ B: Agents page, no team of your own ============ -->
+<text x="40" y="1172" class="cap">B · THE AGENTS PAGE, ONLY TEAMS ADDED FROM BUILT-IN TEMPLATES</text>
+<rect x="40" y="1184" width="720" height="576" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="1222" class="h2">Agents</text>
+<text x="64" y="1244" class="hint">Teams of agents, one for each kind of work. A task goes to its team's coordinator…</text>
+<rect x="528" y="1204" width="104" height="32" rx="3" class="ghost"/>
+<text x="580" y="1225" class="btn" text-anchor="middle">Add a team</text>
+<rect x="640" y="1204" width="100" height="32" rx="3" fill="#fc6d26"/>
+<text x="690" y="1225" class="pri" text-anchor="middle">New agent</text>
+<line x1="40" y1="1262" x2="760" y2="1262" class="rule"/>
+<rect x="64" y="1274" width="228" height="30" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<rect x="67" y="1277" width="64" height="24" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="99" y="1294" class="lbl" text-anchor="middle">Teams</text>
+<text x="170" y="1294" class="lbl" text-anchor="middle">Org chart</text>
+<text x="252" y="1294" class="lbl" text-anchor="middle">List</text>
+<text x="306" y="1294" class="hint">2 teams · 9 agents</text>
+<line x1="40" y1="1316" x2="760" y2="1316" class="rule"/>
+
+<text x="64" y="1356" class="h2">Software</text>
+<text x="152" y="1356" class="hint">5 agents · Builds and changes software…</text>
+<text x="500" y="1356" class="quiet">Edit team</text>
+<text x="566" y="1356" class="quiet">+ Add agent</text>
+<text x="646" y="1356" class="quiet">Remove team</text>
+<rect x="64" y="1372" width="216" height="96" rx="4" fill="#ffffff" stroke="#cdd1d8"/>
+<circle cx="82" cy="1394" r="5" fill="#ea580c"/><text x="94" y="1398" class="mono" font-weight="600">tech-lead</text>
+<rect x="176" y="1384" width="80" height="20" rx="2" fill="#fff4ee"/><text x="216" y="1398" class="badge" text-anchor="middle">coordinator</text>
+<rect x="292" y="1372" width="216" height="96" rx="4" class="card"/>
+<circle cx="310" cy="1394" r="5" fill="#2563eb"/><text x="322" y="1398" class="mono" font-weight="600">engineer</text>
+<rect x="520" y="1372" width="216" height="96" rx="4" class="card"/>
+<circle cx="538" cy="1394" r="5" fill="#7c3aed"/><text x="550" y="1398" class="mono" font-weight="600">reviewer</text>
+
+<text x="64" y="1512" class="h2">Visionaries</text>
+<text x="172" y="1512" class="hint">5 agents · Suggests features…</text>
+<text x="500" y="1512" class="quiet">Edit team</text>
+<text x="566" y="1512" class="quiet">+ Add agent</text>
+<text x="646" y="1512" class="quiet">Remove team</text>
+<rect x="64" y="1528" width="216" height="96" rx="4" fill="#ffffff" stroke="#cdd1d8"/>
+<circle cx="82" cy="1550" r="5" fill="#db2777"/><text x="94" y="1554" class="mono" font-weight="600">visionary</text>
+<rect x="292" y="1528" width="216" height="96" rx="4" class="card"/>
+<rect x="520" y="1528" width="216" height="96" rx="4" class="card"/>
+
+<circle cx="484" cy="1352" r="9" class="mark"/><text x="484" y="1356" class="num" text-anchor="middle">6</text>
+<circle cx="516" cy="1220" r="9" class="mark"/><text x="516" y="1224" class="num" text-anchor="middle">7</text>
+
+<text x="64" y="1666" class="noteh">6 · Edit team on every heading, from day one</text>
+<text x="64" y="1684" class="note">A team added from a template is edited like any other, so there is no empty "your teams" place to</text>
+<text x="64" y="1700" class="note">fill. The three heading actions are text buttons in ink-muted, 12px, each with a 28px hit area.</text>
+<text x="64" y="1730" class="noteh">7 · Add a team is the way to build one</text>
+<text x="64" y="1748" class="note">"New agent" stays for a single agent; the heading's "+ Add agent" now opens the panel instead.</text>
+
+<!-- ============ C: Add a team, no templates of yours ============ -->
+<text x="800" y="1172" class="cap">C · ADD A TEAM, NO TEMPLATES OF YOURS YET</text>
+<rect x="800" y="1184" width="760" height="576" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="824" y="1222" class="h2">Add a team</text>
+<rect x="1516" y="1200" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M1526,1210 L1538,1222 M1538,1210 L1526,1222" stroke="#424854" stroke-width="1.5"/>
+<line x1="800" y1="1246" x2="1560" y2="1246" class="rule"/>
+<text x="824" y="1272" class="hint">Each team comes with a coordinator and its specialists… or build your own.</text>
+<text x="824" y="1306" class="cap">Build your own</text>
+<rect x="824" y="1316" width="712" height="64" rx="4" class="card"/>
+<text x="844" y="1342" class="btn">A team of your own</text>
+<text x="844" y="1362" class="note">Start blank or copy a template, then change any agent.</text>
+<rect x="1404" y="1332" width="112" height="32" rx="3" fill="#fc6d26"/>
+<text x="1460" y="1353" class="pri" text-anchor="middle">Build a team</text>
+<text x="824" y="1418" class="cap">Built in</text>
+<rect x="824" y="1428" width="348" height="168" rx="4" class="card"/>
+<text x="844" y="1456" class="btn">Software</text>
+<rect x="916" y="1442" width="78" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="955" y="1456" class="lbl" text-anchor="middle">you have it</text>
+<text x="844" y="1480" class="note">Builds and changes software: writes the code…</text>
+<rect x="844" y="1496" width="74" height="20" rx="2" fill="#fff4ee"/><text x="850" y="1510" class="lead">tech-lead</text>
+<rect x="924" y="1496" width="66" height="20" rx="2" fill="#e3e5ea"/><text x="930" y="1510" class="chip">engineer</text>
+<rect x="844" y="1548" width="104" height="32" rx="3" class="ghost"/>
+<text x="896" y="1569" class="btn" text-anchor="middle">Add another</text>
+<rect x="956" y="1548" width="116" height="32" rx="3" class="ghost"/>
+<text x="1014" y="1569" class="btn" text-anchor="middle">Change it first</text>
+<rect x="1188" y="1428" width="348" height="168" rx="4" class="card"/>
+<text x="1208" y="1456" class="btn">Writing</text>
+<text x="1208" y="1480" class="note">Writes articles, documentation, reports…</text>
+<rect x="1208" y="1496" width="50" height="20" rx="2" fill="#fff4ee"/><text x="1214" y="1510" class="lead">editor</text>
+<rect x="1264" y="1496" width="82" height="20" rx="2" fill="#e3e5ea"/><text x="1270" y="1510" class="chip">researcher</text>
+<rect x="1208" y="1548" width="104" height="32" rx="3" fill="#fc6d26"/>
+<text x="1260" y="1569" class="pri" text-anchor="middle">Add this team</text>
+<rect x="1320" y="1548" width="116" height="32" rx="3" class="ghost"/>
+<text x="1378" y="1569" class="btn" text-anchor="middle">Change it first</text>
+<circle cx="924" cy="1414" r="9" class="mark"/><text x="924" y="1418" class="num" text-anchor="middle">8</text>
+<text x="824" y="1636" class="noteh">8 · No "Your templates" group at all</text>
+<text x="824" y="1654" class="note">Not an empty group with a "nothing here" line: the group appears with your first template.</text>
+<text x="824" y="1670" class="note">Where templates come from is said once, in the Edit team panel's "Save as a template".</text>
+<text x="824" y="1700" class="noteh">Built in stays last and unchanged</text>
+<text x="824" y="1718" class="note">Same cards as today plus "Change it first"; coordinator chips in brand-ink (add-team-list.svg).</text>
+</svg>

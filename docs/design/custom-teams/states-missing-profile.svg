@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1334" viewBox="0 0 1600 1334" role="img" aria-labelledby="t d">
+<title id="t">Missing-profile offer: in a copied row before saving, and the panel's offer after the server's 409</title>
+<desc id="d">A: the New team panel copying Visionaries as Ideas. Its agents use the read-mostly profile, which policy.toml lacks: a line under the agents legend says so, collapsed rows say profile missing, and the open row's Policy profile shows read-mostly (missing from policy.toml) with AgentForm's hint. B: after Create team the server refuses with 409; the existing MissingProfilesOffer banner appears at the top of the panel body with focus, offering to add the profile and create the team. C: the offer while adding. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .warn { font-size: 12px; fill: #96490f; }
+  .warnb { font-size: 12px; font-weight: 600; fill: #96490f; }
+  .infoh { font-size: 13px; font-weight: 600; fill: #0b6798; }
+  .body { font-size: 12.5px; fill: #424854; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .lead { font-size: 11.5px; font-weight: 600; fill: #994c27; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .trash { fill: none; stroke: #424854; stroke-width: 1.3; }
+  .wico { fill: none; stroke: #96490f; stroke-width: 1.4; stroke-linejoin: round; }
+  .iico { fill: none; stroke: #0b6798; stroke-width: 1.4; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<defs>
+  <!-- lucide TriangleAlert, 12px, warning-ink -->
+  <g id="warn"><path d="M6,0.8 L11.4,10.8 H0.6 Z" class="wico"/><path d="M6,4.2 v3 M6,8.6 v0.5" class="wico"/></g>
+  <!-- lucide Info, 14px, info-ink -->
+  <g id="info"><circle cx="7" cy="7" r="6.3" class="iico"/><path d="M7,6.2 v4 M7,3.8 v0.6" class="iico"/></g>
+</defs>
+<rect width="1600" height="1334" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Missing-profile offer</text>
+<text x="40" y="72" class="sub">Visionaries copied as Ideas; its agents use read-mostly, which this policy.toml lacks. Words from copy.md.</text>
+
+<!-- ============ A: before save ============ -->
+<text x="40" y="112" class="cap">A · BEFORE SAVE: THE ROWS SAY IT</text>
+<rect x="40" y="124" width="680" height="864" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="160" class="lbl">Agents · one coordinates</text>
+<text x="696" y="160" class="hint" text-anchor="end">5 agents</text>
+<use href="#warn" x="64" y="168"/>
+<text x="82" y="178" class="warn">5 agents use read-mostly, which policy.toml doesn't have. Create team offers to add it.</text>
+
+<rect x="64" y="192" width="632" height="52" class="box"/>
+<path d="M80,212 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="218" r="5" fill="#ea580c"/>
+<text x="120" y="222" class="mono">visionary-lead</text>
+<rect x="234" y="208" width="80" height="20" rx="2" fill="#fff4ee"/>
+<text x="274" y="222" class="lead" text-anchor="middle">coordinator</text>
+<use href="#warn" x="324" y="210"/>
+<text x="342" y="222" class="warnb">profile missing</text>
+<circle cx="556" cy="218" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<circle cx="556" cy="218" r="4" fill="#1f2329"/>
+<text x="570" y="222" class="lbl">Coordinator</text>
+<rect x="662" y="204" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,212 h12 M672,212 v12 h8 v-12 M674,209 h4" class="trash"/>
+
+<rect x="64" y="244" width="632" height="508" class="box"/>
+<path d="M78,266 l5,5 l5,-5" class="caret"/>
+<circle cx="106" cy="270" r="5" fill="#2563eb"/>
+<text x="120" y="274" class="mono" font-weight="600">product-strategist</text>
+<circle cx="556" cy="270" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="274" class="lbl">Coordinator</text>
+<rect x="662" y="256" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,264 h12 M672,264 v12 h8 v-12 M674,261 h4" class="trash"/>
+<line x1="65" y1="296" x2="695" y2="296" class="rule"/>
+<text x="84" y="322" class="lbl">Name</text>
+<rect x="84" y="330" width="280" height="36" rx="3" class="box"/>
+<text x="96" y="353" class="mono">product-strategist</text>
+<text x="384" y="322" class="lbl">Description</text>
+<rect x="384" y="330" width="292" height="36" rx="3" class="box"/>
+<text x="396" y="353">Weighs each idea against what users…</text>
+<text x="84" y="398" class="lbl">Prompt</text>
+<rect x="84" y="406" width="592" height="88" rx="3" fill="#fafafa" stroke="#cdd1d8"/>
+<text x="96" y="430" class="mono">You are the product strategist of the Ideas team…</text>
+<text x="84" y="524" class="lbl">Colour</text>
+<rect x="84" y="532" width="24" height="24" rx="2" fill="#2563eb"/>
+<rect x="81" y="529" width="30" height="30" rx="3" fill="none" stroke="#1f2329" stroke-width="2"/>
+<rect x="116" y="532" width="24" height="24" rx="2" fill="#7c3aed"/>
+<rect x="146" y="532" width="24" height="24" rx="2" fill="#0d9488"/>
+<text x="180" y="549" class="hint">…</text>
+<text x="384" y="524" class="lbl">Its work counts as</text>
+<rect x="384" y="532" width="292" height="36" rx="3" class="box"/>
+<text x="396" y="555">Building</text>
+<path d="M656,546 l5,5 l5,-5" class="caret"/>
+<text x="84" y="602" class="lbl">Engine</text>
+<rect x="84" y="610" width="132" height="36" rx="3" class="box"/>
+<text x="96" y="633">claude</text>
+<path d="M196,624 l5,5 l5,-5" class="caret"/>
+<text x="232" y="602" class="lbl">Model</text>
+<rect x="232" y="610" width="132" height="36" rx="3" class="box"/>
+<text x="244" y="633" class="sub" font-style="italic">default</text>
+<text x="384" y="602" class="lbl">Policy profile</text>
+<rect x="384" y="610" width="292" height="36" rx="3" fill="#ffffff" stroke="#b45309"/>
+<text x="396" y="633">read-mostly (missing from policy.toml)</text>
+<path d="M656,624 l5,5 l5,-5" class="caret"/>
+<use href="#warn" x="384" y="656"/>
+<text x="402" y="666" class="warn">read-mostly (missing from policy.toml):</text>
+<text x="402" y="682" class="warn">every call it makes is denied until it's</text>
+<text x="402" y="698" class="warn">back. Create team offers to add it, or pick</text>
+<text x="402" y="714" class="warn">another.</text>
+
+<rect x="64" y="752" width="632" height="52" class="box"/>
+<path d="M80,772 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="778" r="5" fill="#db2777"/>
+<text x="120" y="782" class="mono">user-advocate</text>
+<use href="#warn" x="226" y="770"/>
+<text x="244" y="782" class="warnb">profile missing</text>
+<circle cx="556" cy="778" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="782" class="lbl">Coordinator</text>
+<rect x="662" y="764" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,772 h12 M672,772 v12 h8 v-12 M674,769 h4" class="trash"/>
+<rect x="64" y="804" width="632" height="52" class="box"/>
+<path d="M80,824 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="830" r="5" fill="#0d9488"/>
+<text x="120" y="834" class="mono">technologist</text>
+<use href="#warn" x="218" y="822"/>
+<text x="236" y="834" class="warnb">profile missing</text>
+<circle cx="556" cy="830" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="834" class="lbl">Coordinator</text>
+<rect x="662" y="816" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,824 h12 M672,824 v12 h8 v-12 M674,821 h4" class="trash"/>
+<rect x="64" y="856" width="632" height="52" class="box"/>
+<path d="M80,876 l5,5 l-5,5" class="caret"/>
+<circle cx="106" cy="882" r="5" fill="#64748b"/>
+<text x="120" y="886" class="mono">skeptic</text>
+<use href="#warn" x="180" y="874"/>
+<text x="198" y="886" class="warnb">profile missing</text>
+<circle cx="556" cy="882" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="570" y="886" class="lbl">Coordinator</text>
+<rect x="662" y="868" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M670,876 h12 M672,876 v12 h8 v-12 M674,873 h4" class="trash"/>
+<text x="64" y="944" class="hint">Picking a profile policy.toml has, row by row, clears the line and the offer.</text>
+
+<circle cx="50" cy="174" r="9" class="mark"/><text x="50" y="178" class="num" text-anchor="middle">1</text>
+<circle cx="50" cy="218" r="9" class="mark"/><text x="50" y="222" class="num" text-anchor="middle">2</text>
+<circle cx="370" cy="628" r="9" class="mark"/><text x="370" y="632" class="num" text-anchor="middle">3</text>
+
+<text x="760" y="140" class="noteh">1 · Said once for the team</text>
+<text x="760" y="158" class="note">The client knows the template's profiles and the policy's (/api/policy), so the line</text>
+<text x="760" y="174" class="note">under the agents legend counts the agents and names the profiles, before any save.</text>
+<text x="760" y="190" class="note">It is a warning, not an error: the team can still be made, by accepting the offer.</text>
+<text x="760" y="206" class="note">Warning-ink #96490f on white, 6.5:1, with the triangle icon; never colour alone.</text>
+<text x="760" y="236" class="noteh">2 · Closed rows: "profile missing"</text>
+<text x="760" y="254" class="note">Beside the name, icon and words, as "1 problem" is for errors. Not counted as a</text>
+<text x="760" y="270" class="note">problem, and these rows close normally.</text>
+<text x="760" y="300" class="noteh">3 · The open row: AgentForm's own words</text>
+<text x="760" y="316" class="note">The select's option and its hint are AgentForm's ("… (missing from policy.toml)",</text>
+<text x="760" y="332" class="note">"every call it makes is denied until it's back"), ending with "Create team offers to</text>
+<text x="760" y="348" class="note">add it, or pick another." instead of "Add it on the Policy page", since the panel can.</text>
+<text x="760" y="364" class="note">Edit team says "Save changes offers to add it". The select's border is warning</text>
+<text x="760" y="380" class="note">(#b45309, 5:1).</text>
+
+<!-- ============ B: after the 409 ============ -->
+<text x="760" y="432" class="cap">B · CREATE TEAM PRESSED: THE SERVER'S 409, THE OFFER AT THE TOP</text>
+<rect x="760" y="444" width="680" height="380" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="784" y="484" class="h2">New team</text>
+<line x1="760" y1="508" x2="1440" y2="508" class="rule"/>
+<rect x="784" y="528" width="632" height="132" rx="3" fill="#e0f0f8" stroke="#9acee9"/>
+<rect x="781" y="525" width="638" height="138" rx="4" class="focus"/>
+<use href="#info" x="796" y="540"/>
+<text x="818" y="552" class="infoh">The Ideas team needs the read-mostly profile, which your policy file</text>
+<text x="818" y="570" class="infoh">doesn't have</text>
+<text x="818" y="594" class="body">Agentry adds the default text to policy.toml, keeping a backup, then creates</text>
+<text x="818" y="612" class="body">the Ideas team.</text>
+<rect x="818" y="622" width="262" height="28" rx="3" fill="#fc6d26"/>
+<text x="949" y="641" class="pri" text-anchor="middle">Add the profile and create the team</text>
+<text x="784" y="692" class="lbl">Team name</text>
+<rect x="784" y="700" width="320" height="36" rx="3" class="box"/>
+<text x="796" y="723">Ideas</text>
+<text x="784" y="770" class="hint">… the rows as in A, everything as you left it …</text>
+<line x1="760" y1="790" x2="1440" y2="790" class="rule"/>
+<text x="784" y="812" class="hint">Footer: Cancel · Create team, both on.</text>
+<circle cx="1430" cy="594" r="9" class="mark"/><text x="1430" y="598" class="num" text-anchor="middle">4</text>
+
+<text x="760" y="856" class="noteh">4 · The existing MissingProfilesOffer, moved to the panel</text>
+<text x="760" y="874" class="note">On 409 with missingProfiles the banner takes the summary's place at the top of the body,</text>
+<text x="760" y="890" class="note">with focus. Its title is today's ("The {team} team needs {profiles}, which your policy file</text>
+<text x="760" y="906" class="note">doesn't have"); body and button end "creates the team" / "saves your changes".</text>
+<text x="760" y="922" class="note">The button resends the whole team with addMissingProfiles and the policy hash. If</text>
+<text x="760" y="938" class="note">there are field errors too, the error summary comes first and the offer under it: both</text>
+<text x="760" y="954" class="note">must be dealt with, and the summary's count doesn't include the profile.</text>
+<text x="760" y="970" class="note">Info title in info-ink (5.3:1 on info-soft); today's Banner uses text-info, 3.5:1:</text>
+<text x="760" y="986" class="note">see decision 10 in custom-teams.md.</text>
+
+<!-- ============ C: adding ============ -->
+<text x="40" y="1036" class="cap">C · THE OFFER ACCEPTED, WHILE IT ADDS</text>
+<rect x="40" y="1048" width="680" height="190" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="64" y="1068" width="632" height="132" rx="3" fill="#e0f0f8" stroke="#9acee9"/>
+<use href="#info" x="76" y="1080"/>
+<text x="98" y="1092" class="infoh">The Ideas team needs the read-mostly profile, which your policy file</text>
+<text x="98" y="1110" class="infoh">doesn't have</text>
+<text x="98" y="1134" class="body">Agentry adds the default text to policy.toml, keeping a backup, then creates</text>
+<text x="98" y="1152" class="body">the Ideas team.</text>
+<rect x="98" y="1162" width="236" height="28" rx="3" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="216" y="1181" class="btn" fill="#6b7280" text-anchor="middle">Adding…</text>
+<text x="64" y="1224" class="hint">Create team also shows "Creating…" and is off; fields are read-only (states-saving-error.svg).</text>
+<text x="40" y="1274" class="noteh">After it: success as for any Create team (panel closes, toast "Added the Ideas team"). If policy.toml</text>
+<text x="40" y="1290" class="note">changed since the panel loaded (hash mismatch), the server says so and the banner turns to the error summary with</text>
+<text x="40" y="1306" class="note">its words: "policy.toml changed since you opened this. Check it, then save again." [server] Nothing typed is lost.</text>
+</svg>

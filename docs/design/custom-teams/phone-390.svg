@@ -1,0 +1,344 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1640" viewBox="0 0 1760 1640" role="img" aria-labelledby="t d">
+<title id="t">Phone, 390px: the team panel full screen, one-column rows, a one-row footer, This team at the end of the body, a short viewport, Add a team in one column</title>
+<desc id="d">Four 390 by 844 phone screens. 1: New team full screen, Copy a template, agent rows on two lines, footer with Cancel and Create team in one row. 2: an open row scrolled, every field in one column, the prompt wrapping inside its box. 3: Edit team after a failed save, the error summary wrapping; at the end of the body, under the heading This team, Save as a template with its reason and Remove team; the footer holds only Cancel and Save changes. 4: Add a team full screen, cards in one column, their buttons side by side or wrapping. 5: 320 by 256 (400% zoom): the header and footer scroll with the body. Nothing scrolls sideways. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .gut { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; fill: #6b7280; }
+  .chip { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; fill: #424854; }
+  .leadc { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 11px; fill: #994c27; }
+  .err { font-size: 12px; fill: #9c3739; }
+  .errb { font-size: 12px; font-weight: 600; fill: #9c3739; }
+  .sumh { font-size: 13px; font-weight: 600; fill: #9c3739; }
+  .sum { font-size: 12.5px; fill: #1f2329; text-decoration: underline; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .danger { fill: #9c3739; font-size: 13px; font-weight: 600; }
+  .quiet { font-size: 13px; font-weight: 600; fill: #424854; }
+  .badge { font-size: 11.5px; font-weight: 600; fill: #424854; }
+  .lead { font-size: 11.5px; font-weight: 600; fill: #994c27; }
+  .name { font-size: 14px; font-weight: 600; }
+  .desc { font-size: 12px; fill: #424854; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .phone { fill: #ffffff; stroke: #1f2329; stroke-width: 1; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .card { fill: #ffffff; stroke: #e3e5ea; stroke-width: 1; }
+  .ghost { fill: #ffffff; stroke: #cdd1d8; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .trash { fill: none; stroke: #424854; stroke-width: 1.3; }
+  .ico { fill: none; stroke: #9c3739; stroke-width: 1.4; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<defs>
+  <g id="x"><rect width="44" height="44" rx="3" fill="none" stroke="#cdd1d8"/><path d="M16,16 L28,28 M28,16 L16,28" stroke="#424854" stroke-width="1.5"/></g>
+  <g id="bin"><rect width="44" height="44" rx="3" fill="none" stroke="#e3e5ea"/><path d="M16,16 h12 M18,16 v12 h8 v-12 M20,13 h4" class="trash"/></g>
+  <g id="alert"><circle cx="6" cy="6" r="5.5" class="ico"/><path d="M6,3.2 v3.4 M6,8.4 v0.6" class="ico"/></g>
+</defs>
+<rect width="1760" height="1640" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Phone · 390 by 844</text>
+<text x="40" y="72" class="sub">Under 640px the panel and the Add a team dialog go full screen and everything is one column. 16px gutters; targets 44px. Words from copy.md.</text>
+
+<!-- ============ 1: New team ============ -->
+<text x="40" y="124" class="cap">1 · NEW TEAM, TOP OF THE BODY</text>
+<rect x="40" y="140" width="390" height="844" class="phone"/>
+<text x="56" y="176" class="h2">New team</text>
+<use href="#x" x="370" y="146"/>
+<line x1="40" y1="196" x2="430" y2="196" class="rule"/>
+<text x="56" y="222" class="lbl">Team name</text>
+<rect x="56" y="230" width="358" height="44" rx="3" class="box"/>
+<text x="68" y="257">Docs</text>
+<text x="56" y="292" class="hint">Shown on the Agents page and on New task.</text>
+<text x="56" y="324" class="lbl">Start from</text>
+<rect x="56" y="332" width="358" height="44" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="135" y="359" class="sub btn" text-anchor="middle">Blank</text>
+<rect x="236" y="335" width="175" height="38" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="323" y="359" class="btn" text-anchor="middle">Copy a template</text>
+<rect x="56" y="386" width="358" height="44" rx="3" class="box"/>
+<text x="68" y="413">Writing</text>
+<path d="M392,404 l5,5 l5,-5" class="caret"/>
+<text x="56" y="448" class="hint">Fills every agent from the template; change</text>
+<text x="56" y="464" class="hint">any of them below.</text>
+<text x="56" y="496" class="lbl">Agents · one coordinates</text>
+<!-- rows on two lines -->
+<rect x="56" y="506" width="358" height="76" class="box"/>
+<path d="M70,526 l5,5 l-5,5" class="caret"/>
+<circle cx="92" cy="532" r="5" fill="#ea580c"/>
+<text x="104" y="536" class="mono">editor</text>
+<rect x="158" y="522" width="80" height="20" rx="2" fill="#fff4ee"/><text x="198" y="536" class="lead" text-anchor="middle">coordinator</text>
+<use href="#bin" x="364" y="510"/>
+<circle cx="112" cy="566" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/><circle cx="112" cy="566" r="4" fill="#1f2329"/>
+<text x="126" y="570" class="lbl">Coordinator</text>
+<text x="206" y="570" class="hint">Takes every piece of…</text>
+<rect x="56" y="582" width="358" height="76" class="box"/>
+<path d="M70,602 l5,5 l-5,5" class="caret"/>
+<circle cx="92" cy="608" r="5" fill="#2563eb"/>
+<text x="104" y="612" class="mono">writer</text>
+<use href="#bin" x="364" y="586"/>
+<circle cx="112" cy="642" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="126" y="646" class="lbl">Coordinator</text>
+<text x="206" y="646" class="hint">Outlines and drafts…</text>
+<rect x="56" y="658" width="358" height="76" class="box"/>
+<path d="M70,678 l5,5 l-5,5" class="caret"/>
+<circle cx="92" cy="684" r="5" fill="#0d9488"/>
+<text x="104" y="688" class="mono">researcher</text>
+<use href="#bin" x="364" y="662"/>
+<circle cx="112" cy="718" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="126" y="722" class="lbl">Coordinator</text>
+<text x="206" y="722" class="hint">Finds and records…</text>
+<rect x="56" y="734" width="358" height="76" class="box"/>
+<path d="M70,754 l5,5 l-5,5" class="caret"/>
+<circle cx="92" cy="760" r="5" fill="#7c3aed"/>
+<text x="104" y="764" class="mono">fact-checker</text>
+<rect x="204" y="750" width="62" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/><text x="235" y="764" class="badge" text-anchor="middle">review</text>
+<use href="#bin" x="364" y="738"/>
+<circle cx="112" cy="794" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="126" y="798" class="lbl">Coordinator</text>
+<text x="206" y="798" class="hint">Checks every claim…</text>
+<!-- sticky footer -->
+<rect x="56" y="810" width="358" height="44" rx="3" class="ghost"/>
+<text x="235" y="837" class="btn" text-anchor="middle">+ Add agent</text>
+<line x1="40" y1="912" x2="430" y2="912" class="rule"/>
+<rect x="41" y="913" width="388" height="70" fill="#ffffff"/>
+<rect x="56" y="926" width="171" height="44" rx="3" class="ghost"/>
+<text x="141" y="953" class="btn" text-anchor="middle">Cancel</text>
+<rect x="243" y="926" width="171" height="44" rx="3" fill="#fc6d26"/>
+<text x="328" y="953" class="pri" text-anchor="middle">Create team</text>
+<circle cx="48" cy="544" r="9" class="mark"/><text x="48" y="548" class="num" text-anchor="middle">1</text>
+<circle cx="48" cy="948" r="9" class="mark"/><text x="48" y="952" class="num" text-anchor="middle">2</text>
+
+<!-- ============ 2: an open row ============ -->
+<text x="470" y="124" class="cap">2 · WRITER OPEN, SCROLLED</text>
+<rect x="470" y="140" width="390" height="844" class="phone"/>
+<text x="486" y="176" class="h2">New team</text>
+<use href="#x" x="800" y="146"/>
+<line x1="470" y1="196" x2="860" y2="196" class="rule"/>
+<rect x="486" y="208" width="358" height="776" class="box"/>
+<path d="M500,228 l5,5 l5,-5" class="caret"/>
+<circle cx="522" cy="232" r="5" fill="#2563eb"/>
+<text x="534" y="236" class="mono" font-weight="600">writer</text>
+<use href="#bin" x="794" y="212"/>
+<circle cx="542" cy="270" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="556" y="274" class="lbl">Coordinator</text>
+<line x1="487" y1="292" x2="843" y2="292" class="rule"/>
+<text x="502" y="316" class="lbl">Name</text>
+<rect x="502" y="324" width="326" height="44" rx="3" class="box"/>
+<text x="514" y="351" class="mono">writer</text>
+<text x="502" y="386" class="hint">Lowercase letters, digits and dashes.</text>
+<text x="502" y="416" class="lbl">Description</text>
+<rect x="502" y="424" width="326" height="44" rx="3" class="box"/>
+<text x="514" y="451">Outlines and drafts the piece for…</text>
+<text x="502" y="486" class="hint">One line. The coordinator reads it to</text>
+<text x="502" y="502" class="hint">choose who works next.</text>
+<text x="502" y="532" class="lbl">Prompt</text>
+<rect x="502" y="540" width="326" height="180" rx="3" fill="#fafafa" stroke="#cdd1d8"/>
+<rect x="503" y="541" width="28" height="178" fill="#f0f1f4"/>
+<g xml:space="preserve">
+<text x="525" y="562" class="gut" text-anchor="end">1</text><text x="538" y="562" class="mono">You are the writer of the</text>
+<text x="538" y="582" class="mono">Docs team. You outline and</text>
+<text x="538" y="602" class="mono">draft each piece for its</text>
+<text x="538" y="622" class="mono">reader, in plain language.</text>
+<text x="525" y="662" class="gut" text-anchor="end">3</text><text x="538" y="662" class="mono">## How to write</text>
+<text x="525" y="702" class="gut" text-anchor="end">5</text><text x="538" y="702" class="mono">- Start from the brief.</text>
+</g>
+<text x="502" y="738" class="hint">Its standing instructions, at the start of</text>
+<text x="502" y="754" class="hint">every turn. Tab moves to the next field.</text>
+<text x="502" y="784" class="lbl">Colour</text>
+<rect x="502" y="792" width="30" height="30" rx="2" fill="#2563eb"/>
+<rect x="499" y="789" width="36" height="36" rx="3" fill="none" stroke="#1f2329" stroke-width="2"/>
+<rect x="540" y="792" width="30" height="30" rx="2" fill="#7c3aed"/>
+<rect x="576" y="792" width="30" height="30" rx="2" fill="#0d9488"/>
+<rect x="612" y="792" width="30" height="30" rx="2" fill="#16a34a"/>
+<rect x="648" y="792" width="30" height="30" rx="2" fill="#b45309"/>
+<rect x="684" y="792" width="30" height="30" rx="2" fill="#ea580c"/>
+<rect x="720" y="792" width="30" height="30" rx="2" fill="#dc2626"/>
+<rect x="756" y="792" width="30" height="30" rx="2" fill="#db2777"/>
+<rect x="792" y="792" width="30" height="30" rx="2" fill="#64748b"/>
+<text x="502" y="842" class="hint">Blue. Agents can share a colour.</text>
+<text x="502" y="872" class="lbl">Its work counts as</text>
+<rect x="502" y="880" width="326" height="44" rx="3" class="box"/>
+<text x="514" y="907">Building</text>
+<path d="M806,898 l5,5 l5,-5" class="caret"/>
+<text x="502" y="950" class="lbl">Engine · Model · Policy profile follow, one per line</text>
+<circle cx="478" cy="560" r="9" class="mark"/><text x="478" y="564" class="num" text-anchor="middle">3</text>
+
+<!-- ============ 3: Edit team, failed save, stacked footer ============ -->
+<text x="900" y="124" class="cap">3 · EDIT TEAM: A FAILED SAVE, AND THE END OF THE BODY</text>
+<rect x="900" y="140" width="390" height="844" class="phone"/>
+<text x="916" y="176" class="h2">Edit the Docs team</text>
+<use href="#x" x="1230" y="146"/>
+<line x1="900" y1="196" x2="1290" y2="196" class="rule"/>
+<rect x="916" y="212" width="358" height="132" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<rect x="913" y="209" width="364" height="138" rx="4" class="focus"/>
+<use href="#alert" x="928" y="224"/>
+<text x="948" y="235" class="sumh">Couldn't save the team: 2 things to fix</text>
+<text x="948" y="262" class="sum">Team name: you have a team</text>
+<text x="948" y="280" class="sum">called Handbook already</text>
+<text x="948" y="308" class="sum">reviewer: you have an agent called</text>
+<text x="948" y="326" class="sum">reviewer already, in Software</text>
+<text x="916" y="410" class="lbl">Team name</text>
+<rect x="916" y="418" width="358" height="44" rx="3" fill="#ffffff" stroke="#ef4444"/>
+<text x="928" y="445">Handbook</text>
+<use href="#alert" x="916" y="470"/>
+<text x="934" y="481" class="err">You have a team called Handbook already.</text>
+<text x="934" y="497" class="err">Pick another name.</text>
+<text x="916" y="530" class="lbl">Agents · one coordinates</text>
+<rect x="916" y="540" width="358" height="76" class="box"/>
+<path d="M930,560 l5,5 l-5,5" class="caret"/>
+<circle cx="952" cy="566" r="5" fill="#7c3aed"/>
+<text x="964" y="570" class="mono">reviewer</text>
+<use href="#alert" x="1036" y="558"/>
+<text x="1054" y="570" class="errb">1 problem</text>
+<use href="#bin" x="1224" y="544"/>
+<circle cx="972" cy="600" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="986" y="604" class="lbl">Coordinator</text>
+<text x="1066" y="604" class="hint">Reads the draft as…</text>
+<text x="916" y="642" class="hint">… the other rows; scrolled to the end of the body …</text>
+<rect x="916" y="656" width="358" height="44" rx="3" class="ghost"/>
+<text x="1095" y="683" class="btn" text-anchor="middle">+ Add agent</text>
+<line x1="916" y1="724" x2="1274" y2="724" class="rule"/>
+<text x="916" y="752" class="name">This team</text>
+<rect x="916" y="764" width="358" height="44" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="1095" y="791" class="quiet" text-anchor="middle" style="fill:#6b7280">Save as a template</text>
+<text x="916" y="826" class="hint">Save your changes first.</text>
+<rect x="916" y="840" width="358" height="44" rx="3" fill="none" stroke="#cdd1d8"/>
+<text x="1095" y="867" class="danger" text-anchor="middle">Remove team</text>
+<!-- one-row footer -->
+<line x1="900" y1="912" x2="1290" y2="912" class="rule"/>
+<rect x="901" y="913" width="388" height="70" fill="#ffffff"/>
+<rect x="916" y="926" width="171" height="44" rx="3" class="ghost"/>
+<text x="1001" y="953" class="btn" text-anchor="middle">Cancel</text>
+<rect x="1103" y="926" width="171" height="44" rx="3" fill="#fc6d26"/>
+<text x="1188" y="953" class="pri" text-anchor="middle">Save changes</text>
+<circle cx="908" cy="296" r="9" class="mark"/><text x="908" y="300" class="num" text-anchor="middle">4</text>
+<circle cx="908" cy="786" r="9" class="mark"/><text x="908" y="790" class="num" text-anchor="middle">5</text>
+
+<!-- ============ 4: Add a team ============ -->
+<text x="1330" y="124" class="cap">4 · ADD A TEAM, ONE COLUMN</text>
+<rect x="1330" y="140" width="390" height="844" class="phone"/>
+<text x="1346" y="176" class="h2">Add a team</text>
+<use href="#x" x="1660" y="146"/>
+<line x1="1330" y1="196" x2="1720" y2="196" class="rule"/>
+<text x="1346" y="226" class="cap">Build your own</text>
+<rect x="1346" y="236" width="358" height="112" rx="4" class="card"/>
+<text x="1362" y="262" class="name">A team of your own</text>
+<text x="1362" y="282" class="desc">Start blank or copy a template, then</text>
+<text x="1362" y="298" class="desc">change any agent.</text>
+<rect x="1362" y="308" width="120" height="32" rx="3" fill="#fc6d26"/>
+<text x="1422" y="329" class="pri" text-anchor="middle">Build a team</text>
+<text x="1346" y="380" class="cap">Your templates</text>
+<rect x="1346" y="390" width="358" height="190" rx="4" class="card"/>
+<text x="1362" y="416" class="name">Handbook</text>
+<rect x="1580" y="400" width="112" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<text x="1636" y="419" class="desc" text-anchor="middle" text-decoration="underline">Delete template</text>
+<text x="1362" y="444" class="desc">Takes every piece of writing, sets its</text>
+<text x="1362" y="460" class="desc">brief, decides who works on it next…</text>
+<rect x="1362" y="472" width="50" height="20" rx="2" fill="#fff4ee"/><text x="1368" y="486" class="leadc">editor</text>
+<rect x="1418" y="472" width="64" height="20" rx="2" fill="#e3e5ea"/><text x="1424" y="486" class="chip">drafter</text>
+<rect x="1488" y="472" width="98" height="20" rx="2" fill="#e3e5ea"/><text x="1494" y="486" class="chip">fact-checker</text>
+<text x="1362" y="516" class="hint">Saved 12 Oct from the Handbook team.</text>
+<rect x="1362" y="532" width="112" height="36" rx="3" fill="#fc6d26"/>
+<text x="1418" y="555" class="pri" text-anchor="middle">Add this team</text>
+<rect x="1482" y="532" width="122" height="36" rx="3" class="ghost"/>
+<text x="1543" y="555" class="btn" text-anchor="middle">Change it first</text>
+<text x="1346" y="612" class="cap">Built in</text>
+<rect x="1346" y="622" width="358" height="168" rx="4" class="card"/>
+<text x="1362" y="648" class="name">Software</text>
+<rect x="1436" y="634" width="78" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="1475" y="648" class="badge" text-anchor="middle">you have it</text>
+<text x="1362" y="672" class="desc">Builds and changes software: writes the</text>
+<text x="1362" y="688" class="desc">code with tests, reviews it, tries it…</text>
+<rect x="1362" y="700" width="74" height="20" rx="2" fill="#fff4ee"/><text x="1368" y="714" class="leadc">tech-lead</text>
+<rect x="1442" y="700" width="66" height="20" rx="2" fill="#e3e5ea"/><text x="1448" y="714" class="chip">engineer</text>
+<rect x="1514" y="700" width="66" height="20" rx="2" fill="#e3e5ea"/><text x="1520" y="714" class="chip">reviewer</text>
+<rect x="1586" y="700" width="52" height="20" rx="2" fill="#e3e5ea"/><text x="1592" y="714" class="chip">tester</text>
+<rect x="1362" y="740" width="112" height="36" rx="3" class="ghost"/>
+<text x="1418" y="763" class="btn" text-anchor="middle">Add another</text>
+<rect x="1482" y="740" width="122" height="36" rx="3" class="ghost"/>
+<text x="1543" y="763" class="btn" text-anchor="middle">Change it first</text>
+<rect x="1346" y="806" width="358" height="168" rx="4" class="card"/>
+<text x="1362" y="832" class="name">Writing</text>
+<text x="1362" y="856" class="desc">Writes articles, documentation, reports…</text>
+<circle cx="1338" cy="548" r="9" class="mark"/><text x="1338" y="552" class="num" text-anchor="middle">6</text>
+
+<!-- notes -->
+<text x="40" y="1030" class="noteh">1 · Rows on two lines</text>
+<text x="40" y="1046" class="note">Line one: chevron, dot, name, badges; the remove</text>
+<text x="40" y="1062" class="note">button, 44px, at the end. Line two: the coordinator</text>
+<text x="40" y="1078" class="note">radio and its label (a 44px tall hit area), then the</text>
+<text x="40" y="1094" class="note">description cut short. Names never truncate before</text>
+<text x="40" y="1110" class="note">the description does.</text>
+<text x="40" y="1140" class="noteh">2 · Footer: one row, two buttons</text>
+<text x="40" y="1156" class="note">Under 640px the footer holds only Cancel and the</text>
+<text x="40" y="1172" class="note">primary action, side by side, one 44px row (about</text>
+<text x="40" y="1188" class="note">70px with padding). The body is its own scroller</text>
+<text x="40" y="1204" class="note">between header and footer, so a focused field or a</text>
+<text x="40" y="1220" class="note">summary link's target never lands under either: no</text>
+<text x="40" y="1236" class="note">scroll-margin or scroll-padding is needed.</text>
+<text x="470" y="1030" class="noteh">3 · One column, the same order</text>
+<text x="470" y="1046" class="note">Name, Description, Prompt, Colour, Its work counts as,</text>
+<text x="470" y="1062" class="note">Engine, Model, Policy profile. Inputs 44px tall. The</text>
+<text x="470" y="1078" class="note">prompt wraps (about 36 characters) with a narrower</text>
+<text x="470" y="1094" class="note">gutter; it grows to 24 lines and then scrolls, so the</text>
+<text x="470" y="1110" class="note">page is never stuck inside it. Colour swatches grow</text>
+<text x="470" y="1126" class="note">to 30px, 36px apart: nine fit in 326px.</text>
+<text x="900" y="1030" class="noteh">4 · The summary wraps; nothing is cut</text>
+<text x="900" y="1046" class="note">Each link may take two lines; it is still one link.</text>
+<text x="900" y="1062" class="note">The panel title truncates only past 24 characters</text>
+<text x="900" y="1078" class="note">("Edit the Product Research…"); the close button</text>
+<text x="900" y="1094" class="note">never moves.</text>
+<text x="900" y="1124" class="noteh">5 · This team: the rarer actions, at the end</text>
+<text x="900" y="1140" class="note">Edit only, under 640px. After + Add agent, an h3</text>
+<text x="900" y="1156" class="note">"This team" holds Save as a template (off, with</text>
+<text x="900" y="1172" class="note">"Save your changes first." under it) and Remove</text>
+<text x="900" y="1188" class="note">team, full width. Their questions (the template form,</text>
+<text x="900" y="1204" class="note">Remove the Docs team…?) open here, in place, not in</text>
+<text x="900" y="1220" class="note">the footer. Discard's question still takes the footer</text>
+<text x="900" y="1236" class="note">over while it is asked. Desktop keeps them in the footer.</text>
+<text x="1330" y="1030" class="noteh">6 · Add a team, full screen</text>
+<text x="1330" y="1046" class="note">One column of cards (the grid's sm breakpoint, as</text>
+<text x="1330" y="1062" class="note">today). The two actions sit side by side, 36px tall</text>
+<text x="1330" y="1078" class="note">(over the 24px minimum); under 300px of card they</text>
+<text x="1330" y="1094" class="note">wrap under each other. Delete template is a 28px</text>
+<text x="1330" y="1110" class="note">quiet button at the card's top right.</text>
+<text x="1330" y="1140" class="noteh">No sideways scroll anywhere</text>
+<text x="1330" y="1156" class="note">Chips wrap, long names truncate, prompt lines wrap;</text>
+<text x="1330" y="1172" class="note">must hold at 390px and at 320px (400% zoom, 1.4.10).</text>
+
+<!-- ============ 5: 320 by 256 ============ -->
+<text x="40" y="1296" class="cap">5 · 320 BY 256 (400% ZOOM): NOTHING STICKS</text>
+<rect x="40" y="1312" width="320" height="256" class="phone"/>
+<text x="56" y="1344" class="h2">Edit the Docs team</text>
+<use href="#x" x="308" y="1318"/>
+<line x1="40" y1="1368" x2="360" y2="1368" class="rule"/>
+<text x="56" y="1392" class="lbl">Team name</text>
+<rect x="56" y="1400" width="288" height="44" rx="3" class="box"/>
+<rect x="53" y="1397" width="294" height="50" rx="4" class="focus"/>
+<text x="68" y="1427">Docs</text>
+<line x1="102" y1="1412" x2="102" y2="1432" class="caret"/>
+<text x="56" y="1462" class="hint">Shown on the Agents page and on New task.</text>
+<text x="56" y="1494" class="lbl">Agents · one coordinates</text>
+<rect x="56" y="1504" width="288" height="63" class="box"/>
+<path d="M70,1524 l5,5 l-5,5" class="caret"/>
+<circle cx="92" cy="1530" r="5" fill="#ea580c"/>
+<text x="104" y="1534" class="mono">editor</text>
+<rect x="40" y="1576" width="320" height="44" fill="none" stroke="#9aa0ac" stroke-dasharray="4 3"/>
+<text x="200" y="1603" class="hint" text-anchor="middle">Cancel · Save changes: after This team</text>
+<circle cx="32" cy="1420" r="9" class="mark"/><text x="32" y="1424" class="num" text-anchor="middle">7</text>
+
+<text x="400" y="1328" class="noteh">7 · Short viewports: the header and footer scroll with the body</text>
+<text x="400" y="1344" class="note">Below about 500px of height (400% zoom at 1280 by 1024 is 320 by 256, a phone held sideways, or the on-screen keyboard</text>
+<text x="400" y="1360" class="note">open) the header and the footer stop sticking: the whole panel is one scroller and the footer comes last, after This</text>
+<text x="400" y="1376" class="note">team. The field in focus then has the whole viewport (1.4.10 Reflow, 2.4.11 Focus Not Obscured). A media query on the</text>
+<text x="400" y="1392" class="note">viewport height decides it (max-height: 500px), not a guess about the keyboard. Above it the rule in note 2 holds.</text>
+<text x="400" y="1408" class="note">The dashed box marks where the footer is: below, in the flow, reached by scrolling.</text>
+</svg>

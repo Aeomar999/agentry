@@ -1,0 +1,271 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1730" viewBox="0 0 1600 1730" role="img" aria-labelledby="t d">
+<title id="t">New team panel, desktop: Copy a template, four agents, one open</title>
+<desc id="d">The team side panel over the Agents page at /agents?team=new. Copy a template is chosen with Writing; the agents editor, writer, researcher and fact-checker are listed, writer is open showing every field. An inset shows the coordinator's row with an empty prompt using the default coordinator prompt. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .ph { fill: #6b7280; font-style: italic; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .pri { fill: #ffffff; font-size: 13px; font-weight: 600; }
+  .link { fill: #0675af; font-size: 12px; text-decoration: underline; }
+  .badge { font-size: 11.5px; font-weight: 600; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .dot { stroke: none; }
+  .gut text { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; fill: #6b7280; }
+</style>
+<rect width="1600" height="1730" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">New team · desktop · Copy a template</text>
+<text x="40" y="72" class="sub">The team panel over /agents (?team=new). Writing copied, renamed Docs; writer open. Words from copy.md.</text>
+
+<!-- the Agents page behind, inert while the panel is open -->
+<rect x="40" y="100" width="1200" height="1240" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="140" class="h2">Agents</text>
+<text x="64" y="162" class="hint">Teams of agents, one for each kind of work.</text>
+<text x="64" y="206" class="h2">Software</text>
+<rect x="64" y="222" width="460" height="150" fill="#fafafa" stroke="#e3e5ea"/>
+<text x="64" y="404" class="h2">Visionaries</text>
+<rect x="64" y="420" width="460" height="120" fill="#fafafa" stroke="#e3e5ea"/>
+<!-- flat scrim: no blur, no shadow -->
+<rect x="40" y="100" width="520" height="1240" fill="#1f2329" fill-opacity="0.32"/>
+
+<!-- the panel -->
+<rect x="560" y="100" width="680" height="1240" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="584" y="140" class="h2">New team</text>
+<rect x="1196" y="116" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/>
+<path d="M1206,126 L1218,138 M1218,126 L1206,138" stroke="#424854" stroke-width="1.5"/>
+<line x1="560" y1="164" x2="1240" y2="164" class="rule"/>
+
+<!-- team name -->
+<text x="584" y="194" class="lbl">Team name</text>
+<rect x="584" y="202" width="320" height="36" rx="3" fill="#ffffff" stroke="#d05e27" stroke-width="2"/>
+<text x="596" y="225">Docs</text>
+<line x1="630" y1="210" x2="630" y2="230" stroke="#1f2329"/>
+<text x="584" y="256" class="hint">Shown on the Agents page and on New task.</text>
+
+<!-- start from -->
+<text x="584" y="290" class="lbl">Start from</text>
+<rect x="584" y="298" width="260" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="628" y="321" class="sub btn">Blank</text>
+<rect x="688" y="301" width="153" height="30" rx="2" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="712" y="321" class="btn">Copy a template</text>
+<rect x="860" y="298" width="356" height="36" rx="3" class="box"/>
+<text x="872" y="321">Writing</text>
+<path d="M1196,312 l5,5 l5,-5" class="caret"/>
+<text x="584" y="352" class="hint">Fills every agent from the template; change any of them below.</text>
+
+<!-- agents fieldset -->
+<text x="584" y="388" class="lbl">Agents · one coordinates</text>
+<text x="1216" y="388" class="hint" text-anchor="end">4 agents</text>
+
+<!-- row 1: editor, coordinator, collapsed -->
+<rect x="584" y="398" width="632" height="52" class="box"/>
+<path d="M600,418 l5,5 l-5,5" class="caret"/>
+<circle cx="626" cy="424" r="5" fill="#ea580c" class="dot"/>
+<text x="640" y="428" class="mono">editor</text>
+<rect x="694" y="414" width="80" height="20" rx="2" fill="#fc6d2614" stroke="#fc6d26" stroke-opacity="0.4"/>
+<text x="734" y="428" class="badge" fill="#994c27" text-anchor="middle">coordinator</text>
+<text x="786" y="428" class="hint">Takes every piece of writing, sets its brief…</text>
+<circle cx="1076" cy="424" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<circle cx="1076" cy="424" r="4" fill="#1f2329"/>
+<text x="1090" y="428" class="lbl">Coordinator</text>
+<rect x="1182" y="410" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M1190,418 h12 M1192,418 v12 h8 v-12 M1194,415 h4" fill="none" stroke="#424854" stroke-width="1.3"/>
+
+<!-- row 2: writer, open -->
+<rect x="584" y="450" width="632" height="640" class="box"/>
+<path d="M598,472 l5,5 l5,-5" class="caret"/>
+<circle cx="626" cy="476" r="5" fill="#2563eb" class="dot"/>
+<text x="640" y="480" class="mono" font-weight="600">writer</text>
+<text x="698" y="480" class="hint">Outlines and drafts the piece for its reader…</text>
+<circle cx="1076" cy="476" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="1090" y="480" class="lbl">Coordinator</text>
+<rect x="1182" y="462" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M1190,470 h12 M1192,470 v12 h8 v-12 M1194,467 h4" fill="none" stroke="#424854" stroke-width="1.3"/>
+<line x1="585" y1="502" x2="1215" y2="502" class="rule"/>
+<!-- top: name and description side by side; prompt the full width; settings in two columns -->
+<text x="604" y="528" class="lbl">Name</text>
+<rect x="604" y="536" width="280" height="36" rx="3" class="box"/>
+<text x="616" y="559" class="mono">writer</text>
+<text x="604" y="590" class="hint">Lowercase letters, digits and dashes.</text>
+<text x="904" y="528" class="lbl">Description</text>
+<rect x="904" y="536" width="292" height="36" rx="3" class="box"/>
+<text x="916" y="559">Outlines and drafts the piece for its…</text>
+<text x="904" y="590" class="hint">One line. The coordinator reads it to</text>
+<text x="904" y="606" class="hint">choose who works next.</text>
+<text x="604" y="638" class="lbl">Prompt</text>
+<rect x="604" y="646" width="592" height="180" rx="3" fill="#fafafa" stroke="#cdd1d8"/>
+<rect x="605" y="647" width="40" height="178" fill="#f0f1f4"/>
+<g class="gut">
+<text x="638" y="672" text-anchor="end">1</text><text x="638" y="692" text-anchor="end">2</text><text x="638" y="712" text-anchor="end">3</text><text x="638" y="732" text-anchor="end">4</text>
+<text x="638" y="752" text-anchor="end">5</text><text x="638" y="772" text-anchor="end">6</text><text x="638" y="792" text-anchor="end">7</text>
+</g>
+<text x="656" y="672" class="mono">You are the writer of the Docs team. You outline and draft each</text>
+<text x="656" y="692" class="mono">piece for its reader, in plain language.</text>
+<text x="656" y="732" class="mono">## How to write</text>
+<text x="656" y="772" class="mono">- Start from the brief the editor set.</text>
+<text x="656" y="792" class="mono">- Source every fact with a link the fact-checker can follow.</text>
+<text x="604" y="844" class="hint">Its standing instructions, at the start of every turn. Tab moves to the next field.</text>
+<text x="604" y="880" class="lbl">Colour</text>
+<g>
+  <rect x="604" y="888" width="24" height="24" rx="2" fill="#2563eb"/>
+  <rect x="601" y="885" width="30" height="30" rx="3" fill="none" stroke="#1f2329" stroke-width="2"/>
+  <rect x="636" y="888" width="24" height="24" rx="2" fill="#7c3aed"/>
+  <rect x="666" y="888" width="24" height="24" rx="2" fill="#0d9488"/>
+  <rect x="696" y="888" width="24" height="24" rx="2" fill="#16a34a"/>
+  <rect x="726" y="888" width="24" height="24" rx="2" fill="#b45309"/>
+  <rect x="756" y="888" width="24" height="24" rx="2" fill="#ea580c"/>
+  <rect x="786" y="888" width="24" height="24" rx="2" fill="#dc2626"/>
+  <rect x="816" y="888" width="24" height="24" rx="2" fill="#db2777"/>
+  <rect x="846" y="888" width="24" height="24" rx="2" fill="#64748b"/>
+</g>
+<text x="604" y="936" class="hint">Blue. Agents can share a colour.</text>
+<text x="904" y="880" class="lbl">Its work counts as</text>
+<rect x="904" y="888" width="292" height="36" rx="3" class="box"/>
+<text x="916" y="911">Building</text>
+<path d="M1176,902 l5,5 l5,-5" class="caret"/>
+<text x="904" y="942" class="hint">Checked by the team's reviewers. Its tasks</text>
+<text x="904" y="958" class="hint">show in In progress.</text>
+<text x="604" y="976" class="lbl">Engine</text>
+<rect x="604" y="984" width="132" height="36" rx="3" class="box"/>
+<text x="616" y="1007">claude</text>
+<path d="M716,998 l5,5 l5,-5" class="caret"/>
+<text x="752" y="976" class="lbl">Model</text>
+<rect x="752" y="984" width="132" height="36" rx="3" class="box"/>
+<text x="764" y="1007" class="ph">default</text>
+<text x="604" y="1038" class="hint">Model: empty for the engine's default.</text>
+<text x="904" y="976" class="lbl">Policy profile</text>
+<rect x="904" y="984" width="292" height="36" rx="3" class="box"/>
+<text x="916" y="1007">developer</text>
+<path d="M1176,998 l5,5 l5,-5" class="caret"/>
+<text x="904" y="1038" class="hint">What it may do without asking you.</text>
+<!-- row foot -->
+<line x1="585" y1="1064" x2="1215" y2="1064" class="rule" stroke-dasharray="0"/>
+<text x="604" y="1084" class="hint">Knowledge and where it runs: on its own page, once the team is created.</text>
+
+<!-- row 3, 4 collapsed -->
+<rect x="584" y="1090" width="632" height="52" class="box"/>
+<path d="M600,1110 l5,5 l-5,5" class="caret"/>
+<circle cx="626" cy="1116" r="5" fill="#0d9488" class="dot"/>
+<text x="640" y="1120" class="mono">researcher</text>
+<text x="728" y="1120" class="hint">Finds and records the facts, figures…</text>
+<circle cx="1076" cy="1116" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="1090" y="1120" class="lbl">Coordinator</text>
+<rect x="1182" y="1102" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M1190,1110 h12 M1192,1110 v12 h8 v-12 M1194,1107 h4" fill="none" stroke="#424854" stroke-width="1.3"/>
+
+<rect x="584" y="1142" width="632" height="52" class="box"/>
+<path d="M600,1162 l5,5 l-5,5" class="caret"/>
+<circle cx="626" cy="1168" r="5" fill="#7c3aed" class="dot"/>
+<text x="640" y="1172" class="mono">fact-checker</text>
+<rect x="742" y="1158" width="62" height="20" rx="2" fill="#f0f1f4" stroke="#cdd1d8"/>
+<text x="773" y="1172" class="badge" fill="#424854" text-anchor="middle">review</text>
+<text x="816" y="1172" class="hint">Checks every claim in a draft…</text>
+<circle cx="1076" cy="1168" r="8" fill="#ffffff" stroke="#424854" stroke-width="1.5"/>
+<text x="1090" y="1172" class="lbl">Coordinator</text>
+<rect x="1182" y="1154" width="28" height="28" rx="3" fill="none" stroke="#e3e5ea"/>
+<path d="M1190,1162 h12 M1192,1162 v12 h8 v-12 M1194,1159 h4" fill="none" stroke="#424854" stroke-width="1.3"/>
+
+<!-- add agent -->
+<rect x="584" y="1210" width="120" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="644" y="1231" class="btn" text-anchor="middle">+ Add agent</text>
+
+<!-- footer, fixed at the panel's foot -->
+<line x1="560" y1="1276" x2="1240" y2="1276" class="rule"/>
+<rect x="1096" y="1292" width="120" height="36" rx="3" fill="#fc6d26"/>
+<text x="1156" y="1315" class="pri" text-anchor="middle">Create team</text>
+<rect x="1000" y="1292" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="1042" y="1315" class="btn" text-anchor="middle">Cancel</text>
+<text x="584" y="1315" class="hint">Creates the team and its 4 agents.</text>
+
+<!-- inset: the coordinator's row opened, prompt empty -->
+<text x="560" y="1382" class="lbl" font-weight="700">INSET · editor (the coordinator) opened, its prompt empty</text>
+<rect x="560" y="1394" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="584" y="1422" class="lbl">Prompt</text>
+<rect x="584" y="1430" width="632" height="100" rx="3" fill="#fafafa" stroke="#cdd1d8"/>
+<text x="596" y="1454" class="ph">Empty: it uses Agentry's coordinator prompt for a team of these agents.</text>
+<text x="584" y="1548" class="hint">Empty: it uses Agentry's coordinator prompt for a team of these agents.</text>
+<text x="584" y="1572" class="link">See the default</text>
+<text x="584" y="1606" class="lbl">Its work counts as</text>
+<rect x="584" y="1614" width="292" height="36" rx="3" fill="#f0f1f4" stroke="#e3e5ea"/>
+<text x="596" y="1637" fill="#6b7280">Building</text>
+<text x="584" y="1668" class="hint">Not used: a coordinator hands the work out.</text>
+<text x="924" y="1606" class="lbl">Policy profile</text>
+<rect x="924" y="1614" width="292" height="36" rx="3" class="box"/>
+<text x="936" y="1637">read-only</text>
+<path d="M1196,1628 l5,5 l5,-5" class="caret"/>
+
+<!-- numbered markers on the drawing -->
+<g>
+  <circle cx="1252" cy="116" r="9" fill="#424854"/><text x="1252" y="120" class="num" text-anchor="middle">1</text>
+  <circle cx="914" cy="220" r="9" fill="#424854"/><text x="914" y="224" class="num" text-anchor="middle">2</text>
+  <circle cx="574" cy="316" r="9" fill="#424854"/><text x="574" y="320" class="num" text-anchor="middle">3</text>
+  <circle cx="574" cy="424" r="9" fill="#424854"/><text x="574" y="428" class="num" text-anchor="middle">4</text>
+  <circle cx="1076" cy="400" r="9" fill="#424854"/><text x="1076" y="404" class="num" text-anchor="middle">5</text>
+  <circle cx="1228" cy="476" r="9" fill="#424854"/><text x="1228" y="480" class="num" text-anchor="middle">6</text>
+  <circle cx="714" cy="1226" r="9" fill="#424854"/><text x="714" y="1230" class="num" text-anchor="middle">7</text>
+  <circle cx="1228" cy="1310" r="9" fill="#424854"/><text x="1228" y="1314" class="num" text-anchor="middle">8</text>
+  <circle cx="574" cy="1460" r="9" fill="#424854"/><text x="574" y="1464" class="num" text-anchor="middle">9</text>
+</g>
+
+<!-- notes -->
+<g>
+<text x="1276" y="120" class="noteh">1 · One panel, modal</text>
+<text x="1276" y="138" class="note">680px side panel at /agents?team=new. Focus is</text>
+<text x="1276" y="154" class="note">trapped; the page behind is inert under a flat</text>
+<text x="1276" y="170" class="note">scrim. Esc and Close ask first if anything changed.</text>
+<text x="1276" y="200" class="noteh">2 · Team name</text>
+<text x="1276" y="218" class="note">Focused on open. Checked on leaving it: empty, or</text>
+<text x="1276" y="234" class="note">a team you have (any case). A copy suggests the</text>
+<text x="1276" y="250" class="note">template's name, numbered if taken.</text>
+<text x="1276" y="280" class="noteh">3 · Start from</text>
+<text x="1276" y="298" class="note">The existing SegmentedControl. The select groups</text>
+<text x="1276" y="314" class="note">"Your templates" over "Built in" and, closed, shows</text>
+<text x="1276" y="330" class="note">the name alone. Switching after changes asks first.</text>
+<text x="1276" y="360" class="noteh">4 · Agent rows</text>
+<text x="1276" y="378" class="note">The chevron and name are one button with</text>
+<text x="1276" y="394" class="note">aria-expanded. One row open at a time; a row with</text>
+<text x="1276" y="410" class="note">an error stays open. Collapsed rows show dot, name</text>
+<text x="1276" y="426" class="note">(text, never colour alone), badges, description.</text>
+<text x="1276" y="456" class="noteh">5 · Coordinator: one radio group</text>
+<text x="1276" y="474" class="note">Native radios, name="coordinator", in the</text>
+<text x="1276" y="490" class="note">fieldset "Agents · one coordinates". Arrow keys</text>
+<text x="1276" y="506" class="note">move between agents. It shows as "Coordinator";</text>
+<text x="1276" y="522" class="note">its name is "Coordinator, writer" (2.5.3).</text>
+<text x="1276" y="552" class="noteh">6 · Remove agent (28px, trash)</text>
+<text x="1276" y="570" class="note">Label "Remove writer". Takes the row out at once;</text>
+<text x="1276" y="586" class="note">a stub "writer removed · Undo" stays while the</text>
+<text x="1276" y="602" class="note">panel is open; focus goes to Undo.</text>
+<text x="1276" y="632" class="noteh">7 · Add agent</text>
+<text x="1276" y="650" class="note">A row at the end, open: a free colour, Building, the</text>
+<text x="1276" y="666" class="note">default engine and profile. Focus in its Name.</text>
+<text x="1276" y="696" class="noteh">8 · Create team</text>
+<text x="1276" y="712" class="note">One checked request for the whole team. Busy:</text>
+<text x="1276" y="728" class="note">"Creating…" and off; fields are read-only.</text>
+<text x="1276" y="744" class="note">Errors: a summary at the top of the body,</text>
+<text x="1276" y="760" class="note">text under each field (states-validation.svg).</text>
+<text x="1276" y="776" class="note">Success closes, scrolls to the team, toasts.</text>
+<text x="1276" y="806" class="noteh">Open row layout</text>
+<text x="1276" y="824" class="note">Name and Description side by side, the Prompt</text>
+<text x="1276" y="840" class="note">the full row width, then settings in two columns.</text>
+<text x="1276" y="856" class="note">Tab order is reading order. Hints are AgentForm's</text>
+<text x="1276" y="872" class="note">words. One column under 640px (phone-390.svg).</text>
+<text x="1276" y="1422" class="noteh">9 · The default coordinator prompt</text>
+<text x="1276" y="1440" class="note">Only the coordinator may have an empty prompt.</text>
+<text x="1276" y="1456" class="note">The box's placeholder and its hint both say the</text>
+<text x="1276" y="1472" class="note">default applies. "See the default" shows that</text>
+<text x="1276" y="1488" class="note">text read-only in the box (its words: epic item 5).</text>
+<text x="1276" y="1504" class="note">Typing replaces the default.</text>
+<text x="1276" y="1534" class="note">The column select is disabled, with its reason in</text>
+<text x="1276" y="1550" class="note">text, because a coordinator never works a task.</text>
+</g>
+</svg>

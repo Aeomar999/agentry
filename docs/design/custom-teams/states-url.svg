@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1520" viewBox="0 0 1600 1520" role="img" aria-labelledby="t d">
+<title id="t">Opening the panel from a link: loading, a failed load, no such team, a team changed elsewhere, and browser Back</title>
+<desc id="d">A: Edit team on Docs opened from a link while it loads: the title shows, the body says Loading the Docs team…, Save changes is off with Loading… beside it. B: New team while it loads: Team name and Start from work, the template select says Loading templates…, the agents list waits for engines and profiles. C: the load failed, with the server's words and Try again. D: no team by that name, with Back to the Agents page. E: the save refused because the team changed somewhere else, with Reload the team and Keep my changes here, and the in-place question Reload asks. F: browser Back with unsaved changes asks the discard question in place, focus on Keep editing. Light theme, existing tokens.</desc>
+<style>
+  text { font-family: "IBM Plex Sans", "Noto Sans", sans-serif; font-size: 13px; fill: #1f2329; }
+  .h1 { font-size: 22px; font-weight: 700; }
+  .h2 { font-size: 17px; font-weight: 700; }
+  .cap { font-size: 12px; font-weight: 700; fill: #424854; }
+  .sub { fill: #6b7280; }
+  .lbl { font-size: 12px; font-weight: 500; fill: #424854; }
+  .hint { font-size: 12px; fill: #6b7280; }
+  .mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .q { font-size: 13px; font-weight: 600; fill: #1f2329; }
+  .sumh { font-size: 13px; font-weight: 600; fill: #9c3739; }
+  .body { font-size: 12.5px; fill: #424854; }
+  .btn { font-size: 13px; font-weight: 600; }
+  .off { font-size: 13px; font-weight: 600; fill: #6b7280; }
+  .danger { fill: #9c3739; font-size: 13px; font-weight: 600; }
+  .note { font-size: 12px; fill: #424854; }
+  .noteh { font-size: 12px; font-weight: 700; fill: #1f2329; }
+  .num { font-size: 11px; font-weight: 700; fill: #ffffff; }
+  .box { fill: #ffffff; stroke: #cdd1d8; stroke-width: 1; }
+  .offbox { fill: #f0f1f4; stroke: #e3e5ea; stroke-width: 1; }
+  .rule { stroke: #e3e5ea; stroke-width: 1; }
+  .ico { fill: none; stroke: #9c3739; stroke-width: 1.4; }
+  .caret { fill: none; stroke: #424854; stroke-width: 1.5; }
+  .focus { fill: none; stroke: #d05e27; stroke-width: 2; }
+  .mark { fill: #424854; }
+</style>
+<defs>
+  <g id="alert"><circle cx="6" cy="6" r="5.5" class="ico"/><path d="M6,3.2 v3.4 M6,8.4 v0.6" class="ico"/></g>
+  <g id="spin"><circle cx="0" cy="0" r="6" fill="none" stroke="#cdd1d8" stroke-width="2"/><path d="M0,-6 a6,6 0 0 1 6,6" fill="none" stroke="#6b7280" stroke-width="2"/></g>
+  <g id="close"><rect x="0" y="0" width="32" height="32" rx="3" fill="none" stroke="#cdd1d8"/><path d="M10,10 L22,22 M22,10 L10,22" stroke="#424854" stroke-width="1.5"/></g>
+</defs>
+<rect width="1600" height="1520" fill="#f6f7f9"/>
+<text x="40" y="46" class="h1">Opening the panel from a link</text>
+<text x="40" y="72" class="sub">The panel lives at /agents?team=new or ?team={team}, so a reload, a link or Back can open it before anything has loaded. Words from copy.md.</text>
+
+<!-- ============ A: Edit, loading ============ -->
+<text x="40" y="112" class="cap">A · EDIT TEAM, LOADING (?team=Docs)</text>
+<rect x="40" y="124" width="680" height="320" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="164" class="h2">Edit the Docs team</text>
+<use href="#close" x="676" y="140"/>
+<line x1="40" y1="188" x2="720" y2="188" class="rule"/>
+<use href="#spin" x="72" y="232"/>
+<text x="88" y="236" class="body">Loading the Docs team…</text>
+<line x1="40" y1="388" x2="720" y2="388" class="rule"/>
+<text x="440" y="419" class="hint" text-anchor="end">Loading…</text>
+<rect x="452" y="398" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="494" y="421" class="btn" text-anchor="middle">Cancel</text>
+<rect x="548" y="398" width="148" height="36" rx="3" class="offbox"/>
+<text x="622" y="421" class="off" text-anchor="middle">Save changes</text>
+<circle cx="710" cy="232" r="9" class="mark"/><text x="710" y="236" class="num" text-anchor="middle">1</text>
+
+<text x="40" y="474" class="noteh">1 · Edit loads with nothing to lose</text>
+<text x="40" y="490" class="note">The title comes from the link, so it shows at once. The body says "Loading the Docs team…" (a polite live</text>
+<text x="40" y="506" class="note">region) until the agents, engines, profiles and templates are in; no fields show, so nothing can be typed and lost.</text>
+<text x="40" y="522" class="note">Save changes is off with "Loading…" beside it (aria-describedby). Cancel, Close and Esc close at once.</text>
+
+<!-- ============ B: New, loading ============ -->
+<text x="760" y="112" class="cap">B · NEW TEAM, LOADING (?team=new)</text>
+<rect x="760" y="124" width="680" height="320" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="784" y="164" class="h2">New team</text>
+<use href="#close" x="1396" y="140"/>
+<line x1="760" y1="188" x2="1440" y2="188" class="rule"/>
+<text x="784" y="218" class="lbl">Team name</text>
+<rect x="784" y="226" width="300" height="36" rx="3" class="box"/>
+<rect x="781" y="223" width="306" height="42" rx="4" class="focus"/>
+<text x="796" y="249">Release</text>
+<line x1="848" y1="234" x2="848" y2="254" class="caret"/>
+<text x="1108" y="218" class="lbl">Start from</text>
+<rect x="1108" y="226" width="308" height="36" rx="3" class="box"/>
+<text x="1160" y="249" class="btn" text-anchor="middle">Blank</text>
+<rect x="1212" y="228" width="202" height="32" rx="2" fill="#1f2329"/>
+<text x="1313" y="249" class="btn" text-anchor="middle" style="fill:#ffffff">Copy a template</text>
+<text x="784" y="290" class="lbl">Template</text>
+<rect x="784" y="298" width="300" height="36" rx="3" class="offbox"/>
+<use href="#spin" x="800" y="316"/>
+<text x="816" y="321" class="off" style="font-weight:400">Loading templates…</text>
+<use href="#spin" x="792" y="364"/>
+<text x="808" y="368" class="body">Loading engines and profiles…</text>
+<line x1="760" y1="388" x2="1440" y2="388" class="rule"/>
+<text x="1160" y="419" class="hint" text-anchor="end">Loading…</text>
+<rect x="1172" y="398" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="1214" y="421" class="btn" text-anchor="middle">Cancel</text>
+<rect x="1268" y="398" width="148" height="36" rx="3" class="offbox"/>
+<text x="1342" y="421" class="off" text-anchor="middle">Create team</text>
+<circle cx="1430" cy="316" r="9" class="mark"/><text x="1430" y="320" class="num" text-anchor="middle">2</text>
+
+<text x="760" y="474" class="noteh">2 · A new team loads while you type</text>
+<text x="760" y="490" class="note">Team name and Start from work at once, and focus is in Team name as usual. The template select is off and says</text>
+<text x="760" y="506" class="note">"Loading templates…" until they arrive; the agents list waits for engines and profiles. Create team is off with</text>
+<text x="760" y="522" class="note">"Loading…" beside it: the one time it is off, because there is nothing to check yet. Blank waits only for those.</text>
+
+<!-- ============ C: load failed ============ -->
+<text x="40" y="572" class="cap">C · THE LOAD FAILED</text>
+<rect x="40" y="584" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="624" class="h2">Edit the Docs team</text>
+<use href="#close" x="676" y="600"/>
+<line x1="40" y1="648" x2="720" y2="648" class="rule"/>
+<rect x="64" y="668" width="632" height="108" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<use href="#alert" x="78" y="680"/>
+<text x="98" y="691" class="sumh">Couldn't load the team</text>
+<text x="98" y="713" class="body">Couldn't reach Agentry. Check it's running, then try again.</text>
+<rect x="98" y="728" width="96" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="95" y="725" width="102" height="38" rx="4" class="focus"/>
+<text x="146" y="749" class="btn" text-anchor="middle">Try again</text>
+<line x1="40" y1="828" x2="720" y2="828" class="rule"/>
+<rect x="612" y="838" width="84" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="654" y="861" class="btn" text-anchor="middle">Cancel</text>
+<circle cx="50" cy="692" r="9" class="mark"/><text x="50" y="696" class="num" text-anchor="middle">3</text>
+
+<text x="40" y="914" class="noteh">3 · A failed load says why and tries again</text>
+<text x="40" y="930" class="note">Today's "Couldn't load the {thing}" banner, in danger-ink, with the server's words or the network line; focus</text>
+<text x="40" y="946" class="note">on Try again, which shows A again. The footer has only Cancel: there is nothing to save. On a new team the</text>
+<text x="40" y="962" class="note">title is "Couldn't load what a new team needs" and Team name keeps what was typed.</text>
+
+<!-- ============ D: not found ============ -->
+<text x="760" y="572" class="cap">D · NO TEAM BY THAT NAME (?team=Docs, RENAMED OR REMOVED)</text>
+<rect x="760" y="584" width="680" height="300" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="781" y="603" width="242" height="30" rx="3" class="focus"/>
+<text x="784" y="624" class="h2">Couldn't find the Docs team</text>
+<use href="#close" x="1396" y="600"/>
+<line x1="760" y1="648" x2="1440" y2="648" class="rule"/>
+<text x="784" y="684" class="body">It may have been renamed or removed since this link was made. Its agents, if any</text>
+<text x="784" y="702" class="body">are left, are on the Agents page.</text>
+<rect x="784" y="726" width="184" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="876" y="749" class="btn" text-anchor="middle">Back to the Agents page</text>
+<circle cx="1430" cy="684" r="9" class="mark"/><text x="1430" y="688" class="num" text-anchor="middle">4</text>
+
+<text x="760" y="914" class="noteh">4 · Never an empty Edit panel</text>
+<text x="760" y="930" class="note">An old link, another tab, or a reload after the team was renamed or removed. The title says so and takes focus,</text>
+<text x="760" y="946" class="note">as Edit's title does; no fields and no footer. Back to the Agents page and Close (×) close the panel and leave</text>
+<text x="760" y="962" class="note">/agents. A reload in E that finds no team by that name lands here too.</text>
+
+<!-- ============ E: changed elsewhere ============ -->
+<text x="40" y="1012" class="cap">E · SAVE REFUSED: THE TEAM CHANGED SOMEWHERE ELSE</text>
+<rect x="40" y="1024" width="680" height="344" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="64" y="1064" class="h2">Edit the Docs team</text>
+<use href="#close" x="676" y="1040"/>
+<line x1="40" y1="1088" x2="720" y2="1088" class="rule"/>
+<rect x="64" y="1108" width="632" height="124" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<rect x="61" y="1105" width="638" height="130" rx="4" class="focus"/>
+<use href="#alert" x="78" y="1120"/>
+<text x="98" y="1131" class="sumh">Couldn't save the team: it changed since you opened it</text>
+<text x="98" y="1155" class="body">The Docs team was changed somewhere else after you opened it. Copy anything</text>
+<text x="98" y="1173" class="body">you want to keep, then reload to see the team as it is now.</text>
+<rect x="98" y="1188" width="132" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="164" y="1209" class="btn" text-anchor="middle">Reload the team</text>
+<rect x="240" y="1188" width="172" height="32" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<text x="326" y="1209" class="btn" text-anchor="middle">Keep my changes here</text>
+<text x="64" y="1256" class="hint">After Reload the team, with changes, the box asks in place:</text>
+<rect x="64" y="1268" width="632" height="76" rx="3" fill="#fde8e8" stroke="#f9b4b4"/>
+<text x="98" y="1300" class="q">Reload and lose your changes?</text>
+<rect x="476" y="1282" width="112" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="473" y="1279" width="118" height="42" rx="4" class="focus"/>
+<text x="532" y="1305" class="btn" text-anchor="middle">Keep editing</text>
+<rect x="598" y="1282" width="84" height="36" rx="3" fill="#ffffff" stroke="#9c3739"/>
+<text x="640" y="1305" class="danger" text-anchor="middle">Reload</text>
+<circle cx="50" cy="1132" r="9" class="mark"/><text x="50" y="1136" class="num" text-anchor="middle">5</text>
+
+<text x="40" y="1398" class="noteh">5 · Changed somewhere else: refuse the save, keep the work</text>
+<text x="40" y="1414" class="note">The save carries the version of the team the panel loaded. If an agent was edited on its own page, added with</text>
+<text x="40" y="1430" class="note">+ Add agent on /agents/new or changed in another tab, the server refuses with 409 and nothing typed changes.</text>
+<text x="40" y="1446" class="note">Focus moves to the box. Reload the team asks first (focus on Keep editing), then loads the team as it is now. Keep</text>
+<text x="40" y="1462" class="note">my changes here closes the box and leaves Save on; the next save is refused again until you reload.</text>
+
+<!-- ============ F: browser Back with changes ============ -->
+<text x="760" y="1012" class="cap">F · BROWSER BACK (OR THE PHONE'S BACK GESTURE), WITH CHANGES</text>
+<rect x="760" y="1024" width="680" height="256" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="760" y="1024" width="680" height="44" fill="#f0f1f4" stroke="#cdd1d8"/>
+<rect x="772" y="1032" width="28" height="28" rx="3" fill="#ffffff" stroke="#424854"/>
+<path d="M792,1046 H780 M785,1041 L780,1046 L785,1051" fill="none" stroke="#1f2329" stroke-width="1.6"/>
+<rect x="812" y="1034" width="400" height="24" rx="3" fill="#ffffff" stroke="#e3e5ea"/>
+<text x="824" y="1051" class="mono">/agents?team=Docs</text>
+<text x="1228" y="1051" class="hint">Back pressed</text>
+<text x="784" y="1100" class="h2">Edit the Docs team</text>
+<text x="784" y="1134" class="hint">… the body as you left it: drafter "edited", researcher to be removed, critic "new" …</text>
+<line x1="760" y1="1186" x2="1440" y2="1186" class="rule"/>
+<rect x="760" y="1187" width="680" height="92" fill="#fafafa"/>
+<text x="784" y="1218" class="q">Discard your changes to Docs?</text>
+<text x="784" y="1238" class="hint">The team renamed, 1 agent changed, 1 added</text>
+<text x="784" y="1254" class="hint">and 1 removed. They aren't saved.</text>
+<rect x="1192" y="1206" width="112" height="36" rx="3" fill="#ffffff" stroke="#cdd1d8"/>
+<rect x="1189" y="1203" width="118" height="42" rx="4" class="focus"/>
+<text x="1248" y="1229" class="btn" text-anchor="middle">Keep editing</text>
+<rect x="1316" y="1206" width="100" height="36" rx="3" fill="#ffffff" stroke="#9c3739"/>
+<text x="1366" y="1229" class="danger" text-anchor="middle">Discard</text>
+<circle cx="1430" cy="1172" r="9" class="mark"/><text x="1430" y="1176" class="num" text-anchor="middle">6</text>
+
+<text x="760" y="1310" class="noteh">6 · Back is Close, and asks the same question</text>
+<text x="760" y="1326" class="note">Opening the panel pushes one history entry (?team=…). Back with no changes closes the panel and lands on</text>
+<text x="760" y="1342" class="note">/agents. Back with changes puts the entry back at once and asks Close's question in the footer, focus on</text>
+<text x="760" y="1358" class="note">Keep editing; Discard then closes. Closing any other way (Close, Cancel, Discard, a save) goes back over our</text>
+<text x="760" y="1374" class="note">entry, so Back never reopens a closed panel. Opened from a link or a reload there is no entry of ours to go</text>
+<text x="760" y="1390" class="note">back over: closing replaces ?team=… with /agents. Reload and closing the tab get the browser's own prompt.</text>
+</svg>
