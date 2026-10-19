@@ -502,13 +502,15 @@ Encoding, on the later copy (section 1):
 gzip would save 8 MB on the whole state and about 1 MB on the summarised
 one, and costs 31 to 34 ms on every read and about 70 ms on every write.
 
-**Pick: JSON, not compressed.** Its decode is under 30 ms even with every
-done task in it, and it keeps `nil` and empty apart, which
-`reflect.DeepEqual`, and so the equivalence test, does not forgive.
-Section 6 projects 0.36 s of decode on one core for a month of done work,
-so the body's entries are written one to a line and decoded in parallel:
-0.22 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s) of startup
-(section 7). **The one rule for leaving JSON.** Build step 2 times the
+**First pick, before measuring: JSON, not compressed.** Its decode is
+under 30 ms even with every done task in it, and it keeps `nil` and empty
+apart, which `reflect.DeepEqual`, and so the equivalence test, does not
+forgive. Section 6 projects 0.36 s of decode on one core for a month of
+done work, so the plan was one entry to a line, decoded in parallel: 0.22
+to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s) of startup
+(section 7). Build step 2's measurement, below, turned JSON down: the body
+that was built is gob chunks, decoded in parallel the same way (the file
+is described after it). **The one rule for leaving JSON.** Build step 2 times the
 one-entry-per-line JSON decode of a body sized for 100 GB of history, as
 Target 1's own measurement is: the working set plus 90,000 archived
 summaries, about 186 MB by formula (e) (128.5 MB + 57 MB + 0.2 MB). It
@@ -687,6 +689,28 @@ position. The full replay is
 `read-model.md`'s `Open`, which groups the whole table by stream: it
 scans every row, so its cost is the live log's size, and archiving is what
 keeps that bounded.
+
+**Built in step 4b.** `current.SnapshotWriter` is the trigger above: a
+goroutine woken by `State.Apply` and `Refold` (a channel of one, sent on
+without waiting), which writes once 10,000 events have been applied since
+the last snapshot, once 10 minutes pass with at least one, at once after
+a start that replayed the whole log (`State.Resumed` is 0), and at
+`Close`, unless the snapshot on disk already holds the state. It copies
+the state under its read lock and encodes and writes with no lock held; a
+failed write is logged and leaves the old file, and the next trigger tries
+again. Its clock, thresholds and file writer are fields a test sets.
+`cmd/agentry/serve.go` keeps `state.snapshot` in the data folder: it calls
+`RemoveLeftovers` and `Restore` before `store.Open`, starts the writer
+once the log is open and closes it, which writes the last snapshot,
+before the log closes. The build is the sha256 of the running binary,
+read at startup. The write after each archiving round waits for the
+archiver (step 7). Tests: `TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent`
+(Target 3's rule, with a fake clock), `TestAProposalCommitsWhileTheWriterIsMidWrite`
+(Target 6's "never under `Store.mu`"), `TestCloseWritesASnapshotTheNextStartGoesOnFrom`,
+`TestAFailedWriteIsLoggedAndTheWriterGoesOn`, `TestAStartAfterAFallbackWritesAFreshSnapshot`
+and `TestServeKeepsTheSnapshotAcrossARestart` in `cmd/agentry`; equivalence
+test 2 is `TestARealLogThroughASnapshotEqualsAReplay`, and
+`TestStartupBench` times Targets 1, 3 and 6.
 
 ### The equivalence test
 
