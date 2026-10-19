@@ -48,21 +48,100 @@ Two facts shape the rest:
 
 ## Recommendation: one new shipped profile, `network-diagnosis`
 
-Profiles have no inheritance, so it is read-only's rules copied, plus:
+Diagnosis runs as a short list of fixed forms. Everything else, including every live change, asks you. Profiles have no inheritance, so the profile is read-only's rules copied, with two changes:
 
-1. **More secrets denied**, ahead of everything: `/etc/wireguard/**`, `/etc/ssl/private/**`, `**/privkey*.pem`, `**/*.key`, `**/acme.json` (Traefik keeps its certificates' keys there), and Tailscale's and Hawser's state. Agentry's CA folder is protected already.
-2. **Ask: changes live network state**, a named rule so the page says why: `ufw` other than `status`, `nft` other than `list`, `iptables`/`ip6tables` other than `-L`/`-S`, `ip ... add|del|change|replace|flush|set`, `wg set`, `wg-quick`, `tailscale up|down|set`, `systemctl start|stop|restart|reload`, `docker network create|rm|connect|disconnect`, `docker service update`, `docker stack deploy`, `nginx -s`, `caddy reload`, `resolvectl dns|domain|flush-caches`. It asks rather than denies, because your approval on the page is the go-ahead the task needs; a deny would make a change you want impossible without editing the policy.
-3. **Deny: prints a private key:** `wg showconf *`, `wg show * private-key`, `wg show * preshared-keys`, `wg genkey`.
-4. **Allow: diagnosis**, as exact forms, each with an earlier ask rule for any option that writes, sends or listens (the `sed -n * -*` way, since `*` crosses spaces):
-   - `ping -c # *`, `dig *`, `host *`, `nslookup ?*`, `getent hosts *`, `resolvectl status|query *`
-   - `ip route|addr|link|neigh|rule` with only `show`/`get`, `ss *` (asks on `-K`/`--kill`, `-D`)
-   - `traceroute *`, `tracepath *`, `mtr --report *`, `nc -zv * #` (asks on `-l`, `-e`, `-c`)
-   - `curl` only in forms that throw the body away (`-sSI`, `-sSv -o /dev/null`, with `--resolve`, `--connect-to`, `--cacert`); asks on anything that writes, posts, uploads or reads a config, and on `file:` URLs. Page bodies can carry instructions aimed at the agent, which is why WebFetch asks.
-   - `openssl s_client *`, `openssl x509 -noout *`, `openssl verify *` (asks on `-out`, `-sess_out`, `-keylogfile`, `-msgfile`)
-   - `docker network ls|inspect *`, `docker port *`, `tailscale status|ping|netcheck|ip *`, `hawser status *`, `ufw status *`, `nft list *`, `iptables -L|-S *`, `wg show`, `wg show <iface>`
-   - `tcpdump` stays ask: it needs root, `-w` writes, `-z` runs a command, and a capture can hold tokens in clear.
+- Read-only's first rule, "never touch secrets", also denies the network key files.
+- The network rules below go in after read-only's "writes no files from the shell" and before every rule that allows a shell command. If they went first, `ping -c 1 -W 1 host > out.txt` would match the network allow before the redirect deny saw it.
 
-Who gets what:
+How the patterns match (`internal/policy/glob.go`): `*` crosses spaces, `#` is a number, and a trailing ` *` may match nothing. A form whose arguments are a trailing ` *` gets two option asks, `'<fixed part> -*'` for an option straight after the fixed part and `'<fixed part> * -*'` for one after an argument. The literal `'P -*'` alone would miss `ping -c 3 -W 2 -f host`. A form whose `*` is joined to a word (`show*`, `status*`) needs one, `'<form> -*'`, which covers both places. An exact form (`ss -tlnp`) allows nothing else, so it needs none.
+
+```toml
+[profiles.network-diagnosis]
+why = "For agents that check network work: they look at how traffic flows with a fixed set of read-only commands, and change nothing. Every live change asks you."
+otherwise = "ask"
+unreadable = "ask"
+scratch = ['/tmp/claude-*/**']
+
+  [[profiles.network-diagnosis.rules]]
+  name = "never touch secrets"
+  decision = "deny"
+  paths = [
+    '.env', '.env.*', '~/.ssh/**', '~/.aws/**', '~/.config/gcloud/**', '~/.netrc', '~/.git-credentials', '**/id_rsa', '**/id_ed25519',
+    '/etc/wireguard/**', '**/acme.json', '**/privkey*.pem',
+  ]
+  why = "Keys and passwords never reach a model: WireGuard's keys, and the private keys of certificates (Traefik keeps them in acme.json)."
+
+  # read-only's rules from "keeps its own notes" to "writes no files from the shell", unchanged
+
+  [[profiles.network-diagnosis.rules]]
+  name = "never prints a private key"
+  decision = "deny"
+  runs_any = ['*wg showconf*', '*wg show* dump*', '*wg show * private-key*', '*wg show * preshared-keys*', '*wg genkey*']
+  why = "These print a WireGuard private or preshared key, or make one. wg show alone shows the interfaces and their public keys."
+
+  [[profiles.network-diagnosis.rules]]
+  name = "changes live network state"
+  decision = "ask"
+  runs_any = [
+    'ufw *allow*', 'ufw *deny*', 'ufw *reject*', 'ufw *limit*', 'ufw *delete*', 'ufw *insert*', 'ufw *prepend*', 'ufw *route*',
+    'ufw *default*', 'ufw *enable*', 'ufw *disable*', 'ufw *reset*', 'ufw *reload*', 'ufw *logging*',
+    'ip*tables *-A*', 'ip*tables *-I*', 'ip*tables *-D*', 'ip*tables *-R*', 'ip*tables *-F*', 'ip*tables *-X*', 'ip*tables *-N*',
+    'ip*tables *-P*', 'ip*tables *-Z*', 'ip*tables *-E*', 'ip*tables *--*', 'ip*tables-restore*',
+    'nft *add *', 'nft *insert *', 'nft *create *', 'nft *delete *', 'nft *destroy *', 'nft *flush *', 'nft *replace *',
+    'nft *reset *', 'nft *rename *', 'nft -f*', 'nft * -f*',
+    'ip * add *', 'ip * del *', 'ip * delete *', 'ip * change *', 'ip * replace *', 'ip * append *', 'ip * prepend *',
+    'ip * flush *', 'ip * set *',
+    'wg set *', 'wg setconf *', 'wg addconf *', 'wg syncconf *', 'wg-quick *',
+    'systemctl *start*', 'systemctl *stop*', 'systemctl *reload*',
+  ]
+  why = "This changes a live machine's firewall, routes, links, VPN or services, and a mistake there can lock people out. Your approval here is the go-ahead the task needs: the task must already show the exact commands, what they should do, and a rollback that was tested."
+
+  [[profiles.network-diagnosis.rules]]
+  name = "network commands take no other options"
+  decision = "ask"
+  runs_any = [
+    'ping -c # -W # -*', 'ping -c # -W # * -*', 'dig +short -*', 'dig +short * -*',
+    'ip addr show* -*', 'ip route show* -*', 'ip link show* -*',
+    'traceroute -n -*', 'traceroute -n * -*', 'mtr --report -c # -*', 'mtr --report -c # * -*',
+    'docker network inspect -*', 'docker network inspect * -*', 'ufw status* -*',
+    'nft *;*',
+  ]
+  why = "The diagnosis forms are allowed only as they are. Another option can read a file (dig -f), send chosen bytes (ping -p) or change how the tool runs, so it asks. nft takes several commands joined with ; in one argument, so that asks too."
+
+  [[profiles.network-diagnosis.rules]]
+  name = "diagnoses the network"
+  decision = "allow"
+  runs_only = [
+    'ping -c # -W # *', 'dig +short *', 'ss -tlnp', 'ss -tunap',
+    'ip addr show*', 'ip route show*', 'ip link show*',
+    'traceroute -n *', 'mtr --report -c # *',
+    'docker network ls', 'docker network inspect *',
+    # firewall and WireGuard reads need root; without it they fail and change nothing
+    'ufw status*', 'nft list ruleset', 'iptables -S', 'iptables -L -n -v', 'wg show',
+  ]
+  why = "These look at addresses, routes, sockets, firewall rules and paths across the network, and change nothing."
+
+  # read-only's rules from "runs no command a flag names" on, unchanged
+```
+
+The allow has no `where`: its arguments are hosts and addresses, not files.
+
+No form was dropped. Each one with arguments is closed by its option asks, and the arguments left can only be hosts, addresses or `ip`'s own words (`dev eth0`, `table main`). An `ip` change never reaches the allow either: `ip addr add ...` doesn't start with `ip addr show`.
+
+### Decisions
+
+- **curl, openssl, nc and tcpdump are not allowed forms.** They ask through read-only's `otherwise = "ask"`. Safe fixed forms for them are a follow-up.
+- **A command wrapped in `timeout` asks.** `timeout` isn't one of the wrappers Agentry looks through (`internal/policy/shell.go`), so `timeout 5 ping ...` matches no allowed form. The key-printer denies start with `*`, so `timeout`, `sudo` or anything else in front can't get past them. The prompts tell agents to use each tool's own limits instead: `ping -c # -W #`, `dig +time= +tries=`, `mtr -c #`.
+- **`ss` joins `clusteringTools`** in `internal/policy/shell.go`, with a test, and default.toml's clusters comment lists it. Then a rule naming one of ss's short options matches it inside a cluster (`-tlnpK`), as it already does for sort.
+- **Pipes ask.** `ss -tlnp | grep :443` asks: `runs_only` needs every command in the call to match one rule's list, and `grep` is in read-only's list, not this one. Agents run the form alone and read the output. The probe test confirms it.
+
+### Deferred follow-ups
+
+1. A diagnosis profile for network-engineer: developer's rules plus these.
+2. The network key paths as secrets in every profile, not only this one.
+3. Fixed forms for curl, openssl, nc and tcpdump.
+
+### Who gets what
 
 - **network-lead: read-only**, like every other coordinator. It plans and judges; it runs nothing on the network.
 - **network-engineer: developer.** It edits and commits config in the repo, which only developer allows. Its network commands ask, which is acceptable because the verifier does the probing. Developer already denies sudo.
@@ -84,14 +163,13 @@ Every prompt carries these, and the lead's carries them as its rules for decidin
 
 - `internal/agents/teams.go`: the Networking template after Visionaries, which adds no feature.
 - `internal/agents/defaults/networking/{network-lead,network-engineer,network-verifier,network-security}.md`: about 250 to 400 words each, in the voice of `writing/` and `visionaries/`: "You are the ...", a "How to ..." list, the checkers ending on their verdict line.
-- `internal/policy/default.toml`: the `network-diagnosis` profile, copied to a new `shipped/07-<next version>.toml` (TestEveryShippedProfileIsKept). Adding a profile also changes `policy/file_test.go` (TestTheDefaultHasTheFiveProfiles), the profile loops in `policy/default_test.go`, and the profile count in `web/api_test.go` TestThePolicyShowsWithItsProblem. A new `default_test.go` test checks every command above: the diagnosis forms allow, the live changes ask, the key printers deny, and options appended to an allowed form ask.
+- `internal/policy/default.toml`: the `network-diagnosis` profile, copied to a new `shipped/07-<next version>.toml` (TestEveryShippedProfileIsKept). Adding a profile also changes `policy/file_test.go` (TestTheDefaultHasTheFiveProfiles), the profile loops in `policy/default_test.go`, and the profile count in `web/api_test.go` TestThePolicyShowsWithItsProblem. A new `default_test.go` test checks the rules above: each allowed form allows, an option before or after its arguments asks, the live changes ask, and the key printers deny, also behind `sudo` or `timeout`. The same step adds `ss` to `clusteringTools`.
 - The missing-profiles offer needs no change: an existing install's policy.toml lacks `network-diagnosis`, `POST /api/teams` answers 409 `{missingProfiles}`, and Add the profiles and the team calls `policy.AddProfile` with the shipped text. The UI reads templates from the API, so Teams shows the new one with no UI change.
 - `README.md`, lines 109 and 256: add Networking to the teams you can add.
 - Tests:
   - `agents_test.go`: Networking in TestTheTemplatesAndTheirAgents' names and team list, and a TestTheNetworkingTeam like TestTheVisionariesTeam: four agents, network-lead the coordinator, network-security and network-verifier in Reviews, the profiles above.
   - `prompts_policy_test.go`, which already parses the shipped policy: a test that every template's every profile is in the shipped policy, and a TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging that runs the commands the prompts name against each agent's profile. TestEveryTemplateHasACoordinatorAndPrompts and TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits cover the new prompts as they are.
 
-## Open questions
+## Probe results
 
-- Should the engineer get diagnosis too? That means a second new profile, developer plus the diagnosis rules: another full copy of the developer rules to keep in step. Proposed: not now.
-- The network key paths (`/etc/wireguard/**`, `acme.json`, `privkey*.pem`) are secrets in every profile, not only this one. Adding them to the other profiles' "never touch secrets" changes profiles you already have; is that worth its own task?
+To be filled by the probe test (part B).
