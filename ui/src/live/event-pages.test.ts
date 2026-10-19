@@ -151,6 +151,38 @@ describe("a task's events, newest first (the Activity and Events tabs)", () => {
     expect(positions(pages, wanted)).toEqual([1, 2, 3, 4]);
   });
 
+  test("load earlier asked while a catch-up is read waits for it, then reads once, and the list has no gaps or repeats", async () => {
+    const server = fakeServer([1, 2, 3, 5, 8, 9, 10]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    pages.moved(10);
+    await server.answer(10);
+
+    server.add(12, 13);
+    pages.moved(13); // the catch-up is in flight
+    pages.loadEarlier(newest);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?after=10"]);
+    expect(pages.snapshot(newest).loadingEarlier).toBe(true);
+
+    await server.answer(13);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?before=8"]);
+    server.add(14);
+    pages.moved(14); // the log moves again while the earlier page is read
+    expect(server.pending).toHaveLength(1);
+
+    await server.answer(14);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?after=13"]);
+    await server.answer(14);
+    expect(server.reads).toEqual([
+      "/api/tasks/task-8/events?before=11",
+      "/api/tasks/task-8/events?after=10",
+      "/api/tasks/task-8/events?before=8",
+      "/api/tasks/task-8/events?after=13",
+    ]);
+    expect(positions(pages, newest)).toEqual([2, 3, 5, 8, 9, 10, 12, 13, 14]);
+    expect(pages.snapshot(newest)).toMatchObject({ earlier: true, loadingEarlier: false });
+  });
+
   test("the two tabs, and a view shown twice over, share one list and its reads", async () => {
     const server = fakeServer([1, 2, 3]);
     const pages = new EventPages(server.fetch);
