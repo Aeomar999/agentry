@@ -38,6 +38,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -227,6 +228,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	go loop.Run(ctx)
 	go watchdog.New(log, state, watchdog.DefaultLimits, runner.IsRunning, runner.Stop, runner.TypeLine).Run(ctx)
 	go agentPolicy.Watch(ctx, 2*time.Second, func(loaded *policy.Change, refused error) { recordOnDisk(log, agentPolicy, loaded, refused) })
+	startJobs(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second, installed, logs, log, state, loop.Defaults)
 
 	// The desk starts when you first open it on the page, and stops with the server.
 	hub := terminal.NewHub()
@@ -455,6 +457,28 @@ func rejectionError(rejection *events.Rejection) error {
 		return nil
 	}
 	return rejection
+}
+
+// startJobs watches the settings file every interval and starts the features' jobs, each
+// with the Core its routes get and its own settings. The file is never put
+// in the log: it holds secrets.
+func startJobs(ctx context.Context, settingsPath string, every time.Duration, installed []features.Feature, logs map[string]features.Proposer,
+	log *store.Store, state *current.State, defaults tasks.Limits) {
+	settings := settingsfile.Open(settingsPath)
+	go settings.Watch(ctx, every)
+	readOnly := features.ReadOnly(log)
+	features.StartJobs(ctx, installed, func(f features.Feature) features.Core {
+		return features.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settings.For(f.Name)}
+	})
+}
+
+// proposerOf is f's checked proposer in logs, or one that writes nothing
+// when there is none for it.
+func proposerOf(logs map[string]features.Proposer, f features.Feature) features.Proposer {
+	if log, found := logs[f.Name]; found {
+		return log
+	}
+	return features.Unwritable(f.Name)
 }
 
 // installedFeatures is every feature in this binary, written out here: no

@@ -12,17 +12,21 @@ import (
 
 const policyFile = "policy.toml"
 
+// settingsFile holds features' settings and secrets, beside the policy.
+const settingsFile = "features.toml"
+
 // openPolicy loads the policy agents follow, writing the default on first
 // start, and records it in the log if it isn't the one recorded last. The
-// log, the policy itself, the tokens and the HTTPS CA's folder are
-// protected: no agent may touch them, whatever the policy says. The CA's key
-// is named on its own too, though its folder covers it, so a path that can't
-// be fully known is still refused for spelling out its name.
+// log, the policy itself, the settings file with its secrets, the tokens and
+// the HTTPS CA's folder are protected: no agent may touch them, whatever the
+// policy says. The CA's key is named on its own too, though its folder
+// covers it, so a path that can't be fully known is still refused for
+// spelling out its name.
 func openPolicy(dataDir string, log *store.Store) (*policy.Live, error) {
 	path := filepath.Join(dataDir, policyFile)
 	home, _ := os.UserHomeDir()
-	protected := []string{filepath.Join(dataDir, "agentry.db"), path, filepath.Join(dataDir, "ui-token"),
-		filepath.Join(dataDir, hookTokenFile), filepath.Join(dataDir, deskTokenFile), filepath.Join(dataDir, helperTokenFile),
+	protected := []string{filepath.Join(dataDir, "agentry.db"), path, filepath.Join(dataDir, settingsFile),
+		filepath.Join(dataDir, "ui-token"), filepath.Join(dataDir, hookTokenFile), filepath.Join(dataDir, deskTokenFile), filepath.Join(dataDir, helperTokenFile),
 		tlsca.Dir(dataDir), tlsca.KeyPath(dataDir)}
 	live, err := policy.OpenLive(path, home, protected)
 	if err != nil {

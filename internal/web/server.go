@@ -74,7 +74,7 @@ type Server struct {
 }
 
 func NewServer(s *store.Store, state *current.State, config Config, hooks, terminal http.Handler) *Server {
-	return &Server{store: s, events: struct{ features.EventLog }{s}, state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
+	return &Server{store: s, events: features.ReadOnly(s), state: state, config: config, hooks: hooks, terminal: terminal, signins: newSignins(time.Now)}
 }
 
 func (s *Server) Handler() http.Handler {

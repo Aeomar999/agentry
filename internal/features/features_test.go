@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
 // A feature whose Manifest panics is listed hidden and disabled, saying
@@ -60,4 +62,27 @@ func TestSignedWithNoVerifyPanics(t *testing.T) {
 		}
 	}()
 	Signed(nil)
+}
+
+// writable is a store: it reads and writes the log.
+type writable struct{ appended int }
+
+func (w *writable) Stream(string) ([]events.Event, error) { return nil, nil }
+func (w *writable) Append(events.Event) error             { w.appended++; return nil }
+
+// What ReadOnly returns gives a feature no way back to the store under it.
+func TestReadOnlyHidesTheStore(t *testing.T) {
+	log := ReadOnly(&writable{})
+	if _, found := log.(*writable); found {
+		t.Error("ReadOnly's value is the store")
+	}
+	if _, found := log.(interface{ Append(events.Event) error }); found {
+		t.Error("ReadOnly's value can write")
+	}
+	value := reflect.ValueOf(log)
+	for i := range value.NumField() {
+		if field := value.Type().Field(i); field.IsExported() {
+			t.Errorf("ReadOnly's value has the exported field %s", field.Name)
+		}
+	}
 }

@@ -48,7 +48,7 @@ var agentry = events.Actor{Kind: events.System, ID: tasks.Loop}
 // NewLoop makes the loop before the server takes requests, so a close
 // written once it does is never mistaken for history.
 func NewLoop(s *store.Store, state *current.State, runner *turns.Runner, fleet *machines.Fleet) *Loop {
-	return &Loop{store: s, events: struct{ features.EventLog }{s}, state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
+	return &Loop{store: s, events: features.ReadOnly(s), state: state, runner: runner, fleet: fleet, startedAt: s.LastPosition()}
 }
 
 // gitTimeout is how long a machine has to make, move or remove a worktree:

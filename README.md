@@ -299,7 +299,24 @@ What agents may do is in `~/.agentry/policy.toml`, written on first start from [
 - **Upgrades:** Agentry writes `policy.toml` only on first start, so a newer version's default profiles don't reach your file by themselves. The Policy page lists them. One your file lacks has Add this profile, which appends the default with a comment naming the version that added it. One you never edited, whose default has changed since, offers the update with its diff. One you changed is never overwritten: the page shows both, and you choose Keep mine or Use the default. Adding a team whose profile your file lacks offers to add the profile and the team in one click.
 - **History:** every change to the policy, made on the page or saved to the file, is logged with who made it (you, Agentry, or *on disk* for an edit saved to the file) and a diff. The page's History panel lists them and can Revert to an earlier version, as a new one, after first showing you what it would change from the version in force and warning you when that version puts every agent under one profile (`use_for_everyone`). Before Agentry changes the file itself, it copies it to `policy.toml-backup-<time>` beside it, and keeps the newest 20.
 - **Maintainers:** when a change to `internal/policy/default.toml` changes a profile, copy it to the next `internal/policy/shipped/NN-vX.Y.Z.toml`, so existing installs can be offered the update. A test fails until you do.
-- **Built in:** no agent may touch the policy, the log or the sign-in tokens, whatever the file says.
+- **Built in:** no agent may touch the policy, the settings file, the log or the sign-in tokens, whatever the file says.
+
+## Features' settings and secrets
+
+A feature's settings and secrets, such as a git host's token, go in `~/.agentry/features.toml`, beside the policy: one table per feature, of strings, with its secrets in a table under it.
+
+```toml
+[ideas]
+host = "gitlab.com"
+
+[ideas.secrets]
+token = "..."
+```
+
+- **Watched:** save the file and a running feature sees the change within two seconds, with no restart. A feature reads only its own table.
+- **Mistakes:** a version that doesn't load is refused, the one before it stays in force, and the server's output names the file and the line, never what the line holds. With no file, or a broken one, at start, Agentry starts with no settings.
+- **Removing it:** removes every feature's settings and secrets at once; the server's output says once that the file is gone.
+- **Secrets stay in the file:** they never reach the log, the state's snapshot, the page or the API, and no agent may read the file.
 
 ## Deploy it
 
