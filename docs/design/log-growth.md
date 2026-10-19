@@ -508,14 +508,21 @@ done task in it, and it keeps `nil` and empty apart, which
 Section 6 projects 0.36 s of decode on one core for a month of done work,
 so the body's entries are written one to a line and decoded in parallel:
 0.22 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s) of startup
-(section 7). The one rule for leaving JSON: build step 2 times the
-one-entry-per-line JSON decode of a working-set-sized body on 1, 2 and 8
-goroutines; if 8 goroutines take more than 0.34 s (0.5 s minus the fixed
-0.16 s), the fallback is chosen there, before step 4 is built: gob over
+(section 7). **The one rule for leaving JSON.** Build step 2 times the
+one-entry-per-line JSON decode of a body sized for 100 GB of history, as
+Target 1's own measurement is: the working set plus 90,000 archived
+summaries, about 186 MB by formula (e) (128.5 MB + 57 MB + 0.2 MB). It
+times it on 1, 2 and 8 goroutines and reports all three; the rule reads
+the 2-goroutine time, the weakest case Target 1 promises. If that takes
+more than 0.34 s (0.5 s minus the fixed 0.16 s: 70 ms of hashing and 90 ms
+of tail), the fallback is chosen there, before step 4 is built: gob over
 saved forms that record `nil` versus empty explicitly (a presence flag per
-slice or map), so equivalence test 1 still passes on a gob round trip. If
-even that misses Target 1, the one-core figure, ≤ 0.75 s, is the limit,
-and the build asks the user before going further.
+slice or map), so equivalence test 1 still passes on a gob round trip. The
+projection passes with margin: 186 MB × 2.8 ms/MB is 0.52 s on one core,
+0.26 s on two, plus 11 ms for the largest task decoded alone, so startup
+is about 0.16 + 0.26 + 0.011 ≈ 0.43 s. If gob also misses 0.5 s with two
+or more cores, the build stops and asks the user; 0.75 s on one core stays
+the limit.
 
 The file is one header line, then the body:
 
@@ -1236,14 +1243,8 @@ What it says:
   snapshot and 0.36 s to decode. Decoding the tasks in parallel brings it
   to about 60 ms, so startup is 0.22 to 0.24 s on 8 cores (estimate; one
   core: 0.52 to 0.68 s). Parallel decoding is not measured: build step 2
-  times the one-entry-per-line JSON decode of a working-set-sized body on
-  1, 2 and 8 goroutines; if 8 goroutines take more than 0.34 s (0.5 s
-  minus the fixed 0.16 s), the fallback is chosen there, before step 4 is
-  built: gob over saved forms that record `nil` versus empty explicitly (a
-  presence flag per slice or map), so equivalence test 1 still passes on a
-  gob round trip. If even that misses Target 1, the one-core figure,
-  ≤ 0.75 s, is the limit, and the build asks the user before going further.
-  Section 7 picks the parallel decode.
+  measures it, and [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model)
+  decides whether gob replaces it. Section 7 picks the parallel decode.
 - **Every upgrade replays the live log in full**, since the binary's hash
   changes. In (e) that is the working set (1.6 s) plus the streams nothing
   archives: `agents` (slimmed knowledge, 24 MB per GB) and `workers`
@@ -1316,20 +1317,14 @@ task-21.
 **Snapshots second.** Alone they help little at scale, (b): 1.1 s and
 0.39 GB of snapshot per GB. But they are what makes startup independent
 of history once archiving bounds the state, and they need only task-21's
-state. The projections add one thing to section 2: the body's `tasks` and
-`archived` arrays are written one entry to a line (still one JSON value,
-since JSON allows a newline between elements), and the loader splits on
-newlines and decodes the entries on up to 8 goroutines: 0.22 to 0.24 s on
-8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps `nil` and empty
-apart for the equivalence test. The rule for leaving it, as in section 2:
-build step 2 times the one-entry-per-line JSON decode of a
-working-set-sized body on 1, 2 and 8 goroutines; if 8 goroutines take more
-than 0.34 s (0.5 s minus the fixed 0.16 s), the fallback is chosen there,
-before step 4 is built: gob over saved forms that record `nil` versus
-empty explicitly (a presence flag per slice or map), so equivalence test 1
-still passes on a gob round trip. If even that misses Target 1, the
-one-core figure, ≤ 0.75 s, is the limit, and the build asks the user
-before going further.
+state. The projections add one thing to section 2: the body's `tasks`
+and `archived` arrays are written one entry to a line (still one JSON
+value, since JSON allows a newline between elements), and the loader
+splits on newlines and decodes the entries on up to 8 goroutines: 0.22
+to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps
+`nil` and empty apart for the equivalence test. Whether it gives way to
+gob is
+[section 2's rule for leaving JSON](#2-snapshots-of-the-read-model).
 
 **Archiving third.** The biggest piece: a schema migration, store methods
 that delete and restore rows, summaries in the state, the archived view
@@ -1347,7 +1342,7 @@ size or startup.
 | Snapshots, JSON decoded in parallel | startup down to the working set | saved forms, a writer, a loader, the fallbacks | build, steps 3 and 4 |
 | Archiving behind a gated delete | heap, disk and the full replay down to the working set | a migration, two store methods, summaries, reopening | build, steps 5 to 9 |
 | Erasing and redacting | privacy | two gated triggers, a rewrite path | build, step 10 |
-| gob snapshots over saved forms with a presence flag per slice or map | decodes 6 times faster than JSON | plain gob merges `nil` and empty, so the forms must record which for `Equal` to judge a round trip | the fallback: chosen at build step 2 if 8 goroutines of JSON take more than 0.34 s |
+| gob snapshots over saved forms with a presence flag per slice or map | decodes 6 times faster than JSON | plain gob merges `nil` and empty, so the forms must record which for `Equal` to judge a round trip | the fallback: chosen at build step 2 by [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model) (2 goroutines on a 100 GB-sized body, 0.34 s) |
 | Checkpoints of `agents` and `workers` | the replay after an upgrade at 100 GB, from 27 s to about 2 s | a checkpoint event, and archiving two more streams before it | deferred: when Target 2 fails, at about 13 GB |
 | Paging archived tasks in the list | the list's JSON (57 MB at 100 GB) | API and page paging | deferred: at about 10,000 archived tasks, 11 GB |
 | Blob collection | nothing yet: only a crash leaves a blob unnamed | marking and sweeping | deferred |
@@ -1395,14 +1390,13 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      the working set W or 2W), `internal/current/startup_bench_test.go`.
    - Proves: the synthetic log has the copy's mix (events per GB and bytes
      by type within 5%); prints today's startup and heap, case (a).
-   - Also times the one-entry-per-line JSON decode of a working-set-sized
-     body (128 MB) on 1, 2 and 8 goroutines, using section 1's throwaway
-     mirror structs. If 8 goroutines take more than 0.34 s (0.5 s minus the
-     fixed 0.16 s), choose the fallback here, before step 4 is built: gob
-     over saved forms that record `nil` versus empty with a presence flag
-     per slice or map, which must pass equivalence test 1 on a gob round
-     trip. If even that misses Target 1, the one-core ≤ 0.75 s is the
-     limit, and the build asks the user before going further.
+   - Also times the one-entry-per-line JSON decode of a 100 GB-sized
+     body (the working set plus 90,000 archived summaries, about 186 MB)
+     on 1, 2 and 8 goroutines, using section 1's throwaway mirror structs,
+     and applies
+     [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model):
+     over 0.34 s on 2 goroutines means gob, chosen here before step 4 is
+     built (projected: about 0.43 s of startup, so JSON passes).
    - Measures Targets 1 to 5 from here on; none passes yet.
 3. **Saved forms.** Depends on task-21; skip whatever task-21 already
    built (its item 1).
