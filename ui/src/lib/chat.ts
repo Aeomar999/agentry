@@ -40,6 +40,8 @@ export const CHAT_TYPES = [
   "task.needs_you",
   "task.done",
   "turn.ended",
+  "turn.limited",
+  "turn.resumed",
   "turn.stopped",
   "issue.raised",
 ] as const;
