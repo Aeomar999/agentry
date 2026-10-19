@@ -239,6 +239,21 @@ func TestALimitedTurnIsRetriedOnceJustAfterTheReset(t *testing.T) {
 	}
 }
 
+// A task archived while its turn waits for a usage limit is done: nothing
+// resumes it or types into it when the limit resets.
+func TestALimitedTaskArchivedIsNotRetried(t *testing.T) {
+	w := newWorld(t)
+	w.limit(at(30 * time.Minute))
+	w.state.Archive("task-1")
+	if issue := w.after(2 * time.Hour); issue != "" || w.stopped || len(w.typed) != 0 {
+		t.Errorf("issue %q, stopped %v, typed %q", issue, w.stopped, w.typed)
+	}
+	stream, _ := w.store.Stream("task-1")
+	if last := stream[len(stream)-1]; last.Type != events.TurnLimited {
+		t.Errorf("nothing should follow the limit, got %s", last.Type)
+	}
+}
+
 func TestALimitWithNoResetTimeIsRetriedAfterAnHour(t *testing.T) {
 	w := newWorld(t)
 	w.limit("")
