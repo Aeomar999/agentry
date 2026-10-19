@@ -30,7 +30,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
   const [budget, setBudget] = useState<LimitChoice | null>(null); // null: the server's default
   const [busy, setBusy] = useState<"" | "accept" | "start">("");
   const [refused, setRefused] = useState("");
-  const [made, setMade] = useState<(IdeaAcceptance & { started: boolean }) | null>(null);
+  const [made, setMade] = useState<IdeaAcceptance | null>(null);
 
   async function accept(start: boolean) {
     const limit = budget ? limitOf(SCALES.budget, budget) : undefined;
@@ -43,13 +43,8 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
     try {
       const asked = { kind, note, ...(limit !== undefined && { budget: sent(limit) }), ...(start && { start }) };
       const got = await api<IdeaAcceptance>("POST", path(idea, "accept"), asked);
-      setMade({ ...got, started: start });
-      if (got.accepted)
-        notify(
-          "success",
-          `Made ${got.task} from the idea`,
-          start ? `Started: it is ${COLUMN_TITLES["in-progress"]}.` : "In your Backlog until you start it.",
-        );
+      setMade(got);
+      if (got.accepted) notify("success", `Made ${got.task} from the idea`, placeOf(got.column));
     } catch (failure) {
       setRefused((failure as Error).message);
     }
@@ -61,8 +56,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       {made ? (
         <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
           <p>
-            Made <TaskLink id={made.task} /> from it,{" "}
-            {made.started ? `started: it is ${COLUMN_TITLES["in-progress"]}` : "in your Backlog until you start it"}.
+            Made <TaskLink id={made.task} /> from it. {placeOf(made.column)}
           </p>
           {!made.accepted && <Banner title="The idea wasn't marked accepted">{made.refused}</Banner>}
           <div className="flex gap-2">
@@ -122,6 +116,14 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       )}
     </Dialog>
   );
+}
+
+// placeOf says where the idea's task is, from the column the server
+// answers, not the button pressed: a retry after a failed accept finds the
+// task where it was made. Empty when the column can't be read.
+function placeOf(column: IdeaAcceptance["column"]): string {
+  if (column === "") return "";
+  return column === "backlog" ? "In your Backlog until you start it." : `Started: it is ${COLUMN_TITLES[column]}.`;
 }
 
 // DismissIdeaDialog puts the idea away, into the history, with your reason.

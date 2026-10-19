@@ -32,6 +32,7 @@ export interface Idea {
 // marked accepted, and then refused says why.
 export interface IdeaAcceptance {
   task: string;
+  column: BoardColumn | ""; // the task's column now, "" when it can't be read; a retry keeps the task where it was made
   accepted: boolean;
   refused: string;
 }
