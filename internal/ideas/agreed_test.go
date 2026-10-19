@@ -415,9 +415,9 @@ func TestTheRulesRefuseAgentryADuplicate(t *testing.T) {
 }
 
 // Agentry makes a task from an idea only while it is open, only in your
-// Backlog, and starts only
-// a task it made from an idea it accepted, once, out of the Backlog into
-// In progress, before it has run; no agent accepts an idea.
+// Backlog, and starts only a task it made from an idea it accepted, once,
+// out of the Backlog into In progress, before it has run; no agent accepts
+// an idea.
 func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	turnOn(t, s, state)
