@@ -11,6 +11,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -310,6 +311,30 @@ func TestAStoryAfterAnArchivedTaskStarts(t *testing.T) {
 	}
 	if !loop.blocked(&tasks.Task{After: []string{"task-1", "task-2"}}) {
 		t.Error("a story after a task that isn't done isn't blocked")
+	}
+}
+
+// An erased task has nothing left to wait for: it holds no port, as its
+// stream is gone, and a story after it isn't blocked by it.
+func TestAnErasedTaskHoldsNoPortAndBlocksNoStory(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	for i, id := range []string{"task-1", "task-2"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901 + i}})
+	}
+	if _, rejection, err := s.Erase("task-1", you, "Asked to be forgotten.", sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	loop := &Loop{store: s, state: state}
+	if ports := loop.portsInUse(workers.Local); !slices.Equal(ports, []int{7902}) {
+		t.Errorf("ports in use %v: want only task-2's", ports)
+	}
+	if loop.blocked(&tasks.Task{After: []string{"task-1"}}) {
+		t.Error("a story after an erased task is blocked")
 	}
 }
 

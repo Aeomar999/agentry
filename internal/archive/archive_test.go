@@ -253,6 +253,21 @@ func TestAnEpicWaitsForItsStories(t *testing.T) {
 	}
 }
 
+// An erased story is gone from the state for good, so its epic doesn't
+// wait for it, as it waits for a broken one.
+func TestAnEpicDoesNotWaitForAnErasedStory(t *testing.T) {
+	f := newFixture(t)
+	f.task(t, "task-1", tasks.Epic)
+	f.story(t, "task-2", "task-1")
+	if _, rejection, err := f.log.Erase("task-2", you, "Asked to be forgotten.", f.blobs); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	f.clock = f.done(t, "task-1").Add(age)
+	if archived := f.archiver.round(); archived != 1 || !f.isArchived("task-1") {
+		t.Errorf("with task-2 erased: archived %d, epic %v; want the epic", archived, f.isArchived("task-1"))
+	}
+}
+
 // withABrokenStory is a fixture whose epic task-1 has one story, task-2,
 // broken by a worktree on a worker it doesn't have, which only a log
 // without rules takes.
