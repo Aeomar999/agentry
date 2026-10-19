@@ -234,6 +234,17 @@ export function TaskPage() {
                 </span>
               </>
             )}
+            {task.idea && (
+              <>
+                <span>·</span>
+                <span>
+                  from idea{" "}
+                  <Link to={`/ideas#${task.idea}`} className="font-mono text-info hover:underline">
+                    {task.idea}
+                  </Link>
+                </span>
+              </>
+            )}
             {task.parent && (
               <>
                 <span>·</span>

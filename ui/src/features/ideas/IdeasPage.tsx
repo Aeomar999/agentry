@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Lightbulb, Users } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";
@@ -37,6 +38,14 @@ export function IdeasPage() {
   const titles = new Map((useResource<TaskSummary[]>("/api/tasks").data ?? []).map((task) => [task.id, task.title]));
   const visionaries = useAskVisionaries();
   const [acting, setActing] = useState<{ idea: Idea; action: "accept" | "dismiss" } | null>(null);
+  const { hash } = useLocation();
+  const loaded = data !== undefined;
+
+  // A link to one idea, as from the task it became, scrolls to its row once
+  // the list is in, and not again when the list reloads.
+  useEffect(() => {
+    if (loaded && hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
+  }, [loaded, hash]);
 
   const open = ideas.filter((idea) => idea.state === "open");
   const decided = ideas.filter((idea) => idea.state !== "open");
@@ -237,7 +246,7 @@ function IdeaSettings() {
 // what became of it, and what was said.
 function HistoryRow({ idea }: { idea: Idea }) {
   return (
-    <li className="flex flex-col gap-1 px-4 py-3">
+    <li id={idea.id} className="flex flex-col gap-1 px-4 py-3">
       <span className="flex flex-wrap items-center gap-2">
         <Badge variant={idea.state === "accepted" ? "success" : "default"}>{idea.state}</Badge>
         {idea.autoAccepted && (

@@ -33,6 +33,7 @@ export interface TaskSummary {
   waitingOn: string; // another team's task this one waits for
   kind: "" | "epic"; // "" is a story
   epic: string; // a story's epic
+  idea: string; // the idea it was accepted as, "" for none
   after: string[]; // the stories it builds on
   blockedBy: string[]; // of those, the ones not done yet, so it hasn't started
   stories: number; // an epic's
