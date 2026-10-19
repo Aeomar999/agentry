@@ -72,6 +72,11 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 			return refuse(reason)
 		}
 	}
+	if rule := templateRules[p.Type]; rule != nil {
+		if reason := rule(p); reason != "" {
+			return refuse(reason)
+		}
+	}
 	if catalogue.KindOf(p.Stream) == events.OwnedStream {
 		return checkOwned(p, state, installed)
 	}
