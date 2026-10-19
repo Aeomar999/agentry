@@ -247,7 +247,7 @@ export interface CreatedEvent {
 // Something waiting for you, from any task (internal/web/questions_api.go).
 export interface Question {
   id: string;
-  kind: "approval" | "question" | "budget" | "waiting";
+  kind: "approval" | "question" | "budget" | "turns" | "waiting";
   task: string;
   taskTitle: string;
   agent: string;
@@ -261,6 +261,8 @@ export interface Question {
   page?: string;
   tokensUsed?: number;
   budget?: number;
+  turnsSinceAnswer?: number;
+  maxTurns?: number;
 }
 
 // A one-time code that signs in another device, with the server's addresses

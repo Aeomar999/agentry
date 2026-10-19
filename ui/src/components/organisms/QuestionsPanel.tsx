@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCheck, Gauge, MessageCircleQuestionMark, ShieldAlert, SquareTerminal } from "lucide-react";
+import { CheckCheck, Gauge, Repeat, MessageCircleQuestionMark, ShieldAlert, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { AgentName } from "@/components/molecules/AgentName";
 import { EmptyState } from "@/components/molecules/EmptyState";
@@ -9,7 +9,7 @@ import type { Question } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { cn } from "@/lib/cn";
 import { timeAgo } from "@/lib/time";
-import { Answer, Approval, BudgetChoice } from "./NeedsYouPanel";
+import { Answer, Approval, LimitStopChoice } from "./NeedsYouPanel";
 
 // Everything waiting for you, from every task, in the dock: the list on the
 // left, oldest first, and the one you pick on the right with what led to it
@@ -20,6 +20,7 @@ const KINDS: Record<Question["kind"], { label: string; icon: React.ReactNode }> 
   approval: { label: "Approve", icon: <ShieldAlert /> },
   question: { label: "Question", icon: <MessageCircleQuestionMark /> },
   budget: { label: "Budget", icon: <Gauge /> },
+  turns: { label: "Max turns", icon: <Repeat /> },
   waiting: { label: "Waiting", icon: <SquareTerminal /> },
 };
 
@@ -84,6 +85,7 @@ function QuestionDetail({
   onOpenTerminal: (taskId: string) => void;
 }) {
   const [fromPage, setFromPage] = useState("");
+  const asks = q.kind === "question" || q.kind === "budget" || q.kind === "turns"; // answered in words, too
   return (
     <div className="flex min-w-0 flex-1 scrollbar-thin flex-col gap-3 overflow-y-auto p-4">
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-muted">
@@ -103,13 +105,16 @@ function QuestionDetail({
           onChanged={onChanged}
         />
       )}
-      {(q.kind === "question" || q.kind === "budget") && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{q.text}</p>}
+      {asks && <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{q.text}</p>}
       {q.page && <QuestionPage page={q.page} onAnswer={setFromPage} />}
       {fromPage && <p className="text-[12px] text-ink-muted">The page filled in your answer below. Check it, then send it.</p>}
-      {q.kind === "budget" && <BudgetChoice task={{ id: q.task, budget: q.budget!, tokensUsed: q.tokensUsed! }} onChanged={onChanged} />}
-      {(q.kind === "question" || q.kind === "budget") && (
-        <Answer taskId={q.task} onChanged={onChanged} options={q.options} prefill={fromPage} />
+      {q.kind === "budget" && (
+        <LimitStopChoice taskId={q.task} kind="budget" used={q.tokensUsed ?? 0} limit={q.budget ?? 0} onChanged={onChanged} />
       )}
+      {q.kind === "turns" && (
+        <LimitStopChoice taskId={q.task} kind="turns" used={q.turnsSinceAnswer ?? 0} limit={q.maxTurns ?? 0} onChanged={onChanged} />
+      )}
+      {asks && <Answer taskId={q.task} onChanged={onChanged} options={q.options} prefill={fromPage} />}
       {q.kind === "waiting" && (
         <>
           <p className="text-[13px] whitespace-pre-wrap text-ink-primary">{q.text}</p>
