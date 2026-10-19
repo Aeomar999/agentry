@@ -199,6 +199,7 @@ func (t *Task) Apply(e events.Event) {
 			Text: "Split into stories: " + e.Text("titles") + ". They wait in your Backlog until you start them."}
 		t.Closing = "" // more to do first
 		t.hearStoryNews(e)
+		t.hearApprovalNews(e)
 	case events.EpicWaits:
 		waits := "Waiting for its stories."
 		if t.Closing != "" {
@@ -207,6 +208,7 @@ func (t *Task) Apply(e events.Event) {
 		t.reply(e)
 		t.step(e, t.Coordinator, You, cmp.Or(e.Text("note"), waits))
 		t.hearStoryNews(e)
+		t.hearApprovalNews(e)
 	case events.StoryDone:
 		t.StoriesDone = append(t.StoriesDone, e.Text("story"))
 		text := e.Text("story") + " is done: " + e.Text("summary")
@@ -288,7 +290,7 @@ func (t *Task) Apply(e events.Event) {
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
 		if e.Text("agent") == t.Coordinator {
-			t.storyNews = false // its brief has every story's news so far
+			t.storyNews, t.approvalNews = false, false // its brief has every story's news so far, and your approvals
 			if t.WrapUp != nil {
 				t.WrapUp.Turn = e.Correlation
 			}
@@ -310,6 +312,9 @@ func (t *Task) Apply(e events.Event) {
 		t.decide(e, Approved)
 	case events.ActionDenied:
 		t.decide(e, Denied)
+	case events.ActionHeld:
+		action := t.Action(e.Correlation)
+		action.Held, action.HeldAt = true, e.At
 	case events.ActionResult:
 		t.Action(e.Correlation).HasResult = true
 
@@ -388,7 +393,7 @@ func (t *Task) orphaned(e events.Event) bool {
 	switch e.Type {
 	case events.ActionRequested:
 		return t.OpenTurn() == nil
-	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionResult:
+	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult:
 		return t.Action(e.Correlation) == nil
 	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
@@ -445,6 +450,55 @@ func (t *Task) stopTurn() bool {
 func (t *Task) decide(e events.Event, decision Decision) {
 	action := t.Action(e.Correlation)
 	action.Decision, action.Reason = decision, e.Text("reason")
+	if pass := e.Text("pass"); pass != "" {
+		t.Action(pass).PassUsed = true
+	}
+	if action.Held && decision == Approved {
+		t.handBack(e, action)
+	}
+}
+
+// handBack tells the coordinator you approved a held action: its agent was
+// told no long ago, so it runs it again only when the coordinator hands it
+// back. Deciding, the coordinator hears it once it has decided.
+func (t *Task) handBack(e events.Event, action *Action) {
+	text := approvedLateText(t, action, e.At)
+	if t.idle() {
+		t.step(e, Agentry, t.Coordinator, text)
+		return
+	}
+	t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator, Text: text})
+	t.approvalNews = t.approvalNews || t.Handoff == nil
+}
+
+// approvedLateText is the hand-back: who asked for what, when, and that the
+// command is to be run again only once the branch is checked.
+func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
+	when := "after its turn ended"
+	if turn := t.Turn(action.Turn); turn != nil && !turn.Ended {
+		when = "while its turn went on without it"
+	}
+	again := "Hand the task back to " + action.Agent + " to run it again"
+	if action.Agent == t.Coordinator {
+		again = "Run it again yourself in your next turn"
+	}
+	return fmt.Sprintf("The user approved a command %s asked for in %s at %s (%s), which Agentry held for them when no answer "+
+		"came in time. They approved it at %s, %s, so %s was told no and hasn't run it. The full command:\n\n%s\n\n"+
+		"%s, after checking the branch hasn't changed in a way that makes it wrong. Agentry lets this exact command "+
+		"through once without asking.",
+		action.Agent, action.Turn, clock(action.RequestedAt), action.Tool, clock(approvedAt), when, action.Agent,
+		action.Command, again)
+}
+
+func clock(at time.Time) string { return at.UTC().Format("2006-01-02 15:04 UTC") }
+
+// hearApprovalNews hands the task back to its coordinator when you approved
+// a held action while it was deciding.
+func (t *Task) hearApprovalNews(e events.Event) {
+	if t.approvalNews {
+		t.approvalNews = false
+		t.step(e, Agentry, t.Coordinator, "The user approved a held command while you were deciding: see above. Decide again with it in mind.")
+	}
 }
 
 // step adds a line to the trail. A step to an agent is also the task's

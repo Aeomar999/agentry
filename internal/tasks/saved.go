@@ -6,18 +6,19 @@ import "maps"
 // whole: the task, and beside it what Task keeps unexported, which JSON
 // would leave out.
 type Saved struct {
-	Task      Task // its unexported fields left zero: they are the ones below
-	WrappedUp int
-	Collected map[string]bool
-	StoryNews bool
+	Task         Task // its unexported fields left zero: they are the ones below
+	WrappedUp    int
+	Collected    map[string]bool
+	StoryNews    bool
+	ApprovalNews bool
 }
 
 // Save is the task's saved form. It is made from a Clone, so it shares
 // nothing with the task.
 func (t *Task) Save() Saved {
 	c := t.Clone()
-	saved := Saved{WrappedUp: c.wrappedUp, Collected: c.collected, StoryNews: c.storyNews}
-	c.wrappedUp, c.collected, c.storyNews = 0, nil, false
+	saved := Saved{WrappedUp: c.wrappedUp, Collected: c.collected, StoryNews: c.storyNews, ApprovalNews: c.approvalNews}
+	c.wrappedUp, c.collected, c.storyNews, c.approvalNews = 0, nil, false, false
 	saved.Task = *c
 	return saved
 }
@@ -25,6 +26,6 @@ func (t *Task) Save() Saved {
 // Restore is the task s was saved from. It shares nothing with s.
 func Restore(s Saved) *Task {
 	t := s.Task.Clone()
-	t.wrappedUp, t.collected, t.storyNews = s.WrappedUp, maps.Clone(s.Collected), s.StoryNews
+	t.wrappedUp, t.collected, t.storyNews, t.approvalNews = s.WrappedUp, maps.Clone(s.Collected), s.StoryNews, s.ApprovalNews
 	return t
 }

@@ -166,9 +166,10 @@ var coreTypes = map[Type]Spec{
 	SessionStarted:     {Fields: []string{"engineSession"}, Correlation: true, Writers: []ActorKind{Worker}},
 
 	ActionRequested: {Fields: []string{"tool", "command"}, Correlation: true, Writers: []ActorKind{Agent}},
-	ActionApproved:  {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}},
+	ActionApproved:  {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}}, // "pass": the held action whose late approval let it through
 	ActionAsked:     {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy}},
 	ActionDenied:    {Fields: []string{"reason"}, Correlation: true, Writers: []ActorKind{Policy, Human}},
+	ActionHeld:      {Correlation: true, Writers: []ActorKind{Policy}},
 	ActionResult:    {Correlation: true, Writers: []ActorKind{Worker}},
 
 	PlanUpdated:  {Correlation: true, Writers: []ActorKind{Worker}}, // "plan" may be empty: the agent cleared it

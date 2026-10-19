@@ -72,6 +72,7 @@ type Task struct {
 	Fetching     *Fetch          // a fetch the coordinator asked for, on its way
 	collected    map[string]bool // the turns whose folder was read back
 	storyNews    bool            // a story finished while the coordinator was busy deciding: it hears it next
+	approvalNews bool            // you approved a held action while the coordinator was busy deciding: it hears it next
 	CreatedAt    time.Time
 
 	Worktree *Worktree // nil until the worktree is ready
@@ -212,9 +213,12 @@ type Action struct {
 	Command     string
 	RequestedAt time.Time
 	Asked       bool // the policy handed it to the user
+	Held        bool // no answer came before the hook gave up: it waited for you after its turn moved on
+	HeldAt      time.Time
 	Decision    Decision
 	Reason      string // the rule that asked, then the reason for the decision
 	HasResult   bool
+	PassUsed    bool // held and approved, its one pass was used: the same command asked for again went through
 }
 
 // Step is one line of the handoff trail: who passed what to whom.
@@ -305,14 +309,42 @@ func (t *Task) Pushed(turn string) bool {
 
 // WaitingForYou are the actions the policy asked the user about, not yet decided.
 // action.asked is the only way an action puts a task in Needs you (proof 05).
+// A held action waits only while the task is at work: one done, or parked in
+// To do or the Backlog, can't take a decision on it until it is moved back.
 func (t *Task) WaitingForYou() []*Action {
 	var waiting []*Action
 	for _, action := range t.Actions {
-		if action.Asked && action.Decision == Undecided {
+		if action.Asked && action.Decision == Undecided && (!action.Held || t.atWork()) {
 			waiting = append(waiting, action)
 		}
 	}
 	return waiting
+}
+
+// HooksWaiting are the asked actions a hook call is still waiting on: not
+// decided, and not held.
+func (t *Task) HooksWaiting() []*Action {
+	var waiting []*Action
+	for _, action := range t.Actions {
+		if action.Asked && action.Decision == Undecided && !action.Held {
+			waiting = append(waiting, action)
+		}
+	}
+	return waiting
+}
+
+// atWork is a task that is neither done nor parked.
+func (t *Task) atWork() bool { return !t.IsDone && t.Parked == "" }
+
+// PassFor is the held action you approved whose pass lets this exact tool
+// and command through once without asking, or nil.
+func (t *Task) PassFor(tool, command string) *Action {
+	for _, action := range t.Actions {
+		if action.Held && action.Decision == Approved && !action.PassUsed && action.Tool == tool && action.Command == command {
+			return action
+		}
+	}
+	return nil
 }
 
 // CurrentAgent is who has the task right now: the agent in the open turn, or "".
