@@ -37,28 +37,31 @@ func TestTheCommandsPinTheServersOwnCA(t *testing.T) {
 	hash := strings.ToLower(strings.ReplaceAll(ca.Fingerprint(), ":", ""))
 	network := []string{"https://192.168.1.5:7800"}
 	for _, c := range []struct {
-		name    string
-		config  Config
-		host    string
-		proxied bool            // the request came through a reverse proxy doing TLS
-		pinned  map[string]bool // each address: are its commands pinned?
+		name   string
+		config Config
+		host   string
+		proxy  string          // "http" or "https": how a reverse proxy doing TLS reached the server
+		pinned map[string]bool // each address: are its commands pinned?
 	}{
-		{"open at localhost", Config{CA: string(ca.PEM()), NetworkURLs: network, LocalURL: "https://localhost:7800"}, "localhost:7800", false,
+		{"open at localhost", Config{CA: string(ca.PEM()), NetworkURLs: network, LocalURL: "https://localhost:7800"}, "localhost:7800", "",
 			map[string]bool{network[0]: true, "https://localhost:7800": true}},
-		{"open at a name", Config{CA: string(ca.PEM()), NetworkURLs: network, LocalURL: "https://localhost:7800"}, "agentry.lan:7800", false,
+		{"open at a name", Config{CA: string(ca.PEM()), NetworkURLs: network, LocalURL: "https://localhost:7800"}, "agentry.lan:7800", "",
 			map[string]bool{network[0]: true, "https://agentry.lan:7800": true, "https://localhost:7800": true}},
-		{"a public URL beside", Config{CA: string(ca.PEM()), PublicURL: "https://agentry.example.com", NetworkURLs: network}, "agentry.example.com", true,
+		{"a public URL beside", Config{CA: string(ca.PEM()), PublicURL: "https://agentry.example.com", NetworkURLs: network}, "agentry.example.com", "http",
 			map[string]bool{"https://agentry.example.com": false, network[0]: true}},
-		{"behind a proxy with no public URL", Config{CA: string(ca.PEM()), NetworkURLs: network}, "agentry.example.com", true,
+		{"behind a proxy with no public URL", Config{CA: string(ca.PEM()), NetworkURLs: network}, "agentry.example.com", "http",
 			map[string]bool{network[0]: true, "https://agentry.example.com": false}},
-		{"no CA", Config{NetworkURLs: []string{"http://192.168.1.5:7800"}}, "localhost:7800", false,
+		{"behind a proxy reaching it over https", Config{CA: string(ca.PEM()), NetworkURLs: network}, "agentry.example.com", "https",
+			map[string]bool{network[0]: true, "https://agentry.example.com": false}},
+		{"no CA", Config{NetworkURLs: []string{"http://192.168.1.5:7800"}}, "localhost:7800", "",
 			map[string]bool{"http://192.168.1.5:7800": false, "http://localhost:7800": false}},
 	} {
 		request := httptest.NewRequest("POST", "/api/workers/invite", nil)
 		request.Host = c.host
-		if c.proxied {
+		if c.proxy != "" {
 			request.Header.Set("X-Forwarded-Proto", "https")
-		} else if c.config.CA != "" {
+		}
+		if c.proxy == "https" || c.proxy == "" && c.config.CA != "" {
 			request.TLS = &tls.ConnectionState{}
 		}
 		answer := (&Server{config: c.config}).installCommands(request, "/worker/install", "c0de")

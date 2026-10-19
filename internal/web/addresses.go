@@ -116,15 +116,17 @@ func (s *Server) commandsAt(r *http.Request, url, path, code string) map[string]
 
 // servedWithOwnCA is whether url, the server's address r came to or one it
 // was offered, is served with Agentry's own CA (-https): every address but
-// the public URL, or one a reverse proxy doing TLS in front passed r on
-// from. Plain HTTP this machine sends (localhost) counts, as https reaches
-// it too.
+// the public URL, or one a reverse proxy in front passed r on from. A proxy
+// marks r with X-Forwarded-Proto, even one reaching Agentry over https
+// itself, as it shows its own certificate. A client faking the header only
+// gets commands that trust the system's CAs instead. Plain HTTP this machine
+// sends (localhost) counts, as https reaches it too.
 func (s *Server) servedWithOwnCA(r *http.Request, url string) bool {
 	switch {
 	case s.config.CA == "" || url == strings.TrimSuffix(s.config.PublicURL, "/"):
 		return false
 	case url == requestURL(r):
-		return r.TLS != nil || !overHTTPS(r)
+		return r.Header.Get("X-Forwarded-Proto") == ""
 	default:
 		return true
 	}
