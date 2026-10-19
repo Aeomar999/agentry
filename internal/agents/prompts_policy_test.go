@@ -9,9 +9,10 @@ import (
 )
 
 // The default prompts tell agents to run commands. None of them may be one
-// the policy denies, or an agent following its own prompt gets blocked.
+// the agent's own profile denies, or an agent following its prompt gets
+// blocked. Every template's agents are checked.
 func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
-	// The developer profile's own rules, without the shipped use_for_everyone.
+	// The profiles' own rules, without the shipped use_for_everyone.
 	rules := strings.Replace(string(policy.Default()), "\nuse_for_everyone = ", "\n# use_for_everyone = ", 1)
 	shipped, err := policy.Parse([]byte(rules), "/home/dev", nil)
 	if err != nil {
@@ -19,17 +20,19 @@ func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
 	}
 	quoted := regexp.MustCompile("`(git [^`]+)`")
 	pushes := 0
-	for _, agent := range FromEvents(seeded()) {
-		for _, match := range quoted.FindAllStringSubmatch(agent.Prompt, -1) {
-			for _, command := range strings.Split(match[1], " then ") {
-				verdict := shipped.Decide("developer", policy.Call{Tool: "Bash", Input: command, Workspace: "/w"})
-				if verdict.Decision == policy.Deny {
-					t.Errorf("%s's prompt says to run %q, which is denied: %s", agent.Name, command, verdict.Rule)
-				}
-				if strings.HasPrefix(command, "git push") {
-					pushes++
-					if verdict.Decision != policy.Ask {
-						t.Errorf("%s's push %q must ask you, got %s", agent.Name, command, verdict.Decision)
+	for _, template := range Templates {
+		for _, agent := range template.prompted() {
+			for _, match := range quoted.FindAllStringSubmatch(agent.Prompt, -1) {
+				for _, command := range strings.Split(match[1], " then ") {
+					verdict := shipped.Decide(agent.Profile, policy.Call{Tool: "Bash", Input: command, Workspace: "/w"})
+					if verdict.Decision == policy.Deny {
+						t.Errorf("%s's prompt (%s) says to run %q, which is denied: %s", agent.Name, agent.Profile, command, verdict.Rule)
+					}
+					if strings.HasPrefix(command, "git push") {
+						pushes++
+						if verdict.Decision != policy.Ask {
+							t.Errorf("%s's push %q must ask you, got %s", agent.Name, command, verdict.Decision)
+						}
 					}
 				}
 			}
