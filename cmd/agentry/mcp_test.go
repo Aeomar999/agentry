@@ -213,10 +213,61 @@ func TestAKeptCAIsDroppedWhenTheServerIsNoLongerItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := agentry.Call("GET", "/api/config", nil, nil); err == nil {
+	err = agentry.Call("GET", "/api/config", nil, nil)
+	if err == nil {
 		t.Fatal("trusted a server another CA vouches for")
+	}
+	if !strings.Contains(err.Error(), "no longer vouches for it") || !strings.Contains(err.Error(), "unknown authority") {
+		t.Errorf("the error doesn't say the kept CA was dropped, then why: %v", err)
 	}
 	if _, err := os.Stat(keptCAFile()); !os.IsNotExist(err) {
 		t.Errorf("the kept CA is still there: %v", err)
+	}
+}
+
+// A connection saved with one CA, to a server another CA now vouches for,
+// as after `agentry ca -regenerate`, says to connect again, and how.
+func TestAConnectionToAServerWhoseCAChangedSaysToConnectAgain(t *testing.T) {
+	_, address, _ := connectable(t)
+	old, _ := testCA(t)
+	server := "https://" + address
+	if err := client.SaveConnection(client.Connection{URL: server, Credential: "m1", CA: string(old.PEM())}); err != nil {
+		t.Fatal(err)
+	}
+	agentry, err := connect("", "", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = agentry.Call("GET", "/api/config", nil, nil)
+	if err == nil {
+		t.Fatal("trusted a server another CA vouches for")
+	}
+	said := err.Error()
+	advice := "agentry mcp connect -ca-fingerprint <fingerprint from `agentry ca` on the server> " + server + " <code from the Integrations page>"
+	if !strings.Contains(said, "it was regenerated, or this is another server") || strings.Count(said, advice) != 1 {
+		t.Errorf("the error doesn't say the CA changed and how to connect again, once: %v", err)
+	}
+	if strings.Index(said, advice) > strings.Index(said, "unknown authority") {
+		t.Errorf("the underlying error isn't after the advice: %v", err)
+	}
+}
+
+// A connection that fails for any other reason, such as a server that
+// isn't there, keeps its own error.
+func TestAConnectionToAServerThatIsDownIsNotACAChange(t *testing.T) {
+	ca, _ := testCA(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	gone := httptest.NewUnstartedServer(nil)
+	gone.Listener.Close() // a free port nothing listens on
+	if err := client.SaveConnection(client.Connection{URL: "https://" + gone.Listener.Addr().String(), Credential: "m1", CA: string(ca.PEM())}); err != nil {
+		t.Fatal(err)
+	}
+	agentry, err := connect("", "", "", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = agentry.Call("GET", "/api/config", nil, nil)
+	if err == nil || strings.Contains(err.Error(), "regenerated") || !strings.Contains(err.Error(), "can't reach Agentry") {
+		t.Errorf("a server that's down: %v", err)
 	}
 }
