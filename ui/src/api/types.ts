@@ -208,6 +208,24 @@ export interface PolicyChange {
   backup: string;
 }
 
+// What a profile decides about a call, and the rule that decided it:
+// "otherwise" when none matched.
+export interface Verdict {
+  decision: Decision;
+  profile: string;
+  rule: string;
+  why: string;
+  policy: string; // the hash of the version that decided
+}
+
+// A call tried against a profile, run in workspace. override is what
+// decides today, when use_for_everyone names another profile.
+export interface TriedCall {
+  verdict: Verdict;
+  workspace: string;
+  override?: { profile: string; verdict: Verdict };
+}
+
 export interface PolicyProfile {
   name: string;
   why: string;
