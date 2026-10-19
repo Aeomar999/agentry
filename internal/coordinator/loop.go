@@ -540,13 +540,15 @@ func (l *Loop) removeWorktree(task *tasks.Task) {
 	}
 }
 
-// portsInUse are the ports of unfinished tasks whose work is on the machine.
+// portsInUse are the ports of tasks whose work is on the machine and not
+// over: unfinished, or done by you and still wrapping up, since a reopen
+// then works in the same worktree.
 func (l *Loop) portsInUse(machine string) []int {
 	ids, _ := l.store.TaskIDs()
 	var ports []int
 	for _, id := range ids {
 		task, _, err := l.load(id)
-		if err == nil && task != nil && !task.IsDone && task.Worktree != nil && task.Worktree.Worker == machine {
+		if err == nil && task != nil && (!task.IsDone || task.WrapUp != nil) && task.Worktree != nil && task.Worktree.Worker == machine {
 			ports = append(ports, task.Worktree.Port)
 		}
 	}

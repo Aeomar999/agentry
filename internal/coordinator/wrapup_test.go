@@ -3,6 +3,7 @@ package coordinator
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	watch "gitlab.com/dev.chempa/agentry/internal/watchdog"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // You move a task to Done while the engineer works: it is done at once, and
@@ -214,5 +216,31 @@ func propose(t *testing.T, s *store.Store, p events.Proposal) {
 	t.Helper()
 	if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 		t.Fatal(p.Type, rejection, err)
+	}
+}
+
+// A task you moved to Done keeps its port while its coordinator wraps up,
+// since reopening it then works in the same worktree; after that it is free.
+func TestATaskWrappingUpKeepsItsPort(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), rules.Check)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	for i, id := range []string{"task-1", "task-2", "task-3"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": id, "repo": "/r", "coordinator": "tech-lead"}})
+		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/" + id, "branch": "b", "port": 7901 + i}})
+		propose(t, s, events.Proposal{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+	}
+	for _, id := range []string{"task-2", "task-3"} {
+		propose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
+	}
+	propose(t, s, events.Proposal{Stream: "task-3", Actor: watchdog, Type: events.TaskWrappedUp, Data: map[string]any{"reason": "no usable decision"}})
+
+	if ports := (&Loop{store: s}).portsInUse(workers.Local); !slices.Equal(ports, []int{7901, 7902}) {
+		t.Errorf("ports in use %v: want the working task's and the one wrapping up", ports)
 	}
 }

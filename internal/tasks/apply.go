@@ -343,7 +343,10 @@ func (t *Task) wrapUp(e events.Event, to, text string) {
 	}
 	nothingNew := len(t.Turns) == t.wrappedUp // an open turn counts: it is stopped and wrapped up
 	switch {
-	case t.WrapUp != nil: // moved on while it wraps up: that is still its one turn
+	case t.WrapUp != nil:
+		// Parked, and moved to Done while it wraps up: the same turn now
+		// wraps up a done task. (Done and then parked is reopened first,
+		// which ends the wrap-up, so parking it owes a fresh one.)
 		t.WrapUp.To = to
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
 	case nothingNew && to == "done": // nothing to wrap up
