@@ -1156,17 +1156,18 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 		stream, _ := s.Stream(id)
 		return tasks.FromEvents(stream)
 	}
-	column := func(id string) string {
+	summary := func(id string) taskSummary {
 		_, body := call(t, server, "GET", "/api/tasks", "")
 		var list []taskSummary
 		json.Unmarshal([]byte(body), &list)
 		for _, summary := range list {
 			if summary.ID == id {
-				return summary.Column
+				return summary
 			}
 		}
-		return "missing"
+		return taskSummary{Column: "missing"}
 	}
+	column := func(id string) string { return summary(id).Column }
 
 	// The coordinator hands it to the deployer: Shipping, with no move of yours.
 	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
@@ -1174,6 +1175,9 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 	handOn("task-1", "turn-1", "deployer")
 	if c, task := column("task-1"), load("task-1"); c != "shipping" || task.Column != "" {
 		t.Errorf("with the deployer: column %s, your column %q", c, task.Column)
+	}
+	if !summary("task-1").CanShip {
+		t.Error("a team with a deployer can ship")
 	}
 
 	// Shipped now, from In progress: your move, written at once.
@@ -1253,6 +1257,9 @@ func TestYourMoveToShippingShipsItNow(t *testing.T) {
 	after, _ := s.Stream("task-3")
 	if code != http.StatusConflict || !strings.Contains(body, "Research has no agent that ships work") || len(after) != len(before) {
 		t.Errorf("a team with no shipper: %d %q, %d events written", code, body, len(after)-len(before))
+	}
+	if _, body := call(t, server, "GET", "/api/tasks", ""); summary("task-3").CanShip || !strings.Contains(body, `"canShip":false`) {
+		t.Errorf("a team with no shipper says so, so the board offers no Shipping:\n%s", body)
 	}
 }
 

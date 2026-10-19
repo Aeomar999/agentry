@@ -15,8 +15,9 @@ type Summary struct {
 	Repo             string    `json:"repo"`
 	Status           Status    `json:"status"`
 	CurrentAgent     string    `json:"currentAgent"`
-	Stage            string    `json:"stage"`  // the agent the coordinator last handed it to
-	Column           string    `json:"column"` // its column on the board: backlog, todo, in-progress, review, shipping or done
+	Stage            string    `json:"stage"`   // the agent the coordinator last handed it to
+	Column           string    `json:"column"`  // its column on the board: backlog, todo, in-progress, review, shipping or done
+	CanShip          bool      `json:"canShip"` // its team has an agent that ships work, so it may be moved to Shipping
 	Turns            int       `json:"turns"`
 	NeedsYou         string    `json:"needsYou"`    // what you are asked, "" when nothing
 	HasQuestion      bool      `json:"hasQuestion"` // the coordinator asked you something: what you send next is the answer
@@ -69,7 +70,7 @@ func SummaryOf(t *Task, roster agents.Roster) Summary {
 	if t.Told.Text != "" {
 		said = &Said{At: t.Told.At, From: t.Told.From, Text: t.Told.Text}
 	}
-	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
+	return Summary{Told: said, ID: t.ID, Title: t.Title, Repo: t.Repo, Status: t.Status(), CurrentAgent: t.CurrentAgent(), Stage: t.Stage(), Column: t.boardColumn(roster), CanShip: TeamHas(roster, t.Coordinator, agents.Ships), HasQuestion: t.Question != "", Labels: listOf(t.Labels), Budget: t.Budget, TokensUsed: t.TokensUsed,
 		OverBudget: t.AtBudget(), MaxTurns: t.MaxTurns, TurnsSinceAnswer: t.TurnsSinceAnswer, AtTurnLimit: t.AtTurnLimit(), StoppedAt: t.StoppedAt(), Rank: t.Rank, Parked: t.Parked,
 		Parent: t.Parent, WaitingOn: t.WaitingOn,
 		Kind: t.Kind, Epic: t.Epic, After: listOf(t.After), BlockedBy: []string{}, Stories: len(t.Stories), StoriesDone: len(t.StoriesDone), Closing: closing,
