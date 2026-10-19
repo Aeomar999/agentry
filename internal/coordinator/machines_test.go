@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -34,10 +32,7 @@ func TestTheCoordinatorChoosesTheMachine(t *testing.T) {
 		t.Fatal(rejection)
 	}
 	const id = "task-machine-1"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go newLoop(s, state, t.TempDir()).Run(ctx)
+	run(t, newLoop(s, state, t.TempDir()), state)
 
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Fix it", "repo": gitRepo(t), "coordinator": "tech-lead"}})

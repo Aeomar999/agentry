@@ -11,7 +11,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -21,10 +20,8 @@ import (
 // for Writing and one that builds on the first; each story's summary comes
 // back, and the epic is done only once they all are.
 func TestAnEpicRunsItsStoriesAndFinishesWithThem(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true}})
 
@@ -38,9 +35,6 @@ func TestAnEpicRunsItsStoriesAndFinishesWithThem(t *testing.T) {
 		{"title": "Add the TODO command", "brief": "A command on top of the store.", "after": [1]}]}`)
 	epic = waitUntil(t, s, id, "the split", func(task *tasks.Task) bool { return len(task.Stories) == 3 })
 	store1, guide, command := epic.Stories[0], epic.Stories[1], epic.Stories[2]
-	for _, story := range epic.Stories {
-		defer sessions.Stop(sessions.SocketFor(story))
-	}
 	// They wait in your Backlog; you start them.
 	for _, story := range epic.Stories {
 		if task := load(t, s, story); task.Parked != "backlog" || len(task.Turns) > 0 {
@@ -112,10 +106,8 @@ func TestAnEpicRunsItsStoriesAndFinishesWithThem(t *testing.T) {
 }
 
 func TestAStoryCantBeSplitAndAnEpicIsntAssigned(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Fix the typo", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "", "kindChosen": true}})
 	task := waitForTurn(t, s, id, "turn-1", "tech-lead")
@@ -130,7 +122,6 @@ func TestAStoryCantBeSplitAndAnEpicIsntAssigned(t *testing.T) {
 
 	// Left to the coordinator, a task can become an epic; then it isn't assigned.
 	const other = "task-2"
-	defer sessions.Stop(sessions.SocketFor(other))
 	s.Propose(events.Proposal{Stream: other, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Build the app", "repo": repo, "coordinator": "tech-lead", "teamChosen": true}})
 	task = waitForTurn(t, s, other, "turn-1", "tech-lead")
@@ -139,7 +130,6 @@ func TestAStoryCantBeSplitAndAnEpicIsntAssigned(t *testing.T) {
 	}
 	endTurn(t, s, other, "turn-1", "tech-lead", `{"action": "split", "stories": [{"title": "The backend", "brief": "An API."}]}`)
 	task = waitUntil(t, s, other, "the split", func(task *tasks.Task) bool { return task.Kind == tasks.Epic && len(task.Stories) == 1 })
-	defer sessions.Stop(sessions.SocketFor(task.Stories[0]))
 	start(t, s, task.Stories[0])
 	story := waitForTurn(t, s, task.Stories[0], "turn-1", "tech-lead")
 	endTurn(t, s, story.ID, "turn-1", "tech-lead", `{"action": "split", "stories": [{"title": "a", "brief": "b"}]}`)
@@ -153,16 +143,13 @@ func TestAStoryCantBeSplitAndAnEpicIsntAssigned(t *testing.T) {
 // you leave it open, it waits quietly, with no more questions, until you add
 // a story, which wakes it, or close it.
 func TestAnEpicStaysOpenWithEveryStoryDone(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kind": "epic", "kindChosen": true}})
 	waitForTurn(t, s, id, "turn-1", "tech-lead")
 	endTurn(t, s, id, "turn-1", "tech-lead", `{"action": "split", "stories": [{"title": "Add the TODO store", "brief": "A store."}]}`)
 	first := waitUntil(t, s, id, "the split", func(task *tasks.Task) bool { return len(task.Stories) == 1 }).Stories[0]
-	defer sessions.Stop(sessions.SocketFor(first))
 	start(t, s, first)
 	waitForTurn(t, s, first, "turn-1", "tech-lead")
 	endTurn(t, s, first, "turn-1", "tech-lead", `{"action": "done", "summary": "The store is in."}`)
@@ -198,7 +185,6 @@ func TestAnEpicStaysOpenWithEveryStoryDone(t *testing.T) {
 
 	// A new story wakes it once it is done, and it runs as before.
 	const second = "task-3"
-	defer sessions.Stop(sessions.SocketFor(second))
 	s.Propose(events.Proposal{Stream: second, Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Add the TODO command", "repo": repo, "coordinator": "tech-lead", "teamChosen": true, "kindChosen": true}})
 	for _, p := range []events.Proposal{

@@ -1,14 +1,12 @@
 package coordinator
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -16,7 +14,7 @@ import (
 
 // Two teams on a real loop: Software and Writing. The test plays the
 // coordinators, ending their turns with decisions.
-func twoTeams(t *testing.T) (*store.Store, context.CancelFunc, string) {
+func twoTeams(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
@@ -29,16 +27,13 @@ func twoTeams(t *testing.T) (*store.Store, context.CancelFunc, string) {
 	for _, p := range agents.AddTeam(writing, agents.FromEvents(stream), you) {
 		s.Propose(p)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	go newLoop(s, state, t.TempDir()).Run(ctx)
-	return s, cancel, repo
+	run(t, newLoop(s, state, t.TempDir()), state)
+	return s, repo
 }
 
 func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-ask-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Ship the TODO tool", "repo": repo, "coordinator": "tech-lead", "teamChosen": true}})
 
@@ -50,7 +45,6 @@ func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 
 	task = waitUntil(t, s, id, "the request", func(task *tasks.Task) bool { return task.WaitingOn != "" })
 	child := task.WaitingOn
-	defer sessions.Stop(sessions.SocketFor(child))
 	childTask := waitForTurn(t, s, child, "turn-1", "editor")
 	if childTask.Parent != id || childTask.Title != "Write the user guide for the TODO tool." || !strings.Contains(childTask.Description, "for "+id) {
 		t.Errorf("the Writing team's task: parent %q, title %q, description %q", childTask.Parent, childTask.Title, childTask.Description)
@@ -75,10 +69,8 @@ func TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer(t *testing.T) {
 }
 
 func TestATaskWithNoTeamChosenGoesToTheRightOne(t *testing.T) {
-	s, cancel, repo := twoTeams(t)
-	defer cancel()
+	s, repo := twoTeams(t)
 	const id = "task-route-1"
-	defer sessions.Stop(sessions.SocketFor(id))
 	s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Write a launch blog post", "repo": repo, "coordinator": "tech-lead"}})
 

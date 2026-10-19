@@ -11,7 +11,8 @@ import { usePolicyChange } from "@/lib/policy-change";
 
 // Every version of the policy, newest first: who put it in force and what
 // changed. One whose text the log holds can be restored, as a new version;
-// those from before Agentry kept the text show without Revert.
+// those from before Agentry kept the text show without Revert. Revert asks
+// first, since an early version can loosen the policy.
 export function PolicyHistory({ hash, onChanged }: { hash: string; onChanged: () => void }) {
   const { data: history, error } = useResource<PolicyVersion[]>("/api/policy/history");
   const { busy, run } = usePolicyChange(onChanged);
@@ -48,6 +49,13 @@ interface VersionRowProps {
 
 function VersionRow({ version, inForce, canRevert, busy, onRevert }: VersionRowProps) {
   const [open, setOpen] = useState(false);
+  // Asking only names the date; the proper Revert (idea 'Revert, done
+  // properly') replaces this with what would change.
+  const [asking, setAsking] = useState(false);
+  const revert = () => {
+    setAsking(false);
+    onRevert();
+  };
   return (
     <li className="border-b border-divider last:border-b-0">
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 text-[12px]">
@@ -65,12 +73,23 @@ function VersionRow({ version, inForce, canRevert, busy, onRevert }: VersionRowP
             {open ? "Hide diff" : "Diff"}
           </Button>
         )}
-        {canRevert && (
-          <Button size="sm" disabled={busy} onClick={onRevert}>
+        {canRevert && !asking && (
+          <Button size="sm" disabled={busy} onClick={() => setAsking(true)}>
             Revert
           </Button>
         )}
       </div>
+      {canRevert && asking && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-2 text-[12px] text-ink-secondary">
+          <span className="min-w-0">Replace the policy in force with the version of {dateTime(version.at)}? Check its diff first.</span>
+          <Button size="sm" variant="danger" disabled={busy} onClick={revert}>
+            Revert
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>
+            Keep
+          </Button>
+        </div>
+      )}
       {open && version.diff && <Diff text={version.diff} className="border-t border-divider" />}
     </li>
   );

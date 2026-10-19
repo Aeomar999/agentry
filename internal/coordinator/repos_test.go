@@ -1,14 +1,12 @@
 package coordinator
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/sessions"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -25,12 +23,9 @@ func TestTheCoordinatorMovesATaskToTheRepoYouNamed(t *testing.T) {
 		s.Propose(p)
 	}
 	const id = "task-repos-1"
-	defer sessions.Stop(sessions.SocketFor(id))
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	loop := newLoop(s, state, root)
 	loop.Clones = filepath.Join(root, ".repos")
-	go loop.Run(ctx)
+	run(t, loop, state)
 
 	remote := gitRepo(t)
 	address := "file://" + filepath.ToSlash(remote)
