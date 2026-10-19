@@ -74,13 +74,9 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 	switch n := node.(type) {
 	case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.FuncDecl, *syntax.CoprocClause:
 		s.call.opaque = true
-	case *syntax.Assign:
-		if n.Name != nil {
-			s.setVariable(n.Name.Value)
-		}
 	case *syntax.ForClause:
 		if iteration, ok := n.Loop.(*syntax.WordIter); ok {
-			s.setVariable(iteration.Name.Value)
+			s.setVariable(iteration.Name.Value, false)
 		}
 	case *syntax.CallExpr:
 		s.addCommand(n.Args, n.Assigns)
@@ -90,7 +86,13 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 		s.addRedirect(n)
 	case *syntax.BinaryCmd:
 		if n.Op == syntax.Pipe || n.Op == syntax.PipeAll {
-			s.call.pipelines = append(s.call.pipelines, strings.Join(s.pipeline(n), " | "))
+			ways, complete := combinations(s.pipeline(n))
+			if !complete {
+				s.call.opaque = true
+			}
+			for _, way := range ways {
+				s.call.pipelines = append(s.call.pipelines, strings.Join(way, " | "))
+			}
 		}
 	}
 	return true
@@ -98,6 +100,9 @@ func (s *shellInspector) visit(node syntax.Node) bool {
 
 func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assign) {
 	for _, assign := range assigns {
+		if assign.Name != nil {
+			s.setVariable(assign.Name.Value, len(args) > 0) // FOO=1 cmd hands FOO to cmd
+		}
 		if assign.Value != nil {
 			s.addPath(assign.Value)
 		}
@@ -105,11 +110,12 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 	if len(args) == 0 {
 		return
 	}
-	text := s.commandText(args)
-	if name, found := printfVariable(text); found {
-		s.setVariable(name)
+	for _, text := range s.commandTexts(args) {
+		if name, found := printfVariable(text); found {
+			s.setVariable(name, false)
+		}
+		s.call.commands = append(s.call.commands, text)
 	}
-	s.call.commands = append(s.call.commands, text)
 	if name, ok := s.values(args[0]); ok && len(name) == 1 && strings.Contains(name[0], "/") {
 		s.addPath(args[0]) // ./test.sh runs a file
 	}
@@ -120,11 +126,13 @@ func (s *shellInspector) addCommand(args []*syntax.Word, assigns []*syntax.Assig
 
 func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
 	words := []string{n.Variant.Value}
+	exported := s.exports(n)
 	for _, assign := range n.Args {
 		if assign.Name == nil { // an option: declare -x
 			words = append(words, s.wordText(assign.Value))
 			continue
 		}
+		s.setVariable(assign.Name.Value, exported)
 		text := assign.Name.Value
 		if assign.Value != nil {
 			value := s.wordText(assign.Value)
@@ -159,12 +167,15 @@ func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 }
 
 // Variables a command may be given without being judged differently. The
-// programs agents run read their settings from upper-case variables, and some
-// of those run a command or write a file: GIT_EXTERNAL_DIFF, GIT_CONFIG_*,
-// GOFLAGS=-toolexec, PATH, PAGER, LD_PRELOAD. So setting any other upper-case
-// variable makes the call unknown until it runs, as git -c does. These only
-// choose a toolchain, a platform or how output looks. Lower-case names are the
-// command's own variables, as in `for f in a b`.
+// programs agents run read their settings from the environment, and some of
+// those run a command or write a file: GIT_EXTERNAL_DIFF, GIT_CONFIG_*,
+// GOFLAGS=-toolexec, PATH, PAGER, LD_PRELOAD, npm's npm_config_script_shell
+// (npm takes npm_config_* in any case), and any variable make is handed, which
+// a Makefile may use. So setting an upper-case or npm_config_ variable, or
+// handing a lower-case one to a program (x=1 make test, export x), makes the
+// call unknown until it runs, as git -c does. These only choose a toolchain, a
+// platform or how output looks. A lower-case variable the shell keeps to
+// itself, as in `for f in a b`, is the command's own.
 var harmlessVariables = map[string]bool{
 	"GOTOOLCHAIN": true, "GOPROXY": true, "CGO_ENABLED": true, "GOOS": true, "GOARCH": true,
 	"NO_COLOR": true, "LC_ALL": true, "LANG": true, "TZ": true,
@@ -172,11 +183,38 @@ var harmlessVariables = map[string]bool{
 
 // setVariable judges a variable the command sets: before a command
 // (FOO=1 cmd), on its own, with export or declare, by a for loop or by
-// printf -v. Any of them can reach the programs it runs.
-func (s *shellInspector) setVariable(name string) {
-	if !harmlessVariables[name] && strings.ToLower(name) != name {
+// printf -v. An upper-case one may already be exported, so any of them can
+// reach the programs it runs; exported says this one is handed to them.
+func (s *shellInspector) setVariable(name string, exported bool) {
+	lower := strings.ToLower(name)
+	switch {
+	case harmlessVariables[name]:
+	case lower != name, strings.HasPrefix(lower, "npm_config_"), exported:
 		s.call.opaque = true
 	}
+}
+
+// exports: the declaration hands its variables to the programs the command
+// runs, as export and declare -x do.
+func (s *shellInspector) exports(n *syntax.DeclClause) bool {
+	if n.Variant.Value == "export" {
+		return true
+	}
+	for _, assign := range n.Args {
+		if assign.Name != nil {
+			continue
+		}
+		values, ok := s.values(assign.Value)
+		if !ok {
+			return true
+		}
+		for _, option := range values {
+			if strings.HasPrefix(option, "-") && strings.Contains(option, "x") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // printfVariable is the variable printf -v sets, if it is given one.
@@ -204,6 +242,14 @@ func (s *shellInspector) addPath(word *syntax.Word) { s.addWordAsPath(word, fals
 
 func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 	values, ok := s.values(word)
+	if !isTarget { // a redirect target isn't split: the shell refuses one that would be
+		values = nil
+		fields, known := s.fields(word)
+		for _, words := range fields {
+			values = append(values, words...)
+		}
+		ok = known
+	}
 	if !ok {
 		s.call.opaque = true
 		return
@@ -216,15 +262,57 @@ func (s *shellInspector) addWordAsPath(word *syntax.Word, isTarget bool) {
 	}
 }
 
-func (s *shellInspector) commandText(args []*syntax.Word) string {
-	words := make([]string, len(args))
+// commandTexts is a command as the rules match it, once for each way its
+// words can expand: `for c in status commit; do git $c; done` runs both
+// `git status` and `git commit`, and each is judged, so the strictest rule
+// wins. Past maxValues ways the call is opaque, and only the first ways are
+// judged; a word that can't be known is "$?", and opaque too.
+func (s *shellInspector) commandTexts(args []*syntax.Word) []string {
+	choices := make([][][]string, len(args))
 	for i, arg := range args {
-		words[i] = s.wordText(arg)
+		fields, ok := s.fields(arg)
+		if !ok {
+			s.call.opaque = true
+			fields = [][]string{{"$?"}}
+		}
+		choices[i] = fields
 	}
-	if words[0] == "git" {
-		words = s.withoutGitOptions(words)
+	ways, complete := combinations(choices)
+	if !complete {
+		s.call.opaque = true
 	}
-	return strings.Join(withShortOptionsApart(words), " ")
+	var texts []string
+	for _, way := range ways {
+		words := slices.Concat(way...)
+		if len(words) == 0 {
+			continue // every word expanded to nothing: no command runs
+		}
+		if words[0] == "git" {
+			words = s.withoutGitOptions(words)
+		}
+		texts = append(texts, strings.Join(withShortOptionsApart(words), " "))
+	}
+	return texts
+}
+
+// combinations is every way to take one item from each choice, in order. It
+// stops growing at maxValues ways: past that, complete is false and later
+// choices give only their first item.
+func combinations[T any](choices [][]T) (ways [][]T, complete bool) {
+	ways, complete = [][]T{nil}, true
+	for _, choice := range choices {
+		if len(ways)*len(choice) > maxValues {
+			choice, complete = choice[:1], false
+		}
+		next := make([][]T, 0, len(ways)*len(choice))
+		for _, way := range ways {
+			for _, item := range choice {
+				next = append(next, append(way[:len(way):len(way)], item))
+			}
+		}
+		ways = next
+	}
+	return ways, complete
 }
 
 // Tools whose short options cluster, getopt style, and that have one which
@@ -306,11 +394,12 @@ func (s *shellInspector) withoutGitOptions(words []string) []string {
 	return []string{"git"}
 }
 
-// wordText is a word as the rules match it: its value, or its first value
-// when a variable could hold several, or "$?" when it can't be known.
+// wordText is a word that must have one value, as a declaration's options
+// and a redirect's descriptor are matched: "$?", and the call opaque, when it
+// can't be known or could be one of several.
 func (s *shellInspector) wordText(word *syntax.Word) string {
 	values, ok := s.values(word)
-	if !ok {
+	if !ok || len(values) > 1 {
 		s.call.opaque = true
 		return "$?"
 	}
@@ -320,8 +409,9 @@ func (s *shellInspector) wordText(word *syntax.Word) string {
 	return values[0]
 }
 
-func (s *shellInspector) pipeline(n *syntax.BinaryCmd) []string {
-	var parts []string
+// pipeline is each command of a pipeline, in every way it can expand.
+func (s *shellInspector) pipeline(n *syntax.BinaryCmd) [][]string {
+	var parts [][]string
 	for _, side := range []*syntax.Stmt{n.X, n.Y} {
 		switch cmd := side.Cmd.(type) {
 		case *syntax.BinaryCmd:
@@ -330,14 +420,41 @@ func (s *shellInspector) pipeline(n *syntax.BinaryCmd) []string {
 				continue
 			}
 		case *syntax.CallExpr:
-			if len(cmd.Args) > 0 {
-				parts = append(parts, s.commandText(cmd.Args))
+			if texts := s.commandTexts(cmd.Args); len(texts) > 0 {
+				parts = append(parts, texts)
 				continue
 			}
 		}
-		parts = append(parts, "$?")
+		parts = append(parts, []string{"$?"})
 	}
 	return parts
+}
+
+// maxValues is how many values a word, or ways a command, may have before it
+// counts as unknown.
+const maxValues = 64
+
+// fields is every list of words a shell word can become: each of its values,
+// split at spaces when the word holds an unquoted $variable, as the shell
+// splits it (c='push -f'; git $c is git push -f).
+func (s *shellInspector) fields(word *syntax.Word) ([][]string, bool) {
+	values, ok := s.values(word)
+	if !ok {
+		return nil, false
+	}
+	splits := slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
+		_, isVariable := part.(*syntax.ParamExp)
+		return isVariable
+	})
+	fields := make([][]string, len(values))
+	for i, value := range values {
+		if splits {
+			fields[i] = strings.Fields(value)
+		} else {
+			fields[i] = []string{value}
+		}
+	}
+	return fields, true
 }
 
 // values is every string a word can expand to, when that can be known without
@@ -346,7 +463,7 @@ func (s *shellInspector) values(word *syntax.Word) ([]string, bool) {
 	results := []string{""}
 	for _, part := range word.Parts {
 		pieces, ok := s.partValues(part)
-		if !ok || len(results)*len(pieces) > 64 {
+		if !ok || len(results)*len(pieces) > maxValues {
 			return nil, false
 		}
 		var next []string

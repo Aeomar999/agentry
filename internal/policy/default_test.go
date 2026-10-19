@@ -350,6 +350,51 @@ func TestTheJudgingProfilesCloseWhatTheReviewFound(t *testing.T) {
 	}
 }
 
+// A variable that can hold several values is judged with each of them, and
+// one handed to a program is judged as a setting of that program (task-30,
+// review round 2).
+func TestEveryValueOfAVariableIsJudged(t *testing.T) {
+	p := loadDefault(t)
+	hiddenPush := bash("for c in status 'push -f origin main'; do git $c; done")
+	check(t, p, "developer", []decisionCase{
+		{"a loop that hides a push to main", hiddenPush, Deny},
+		{"a later value of a variable", bash("c=status; c='push origin main'; git $c"), Deny},
+		{"a loop over reading commands", bash("for c in status log; do git $c; done"), Allow},
+	})
+	for _, profile := range []string{"read-only", "read-mostly"} {
+		check(t, p, profile, []decisionCase{
+			{"a loop that hides a push to main", hiddenPush, Deny},
+			{"a loop that hides a commit", bash("for c in status 'commit -qam x'; do git $c; done"), Deny},
+			{"a variable set twice", bash("c=log; c=commit; git $c -m x"), Deny},
+			{"a loop over sort's options", bash("for a in -n -uo; do sort $a out.txt in.txt; done"), Deny},
+			{"a loop over files", bash("for f in a b; do cat $f; done"), Allow},
+			{"a value split into options", bash("o='-n -o out.txt'; sort $o in.txt"), Deny},
+			{"a value split into paths", bash("f='a.go /etc/hosts'; cat $f"), Ask},
+			{"a quoted value isn't split", bash(`m='commit -m x'; git log --grep "$m"`), Allow},
+			{"nested loops", bash("for a in git; do for b in status commit; do $a $b; done; done"), Deny},
+			{"select", bash("select c in status commit; do git $c; done"), Deny},
+			{"case", bash("for c in status commit; do case $c in commit) git $c ;; esac; done"), Deny},
+			{"a pipeline with several values", bash("for s in cat 'tee out.txt'; do git log | $s; done"), Deny},
+			{"too many ways to judge", bash("for a in 1 2 3 4 5 6 7 8; do for b in 1 2 3 4 5 6 7 8 9; do echo $a $b; done; done"), Ask},
+			{"a value read when it runs", bash("while read c; do git $c; done < cmds.txt"), Ask},
+			{"an array", bash("a=(status commit); git ${a[1]}"), Ask},
+			{"a default value", bash("git ${c:-commit}"), Ask},
+			{"a replaced value", bash("c=x; git ${c/x/commit}"), Ask},
+			{"a value from a command", bash("c=$(echo commit); git $c"), Ask},
+
+			// npm reads npm_config_* in any case, and make takes every variable it is given
+			{"npm_config_node_options", bash("npm_config_node_options='--import=data:text/javascript,x' npm test"), Ask},
+			{"npm_config_script_shell", bash("npm_config_script_shell=./x.sh npm test"), Ask},
+			{"NPM_CONFIG_SCRIPT_SHELL", bash("NPM_CONFIG_SCRIPT_SHELL=./x.sh npm test"), Ask},
+			{"npm_config_ before npx", bash("npm_config_call='x' npx tsc --noEmit"), Ask},
+			{"npm_config_ on its own", bash("npm_config_script_shell=./x.sh; npm test"), Ask},
+			{"a lower-case variable for make", bash("go=./x.sh make test"), Ask},
+			{"an exported lower-case variable", bash("export go=./x.sh; make test"), Ask},
+			{"declare -x lower case", bash("declare -x go=./x.sh; make test"), Ask},
+		})
+	}
+}
+
 // What they are for still runs without asking: reading and testing.
 func TestTheJudgingProfilesStillReadAndTest(t *testing.T) {
 	p := loadDefault(t)
