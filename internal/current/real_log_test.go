@@ -18,7 +18,8 @@ import (
 // by AGENTRY_BENCH_DB as for TestReadModelBench, a state takes the log one
 // event at a time through Apply, as the store feeds it live. Every 50
 // events, each stream those events touched must equal FromEvents over the
-// same prefix; at the end, Equal compares everything.
+// same prefix; at the end, Equal compares everything, and no stream may be
+// broken: a replay must never fail on an event the store accepted.
 //
 //	AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestARealLog -v -count=1
 func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
@@ -74,6 +75,11 @@ func TestARealLogAppliedEventByEventEqualsAReplay(t *testing.T) {
 	}
 	if err := Equal(s, state); err != nil {
 		t.Fatal(err)
+	}
+	for stream := range accepted {
+		if err := state.Broken(stream); err != nil {
+			t.Errorf("%s is broken: %v", stream, err)
+		}
 	}
 	t.Logf("%d events applied one by one, %d streams, checked every 50", applied, len(accepted))
 }
