@@ -25,7 +25,8 @@ func ResetTime(text string, now time.Time) time.Time {
 }
 
 func resetIn(text string, now time.Time) time.Time {
-	if at, ok := isoOrEpoch(text); ok {
+	// A time already past may be some other field; the words may still say.
+	if at, ok := isoOrEpoch(text); ok && !at.Before(now) {
 		return at
 	}
 	m := resetsPattern.FindStringSubmatch(text)
@@ -78,7 +79,7 @@ func resetIn(text string, now time.Time) time.Time {
 
 // A reset word, as in "resets at", "reset_at": or "resetsAt"=, so other
 // times in the text, such as when a request was sent, aren't taken for it.
-const resetsWord = `(?i)resets?\w*["':=\s]+(?:at\s+)?`
+const resetsWord = `(?i)\bresets?\w*["':=\s]+(?:at\s+)?`
 
 var (
 	isoPattern   = regexp.MustCompile(resetsWord + `(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))`)

@@ -28,7 +28,11 @@ func TestResetTimeReadsWhatClaudeCodeSays(t *testing.T) {
 		{"limit resets at 2026-10-20T04:00:00Z", time.Date(2026, 10, 20, 4, 0, 0, 0, time.UTC)},
 		{`{"resetsAt": 1792468800}`, time.Unix(1792468800, 0)},
 		{`{"resets_at": "2026-10-20T04:00:00Z"}`, time.Date(2026, 10, 20, 4, 0, 0, 0, time.UTC)},
-		{"request sent 2026-10-20T04:00:00Z", time.Time{}},    // not a reset
+		{"request sent 2026-10-20T04:00:00Z", time.Time{}},       // not a reset
+		{`{"preset_time": "2026-10-20T04:00:00Z"}`, time.Time{}}, // not a reset either
+		{`{"preset": 1792468800}`, time.Time{}},
+		{`{"resets_at": "2026-10-19T20:00:00Z"} · resets 3am (UTC)`, at(10, 20, 3, 0, time.UTC)}, // past ISO, then the words
+		{`{"resetsAt": 1760000000} · resets 3am (UTC)`, at(10, 20, 3, 0, time.UTC)},
 		{"limit resets at 2026-10-19T20:00:00Z", time.Time{}}, // already past
 		{`{"resetsAt": 1760000000}`, time.Time{}},             // already past
 		{"resets Jan 2, 2025, 9am (UTC)", time.Time{}},        // already past
