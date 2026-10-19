@@ -61,7 +61,8 @@ func (w *Watchdog) Run(ctx context.Context) {
 	}
 }
 
-// Check looks at every task with an open turn, once.
+// Check looks at every task with an open turn, once: a finished task's too
+// while its coordinator wraps up, so a wrap-up that crashes still ends.
 func (w *Watchdog) Check(now time.Time) {
 	ids, err := w.store.TaskIDs()
 	if err != nil {
@@ -74,7 +75,7 @@ func (w *Watchdog) Check(now time.Time) {
 			continue
 		}
 		task := tasks.FromEvents(stream)
-		if task == nil || task.IsDone || task.OpenTurn() == nil {
+		if task == nil || task.IsDone && task.WrapUp == nil || task.OpenTurn() == nil {
 			continue
 		}
 		w.checkTurn(now, task, task.OpenTurn())

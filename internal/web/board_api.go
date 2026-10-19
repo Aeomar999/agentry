@@ -18,7 +18,8 @@ import (
 //     work
 //   - Review: have it checked next
 //   - Done: it is done at once, as it is; a turn in progress stops, and the
-//     coordinator only wraps up (an epic closes)
+//     coordinator only wraps up (an epic closes, and its open stories are
+//     parked in the Backlog)
 //
 // A finished task moved anywhere but Done is reopened first. A task
 // waiting for your answer takes the words as the answer.
@@ -54,8 +55,15 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the task is done already", http.StatusConflict)
 			return
 		}
-		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone,
-			Data: map[string]any{"summary": "The user moved it to Done, as it was.", "note": note, "moved": true}})
+		done := events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone,
+			Data: map[string]any{"summary": "The user moved it to Done, as it was.", "note": note, "moved": true}}
+		if task.Kind != tasks.Epic {
+			s.propose(w, done)
+			return
+		}
+		if s.proposeOrRefuse(w, done) && s.parkStories(w, task, note) {
+			reply(w, map[string]string{"task": task.ID})
+		}
 		return
 	case "in-progress", "review":
 	default:
@@ -91,6 +99,27 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.tell(w, task, text, note)
+}
+
+// parkStories parks the stories of an epic you closed that aren't done, in
+// the Backlog: their turns in progress stop, and their coordinators only
+// wrap up. A story parked already stays where it is.
+func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note string) bool {
+	for _, id := range epic.Stories {
+		story, err := s.task(id)
+		if err != nil {
+			failed(w, err)
+			return false
+		}
+		if story == nil || story.IsDone || story.Parked != "" {
+			continue
+		}
+		held := events.Proposal{Stream: id, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": note}}
+		if !s.proposeOrRefuse(w, held) {
+			return false
+		}
+	}
+	return true
 }
 
 // tell gives the coordinator your words: as the answer, if it asked you

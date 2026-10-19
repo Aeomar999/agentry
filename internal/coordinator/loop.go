@@ -461,10 +461,11 @@ func (l *Loop) newTask(by events.Actor, data map[string]any) (string, string) {
 }
 
 // storyDone gives a finished story's summary to its epic, if the epic
-// hasn't heard it yet.
+// hasn't heard it yet. A closed epic hears nothing more; reopened, it
+// hears its finished stories then.
 func (l *Loop) storyDone(story *tasks.Task) {
 	epic, _, err := l.load(story.Epic)
-	if err != nil || epic == nil || !slices.Contains(epic.Stories, story.ID) || slices.Contains(epic.StoriesDone, story.ID) {
+	if err != nil || epic == nil || epic.IsDone || !slices.Contains(epic.Stories, story.ID) || slices.Contains(epic.StoriesDone, story.ID) {
 		return
 	}
 	l.propose(epic.ID, agentry, events.StoryDone, map[string]any{"story": story.ID, "summary": story.Summary,

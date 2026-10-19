@@ -948,6 +948,22 @@ func TestYourMovesOnTheBoardStand(t *testing.T) {
 	if task := load("task-3"); !task.IsDone {
 		t.Errorf("an epic onto Done should close: %s", task.Status())
 	}
+
+	// An epic onto Done parks its open stories, in the same request.
+	call(t, server, "POST", "/api/tasks", `{"title":"Add the store","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Add the command","kind":"story"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Ship the tool","stories":["task-4","task-5"]}`)
+	working("task-4")
+	move("task-6", "done")
+	if task := load("task-6"); !task.IsDone {
+		t.Errorf("the epic should close: %s", task.Status())
+	}
+	if task := load("task-4"); task.Parked != "backlog" || !task.Turns[0].Stopped || task.WrapUp == nil {
+		t.Errorf("the story at work: parked %q, turn stopped %v, wrap-up %+v", task.Parked, task.Turns[0].Stopped, task.WrapUp)
+	}
+	if task := load("task-5"); task.Parked == "" || task.WrapUp != nil {
+		t.Errorf("the story not started: parked %q, wrap-up %+v", task.Parked, task.WrapUp)
+	}
 }
 
 // You can edit what an agent knows, and see who changed it.

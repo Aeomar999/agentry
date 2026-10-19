@@ -90,7 +90,7 @@ func (t *Task) apply(e events.Event) {
 		}
 
 	case events.TaskWrappedUp:
-		t.WrapUp, t.PendingDecision, t.Handoff = nil, "", nil
+		t.WrapUp, t.PendingDecision, t.Handoff, t.wrappedUp = nil, "", nil, len(t.Turns)
 		t.reply(e)
 		text := e.Text("summary")
 		if e.Actor.Kind == events.Agent && t.IsDone {
@@ -104,8 +104,15 @@ func (t *Task) apply(e events.Event) {
 
 	case events.TaskReopened:
 		// Back to work in a fresh worktree (the loop makes it again), with a
-		// new count of turns and issues, from what you said.
-		t.IsDone, t.DoneByYou, t.Summary, t.Worktree, t.WrapUp = false, false, "", nil, nil
+		// new count of turns and issues, from what you said. Reopened while
+		// its coordinator wraps up, the wrap-up turn stops, and the worktree,
+		// not removed yet, is worked in again.
+		if t.WrapUp != nil {
+			t.stopTurn()
+		} else {
+			t.Worktree = nil
+		}
+		t.IsDone, t.DoneByYou, t.Summary, t.WrapUp = false, false, "", nil
 		t.Question, t.Asked, t.TurnsSinceAnswer, t.IssuesInARow = "", Asked{}, 0, 0
 		t.step(e, You, t.Coordinator, e.Text("text"))
 
@@ -329,19 +336,20 @@ func (t *Task) apply(e events.Event) {
 
 // wrapUp makes your move to Done or a parking place stand at once: the turn
 // in progress stops, and the coordinator has one last turn to wrap up, if
-// anyone has worked on the task at all.
+// anyone has worked on the task since it last wrapped up.
 func (t *Task) wrapUp(e events.Event, to, text string) {
 	if note := e.Text("note"); note != "" {
 		text += " " + note
 	}
+	nothingNew := len(t.Turns) == t.wrappedUp // an open turn counts: it is stopped and wrapped up
 	switch {
 	case t.WrapUp != nil: // moved on while it wraps up: that is still its one turn
 		t.WrapUp.To = to
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
-	case len(t.Turns) == 0 && to == "done": // nothing to wrap up
+	case nothingNew && to == "done": // nothing to wrap up
 		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator, Text: text})
 		t.PendingDecision, t.Handoff = "", nil
-	case len(t.Turns) == 0: // parked before it started: it starts as it would have
+	case nothingNew: // parked before it started, or since it wrapped up: it starts as it would have
 	default:
 		t.stopTurn()
 		t.WrapUp = &WrapUp{To: to}
