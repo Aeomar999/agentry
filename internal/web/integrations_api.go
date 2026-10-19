@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/connections"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
@@ -26,13 +27,13 @@ const unknownInstallCode = "That install command is unknown, used or expired. Ma
 
 // inviteClaudeCode makes a one-time install command.
 func (s *Server) inviteClaudeCode(w http.ResponseWriter, r *http.Request) {
-	code, invited := connections.Invite(you, time.Now())
-	if !s.proposeOrRefuse(w, invited) {
+	code, invited := connections.Invite(httpapi.You, time.Now())
+	if !httpapi.ProposeOrRefuse(w, s.store, invited) {
 		return
 	}
 	answer := s.installCommands(r, "/integrations/claude-code", code)
 	answer["expires"] = time.Now().Add(connections.InviteLifetime)
-	reply(w, answer)
+	httpapi.Reply(w, answer)
 }
 
 // claudeCodeScript is the install script: for sh, or for PowerShell on Windows.
@@ -59,31 +60,31 @@ func (s *Server) connect(w http.ResponseWriter, r *http.Request) {
 		Code string
 		connections.Machine
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	credential, made := connections.Connect(request.Code, request.Machine)
-	if !s.proposeOrRefuse(w, made) {
+	if !httpapi.ProposeOrRefuse(w, s.store, made) {
 		return
 	}
-	reply(w, map[string]string{"credential": credential, "page": s.publicURL(r)})
+	httpapi.Reply(w, map[string]string{"credential": credential, "page": s.publicURL(r)})
 }
 
 func (s *Server) listConnections(w http.ResponseWriter, _ *http.Request) {
 	roster, err := s.connections()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	list := roster.Connections
 	if list == nil {
 		list = []connections.Connection{}
 	}
-	reply(w, map[string]any{"connections": list})
+	httpapi.Reply(w, map[string]any{"connections": list})
 }
 
 func (s *Server) revokeConnection(w http.ResponseWriter, r *http.Request) {
-	s.propose(w, connections.Revocation(you, r.PathValue("id")))
+	httpapi.Propose(w, s.store, connections.Revocation(httpapi.You, r.PathValue("id")))
 }
 
 func (s *Server) connectionCodeWorks(code string) bool {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 )
 
 // setEpic files a task under an epic as one of its stories, moves it to
@@ -12,14 +13,14 @@ import (
 // it too: it sorts work, and approves nothing.
 func (s *Server) setEpic(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Epic string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	if refused := s.fileUnder(r.PathValue("task"), strings.TrimSpace(request.Epic)); refused != "" {
 		http.Error(w, refused, http.StatusConflict)
 		return
 	}
-	reply(w, map[string]string{"task": r.PathValue("task"), "epic": request.Epic})
+	httpapi.Reply(w, map[string]string{"task": r.PathValue("task"), "epic": request.Epic})
 }
 
 // fileUnder makes the task a story of epic, out of any epic it was in, and
@@ -46,8 +47,8 @@ func (s *Server) fileUnder(id, epic string) string {
 	}
 	if old := story.Epic; old != "" {
 		for _, p := range []events.Proposal{
-			{Stream: old, Actor: you, Type: events.StoryRemoved, Data: map[string]any{"story": id}},
-			{Stream: id, Actor: you, Type: events.EpicLeft, Data: map[string]any{"epic": old}},
+			{Stream: old, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": id}},
+			{Stream: id, Actor: httpapi.You, Type: events.EpicLeft, Data: map[string]any{"epic": old}},
 		} {
 			if refused := s.tryPropose(p); refused != "" {
 				return refused
@@ -57,10 +58,10 @@ func (s *Server) fileUnder(id, epic string) string {
 	if epic == "" {
 		return ""
 	}
-	if refused := s.tryPropose(events.Proposal{Stream: id, Actor: you, Type: events.EpicJoined, Data: map[string]any{"epic": epic}}); refused != "" {
+	if refused := s.tryPropose(events.Proposal{Stream: id, Actor: httpapi.You, Type: events.EpicJoined, Data: map[string]any{"epic": epic}}); refused != "" {
 		return refused
 	}
-	return s.tryPropose(events.Proposal{Stream: epic, Actor: you, Type: events.StoryAdded, Data: map[string]any{
+	return s.tryPropose(events.Proposal{Stream: epic, Actor: httpapi.You, Type: events.StoryAdded, Data: map[string]any{
 		"story": id, "title": story.Title, "done": story.IsDone, "summary": story.Summary}})
 }
 

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 )
 
 // A task's events a page at a time, so the page needn't take a long task's
@@ -51,7 +52,7 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	found, err := read(task.ID, types, after, before, limit+1) // one more, to tell whether there is more
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	page := eventsPage{Events: []eventEntry{}, More: len(found) > limit}
@@ -64,7 +65,7 @@ func (s *Server) listEvents(w http.ResponseWriter, r *http.Request) {
 	for _, e := range found {
 		page.Events = append(page.Events, entryOf(e))
 	}
-	reply(w, page)
+	httpapi.Reply(w, page)
 }
 
 // pageOf reads a page's bounds and size from the query: no bound when a

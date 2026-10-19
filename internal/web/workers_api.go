@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -34,7 +35,7 @@ type workerView struct {
 func (s *Server) listWorkers(w http.ResponseWriter, r *http.Request) {
 	roster, err := s.workers()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	on := s.tasksByMachine()
@@ -45,7 +46,7 @@ func (s *Server) listWorkers(w http.ResponseWriter, r *http.Request) {
 	}
 	local := s.config.Local
 	local.Engines, local.Missing = listOf(local.Engines), listOf(local.Missing)
-	reply(w, map[string]any{"workers": list, "local": map[string]any{"tasks": listOf(on[workers.Local]), "machine": local}})
+	httpapi.Reply(w, map[string]any{"workers": list, "local": map[string]any{"tasks": listOf(on[workers.Local]), "machine": local}})
 }
 
 // workerDetail is one machine as the Workers page's side panel shows it.
@@ -67,7 +68,7 @@ func (s *Server) showWorker(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	roster, err := s.workers()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	var detail workerDetail
@@ -115,7 +116,7 @@ func (s *Server) showWorker(w http.ResponseWriter, r *http.Request) {
 			break // what came before was an earlier machine by this name
 		}
 	}
-	reply(w, detail)
+	httpapi.Reply(w, detail)
 }
 
 // tasksByMachine is every unfinished task with a worktree, by the machine it is on.
@@ -131,19 +132,19 @@ func (s *Server) tasksByMachine() map[string][]string {
 
 // invite makes a join code, and the command that uses it.
 func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
-	code, p := workers.Invite(you, time.Now())
+	code, p := workers.Invite(httpapi.You, time.Now())
 	if _, rejection, err := s.store.Propose(p); err != nil || rejection != nil {
-		failed(w, firstError(err, rejection))
+		httpapi.Failed(w, firstError(err, rejection))
 		return
 	}
 	answer := s.installCommands(r, "/worker/install", code)
 	answer["code"], answer["expires"] = code, time.Now().Add(workers.InviteLifetime)
-	reply(w, answer)
+	httpapi.Reply(w, answer)
 }
 
 func (s *Server) removeWorker(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	s.propose(w, workers.Removal(you, name))
+	httpapi.Propose(w, s.store, workers.Removal(httpapi.You, name))
 	if s.config.Workers != nil {
 		s.config.Workers.Disconnect(name)
 	}
@@ -169,12 +170,12 @@ type joinRequest struct {
 // if that is taken, the first free one after it (laptop-2, laptop-3).
 func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 	var request joinRequest
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	roster, err := s.workers()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	if !roster.CanJoin(workers.Hash(request.Code), time.Now()) {
@@ -187,7 +188,7 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, firstError(err, rejection).Error(), http.StatusConflict)
 		return
 	}
-	reply(w, map[string]string{"name": name, "credential": credential})
+	httpapi.Reply(w, map[string]string{"name": name, "credential": credential})
 }
 
 var notInName = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -221,7 +222,7 @@ func (s *Server) requireWorker(next func(http.ResponseWriter, *http.Request, wor
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		roster, err := s.workers()
 		if err != nil {
-			failed(w, err)
+			httpapi.Failed(w, err)
 			return
 		}
 		worker, ok := roster.WithCredential(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
@@ -235,7 +236,7 @@ func (s *Server) requireWorker(next func(http.ResponseWriter, *http.Request, wor
 
 // leave takes the worker off at its own request, as on the page.
 func (s *Server) leave(w http.ResponseWriter, r *http.Request, worker workers.Worker) {
-	s.propose(w, workers.Left(worker.Name))
+	httpapi.Propose(w, s.store, workers.Left(worker.Name))
 	s.config.Workers.Disconnect(worker.Name) // a no-op if it was refused: the credential still works
 }
 
@@ -293,13 +294,13 @@ func (s *Server) serveBinary(w http.ResponseWriter, r *http.Request) {
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	defer file.Close()
 	sum := sha256.New()
 	if _, err := io.Copy(sum, file); err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	file.Seek(0, io.SeekStart)

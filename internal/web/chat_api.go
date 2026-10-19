@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -15,7 +16,7 @@ import (
 // on when it is handed back.
 func (s *Server) message(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Text string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	task, err := s.task(r.PathValue("task"))
@@ -39,24 +40,24 @@ func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, via string) 
 		if via != "" {
 			reopen.Data["via"] = via
 		}
-		s.propose(w, reopen)
+		httpapi.Propose(w, s.store, reopen)
 		return
 	}
 	kind, field := events.TaskDirected, "text"
 	if task.Question != "" {
 		kind, field = events.TaskAnswered, "answer"
 	}
-	said := events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}}
+	said := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: kind, Data: map[string]any{field: text}}
 	if via != "" {
 		said.Data["via"] = via
 	}
 	open := task.OpenTurn()
 	if open == nil {
-		s.propose(w, said)
+		httpapi.Propose(w, s.store, said)
 		return
 	}
-	if !s.proposeOrRefuse(w, said) {
+	if !httpapi.ProposeOrRefuse(w, s.store, said) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TurnStopped, Correlation: open.ID})
+	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TurnStopped, Correlation: open.ID})
 }

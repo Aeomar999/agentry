@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -23,7 +24,7 @@ func withEvents(t *testing.T, labels int) (*httptest.Server, []eventEntry) {
 	call(t, server, "POST", "/api/tasks", `{"title":"Others between"}`)
 	for i := range labels {
 		label := func(task string) {
-			s.Propose(events.Proposal{Stream: task, Actor: you, Type: events.TaskLabeled, Data: map[string]any{"labels": []string{fmt.Sprint("l", i)}}})
+			s.Propose(events.Proposal{Stream: task, Actor: httpapi.You, Type: events.TaskLabeled, Data: map[string]any{"labels": []string{fmt.Sprint("l", i)}}})
 		}
 		label("task-1")
 		label("task-2")
@@ -52,7 +53,7 @@ func withEvents(t *testing.T, labels int) (*httptest.Server, []eventEntry) {
 
 func refuseOn(t *testing.T, s *store.Store, task string) {
 	t.Helper()
-	if _, rejection, _ := s.Propose(events.Proposal{Stream: task, Actor: you, Type: events.TaskCreated,
+	if _, rejection, _ := s.Propose(events.Proposal{Stream: task, Actor: httpapi.You, Type: events.TaskCreated,
 		Data: map[string]any{"title": "again", "repo": "/r", "coordinator": "tech-lead"}}); rejection == nil {
 		t.Fatal("a second task.created should be refused")
 	}

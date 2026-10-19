@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -43,7 +44,7 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) {
 		}
 		views = append(views, viewOf(idea, about[idea.Task], became, roster, why))
 	}
-	reply(w, views)
+	httpapi.Reply(w, views)
 }
 
 // acceptIdea makes the idea a task in your Backlog (ideas.Accept), or
@@ -61,10 +62,10 @@ func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 		Start      bool
 		Budget     int
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	if request.Budget < noLimit {
+	if request.Budget < httpapi.NoLimit {
 		http.Error(w, "a budget is a number of tokens, 0 for the default or -1 for no limit", http.StatusBadRequest)
 		return
 	}
@@ -76,11 +77,11 @@ func (s *Server) acceptIdea(w http.ResponseWriter, r *http.Request) {
 		Defaults: s.config.defaults(), Budget: chosenBudget(request.Budget), Start: request.Start})
 	switch {
 	case err != nil:
-		failed(w, err)
+		httpapi.Failed(w, err)
 	case got.Task == "":
 		http.Error(w, got.Refused, http.StatusConflict)
 	default:
-		reply(w, acceptance{Task: got.Task, Column: got.Column, Accepted: got.Accepted, Refused: got.Refused})
+		httpapi.Reply(w, acceptance{Task: got.Task, Column: got.Column, Accepted: got.Accepted, Refused: got.Refused})
 	}
 }
 
@@ -90,7 +91,7 @@ func chosenBudget(asked int) *int {
 	if asked == 0 {
 		return nil
 	}
-	budget := limitOf(asked, 0)
+	budget := httpapi.LimitOf(asked, 0)
 	return &budget
 }
 
@@ -98,14 +99,14 @@ func chosenBudget(asked int) *int {
 // 409 when the rules refuse it, else the event.
 func (s *Server) dismissIdea(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Note string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	id := r.PathValue("idea")
 	if !s.ideaExists(w, id) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: ideas.IdeaDismissed, Data: map[string]any{"note": strings.TrimSpace(request.Note)}})
+	httpapi.Propose(w, s.store, events.Proposal{Stream: id, Actor: httpapi.You, Type: ideas.IdeaDismissed, Data: map[string]any{"note": strings.TrimSpace(request.Note)}})
 }
 
 // ideaExists answers 404 when there is no such idea.
@@ -117,7 +118,7 @@ func (s *Server) ideaExists(w http.ResponseWriter, id string) bool {
 	idea, err := ideas.Get(s.state, id)
 	switch {
 	case err != nil:
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return false
 	case idea == nil:
 		http.Error(w, "no such idea", http.StatusNotFound)

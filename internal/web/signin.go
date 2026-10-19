@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 )
 
 // Signing in a device that doesn't have the token, such as the installed
@@ -195,7 +197,7 @@ func retryAfter(times []time.Time, limit int, now time.Time) time.Duration {
 func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 	code, expires, err := s.signins.issue()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	list, chosen := s.addresses(r)
@@ -207,8 +209,9 @@ func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 		}
 		addresses = append(addresses, address)
 	}
-	reply(w, map[string]any{"code": code, "expiresAt": expires, "expiresIn": int(codeLifetime / time.Second),
+	httpapi.Reply(w, map[string]any{"code": code, "expiresAt": expires, "expiresIn": int(codeLifetime / time.Second),
 		"addresses": addresses, "address": chosen})
+
 }
 
 // signIn swaps a code, or the token pasted in, for the token and the cookie.
@@ -216,7 +219,7 @@ func (s *Server) issueSigninCode(w http.ResponseWriter, r *http.Request) {
 // limited, so codes can't be guessed.
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Code, Token string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	withCode := request.Token == ""
@@ -241,13 +244,13 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 	s.signins.succeeded(try)
 	setUICookie(w, r, s.config.UIToken)
-	reply(w, map[string]string{"token": s.config.UIToken})
+	httpapi.Reply(w, map[string]string{"token": s.config.UIToken})
 }
 
 // signOut forgets the cookie. The page forgets its own copy of the token.
 func (s *Server) signOut(w http.ResponseWriter, r *http.Request) {
 	clearUICookie(w, r)
-	reply(w, map[string]string{})
+	httpapi.Reply(w, map[string]string{})
 }
 
 // clientAddress is the address a request came from, without its port.

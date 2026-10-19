@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -137,7 +138,7 @@ func TestAMissingProfileIsAddedFromThePageAndLogged(t *testing.T) {
 	}
 	stream := server.policyEvents(t)
 	logged := stream[len(stream)-1]
-	if len(stream) != 1 || logged.Actor != you || logged.Text("change") != "added profile read-mostly" || logged.Text("text") != string(text) ||
+	if len(stream) != 1 || logged.Actor != httpapi.You || logged.Text("change") != "added profile read-mostly" || logged.Text("text") != string(text) ||
 		!strings.Contains(logged.Text("diff"), "+[profiles.read-mostly]\n") {
 		t.Errorf("the change is logged as yours, with its diff: %d events, %s %q", len(stream), logged.Actor, logged.Text("change"))
 	}
@@ -181,7 +182,7 @@ func TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice(t *testing.T) {
 		t.Error("the file should have this version's read-only")
 	}
 	stream := server.policyEvents(t)
-	if len(stream) != 1 || stream[0].Text("change") != "updated read-only to the v0.9.0 default" || stream[0].Actor != you ||
+	if len(stream) != 1 || stream[0].Text("change") != "updated read-only to the v0.9.0 default" || stream[0].Actor != httpapi.You ||
 		!strings.Contains(stream[0].Text("diff"), `+  name = "keeps its own notes"`) {
 		t.Errorf("the update is logged as yours with its change: %d events", len(stream))
 	}
@@ -357,7 +358,7 @@ func TestEveryVersionShowsInTheHistoryAndCanBeRestored(t *testing.T) {
 		t.Error("the file should be the first version again")
 	}
 	stream := server.policyEvents(t)
-	if last := stream[len(stream)-1]; !strings.HasPrefix(last.Text("change"), "reverted to the version of ") || last.Actor != you {
+	if last := stream[len(stream)-1]; !strings.HasPrefix(last.Text("change"), "reverted to the version of ") || last.Actor != httpapi.You {
 		t.Errorf("the revert is a new version, yours: %q %s", last.Text("change"), last.Actor)
 	}
 	if code, body := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[2].Position)+`,"hash":"`+server.hash()+`"}`); code != http.StatusConflict ||

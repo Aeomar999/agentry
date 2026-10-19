@@ -8,6 +8,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -41,7 +42,7 @@ import (
 // takes the words as the answer.
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To, Note string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	task, err := s.task(r.PathValue("task"))
@@ -51,35 +52,35 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	}
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	note := strings.TrimSpace(request.Note)
 	shippers := teammates(roster, task, agents.Ships)
 	park := func(place string) events.Proposal {
-		return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": place, "note": note}}
+		return events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskHeld, Data: map[string]any{"place": place, "note": note}}
 	}
 
 	switch request.To {
 	case "backlog", "todo":
-		if task.IsDone && !s.proposeOrRefuse(w, s.reopen(task, "Reopen this task and park it.", note)) {
+		if task.IsDone && !httpapi.ProposeOrRefuse(w, s.store, s.reopen(task, "Reopen this task and park it.", note)) {
 			return
 		}
-		s.propose(w, park(request.To))
+		httpapi.Propose(w, s.store, park(request.To))
 		return
 	case "done":
 		if task.IsDone {
 			http.Error(w, "the task is done already", http.StatusConflict)
 			return
 		}
-		done := events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone,
+		done := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskDone,
 			Data: map[string]any{"summary": "The user moved it to Done, as it was.", "note": note, "moved": true}}
 		if task.Kind != tasks.Epic {
-			s.propose(w, done)
+			httpapi.Propose(w, s.store, done)
 			return
 		}
-		if s.proposeOrRefuse(w, done) && s.parkStories(w, task, note) {
-			reply(w, map[string]string{"task": task.ID})
+		if httpapi.ProposeOrRefuse(w, s.store, done) && s.parkStories(w, task, note) {
+			httpapi.Reply(w, map[string]string{"task": task.ID})
 		}
 		return
 	case "in-progress", "review":
@@ -119,20 +120,20 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		if text == "" {
 			text = "It needs more work."
 		}
-		s.propose(w, moved(s.reopen(task, "Reopen this task. "+text, note)))
+		httpapi.Propose(w, s.store, moved(s.reopen(task, "Reopen this task. "+text, note)))
 	case task.Parked != "":
-		if !s.proposeOrRefuse(w, moved(park(""))) {
+		if !httpapi.ProposeOrRefuse(w, s.store, moved(park(""))) {
 			return
 		}
 		if text == "" { // started from To do or the Backlog: nothing more to say
-			reply(w, map[string]string{"task": task.ID})
+			httpapi.Reply(w, map[string]string{"task": task.ID})
 			return
 		}
-		s.propose(w, s.direction(task, text, note))
+		httpapi.Propose(w, s.store, s.direction(task, text, note))
 	case text == "": // already there
-		reply(w, map[string]string{"task": task.ID})
+		httpapi.Reply(w, map[string]string{"task": task.ID})
 	default:
-		s.propose(w, moved(s.direction(task, text, note)))
+		httpapi.Propose(w, s.store, moved(s.direction(task, text, note)))
 	}
 }
 
@@ -146,14 +147,14 @@ func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note strin
 			continue // done, and kept as done
 		}
 		if err != nil {
-			failed(w, err)
+			httpapi.Failed(w, err)
 			return false
 		}
 		if story == nil || story.IsDone || story.Parked != "" {
 			continue
 		}
-		held := events.Proposal{Stream: id, Actor: you, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": note}}
-		if !s.proposeOrRefuse(w, held) {
+		held := events.Proposal{Stream: id, Actor: httpapi.You, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": note}}
+		if !httpapi.ProposeOrRefuse(w, s.store, held) {
 			return false
 		}
 	}
@@ -170,29 +171,14 @@ func (s *Server) direction(task *tasks.Task, text, note string) events.Proposal 
 	if task.Question != "" {
 		kind, field = events.TaskAnswered, "answer"
 	}
-	return events.Proposal{Stream: task.ID, Actor: you, Type: kind, Data: map[string]any{field: text}}
+	return events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: kind, Data: map[string]any{field: text}}
 }
 
 func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {
 	if note != "" {
 		text += " " + note
 	}
-	return events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskReopened, Data: map[string]any{"text": text}}
-}
-
-// proposeOrRefuse writes a proposal that comes before another, and answers
-// for the request only if it fails.
-func (s *Server) proposeOrRefuse(w http.ResponseWriter, p events.Proposal) bool {
-	_, rejection, err := s.store.Propose(p)
-	switch {
-	case err != nil:
-		failed(w, err)
-		return false
-	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusConflict)
-		return false
-	}
-	return true
+	return events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskReopened, Data: map[string]any{"text": text}}
 }
 
 // teammates are the agents of the task's team whose work counts as column.

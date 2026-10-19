@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 )
 
@@ -23,9 +24,10 @@ type settingsView struct {
 
 func (s *Server) showSettings(w http.ResponseWriter, r *http.Request) {
 	now := s.state.Settings()
-	reply(w, settingsView{VisionariesOnEpicClose: now.VisionariesOnEpicClose, AutoAcceptIdeas: now.AutoAcceptIdeas,
+	httpapi.Reply(w, settingsView{VisionariesOnEpicClose: now.VisionariesOnEpicClose, AutoAcceptIdeas: now.AutoAcceptIdeas,
 		AutoStartIdeas: now.AutoStartIdeas, AutoAcceptRule: now.AutoAcceptRule, MaxRunningTasks: now.MaxRunningTasks,
 		RunningTasks: s.slots().Running})
+
 }
 
 // changeSettings changes the settings the request names, 400 when it names
@@ -37,7 +39,7 @@ func (s *Server) changeSettings(w http.ResponseWriter, r *http.Request) {
 		AutoAcceptRule                                          *string
 		MaxRunningTasks                                         *int
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	changes := map[string]any{}
@@ -65,7 +67,7 @@ func (s *Server) changeSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "say which setting to change: visionariesOnEpicClose, autoAcceptIdeas, autoStartIdeas, autoAcceptRule or maxRunningTasks", http.StatusBadRequest)
 		return
 	}
-	if !s.proposeOrRefuse(w, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: changes}) {
+	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: events.SettingsStream, Actor: httpapi.You, Type: events.SettingsChanged, Data: changes}) {
 		return
 	}
 	s.showSettings(w, r)

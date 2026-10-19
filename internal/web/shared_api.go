@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
@@ -33,7 +34,7 @@ func (s *Server) listShared(w http.ResponseWriter, r *http.Request) {
 	for _, f := range task.SharedFiles() {
 		list = append(list, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})
 	}
-	reply(w, list)
+	httpapi.Reply(w, list)
 }
 
 // uploadShared shares the request's body with the task as ?name=.
@@ -53,8 +54,9 @@ func (s *Server) uploadShared(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.FileAdded,
+	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.FileAdded,
 		Data: map[string]any{"name": name, "hash": hash, "size": size, "by": "you"}})
+
 }
 
 func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +72,7 @@ func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := s.config.Blobs.Open(f.Hash)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	defer body.Close()
@@ -81,8 +83,9 @@ func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeShared(w http.ResponseWriter, r *http.Request) {
-	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.FileRemoved,
+	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.FileRemoved,
 		Data: map[string]any{"name": r.URL.Query().Get("name"), "by": "you"}})
+
 }
 
 // blobFor sends a worker a file it needs, by its hash.
@@ -96,7 +99,7 @@ func (s *Server) blobFor(w http.ResponseWriter, r *http.Request, _ workers.Worke
 	}
 	body, err := s.config.Blobs.Open(r.PathValue("hash"))
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	defer body.Close()
@@ -111,5 +114,5 @@ func (s *Server) blobFrom(w http.ResponseWriter, r *http.Request, _ workers.Work
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	reply(w, map[string]any{"hash": hash, "size": size})
+	httpapi.Reply(w, map[string]any{"hash": hash, "size": size})
 }

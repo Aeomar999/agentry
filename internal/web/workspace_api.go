@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 	"gitlab.com/dev.chempa/agentry/internal/workspace"
@@ -44,7 +45,7 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request) {
 	if files == nil {
 		files = []workspace.File{}
 	}
-	reply(w, map[string]any{"base": ws.Base, "files": files})
+	httpapi.Reply(w, map[string]any{"base": ws.Base, "files": files})
 }
 
 func (s *Server) listCommits(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +61,7 @@ func (s *Server) listCommits(w http.ResponseWriter, r *http.Request) {
 	if commits == nil {
 		commits = []workspace.Commit{}
 	}
-	reply(w, commits)
+	httpapi.Reply(w, commits)
 }
 
 func (s *Server) readFile(w http.ResponseWriter, r *http.Request) {
@@ -73,8 +74,8 @@ func (s *Server) readFile(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, workspace.ErrOutside):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	case err != nil:
-		failed(w, err)
+		httpapi.Failed(w, err)
 	default:
-		reply(w, contents)
+		httpapi.Reply(w, contents)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -45,7 +46,7 @@ func (s *Server) listQuestions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.SortStableFunc(questions, func(a, b question) int { return cmp.Compare(a.At.UnixNano(), b.At.UnixNano()) }) // oldest first
-	reply(w, questions)
+	httpapi.Reply(w, questions)
 }
 
 func questionsOf(t *tasks.Task) []question {

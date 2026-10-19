@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 )
 
@@ -22,7 +23,7 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.propose(w, agent.Proposal(you, false))
+	httpapi.Propose(w, s.store, agent.Proposal(httpapi.You, false))
 }
 
 func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +35,7 @@ func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
 	if had, found := s.state.Roster().Get(agent.Name); found {
 		agent.Template = had.Template // what it was made from stays, so its team keeps its features
 	}
-	s.propose(w, agent.Proposal(you, true))
+	httpapi.Propose(w, s.store, agent.Proposal(httpapi.You, true))
 }
 
 // renameAgent gives an agent a new name, keeping everything else, and tells
@@ -42,23 +43,23 @@ func (s *Server) changeAgent(w http.ResponseWriter, r *http.Request) {
 // work goes on with it. What has happened keeps the name it had.
 func (s *Server) renameAgent(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	name, to := r.PathValue("name"), strings.TrimSpace(request.To)
-	if !s.proposeOrRefuse(w, agents.Agent{Name: name}.Renaming(you, to)) {
+	if !httpapi.ProposeOrRefuse(w, s.store, agents.Agent{Name: name}.Renaming(httpapi.You, to)) {
 		return
 	}
 	for _, task := range s.state.Tasks() {
 		if task.Coordinator != name && (task.Handoff == nil || task.Handoff.To != name) {
 			continue
 		}
-		if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.AgentRenamedInTask,
+		if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.AgentRenamedInTask,
 			Data: map[string]any{"name": name, "to": to}}) {
 			return
 		}
 	}
-	reply(w, map[string]string{"name": to})
+	httpapi.Reply(w, map[string]string{"name": to})
 }
 
 // removeAgent removes an agent no unfinished task needs: one that isn't
@@ -66,13 +67,13 @@ func (s *Server) renameAgent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if busy, err := s.needing(name); err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	} else if len(busy) > 0 {
 		http.Error(w, name+" is still needed by "+strings.Join(busy, ", ")+": finish those first (dragging a task to Done on the board finishes it as it is)", http.StatusConflict)
 		return
 	}
-	s.propose(w, agents.Agent{Name: name}.Removal(you))
+	httpapi.Propose(w, s.store, agents.Agent{Name: name}.Removal(httpapi.You))
 }
 
 // removeTeam removes a team and all its agents, its coordinator last, once
@@ -81,7 +82,7 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) removeTeam(w http.ResponseWriter, r *http.Request) {
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	team := r.PathValue("team")
@@ -109,7 +110,7 @@ func (s *Server) removeTeam(w http.ResponseWriter, r *http.Request) {
 		names = append(names, agent.Name)
 	}
 	if busy, err := s.needing(names...); err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	} else if len(busy) > 0 {
 		http.Error(w, "the "+team+" team is still needed by "+strings.Join(busy, ", ")+": finish those first (dragging a task to Done on the board finishes it as it is)",
@@ -117,11 +118,11 @@ func (s *Server) removeTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, agent := range everyone {
-		if !s.proposeOrRefuse(w, agent.Removal(you)) {
+		if !httpapi.ProposeOrRefuse(w, s.store, agent.Removal(httpapi.You)) {
 			return
 		}
 	}
-	reply(w, map[string]any{"team": team, "removed": names})
+	httpapi.Reply(w, map[string]any{"team": team, "removed": names})
 }
 
 // needing lists the unfinished tasks that one of the agents coordinates,
@@ -168,7 +169,7 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 		}
 		list = append(list, view)
 	}
-	reply(w, list)
+	httpapi.Reply(w, list)
 }
 
 // addTeam adds a team made from a template: its coordinator first, so the
@@ -184,7 +185,7 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 		AddMissingProfiles bool
 		Hash               string
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	template, ok := agents.TemplateNamed(request.Template)
@@ -203,16 +204,16 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 	}
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
-	proposals := agents.AddTeam(template, roster, you)
+	proposals := agents.AddTeam(template, roster, httpapi.You)
 	for _, p := range proposals[:len(proposals)-1] {
-		if !s.proposeOrRefuse(w, p) {
+		if !httpapi.ProposeOrRefuse(w, s.store, p) {
 			return
 		}
 	}
-	s.propose(w, proposals[len(proposals)-1])
+	httpapi.Propose(w, s.store, proposals[len(proposals)-1])
 }
 
 // jsonErrors writes the plain-text errors of http.Error as {"error": ...},
@@ -240,7 +241,7 @@ func (w *jsonErrors) Write(text []byte) (int, error) {
 
 func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent, bool) {
 	var agent agents.Agent
-	if !decode(w, r, &agent) {
+	if !httpapi.Decode(w, r, &agent) {
 		return agent, false
 	}
 	agent.Name, agent.Model = strings.TrimSpace(agent.Name), strings.TrimSpace(agent.Model)
@@ -317,10 +318,10 @@ func (s *Server) unknownProfile(profile string) string {
 // setKnowledge replaces the agent's knowledge with yours.
 func (s *Server) setKnowledge(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Knowledge string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	s.propose(w, agents.Agent{Name: r.PathValue("name")}.Learned(you, strings.TrimSpace(request.Knowledge)))
+	httpapi.Propose(w, s.store, agents.Agent{Name: r.PathValue("name")}.Learned(httpapi.You, strings.TrimSpace(request.Knowledge)))
 }
 
 // knowledgeHistory is every change to the agent's knowledge, newest first:
@@ -328,12 +329,12 @@ func (s *Server) setKnowledge(w http.ResponseWriter, r *http.Request) {
 // version before, so each version is rebuilt walking forward from the start.
 func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.roster(); err != nil { // the walk would fail as the state's did
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	stream, err := s.store.Stream(events.AgentsStream)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	type change struct {
@@ -352,5 +353,5 @@ func (s *Server) knowledgeHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	slices.Reverse(history)
-	reply(w, history)
+	httpapi.Reply(w, history)
 }

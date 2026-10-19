@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workerlink"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
@@ -39,7 +40,7 @@ func (s *Server) gitFetch(w http.ResponseWriter, r *http.Request, _ workers.Work
 	gitDir := strings.TrimSpace(string(common))
 	git, err := exec.LookPath("git")
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	handler := &cgi.Handler{Path: git, Args: []string{"http-backend"}, Root: workerlink.GitPath + task.ID,
@@ -63,7 +64,7 @@ func (s *Server) receiveBundle(w http.ResponseWriter, r *http.Request, worker wo
 	}
 	file, err := os.CreateTemp("", "agentry-*.bundle")
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	defer os.Remove(file.Name())
@@ -77,7 +78,7 @@ func (s *Server) receiveBundle(w http.ResponseWriter, r *http.Request, worker wo
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	reply(w, map[string]string{"branch": task.Worktree.Branch})
+	httpapi.Reply(w, map[string]string{"branch": task.Worktree.Branch})
 }
 
 func (s *Server) hubTask(w http.ResponseWriter, r *http.Request) (*tasks.Task, bool) {

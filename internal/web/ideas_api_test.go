@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/settings"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -220,8 +221,8 @@ func TestAnIdeaAgentryAcceptedSaysSo(t *testing.T) {
 		t.Fatal(rejection, err)
 	}
 	id := created.Stream
-	for _, p := range append(agents.AddTeam(visionaries, nil, you), []events.Proposal{
-		{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
+	for _, p := range append(agents.AddTeam(visionaries, nil, httpapi.You), []events.Proposal{
+		{Stream: events.SettingsStream, Actor: httpapi.You, Type: events.SettingsChanged, Data: map[string]any{settings.AutoAcceptIdeas: true}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Search the board", "repo": repo,
 			"coordinator": "tech-lead", "parked": "backlog", "idea": id}},
 		{Stream: id, Actor: agentry, Type: ideas.IdeaAccepted, Data: map[string]any{"task": "task-2", "note": "auto-accepted: all Visionaries agreed"}},
@@ -268,11 +269,11 @@ func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	for _, p := range []events.Proposal{
-		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list", "repo": repo,
+		{Stream: "task-1", Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{"title": "Ideas list", "repo": repo,
 			"coordinator": "tech-lead", "kind": "epic"}},
 		{Stream: "task-2", Actor: agentry, Type: events.TaskCreated, Data: map[string]any{"title": "Follow-ups after Ideas list",
 			"repo": repo, "coordinator": "tech-lead", "about": "task-1", "close": 9}},
-		{Stream: "task-3", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Think", "repo": repo, "coordinator": "tech-lead"}},
+		{Stream: "task-3", Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{"title": "Think", "repo": repo, "coordinator": "tech-lead"}},
 	} {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
@@ -303,7 +304,7 @@ func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
 	visionaries, _ := agents.TemplateNamed(ideas.VisionariesTeam)
-	for _, p := range agents.AddTeam(visionaries, nil, you) {
+	for _, p := range agents.AddTeam(visionaries, nil, httpapi.You) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}

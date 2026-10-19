@@ -12,6 +12,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 )
 
@@ -56,13 +57,13 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	current := s.config.Policy.Current()
 	defaults, err := defaultsOf(current)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	users := map[string][]profileUser{}
@@ -75,10 +76,11 @@ func (s *Server) showPolicy(w http.ResponseWriter, r *http.Request) {
 	for _, list := range users {
 		slices.SortFunc(list, func(a, b profileUser) int { return cmp.Compare(a.Agent, b.Agent) })
 	}
-	reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
+	httpapi.Reply(w, map[string]any{"path": s.config.Policy.Path(), "hash": current.Hash(), "problem": s.config.Policy.Problem(),
 		"defaultProfile": current.DefaultProfile(), "useForEveryone": current.UseForEveryone(),
 		"profiles": current.Summary(), "text": current.Text(), "version": s.version(),
 		"defaults": defaults, "users": users, "effective": effective, "missing": current.MissingProfiles(agentProfiles(roster))})
+
 }
 
 func defaultsOf(current *policy.Policy) ([]defaultView, error) {
@@ -137,7 +139,7 @@ func (s *Server) useDefaultProfile(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) changeProfile(w http.ResponseWriter, r *http.Request, change string, edit func(text []byte, name string) ([]byte, error)) {
 	var request seenHash
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	name := r.PathValue("name")
@@ -152,7 +154,7 @@ func (s *Server) changeProfile(w http.ResponseWriter, r *http.Request, change st
 // its own profile again.
 func (s *Server) turnOffUseForEveryone(w http.ResponseWriter, r *http.Request) {
 	var request seenHash
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	s.changePolicy(w, request.Hash, "turned off use_for_everyone", policy.TurnOffUseForEveryone)
@@ -162,10 +164,10 @@ func (s *Server) turnOffUseForEveryone(w http.ResponseWriter, r *http.Request) {
 func (s *Server) policyHistory(w http.ResponseWriter, r *http.Request) {
 	stream, err := s.store.Stream(events.PolicyStream)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
-	reply(w, policy.History(stream))
+	httpapi.Reply(w, policy.History(stream))
 }
 
 // policyVersion is what reverting to the version at position would change:
@@ -191,9 +193,10 @@ func (s *Server) policyVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current := s.config.Policy.Current()
-	reply(w, map[string]any{"position": position, "at": at,
+	httpapi.Reply(w, map[string]any{"position": position, "at": at,
 		"diff":           policy.LineDiff("in force", "version of "+versionTime(at), current.Text(), text),
 		"useForEveryone": useForEveryone, "inForceUseForEveryone": current.UseForEveryone()})
+
 }
 
 // revertPolicy writes an earlier version back, as a new version.
@@ -202,7 +205,7 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 		Position int64
 		Hash     string
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	text, at, ok := s.versionAt(w, request.Position)
@@ -224,7 +227,7 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) versionAt(w http.ResponseWriter, position int64) (string, time.Time, bool) {
 	stream, err := s.store.Stream(events.PolicyStream)
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return "", time.Time{}, false
 	}
 	text, at, err := policy.VersionAt(stream, position)
@@ -268,7 +271,7 @@ func (s *Server) tryPolicy(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Profile, Tool, Input, Workspace string
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	current := s.config.Policy.Current()
@@ -295,7 +298,7 @@ func (s *Server) tryPolicy(w http.ResponseWriter, r *http.Request) {
 	if everyone := current.UseForEveryone(); everyone != "" && everyone != request.Profile {
 		tried["override"] = map[string]any{"profile": everyone, "verdict": verdictOf(current.Decide(request.Profile, call))}
 	}
-	reply(w, tried)
+	httpapi.Reply(w, tried)
 }
 
 // standInWorkspace is the worktree a tried call runs in when it names none:
@@ -309,7 +312,7 @@ func (s *Server) standInWorkspace() string {
 // logs it as yours, and replies with the new version.
 func (s *Server) changePolicy(w http.ResponseWriter, seen, change string, edit func(text []byte) ([]byte, error)) {
 	if c, ok := s.applyPolicy(w, seen, change, edit); ok {
-		reply(w, map[string]any{"hash": c.Policy.Hash(), "change": change, "diff": c.Diff, "backup": c.Backup})
+		httpapi.Reply(w, map[string]any{"hash": c.Policy.Hash(), "change": change, "diff": c.Diff, "backup": c.Backup})
 	}
 }
 
@@ -327,7 +330,7 @@ func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit fu
 	// With one person making both changes, that is accepted.
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return nil, false
 	}
 	var recorded error
@@ -336,7 +339,7 @@ func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit fu
 			return s.config.Policy.Current().RefuseRemovingUsed(next, agentProfiles(roster))
 		},
 		Record: func(c *policy.Change) {
-			_, rejection, err := s.store.Propose(policy.Loaded(s.config.Policy.Path(), c, change, you))
+			_, rejection, err := s.store.Propose(policy.Loaded(s.config.Policy.Path(), c, change, httpapi.You))
 			if rejection != nil {
 				err = errors.New(rejection.Reason)
 			}
@@ -352,10 +355,10 @@ func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit fu
 		http.Error(w, err.Error(), http.StatusConflict)
 		return nil, false
 	case err != nil:
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return nil, false
 	case recorded != nil:
-		failed(w, fmt.Errorf("the policy changed, but recording the change failed: %w", recorded))
+		httpapi.Failed(w, fmt.Errorf("the policy changed, but recording the change failed: %w", recorded))
 		return nil, false
 	}
 	return c, true

@@ -22,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
@@ -165,7 +166,7 @@ func TestChangesAnswerAsSoonAsTheLogMoves(t *testing.T) {
 	start := s.LastPosition()
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+		s.Propose(events.Proposal{Stream: "task-1", Actor: httpapi.You, Type: events.TaskCreated,
 			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
 	}()
 	began := time.Now()
@@ -198,7 +199,7 @@ func TestThePositionIsTakenBeforeTheRead(t *testing.T) {
 	server := NewServer(s, state, Config{UIToken: token}, http.NotFoundHandler(), nil)
 	before := s.LastPosition()
 	read := server.atPosition(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated,
+		s.Propose(events.Proposal{Stream: "task-1", Actor: httpapi.You, Type: events.TaskCreated,
 			Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}})
 	}))
 	recorder := httptest.NewRecorder()
@@ -1472,7 +1473,7 @@ func TestTheKnowledgeHistoryIsTheSameFromPatches(t *testing.T) {
 		by, before := events.Actor{Kind: events.Agent, ID: "engineer"}, ""
 		for i, text := range versions {
 			if i == 2 {
-				s.Propose(engineer.Renaming(you, "builder"))
+				s.Propose(engineer.Renaming(httpapi.You, "builder"))
 				engineer.Name, by.ID = "builder", "builder"
 			}
 			p := engineer.Learned(by, text)

@@ -3,7 +3,6 @@ package web
 import (
 	"cmp"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
@@ -24,12 +24,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
-var you = events.Actor{Kind: events.Human, ID: "you"}
-
 func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	all := s.state.Tasks()
@@ -52,7 +50,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 		summary.Queued = slots.Queued(task.ID)
 		summaries = append(summaries, summary)
 	}
-	reply(w, summaries)
+	httpapi.Reply(w, summaries)
 }
 
 // changeRepo moves a task's work to another repo: when the turn in progress
@@ -61,7 +59,7 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 // its Workspace shows what was done there.
 func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Repo string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	repo, reason := s.repoFor(strings.TrimSpace(request.Repo))
@@ -74,22 +72,23 @@ func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	moved := events.Proposal{Stream: task.ID, Actor: you, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}
+	moved := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}
 	if !task.IsDone || s.config.Fleet == nil {
-		s.propose(w, moved)
+		httpapi.Propose(w, s.store, moved)
 		return
 	}
-	if !s.proposeOrRefuse(w, moved) {
+	if !httpapi.ProposeOrRefuse(w, s.store, moved) {
 		return
 	}
 	here := s.config.Fleet.Of(workers.Local)
 	made, err := here.Prepare(r.Context(), machines.WorktreeRequest{Task: task.ID, Repo: repo})
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
-	s.propose(w, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
+	httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: events.Actor{Kind: events.Worker, ID: here.Name()}, Type: events.WorktreeReady,
 		Data: map[string]any{"repo": made.Repo, "worker": here.Name(), "path": made.Path, "branch": made.Branch, "base": "", "port": made.Port}})
+
 }
 
 // repoFor is the folder a task's work goes in, for a repo named by its
@@ -118,7 +117,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		Budget                   int // tokens; 0 takes the default, -1 is no limit
 		MaxTurns                 int // turns without your answer; 0 takes the default, -1 is no limit
 	}
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	request.Title, request.Repo = strings.TrimSpace(request.Title), strings.TrimSpace(request.Repo)
@@ -168,7 +167,7 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	}
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	coordinator, ok := roster.Coordinator(request.Team)
@@ -182,14 +181,14 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 	if request.Epic != "" {
 		parked = "backlog" // with the epic's other stories, until you start it
 	}
-	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
+	created, rejection, err := s.store.Create("task-", events.Proposal{Actor: httpapi.You, Type: events.TaskCreated, Data: map[string]any{
 		"title": request.Title, "description": request.Description,
 		"repo": request.Repo, "coordinator": coordinator.Name, "labels": cleanLabels(request.Labels),
-		"budget": limitOf(request.Budget, defaults.Budget), "maxTurns": limitOf(request.MaxTurns, defaults.MaxTurns),
+		"budget": httpapi.LimitOf(request.Budget, defaults.Budget), "maxTurns": httpapi.LimitOf(request.MaxTurns, defaults.MaxTurns),
 		"teamChosen": request.Team != "", "kind": kind, "kindChosen": request.Kind != "", "parked": parked}})
 	switch {
 	case err != nil:
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	case rejection != nil:
 		http.Error(w, rejection.Reason, http.StatusConflict)
@@ -209,34 +208,17 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 			refused = append(refused, why)
 		}
 	}
-	reply(w, map[string]any{"stream": created.Stream, "position": created.Position, "notFiled": refused})
+	httpapi.Reply(w, map[string]any{"stream": created.Stream, "position": created.Position, "notFiled": refused})
 }
-
-// noLimit is what a request sends for no limit. At creation 0 takes the
-// server's default, so a task made without one is unlimited only when asked.
-const noLimit = -1
 
 // defaults are the limits a new task gets when it names none.
 func (c Config) defaults() tasks.Limits { return tasks.Limits{Budget: c.Budget, MaxTurns: c.MaxTurns} }
-
-// limitOf is a budget or limit of turns as the task keeps it, 0 for no
-// limit, from a request's: 0 takes byDefault (the server's for a new task, no
-// limit for a change), and noLimit is none.
-func limitOf(asked, byDefault int) int {
-	switch asked {
-	case 0:
-		return byDefault
-	case noLimit:
-		return 0
-	}
-	return asked // below -1, the rules refuse it
-}
 
 // setBudget gives the task a new token budget, 0 (or -1) for no limit. A
 // task stopped at its budget takes it as your answer and carries on.
 func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Budget int }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	task, err := s.task(r.PathValue("task"))
@@ -244,8 +226,8 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	budget := limitOf(request.Budget, 0)
-	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
+	budget := httpapi.LimitOf(request.Budget, 0)
+	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskBudgeted, Data: map[string]any{"budget": budget}}) {
 		return
 	}
 	answered, refused := false, ""
@@ -255,11 +237,11 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 			answer = "I made the budget unlimited. Carry on."
 		}
 		if answered, refused, err = s.carryOn(task, answer); err != nil {
-			failed(w, err)
+			httpapi.Failed(w, err)
 			return
 		}
 	}
-	reply(w, limitReply("budget", budget, answered, refused))
+	httpapi.Reply(w, limitReply("budget", budget, answered, refused))
 }
 
 // setMaxTurns gives the task a new limit of turns without your answer, 0 (or
@@ -267,7 +249,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 // carries on.
 func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 	var request struct{ MaxTurns int }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	task, err := s.task(r.PathValue("task"))
@@ -275,8 +257,8 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
-	maxTurns := limitOf(request.MaxTurns, 0)
-	if !s.proposeOrRefuse(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
+	maxTurns := httpapi.LimitOf(request.MaxTurns, 0)
+	if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskTurnsLimited, Data: map[string]any{"maxTurns": maxTurns}}) {
 		return
 	}
 	answered, refused := false, ""
@@ -286,17 +268,17 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 			answer = "I made the turns unlimited. Carry on."
 		}
 		if answered, refused, err = s.carryOn(task, answer); err != nil {
-			failed(w, err)
+			httpapi.Failed(w, err)
 			return
 		}
 	}
-	reply(w, limitReply("maxTurns", maxTurns, answered, refused))
+	httpapi.Reply(w, limitReply("maxTurns", maxTurns, answered, refused))
 }
 
 // carryOn answers the loop's stop for you, so the coordinator goes on. It
 // says whether it did, or why the rules refused it.
 func (s *Server) carryOn(task *tasks.Task, answer string) (answered bool, refused string, err error) {
-	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+	_, rejection, err := s.store.Propose(events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
 	switch {
 	case err != nil:
 		return false, "", err
@@ -321,20 +303,21 @@ func limitReply(field string, limit int, answered bool, refused string) map[stri
 // the two tasks it was dropped between.
 func (s *Server) rank(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Rank float64 }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
+	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
 }
 
 // label sets the task's labels, all of them.
 func (s *Server) label(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Labels []string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskLabeled,
+	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskLabeled,
 		Data: map[string]any{"labels": cleanLabels(request.Labels)}})
+
 }
 
 // cleanLabels trims labels, lowercases them so "Bug" and "bug" are one, and
@@ -373,7 +356,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	}
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	slots := s.slots()
@@ -392,7 +375,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 			detail.StoryList = append(detail.StoryList, summary)
 		}
 	}
-	reply(w, detail)
+	httpapi.Reply(w, detail)
 }
 
 // answer sends your answer to the coordinator's question. Two answers are
@@ -401,7 +384,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 // machine's worktrees. The desk passes on what you say, and approves nothing.
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Answer string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	answer := strings.TrimSpace(request.Answer)
@@ -410,13 +393,13 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	copies := err == nil && task != nil && task.Asked.Fetch != nil && strings.EqualFold(answer, coordinator.CopyFile)
 	switch {
 	case !closes && !copies:
-		s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
+		httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskAnswered, Data: map[string]any{"answer": answer}})
 	case !s.carriesUIToken(r):
 		http.Error(w, "that is approved on the page", http.StatusForbidden)
 	case closes:
 		// One event, the answer and the close together: an answer alone
 		// would start the coordinator's next turn.
-		s.propose(w, events.Proposal{Stream: task.ID, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
+		httpapi.Propose(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskDone, Data: map[string]any{"summary": task.Closing}})
 	default:
 		s.copyApproved(w, r, task.ID, *task.Asked.Fetch)
 	}
@@ -438,7 +421,7 @@ func (s *Server) copyApproved(w http.ResponseWriter, r *http.Request, id string,
 		http.Error(w, "copying "+f.Machine+":"+f.Path+": "+err.Error(), http.StatusConflict)
 		return
 	}
-	s.propose(w, events.Proposal{Stream: id, Actor: you, Type: events.FilesFetched, Data: coordinator.Fetched(f, files, true)})
+	httpapi.Propose(w, s.store, events.Proposal{Stream: id, Actor: httpapi.You, Type: events.FilesFetched, Data: coordinator.Fetched(f, files, true)})
 }
 
 func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
@@ -448,27 +431,28 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request) { s.decide(w, r, e
 
 func (s *Server) decide(w http.ResponseWriter, r *http.Request, kind events.Type) {
 	var request struct{ Reason string }
-	if r.ContentLength != 0 && !decode(w, r, &request) {
+	if r.ContentLength != 0 && !httpapi.Decode(w, r, &request) {
 		return
 	}
 	if request.Reason == "" {
 		request.Reason = "no reason given"
 	}
-	s.propose(w, events.Proposal{Stream: r.PathValue("task"), Actor: you, Type: kind,
+	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: kind,
 		Correlation: r.PathValue("action"), Data: map[string]any{"reason": request.Reason}})
+
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	roster, err := s.roster()
 	if err != nil {
-		failed(w, err)
+		httpapi.Failed(w, err)
 		return
 	}
 	var inForce *policy.Policy
 	if s.config.Policy != nil {
 		inForce = s.config.Policy.Current()
 	}
-	reply(w, agentsOf(roster, inForce))
+	httpapi.Reply(w, agentsOf(roster, inForce))
 }
 
 // showConfig is what the page needs to know about the server. policyProblem
@@ -483,7 +467,7 @@ func (s *Server) showConfig(w http.ResponseWriter, r *http.Request) {
 	if trust := s.trustAt(r, requestURL(r)); trust != nil {
 		config["trust"] = trust // the page is served with the server's own CA
 	}
-	reply(w, config)
+	httpapi.Reply(w, config)
 }
 
 // missingProfilesInUse is policy.MissingProfiles for the roster: none while
@@ -500,7 +484,7 @@ func (s *Server) missingProfilesInUse() map[string][]string {
 // after it use it, so the engines draw colours that suit the terminal.
 func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Theme string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	if request.Theme != "light" && request.Theme != "dark" {
@@ -510,7 +494,7 @@ func (s *Server) setTheme(w http.ResponseWriter, r *http.Request) {
 	if s.config.SetTheme != nil {
 		s.config.SetTheme(request.Theme)
 	}
-	reply(w, map[string]string{"theme": request.Theme})
+	httpapi.Reply(w, map[string]string{"theme": request.Theme})
 }
 
 // workerChoices are the machines an agent can be given: this one, then
@@ -530,21 +514,7 @@ func (s *Server) waitForChanges(w http.ResponseWriter, r *http.Request) {
 	reader := s.store.NewReader(after)
 	defer reader.Close()
 	reader.Next(ctx) // returns early with events, or when ctx ends
-	reply(w, map[string]int64{"position": s.store.LastPosition()})
-}
-
-// propose writes a proposal and replies with the event, or with the
-// validator's reason as a 409 when it was refused.
-func (s *Server) propose(w http.ResponseWriter, p events.Proposal) {
-	event, rejection, err := s.store.Propose(p)
-	switch {
-	case err != nil:
-		failed(w, err)
-	case rejection != nil:
-		http.Error(w, rejection.Reason, http.StatusConflict)
-	default:
-		reply(w, event)
-	}
+	httpapi.Reply(w, map[string]int64{"position": s.store.LastPosition()})
 }
 
 func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) }
@@ -577,21 +547,4 @@ func (s *Server) isDone(id string) bool {
 
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)
-}
-
-func decode(w http.ResponseWriter, r *http.Request, into any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(into); err != nil {
-		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
-		return false
-	}
-	return true
-}
-
-func reply(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(value)
-}
-
-func failed(w http.ResponseWriter, err error) {
-	http.Error(w, err.Error(), http.StatusInternalServerError)
 }

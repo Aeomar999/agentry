@@ -4,6 +4,8 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 )
 
 // claudeMessage is a message to the coordinator that you asked Claude, in a
@@ -12,7 +14,7 @@ import (
 // you before it runs the command, so it never sends one on its own.
 func (s *Server) claudeMessage(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Text string }
-	if !decode(w, r, &request) {
+	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	task, err := s.task(r.PathValue("task"))
