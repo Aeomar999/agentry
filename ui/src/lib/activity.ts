@@ -230,8 +230,14 @@ function rowOf(
       const labels = Array.isArray(e.data?.labels) ? (e.data.labels as string[]) : [];
       return { ...base, kind: "note", title: labels.length ? `Labeled ${labels.join(", ")}` : "Labels removed" };
     }
-    case "task.budgeted":
-      return { ...base, kind: "note", title: `Budget set to ${tokens(Number(e.data?.budget ?? 0))} tokens` };
+    case "task.budgeted": {
+      const budget = Number(e.data?.budget ?? 0);
+      return { ...base, kind: "note", title: budget > 0 ? `Budget set to ${tokens(budget)} tokens` : "Budget set to unlimited" };
+    }
+    case "task.turns_limited": {
+      const maxTurns = Number(e.data?.maxTurns ?? 0);
+      return { ...base, kind: "note", title: maxTurns > 0 ? `Max turns set to ${maxTurns}` : "Max turns set to unlimited" };
+    }
     case "task.held": {
       const place = text(e, "place");
       return { ...base, kind: "note", title: place ? `Held in ${place}` : "Moved on" };

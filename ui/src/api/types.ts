@@ -17,6 +17,10 @@ export interface TaskSummary {
   budget: number; // tokens; 0 is no limit
   tokensUsed: number;
   overBudget: boolean;
+  maxTurns: number; // turns it may have without your answer; 0 is no limit
+  turnsSinceAnswer: number; // since it started or you last answered
+  atTurnLimit: boolean;
+  stoppedAt: "" | "budget" | "turns"; // the limit whose stop is the open question: raising it answers
   rank: number; // your priority order, lower first
   parked: "" | "todo" | "backlog"; // while you hold it there
   parent: string; // the task, of another team, that asked for this one
@@ -141,7 +145,8 @@ export interface PolicyProfile {
 
 export interface ServerConfig {
   defaultRepo: string;
-  budget: number; // what a new task gets, in tokens
+  budget: number; // what a new task gets, in tokens; 0 is no limit
+  maxTurns: number; // what a new task gets; 0 is no limit
   hasTerminal: boolean;
   hasDesk: boolean;
   engines: string[];

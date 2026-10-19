@@ -22,6 +22,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { TokenMeter } from "@/components/molecules/TokenMeter";
 import { ActivityFeed, Now } from "@/components/organisms/ActivityFeed";
 import { NeedsYouPanel } from "@/components/organisms/NeedsYouPanel";
+import { LimitEditor, turnsLine } from "@/components/organisms/LimitEditor";
 import { OpenEpic } from "@/components/organisms/OpenEpic";
 import { LabelEditor } from "@/components/organisms/LabelEditor";
 import { TerminalView } from "@/components/organisms/TerminalView";
@@ -262,11 +263,17 @@ export function TaskPage() {
         <Fact label="Agent">
           {working ? <AgentName name={working} className="text-[12px]" /> : <Mono className="text-ink-muted">none</Mono>}
         </Fact>
-        <Fact label="Tokens" className="w-48">
-          <TokenMeter used={task.tokensUsed} budget={task.budget} />
+        <Fact label="Tokens" className="min-w-56">
+          <LimitEditor task={task} kind="budget" compact onChanged={reload}>
+            <TokenMeter used={task.tokensUsed} budget={task.budget} />
+          </LimitEditor>
         </Fact>
-        <Fact label="Turns">
-          <Mono>{task.turns}</Mono>
+        <Fact label="Turns since your answer">
+          <LimitEditor task={task} kind="turns" compact onChanged={reload}>
+            <Mono className={cn("whitespace-nowrap", task.atTurnLimit && "text-danger")}>
+              {turnsLine(task.turnsSinceAnswer, task.maxTurns)}
+            </Mono>
+          </LimitEditor>
         </Fact>
         <Fact label="Actions">
           <Mono>{actions.length}</Mono>
@@ -411,7 +418,8 @@ export function TaskPage() {
                         { label: "Repo", value: <RepoEditor task={task} onChanged={reload} /> },
                         ...(isEpic ? [] : [{ label: "Epic", value: <EpicPicker task={task} onChanged={reload} /> }]),
                         { label: "Coordinator", value: <AgentName name={task.coordinator} /> },
-                        { label: "Budget", value: <Mono>{task.budget > 0 ? `${tokens(task.budget)} tokens` : "no limit"}</Mono> },
+                        { label: "Budget", value: <LimitEditor task={task} kind="budget" onChanged={reload} /> },
+                        { label: "Max turns", value: <LimitEditor task={task} kind="turns" onChanged={reload} /> },
                         { label: "Created", value: dateTime(task.createdAt) },
                         { label: "Last active", value: dateTime(task.lastActiveAt) },
                         ...(task.firstTitle ? [{ label: "First title", value: task.firstTitle }] : []),
