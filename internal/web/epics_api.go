@@ -39,15 +39,14 @@ func (s *Server) fileUnder(id, epic string) string {
 	}
 	if epic != "" {
 		target, err := s.task(epic)
-		if errors.Is(err, current.ErrArchived) {
+		switch {
+		case errors.Is(err, current.ErrArchived):
 			// Only a done task is archived, and a done epic takes no
 			// stories, so it isn't unarchived for one: you reopen it.
 			if summary, _ := s.state.Summary(epic); summary.Kind != tasks.Epic {
 				return epic + " isn't an epic"
 			}
 			return epic + " is done; reopen it to add stories"
-		}
-		switch {
 		case err != nil || target == nil:
 			return "no task " + epic
 		case target.Kind != "epic":

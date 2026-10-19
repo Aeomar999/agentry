@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -141,7 +142,8 @@ func servedWith(t *testing.T, o serveOptions) string {
 }
 
 // startServing starts serve as servedWith does and waits until it is
-// running. Its stop stops it cleanly and returns what it logged.
+// running. Its stop stops it cleanly and returns what it logged; the test's
+// cleanup calls it too, so a test that fails first still stops the server.
 func startServing(t *testing.T, o serveOptions) (stop func() string) {
 	t.Helper()
 	var logged, out syncBuffer
@@ -149,11 +151,9 @@ func startServing(t *testing.T, o serveOptions) (stop func() string) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() {
-		o.address, o.repo = "127.0.0.1:0", t.TempDir()
-		done <- serve(ctx, o, &out)
-	}()
-	stop = func() string {
+	o.address, o.repo = "127.0.0.1:0", t.TempDir() // made before the cleanup below, so removed after it stops serve
+	go func() { done <- serve(ctx, o, &out) }()
+	stop = sync.OnceValue(func() string {
 		t.Helper()
 		defer slog.SetDefault(previous)
 		cancel()
@@ -161,11 +161,13 @@ func startServing(t *testing.T, o serveOptions) (stop func() string) {
 			t.Fatalf("serve: %v", err)
 		}
 		return logged.String()
-	}
+	})
+	t.Cleanup(func() { stop() })
 	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(out.String(), "Agentry is running"); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
+			t.Errorf("serve didn't start in time; it printed:\n%s", out.String())
 			stop()
-			t.Fatalf("serve printed:\n%s", out.String())
+			t.FailNow()
 		}
 	}
 	return stop

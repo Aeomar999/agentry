@@ -99,6 +99,26 @@ func TestMovingAnArchivedTaskBackToWorkReopensIt(t *testing.T) {
 	}
 }
 
+// A move to Shipping is refused while the task's team has no agent that
+// ships work, and an archived task is refused that before it is unarchived:
+// nothing is written, and it stays archived.
+func TestMovingAnArchivedTaskToShippingWithNoShipperUnarchivesNothing(t *testing.T) {
+	f := newArchiveFixture(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
+	if code, body := call(t, f.server, "DELETE", "/api/agents/deployer", ""); code != http.StatusOK {
+		t.Fatalf("removing the deployer: %d %s", code, body)
+	}
+	last := f.log.LastPosition()
+	const refused = "Software has no agent that ships work\n"
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-2/direct", `{"to":"shipping"}`); code != http.StatusConflict || body != refused {
+		t.Errorf("moving the archived task-2 to Shipping: %d %q, want 409 %q", code, body, refused)
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the refused move wrote events: the log moved from %d to %d", last, f.log.LastPosition())
+	}
+	stillArchived(t, f, "task-2")
+}
+
 // What you say to an archived task reopens it too, unarchived first; saying
 // nothing is refused before anything is written.
 func TestSayingSomethingToAnArchivedTaskReopensIt(t *testing.T) {

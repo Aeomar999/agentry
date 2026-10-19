@@ -49,17 +49,28 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("task")
-	if _, err := s.task(id); errors.Is(err, current.ErrArchived) && !slices.Contains(reopeningColumns, request.To) {
-		http.Error(w, rules.ArchivedRefusal(id), http.StatusConflict)
-		return
-	}
-	task := s.reopenable(w, id)
-	if task == nil {
-		return
-	}
 	roster, err := s.roster()
 	if err != nil {
 		httpapi.Failed(w, err)
+		return
+	}
+	task, err := s.task(id)
+	switch {
+	case errors.Is(err, current.ErrArchived):
+		refusal, err := s.archivedMove(id, request.To, roster)
+		if err != nil {
+			httpapi.Failed(w, err)
+			return
+		}
+		if refusal != "" {
+			http.Error(w, refusal, http.StatusConflict)
+			return
+		}
+		if task = s.unarchive(w, id); task == nil {
+			return
+		}
+	case err != nil || task == nil:
+		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
 	note := strings.TrimSpace(request.Note)
@@ -93,7 +104,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	case "in-progress", "review":
 	case "shipping":
 		if len(shippers) == 0 {
-			http.Error(w, teamOf(roster, task)+" has no agent that ships work", http.StatusConflict)
+			http.Error(w, noShipperIn(roster, task), http.StatusConflict)
 			return
 		}
 	default:
@@ -144,9 +155,30 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// reopeningColumns are the columns a done task moved to is reopened in:
+// reopeningColumns are the columns that reopen a done task moved to them:
 // every one but Done.
 var reopeningColumns = []string{"backlog", "todo", "in-progress", "review", "shipping"}
+
+// archivedMove is why an archived task can't be moved to a column, or ""
+// when it can: only a column that reopens it, and Shipping only while its
+// team has an agent that ships work. The team is read from the task's
+// history, so a move refused here unarchives nothing.
+func (s *Server) archivedMove(id, to string, roster agents.Roster) (string, error) {
+	if !slices.Contains(reopeningColumns, to) {
+		return rules.ArchivedRefusal(id), nil
+	}
+	if to != "shipping" {
+		return "", nil
+	}
+	archived, err := s.readArchived(id)
+	if err != nil {
+		return "", err
+	}
+	if len(teammates(roster, archived.task, agents.Ships)) == 0 {
+		return noShipperIn(roster, archived.task), nil
+	}
+	return "", nil
+}
 
 // parkStories parks the stories of an epic you closed that aren't done, in
 // the Backlog: their turns in progress stop, and their coordinators only
@@ -201,6 +233,11 @@ func teammates(roster agents.Roster, task *tasks.Task, column string) []string {
 		}
 	}
 	return names
+}
+
+// noShipperIn is why a task can't move to Shipping.
+func noShipperIn(roster agents.Roster, task *tasks.Task) string {
+	return teamOf(roster, task) + " has no agent that ships work"
 }
 
 func teamOf(roster agents.Roster, task *tasks.Task) string {
