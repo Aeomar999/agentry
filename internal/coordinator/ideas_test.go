@@ -281,6 +281,21 @@ func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
 	}
 }
 
+// The log under logOf's fallback refuses everything itself, so even a
+// proposal Checked let through would reach no log.
+func TestTheFallbackLogRefusesEverything(t *testing.T) {
+	log := writesNothing{name: "votes"}
+	p := events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated}
+	for name, propose := range map[string]func() (events.Event, *events.Rejection, error){
+		"Propose": func() (events.Event, *events.Rejection, error) { return log.Propose(p) },
+		"Create":  func() (events.Event, *events.Rejection, error) { return log.Create("task-", p) },
+	} {
+		if _, rejection, err := propose(); err != nil || rejection == nil || rejection.Check != "features" {
+			t.Errorf("%s: got %+v %v, want a features rejection", name, rejection, err)
+		}
+	}
+}
+
 // A hook's Core.Events only reads the log: it can't be asserted back to the
 // store to write past the feature's checked proposer.
 func TestAHooksEventsCantPropose(t *testing.T) {
