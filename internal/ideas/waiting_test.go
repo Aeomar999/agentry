@@ -103,8 +103,6 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 	here.Line = strings.Replace(here.Line, "(list_ideas)", "(list_ideas all)", 1)
 	both("in "+other+", with none of its own", other, append(core, here))
 	both("outside a repo, after the dismiss", "", append(core, here))
-	checkNote(t, "a reply outside a repo, after the dismiss", api, t.TempDir(), append(core, here))
-	checkNote(t, "a reply in "+other+", after the dismiss", api, other, append(core, here))
 }
 
 // waitingFor is what agentry mcp says waits for a session in repo ("" outside one).
@@ -119,7 +117,8 @@ func waitingFor(t *testing.T, api client.Client, repo string) []features.Waiting
 
 // checkNote checks that a reply of agentry mcp, run in dir, ends with the
 // count of want and its first five lines (here the core's, so the repo
-// isn't seen: the mcp tests check it is passed).
+// isn't seen: the mcp tests check it is passed). The ideas line is past
+// the fifth, so the note can't show it; the lists above check it.
 func checkNote(t *testing.T, where string, api client.Client, dir string, want []features.Waiting) {
 	t.Helper()
 	note := fmt.Sprintf("\n\nWaiting for the user (%d):", len(want))
