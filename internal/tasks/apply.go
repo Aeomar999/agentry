@@ -486,16 +486,16 @@ func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
 	if turn := t.Turn(action.Turn); turn != nil && !turn.Ended {
 		when = "while its turn went on without it"
 	}
-	again := "Hand the task back to " + action.Agent + " to run it again"
+	again, turn := "Hand the task back to "+action.Agent+" to run it again", action.Agent+"'s next turn"
 	if action.Agent == t.Coordinator {
-		again = "Run it again yourself in your next turn"
+		again, turn = "Run it again yourself in this turn", "this turn"
 	}
 	return fmt.Sprintf("The user approved a command %s asked for in %s at %s (%s), which Agentry held for them when no answer "+
 		"came in time. They approved it at %s, %s, so %s was told no and hasn't run it. The full command:\n\n%s\n\n"+
 		"%s, after checking the branch hasn't changed in a way that makes it wrong. Agentry lets this exact command "+
-		"through once without asking, in %s's next turn only.",
+		"through once without asking, in %s only.",
 		action.Agent, action.Turn, clock(action.RequestedAt), action.Tool, clock(approvedAt), when, action.Agent,
-		action.Command, again, action.Agent)
+		action.Command, again, turn)
 }
 
 // hearApprovals marks the held actions you approved as heard when the

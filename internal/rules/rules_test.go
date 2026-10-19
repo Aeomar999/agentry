@@ -3,6 +3,7 @@ package rules
 import (
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -284,6 +285,10 @@ func TestACoordinatorsPassWorksInItsNextTurn(t *testing.T) {
 	})
 	if pass := task.Action("toolu_1"); pass.PassTurn != "turn-2" || !pass.PassUsed {
 		t.Errorf("toolu_1: %+v, want its pass used in turn-2", pass)
+	}
+	handBack := slices.IndexFunc(task.Trail, func(s tasks.Step) bool { return strings.Contains(s.Text, "Run it again yourself in this turn") })
+	if handBack < 0 || !strings.HasSuffix(task.Trail[handBack].Text, "in this turn only.") {
+		t.Errorf("the hand-back should tell the coordinator to run it in this turn: %+v", task.Trail)
 	}
 }
 
