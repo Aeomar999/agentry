@@ -80,6 +80,11 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	if turn := updated.OpenTurn(); turn == nil || turn.Agent != "tech-lead" || turn.Hash != events.Hash(prompt) {
 		t.Fatalf("open turn: %+v", turn)
 	}
+	for _, e := range mustStream(t, s, task.ID) {
+		if _, given := e.Data["seen"]; e.Type == events.TurnStarted && (!given || e.Number("seen") != len(task.Trail)) {
+			t.Errorf("turn.started says its brief saw %v steps of the trail, want %d", e.Data["seen"], len(task.Trail))
+		}
+	}
 
 	var launched string
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && launched == ""; time.Sleep(50 * time.Millisecond) {

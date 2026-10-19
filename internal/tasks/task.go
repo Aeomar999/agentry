@@ -219,7 +219,8 @@ type Action struct {
 	Reason      string // the rule that asked, then the reason for the decision
 	HasResult   bool
 	PassUsed    bool   // held and approved, its one pass was used: the same command asked for again went through
-	Heard       bool   // held and approved, its coordinator has started a turn since: only then can its pass start
+	HandBack    int    // held and approved, the place in the trail of the step that handed it back
+	Heard       bool   // held and approved, a coordinator turn has started whose brief had its hand-back: only then can its pass start
 	PassTurn    string // held and approved, its agent's first turn once heard: the only one its pass works in
 }
 

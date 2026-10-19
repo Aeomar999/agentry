@@ -160,8 +160,8 @@ var coreTypes = map[Type]Spec{
 	WorktreeReady:      {Fields: []string{"path", "branch", "port"}, Writers: []ActorKind{Worker}},
 	WorktreeMoved:      {Fields: []string{"worker", "path", "port"}, Writers: []ActorKind{Worker}},
 
-	TaskAssigned:       {Fields: []string{"agent", "instructions"}, Writers: []ActorKind{Agent}}, // "checks": the agent checks work; "ships": it ships work
-	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}},
+	TaskAssigned:       {Fields: []string{"agent", "instructions"}, Writers: []ActorKind{Agent}},             // "checks": the agent checks work; "ships": it ships work
+	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}}, // "seen": the trail steps its brief was made from
 	PromptAcknowledged: {Fields: []string{"hash"}, Correlation: true, Writers: []ActorKind{Worker}},
 	SessionStarted:     {Fields: []string{"engineSession"}, Correlation: true, Writers: []ActorKind{Worker}},
 

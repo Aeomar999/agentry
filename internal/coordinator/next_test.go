@@ -194,6 +194,46 @@ func TestALateApprovalReachesADecidingCoordinator(t *testing.T) {
 	}
 }
 
+// A held command you approve after the coordinator's brief was made, but
+// before its turn starts, isn't heard by that turn: it can't finish, the
+// agent's next turn gets no pass, and its following turn hears it.
+func TestAnApprovalAfterTheBriefWasMadeIsHeardNextTime(t *testing.T) {
+	policy := events.Actor{Kind: events.Policy, ID: "rules"}
+	engineer := events.Actor{Kind: events.Agent, ID: "engineer"}
+	ended := started().turn("turn-1", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it."}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}).
+		add(policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}).
+		add(policy, events.ActionHeld, "toolu_1", nil).
+		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "The push is held."})
+	seen := len(ended.task().Trail) // the coordinator's brief is made here
+	deciding := ended.add(you, events.ActionApproved, "toolu_1", map[string]any{"reason": "fine"}).
+		add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "tech-lead", "hash": "h", "seen": seen})
+	if task := deciding.task(); task.Action("toolu_1").Heard || !task.ApprovalUnheard() {
+		t.Fatalf("a brief made before the approval heard it: %+v, unheard %v", task.Action("toolu_1"), task.ApprovalUnheard())
+	}
+
+	finished := deciding.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": `{"action": "done", "summary": "Pushed."}`}).task()
+	if move := Next(finished, defaultRoster()); move.Kind != RaiseIssue || !strings.Contains(move.Reason, "approved a held command") {
+		t.Errorf("finishing without hearing the approval: %+v", move)
+	}
+
+	other := deciding.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": "assign"}).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Write the docs."}).
+		turn("turn-4", "engineer", "Docs written.")
+	if pass := other.task().Action("toolu_1"); pass.PassTurn != "" {
+		t.Errorf("the turn given before hearing took the pass: %+v", pass)
+	}
+
+	heard := other.turn("turn-5", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it again."}).
+		add(worker, events.TurnStarted, "turn-6", map[string]any{"agent": "engineer", "hash": "h"}).task()
+	if pass := heard.Action("toolu_1"); !pass.Heard || pass.PassTurn != "turn-6" || heard.ApprovalUnheard() {
+		t.Errorf("once heard, the next turn should get the pass: %+v, unheard %v", pass, heard.ApprovalUnheard())
+	}
+}
+
 // An epic waits while its stories are going, and, once they are all done,
 // after it has asked you to close it: you may leave it open.
 func TestWhenAnEpicMayWait(t *testing.T) {

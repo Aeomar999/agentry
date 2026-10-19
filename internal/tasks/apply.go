@@ -289,12 +289,15 @@ func (t *Task) Apply(e events.Event) {
 			PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
-		if e.Text("agent") == t.Coordinator {
-			t.hearApprovals()
+		coordinates, unheard := e.Text("agent") == t.Coordinator, false
+		if coordinates {
+			unheard = t.hearApprovals(seenBy(e, len(t.Trail)))
 		}
 		t.startPasses(e.Correlation, e.Text("agent"))
-		if e.Text("agent") == t.Coordinator {
-			t.storyNews, t.approvalNews = false, false // its brief has every story's news so far, and your approvals
+		if coordinates {
+			// Its brief has every story's news so far, and your approvals,
+			// but those that came after it was made.
+			t.storyNews, t.approvalNews = false, unheard
 			if t.WrapUp != nil {
 				t.WrapUp.Turn = e.Correlation
 			}
@@ -467,6 +470,7 @@ func (t *Task) decide(e events.Event, decision Decision) {
 // back. Deciding, the coordinator hears it once it has decided.
 func (t *Task) handBack(e events.Event, action *Action) {
 	text := approvedLateText(t, action, e.At)
+	action.HandBack = len(t.Trail)
 	if t.idle() {
 		t.step(e, Agentry, t.Coordinator, text)
 		return
@@ -494,14 +498,27 @@ func approvedLateText(t *Task, action *Action, approvedAt time.Time) string {
 		action.Command, again, action.Agent)
 }
 
-// hearApprovals marks the held actions you approved as heard: a coordinator
-// turn is starting, and its brief has your approvals.
-func (t *Task) hearApprovals() {
+// hearApprovals marks the held actions you approved as heard when the
+// starting coordinator turn's brief, made from the first seen steps of the
+// trail, has their hand-back. It says whether one is still unheard: you
+// approved it after the brief was made.
+func (t *Task) hearApprovals(seen int) (unheard bool) {
 	for _, action := range t.Actions {
-		if action.Held && action.Decision == Approved {
-			action.Heard = true
+		if action.Held && action.Decision == Approved && !action.Heard {
+			action.Heard = action.HandBack < seen
+			unheard = unheard || !action.Heard
 		}
 	}
+	return unheard
+}
+
+// seenBy is how many steps of the trail the turn's brief was made from. A
+// turn started before turn.started said so saw all of it.
+func seenBy(e events.Event, trail int) int {
+	if _, given := e.Data["seen"]; given {
+		return e.Number("seen")
+	}
+	return trail
 }
 
 // startPasses gives the agent's held actions you approved, which its
