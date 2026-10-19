@@ -167,6 +167,37 @@ func TestTheViewpointsAreTheTemplateTeams(t *testing.T) {
 	}
 }
 
+// The viewpoints of every team made from the Visionaries template weigh
+// in, not only those of the first.
+func TestTheViewpointsOfEveryTemplateTeamCount(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed("Visionaries")
+	var log []events.Event
+	for _, p := range agents.SeedProposals(nil) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	for range 2 {
+		for _, p := range agents.AddTeam(visionaries, agents.FromEvents(log), you) {
+			log = append(log, events.Event{Proposal: p})
+		}
+	}
+	roster := agents.FromEvents(log)
+	if got, want := ideas.Visionaries(roster), []string{"Visionaries", "Visionaries 2"}; !slices.Equal(got, want) {
+		t.Errorf("the Visionaries teams: %q, want %q", got, want)
+	}
+	// The second team's agents are named with -2, and its skeptic didn't weigh in.
+	idea := &ideas.Idea{State: ideas.Open, BackedBy: []string{"product-strategist", "user-advocate", "technologist", "skeptic",
+		"product-strategist-2", "user-advocate-2", "technologist-2"}}
+	if got, want := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, roster, settings.EveryoneBacked), "not backed by skeptic-2"; got != want {
+		t.Errorf("not auto-accepted %q, want %q", got, want)
+	}
+	if got := ideas.Backers(idea, roster); len(got) != 7 {
+		t.Errorf("backers %q, want the 7 of both teams", got)
+	}
+	if got, want := ideas.AutoAccepted(idea, roster, settings.NobodyDoubted), "auto-accepted: nobody doubted it, 7 backed it"; got != want {
+		t.Errorf("note %q, want %q", got, want)
+	}
+}
+
 func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
 	at := func(minute int) time.Time { return time.Date(2026, 10, 19, 1, minute, 0, 0, time.UTC) }
 	idea := &ideas.Idea{ID: "idea-9", Title: "Search the board", Repo: "/r", State: ideas.Open, CreatedAt: at(9)}

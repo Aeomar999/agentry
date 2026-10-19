@@ -183,6 +183,13 @@ func TestTheVisionariesSessionGoesByTemplate(t *testing.T) {
 			}
 			return append(ps, agents.AddTeam(visionaries, roster, you)...)
 		}, "visionary-lead", "Visionaries 2"},
+		{"two teams from the template: the first", func(roster agents.Roster) []events.Proposal {
+			ps := agents.AddTeam(visionaries, roster, you)
+			for _, p := range ps {
+				roster = append(roster, agents.FromEvents([]events.Event{{Proposal: p}})...)
+			}
+			return append(ps, agents.AddTeam(visionaries, roster, you)...)
+		}, "visionary-lead", "Visionaries"},
 		{"a team you called Visionaries", func(agents.Roster) []events.Proposal {
 			var ps []events.Proposal
 			for _, agent := range handMade {
