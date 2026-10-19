@@ -13,9 +13,18 @@ import (
 var resetsPattern = regexp.MustCompile(`(?i)resets\s+(?:([A-Z][a-z]{2})\s+(\d{1,2}),\s*(?:(\d{4}),\s*)?)?(\d{1,2})(?::(\d{2}))?\s*([ap]m)(?:\s*\(([^)]+)\))?`)
 
 // ResetTime is when the limit a message describes resets, the next such
-// time after now, or zero when the message doesn't say in a way it reads.
+// time after now, or zero when the message doesn't say in a way it reads
+// or names a time already past.
 // The text is free and may change between versions, so it never panics.
 func ResetTime(text string, now time.Time) time.Time {
+	at := resetIn(text, now)
+	if at.Before(now) {
+		return time.Time{}
+	}
+	return at
+}
+
+func resetIn(text string, now time.Time) time.Time {
 	if at, ok := isoOrEpoch(text); ok {
 		return at
 	}
@@ -67,15 +76,19 @@ func ResetTime(text string, now time.Time) time.Time {
 	return at
 }
 
+// A reset word, as in "resets at", "reset_at": or "resetsAt"=, so other
+// times in the text, such as when a request was sent, aren't taken for it.
+const resetsWord = `(?i)resets?\w*["':=\s]+(?:at\s+)?`
+
 var (
-	isoPattern   = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
-	epochPattern = regexp.MustCompile(`(?i)resets?(?:_at|At)?["':=\s]+(\d{10})\b`)
+	isoPattern   = regexp.MustCompile(resetsWord + `(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))`)
+	epochPattern = regexp.MustCompile(resetsWord + `(\d{10})\b`)
 )
 
-// isoOrEpoch reads an RFC 3339 time, or a reset given in Unix seconds.
+// isoOrEpoch reads a reset given as an RFC 3339 time or in Unix seconds.
 func isoOrEpoch(text string) (time.Time, bool) {
-	if s := isoPattern.FindString(text); s != "" {
-		if at, err := time.Parse(time.RFC3339, s); err == nil {
+	if m := isoPattern.FindStringSubmatch(text); m != nil {
+		if at, err := time.Parse(time.RFC3339, m[1]); err == nil {
 			return at, true
 		}
 	}
