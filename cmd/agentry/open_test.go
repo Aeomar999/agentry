@@ -19,7 +19,7 @@ func TestOpenPagePrintsEveryLink(t *testing.T) {
 	t.Cleanup(func() { openBrowser = saved })
 
 	every, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:7901")
-	network := networkURLs(every)
+	network := networkURLs(every, "http")
 	var out bytes.Buffer
 	c := client.Client{Where: client.Where{URL: "http://127.0.0.1:7901", Page: "https://agentry.example.com/", Listen: "0.0.0.0:7901"}, Token: "abc"}
 	if code := openPage(c, &out, &out); code != 0 {
@@ -59,6 +59,28 @@ func TestOpenPageOnThisComputerOnly(t *testing.T) {
 			"Open the first link in your browser. Agentry keeps running; Stop Agentry stops it.\n"
 		if out.String() != want {
 			t.Errorf("listening on %q, printed:\n%s", listen, out.String())
+		}
+	}
+}
+
+// With -https, open's links are https, this computer's at localhost.
+func TestOpenPageOverHTTPS(t *testing.T) {
+	saved := openBrowser
+	openBrowser = func(string) error { return errors.New("no browser") }
+	t.Cleanup(func() { openBrowser = saved })
+	c := client.Client{Where: client.Where{URL: "http://127.0.0.1:7901", Page: "https://127.0.0.1:7901", Listen: "127.0.0.1:7901", HTTPS: true}, Token: "abc"}
+	if links := pageLinks(c); len(links) != 1 || links[0].url != "https://localhost:7901/?token=abc" {
+		t.Errorf("links %v", links)
+	}
+	every, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:7901")
+	c.Listen = "0.0.0.0:7901"
+	links := pageLinks(c)
+	if want := len(networkURLs(every, "https")) + 1; len(links) != want {
+		t.Fatalf("links %v, want %d", links, want)
+	}
+	for _, link := range links {
+		if !strings.HasPrefix(link.url, "https://") {
+			t.Errorf("a link over plain HTTP: %v", link)
 		}
 	}
 }

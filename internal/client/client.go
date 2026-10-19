@@ -21,11 +21,13 @@ const ServerFile = "server.json"
 
 // Where is how a server is reached: URL for the API, Page for links people
 // open (the public address, when it has one), Listen for the address it
-// listens on, which says whether other machines reach it.
+// listens on, which says whether other machines reach it. HTTPS says people
+// open it over https, with Agentry's own CA; URL stays plain HTTP on loopback.
 type Where struct {
 	URL    string `json:"url"`
 	Page   string `json:"page"`
 	Listen string `json:"listen,omitempty"`
+	HTTPS  bool   `json:"https,omitempty"`
 }
 
 // Save writes where the server is, in its data folder.

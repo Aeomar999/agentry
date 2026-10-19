@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -38,6 +39,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/terminal"
+	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/watchdog"
 	"gitlab.com/dev.chempa/agentry/internal/web"
@@ -52,6 +54,7 @@ type serveOptions struct {
 	budget    int    // tokens a new task may use before it asks you; 0 is no limit
 	maxTurns  int    // turns a new task may have without your answer before it asks you; 0 is no limit
 	publicURL string // the address people open; "" for the address listened on
+	https     bool   // serve TLS with Agentry's own CA, on the same port as plain HTTP
 }
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
@@ -62,6 +65,7 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	var options serveOptions
 	flags.StringVar(&options.address, "addr", "0.0.0.0:7800", "where to listen: every interface by default, so other machines reach it; 127.0.0.1:7800 for this machine only")
 	flags.StringVar(&options.publicURL, "public-url", "", "the address people open, for the printed link, such as https://agentry.example.com")
+	flags.BoolVar(&options.https, "https", false, "serve over https with Agentry's own local CA, which devices trust once from /trust/ca.crt")
 	flags.StringVar(&options.repo, "repo", here, "the repo a new task works on when it names none")
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
@@ -127,6 +131,12 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	var ca *tlsca.CA
+	if o.https {
+		if ca, err = tlsca.Open(tlsca.Dir(o.dataDir)); err != nil {
+			return err
+		}
+	}
 	uiToken, err := keptToken(filepath.Join(o.dataDir, "ui-token"))
 	if err != nil {
 		return err
@@ -145,9 +155,16 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	serverURL := localURL(listener.Addr())  // what agents' hooks and the desk call, on this machine
-	network := networkURLs(listener.Addr()) // what other machines reach, when listening on every address
-	var theme atomic.Value                  // the page's theme, which the sessions it watches start in
+	// Hooks, `agentry mcp`, the status line and the desk call serverURL on
+	// loopback, over plain HTTP even with -https: the front door lets this
+	// machine through. Step 3 moves them to https, trusting the pinned CA.
+	serverURL := localURL(listener.Addr(), "http")
+	scheme := "http" // of the links people open
+	if o.https {
+		scheme = "https"
+	}
+	network := networkURLs(listener.Addr(), scheme) // what other machines reach, when listening on every address
+	var theme atomic.Value                          // the page's theme, which the sessions it watches start in
 	theme.Store("dark")
 	currentTheme := func() string { return theme.Load().(string) }
 
@@ -220,11 +237,11 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL,
-		NetworkURLs: network, LocalURL: localhostURL(listener.Addr()), Binary: self, Local: machines.Describe(), Blobs: blobs,
+		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
 		Features: installed, Worktrees: worktreeRoot},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
-	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), serverURL)
-	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String()}); err != nil {
+	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
+	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https}); err != nil {
 		return err // `agentry mcp` and the status line find the server by it
 	}
 	fmt.Fprintf(stdout, "Agentry is running. Open %s/?token=%s\n", publicURL, uiToken)
@@ -235,42 +252,59 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "New tasks work on %s unless they name another repo. Ctrl-C to stop.\n", o.repo)
 	fmt.Fprintf(stdout, "Agents follow the policy in %s; edits take effect when you save.\n", agentPolicy.Path())
-	return serveUntilDone(ctx, listener, server.Handler())
+	if !o.https {
+		return serveUntilDone(ctx, listener, server.Handler(), nil)
+	}
+	fmt.Fprintf(stdout, "Served over https with Agentry's own CA, SHA-256 %s.\n", ca.Fingerprint())
+	fmt.Fprintf(stdout, "Trust it once on each device: %s%sca.crt\n", cmp.Or(append(plainURLs(network), serverURL)...), trustPrefix)
+	issuer := tlsca.NewIssuer(ca, tlsca.Hosts, time.Now)
+	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), ca), tlsConfig(issuer))
 }
 
-// localURL is the server as seen from this machine. Listening on every
-// address (0.0.0.0, as in a container) is reached on loopback.
-func localURL(addr net.Addr) string {
+// localURL is the server as seen from this machine, over scheme (http or
+// https). Listening on every address (0.0.0.0, as in a container) is
+// reached on loopback.
+func localURL(addr net.Addr, scheme string) string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() {
-		return "http://" + addr.String()
+		return scheme + "://" + addr.String()
 	}
-	return fmt.Sprintf("http://127.0.0.1:%d", tcp.Port)
+	return fmt.Sprintf("%s://127.0.0.1:%d", scheme, tcp.Port)
 }
 
 // localhostURL is the server at localhost, as a page on this machine opens
 // it, or "" when it listens on one address that isn't loopback.
-func localhostURL(addr net.Addr) string {
+func localhostURL(addr net.Addr, scheme string) string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() && !tcp.IP.IsLoopback() {
 		return ""
 	}
-	return fmt.Sprintf("http://localhost:%d", tcp.Port)
+	return fmt.Sprintf("%s://localhost:%d", scheme, tcp.Port)
 }
 
 // networkURLs are the server as other machines on the network reach it,
 // when it listens on every address: one for each of this machine's own
 // addresses other machines reach.
-func networkURLs(addr net.Addr) []string {
+func networkURLs(addr net.Addr, scheme string) []string {
 	tcp, ok := addr.(*net.TCPAddr)
 	if !ok || !tcp.IP.IsUnspecified() {
 		return nil
 	}
 	var urls []string
 	for _, ip := range hostaddrs.Network() {
-		urls = append(urls, fmt.Sprintf("http://%s:%d", ip, tcp.Port))
+		urls = append(urls, fmt.Sprintf("%s://%s:%d", scheme, ip, tcp.Port))
 	}
 	return urls
+}
+
+// plainURLs are urls over plain HTTP, as a device that doesn't trust the CA
+// yet opens them.
+func plainURLs(urls []string) []string {
+	plain := make([]string, len(urls))
+	for i, url := range urls {
+		plain[i] = "http://" + strings.TrimPrefix(url, "https://")
+	}
+	return plain
 }
 
 func seedAgents(log *store.Store, state *current.State) error {
@@ -286,7 +320,9 @@ func seedAgents(log *store.Store, state *current.State) error {
 	return nil
 }
 
-func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Handler) error {
+// serveUntilDone serves handler on listener until ctx ends. With config, it
+// serves TLS and plain HTTP on the one port (see splitTLS).
+func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Handler, config *tls.Config) error {
 	// Requests share ctx, so stopping cancels a hook call waiting for you, and
 	// it records its own denial before the server exits.
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second,
@@ -297,10 +333,23 @@ func serveUntilDone(ctx context.Context, listener net.Listener, handler http.Han
 		defer cancel()
 		server.Shutdown(shutdown)
 	}()
-	if err := server.Serve(listener); !errors.Is(err, http.ErrServerClosed) {
-		return err
+	listeners := []net.Listener{listener}
+	if config != nil {
+		tlsConns, plainConns := splitTLS(listener)
+		listeners = []net.Listener{tls.NewListener(tlsConns, config), plainConns}
 	}
-	return nil
+	errs := make(chan error, len(listeners))
+	for _, l := range listeners {
+		go func() { errs <- server.Serve(l) }()
+	}
+	var failed error
+	for range listeners {
+		if err := <-errs; !errors.Is(err, http.ErrServerClosed) && failed == nil {
+			failed = err
+			server.Close() // one stopped, so stop the other too
+		}
+	}
+	return failed
 }
 
 // The tokens kept in the data folder, next to the UI token.

@@ -184,21 +184,26 @@ type pageLink struct{ label, url string }
 
 // pageLinks are the signed-in links to a running server: this computer's
 // first, then its public address if it was given one, and one for each
-// network address when it listens on every interface.
+// network address when it listens on every interface. They are https when
+// the server serves it.
 func pageLinks(c client.Client) []pageLink {
 	signedIn := "/?token=" + c.Token
 	here, err := url.Parse(c.URL)
 	if err != nil {
 		return []pageLink{{"This computer", c.PageURL(signedIn)}}
 	}
+	if c.HTTPS {
+		here.Scheme = "https"
+	}
+	own := strings.TrimSuffix(here.String(), "/") // serve's page when it has no public address
 	if ip := net.ParseIP(here.Hostname()); ip != nil && ip.IsLoopback() {
 		here.Host = net.JoinHostPort("localhost", here.Port())
 	}
 	links := []pageLink{{"This computer", strings.TrimSuffix(here.String(), "/") + signedIn}}
-	if c.Page != "" && c.Page != c.URL {
+	if page := strings.TrimSuffix(c.Page, "/"); page != "" && page != c.URL && page != own {
 		links = append(links, pageLink{"Public address", c.PageURL(signedIn)})
 	}
-	for _, other := range networkURLs(listenAddress(c.Listen)) {
+	for _, other := range networkURLs(listenAddress(c.Listen), here.Scheme) {
 		links = append(links, pageLink{"On your network", other + signedIn})
 	}
 	return links

@@ -48,7 +48,7 @@ func TestLocalURL(t *testing.T) {
 		"[::]:7802":      "http://127.0.0.1:7802",
 	} {
 		tcp, _ := net.ResolveTCPAddr("tcp", addr)
-		if got := localURL(tcp); got != want {
+		if got := localURL(tcp, "http"); got != want {
 			t.Errorf("localURL(%s) = %s, want %s", addr, got, want)
 		}
 	}
@@ -64,7 +64,7 @@ func TestLocalhostURL(t *testing.T) {
 		"192.168.1.5:7803": "",
 	} {
 		tcp, _ := net.ResolveTCPAddr("tcp", addr)
-		if got := localhostURL(tcp); got != want {
+		if got := localhostURL(tcp, "http"); got != want {
 			t.Errorf("localhostURL(%s) = %s, want %s", addr, got, want)
 		}
 	}
@@ -74,11 +74,11 @@ func TestLocalhostURL(t *testing.T) {
 // own addresses other machines reach; listening on one, it prints none.
 func TestNetworkURLs(t *testing.T) {
 	one, _ := net.ResolveTCPAddr("tcp", "127.0.0.1:7800")
-	if urls := networkURLs(one); urls != nil {
+	if urls := networkURLs(one, "http"); urls != nil {
 		t.Errorf("on one address: %v", urls)
 	}
 	every, _ := net.ResolveTCPAddr("tcp", "0.0.0.0:7800")
-	for _, url := range networkURLs(every) {
+	for _, url := range networkURLs(every, "http") {
 		if !strings.HasPrefix(url, "http://") || !strings.HasSuffix(url, ":7800") || strings.Contains(url, "127.0.0.1") {
 			t.Errorf("a network URL: %s", url)
 		}
@@ -87,7 +87,7 @@ func TestNetworkURLs(t *testing.T) {
 	for _, ip := range hostaddrs.Network() {
 		want = append(want, "http://"+ip.String()+":7800")
 	}
-	if got := networkURLs(every); !slices.Equal(got, want) {
+	if got := networkURLs(every, "http"); !slices.Equal(got, want) {
 		t.Errorf("networkURLs = %v, want one for each network address: %v", got, want)
 	}
 }
