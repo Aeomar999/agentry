@@ -353,9 +353,7 @@ more than one period old, changes nothing for a daily schedule or a
 weekly one on one day: the latest due slot is always less than one
 period old, or the next slot would be due. It bites only where the gap
 between slots varies: a weekdays schedule (period a day) found on
-Saturday morning loses Friday's run, and a Mon and Thu schedule
-(period three days) found on Wednesday loses Monday's; that is open
-question 2.
+Saturday morning loses Friday's run; that is open question 2.
 
 ### Firing one schedule
 
