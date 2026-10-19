@@ -142,6 +142,25 @@ func TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS(t *testing.T) {
 	}
 }
 
+func TestHTTPSOf(t *testing.T) {
+	for given, want := range map[string]string{
+		"http://192.168.1.5:7800":      "https://192.168.1.5:7800",
+		"https://192.168.1.5:7800":     "https://192.168.1.5:7800",
+		"HTTP://host:7800":             "https://host:7800",
+		"HTTPS://host:7800":            "https://host:7800",
+		"http://[fd7a:115c::5]:7800/x": "https://[fd7a:115c::5]:7800/x",
+	} {
+		if got, err := httpsOf(given); err != nil || got != want {
+			t.Errorf("httpsOf(%s) = %s, %v; want %s", given, got, err, want)
+		}
+	}
+	for _, given := range []string{"ftp://host:7800", "host:7800", "file:///etc/passwd", "://"} {
+		if got, err := httpsOf(given); err == nil {
+			t.Errorf("httpsOf(%s) = %s; want it refused", given, got)
+		}
+	}
+}
+
 // After `agentry ca -regenerate`, running the install command again without
 // the new fingerprint says the CA changed, rather than that the worker has
 // joined already; with it, the worker moves to the new CA, keeping its

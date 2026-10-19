@@ -65,7 +65,11 @@ func readKeptCA(given, fingerprint string) (trustedServer, bool) {
 	if pinned.Check(ca) != nil || normalFingerprint(tlsca.FingerprintOf(derOf(ca))) != normalFingerprint(fingerprint) {
 		return trustedServer{}, false
 	}
-	return trustedServer{server: httpsOf(given), ca: ca}, true
+	secure, err := httpsOf(given)
+	if err != nil {
+		return trustedServer{}, false
+	}
+	return trustedServer{server: secure, ca: ca}, true
 }
 
 // keepCA writes the CA as the connection is written: readable only by you.
@@ -89,6 +93,8 @@ func keepCA(kept keptCA) error {
 	if err != nil {
 		return err
 	}
+	// On Windows this is "access denied" while another hook has the file
+	// open; that is fine, as the CA is just checked again next run.
 	return os.Rename(temp.Name(), path)
 }
 
