@@ -11,22 +11,24 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
 
-// inbox is a fake push service that keeps every push by its path and
-// answers the paths in gone with 410.
+// inbox is a fake push service that keeps every push by its path,
+// answers the paths in gone with 410 and those in broken with 500.
 type inbox struct {
 	*httptest.Server
 	mu       sync.Mutex
 	gone     map[string]bool
+	broken   map[string]bool
 	received map[string][][]byte
 	arrived  chan string
 }
 
 func newInbox(t *testing.T, gone ...string) *inbox {
-	in := &inbox{gone: map[string]bool{}, received: map[string][][]byte{}, arrived: make(chan string, 100)}
+	in := &inbox{gone: map[string]bool{}, broken: map[string]bool{}, received: map[string][][]byte{}, arrived: make(chan string, 100)}
 	for _, path := range gone {
 		in.gone[path] = true
 	}
@@ -35,9 +37,12 @@ func newInbox(t *testing.T, gone ...string) *inbox {
 		in.mu.Lock()
 		in.received[r.URL.Path] = append(in.received[r.URL.Path], body)
 		in.mu.Unlock()
-		if in.gone[r.URL.Path] {
+		switch {
+		case in.gone[r.URL.Path]:
 			w.WriteHeader(http.StatusGone)
-		} else {
+		case in.broken[r.URL.Path]:
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
 			w.WriteHeader(http.StatusCreated)
 		}
 		in.arrived <- r.URL.Path
@@ -134,7 +139,7 @@ func TestANewEntryIsPushedOnceToEachDevice(t *testing.T) {
 	sink.check(context.Background())
 	sink.check(context.Background()) // nothing new
 
-	want := message{Title: "Agentry", Body: approval.Line, Task: "task-4", URL: "/tasks/task-4", Tag: approval.Key}
+	want := message{Title: "Agentry", Body: approval.Line, Task: "task-4", URL: "/tasks/task-4", Tag: tagOf(approval.Key)}
 	for path, d := range devices {
 		if got := pushed(t, in, path, d); len(got) != 1 || got[0] != want {
 			t.Errorf("%s: got %+v, want one %+v", path, got, want)
@@ -151,7 +156,7 @@ func TestTwoNewEntriesAreTwoPushes(t *testing.T) {
 	sink.check(context.Background())
 
 	got := pushed(t, in, "/phone", devices["/phone"])
-	if len(got) != 2 || got[0].Tag != approval.Key || got[1].Tag != ideas.Key || got[1].URL != "/" || got[1].Task != "" {
+	if len(got) != 2 || got[0].Tag != tagOf(approval.Key) || got[1].Tag != tagOf(ideas.Key) || got[1].URL != "/" || got[1].Task != "" {
 		t.Errorf("want the approval, then the ideas opening /, got %+v", got)
 	}
 }
@@ -193,6 +198,46 @@ func TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs(t *testing.T) {
 	}
 }
 
+func TestADeviceThatFailsDoesNotStopTheOthers(t *testing.T) {
+	in := newInbox(t)
+	in.broken["/broken-phone"] = true
+	list := &waitingList{}
+	sink, store, devices := newSink(t, in, list, nil, "/broken-phone", "/phone")
+	sink.start()
+	list.set(approval)
+	sink.check(context.Background())
+
+	if got := pushed(t, in, "/phone", devices["/phone"]); len(got) != 1 {
+		t.Errorf("the phone: want 1 push, got %+v", got)
+	}
+	if got := len(store.Subscriptions()); got != 2 {
+		t.Errorf("a device that failed once is kept: want 2 subscriptions, got %d", got)
+	}
+}
+
+func TestAnEntryWithALongKeyIsStillPushed(t *testing.T) {
+	in := newInbox(t)
+	list := &waitingList{}
+	sink, _, devices := newSink(t, in, list, nil, "/phone")
+	sink.start()
+	text := strings.Repeat(`which "store" <db> to use? `, 200)
+	long := features.Waiting{Key: "task-9/question/open/" + text, Task: "task-9", Line: "task-9: tech-lead asks " + text, Kind: "needs you"}
+	list.set(long)
+	sink.check(context.Background())
+
+	want := message{Title: "Agentry", Body: shortened(long.Line, lineShown), Task: "task-9", URL: "/tasks/task-9", Tag: tagOf(long.Key)}
+	if got := pushed(t, in, "/phone", devices["/phone"]); len(got) != 1 || got[0] != want {
+		t.Errorf("got %+v, want one %+v", got, want)
+	}
+}
+
+func TestATagIsShortAndTheSameForTheSameKey(t *testing.T) {
+	tag := tagOf(approval.Key)
+	if len(tag) != 32 || tag != tagOf(approval.Key) || tag == tagOf(question.Key) {
+		t.Errorf("want 32 hex digits, the same for one key and different for another, got %q", tag)
+	}
+}
+
 func TestALongLineIsCutToFitAPush(t *testing.T) {
 	long := strings.Repeat("<é>", 2000)
 	got := messageOf(features.Waiting{Key: "k", Task: "task-1", Line: long})
@@ -228,5 +273,24 @@ func TestRunPushesOnAWakeAndStopsWithItsContext(t *testing.T) {
 	<-stopped
 	if got := len(in.bodies("/phone")); got != 1 {
 		t.Errorf("want one push, for the question, got %d", got)
+	}
+}
+
+func TestRunStopsWhenWakeIsClosed(t *testing.T) {
+	in := newInbox(t)
+	list := &waitingList{}
+	wake := make(chan struct{})
+	sink, _, _ := newSink(t, in, list, wake, "/phone")
+	stopped := make(chan struct{})
+	go func() {
+		sink.Run(context.Background())
+		close(stopped)
+	}()
+
+	close(wake)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run is still running after wake was closed")
 	}
 }

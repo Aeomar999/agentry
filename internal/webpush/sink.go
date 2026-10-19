@@ -2,6 +2,8 @@ package webpush
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -28,14 +30,17 @@ func NewSink(waiting func() []features.Waiting, sender *Sender, wake <-chan stru
 	return &Sink{waiting: waiting, sender: sender, wake: wake}
 }
 
-// Run pushes what newly waits until ctx ends.
+// Run pushes what newly waits until ctx ends or wake is closed.
 func (s *Sink) Run(ctx context.Context) {
 	s.start()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.wake:
+		case _, ok := <-s.wake:
+			if !ok {
+				return
+			}
 			s.check(ctx)
 		}
 	}
@@ -63,13 +68,13 @@ func (s *Sink) check(ctx context.Context) {
 func (s *Sink) push(ctx context.Context, entry features.Waiting) {
 	message, err := json.Marshal(messageOf(entry))
 	if err != nil {
-		slog.Warn("push: the message can't be made", "key", entry.Key, "error", err)
+		slog.Warn("push: the message can't be made", "tag", tagOf(entry.Key), "error", err)
 		return
 	}
 	for _, sub := range s.sender.store.Subscriptions() {
 		err := s.sender.Send(ctx, sub, message)
 		if err != nil && !errors.Is(err, ErrGone) {
-			slog.Warn("push: not sent", "key", entry.Key, "error", err)
+			slog.Warn("push: not sent", "tag", tagOf(entry.Key), "error", err)
 		}
 	}
 }
@@ -89,7 +94,15 @@ func messageOf(entry features.Waiting) message {
 	if entry.Task != "" {
 		url = "/tasks/" + entry.Task
 	}
-	return message{Title: "Agentry", Body: shortened(entry.Line, lineShown), Task: entry.Task, URL: url, Tag: entry.Key}
+	return message{Title: "Agentry", Body: shortened(entry.Line, lineShown), Task: entry.Task, URL: url, Tag: tagOf(entry.Key)}
+}
+
+// tagOf is a short name for key that is the same each time, so a push
+// replaces the notification of the same entry. A key holds the whole
+// question, too long to fit in a push.
+func tagOf(key string) string {
+	digest := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(digest[:16])
 }
 
 // shortened is text cut to at most limit bytes, on a character boundary,
