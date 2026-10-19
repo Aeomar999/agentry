@@ -3,7 +3,9 @@
 package web
 
 import (
+	"bytes"
 	"crypto/subtle"
+	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -13,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -183,7 +186,7 @@ func (s *Server) Handler() http.Handler {
 	// Last, so a feature's route that clashes with any core route is
 	// the one that fails, naming its feature.
 	for _, f := range s.config.Features {
-		s.mount(f, api, deskToo)
+		s.mount(f, mux)
 	}
 	return s.atPosition(mux)
 }
@@ -235,6 +238,29 @@ func (s *Server) requireUIOrDesk(next http.HandlerFunc) http.Handler {
 			http.Error(w, "open the link `agentry serve` printed", http.StatusUnauthorized)
 			return
 		}
+		next(w, r)
+	})
+}
+
+// signed lets in a request whose body verify accepts, such as a git host's
+// webhook signed with that hook's secret, and gives next the body again. No
+// token opens it, the UI's included: a webhook's caller has none, and the
+// page has no business writing as System.
+func signed(verify func(r *http.Request, body []byte) error, next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil {
+			r.Body = http.NoBody // a hand-built request may have none
+		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, httpapi.MaxBody))
+		if err != nil {
+			http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := verify(r, body); err != nil {
+			http.Error(w, "this route takes only a request signed with its secret", http.StatusUnauthorized)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
 		next(w, r)
 	})
 }

@@ -1,0 +1,51 @@
+package rules
+
+import (
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
+)
+
+// Archiving moves a done task's rows out of the live log into a blob and
+// back (docs/design/log-growth.md section 4). Only the store writes the two
+// events, and the catalogue lets no one else. What these rules can't see
+// yet is left to the store methods that write them: the task done for the
+// age, its stream unchanged since the blob, the blob present (Store.Archive),
+// and the marker undone being the stream's last (Store.Unarchive).
+
+// doneToArchive: only a done task is archived.
+func doneToArchive(t *tasks.Task, _ events.Proposal) string {
+	if !t.IsDone {
+		return "the task isn't done, so it can't be archived"
+	}
+	return ""
+}
+
+// aMarker says where the task's rows went: the blob, and the positions it
+// covers, from the task's task.created at "created" to "through".
+func aMarker(_ *tasks.Task, p events.Proposal) string {
+	switch {
+	case !isSHA256(p.Text("archive")):
+		return "not an archive's hash"
+	case p.Number("created") < 1 || p.Number("through") < p.Number("created"):
+		return "an archive covers the task's rows from its task.created to its \"through\""
+	case p.Number("count") < 1:
+		return "an archive holds the task's rows, its task.created at least"
+	}
+	return ""
+}
+
+// anArchivedTask: a task the state holds whole isn't archived.
+func anArchivedTask(t *tasks.Task, _ events.Proposal) string {
+	return "task " + t.ID + " isn't archived"
+}
+
+// anUnarchiving names the marker it undoes and that marker's blob.
+func anUnarchiving(p events.Proposal) string {
+	switch {
+	case !isSHA256(p.Text("archive")):
+		return "not an archive's hash"
+	case p.Number("marker") < 1:
+		return "an unarchiving names the position of the marker it undoes"
+	}
+	return ""
+}

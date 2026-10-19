@@ -95,7 +95,8 @@ export function ResourceTable<Row>({ columns, rows, rowKey, onOpen, activeKey, e
                   onKeyDown={(event) => event.key === "Enter" && onOpen?.(row)}
                   data-active={active || undefined}
                   className={cn(
-                    "h-row-list border-b border-divider transition-colors duration-(--dur-fast)",
+                    // The focus line goes inside, where the table's scroller can't clip it.
+                    "h-row-list border-b border-divider transition-colors duration-(--dur-fast) focus-visible:-outline-offset-2",
                     onOpen && "cursor-pointer hover:bg-surface-2",
                     active && "bg-surface-3",
                     key === moving && "opacity-40",

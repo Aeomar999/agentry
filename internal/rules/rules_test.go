@@ -50,6 +50,14 @@ var withIdeas = func() *events.Catalogue {
 // be used here), the replay check included.
 func openSeeded(t *testing.T) *store.Store {
 	t.Helper()
+	s, _ := openSeededState(t)
+	return s
+}
+
+// openSeededState is openSeeded with the state the rules read, for a test
+// that changes it by hand, as archiving a task before the state can.
+func openSeededState(t *testing.T) (*store.Store, *current.State) {
+	t.Helper()
 	state := current.New(withIdeas, ideas.Streams())
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), withIdeas, state, func(p events.Proposal) *events.Rejection { return Check(p, state, withIdeas) })
 	if err != nil {
@@ -66,7 +74,7 @@ func openSeeded(t *testing.T) *store.Store {
 			t.Fatalf("seeding %s: %v %v", p.Text("name"), rejection, err)
 		}
 	}
-	return s
+	return s, state
 }
 
 func run(t *testing.T, steps []step) *tasks.Task {
@@ -732,7 +740,10 @@ func TestAnArchivedTaskTakesNoEvents(t *testing.T) {
 			t.Fatal(p.Type, rejection, err)
 		}
 	}
-	state.Archive("task-1")
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "s", "moved": true}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	archive(t, s, state, "task-1")
 
 	for _, p := range []events.Proposal{
 		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},

@@ -106,22 +106,43 @@ type Coordinator struct {
 // A Route is one endpoint of a feature's HTTP API. Web mounts it behind the
 // wrapper its Auth names; there is no way to mount one without, and none
 // sits behind the wrapper that hands out the UI token. Its writes should be
-// made as you (httpapi.You), with your authority and no more; that is the
-// route's to keep, since the checked proposer limits only the event type it
-// writes, not the actor.
+// made as you (httpapi.You), with your authority and no more, and a signed
+// route's as System (httpapi.System); that is the route's to keep, since the
+// checked proposer limits only the event type it writes, not the actor.
 type Route struct {
 	Pattern string // as http.ServeMux takes it: "GET /api/ideas"
 	Auth    Auth
 	Handler http.HandlerFunc
 }
 
-// Auth says who may call a Route: UI or Desk. The zero Auth is UI.
-type Auth struct{ deskToo bool }
+// Auth says who may call a Route: UI, Desk or Signed(verify). The zero Auth
+// is UI. It holds a func, so it can't be compared: ask DeskToo and Verify.
+type Auth struct {
+	deskToo bool
+	verify  func(r *http.Request, body []byte) error
+}
 
 var (
 	UI   = Auth{}              // the page, and Claude Code connections, which carry the UI token
 	Desk = Auth{deskToo: true} // those, and the desk with its own token
 )
+
+// Signed is for a webhook: a request whose body verify accepts, checked
+// against that hook's secret, and no token opens it. verify is given the
+// request for its headers, so a missing signature is its to refuse. A nil
+// verify panics: a signed route that checks nothing would let anyone write.
+func Signed(verify func(r *http.Request, body []byte) error) Auth {
+	if verify == nil {
+		panic("features.Signed needs a verify: a signed route that checks nothing would let anyone in")
+	}
+	return Auth{verify: verify}
+}
+
+// DeskToo is whether the desk's token opens the route too: Desk.
+func (a Auth) DeskToo() bool { return a.deskToo }
+
+// Verify is a Signed route's check of a request and its body, nil for UI and Desk.
+func (a Auth) Verify() func(r *http.Request, body []byte) error { return a.verify }
 
 // Section is one more part of a coordinator's brief.
 type Section struct{ Heading, Text string }

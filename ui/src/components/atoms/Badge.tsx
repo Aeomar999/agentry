@@ -5,11 +5,11 @@ export type BadgeVariant = "default" | "success" | "danger" | "warning" | "info"
 
 const VARIANTS: Record<BadgeVariant, string> = {
   default: "bg-surface-3 text-ink-secondary",
-  success: "bg-success-soft text-success",
-  danger: "bg-danger-soft text-danger",
-  warning: "bg-warning-soft text-warning",
-  info: "bg-info-soft text-info",
-  brand: "bg-brand-soft text-brand",
+  success: "bg-success-soft text-success-ink",
+  danger: "bg-danger-soft text-danger-ink",
+  warning: "bg-warning-soft text-warning-ink",
+  info: "bg-info-soft text-info-ink",
+  brand: "bg-brand-soft text-brand-ink",
 };
 
 // A fixed 18px height, so rows don't jitter between values.

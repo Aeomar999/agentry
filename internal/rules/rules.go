@@ -62,6 +62,11 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 
 	task, err := state.Task(p.Stream)
 	switch {
+	case errors.Is(err, current.ErrArchived) && p.Type == events.TaskUnarchived:
+		if reason := anUnarchiving(p); reason != "" {
+			return refuse(reason)
+		}
+		return nil
 	case errors.Is(err, current.ErrArchived):
 		return refuse(p.Stream + " is archived: an archived task takes no events")
 	case err != nil:
@@ -99,8 +104,6 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 		}
 		return nil
 	case task == nil:
-		// When tasks can be archived (docs/design/log-growth.md section 4),
-		// an archived task's unarchiving goes through here too.
 		return refuse("task " + p.Stream + " doesn't exist")
 	case task.IsDone && task.WrapUp != nil && slices.Contains(duringWrapUp, p.Type):
 	case task.IsDone && !slices.Contains(afterDone, p.Type):
@@ -131,7 +134,8 @@ func Check(p events.Proposal, state State, catalogue *events.Catalogue) *events.
 var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.RepoChanged, events.WorktreeReady,
 	events.AgentRenamedInTask,          // a finished task reopened later goes to its coordinator by its new name
 	events.EpicJoined, events.EpicLeft, // finished work is filed under epics too
-	events.FollowUpsSkipped} // an epic you closed: why no Visionaries session started after it
+	events.FollowUpsSkipped,                    // an epic you closed: why no Visionaries session started after it
+	events.TaskArchived, events.TaskUnarchived} // its rows moved out of the live log, and back
 
 // duringWrapUp are what may happen to a task you moved to Done while its
 // coordinator wraps up: its one turn, the shared files around it, and

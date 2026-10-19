@@ -12,7 +12,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
     <div
       className={cn(
         "relative flex h-8 w-full items-center rounded-md border border-divider bg-surface-1 text-[13px] text-ink-primary",
-        "transition-colors duration-(--dur-fast) focus-within:border-brand hover:not-focus-within:border-divider-2",
+        "transition-colors duration-(--dur-fast) focus-within:border-focus hover:not-focus-within:border-divider-2",
         className,
       )}
     >

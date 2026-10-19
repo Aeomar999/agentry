@@ -1,6 +1,10 @@
 package web
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -71,10 +75,11 @@ func TestFeaturesCountWhatThisBuildSkipped(t *testing.T) {
 }
 
 // votes is a feature with a route behind each Auth: a read for the page, a
-// read the desk may make too, and two writes, one of a type it lists in
-// Writes and one it doesn't, behind a route that names no Auth.
+// read the desk may make too, two writes, one of a type it lists in Writes
+// and one it doesn't, behind a route that names no Auth, and a webhook that
+// raises an issue on task-1 saying the body it was signed with.
 func votes() features.Feature {
-	return features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated}, Routes: func(c features.Core) []features.Route {
+	return features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated, events.IssueRaised}, Routes: func(c features.Core) []features.Route {
 		write := func(p events.Proposal) http.HandlerFunc {
 			return func(w http.ResponseWriter, r *http.Request) { httpapi.Propose(w, c.Log, p) }
 		}
@@ -85,6 +90,10 @@ func votes() features.Feature {
 				Data: map[string]any{"title": "Count the votes", "repo": "/src/app", "coordinator": "tech-lead"}})},
 			{Pattern: "POST /api/votes/close", Handler: write(events.Proposal{Stream: "task-1", Actor: httpapi.You, Type: events.TaskDone,
 				Data: map[string]any{"summary": "Counted."}})},
+			{Pattern: "POST /api/votes/hook", Auth: features.Signed(signedWith(hookSecret)), Handler: func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				httpapi.Propose(w, c.Log, events.Proposal{Stream: "task-1", Actor: httpapi.System, Type: events.IssueRaised, Data: map[string]any{"reason": string(body)}})
+			}},
 		}
 	}}
 }
@@ -215,5 +224,127 @@ func TestAFeatureRouteThatClashesNamesItsFeature(t *testing.T) {
 		if message, _ := got.(string); !strings.HasPrefix(message, step.want) {
 			t.Errorf("mounting %s: panicked with %v, want %q", step.list[len(step.list)-1].Name, got, step.want)
 		}
+	}
+}
+
+const hookSecret = "hook-secret"
+
+// signedWith checks a body as a git host does: X-Signature is the hex
+// HMAC-SHA256 of the body under secret.
+func signedWith(secret string) func(r *http.Request, body []byte) error {
+	return func(r *http.Request, body []byte) error {
+		given, err := hex.DecodeString(r.Header.Get("X-Signature"))
+		if err != nil || len(given) == 0 {
+			return errors.New("no signature")
+		}
+		if !hmac.Equal(given, signature(secret, body)) {
+			return errors.New("the signature doesn't match")
+		}
+		return nil
+	}
+}
+
+func signature(secret string, body []byte) []byte {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return mac.Sum(nil)
+}
+
+// callHook posts body to the votes webhook with headers.
+func callHook(t *testing.T, server *httptest.Server, body string, headers map[string]string) (int, string) {
+	t.Helper()
+	request, _ := http.NewRequest("POST", server.URL+"/api/votes/hook", strings.NewReader(body))
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	content, _ := io.ReadAll(response.Body)
+	return response.StatusCode, string(content)
+}
+
+// A signed route takes a request whose signature verify accepts, gives the
+// handler its body, and writes as System.
+func TestASignedRouteWritesAsSystem(t *testing.T) {
+	server, s := votesServer(t, checkedVotes)
+	body := `{"pipeline":"failed"}`
+	code, reply := callHook(t, server, body, map[string]string{"X-Signature": hex.EncodeToString(signature(hookSecret, []byte(body)))})
+	if code != http.StatusOK {
+		t.Fatalf("a good signature: %d %s", code, reply)
+	}
+	log, _ := s.Log("task-1")
+	last := log[len(log)-1]
+	if last.Type != events.IssueRaised || last.Actor != httpapi.System || last.Actor.Kind != events.System || last.Data["reason"] != body {
+		t.Errorf("the hook should raise an issue as System with its body: %+v", last)
+	}
+}
+
+// A signed route refuses a request whose signature is wrong or missing,
+// even one carrying the UI token, and its handler writes nothing.
+func TestASignedRouteRefusesABadSignature(t *testing.T) {
+	server, s := votesServer(t, checkedVotes)
+	body := `{"pipeline":"failed"}`
+	for _, c := range []struct {
+		name    string
+		headers map[string]string
+	}{
+		{"a bad signature", map[string]string{"X-Signature": hex.EncodeToString(signature("not-the-secret", []byte(body)))}},
+		{"no signature", nil},
+		{"the UI token and no signature", map[string]string{"Authorization": "Bearer " + token}},
+		{"the UI token and a bad signature", map[string]string{"Authorization": "Bearer " + token, "X-Signature": "00ff"}},
+		{"the desk's token", map[string]string{"Authorization": "Bearer desk-secret"}},
+	} {
+		before := s.LastPosition()
+		if code, reply := callHook(t, server, body, c.headers); code != http.StatusUnauthorized {
+			t.Errorf("%s: %d %s, want 401", c.name, code, reply)
+		}
+		if after := s.LastPosition(); after != before {
+			t.Errorf("%s: the log moved from %d to %d", c.name, before, after)
+		}
+	}
+}
+
+// A signed route's body is limited as a JSON body is: over MaxBody, it is
+// refused before verify sees it.
+func TestASignedRouteRefusesAnOversizedBody(t *testing.T) {
+	server, s := votesServer(t, checkedVotes)
+	body := strings.Repeat("x", httpapi.MaxBody+1)
+	before := s.LastPosition()
+	code, reply := callHook(t, server, body, map[string]string{"X-Signature": hex.EncodeToString(signature(hookSecret, []byte(body)))})
+	if code != http.StatusBadRequest {
+		t.Errorf("an oversized body: %d %s, want 400", code, reply)
+	}
+	if after := s.LastPosition(); after != before {
+		t.Errorf("the log moved from %d to %d", before, after)
+	}
+}
+
+// A body of exactly MaxBody is within the limit: verify sees all of it and
+// the handler gets it.
+func TestASignedRouteTakesABodyOfExactlyMaxBody(t *testing.T) {
+	server, s := votesServer(t, checkedVotes)
+	body := strings.Repeat("x", httpapi.MaxBody)
+	code, reply := callHook(t, server, body, map[string]string{"X-Signature": hex.EncodeToString(signature(hookSecret, []byte(body)))})
+	if code != http.StatusOK {
+		t.Fatalf("a body of MaxBody: %d %s, want 200", code, reply)
+	}
+	log, _ := s.Log("task-1")
+	if last := log[len(log)-1]; last.Type != events.IssueRaised || last.Data["reason"] != body {
+		t.Errorf("the hook should raise an issue with the whole body: %s", last.Type)
+	}
+}
+
+// A hand-built request may carry no body at all: signed reads it as empty,
+// so verify refuses it for its missing signature instead of a panic.
+func TestASignedRouteTakesARequestWithNoBody(t *testing.T) {
+	reached := false
+	handler := signed(signedWith(hookSecret), func(w http.ResponseWriter, r *http.Request) { reached = true })
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, &http.Request{Method: "POST", Header: http.Header{}})
+	if response.Code != http.StatusUnauthorized || reached {
+		t.Errorf("no body: %d, handler reached %v; want 401 and not reached", response.Code, reached)
 	}
 }

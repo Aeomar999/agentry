@@ -973,6 +973,34 @@ one `created`). The rules (`internal/rules/rules.go`) refuse a
 `task.created` on a stream that holds a summary, as on one that holds a
 task.
 
+**Built in step 5.** `internal/store/store.go` keeps the schema's
+`migrations` as a list: entry i takes a file at `user_version` i to i+1,
+so the version is the list's length and nothing is bumped by hand. `Open`
+runs the ones a file hasn't had and records the version in one
+transaction; a new file starts at 0 and runs them all, and a file from a
+newer build isn't opened. Migration 1 is the gated trigger above, plus a
+partial index of the markers, `events_archived` on `(stream, position)
+WHERE type = 'task.archived'`: the trigger runs once per deleted row, and
+without the index each run scanned the stream, so deleting 8,000 rows took
+4.6 s under `Store.mu`; with it, 29 ms.
+`auto_vacuum = INCREMENTAL` is a pragma of the writing connection, so a
+new file is incremental from the start; an existing one keeps its mode
+until the one full `VACUUM` (below), which `Open` does not run. `made`
+is the `UNION` above. `task.archived` (`through`, `count`, `archive`,
+`created`, `summary`) and `task.unarchived` (`marker`, `archive`) are in
+the catalogue, written by Agentry alone; `task.unarchived` refolds its
+stream. The rules (`internal/rules/archive_rules.go`) let an archived task
+take only `task.unarchived`, archive only a done task with a marker whose
+hash and positions make sense, and refuse `task.unarchived` on a whole
+task. The state folds the markers since step 6 (below, "Done tasks leave
+the state"). Nothing writes a marker outside tests before step 7. Tests:
+`TestAStrayDeleteIsRefused`, `TestAMarkerAllowsDeletingOnlyTheRowsItCovers`,
+`TestUnarchivingEndsWhatTheMarkerAllows`, `TestAVersionZeroLogMigratesOnce`,
+`TestANewLogStartsAtTheLatestSchema`, `TestALogFromANewerBuildIsNotOpened`
+and `TestCreateCountsArchivedTasksOnce` in `internal/store`;
+`TestAnArchivedTaskTakesOnlyItsUnarchiving`, `TestOnlyADoneTaskIsArchived`
+and `TestOnlyTheStoreWritesTheMarkers` in `internal/rules`.
+
 ### The move, step by step
 
 An archiver goroutine (`internal/archive`) runs at startup and then
@@ -1128,6 +1156,32 @@ the marker's `created` is the `task.created` position the state orders by,
 and the next id counts archived tasks too, through `Store.made`, which
 `Store.Create` calls (section 4, "How it fits").
 
+**Built in step 6.** `tasks.Replay` sets the task aside at a marker and
+takes it back at `task.unarchived` (panicking, so the stream breaks, when
+nothing was set aside), and `tasks.Archived` reads the last marker's
+summary, its id always the stream's. `current.State` folds a marker into
+`archived` on `Load`, `Apply` and `Refold`; a marker that is the first
+event of its stream the state sees stands for the `task.created` that
+went with the rows: it counts for `NextTask` and goes into `created` at
+its `created` position, in order even in a snapshot's tail. `Summaries()`
+lists whole tasks' `SummaryOf` and archived summaries in that order, and
+`/api/tasks` reads it, so an archived task is listed as done with its
+summary. `Equal` compares each summary with `tasks.Archived` of a replay,
+and the snapshot carries the map; a snapshot from before this is another
+build's, and one of the old shape under the same tag fails to decode, so
+either way the log replays. The readers of item 6 already skipped an
+archived task; their tests now archive through a real marker
+(`storetest.Archive`). Measured on a thousand copies of the every-event
+task, the state holds 818 bytes per archived task
+(`TestTheSummaryHeapBenchRunsOnAFixture`; `TestStartupBench` logs the
+same on the synthetic log). Tests: `TestAMarkerAloneFoldsToItsSummary`,
+`TestASnapshotTakesAnUnarchivingInItsTail`,
+`TestASnapshotFromBeforeSummariesReplays`,
+`TestAnArchivedTaskIsCountedButNotHandedOut`,
+`TestUnarchivingTakesBackTheWholeTask` and `TestEqualSeesAWrongSummary`
+in `internal/current`; `TestAnArchivedTaskIsListedAsItsSummary` in
+`internal/web`.
+
 At scale: a task is about 1.2 MB of file today, so 1 GB of history is
 about 900 tasks, and 100 GB about 90,000: some 60 MB of summaries in
 memory and in the list's JSON. The list will then have to page archived
@@ -1151,7 +1205,8 @@ runs the first archiving round, and only then runs the one `VACUUM`:
 are gone. If the disk lacks room for the copy, it logs that and tries
 again at the next start. After each round: `PRAGMA incremental_vacuum`,
 then `PRAGMA wal_checkpoint(TRUNCATE)`, so the WAL does not keep the old
-pages either.
+pages either. Step 5 sets the pragma on every open; the `VACUUM` is step
+7's.
 
 ## 5. Deleting data for privacy
 
@@ -1413,8 +1468,8 @@ value, since JSON allows a newline between elements; at build step 2 it
 gave way to gob chunks, see section 2), and the loader
 splits on newlines and decodes the entries on up to 8 goroutines: 0.22
 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps
-`nil` and empty apart for the equivalence test. Whether it gives way to
-gob is
+`nil` and empty apart for the equivalence test. It gave way to gob at
+build step 2, by
 [section 2's rule for leaving JSON](#2-snapshots-of-the-read-model).
 
 **Archiving third.** The biggest piece: a schema migration, store methods

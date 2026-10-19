@@ -15,10 +15,17 @@ import (
 // You is who every write from the page or the desk is made as.
 var You = events.Actor{Kind: events.Human, ID: "you"}
 
+// System is who a signed route's writes are made as: a webhook speaks for
+// the service that signed it, not for you.
+var System = events.Actor{Kind: events.System, ID: "webhook"}
+
+// MaxBody is the most a request's body may hold.
+const MaxBody = 1 << 20
+
 // Decode reads a request's JSON body into into, and answers 400 when it
-// can't. A body over 1 MiB is refused.
+// can't. A body over MaxBody is refused.
 func Decode(w http.ResponseWriter, r *http.Request, into any) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(into); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxBody)).Decode(into); err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return false
 	}

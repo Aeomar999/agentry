@@ -1,14 +1,15 @@
 // Package store is the append-only event log, in SQLite.
 //
 // Triggers make UPDATE and DELETE fail in the database itself, so
-// "append-only" does not depend on the code remembering. Propose is the only
-// way in: it runs the checks against the model, appends the event (or a
-// proposal.rejected) and applies it to the model. A mutex makes proposals
-// strictly one at a time, from the check to the apply, so two can never both
-// pass the order check against the same state (proof 05). Reads of the log
-// go through a separate pool of read-only connections, so they never queue
-// behind a write: in WAL mode a reader sees every committed event and none
-// in flight.
+// "append-only" does not depend on the code remembering; the one delete
+// allowed is of a task's rows that its task.archived marker covers (see
+// migrations). Propose is the only way in: it runs the checks against the
+// model, appends the event (or a proposal.rejected) and applies it to the
+// model. A mutex makes proposals strictly one at a time, from the check to
+// the apply, so two can never both pass the order check against the same
+// state (proof 05). Reads of the log go through a separate pool of read-only
+// connections, so they never queue behind a write: in WAL mode a reader sees
+// every committed event and none in flight.
 package store
 
 import (
@@ -41,6 +42,30 @@ CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
 	BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
 `
+
+// migrations bring a log made by an older build up to this one's schema:
+// migrations[i] takes a file at PRAGMA user_version i to i+1, and a new
+// file starts at 0 and runs them all. The schema's version is the list's
+// length, so a new migration is only a new entry.
+var migrations = []string{
+	// 1: archiving (docs/design/log-growth.md section 4). A delete is
+	// allowed only for rows a task.archived marker in the same stream
+	// covers, and only until a task.unarchived follows that marker. The
+	// marker counts inside its own uncommitted transaction, so the archiver
+	// inserts it and deletes the rows in one. The trigger checks every row
+	// deleted: the index of markers keeps that a lookup, where a scan of the
+	// stream per row took 4.6 s to delete 8,000.
+	`CREATE INDEX events_archived ON events (stream, position) WHERE type = 'task.archived';
+DROP TRIGGER IF EXISTS events_no_delete;
+CREATE TRIGGER events_no_delete BEFORE DELETE ON events
+WHEN NOT EXISTS (
+	SELECT 1 FROM events m
+	WHERE m.stream = OLD.stream AND m.type = 'task.archived'
+	  AND OLD.position <= json_extract(m.data, '$.through')
+	  AND NOT EXISTS (SELECT 1 FROM events u WHERE u.stream = m.stream
+	                  AND u.type = 'task.unarchived' AND u.position > m.position))
+BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;`,
+}
 
 // A Model is state kept from the log. The store fills it at Open and
 // applies each event after it commits, before any reader of the log can
@@ -95,10 +120,17 @@ var Driver = "sqlite"
 // readConnections is how many reads of the log can run at once.
 const readConnections = 4
 
-// Open opens the log at path and loads it into model, if there is one.
-// Every proposal must be of a type in catalogue, in a stream it belongs in.
+// Open opens the log at path, migrates it to this build's schema and loads
+// it into model, if there is one. Every proposal must be of a type in
+// catalogue, in a stream it belongs in.
+//
+// auto_vacuum is set first, so a new file gives back the pages archiving
+// frees. An existing file switches mode only with a full VACUUM, which
+// Open does not run: the archiver runs it once, after its first round,
+// when the done tasks are gone and the copy is cheapest (log-growth.md
+// section 4, "VACUUM").
 func Open(path string, catalogue *events.Catalogue, model Model, check OrderCheck) (*Store, error) {
-	db, err := sql.Open(Driver, path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open(Driver, path+"?_pragma=auto_vacuum(INCREMENTAL)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +138,10 @@ func Open(path string, catalogue *events.Catalogue, model Model, check OrderChec
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
+	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrating the schema: %w", err)
 	}
 	last, err := load(db, catalogue, model)
 	if err != nil {
@@ -130,6 +166,36 @@ func Open(path string, catalogue *events.Catalogue, model Model, check OrderChec
 	return s, nil
 }
 
+// migrate runs the migrations the file hasn't had, and records the new
+// version, in one transaction: a failure leaves the file as it was.
+func migrate(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version > len(migrations) {
+		return fmt.Errorf("the log is at schema version %d, newer than this build's %d", version, len(migrations))
+	}
+	if version == len(migrations) {
+		return nil
+	}
+	for i, migration := range migrations[version:] {
+		if _, err := tx.Exec(migration); err != nil {
+			return fmt.Errorf("to version %d: %w", version+i+1, err)
+		}
+	}
+	// PRAGMA takes no parameters; the number is the list's length.
+	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations))); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // Catalogue is the event types the log was opened with.
 func (s *Store) Catalogue() *events.Catalogue { return s.catalogue }
 
@@ -150,7 +216,7 @@ func (s *Store) Propose(p events.Proposal) (events.Event, *events.Rejection, err
 // Create is Propose for the event that starts a new stream, such as
 // task.created or idea.suggested. The stream is named prefix and the next
 // number, counted under the same lock, so two made at once never take the
-// same name. See made for what an archiver must change.
+// same name, and never an archived task's (see made).
 func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -164,13 +230,28 @@ func (s *Store) Create(prefix string, p events.Proposal) (events.Event, *events.
 
 // made counts the events of a type in the log, rejections left out, so the
 // next stream of its kind follows every one made, even one whose stream
-// can't be read. For tasks it counts task.created rows: once the archiver
-// deletes rows, it must count archive markers too, or it hands out ids
-// already taken (docs/design/log-growth.md, "What task-21 should leave
-// room for", item 6).
+// can't be read.
+//
+// For tasks it counts task.created rows and task.archived markers
+// together, since archiving deletes a task's task.created row: each marker
+// at the task.created position it stands for (its "created"), so a task
+// counts once whether archived, unarchived (the row is back, at that
+// position) or archived twice (two markers, one "created"). The markers are
+// gated on that position, not their own: between the archive's commit and
+// applied moving past its marker, a gate on the marker would hide the task
+// from both halves (log-growth.md section 4, "How it fits").
 func (s *Store) made(kind events.Type) (int, error) {
+	query, args := `SELECT COUNT(*) FROM events WHERE type = ? AND position <= ?`, []any{kind, s.applied.Load()}
+	if kind == events.TaskCreated {
+		query = `SELECT COUNT(*) FROM (
+			SELECT stream, position FROM events WHERE type = ?1 AND position <= ?2
+			UNION
+			SELECT stream, json_extract(data, '$.created') FROM events
+			WHERE type = ?3 AND json_extract(data, '$.created') <= ?2)`
+		args = append(args, events.TaskArchived)
+	}
 	var made int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM events WHERE type = ? AND position <= ?`, kind, s.applied.Load()).Scan(&made)
+	err := s.db.QueryRow(query, args...).Scan(&made)
 	return made, err
 }
 

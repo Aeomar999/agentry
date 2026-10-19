@@ -187,6 +187,9 @@ var coreTypes = map[Type]Spec{
 	TaskAnswered: {Fields: []string{"answer"}, Writers: []ActorKind{Human}},           // with a board move's "column", "sentBack"
 	TaskDone:     {Fields: []string{"summary"}, Writers: []ActorKind{Agent, Human}},   // yours: an epic you approved closing, or a card you moved to Done ("moved")
 
+	TaskArchived:   {Fields: []string{"through", "count", "archive", "created", "summary"}, Writers: []ActorKind{System}},
+	TaskUnarchived: {Fields: []string{"marker", "archive"}, Writers: []ActorKind{System}, Refolds: true}, // the task is folded again from its restored rows
+
 	WorkerInvited:      {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},
 	ConnectionInvited:  {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},
 	ConnectionMade:     {Fields: []string{"id", "code", "credential"}, Writers: []ActorKind{System}},
@@ -323,7 +326,7 @@ func (c *Catalogue) CheckWriter(p Proposal) *Rejection {
 }
 
 // Refolds says whether an event changes what came before it in its stream,
-// as task.unarchived and event.redacted will: the stream's state is then
-// folded again from its earlier events and this one, not changed by this
-// one alone. No core type does yet.
+// as task.unarchived does and event.redacted will: the stream's state is
+// then folded again from its earlier events and this one, not changed by
+// this one alone.
 func (c *Catalogue) Refolds(kind Type) bool { return c.specs[kind].Refolds }
