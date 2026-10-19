@@ -103,7 +103,9 @@ describe("SettingsPage", () => {
     useAskVisionaries = () => {
       const [opening, setOpening] = useState(false);
       useEffect(() => {
-        if (opening && teamShows) newTask();
+        if (!opening || !teamShows) return;
+        setOpening(false);
+        newTask();
       });
       return { ...FRESH, adding: opening, ask: () => setOpening(true) };
     };
