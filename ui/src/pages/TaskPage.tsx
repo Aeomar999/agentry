@@ -44,6 +44,7 @@ import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { useResource } from "@/live/use-resource";
 import { useNow } from "@/live/use-now";
+import { useTaskCommits, useTaskLinks } from "@/live/refs";
 import { COLUMN_TITLES, stageOf } from "@/lib/columns";
 
 // A task in full. The header and a strip of facts stay put. Under them, on
@@ -138,6 +139,7 @@ export function TaskPage() {
   const { data: task, error, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
+  const links = useTaskLinks(taskId, useTaskCommits(taskId));
 
   if (error && !task) {
     return (
@@ -347,6 +349,7 @@ export function TaskPage() {
           <div className="h-[80dvh] min-h-0 md:h-auto md:flex-1">
             {tab === "handoffs" && (
               <Scroll>
+                <h2 className="sr-only">Handoffs</h2>
                 <div className="max-w-4xl px-6 py-5">
                   {task.trail?.length ? (
                     <HandoffTimeline
@@ -369,6 +372,8 @@ export function TaskPage() {
             {tab === "activity" && (
               <ActivityFeed
                 items={items}
+                agents={roster}
+                links={links}
                 turn={turn}
                 show={show}
                 row={row}

@@ -81,18 +81,6 @@ export function rowFor(items: ActivityItem[], target: { action?: string; event?:
   return (id && items.find((item) => item.action?.id === id)?.key) || "";
 }
 
-// newestFirst puts the latest rows first, but keeps each turn's band above
-// the rows of its turn, as a heading stays above what it heads.
-export function newestFirst(items: ActivityItem[]): ActivityItem[] {
-  const blocks: ActivityItem[][] = [];
-  for (const item of items) {
-    const block = blocks[blocks.length - 1];
-    if (item.kind !== "turn" && item.turn && block?.[0].kind === "turn" && block[0].turn === item.turn) block.push(item);
-    else blocks.push([item]);
-  }
-  return blocks.reverse().flatMap(([first, ...rest]) => [first, ...rest.reverse()]);
-}
-
 // A Section is a run of rows with one author, under one band: a turn (its
 // agent's), or rows between turns by you, by Agentry or by another agent.
 export interface Section {
