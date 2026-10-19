@@ -8,6 +8,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -273,4 +274,38 @@ func agentsOf(roster agents.Roster) []agents.Agent {
 		list = append(list, a)
 	}
 	return list
+}
+
+type ideaView struct {
+	ID        string      `json:"id"`
+	Title     string      `json:"title"`
+	Problem   string      `json:"problem"`
+	Proposal  string      `json:"proposal"`
+	WhyNow    string      `json:"whyNow"`
+	Size      string      `json:"size"` // S, M or L
+	Risks     string      `json:"risks"`
+	BackedBy  []string    `json:"backedBy"`
+	DoubtedBy []string    `json:"doubtedBy"`
+	Task      string      `json:"task"` // the session it came from
+	Repo      string      `json:"repo"`
+	Epic      string      `json:"epic"` // the epic it follows up, "" for none
+	Kind      tasks.Kind  `json:"kind"` // what it suggests making of it: "" for a story, "epic"
+	State     ideas.State `json:"state"`
+	Note      string      `json:"note"`   // what you said when you accepted or dismissed it
+	Became    string      `json:"became"` // the task an accepted idea became
+	CreatedAt time.Time   `json:"createdAt"`
+}
+
+func viewOf(idea *ideas.Idea) ideaView {
+	return ideaView{ID: idea.ID, Title: idea.Title, Problem: idea.Problem, Proposal: idea.Proposal, WhyNow: idea.WhyNow,
+		Size: idea.Size, Risks: idea.Risks, BackedBy: listOf(idea.BackedBy), DoubtedBy: listOf(idea.DoubtedBy), Task: idea.Task,
+		Repo: idea.Repo, Epic: idea.Epic, Kind: idea.Kind, State: idea.State, Note: idea.Note, Became: idea.Became,
+		CreatedAt: idea.CreatedAt}
+}
+
+// acceptance is what accepting an idea did (ideas.Acceptance).
+type acceptance struct {
+	Task     string `json:"task"`     // the task made from the idea
+	Accepted bool   `json:"accepted"` // the idea is marked accepted
+	Refused  string `json:"refused"`  // why it isn't, "" once accepted
 }
