@@ -58,6 +58,7 @@ const keepBackups = 20
 
 // OpenLive loads path, writing the default policy there first if there is
 // none. It fails if that first load fails: Agentry never runs without a policy.
+// A file that doesn't load is named in the error, with its newest backup.
 func OpenLive(path, home string, protected []string) (*Live, error) {
 	if err := EnsureFile(path); err != nil {
 		return nil, err
@@ -68,7 +69,7 @@ func OpenLive(path, home string, protected []string) (*Live, error) {
 	}
 	first, err := Parse(text, home, protected)
 	if err != nil {
-		return nil, err
+		return nil, refusedAtStart(path, err)
 	}
 	l := &Live{path: path, home: home, protected: protected, lastSeen: sha256.Sum256(text)}
 	l.current.Store(first)
@@ -174,16 +175,33 @@ func (l *Live) storeLocked(loaded *Policy, backup string) *Change {
 		Diff: LineDiff("before", "after", before.Text(), loaded.Text())}
 }
 
-// pruneBackups deletes all but the newest keep backups of the policy at
-// path. A backup it can't delete stays; the next change tries again.
-func pruneBackups(path string, keep int) {
-	entries, _ := os.ReadDir(filepath.Dir(path)) // sorted by name, and the names end in the time: oldest first
+// refusedAtStart says how to recover from a policy file that doesn't load
+// when Agentry starts: there is no page yet to show what's wrong.
+func refusedAtStart(path string, err error) error {
+	backups := listBackups(path)
+	if len(backups) == 0 {
+		return fmt.Errorf("policy %s is refused: %w; there is no backup of it", path, err)
+	}
+	newest := backups[len(backups)-1]
+	return fmt.Errorf("policy %s is refused: %w; to go back to its newest backup, cp '%s' '%s'", path, err, newest, path)
+}
+
+// listBackups is the backups of the policy at path, oldest first.
+func listBackups(path string) []string {
+	entries, _ := os.ReadDir(filepath.Dir(path)) // sorted by name, and the names end in the time
 	var backups []string
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), filepath.Base(path)+"-backup-") {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), filepath.Base(path)+"-backup-") {
 			backups = append(backups, filepath.Join(filepath.Dir(path), e.Name()))
 		}
 	}
+	return backups
+}
+
+// pruneBackups deletes all but the newest keep backups of the policy at
+// path. A backup it can't delete stays; the next change tries again.
+func pruneBackups(path string, keep int) {
+	backups := listBackups(path)
 	for _, old := range backups[:max(len(backups)-keep, 0)] {
 		os.Remove(old)
 	}
