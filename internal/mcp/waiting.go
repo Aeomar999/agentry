@@ -108,7 +108,10 @@ func WaitForNew(ctx context.Context, agentry client.Client, list []features.Feat
 }
 
 // featuresWaiting is what waits of each feature in list, about repo ("" when
-// not known). What a feature can't read is left out, not an error.
+// not known). What a feature can't read is left out, not an error. Unlike
+// Tools and Instructions, it asks every feature, hidden or not: a feature
+// with something waiting (open ideas) shows anyway, and in story 13 the
+// server lists what waits (GET /api/waiting) and this goes.
 func featuresWaiting(agentry client.Client, list []features.Feature, repo string) []Waiting {
 	var all []Waiting
 	for _, f := range list {

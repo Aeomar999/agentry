@@ -32,7 +32,8 @@ type Feature struct {
 	// one), and Instructions its lines in the server instructions Claude
 	// Code reads, each a "- " bullet; both only while the feature is
 	// enabled or visible. Waiting is what of it waits for you, about repo
-	// ("" when not known), read over the API until the server lists it.
+	// ("" when not known), read over the API until the server lists it in
+	// story 13 (GET /api/waiting).
 	Tools        func(agentry API, repo string) []Tool
 	Instructions string
 	Waiting      func(agentry API, repo string) []Waiting
