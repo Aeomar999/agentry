@@ -10,10 +10,15 @@ import (
 )
 
 // FromEvents builds a task by applying its accepted events in order.
-// It returns nil if the events don't include task.created, and nil for a
-// stream Replay can't replay.
+// It returns nil if the events don't include task.created, and panics with
+// Replay's error for a stream it can't replay. Tests and callers that want
+// a bad stream to fail loudly use it; code that must survive one, such as
+// startup, uses Replay.
 func FromEvents(stream []events.Event) *Task {
-	t, _ := Replay(stream)
+	t, err := Replay(stream)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 

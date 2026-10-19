@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,9 +25,15 @@ func TestAStreamThatCantBeReplayedSaysWhere(t *testing.T) {
 			t.Errorf("%q doesn't say %q", err, want)
 		}
 	}
-	if task := FromEvents(log); task != nil {
-		t.Errorf("FromEvents gave %+v, want no task", task)
-	}
+	func() {
+		defer func() {
+			if recovered := recover(); fmt.Sprint(recovered) != err.Error() {
+				t.Errorf("FromEvents panicked with %v, want Replay's error %q", recovered, err)
+			}
+		}()
+		task := FromEvents(log)
+		t.Errorf("FromEvents gave %+v, want a panic", task)
+	}()
 	if task, err := Replay(log[:1]); err != nil || task == nil || task.Title != "t" {
 		t.Errorf("the stream up to the bad event replays: %+v, %v", task, err)
 	}
