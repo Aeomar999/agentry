@@ -493,7 +493,7 @@ func ideasLine(t *testing.T, server *httptest.Server) features.Line {
 func TestIdeasHiddenWithNoTeamAndNoIdeas(t *testing.T) {
 	server, _ := newTestServer(t)
 	line := ideasLine(t, server)
-	if line.Enabled || line.Visible || line.Badge != 0 || !strings.Contains(line.Why, "add the Visionaries team") {
+	if line.Enabled || line.Visible || line.Badge != 0 || !strings.Contains(line.Why, "add a team from the Visionaries template") {
 		t.Errorf("no team, no ideas: %+v", line)
 	}
 }

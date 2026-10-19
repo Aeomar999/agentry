@@ -56,7 +56,7 @@ func manifest(state features.Reader) features.Entry {
 	}
 	switch kept := len(list); kept {
 	case 0:
-		entry.Why = "add the Visionaries team to get ideas"
+		entry.Why = "add a team from the Visionaries template to get ideas"
 	case 1:
 		entry.Visible, entry.Why = true, "kept while 1 idea remains; the Visionaries team was removed"
 	default:

@@ -14,8 +14,8 @@ import (
 // what it delivered, and what could follow. Its ideas land in Ideas like
 // any session's, each from a task that is "about" the epic. The session
 // comes from no task, so it takes the server's limits, as a task you make
-// does. You turn it off on the Ideas page; without a Visionaries team, the
-// epic says how to add one.
+// does. You turn it off on the Ideas page; without a team made from the
+// Visionaries template, the epic says how to add one.
 
 // followUps starts a session after each epic the batch closed: your
 // task.done on it, as you approved closing it, not a move to Done on the
@@ -43,8 +43,8 @@ func (l *Loop) followUp(id string, close int64) {
 	}
 	teams := ideas.Visionaries(roster)
 	if len(teams) == 0 {
-		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as there is no Visionaries team. "+
-			"To have one after the next epic you close, add the team: on the Agents page, Add a team, Visionaries. "+
+		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as no team was added from the Visionaries template. "+
+			"To have one after the next epic you close, add one: on the Agents page, Add a team, Visionaries. "+
 			"Or turn these sessions off on the Ideas page.")
 		return
 	}

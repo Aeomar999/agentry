@@ -46,9 +46,9 @@ func TestIdeasIsOnByTheTeamsTemplate(t *testing.T) {
 		{"a second Visionaries team", agents.Agent{Name: "lead", Team: "Visionaries 2", Coordinates: true, Template: "visionaries"},
 			true, "the Visionaries 2 team suggests ideas"},
 		{"a team you called Visionaries", agents.Agent{Name: "lead", Team: "Visionaries", Coordinates: true},
-			false, "add the Visionaries team to get ideas"},
+			false, "add a team from the Visionaries template to get ideas"},
 		{"a Visionaries agent that doesn't coordinate", agents.Agent{Name: "lead", Team: "Visionaries", Template: "visionaries"},
-			false, "add the Visionaries team to get ideas"},
+			false, "add a team from the Visionaries template to get ideas"},
 	}
 	for _, c := range cases {
 		state := board{roster: agents.Roster{{Name: "tech-lead", Coordinates: true}, c.lead}}
