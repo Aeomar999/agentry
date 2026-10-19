@@ -306,3 +306,22 @@ func TestAgentryStartsNoTaskYouMade(t *testing.T) {
 		t.Errorf("want refused, got %v %v", rejection, err)
 	}
 }
+
+// An idea naming an epic that isn't there loses the epic's limits: Agentry
+// leaves it for you, and your accept says so in the task.
+func TestAnIdeaWhoseEpicIsMissingSaysSo(t *testing.T) {
+	s, state, repo := openSeeded(t)
+	turnOn(t, s, state)
+	id := suggestAgreed(t, s, repo, map[string]any{"epic": "task-9"})
+	if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry}); got.Task != "" || got.Accepted || !strings.Contains(got.Refused, "task-9") {
+		t.Errorf("Agentry's accept: %+v", got)
+	}
+	got, err := ideas.Accept(s, state, id, ideas.Choice{})
+	if err != nil || !got.Accepted {
+		t.Fatalf("your accept: %+v %v", got, err)
+	}
+	const want = "The epic task-9 this follows up wasn't found, so its limits weren't copied."
+	if description := loadTask(t, s, got.Task).Description; !strings.Contains(description, want) {
+		t.Errorf("description has no %q:\n%s", want, description)
+	}
+}

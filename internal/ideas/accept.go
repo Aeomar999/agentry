@@ -150,8 +150,11 @@ func makeTask(log *store.Store, board Board, idea *Idea, kind tasks.Kind, choice
 		return Acceptance{Refused: "there is no coordinator in the first team"}, nil
 	}
 	epic, err := epicOf(board, idea)
-	if err != nil {
+	switch {
+	case err != nil:
 		return Acceptance{Refused: "the epic " + idea.Epic + " can't be read, so its limits can't go with the task: " + err.Error()}, nil
+	case idea.Epic != "" && epic == nil && choice.acceptor().Kind == events.System:
+		return Acceptance{Refused: "the epic " + idea.Epic + " it follows up wasn't found, so its limits can't go with the task: it is left for you"}, nil
 	}
 	created, rejection, err := log.Create("task-", events.Proposal{Actor: choice.acceptor(), Type: events.TaskCreated, Data: map[string]any{
 		"title": idea.Title, "description": description(idea, choice.Note, epic), "repo": idea.Repo, "coordinator": coordinator.Name,
@@ -178,8 +181,9 @@ func kindOf(chosen string, idea *Idea) (tasks.Kind, bool) {
 	return "", false
 }
 
-// epicOf is the epic the idea follows up, nil when it names none or none
-// is left to read.
+// epicOf is the epic the idea follows up, nil when it names none or the
+// one it names isn't there. Agentry leaves such an idea for you; your
+// accept makes the task, which says the limits are missing.
 func epicOf(board Board, idea *Idea) (*tasks.Task, error) {
 	if idea.Epic == "" {
 		return nil, nil
@@ -189,7 +193,7 @@ func epicOf(board Board, idea *Idea) (*tasks.Task, error) {
 
 // description tells the coordinator the idea in full, and links back to it.
 // An idea that follows up an epic carries the epic's limits, as its stories
-// would.
+// would, or says the epic wasn't found.
 func description(idea *Idea, note string, epic *tasks.Task) string {
 	parts := []string{"From " + idea.ID + ", the idea \"" + idea.Title + "\", suggested in " + idea.Task + "."}
 	for _, part := range [][2]string{{"Problem", idea.Problem}, {"Proposal", idea.Proposal}, {"Why now", idea.WhyNow},
@@ -198,8 +202,11 @@ func description(idea *Idea, note string, epic *tasks.Task) string {
 			parts = append(parts, part[0]+": "+text)
 		}
 	}
-	if limits := limitsOf(epic); limits != "" {
+	switch limits := limitsOf(epic); {
+	case limits != "":
 		parts = append(parts, "Limits from "+epic.ID+" (copied from the epic):\n\n"+limits)
+	case idea.Epic != "" && epic == nil:
+		parts = append(parts, "The epic "+idea.Epic+" this follows up wasn't found, so its limits weren't copied.")
 	}
 	return strings.Join(parts, "\n\n")
 }
