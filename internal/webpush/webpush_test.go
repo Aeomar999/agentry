@@ -139,8 +139,11 @@ func TestAMalformedSubscriptionIsRefused(t *testing.T) {
 func TestAFileThatCantBeReadIsAnErrorNotNewKeys(t *testing.T) {
 	path := filepath.Join(t.TempDir(), File)
 	os.WriteFile(path, []byte("{not json"), 0o600)
-	if _, err := Open(path); err == nil || !strings.Contains(err.Error(), path) {
+	_, err := Open(path)
+	if err == nil || !strings.Contains(err.Error(), path) {
 		t.Errorf("want an error naming the file, got %v", err)
+	} else if !strings.Contains(err.Error(), "move it aside to start with new keys") {
+		t.Errorf("want how to recover, got %v", err)
 	}
 	if saved, _ := os.ReadFile(path); string(saved) != "{not json" {
 		t.Errorf("the file was replaced: %s", saved)

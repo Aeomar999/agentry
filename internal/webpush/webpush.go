@@ -74,21 +74,26 @@ func Open(path string) (*Store, error) {
 		return create(path)
 	}
 	if err != nil {
-		return nil, err
+		return nil, unreadable(err)
 	}
 	var file onDisk
 	if err := json.Unmarshal(saved, &file); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, unreadable(fmt.Errorf("%s: %w", path, err))
 	}
 	scalar, err := base64.RawURLEncoding.DecodeString(file.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("%s: the private key: %w", path, err)
+		return nil, unreadable(fmt.Errorf("%s: the private key: %w", path, err))
 	}
 	key, err := ecdsa.ParseRawPrivateKey(elliptic.P256(), scalar)
 	if err != nil {
-		return nil, fmt.Errorf("%s: the private key: %w", path, err)
+		return nil, unreadable(fmt.Errorf("%s: the private key: %w", path, err))
 	}
 	return &Store{path: path, key: key, subscriptions: file.Subscriptions}, nil
+}
+
+// unreadable is err, which names the file, with how to recover from it.
+func unreadable(err error) error {
+	return fmt.Errorf("%w. Fix the file, or move it aside to start with new keys, which ends every subscription: each device has to subscribe again", err)
 }
 
 // removeLeftovers deletes the temporary files of writes to path that never
