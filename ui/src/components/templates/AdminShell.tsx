@@ -16,6 +16,7 @@ import { useResource } from "@/live/use-resource";
 import { AgentColorsProvider } from "@/live/agent-colors";
 import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
+import { CrumbContext } from "@/lib/breadcrumb";
 import { readStored, writeStored } from "@/lib/stored";
 import { useFeatures, visibleFeatures } from "@/features";
 
@@ -24,14 +25,6 @@ import { useFeatures, visibleFeatures } from "@/features";
 // change, and a page only supplies its breadcrumb (with useBreadcrumb) and
 // its content. An agent's terminal is on its task's page, not in the dock.
 // A page opens the dock on one question with useOpenQuestion.
-
-const CrumbContext = createContext<(crumbs: Crumb[]) => void>(() => {});
-
-export function useBreadcrumb(...crumbs: Crumb[]): void {
-  const setCrumbs = useContext(CrumbContext);
-  const key = JSON.stringify(crumbs);
-  useEffect(() => setCrumbs(JSON.parse(key)), [key, setCrumbs]);
-}
 
 const QuestionContext = createContext<(questionId: string) => void>(() => {});
 

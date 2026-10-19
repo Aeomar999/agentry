@@ -12,7 +12,7 @@ import {
   Play,
   Plus,
 } from "lucide-react";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Banner } from "@/components/molecules/Banner";
 import { EmptyState } from "@/components/molecules/EmptyState";

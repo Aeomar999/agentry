@@ -1,5 +1,5 @@
 import { FileQuestion } from "lucide-react";
-import { useBreadcrumb } from "@/components/templates/AdminShell";
+import { useBreadcrumb } from "@/lib/breadcrumb";
 import { EmptyState } from "@/components/molecules/EmptyState";
 
 export function NotFoundPage() {
