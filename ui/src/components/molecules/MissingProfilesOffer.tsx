@@ -15,8 +15,8 @@ interface MissingProfilesOfferProps {
 export function MissingProfilesOffer({ team, profiles, adding, disabled, onAdd }: MissingProfilesOfferProps) {
   return (
     <Banner tone="info" title={`The ${team} team needs ${profilesNamed(profiles)}, which your policy file doesn't have`}>
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="min-w-0 flex-1">Agentry adds the default text to policy.toml, keeping a backup, then adds the {team} team.</span>
+      <div className="flex flex-col items-start gap-2">
+        <span>Agentry adds the default text to policy.toml, keeping a backup, then adds the {team} team.</span>
         <Button size="sm" variant="primary" disabled={adding || disabled} onClick={onAdd}>
           {adding ? "Adding…" : profiles.length === 1 ? "Add the profile and the team" : "Add the profiles and the team"}
         </Button>
