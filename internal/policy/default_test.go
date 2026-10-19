@@ -1,8 +1,11 @@
 package policy
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -472,6 +475,43 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 			{"an exported lower-case variable", bash("export go=./x.sh; make test"), Ask},
 			{"declare -x lower case", bash("declare -x go=./x.sh; make test"), Ask},
 		})
+	}
+}
+
+// manyValues gives c far more values than a word may have: a loop's 64 items
+// times each of 600 assignments (task-30, review round 6).
+func manyValues(use string) Call {
+	items := make([]string, maxValues)
+	for i := range items {
+		items[i] = strconv.Itoa(i)
+	}
+	var command strings.Builder
+	fmt.Fprintf(&command, "for p in %s; do :; done; ", strings.Join(items, " "))
+	for i := range 600 {
+		fmt.Fprintf(&command, "c=${p}a%d; ", i)
+	}
+	command.WriteString(use)
+	return bash(command.String())
+}
+
+func TestAVariableWithTooManyValuesIsUnknown(t *testing.T) {
+	p := loadDefault(t)
+	for _, profile := range []string{"read-only", "read-mostly", "developer"} {
+		check(t, p, profile, []decisionCase{
+			{"git $c", manyValues("git $c"), Ask},
+			{"git $c after a push to main", manyValues("git push -f origin main $c"), Deny},
+		})
+	}
+	check(t, p, "read-only", []decisionCase{{"git $c after a commit", manyValues("git commit -m x $c"), Deny}})
+}
+
+func TestAVariableWithTooManyValuesIsJudgedQuickly(t *testing.T) {
+	p := loadDefault(t)
+	call := manyValues("git $c")
+	start := time.Now()
+	p.Decide("read-only", call)
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("a %d-byte command took %v to judge", len(call.Input), took)
 	}
 }
 

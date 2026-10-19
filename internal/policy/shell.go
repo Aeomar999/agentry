@@ -123,9 +123,15 @@ func (s *shellInspector) learnOnce(file *syntax.File) (unsure bool) {
 	return unsure
 }
 
-// learn adds the values a variable doesn't have yet.
+// learn adds the values a variable doesn't have yet. It stops at maxValues+1:
+// a variable with more than maxValues values is unknown in every word, so
+// which values past that it holds changes no verdict, and a full list no
+// longer grows, so learnVariables still sees the values settle.
 func (s *shellInspector) learn(name string, values []string) {
 	for _, value := range values {
+		if len(s.variables[name]) > maxValues {
+			return
+		}
 		if !slices.Contains(s.variables[name], value) {
 			s.variables[name] = append(s.variables[name], value)
 		}
