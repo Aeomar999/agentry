@@ -281,6 +281,9 @@ func (s *Server) tryPolicy(w http.ResponseWriter, r *http.Request) {
 	case request.Workspace != "" && !filepath.IsAbs(request.Workspace):
 		http.Error(w, "the workspace must be an absolute path", http.StatusBadRequest)
 		return
+	case request.Workspace == "" && s.config.Worktrees == "":
+		http.Error(w, "this server has no worktrees folder to put a stand-in workspace in: name an absolute workspace", http.StatusBadRequest)
+		return
 	}
 	workspace := s.standInWorkspace()
 	if request.Workspace != "" {

@@ -27,7 +27,9 @@ type policyServer struct {
 	path string
 }
 
-func servePolicy(t *testing.T, text string) policyServer {
+// servePolicy serves the policy text; configure, if given, changes the
+// server's Config first.
+func servePolicy(t *testing.T, text string, configure ...func(*Config)) policyServer {
 	t.Helper()
 	data := t.TempDir()
 	db := filepath.Join(data, "agentry.db")
@@ -41,8 +43,12 @@ func servePolicy(t *testing.T, text string) policyServer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DeskToken: "desk-secret", HelperToken: "helper-secret",
-		Policy: live, Local: workers.Machine{Version: "v0.9.0"}, Worktrees: filepath.Join(data, "worktrees")}, http.NotFoundHandler(), nil).Handler())
+	config := Config{UIToken: token, DeskToken: "desk-secret", HelperToken: "helper-secret",
+		Policy: live, Local: workers.Machine{Version: "v0.9.0"}, Worktrees: filepath.Join(data, "worktrees")}
+	for _, c := range configure {
+		c(&config)
+	}
+	server := httptest.NewServer(NewServer(s, state, config, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
 	return policyServer{Server: server, log: s, live: live, path: path}
 }
@@ -543,6 +549,17 @@ func TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys(t *testing.T) {
 	named := try(t, server, `{"profile":"developer","tool":"Edit","input":"/srv/app/main.go","workspace":"/srv/app/"}`)
 	if named.Workspace != "/srv/app" || named.Verdict.Rule != "edit inside the workspace, the diff is reviewed" {
 		t.Errorf("a named workspace is used, cleaned: got %q %+v", named.Workspace, named.Verdict)
+	}
+}
+
+func TestATriedCallNeedsAWorkspaceWhenThereAreNoWorktrees(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()), func(c *Config) { c.Worktrees = "" })
+	code, body := call(t, server.Server, "POST", "/api/policy/try", `{"profile":"developer","tool":"Edit","input":"main.go"}`)
+	if code != http.StatusBadRequest || !strings.Contains(body, "name an absolute workspace") {
+		t.Errorf("with no worktrees folder there is no stand-in: got %d %s", code, body)
+	}
+	if got := try(t, server, `{"profile":"developer","tool":"Edit","input":"/srv/app/main.go","workspace":"/srv/app"}`); got.Workspace != "/srv/app" {
+		t.Errorf("a named workspace is still judged: got %+v", got)
 	}
 }
 
