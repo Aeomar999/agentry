@@ -292,7 +292,7 @@ func TestThePinnedInstallCommandRunsInPowerShell(t *testing.T) {
 
 	fake, faked := impostor(t, ca)
 	out, _, _ = runShell(t, pwsh, commands(fake, "/worker/install", code, ca.Fingerprint())["windowsCommand"].(string))
-	if strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
+	if !strings.Contains(out, "Couldn't get the script") || strings.Contains(out, "impostor") || len(withCode(faked())) != 0 {
 		t.Errorf("an impostor with the CA:\n%s\nits requests: %v", out, faked())
 	}
 }

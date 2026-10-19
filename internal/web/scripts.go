@@ -108,7 +108,9 @@ var pinnedPowerShell = strings.Join([]string{
 	`curl.exe -fsSk "$server/trust/ca.crt" -o $ca; if ($LASTEXITCODE) { return };`,
 	`if ((Get-FileHash $ca -Algorithm SHA256).Hash -ne $fingerprint) { Write-Error "` + otherCA("$server") + `"; return };`,
 	`Set-Content $ca ('-----BEGIN CERTIFICATE-----', [Convert]::ToBase64String([IO.File]::ReadAllBytes($ca), 'InsertLineBreaks'), '-----END CERTIFICATE-----');`,
-	`curl.exe -fsSL --cacert $ca --ssl-no-revoke $script | Out-String | iex`,
+	`$text = curl.exe -fsSL --cacert $ca --ssl-no-revoke $script | Out-String;`,
+	`if ($LASTEXITCODE) { Write-Error "Couldn't get the script from $server, so nothing was run."; return };`,
+	`$text | iex`,
 	`} finally { Remove-Item $ca }`,
 }, " ")
 
