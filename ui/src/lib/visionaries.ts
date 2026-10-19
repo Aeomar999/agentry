@@ -53,8 +53,9 @@ export function useAskVisionaries(): AskVisionaries {
     ready: data !== undefined,
     has,
     adding,
-    error,
-    missingProfiles: has ? [] : missingProfiles, // the team may have been added elsewhere
+    // the team may have been added elsewhere, so drop what adding it left
+    error: has ? "" : error,
+    missingProfiles: has ? [] : missingProfiles,
     ask: () => ask(),
     askAddingProfiles: () => ask(true),
   };
