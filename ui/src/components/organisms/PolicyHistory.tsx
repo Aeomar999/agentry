@@ -104,7 +104,10 @@ function RevertDialog({ version, onClose, onRevert }: { version: PolicyVersion; 
         {change && !change.diff && <p>This version is the one in force: reverting to it changes nothing.</p>}
         {change?.diff && (
           <>
-            <p>Reverting replaces the policy in force with this version, written back to policy.toml as a new one. It changes:</p>
+            <p>
+              Reverting replaces the policy in force with this version ({version.change}), written back to policy.toml as a new one. The
+              text in force now stays in History and in a backup. It changes:
+            </p>
             <Diff text={change.diff} className="border border-divider" />
           </>
         )}
