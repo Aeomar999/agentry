@@ -133,7 +133,8 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
       </header>
 
       <div className="relative min-h-0 flex-1">
-        <div ref={scroller} onScroll={onScroll} className="h-full scrollbar-thin overflow-y-auto">
+        {/* Positioned, so screen-reader-only text in a message is placed in it, not the page. */}
+        <div ref={scroller} onScroll={onScroll} className="relative h-full scrollbar-thin overflow-y-auto">
           <ol className="mx-auto flex max-w-3xl flex-col px-6 pt-4 pb-6">
             {entries.map((entry) => (
               <Entry

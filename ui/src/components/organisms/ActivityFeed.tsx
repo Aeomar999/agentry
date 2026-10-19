@@ -131,7 +131,8 @@ export function ActivityFeed(props: ActivityFeedProps) {
           onScroll={onScroll}
           aria-busy={loading || undefined}
           // Focus and the row you came to see stop under the stuck band, and on a phone above Newest.
-          className="h-full scroll-pt-11 scrollbar-thin overflow-y-auto max-md:scroll-pb-12"
+          // Positioned, so screen-reader-only text (absolute) is placed in it and scrolls with it, not the page.
+          className="relative h-full scroll-pt-11 scrollbar-thin overflow-y-auto max-md:scroll-pb-12"
         >
           {error ? (
             <LoadError error={error} onRetry={onRetry} />

@@ -141,6 +141,12 @@ describe("ActivityFeed", () => {
     for (const chip of container.querySelectorAll("h3 [class*='size-5']")) expect(chip.getAttribute("aria-hidden")).toBe("true");
   });
 
+  test("keeps screen-reader text in the tab's own scroller, its positioned box, so the page doesn't grow", () => {
+    const { container } = feed();
+    const said = [...container.querySelectorAll(".sr-only")].find((span) => span.textContent === " to ")!;
+    expect(said.parentElement!.closest(".relative")!.className).toContain("overflow-y-auto");
+  });
+
   test("loads no Monaco while no command is near the screen", async () => {
     feed();
     await new Promise((resolve) => setTimeout(resolve, 20));
