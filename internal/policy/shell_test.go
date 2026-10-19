@@ -66,7 +66,28 @@ func TestWordsAreReadAsBashReadsThem(t *testing.T) {
 		{`"{a,b}"`, []string{"{a,b}"}},
 		{`{a}`, []string{"{a}"}},
 		{`a{b,c`, []string{"a{b,c"}},
-		{`x{1..3}`, nil},
+		{`{a}b,c}`, []string{"a}b", "c"}},
+		{`{a}{b,c}`, []string{"{a}b", "{a}c"}},
+		{`{a}b,{c}`, []string{"{a}b,{c}"}},
+		{`{},}1`, []string{"{},}1"}},
+		{`x{},}1`, []string{"x}1", "x1"}},
+		{`x{1..3}`, []string{"x1", "x2", "x3"}},
+		{`{3..1}`, []string{"3", "2", "1"}},
+		{`{a..c}`, []string{"a", "b", "c"}},
+		{`{C..A}`, []string{"C", "B", "A"}},
+		{`{1..10..4}`, []string{"1", "5", "9"}},
+		{`{10..1..-4}`, []string{"10", "6", "2"}},
+		{`{-2..1}`, []string{"-2", "-1", "0", "1"}},
+		{`{01..03}`, []string{"01", "02", "03"}},
+		{`{1..010..4}`, []string{"001", "005", "009"}},
+		{`{5..5}`, []string{"5"}},
+		{`{1..2}{a,b}`, []string{"1a", "1b", "2a", "2b"}},
+		{`{1..65}`, nil},    // more than maxValues words
+		{`{-01..2}`, nil},   // bash pads a negative number as -01 000
+		{`{a..Z}`, nil},     // letters of mixed case
+		{`{+1..3}`, nil},    // a sign
+		{`{1..a}`, nil},     // bash leaves it as it is
+		{`{1..{2,3}}`, nil}, // bash makes {1..2} {1..3}
 		{`$x{y,}`, nil},
 	}
 	for _, c := range cases {

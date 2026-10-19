@@ -822,7 +822,12 @@ func TestTheJudgingProfilesReadWordsAsBashDoes(t *testing.T) {
 			{"a brace in a loop list", bash("for d in {internal," + scratch + "}; do cd $d; done; go test ./..."), Ask},
 			{"a brace in a redirect", bash("echo x > {" + scratch + "/../../../../../home/f,}"), Deny},
 			{"a brace in a declaration", bash("declare d={a,}; ls"), Ask},
-			{"a sequence", bash("go test ./x{1..3}/"), Ask},
+			{"a sequence", bash("go test ./x{1..3}/"), Allow},
+			{"a sequence outside", bash("go test {" + scratch + ",.}/x{1..3}/"), Ask},
+			{"a sequence in a loop list", bash("for i in {1..3}; do go test -count=1 ./...; done"), Allow},
+			{"a sequence bash may read otherwise", bash("ls {1..a}"), Ask},
+			{"a brace that stays open past a }", bash("cd {" + scratch + "}x,} && npm test"), Ask},
+			{"$ and a backslash-newline next to a brace", bash("x=" + scratch + "; go test $\\\nx{,}/..."), Ask},
 			{"a brace next to $name", bash("x=.; xy=" + scratch + "; go test $x{y,}/..."), Ask},
 
 			// a brace bash leaves as text, and a backslash that changes nothing
@@ -876,6 +881,8 @@ func TestOnlyTheJudgingProfilesAskAboutRunnersOutside(t *testing.T) {
 		{"jest escaped JSON", bash(`npx jest --transform='{"x":"` + escaped + `/t.js"}'`), Allow},
 		{"go test an escaped scratch path", bash(`go test \` + scratch + "/..."), Allow},
 		{"go test a brace", bash("go test ./internal/{policy,tasks}/"), Allow},
+		{"a sequence in a loop list", bash("for i in {1..3}; do echo $i; done"), Allow},
+		{"ls a sequence", bash("ls {1..3}"), Allow},
 	})
 	for _, profile := range []string{"autonomous", "allow-everything"} {
 		check(t, p, profile, []decisionCase{

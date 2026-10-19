@@ -2,8 +2,10 @@ package policy
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"mvdan.cc/sh/v3/syntax"
@@ -953,12 +955,12 @@ func unescaped(text string, quoted bool) string {
 	return b.String()
 }
 
-// expandBraces makes each word of the command's calls and loop lists into the
-// words bash's brace expansion makes of it, before anything else reads them,
-// and redirects, as bash does: go test ./{a,b}/ is go test ./a/ ./b/, and
-// > {a,} writes a. A brace that can't be expanded here leaves its word as it
-// is and the call unknown: not ok. So does one that expands in a declaration
-// or a redirect (declare x={a,} sets x to "", while x={a,} sets {a,}).
+// expandBraces replaces each word of a call or loop list with the words brace
+// expansion makes of it, before anything else reads them: go test ./{a,b}/ is
+// go test ./a/ ./b/. It rewrites the parsed file in place. A word it can't
+// expand, and any brace that would expand in a declaration or a redirect,
+// leaves the call unknown: not ok (declare x={a,} sets x to "", while x={a,}
+// sets {a,}).
 func expandBraces(file *syntax.File) (ok bool) {
 	ok = true
 	expandAll := func(words []*syntax.Word) []*syntax.Word {
@@ -1011,9 +1013,10 @@ type braceAtom struct {
 }
 
 // braceWords is the words brace expansion makes of word: {a,b}c is ac bc,
-// x{a,} is just xa. Not ok for a sequence ({1..3}), for more than maxValues
-// words, and next to a $name or a $ that joins the next line, which bash reads
-// again after expanding, so that $x{y,} is $xy $x.
+// x{a,} is just xa, x{1..3} is x1 x2 x3. Not ok for a sequence this can't
+// read ({1..a}), for more than maxValues words, and next to a $name or a $
+// that joins the next line, which bash reads again after expanding, so that
+// $x{y,} is $xy $x.
 func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
 	atoms := braceAtoms(word)
 	if !slices.ContainsFunc(atoms, func(a braceAtom) bool { return a.brace && a.text == "{" }) {
@@ -1023,7 +1026,7 @@ func braceWords(word *syntax.Word) ([]*syntax.Word, bool) {
 	if !ok || len(ways) > maxValues {
 		return nil, false
 	}
-	if len(ways) == 1 {
+	if len(ways) == 1 && len(ways[0]) == len(atoms) { // nothing expanded; {5..5} did
 		return []*syntax.Word{word}, true
 	}
 	if joinsDollar(word.Parts) || slices.ContainsFunc(word.Parts, func(part syntax.WordPart) bool {
@@ -1062,42 +1065,30 @@ func braceAtoms(word *syntax.Word) []braceAtom {
 	return atoms
 }
 
-// expandAtoms expands the first {…} holding a comma at its own level, and
-// the rest after it, as bash does. A {…} without one stays text, but a
-// brace inside it may still expand ({x{a,b}} is {xa} {xb}).
+// expandAtoms expands the first {…} holding a comma at its own level, or a
+// sequence, and the rest after it, as bash does. A { that doesn't close stays
+// text, but a brace after it may still expand ({x{a,b}} is {xa} {xb}).
 func expandAtoms(atoms []braceAtom) ([][]braceAtom, bool) {
 	for open, a := range atoms {
-		if !a.brace || a.text != "{" {
+		if !a.brace || a.text != "{" || open == 0 && isBrace(atoms, 1, "}") { // a word's first {} is text, as in find -exec
 			continue
 		}
 		end, commas := closingBrace(atoms, open)
 		if end < 0 {
 			continue
 		}
-		if len(commas) == 0 {
-			if strings.Contains(atomsText(atoms[open+1:end]), "..") {
-				return nil, false // maybe a sequence: {1..3}, {a..c}
-			}
-			continue
-		}
-		rest, ok := expandAtoms(atoms[end+1:])
+		choices, ok := braceChoices(atoms, open, end, commas)
 		if !ok {
 			return nil, false
 		}
+		rest, ok := expandAtoms(atoms[end+1:])
+		if !ok || len(choices)*len(rest) > maxValues {
+			return nil, false
+		}
 		var ways [][]braceAtom
-		for i, start := range append([]int{open}, commas...) {
-			stop := end
-			if i < len(commas) {
-				stop = commas[i]
-			}
-			choices, ok := expandAtoms(atoms[start+1 : stop])
-			if !ok || len(ways)+len(choices)*len(rest) > maxValues {
-				return nil, false
-			}
-			for _, choice := range choices {
-				for _, after := range rest {
-					ways = append(ways, slices.Concat(atoms[:open], choice, after))
-				}
+		for _, choice := range choices {
+			for _, after := range rest {
+				ways = append(ways, slices.Concat(atoms[:open], choice, after))
 			}
 		}
 		return ways, true
@@ -1105,25 +1096,132 @@ func expandAtoms(atoms []braceAtom) ([][]braceAtom, bool) {
 	return [][]braceAtom{atoms}, true
 }
 
+// braceChoices is what one {…} expands to: each of its comma-separated parts
+// expanded, or a sequence's terms. Not ok for a sequence this can't read.
+func braceChoices(atoms []braceAtom, open, end int, commas []int) ([][]braceAtom, bool) {
+	if len(commas) == 0 {
+		return sequence(atoms[open+1 : end])
+	}
+	var choices [][]braceAtom
+	start := open
+	for _, stop := range append(commas, end) {
+		parts, ok := expandAtoms(atoms[start+1 : stop])
+		if !ok || len(choices)+len(parts) > maxValues {
+			return nil, false
+		}
+		choices = append(choices, parts...)
+		start = stop
+	}
+	return choices, true
+}
+
+// sequence is the terms of a brace sequence as bash makes them: {1..3} is
+// 1 2 3, {3..1} is 3 2 1, {1..10..3} is 1 4 7 10, {01..03} is 01 02 03, and
+// {a..c} is a b c. Not ok for any other {x..y}: a sign, a negative number
+// padded with zeros, letters of mixed case, or a step that isn't a number.
+func sequence(inner []braceAtom) ([][]braceAtom, bool) {
+	for _, a := range inner {
+		if a.part != nil || a.brace || len(a.text) != 1 {
+			return nil, false
+		}
+	}
+	ends := strings.Split(atomsText(inner), "..")
+	if len(ends) != 2 && len(ends) != 3 {
+		return nil, false
+	}
+	step := 1
+	if len(ends) == 3 {
+		var ok bool
+		if step, ok = sequenceNumber(ends[2]); !ok {
+			return nil, false
+		}
+		step = max(step, -step, 1)
+	}
+	first, last, format, ok := sequenceEnds(ends[0], ends[1])
+	if !ok || (max(first, last)-min(first, last))/step+1 > maxValues {
+		return nil, false
+	}
+	if last < first {
+		step = -step
+	}
+	var terms [][]braceAtom
+	for n := first; step > 0 && n <= last || step < 0 && n >= last; n += step {
+		term := format(n)
+		atoms := make([]braceAtom, len(term))
+		for i := range term {
+			atoms[i] = braceAtom{text: term[i : i+1]}
+		}
+		terms = append(terms, atoms)
+	}
+	return terms, true
+}
+
+// sequenceEnds reads a sequence's two ends, both numbers or both letters of
+// one case, and how each term is written.
+func sequenceEnds(from, to string) (first, last int, format func(int) string, ok bool) {
+	isLetter := func(s string) bool { return len(s) == 1 && ('a' <= s[0] && s[0] <= 'z' || 'A' <= s[0] && s[0] <= 'Z') }
+	if isLetter(from) && isLetter(to) {
+		sameCase := ('a' <= from[0]) == ('a' <= to[0])
+		return int(from[0]), int(to[0]), func(n int) string { return string(rune(n)) }, sameCase
+	}
+	first, okFirst := sequenceNumber(from)
+	last, okLast := sequenceNumber(to)
+	if !okFirst || !okLast {
+		return 0, 0, nil, false
+	}
+	padded := func(s string) bool {
+		digits := strings.TrimPrefix(s, "-")
+		return len(digits) > 1 && digits[0] == '0'
+	}
+	if !padded(from) && !padded(to) {
+		return first, last, strconv.Itoa, true
+	}
+	if first < 0 || last < 0 {
+		return 0, 0, nil, false
+	}
+	width := max(len(from), len(to))
+	return first, last, func(n int) string { return fmt.Sprintf("%0*d", width, n) }, true
+}
+
+// sequenceNumber reads a whole number of up to nine digits, maybe after a -.
+func sequenceNumber(s string) (int, bool) {
+	digits := strings.TrimPrefix(s, "-")
+	if digits == "" || len(digits) > 9 || strings.Trim(digits, "0123456789") != "" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(s)
+	return n, err == nil
+}
+
 // closingBrace is where the { at open closes, -1 when it doesn't, and the
-// commas at its own level.
+// commas at its own level. As in bash, a } before any comma, which isn't the
+// end of something like a sequence, leaves the { open: {a}b,c} is a}b c.
 func closingBrace(atoms []braceAtom, open int) (end int, commas []int) {
-	depth := 0
+	depth, dots := 0, false
 	for i := open; i < len(atoms); i++ {
 		switch {
 		case !atoms[i].brace:
+			dots = dots || atoms[i].text == "." && atoms[i-1].text == "."
 		case atoms[i].text == "{":
 			depth++
 		case atoms[i].text == "}":
 			depth--
-			if depth == 0 {
+			if depth > 0 {
+				continue
+			}
+			if len(commas) > 0 || dots {
 				return i, commas
 			}
+			depth = 1
 		case depth == 1:
 			commas = append(commas, i)
 		}
 	}
 	return -1, nil
+}
+
+func isBrace(atoms []braceAtom, i int, brace string) bool {
+	return i < len(atoms) && atoms[i].brace && atoms[i].text == brace
 }
 
 func atomsText(atoms []braceAtom) string {
