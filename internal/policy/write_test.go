@@ -52,3 +52,44 @@ func TestWriteFileKeepsABackupFirst(t *testing.T) {
 		t.Errorf("editing the backup: %s (%s), want it denied as Agentry's own file", v.Decision, v.Rule)
 	}
 }
+
+func TestWriteFileKeepsTheFilesMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "policy.toml")
+	if err := os.WriteFile(path, Default(), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	os.Chmod(path, 0o640) // whatever the umask
+	off, _ := TurnOffUseForEveryone(Default())
+	if _, err := WriteFile(path, off, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o640 {
+		t.Errorf("mode %v after the write, want the old file's -rw-r-----", info.Mode().Perm())
+	}
+}
+
+func TestWriteFileRefusesALinkedPolicy(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "elsewhere.toml")
+	if err := os.WriteFile(real, Default(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "policy.toml")
+	if err := os.Symlink(real, path); err != nil {
+		t.Fatal(err)
+	}
+	off, _ := TurnOffUseForEveryone(Default())
+	if _, err := WriteFile(path, off, time.Now()); err == nil || err.Error() != "policy.toml is a link; edit it yourself" {
+		t.Errorf("writing over a link: %v", err)
+	}
+	if info, _ := os.Lstat(path); info.Mode()&os.ModeSymlink == 0 {
+		t.Error("the link should still be a link")
+	}
+	if text, _ := os.ReadFile(real); string(text) != string(Default()) {
+		t.Error("the file it links to should be as it was")
+	}
+	names, _ := filepath.Glob(filepath.Join(dir, "*"))
+	if want := []string{real, path}; !slices.Equal(names, want) {
+		t.Errorf("files %v, want only %v: no backup or temporary file", names, want)
+	}
+}
