@@ -65,6 +65,10 @@ type serveOptions struct {
 	archiveAfter time.Duration // how long a task is done before it is archived; 0 never archives
 }
 
+// defaultArchiveAfter is how long a task is done before it is archived
+// when -archive-after isn't given: 30 days.
+const defaultArchiveAfter = 30 * 24 * time.Hour
+
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	options, ok := parseServe(args, stderr)
 	if !ok {
@@ -95,7 +99,7 @@ func parseServe(args []string, stderr io.Writer) (serveOptions, bool) {
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
-	flags.DurationVar(&options.archiveAfter, "archive-after", 0, "archive tasks done for this long, such as 720h; 0 (the default) never archives. An archived task opens, but can't be reopened yet")
+	flags.DurationVar(&options.archiveAfter, "archive-after", defaultArchiveAfter, "archive tasks done for this long, 30 days by default; 0 never archives. An archived task still opens, and reopening it brings it back")
 	if flags.Parse(args) != nil {
 		return options, false
 	}
@@ -164,6 +168,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		archiver := archive.New(log, state, blobs, snapshots, o.archiveAfter)
 		archiver.Start()
 		defer archiver.Close() // the task under way finishes before the last snapshot
+	} else {
+		slog.Info("agentry: archiving is off (-archive-after=0)")
 	}
 	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {

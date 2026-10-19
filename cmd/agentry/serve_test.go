@@ -220,9 +220,11 @@ func TestAnUnhashedBuildNeverUsesASnapshot(t *testing.T) {
 	}
 }
 
-// -archive-after is a duration, 0 by default; a negative one is refused.
+// -archive-after is a duration, 30 days by default; 0 turns archiving off,
+// and a negative one is refused. What open passes on parses too.
 func TestServeParsesArchiveAfter(t *testing.T) {
-	for args, want := range map[string]time.Duration{"": 0, "-archive-after=720h": 720 * time.Hour, "-archive-after=0": 0} {
+	for args, want := range map[string]time.Duration{"": 720 * time.Hour, "-archive-after=48h": 48 * time.Hour, "-archive-after=48h0m0s": 48 * time.Hour,
+		"-archive-after=0": 0, "-archive-after=0s": 0} {
 		var said strings.Builder
 		options, ok := parseServe(strings.Fields(args), &said)
 		if !ok || options.archiveAfter != want {
@@ -236,8 +238,8 @@ func TestServeParsesArchiveAfter(t *testing.T) {
 }
 
 // serve archives a task done for -archive-after, at start, and logs that it
-// does; with the default 0 it archives nothing, however long a task has
-// been done.
+// does; with 0 it archives nothing, however long a task has been done, and
+// logs that archiving is off.
 func TestServeArchivesOnlyWithArchiveAfter(t *testing.T) {
 	for _, after := range []time.Duration{0, time.Nanosecond} {
 		dataDir := t.TempDir()
@@ -248,6 +250,9 @@ func TestServeArchivesOnlyWithArchiveAfter(t *testing.T) {
 		}
 		if said := strings.Contains(logged, "archiving tasks done for "+after.String()); said != (after > 0) {
 			t.Errorf("with -archive-after=%v, logged that it archives: %v; log:\n%s", after, said, logged)
+		}
+		if off := strings.Contains(logged, "archiving is off (-archive-after=0)"); off != (after == 0) {
+			t.Errorf("with -archive-after=%v, logged that archiving is off: %v; log:\n%s", after, off, logged)
 		}
 	}
 }

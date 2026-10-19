@@ -37,10 +37,11 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.Bool("https", false, "serve over https with Agentry's own local CA (see agentry serve -h)")
 	flags.Int("budget", 0, "the tokens a new task may use before it asks you; 0 for no limit (serve's default when not given)")
 	flags.Int("max-turns", 0, "the turns a new task may have without your answer; 0 for no limit (serve's default when not given)")
+	flags.Duration("archive-after", 0, "archive tasks done for this long; 0 never archives (serve's default, 30 days, when not given)")
 	if flags.Parse(args) != nil {
 		return 2
 	}
-	passed := passedOn(flags, "https", "budget", "max-turns")
+	passed := passedOn(flags, "https", "budget", "max-turns", "archive-after")
 	dropParentSession(stderr) // before the server starts, so it doesn't inherit them
 	for _, tool := range []string{"git", "claude"} {
 		if _, err := exec.LookPath(tool); err != nil {
