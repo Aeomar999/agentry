@@ -36,6 +36,7 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 			io.WriteString(w, `[{"id":"task-2","title":"Ship it","repo":"/repo","status":"needs you","kind":"epic","stories":2,"storiesDone":2,"rank":-2},
 				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1},
 				{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","rank":-3},
+				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4},
 				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
 		case "GET /api/tasks/task-3":
 			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished."}`)
@@ -132,13 +133,17 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 
 	board := c.tool("status", map[string]any{})
-	for _, want := range []string{"Agentry board for /repo", "task-1: deployer asks to run git push origin dev", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done"} {
+	for _, want := range []string{"Agentry board for /repo", "task-1: deployer asks to run git push origin dev", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
+		"task-4 Release: deployer is working (Shipping)"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("the board is missing %q:\n%s", want, board)
 		}
 	}
 	if strings.Contains(board, "Elsewhere") {
 		t.Errorf("another repo's task is on this repo's board:\n%s", board)
+	}
+	if listed := c.tool("list_tasks", map[string]any{}); !strings.Contains(listed, "task-4 [working · Shipping] Release") {
+		t.Errorf("list_tasks should name the board column:\n%s", listed)
 	}
 
 	created := c.tool("create_task", map[string]any{"title": "Add a retry", "description": "Retry on 503."})
