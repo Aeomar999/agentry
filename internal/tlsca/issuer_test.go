@@ -117,6 +117,20 @@ func TestANewCertificateNearItsEnd(t *testing.T) {
 	}
 }
 
+func TestANewCertificateWhenTheClockWentBack(t *testing.T) {
+	i, w := newIssuer(t)
+	first := certificate(t, i)
+	w.set(first.Leaf.NotBefore, w.Hosts()...)
+	if certificate(t, i) != first {
+		t.Fatal("issued again at the certificate's start")
+	}
+	w.set(first.Leaf.NotBefore.Add(-time.Second), w.Hosts()...)
+	second := certificate(t, i)
+	if second == first || second.Leaf.NotBefore.After(w.Now()) {
+		t.Errorf("served a certificate that begins at %v, at %v", second.Leaf.NotBefore, w.Now())
+	}
+}
+
 // Run with -race: handshakes ask for the certificate at once, while the
 // addresses change under them.
 func TestConcurrentHandshakes(t *testing.T) {

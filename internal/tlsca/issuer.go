@@ -58,7 +58,7 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 	i.listHosts(now)
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	if i.cert != nil && slices.Equal(i.issued, i.listed) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore)) {
+	if i.cert != nil && slices.Equal(i.issued, i.listed) && i.inTime(now) {
 		return i.cert, nil
 	}
 	// Issued under the lock for the list kept, so a certificate for an
@@ -69,6 +69,13 @@ func (i *Issuer) Certificate() (*tls.Certificate, error) {
 	}
 	i.cert, i.issued = cert, i.listed
 	return cert, nil
+}
+
+// inTime is whether the certificate kept may still be served at now: it has
+// begun, as it hasn't after the clock went back, and isn't within
+// renewBefore of its end.
+func (i *Issuer) inTime(now time.Time) bool {
+	return !now.Before(i.cert.Leaf.NotBefore) && now.Before(i.cert.Leaf.NotAfter.Add(-renewBefore))
 }
 
 // listHosts asks for the hosts again once the list is hostsFresh old, or
