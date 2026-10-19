@@ -2,7 +2,8 @@ import { ReactNode, useEffect } from "react";
 import { cn } from "@/lib/cn";
 
 // A modal: a dimmed page behind, Esc or a click outside closes it. Wide fits
-// a line of shell; large fits a form. A body taller than the window scrolls.
+// a line of shell; large fits a form. A body taller than the window scrolls,
+// the dialog ending above the window's bottom edge.
 export function Dialog({
   title,
   onClose,
@@ -31,8 +32,8 @@ export function Dialog({
         role="dialog"
         aria-label={title}
         className={cn(
-          "flex max-h-[88vh] w-full flex-col rounded-lg border border-divider-2 bg-surface-1",
-          large ? "max-w-3xl" : wide ? "max-w-2xl" : "max-w-md",
+          "flex w-full flex-col rounded-lg border border-divider-2 bg-surface-1",
+          large ? "max-h-[88vh] max-w-3xl" : wide ? "max-h-[80vh] max-w-2xl" : "max-h-[80vh] max-w-md",
         )}
         onMouseDown={(event) => event.stopPropagation()}
       >
