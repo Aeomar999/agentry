@@ -96,11 +96,11 @@ func (l *Loop) acceptAgreed(repo string, added []string) {
 	roster := l.state.Roster()
 	for _, id := range added {
 		i := slices.IndexFunc(list, func(idea *ideas.Idea) bool { return idea.ID == id })
-		if i < 0 || !ideas.Agreed(list[i], roster, ideas.VisionariesTeam) {
+		if i < 0 {
 			continue
 		}
-		if why := ideas.Repeats(list[i], list, l.madeFromIdea); why != "" {
-			slog.Info("coordinator loop: an agreed idea is left for you", "idea", id, "why", why)
+		if why := ideas.NotAutoAccepted(list[i], list, roster, now.AutoAcceptRule); why != "" {
+			slog.Info("coordinator loop: an idea is left for you", "idea", id, "why", why)
 			continue
 		}
 		got, err := ideas.Accept(l.store, l.state, id, ideas.Choice{Note: AutoAccepted, Defaults: l.Defaults, By: agentry})

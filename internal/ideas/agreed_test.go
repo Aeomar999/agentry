@@ -1,8 +1,13 @@
 package ideas_test
 
 import (
+	"encoding/json"
+	"maps"
+	"os"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -31,58 +36,136 @@ func TestAnIdeaIsAgreedWhenEveryViewpointBacksIt(t *testing.T) {
 		team      string
 		backedBy  []string
 		doubtedBy []string
-		want      bool
+		want      string // "" for agreed
 	}{
-		{"every viewpoint backs it", four, "Visionaries", all, nil, true},
-		{"in another order and case, past the team", four, "Visionaries", []string{"Skeptic", "technologist ", "user-advocate", "product-strategist", "engineer"}, nil, true},
-		{"one doubts it", four, "Visionaries", all, []string{"skeptic"}, false},
-		{"one doubts it as well as backing it", four, "Visionaries", all, []string{"technologist"}, false},
-		{"one didn't weigh in", four, "Visionaries", all[:3], nil, false},
-		{"nobody weighed in", four, "Visionaries", nil, nil, false},
-		{"no such team", four, "Dreamers", all, nil, false},
-		{"a team of only its coordinator", team("Visionaries"), "Visionaries", all, nil, false},
-		{"a team with other viewpoints", team("Visionaries", "dreamer", "builder"), "Visionaries", []string{"builder", "dreamer"}, nil, true},
-		{"a team with other viewpoints, one missing", team("Visionaries", "dreamer", "builder"), "Visionaries", all, nil, false},
+		{"every viewpoint backs it", four, "Visionaries", all, nil, ""},
+		{"in another order and case, past the team", four, "Visionaries", []string{"Skeptic", "technologist ", "user-advocate", "product-strategist", "engineer"}, nil, ""},
+		{"one doubts it", four, "Visionaries", all, []string{"skeptic"}, "doubted by skeptic"},
+		{"one doubts it as well as backing it", four, "Visionaries", all, []string{"technologist"}, "doubted by technologist"},
+		{"one didn't weigh in", four, "Visionaries", all[:3], nil, "not backed by skeptic"},
+		{"nobody weighed in", four, "Visionaries", nil, nil, "not backed by product-strategist, user-advocate, technologist, skeptic"},
+		{"no such team", four, "Dreamers", all, nil, "the Dreamers team has no viewpoints"},
+		{"a team of only its coordinator", team("Visionaries"), "Visionaries", all, nil, "the Visionaries team has no viewpoints"},
+		{"a team with other viewpoints", team("Visionaries", "dreamer", "builder"), "Visionaries", []string{"builder", "dreamer"}, nil, ""},
+		{"a team with other viewpoints, one missing", team("Visionaries", "dreamer", "builder"), "Visionaries", all, nil, "not backed by dreamer, builder"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
-			if got := ideas.Agreed(idea, c.roster, c.team); got != c.want {
-				t.Errorf("agreed: got %v, want %v", got, c.want)
+			for _, rule := range []string{settings.EveryoneBacked, "a rule from a later version"} {
+				if got := ideas.Disagreed(idea, c.roster, c.team, rule); got != c.want {
+					t.Errorf("%s: got %q, want %q", rule, got, c.want)
+				}
 			}
 		})
 	}
 }
 
-func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
-	idea := &ideas.Idea{ID: "idea-9", Title: "Search the board", Repo: "/r", State: ideas.Open}
-	other := func(id, title, repo string, state ideas.State) *ideas.Idea {
-		return &ideas.Idea{ID: id, Title: title, Repo: repo, State: state}
+func TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers(t *testing.T) {
+	four := append(team("Visionaries", "product-strategist", "user-advocate", "technologist", "skeptic"),
+		agents.Agent{Name: "engineer"}, agents.Agent{Name: "tech-lead", Coordinates: true})
+	cases := []struct {
+		name      string
+		backedBy  []string
+		doubtedBy []string
+		want      string // "" for agreed
+	}{
+		{"two backers", []string{"skeptic", "technologist"}, nil, ""},
+		{"every viewpoint", []string{"product-strategist", "user-advocate", "technologist", "skeptic"}, nil, ""},
+		{"two, in another case and spaced", []string{" Skeptic", "TECHNOLOGIST "}, []string{}, ""},
+		{"one backer", []string{"skeptic"}, nil, "only one backer"},
+		{"no backers", nil, nil, "no backers"},
+		{"one backer named twice", []string{"skeptic", "Skeptic "}, nil, "only one backer"},
+		{"one backer and the lead", []string{"skeptic", "lead"}, nil, "only one backer"},
+		{"one backer and agents of other teams", []string{"skeptic", "engineer", "tech-lead", "stranger"}, nil, "only one backer"},
+		{"two backers and a doubter", []string{"skeptic", "technologist"}, []string{"user-advocate"}, "doubted by user-advocate"},
+		{"every viewpoint and a doubter", []string{"product-strategist", "user-advocate", "technologist", "skeptic"}, []string{"skeptic"}, "doubted by skeptic"},
+		{"doubted by two, one an outsider", []string{"skeptic", "technologist"}, []string{"skeptic", " stranger "}, "doubted by skeptic, stranger"},
 	}
-	none := func(string) bool { return false }
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
+			if got := ideas.Disagreed(idea, four, "Visionaries", settings.NobodyDoubted); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+	if got := ideas.Disagreed(&ideas.Idea{BackedBy: []string{"skeptic", "technologist"}}, team("Visionaries"), "Visionaries", settings.NobodyDoubted); got == "" {
+		t.Error("a team with no viewpoints agrees on nothing")
+	}
+}
+
+func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
+	at := func(minute int) time.Time { return time.Date(2026, 10, 19, 1, minute, 0, 0, time.UTC) }
+	idea := &ideas.Idea{ID: "idea-9", Title: "Search the board", Repo: "/r", State: ideas.Open, CreatedAt: at(9)}
+	other := func(id, title, repo string, state ideas.State, minute int) *ideas.Idea {
+		return &ideas.Idea{ID: id, Title: title, Repo: repo, State: state, CreatedAt: at(minute)}
+	}
+	accepted := other("idea-1", "Search the board", "/r", ideas.Accepted, 1)
+	accepted.Became = "task-64"
 	cases := []struct {
 		name string
 		idea *ideas.Idea
 		list []*ideas.Idea
-		made func(string) bool
-		want string // in the reason, "" for none
+		want string // "" for none
 	}{
-		{"new", idea, []*ideas.Idea{idea, other("idea-1", "Dark mode", "/r", ideas.Dismissed)}, none, ""},
-		{"not open", other("idea-9", "Search the board", "/r", ideas.Dismissed), nil, none, "dismissed already"},
-		{"dismissed before", idea, []*ideas.Idea{other("idea-1", " search the Board", "/r", ideas.Dismissed)}, none, "you dismissed idea-1"},
-		{"accepted before", idea, []*ideas.Idea{other("idea-1", "Search the board", "/r", ideas.Accepted)}, none, "idea-1, under the same title, is a task"},
-		{"a task made from one still open", idea, []*ideas.Idea{other("idea-1", "Search the board", "/r", ideas.Open)},
-			func(id string) bool { return id == "idea-1" }, "idea-1, under the same title, is a task"},
-		{"open twice, no task", idea, []*ideas.Idea{other("idea-1", "Search the board", "/r", ideas.Open)}, none, ""},
-		{"dismissed in another repo", idea, []*ideas.Idea{other("idea-1", "Search the board", "/elsewhere", ideas.Dismissed)}, none, ""},
+		{"new", idea, []*ideas.Idea{idea, other("idea-1", "Dark mode", "/r", ideas.Dismissed, 1)}, ""},
+		{"dismissed before", idea, []*ideas.Idea{other("idea-1", " search the Board", "/r", ideas.Dismissed, 1)}, "duplicate of idea-1"},
+		{"dismissed after", idea, []*ideas.Idea{other("idea-12", "Search the board", "/r", ideas.Dismissed, 12)}, "duplicate of idea-12"},
+		{"accepted before", idea, []*ideas.Idea{accepted}, "duplicate of idea-1 (task-64)"},
+		{"accepted, the title reworded", idea, []*ideas.Idea{other("idea-1", "Search on the board!", "/r", ideas.Accepted, 1)}, "duplicate of idea-1"},
+		{"open before", idea, []*ideas.Idea{other("idea-1", "Search the board", "/r", ideas.Open, 1)}, "duplicate of idea-1"},
+		{"open after: this one is the original", idea, []*ideas.Idea{other("idea-12", "Search the board", "/r", ideas.Open, 12)}, ""},
+		{"open in the same instant, a lower id", idea, []*ideas.Idea{other("idea-8", "Search the board", "/r", ideas.Open, 9)}, "duplicate of idea-8"},
+		{"open in the same instant, a higher id", idea, []*ideas.Idea{other("idea-10", "Search the board", "/r", ideas.Open, 9)}, ""},
+		{"the earliest of several", idea, []*ideas.Idea{other("idea-5", "Search the board", "/r", ideas.Dismissed, 5),
+			other("idea-3", "search the board", "/r", ideas.Open, 3), other("idea-12", "Search the board", "/r", ideas.Accepted, 12)}, "duplicate of idea-3"},
+		{"dismissed in another repo", idea, []*ideas.Idea{other("idea-1", "Search the board", "/elsewhere", ideas.Dismissed, 1)}, ""},
+		{"another feature", idea, []*ideas.Idea{other("idea-1", "Search the ideas", "/r", ideas.Accepted, 1)}, ""},
+		{"said to repeat one", &ideas.Idea{ID: "idea-9", Title: "Find tasks fast", Repo: "/r", State: ideas.Open, Repeats: "idea-1", CreatedAt: at(9)},
+			[]*ideas.Idea{accepted}, "duplicate of idea-1 (task-64)"},
+		{"said to repeat a later open one", &ideas.Idea{ID: "idea-9", Title: "Find tasks fast", Repo: "/r", State: ideas.Open, Repeats: "idea-12", CreatedAt: at(9)},
+			[]*ideas.Idea{other("idea-12", "Other", "/r", ideas.Open, 12)}, "duplicate of idea-12"},
+		{"said to repeat one not in the list", &ideas.Idea{ID: "idea-9", Title: "Find tasks fast", Repo: "/r", State: ideas.Open, Repeats: "idea-2", CreatedAt: at(9)},
+			nil, "duplicate of idea-2"},
+		{"not open", other("idea-9", "Search the board", "/r", ideas.Dismissed, 9), nil, "it was dismissed already"},
 	}
+	agreed := team("Visionaries", "dreamer", "builder")
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := ideas.Repeats(c.idea, c.list, c.made)
-			if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
-				t.Errorf("got %q, want %q", got, c.want)
+			c.idea.BackedBy = []string{"dreamer", "builder"}
+			for _, rule := range settings.AutoAcceptRules {
+				if got := ideas.NotAutoAccepted(c.idea, append(c.list, c.idea), agreed, rule); got != c.want {
+					t.Errorf("%s: got %q, want %q", rule, got, c.want)
+				}
 			}
 		})
+	}
+}
+
+// The ideas the Visionaries raised again under new titles, kept in the
+// log, beside ideas about other features of the same repos.
+func TestAnIdeaRaisedAgainInOtherWordsIsADuplicate(t *testing.T) {
+	data, err := os.ReadFile("testdata/repeated-ideas.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var byID map[string]*ideas.Idea
+	if err := json.Unmarshal(data, &byID); err != nil {
+		t.Fatal(err)
+	}
+	repeated := map[[2]string]bool{{"idea-11", "idea-21"}: true, {"idea-12", "idea-22"}: true, {"idea-16", "idea-26"}: true,
+		{"idea-17", "idea-27"}: true, {"idea-18", "idea-28"}: true}
+	ids := slices.Sorted(maps.Keys(byID))
+	for i, first := range ids {
+		for _, second := range ids[i+1:] {
+			a, b := byID[first], byID[second]
+			a.ID, a.Repo, a.State, b.ID, b.Repo, b.State = first, "/r", ideas.Accepted, second, "/r", ideas.Open
+			got := ideas.Duplicate(b, []*ideas.Idea{a}) != nil
+			if want := repeated[[2]string{first, second}]; got != want {
+				t.Errorf("%s %q and %s %q: duplicate %v, want %v (they share %.2f)", first, a.Title, second, b.Title, got, want, ideas.Similarity(a, b))
+			}
+		}
 	}
 }
 
