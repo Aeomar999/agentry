@@ -5,9 +5,11 @@ import {
   addCustomTeam,
   blankTeam,
   checkTeam,
+  changedAgents,
   copyTemplate,
   type DraftAgent,
   missingProfiles,
+  newAgent,
   type TeamDraft,
   type TeamRules,
 } from "./custom-team";
@@ -319,6 +321,28 @@ describe("checkTeam", () => {
       { row: "a2", field: "profile" },
       { row: "a3", field: "name" },
     ]);
+  });
+});
+
+describe("newAgent", () => {
+  test("has no name, a colour no row has, Building and the first engine", () => {
+    const added = newAgent(draft(row("a1", { color: "blue" })), ["codex", "claude"]);
+    expect(added).toMatchObject({ name: "", prompt: "", coordinates: false, engine: "codex", profile: "", column: "", color: "violet" });
+  });
+
+  test("coordinates a team with no agents", () => {
+    expect(newAgent({ team: "", agents: [] }, ["claude"]).coordinates).toBe(true);
+  });
+});
+
+describe("changedAgents", () => {
+  test("names the rows changed, added and removed since the start", () => {
+    const start = draft(row("a1"), row("a2"));
+    const [chief, a1, a2] = start.agents;
+    const now = { ...start, agents: [chief, a1, { ...a2, prompt: "Other." }, row("a3", { name: "" })] };
+    expect(changedAgents(start, now)).toEqual(["a2", "New agent"]);
+    expect(changedAgents(start, { ...start, agents: [a1, a2] })).toEqual(["chief"]);
+    expect(changedAgents(start, { ...start, team: "Other" })).toEqual([]);
   });
 });
 

@@ -96,7 +96,8 @@ export function AgentRow(props: AgentRowProps) {
             onChange={() => onChange({ coordinates: true })}
             label={
               <span className="text-[12px] text-ink-secondary">
-                Coordinator<span className="sr-only">, {name}</span>
+                <span className="sr-only">Coordinator, {name}</span>
+                <span aria-hidden>Coordinator</span>
               </span>
             }
           />
