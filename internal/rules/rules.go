@@ -73,7 +73,10 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 		}
 	}
 	if rule := templateRules[p.Type]; rule != nil {
-		if reason := rule(p); reason != "" {
+		if err := state.Broken(events.TemplatesStream); err != nil {
+			return refuse("could not read the templates: " + err.Error())
+		}
+		if reason := rule(state.Templates(), p); reason != "" {
 			return refuse(reason)
 		}
 	}

@@ -129,14 +129,46 @@ func TestATemplatesAgentHasAPrompt(t *testing.T) {
 	refusedSaying(t, savingTemplate("papers", "Research", members), "agent reader: an agent needs a prompt")
 }
 
-func TestATemplateIsRemoved(t *testing.T) {
-	removal := events.Proposal{Stream: events.TemplatesStream, Actor: you, Type: events.TemplateRemoved, Data: map[string]any{"id": "papers"}}
-	if reason := proposeTemplate(t, removal); reason != "" {
-		t.Errorf("removing a template was refused: %s", reason)
+func removingTemplate(id string) events.Proposal {
+	return events.Proposal{Stream: events.TemplatesStream, Actor: you, Type: events.TemplateRemoved, Data: map[string]any{"id": id}}
+}
+
+// reasonsFor proposes each of ps in turn to one seeded log, and gives why
+// each was refused, or "" for one accepted.
+func reasonsFor(t *testing.T, ps ...events.Proposal) []string {
+	t.Helper()
+	s := openSeeded(t)
+	reasons := make([]string, len(ps))
+	for i, p := range ps {
+		_, rejection, err := s.Propose(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rejection != nil {
+			reasons[i] = rejection.Reason
+		}
+	}
+	return reasons
+}
+
+func TestASavedTemplateIsRemoved(t *testing.T) {
+	reasons := reasonsFor(t, savingTemplate("papers", "Research", research()), removingTemplate("papers"))
+	if reasons[1] != "" {
+		t.Errorf("removing a saved template was refused: %s", reasons[1])
+	}
+}
+
+func TestATemplateNeverSavedIsNotRemoved(t *testing.T) {
+	refusedSaying(t, removingTemplate("papers"), "no saved template papers")
+}
+
+func TestATemplateIsRemovedOnce(t *testing.T) {
+	reasons := reasonsFor(t, savingTemplate("papers", "Research", research()), removingTemplate("papers"), removingTemplate("papers"))
+	if reasons[1] != "" || !strings.Contains(reasons[2], "no saved template papers") {
+		t.Errorf("removing twice: %q, want the second refused", reasons)
 	}
 }
 
 func TestARemovalNeedsAnID(t *testing.T) {
-	removal := events.Proposal{Stream: events.TemplatesStream, Actor: you, Type: events.TemplateRemoved, Data: map[string]any{"id": ""}}
-	refusedSaying(t, removal, "needs an id")
+	refusedSaying(t, removingTemplate(""), "needs an id")
 }

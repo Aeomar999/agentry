@@ -7,9 +7,10 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
 
-// templateRules check the team templates you save, on their own: a template
-// makes agents only when you add it, under the agent rules then.
-var templateRules = map[events.Type]func(events.Proposal) string{
+// templateRules check the team templates you save against those saved
+// already: a template makes agents only when you add it, under the agent
+// rules then.
+var templateRules = map[events.Type]func(agents.UserTemplates, events.Proposal) string{
 	events.TemplateSaved:   aSavedTemplate,
 	events.TemplateRemoved: aRemovedTemplate,
 }
@@ -19,7 +20,7 @@ var templateRules = map[events.Type]func(events.Proposal) string{
 // validation once it is in, instead of this and the checks below.
 var asAnAgent = allOf(nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown)
 
-func aSavedTemplate(p events.Proposal) string {
+func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	id := p.Text("id")
 	switch {
 	case strings.TrimSpace(id) == "":
@@ -56,12 +57,13 @@ func aSavedTemplate(p events.Proposal) string {
 	return ""
 }
 
-// aRemovedTemplate can't yet check that the id was saved and not removed:
-// the state the rules read keeps no templates.
-// TODO(task-176): refuse an id that isn't saved, once the state keeps templates.
-func aRemovedTemplate(p events.Proposal) string {
-	if strings.TrimSpace(p.Text("id")) == "" {
+func aRemovedTemplate(saved agents.UserTemplates, p events.Proposal) string {
+	id := p.Text("id")
+	if strings.TrimSpace(id) == "" {
 		return "which template? It needs an id"
+	}
+	if _, ok := saved.WithID(id); !ok {
+		return "there is no saved template " + id
 	}
 	return ""
 }
