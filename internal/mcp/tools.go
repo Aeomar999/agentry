@@ -31,6 +31,8 @@ type task struct {
 type detail struct {
 	task
 	Description, Summary, Coordinator, TokensUnknown string
+	Archived                                         bool // read back from its archive: it takes no events
+	ArchivedAt                                       time.Time
 	Trail                                            []struct{ From, To, Text string }
 	Shared                                           []struct {
 		Name, By, From string
@@ -204,6 +206,9 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 		s.agentry.PageURL("/tasks/"+t.ID))
 	if t.Status == "done" && t.DoneByYou {
 		b.WriteString("Moved to Done by you.\n")
+	}
+	if t.Archived {
+		fmt.Fprintf(&b, "Archived on %s: it can be read, not changed.\n", t.ArchivedAt.Format(time.DateOnly))
 	}
 	if t.Kind == "epic" {
 		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
