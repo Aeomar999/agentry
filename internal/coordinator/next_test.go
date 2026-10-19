@@ -162,6 +162,38 @@ func TestAHandoffFitsTheColumnYouMovedItTo(t *testing.T) {
 	}
 }
 
+// A held command you approve while the coordinator is in a turn is handed
+// to it once it has decided: it can't finish without hearing it first.
+func TestALateApprovalReachesADecidingCoordinator(t *testing.T) {
+	policy := events.Actor{Kind: events.Policy, ID: "rules"}
+	engineer := events.Actor{Kind: events.Agent, ID: "engineer"}
+	held := started().turn("turn-1", "tech-lead", "assign").
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Push it."}).
+		add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h"}).
+		add(engineer, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "git push origin HEAD:dev"}).
+		add(policy, events.ActionAsked, "toolu_1", map[string]any{"reason": "may reach outside the worktree"}).
+		add(policy, events.ActionHeld, "toolu_1", nil).
+		add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "The push is held."}).
+		add(worker, events.TurnStarted, "turn-3", map[string]any{"agent": "tech-lead", "hash": "h"}).
+		add(you, events.ActionApproved, "toolu_1", map[string]any{"reason": "fine"})
+
+	task := held.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": `{"action": "done", "summary": "Pushed."}`}).task()
+	if move := Next(task, defaultRoster()); move.Kind != RaiseIssue || !strings.Contains(move.Reason, "approved a held command") {
+		t.Errorf("finishing without hearing the approval: %+v", move)
+	}
+	if step := task.Trail[len(task.Trail)-1]; step.To != "tech-lead" || !strings.Contains(step.Text, "git push origin HEAD:dev") {
+		t.Errorf("the hand-back with the full command should be in the trail: %+v", step)
+	}
+
+	// Heard in its next turn, it may finish.
+	again := held.add(worker, events.TurnEnded, "turn-3", map[string]any{"agent": "tech-lead", "report": "assign"}).
+		add(watchdog, events.IssueRaised, "", map[string]any{"reason": "decide again"}).
+		turn("turn-4", "tech-lead", `{"action": "done", "summary": "Not needed."}`).task()
+	if again.ApprovalUnheard() {
+		t.Error("its next turn's brief has the approval")
+	}
+}
+
 // An epic waits while its stories are going, and, once they are all done,
 // after it has asked you to close it: you may leave it open.
 func TestWhenAnEpicMayWait(t *testing.T) {
