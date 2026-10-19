@@ -12,11 +12,11 @@ import (
 // one foreign stream prefix, or those of one type the catalogue doesn't know
 // in the streams it does. It is never an error and never breaks a stream.
 type Unknown struct {
-	Prefix  string      // the foreign streams' prefix, "idea-"; or
-	Type    events.Type // the unknown type, "git.pr_opened"
-	Streams int         // how many foreign streams have the prefix
-	Events  int
-	Last    int64 // the position of the last of them
+	Prefix  string      `json:"prefix,omitempty"`  // the foreign streams' prefix, "idea-"; or
+	Type    events.Type `json:"type,omitempty"`    // the unknown type, "git.pr_opened"
+	Streams int         `json:"streams,omitempty"` // how many foreign streams have the prefix
+	Events  int         `json:"events"`
+	Last    int64       `json:"last"` // the position of the last of them
 }
 
 // tally is the counts as they are kept, so a stream loaded whole and one
@@ -61,8 +61,10 @@ func (t tally) clone() tally {
 	return tally{prefixes: maps.Clone(t.prefixes), types: maps.Clone(t.types)}
 }
 
-// list is the prefixes, then the types, each in name order.
+// list is the prefixes, then the types, each in name order: empty, not
+// nil, when nothing was skipped.
 func (t tally) list() []Unknown {
-	all := slices.SortedFunc(maps.Values(t.prefixes), func(a, b Unknown) int { return strings.Compare(a.Prefix, b.Prefix) })
-	return append(all, slices.SortedFunc(maps.Values(t.types), func(a, b Unknown) int { return strings.Compare(string(a.Type), string(b.Type)) })...)
+	prefixes := slices.SortedFunc(maps.Values(t.prefixes), func(a, b Unknown) int { return strings.Compare(a.Prefix, b.Prefix) })
+	types := slices.SortedFunc(maps.Values(t.types), func(a, b Unknown) int { return strings.Compare(string(a.Type), string(b.Type)) })
+	return append(append(make([]Unknown, 0, len(prefixes)+len(types)), prefixes...), types...)
 }

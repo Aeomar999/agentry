@@ -41,7 +41,13 @@ func newTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 // newTestServerWith is newTestServer with the new tasks' limits in limits.
 func newTestServerWith(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Store) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	return newTestServerOn(t, filepath.Join(t.TempDir(), "agentry.db"), limits)
+}
+
+// newTestServerOn is newTestServerWith on the log at path.
+func newTestServerOn(t *testing.T, path string, limits tasks.Limits) (*httptest.Server, *store.Store) {
+	t.Helper()
+	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
