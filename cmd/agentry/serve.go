@@ -240,8 +240,9 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	// The loop and the server are given the same features. Each writes
 	// through its own checked proposer, made here once, never the store.
 	settings := openSettings(ctx, filepath.Join(o.dataDir, settingsFile), 2*time.Second)
-	logs := map[string]features.Proposer{
-		ideas.Name: features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), log),
+	logs := map[string]features.Proposer{}
+	for _, f := range installed {
+		logs[f.Name] = features.Checked(f, features.Registration(f), log)
 	}
 
 	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
