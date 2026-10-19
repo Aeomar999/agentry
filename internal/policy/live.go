@@ -41,6 +41,16 @@ type Change struct {
 // longer the file on disk.
 var ErrStale = errors.New("the policy file changed since you loaded it; reload and try again")
 
+// A Refusal is a change Agentry won't make, and why: the version seen is
+// stale, the file doesn't load, the edit doesn't apply or wouldn't load,
+// its check refused it, or the file is a link. Any other error from Change
+// is a failure to read or write the file.
+type Refusal struct{ Err error }
+
+func (r *Refusal) Error() string { return r.Err.Error() }
+
+func (r *Refusal) Unwrap() error { return r.Err }
+
 // keepBackups is how many of its backups Agentry keeps beside the policy:
 // the newest, as each is named by its time. Older ones go after each
 // change it writes, so the folder doesn't fill with them.
@@ -107,15 +117,15 @@ func (l *Live) reloadLocked() (*Change, error) {
 // An Edit is a change to make to the policy file.
 type Edit struct {
 	Seen   string                            // the hash of the version it was made against
-	Apply  func(text []byte) ([]byte, error) // the file's text, changed
+	Apply  func(text []byte) ([]byte, error) // the file's text, changed; an error refuses the edit
 	Check  func(next *Policy) error          // may refuse the new version before it is written; nil for none
 	Record func(*Change)                     // logs it before any other change or reload can start; nil for none
 }
 
 // Change makes the edit to the policy file and puts the result in force.
 // When the version e.Seen isn't the one in force, or the file on disk
-// isn't it (changed but not reloaded yet), it refuses with ErrStale. The
-// old file is backed up first, as WriteFile does.
+// isn't it (changed but not reloaded yet), it refuses with ErrStale. Each
+// refusal is a *Refusal. The old file is backed up first, as WriteFile does.
 func (l *Live) Change(e Edit, now time.Time) (*Change, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -125,22 +135,22 @@ func (l *Live) Change(e Edit, now time.Time) (*Change, error) {
 		return nil, err
 	}
 	if l.problem != "" {
-		return nil, fmt.Errorf("policy.toml doesn't load, so Agentry won't change it until you fix it: %s", l.problem)
+		return nil, &Refusal{fmt.Errorf("policy.toml doesn't load, so Agentry won't change it until you fix it: %s", l.problem)}
 	}
 	if e.Seen != before.Hash() || string(text) != before.Text() {
-		return nil, ErrStale
+		return nil, &Refusal{ErrStale}
 	}
 	edited, err := e.Apply(text)
 	if err != nil {
-		return nil, err
+		return nil, &Refusal{err}
 	}
 	next, err := Parse(edited, l.home, l.protected)
 	if err != nil {
-		return nil, fmt.Errorf("the changed policy wouldn't load: %w", err)
+		return nil, &Refusal{fmt.Errorf("the changed policy wouldn't load: %w", err)}
 	}
 	if e.Check != nil {
 		if err := e.Check(next); err != nil {
-			return nil, err
+			return nil, &Refusal{err}
 		}
 	}
 	backup, err := WriteFile(l.path, edited, now)

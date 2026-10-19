@@ -84,7 +84,7 @@ func TestAChangeToAnOldVersionIsRefused(t *testing.T) {
 func TestAChangeItsCheckRefusesIsNotWritten(t *testing.T) {
 	live, path := openTestLive(t)
 	no := errors.New("no")
-	if _, err := live.Change(Edit{Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone, Check: func(*Policy) error { return no }}, at); err != no {
+	if _, err := live.Change(Edit{Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone, Check: func(*Policy) error { return no }}, at); !errors.Is(err, no) {
 		t.Errorf("got %v, want the check's error", err)
 	}
 	if text, _ := os.ReadFile(path); string(text) != string(Default()) || live.Current().UseForEveryone() == "" {
@@ -92,6 +92,27 @@ func TestAChangeItsCheckRefusesIsNotWritten(t *testing.T) {
 	}
 	if names, _ := filepath.Glob(path + "-*"); len(names) != 0 {
 		t.Errorf("no backup for a change not made: %v", names)
+	}
+}
+
+// A refusal says the change won't be made; failing to write the file isn't one.
+func TestOnlyAChangeAgentryWontMakeIsARefusal(t *testing.T) {
+	live, path := openTestLive(t)
+	var refusal *Refusal
+	for name, e := range map[string]Edit{
+		"stale":         {Seen: "0ld", Apply: TurnOffUseForEveryone},
+		"doesn't apply": {Seen: live.Current().Hash(), Apply: func([]byte) ([]byte, error) { return nil, errors.New("no") }},
+		"won't load":    {Seen: live.Current().Hash(), Apply: func([]byte) ([]byte, error) { return []byte("version = "), nil }},
+		"checked":       {Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone, Check: func(*Policy) error { return errors.New("no") }},
+	} {
+		if _, err := live.Change(e, at); !errors.As(err, &refusal) {
+			t.Errorf("%s: %v should be a refusal", name, err)
+		}
+	}
+	os.Chmod(filepath.Dir(path), 0o500)
+	t.Cleanup(func() { os.Chmod(filepath.Dir(path), 0o700) })
+	if _, err := live.Change(Edit{Seen: live.Current().Hash(), Apply: TurnOffUseForEveryone}, at); err == nil || errors.As(err, &refusal) {
+		t.Errorf("a folder Agentry can't write to: %v should be a failure, not a refusal", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -74,8 +75,12 @@ func History(stream []events.Event) []Version {
 	return history
 }
 
+// ErrNoVersion is a position in the policy stream that holds no version.
+var ErrNoVersion = errors.New("the policy has no such version")
+
 // VersionAt is the text of the version recorded at position in the policy
-// stream, and when it was put in force.
+// stream, and when it was put in force. A position holding no version is
+// ErrNoVersion; any other error is a version whose text the log lacks.
 func VersionAt(stream []events.Event, position int64) (string, time.Time, error) {
 	for _, e := range stream {
 		if e.Position != position {
@@ -86,5 +91,5 @@ func VersionAt(stream []events.Event, position int64) (string, time.Time, error)
 		}
 		return e.Text("text"), e.At, nil
 	}
-	return "", time.Time{}, fmt.Errorf("the policy has no version %d", position)
+	return "", time.Time{}, fmt.Errorf("version %d: %w", position, ErrNoVersion)
 }

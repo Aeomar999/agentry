@@ -149,6 +149,74 @@ func TestAMissingProfileIsAddedFromThePageAndLogged(t *testing.T) {
 	}
 }
 
+// beforeV010 is the policy of a build before v0.1.0, whose read-only
+// profile is outdated now.
+func beforeV010(t *testing.T) string {
+	t.Helper()
+	text, err := os.ReadFile("../policy/shipped/01-v0.1.0-dev.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(text)
+}
+
+func TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice(t *testing.T) {
+	server := servePolicy(t, beforeV010(t))
+	code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-only/update", `{"hash":"`+server.hash()+`"}`)
+	if code != 200 {
+		t.Fatalf("update: %d %s", code, body)
+	}
+	shipped, _ := policy.ShippedProfile("read-only")
+	if text, _ := os.ReadFile(server.path); !strings.Contains(string(text), shipped) {
+		t.Error("the file should have this version's read-only")
+	}
+	stream := server.policyEvents(t)
+	if len(stream) != 1 || stream[0].Text("change") != "updated read-only to the v0.9.0 default" || stream[0].Actor != you ||
+		!strings.Contains(stream[0].Text("diff"), `+  name = "keeps its own notes"`) {
+		t.Errorf("the update is logged as yours with its change: %d events", len(stream))
+	}
+
+	edited := strings.Replace(string(policy.Default()), `why = "For agents that judge work`, `why = "Mine: for agents that judge work`, 1)
+	os.WriteFile(server.path, []byte(edited), 0o600)
+	server.live.Reload()
+	if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-only/update", `{"hash":"`+server.hash()+`"}`); code != http.StatusConflict ||
+		!strings.Contains(body, "won't overwrite it") {
+		t.Errorf("updating a profile you changed: %d %s", code, body)
+	}
+	if text, _ := os.ReadFile(server.path); string(text) != edited {
+		t.Error("a refused update leaves your profile as it is")
+	}
+	if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-only/use-default", `{"hash":"`+server.hash()+`"}`); code != 200 {
+		t.Fatalf("use the default: %d %s", code, body)
+	}
+	if text, _ := os.ReadFile(server.path); string(text) != string(policy.Default()) {
+		t.Error("taking the default should leave the file as Agentry ships it")
+	}
+	stream = server.policyEvents(t)
+	if last := stream[len(stream)-1]; len(stream) != 2 || last.Text("change") != "replaced your read-only with the v0.9.0 default" ||
+		!strings.Contains(last.Text("diff"), `-why = "Mine: for agents that judge work`) {
+		t.Errorf("taking the default is logged with its change: %d events, %q", len(stream), last.Text("change"))
+	}
+}
+
+// A change Agentry refuses is a 409; failing to write the file is a 500.
+func TestAChangeThatCantBeWrittenIsAFailureNotARefusal(t *testing.T) {
+	server := servePolicy(t, string(policy.Default()))
+	if code, body := call(t, server.Server, "POST", "/api/policy/profiles/read-only/add", `{"hash":"`+server.hash()+`"}`); code != http.StatusConflict ||
+		!strings.Contains(body, "already has") {
+		t.Errorf("a refusal: %d %s", code, body)
+	}
+	dir := filepath.Dir(server.path)
+	os.Chmod(dir, 0o500)
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	if code, body := call(t, server.Server, "POST", "/api/policy/use-for-everyone/off", `{"hash":"`+server.hash()+`"}`); code != http.StatusInternalServerError {
+		t.Errorf("a folder Agentry can't write to: %d %s", code, body)
+	}
+	if len(server.policyEvents(t)) != 0 {
+		t.Error("nothing should be logged")
+	}
+}
+
 // A policy from before a profile was added doesn't have it: a team whose
 // agents need it is refused, not added with agents that can do nothing,
 // unless you ask for the profile to be added too.
@@ -167,6 +235,15 @@ func TestATeamNeedsItsProfilesInThePolicy(t *testing.T) {
 	}
 	if after, _ := server.log.Stream(events.AgentsStream); len(after) != len(agentsBefore) {
 		t.Errorf("nothing should be proposed: %d agent events, then %d", len(agentsBefore), len(after))
+	}
+
+	for request, want := range map[string]int{`{"template":"Dreamers"}`: http.StatusNotFound, `{"template":`: http.StatusBadRequest,
+		`{"template":"Visionaries","addMissingProfiles":true,"hash":"0ld"}`: http.StatusConflict} {
+		code, body := call(t, server.Server, "POST", "/api/teams", request)
+		var refusal struct{ Error string }
+		if err := json.Unmarshal([]byte(body), &refusal); code != want || err != nil || refusal.Error == "" {
+			t.Errorf("%s: every error from adding a team is JSON: %d %s", request, code, body)
+		}
 	}
 
 	if code, body := call(t, server.Server, "POST", "/api/teams", `{"template":"Visionaries","addMissingProfiles":true}`); code != 200 {
@@ -238,8 +315,12 @@ func TestEveryVersionShowsInTheHistoryAndCanBeRestored(t *testing.T) {
 	if last := stream[len(stream)-1]; !strings.HasPrefix(last.Text("change"), "reverted to the version of ") || last.Actor != you {
 		t.Errorf("the revert is a new version, yours: %q %s", last.Text("change"), last.Actor)
 	}
-	if code, _ := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[2].Position)+`,"hash":"`+server.hash()+`"}`); code != http.StatusNotFound {
-		t.Errorf("a version without its text: %d", code)
+	if code, body := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[2].Position)+`,"hash":"`+server.hash()+`"}`); code != http.StatusConflict ||
+		!strings.Contains(body, "can't be restored") {
+		t.Errorf("a version without its text: %d %s", code, body)
+	}
+	if code, _ := call(t, server.Server, "POST", "/api/policy/revert", `{"position":999,"hash":"`+server.hash()+`"}`); code != http.StatusNotFound {
+		t.Errorf("a position with no version: %d", code)
 	}
 	if code, body := call(t, server.Server, "POST", "/api/policy/revert", `{"position":`+itoa(history[1].Position)+`,"hash":"`+server.hash()+`"}`); code != http.StatusConflict || !strings.Contains(body, "in force") {
 		t.Errorf("the version in force: %d %s", code, body)

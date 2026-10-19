@@ -45,10 +45,13 @@ func TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText(t *testing.T) {
 	if text, when, err := VersionAt(stream, 9); err != nil || text != change.Policy.Text() || !when.Equal(at.Add(9*time.Minute)) {
 		t.Errorf("version 9: %v %v", when, err)
 	}
-	for _, position := range []int64{3, 7, 8} {
-		if _, _, err := VersionAt(stream, position); err == nil {
-			t.Errorf("version %d has no text to restore", position)
+	for _, position := range []int64{3, 7} {
+		if _, _, err := VersionAt(stream, position); err == nil || errors.Is(err, ErrNoVersion) {
+			t.Errorf("version %d is there, with no text to restore: %v", position, err)
 		}
+	}
+	if _, _, err := VersionAt(stream, 8); !errors.Is(err, ErrNoVersion) {
+		t.Errorf("position 8 holds no version: %v", err)
 	}
 }
 

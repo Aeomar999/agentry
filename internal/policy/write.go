@@ -23,10 +23,11 @@ const backupTime = "20060102T150405.000000000Z"
 //
 // It refuses a policy file that is a symbolic link: renaming over it would
 // turn the link into a plain file, and following it would put the backup
-// and the temporary file under names the policy doesn't protect.
+// and the temporary file under names the policy doesn't protect. Both
+// refusals are a *Refusal.
 func WriteFile(path string, text []byte, now time.Time) (backup string, err error) {
 	if _, err := Parse(text, "", nil); err != nil {
-		return "", fmt.Errorf("Agentry won't write a policy that doesn't load: %w", err)
+		return "", &Refusal{fmt.Errorf("Agentry won't write a policy that doesn't load: %w", err)}
 	}
 	mode := os.FileMode(0o600)
 	switch info, err := os.Lstat(path); {
@@ -34,7 +35,7 @@ func WriteFile(path string, text []byte, now time.Time) (backup string, err erro
 	case err != nil:
 		return "", err
 	case info.Mode()&os.ModeSymlink != 0:
-		return "", fmt.Errorf("%s is a link; edit it yourself", filepath.Base(path))
+		return "", &Refusal{fmt.Errorf("%s is a link; edit it yourself", filepath.Base(path))}
 	default:
 		mode = info.Mode().Perm()
 	}

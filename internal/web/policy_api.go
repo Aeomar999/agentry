@@ -181,8 +181,12 @@ func (s *Server) revertPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text, at, err := policy.VersionAt(stream, request.Position)
-	if err != nil {
+	switch {
+	case errors.Is(err, policy.ErrNoVersion):
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	case err != nil: // the version is there, but not its text
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	change := "reverted to the version of " + at.Local().Format("2 Jan 2006 15:04:05")
@@ -205,11 +209,15 @@ func (s *Server) changePolicy(w http.ResponseWriter, seen, change string, edit f
 // applyPolicy is changePolicy without the reply. A refused change is a 409
 // that says why: the file changed since the page loaded it, the edit isn't
 // one that can be made, or it would take a profile from agents that name it.
+// Failing to read or write the file is a 500.
 func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit func(text []byte) ([]byte, error)) (*policy.Change, bool) {
 	if s.config.Policy == nil {
 		http.Error(w, "no policy", http.StatusNotFound)
 		return nil, false
 	}
+	// The roster is read before Change takes the policy's lock, so an agent
+	// created meanwhile could get a profile this change removes, unrefused.
+	// With one person making both changes, that is accepted.
 	roster, err := s.roster()
 	if err != nil {
 		failed(w, err)
@@ -228,12 +236,16 @@ func (s *Server) applyPolicy(w http.ResponseWriter, seen, change string, edit fu
 			recorded = err
 		},
 	}, time.Now())
+	var refusal *policy.Refusal
 	switch {
 	case errors.Is(err, policy.ErrStale):
 		http.Error(w, "policy.toml changed since the page loaded it: reload the page and try again", http.StatusConflict)
 		return nil, false
-	case err != nil:
+	case errors.As(err, &refusal):
 		http.Error(w, err.Error(), http.StatusConflict)
+		return nil, false
+	case err != nil:
+		failed(w, err)
 		return nil, false
 	case recorded != nil:
 		failed(w, fmt.Errorf("the policy changed, but recording the change failed: %w", recorded))

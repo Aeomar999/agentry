@@ -168,8 +168,9 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 // policy lacks a profile the team needs, it refuses with the profiles
 // missing, unless asked to add them first (addMissingProfiles), which it
 // does in one change of the policy. hash is the version of the policy
-// the page saw, if it saw one.
-func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
+// the page saw, if it saw one. Every error is JSON {error, missingProfiles?}.
+func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
+	w := &jsonErrors{ResponseWriter: writer}
 	var request struct {
 		Template           string
 		AddMissingProfiles bool
@@ -204,6 +205,29 @@ func (s *Server) addTeam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.propose(w, proposals[len(proposals)-1])
+}
+
+// jsonErrors writes the plain-text errors of http.Error as {"error": ...},
+// so a handler built from the shared helpers replies in one shape.
+type jsonErrors struct {
+	http.ResponseWriter
+	failing bool
+}
+
+func (w *jsonErrors) WriteHeader(status int) {
+	if status >= http.StatusBadRequest && strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+		w.failing = true
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *jsonErrors) Write(text []byte) (int, error) {
+	if !w.failing {
+		return w.ResponseWriter.Write(text)
+	}
+	err := json.NewEncoder(w.ResponseWriter).Encode(map[string]string{"error": strings.TrimSpace(string(text))})
+	return len(text), err
 }
 
 func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent, bool) {
