@@ -154,4 +154,38 @@ describe("Fold", () => {
     fireEvent.click(button);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "start" });
   });
+
+  // A report folded at 4 lines (cut at 80px) with a framed fold, a code box, inside it.
+  function reportWithBox(box: string) {
+    return render(
+      <Fold lines={4} lineHeight={20} kind="report">
+        <p data-lines="0-20 20-40">Two lines of report.</p>
+        <Fold lines={12} lineHeight={20} kind="code" className="frame">
+          <pre data-lines={box}>code</pre>
+        </Fold>
+        <p data-lines="200-220">After the box.</p>
+      </Fold>,
+    );
+  }
+
+  test("a cut through a code box draws a hairline at the cut, a pixel below it", () => {
+    const { container } = reportWithBox("40-60 60-80 80-100 100-120");
+    const outer = container.querySelector<HTMLElement>("[data-fold-cut]")!;
+    expect(outer.className).toContain("border-b border-divider");
+    expect(outer.style.maxHeight).toBe("81px");
+  });
+
+  test("a cut above or below a code box draws none", () => {
+    for (const box of ["100-120 120-140", "20-40 40-60"]) {
+      const { container, unmount } = reportWithBox(box);
+      const outer = container.querySelector<HTMLElement>("[data-fold-cut]")!;
+      expect(outer.className).not.toContain("border-b");
+      unmount();
+    }
+  });
+
+  test("a cut through plain text draws none", () => {
+    const { container } = report();
+    expect(container.querySelector<HTMLElement>("[data-fold-cut]")!.className).not.toContain("border-b");
+  });
 });

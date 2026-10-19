@@ -6,7 +6,8 @@ import { cn } from "@/lib/cn";
 // is below it stays in the page for screen readers but out of the Tab order:
 // a link no one can see can't be tabbed to. Never `inert`, which would take
 // the visible links too. Folds nest (a code box in a report), so a link is
-// out of the Tab order while any fold around it cuts it off.
+// out of the Tab order while any fold around it cuts it off. A cut through
+// a framed fold inside (a code box) gets a hairline, so the box still ends.
 
 export interface FoldProps {
   children: ReactNode;
@@ -20,6 +21,7 @@ export interface FoldProps {
 interface Size {
   full: number; // the text's whole height
   cut: number; // where it is cut while folded
+  edge: boolean; // the cut passes through a frame inside, so it draws one
 }
 
 const FOCUSABLE = "a[href], button, [tabindex]";
@@ -35,7 +37,7 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
 
   const measure = useCallback(() => {
     const next = sizeOf(text.current!, limit);
-    setSize((size) => (size && size.full === next.full && size.cut === next.cut ? size : next));
+    setSize((size) => (size && size.full === next.full && size.cut === next.cut && size.edge === next.edge ? size : next));
   }, [limit]);
   // Measuring forces a layout, so only once, then when the width changes and
   // when the text does, never on a render that changed neither.
@@ -69,15 +71,15 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
   const count = `${n} ${n === 1 ? "line" : "lines"}`;
   return (
     <div>
-      <div className={cn(aside !== undefined && "relative", className)}>
+      <div data-fold-frame={className ? "" : undefined} className={cn(aside !== undefined && "relative", className)}>
         {aside}
         <div
           ref={box}
           id={id}
           data-fold-cut={folded ? (size?.cut ?? limit) : undefined}
-          style={folded ? { maxHeight: size?.cut ?? limit } : undefined}
+          style={folded ? { maxHeight: (size?.cut ?? limit) + (size?.edge ? 1 : 0) } : undefined}
           // clip can't be scrolled, so focusing a link can't shift the lines; hidden where clip isn't known.
-          className="overflow-hidden supports-[overflow:clip]:overflow-clip"
+          className={cn("overflow-hidden supports-[overflow:clip]:overflow-clip", folded && size?.edge && "border-b border-divider")}
           onScroll={(event) => {
             event.currentTarget.scrollTop = 0;
           }}
@@ -102,8 +104,9 @@ export function Fold({ children, lines, lineHeight, kind, className, aside }: Fo
   );
 }
 
-// sizeOf measures the text: its whole height, and the cut, at the bottom of
-// the last line box that ends above the limit, so no line is cut in half.
+// sizeOf measures the text: its whole height, the cut, at the bottom of the
+// last line box that ends above the limit, so no line is cut in half, and
+// whether the cut passes through a frame inside.
 function sizeOf(text: HTMLElement, limit: number): Size {
   const top = text.getBoundingClientRect().top;
   let cut = 0;
@@ -116,7 +119,12 @@ function sizeOf(text: HTMLElement, limit: number): Size {
       if (bottom <= limit && bottom > cut) cut = bottom;
     }
   }
-  return { full: text.getBoundingClientRect().height, cut: Math.ceil(cut) || limit };
+  cut = Math.ceil(cut) || limit;
+  const edge = [...text.querySelectorAll("[data-fold-frame]")].some((frame) => {
+    const box = frame.getBoundingClientRect();
+    return box.top - top < cut && box.bottom - top > cut + 1;
+  });
+  return { full: text.getBoundingClientRect().height, cut, edge };
 }
 
 // takeHiddenOutOfTabOrder gives every focusable element in a fold whose first
