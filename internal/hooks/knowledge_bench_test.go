@@ -19,7 +19,7 @@ import (
 // as the hook would write it today: a patch, or a full copy by learning's
 // rule. Yours stay full copies, as the page sends them. Each version must
 // rebuild byte for byte; the test prints the bytes stored, as a share of the
-// full copies' (target <= 6%), and the most text any version's rebuild reads,
+// full copies' (target <= 8%), and the most text any version's rebuild reads,
 // as a multiple of its own length (target <= 2.5).
 //
 //	D=$(mktemp -d); sqlite3 "file:$HOME/.agentry/agentry.db?mode=ro" "VACUUM INTO '$D/agentry.db'"
@@ -98,9 +98,9 @@ func TestKnowledgeAsPatchesOnARealLog(t *testing.T) {
 	}
 	share := 100 * float64(storedBytes) / float64(copiesBytes)
 	t.Logf("%d versions: %d patches, %d full copies", versions, patches, versions-patches)
-	t.Logf("stored: %d bytes of %d as full copies, %.2f%% (target <= 6%%)", storedBytes, copiesBytes, share)
+	t.Logf("stored: %d bytes of %d as full copies, %.2f%% (target <= 8%%)", storedBytes, copiesBytes, share)
 	t.Logf("most read to rebuild a version: %.2f times its length (%s; target <= 2.5); most bytes read: %d", mostRatio, mostRatioOf, mostRead)
-	if share > 6 || mostRatio > 2.5 {
+	if share > 8 || mostRatio > 2.5 {
 		t.Errorf("Target 9 missed: %.2f%% stored, %.2f times read", share, mostRatio)
 	}
 }

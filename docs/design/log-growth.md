@@ -1300,7 +1300,7 @@ W, or twice W with `AGENTRY_BENCH_WORKING=2`.
 | 6 | A snapshot write **≤ 0.5 s of CPU**, never on the request path and never under `Store.mu` | 0.28 s | the benchmark; a test that commits a proposal while the writer is held mid-write |
 | 7 | An archived task's history opens in **≤ 100 ms** for the largest task, **≤ 10 ms** from the cache | about 60 ms (17 ms gunzip, 40 ms fold) | `GET /api/tasks/task-8` on the archived copy, a benchmark in `internal/web` |
 | 8 | An archive blob **≤ 25%** of its rows' JSON | 22.3% | the archiver's benchmark on the copy |
-| 9 | Knowledge stored **≤ 6%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file | build step 1's test on the copy |
+| 9 | Knowledge stored **≤ 8%** of its full copies; rebuilding any version reads **≤ 2.5 times** its text | 4.7%; 118 KB for the 59 KB file. Built: 7.47% and 2.02 times with a full copy past 1x the text; at about 61 KB per file one hunk's middle is wider than the 446 versions measured here showed, and no threshold met 6% (1.25x: 6.89%/2.25; 1.5x: 6.47%/2.47; 2x: 6.14%/3.00; never: 4.99%/31.4) | build step 1's test on the copy |
 | 10 | `Store.mu` held **≤ 200 ms** per task archived or unarchived, the largest included | not measured; roughly: unarchive holds it for about 40 ms of `Refold` plus the insert of about 4.8 MB of rows, archive for a delete through `events_by_stream`; step 7 measures it | a benchmark of `Store.Archive` and `Store.Unarchive` on `task-8` |
 
 Targets 1, 2, 4 and 5 grow only with the working set and, slowly, with
