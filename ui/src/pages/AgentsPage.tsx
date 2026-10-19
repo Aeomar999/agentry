@@ -14,6 +14,7 @@ import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffe
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
+import { TeamPanel } from "@/components/organisms/TeamPanel";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
 import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
@@ -30,8 +31,9 @@ import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 // or one of your own. Three ways to see them: the teams as cards, each
 // team as an org chart (its coordinator over its agents), or one dense list.
 // Add a team makes one from a template, every agent with a prompt written
-// for that work, which you can then change. A team, or one agent, can be
-// removed once no unfinished task needs it.
+// for that work, which you can then change, or opens the New team panel
+// (?team=new) to build one: blank, or from a copy of a template. A team, or
+// one agent, can be removed once no unfinished task needs it.
 
 type View = "teams" | "org" | "list";
 
@@ -73,16 +75,22 @@ export function AgentsPage() {
   const templates = useResource<TeamTemplate[]>("/api/teams/templates").data ?? [];
   const policy = useResource<Policy>("/api/policy");
   // A change to the policy changes the profiles in force, so both are read again.
-  const reloadAll = () => {
-    reload();
-    policy.reload();
-  };
+  const reloadAll = () => Promise.all([reload(), policy.reload()]);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
   const cursor = useRowCursor(view === "list" ? ordered.length : 0, (index) => open(ordered[index]));
+  const building = params.get("team") === "new";
+  // The panel's address keeps the view behind it.
+  const showPanel = (panel: Record<string, string>, replace = false) =>
+    setParams(view === "teams" ? panel : { view, ...panel }, { replace });
+  // buildTeam opens the New team panel, starting from a copy of the template when one is given.
+  const buildTeam = (template?: string) => {
+    setAdding(false);
+    showPanel(template ? { team: "new", template } : { team: "new" });
+  };
 
   return (
     <>
@@ -168,6 +176,7 @@ export function AgentsPage() {
             templates={templates}
             existing={teams.map((t) => t.team)}
             policyHash={policy.data?.hash ?? ""}
+            onBuild={buildTeam}
             onAdded={(team) => {
               setAdding(false);
               reloadAll();
@@ -175,6 +184,16 @@ export function AgentsPage() {
             }}
           />
         </Dialog>
+      )}
+      {building && (
+        <TeamPanel
+          template={params.get("template") ?? undefined}
+          onClose={() => showPanel({}, true)}
+          onCreated={async (team) => {
+            await reloadAll(); // so the team is on the page as the panel closes
+            notify(team);
+          }}
+        />
       )}
     </>
   );
@@ -320,6 +339,7 @@ interface AddTeamProps {
   templates: TeamTemplate[];
   existing: string[];
   policyHash: string;
+  onBuild: (template?: string) => void; // opens the New team panel, blank or copying the template
   onAdded: (team: string) => void;
 }
 
@@ -328,7 +348,7 @@ interface NeedsProfiles {
   profiles: string[];
 }
 
-export function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamProps) {
+export function AddTeam({ templates, existing, policyHash, onBuild, onAdded }: AddTeamProps) {
   const notify = useToast();
   const [busy, setBusy] = useState("");
   const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
@@ -353,9 +373,22 @@ export function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamPro
   return (
     <div className="flex flex-col gap-3">
       <p className="text-[12px] text-ink-muted">
-        Each team comes with a coordinator and its specialists, each with a prompt written for the work. Change any of them afterwards, or
-        add agents of your own with New agent.
+        Each team comes with a coordinator and its specialists, each with a prompt written for the work. Add one as it is, change it first,
+        or build your own.
       </p>
+      <h3 className="text-[12px] font-medium text-ink-secondary">Build your own</h3>
+      <div
+        role="group"
+        aria-label="A team of your own"
+        className="flex flex-col items-start gap-2 rounded-lg border border-divider bg-surface-0 p-4"
+      >
+        <span className="text-[14px] font-semibold text-ink-primary">A team of your own</span>
+        <p className="text-[12px] leading-5 text-ink-secondary">Start blank or copy a template, then change any agent.</p>
+        <Button size="sm" disabled={Boolean(busy)} onClick={() => onBuild()}>
+          Build a team
+        </Button>
+      </div>
+      <h3 className="text-[12px] font-medium text-ink-secondary">Built in</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         {templates.map((template) => {
           const has = existing.includes(template.team);
@@ -385,9 +418,18 @@ export function AddTeam({ templates, existing, policyHash, onAdded }: AddTeamPro
                   </span>
                 ))}
               </span>
-              <span className="mt-auto pt-1">
+              <span className="mt-auto flex flex-wrap gap-2 pt-1">
                 <Button size="sm" variant={has ? "ghost" : "primary"} disabled={Boolean(busy)} onClick={() => add(template.team)}>
                   {busy === template.team ? "Adding…" : has ? "Add another" : "Add this team"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Change it first, ${template.team}`}
+                  disabled={Boolean(busy)}
+                  onClick={() => onBuild(template.id)}
+                >
+                  Change it first
                 </Button>
               </span>
               {needs?.team === template.team && (

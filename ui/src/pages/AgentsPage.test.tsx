@@ -37,7 +37,7 @@ beforeEach(() => {
 describe("AddTeam: a team refused for its profiles", () => {
   test("the offer shows in the refused team's card, scrolled into view", async () => {
     vi.mocked(api).mockRejectedValueOnce(refused);
-    render(<AddTeam templates={TEMPLATES} existing={[]} policyHash="h1" onAdded={() => {}} />);
+    render(<AddTeam templates={TEMPLATES} existing={[]} policyHash="h1" onBuild={() => {}} onAdded={() => {}} />);
     const card = screen.getByRole("group", { name: "Visionaries" });
     await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Add this team" })));
 
@@ -51,7 +51,7 @@ describe("AddTeam: a team refused for its profiles", () => {
   test("its button adds the profile with the team, against the policy the page saw", async () => {
     const onAdded = vi.fn();
     vi.mocked(api).mockRejectedValueOnce(refused).mockResolvedValueOnce({});
-    render(<AddTeam templates={TEMPLATES} existing={[]} policyHash="h1" onAdded={onAdded} />);
+    render(<AddTeam templates={TEMPLATES} existing={[]} policyHash="h1" onBuild={() => {}} onAdded={onAdded} />);
     const card = screen.getByRole("group", { name: "Visionaries" });
     await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Add this team" })));
     await act(async () => fireEvent.click(within(card).getByRole("button", { name: "Add the profile and the team" })));
