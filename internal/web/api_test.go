@@ -1121,6 +1121,141 @@ func TestBackToInProgressFromDoneOrParkedNeedsMoreWork(t *testing.T) {
 	}
 }
 
+// A task an agent that ships work has shows in Shipping. Moving a card
+// there ships it now: the move stands at once, until the coordinator hands
+// it to an agent of its team that ships work; a team with none refuses it.
+// Moved out again, it keeps the other columns' meaning.
+func TestYourMoveToShippingShipsItNow(t *testing.T) {
+	server, s := newTestServer(t)
+	worker, lead := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	propose := func(p events.Proposal) *events.Rejection {
+		_, rejection, err := s.Propose(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rejection
+	}
+	handOn := func(id, turn, agent string) *events.Rejection {
+		for _, p := range []events.Proposal{
+			{Stream: id, Actor: worker, Type: events.TurnStarted, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+			{Stream: id, Actor: worker, Type: events.TurnEnded, Correlation: turn, Data: map[string]any{"agent": "tech-lead", "report": "r"}},
+		} {
+			if rejection := propose(p); rejection != nil {
+				t.Fatalf("%s: %v", p.Type, rejection)
+			}
+		}
+		return propose(events.Proposal{Stream: id, Actor: lead, Type: events.TaskAssigned,
+			Data: map[string]any{"agent": agent, "instructions": "go", "checks": agent == "reviewer", "ships": agent == "deployer"}})
+	}
+	move := func(id, to string) {
+		if code, body := call(t, server, "POST", "/api/tasks/"+id+"/direct", `{"to":"`+to+`"}`); code != 200 {
+			t.Fatalf("%s onto %s: %d %s", id, to, code, body)
+		}
+	}
+	load := func(id string) *tasks.Task {
+		stream, _ := s.Stream(id)
+		return tasks.FromEvents(stream)
+	}
+	column := func(id string) string {
+		_, body := call(t, server, "GET", "/api/tasks", "")
+		var list []taskSummary
+		json.Unmarshal([]byte(body), &list)
+		for _, summary := range list {
+			if summary.ID == id {
+				return summary.Column
+			}
+		}
+		return "missing"
+	}
+
+	// The coordinator hands it to the deployer: Shipping, with no move of yours.
+	call(t, server, "POST", "/api/tasks", `{"description":"Fix the login redirect"}`)
+	propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	handOn("task-1", "turn-1", "deployer")
+	if c, task := column("task-1"), load("task-1"); c != "shipping" || task.Column != "" {
+		t.Errorf("with the deployer: column %s, your column %q", c, task.Column)
+	}
+
+	// Shipped now, from In progress: your move, written at once.
+	call(t, server, "POST", "/api/tasks", `{"description":"Tidy the README"}`)
+	propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w2", "branch": "b", "port": 7902}})
+	handOn("task-2", "turn-1", "engineer")
+	before, _ := s.Stream("task-2")
+	move("task-2", "shipping")
+	stream, _ := s.Stream("task-2")
+	first := stream[len(before)]
+	if first.Actor.Kind != events.Human || first.Text("column") != "shipping" || column("task-2") != "shipping" {
+		t.Errorf("onto Shipping: first event %s by %s with column %q, board column %s", first.Type, first.Actor.Kind, first.Text("column"), column("task-2"))
+	}
+	if text := load("task-2").Trail[len(load("task-2").Trail)-1].Text; !strings.Contains(text, "hand it to deployer") ||
+		!strings.Contains(text, "maybe before it was reviewed or tested") || !strings.Contains(text, "still runs its usual checks") {
+		t.Errorf("the coordinator is told: %q", text)
+	}
+	if rejection := handOn("task-2", "turn-2", "engineer"); rejection == nil ||
+		rejection.Reason != "the user moved this task to Shipping; hand it to an agent that ships work" {
+		t.Errorf("handed to the engineer: %v", rejection)
+	}
+	if rejection := handOn("task-2", "turn-3", "reviewer"); rejection == nil || column("task-2") != "shipping" {
+		t.Errorf("handed to the reviewer: %v, column %s", rejection, column("task-2"))
+	}
+	if rejection := propose(events.Proposal{Stream: "task-2", Actor: lead, Type: events.TaskAssigned,
+		Data: map[string]any{"agent": "deployer", "instructions": "ship it", "ships": true}}); rejection != nil {
+		t.Fatalf("to the deployer: %v", rejection)
+	}
+	if task := load("task-2"); column("task-2") != "shipping" || task.Column != "" || !task.Handoff.Ships {
+		t.Errorf("with the deployer you asked for: column %s, your column %q, handoff %+v", column("task-2"), task.Column, task.Handoff)
+	}
+	propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.TurnStarted, Correlation: "turn-4", Data: map[string]any{"agent": "deployer", "hash": "h"}})
+	if task := load("task-2"); !task.Turns[len(task.Turns)-1].Shipped {
+		t.Errorf("the deployer's turn ships it for you: %+v", task.Turns[len(task.Turns)-1])
+	}
+	propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.TurnEnded, Correlation: "turn-4", Data: map[string]any{"agent": "deployer", "report": "Shipped."}})
+
+	// Out of Shipping: back to In progress is more work.
+	move("task-2", "in-progress")
+	if task := load("task-2"); !task.SentBack || task.Column != "in-progress" {
+		t.Errorf("sent back from Shipping: sent back %v, column %q", task.SentBack, task.Column)
+	}
+	if rejection := handOn("task-2", "turn-5", "deployer"); rejection == nil ||
+		rejection.Reason != "the user moved this task back to In progress; hand it to an agent that builds it" {
+		t.Errorf("sent back, handed to the deployer: %v", rejection)
+	}
+	handOn("task-2", "turn-6", "engineer")
+	move("task-2", "shipping")
+	move("task-2", "review")
+	if task := load("task-2"); column("task-2") != "review" || task.SentBack {
+		t.Errorf("from Shipping onto Review: column %s, sent back %v", column("task-2"), task.SentBack)
+	}
+	move("task-2", "shipping")
+	move("task-2", "done")
+	if task := load("task-2"); !task.DoneByYou || task.WrapUp == nil || column("task-2") != "done" {
+		t.Errorf("from Shipping onto Done: by you %v, wrap-up %+v, column %s", task.DoneByYou, task.WrapUp, column("task-2"))
+	}
+
+	// From Done and from To do: reopened or started, in Shipping.
+	move("task-2", "shipping")
+	if task := load("task-2"); task.IsDone || column("task-2") != "shipping" {
+		t.Errorf("from Done onto Shipping: done %v, column %s", task.IsDone, column("task-2"))
+	}
+	move("task-2", "todo")
+	move("task-2", "shipping")
+	if task := load("task-2"); task.Parked != "" || column("task-2") != "shipping" {
+		t.Errorf("from To do onto Shipping: parked %q, column %s", task.Parked, column("task-2"))
+	}
+
+	// A team with no agent that ships work refuses the move, and writes nothing.
+	if code, body := call(t, server, "POST", "/api/teams", `{"template":"research"}`); code != 200 {
+		t.Fatalf("adding the Research team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Size the market","team":"Research"}`)
+	before, _ = s.Stream("task-3")
+	code, body := call(t, server, "POST", "/api/tasks/task-3/direct", `{"to":"shipping"}`)
+	after, _ := s.Stream("task-3")
+	if code != http.StatusConflict || !strings.Contains(body, "Research has no agent that ships work") || len(after) != len(before) {
+		t.Errorf("a team with no shipper: %d %q, %d events written", code, body, len(after)-len(before))
+	}
+}
+
 // An epic you move to Done, whether it is asking you to close it or you
 // left it open, is closed by the move: nothing is left to ask again.
 func TestAnEpicOntoDoneLeavesNothingToClose(t *testing.T) {

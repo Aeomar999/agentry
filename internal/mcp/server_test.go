@@ -255,3 +255,13 @@ func TestTheTaskSaysItsLimits(t *testing.T) {
 		t.Errorf("unlimited: %q", got)
 	}
 }
+
+// show_task says where the task is on the board, as the board names it.
+func TestTheTaskSaysItsColumn(t *testing.T) {
+	if got := columnOf(task{Column: "shipping"}); got != "on the board: Shipping" {
+		t.Errorf("shipping: %q", got)
+	}
+	if got := columnOf(task{Column: "in-progress"}); got != "on the board: In progress" {
+		t.Errorf("in progress: %q", got)
+	}
+}

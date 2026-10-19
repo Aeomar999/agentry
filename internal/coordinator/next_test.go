@@ -96,6 +96,8 @@ func TestAHandoffFitsTheColumnYouMovedItTo(t *testing.T) {
 	}
 	review := started().add(you, events.TaskDirected, "", map[string]any{"text": "Have this task reviewed next.", "column": "review"})
 	sentBack := started().add(you, events.TaskDirected, "", map[string]any{"text": "This needs more work.", "column": "in-progress", "sentBack": true})
+	shipping := started().add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"})
+	const toShip = "the user moved this task to Shipping; hand it to an agent that ships work"
 	cases := []struct {
 		name string
 		task *tasks.Task
@@ -108,6 +110,13 @@ func TestAHandoffFitsTheColumnYouMovedItTo(t *testing.T) {
 		{"sent back, not to a checker", sentBack.turn("turn-1", "tech-lead", assign("reviewer")).task(),
 			RaiseIssue, "the user moved this task back to In progress; hand it to an agent that builds it"},
 		{"but to a builder", sentBack.turn("turn-1", "tech-lead", assign("engineer")).task(), ApplyDecision, ""},
+		{"sent back, not to a shipper", sentBack.turn("turn-1", "tech-lead", assign("deployer")).task(),
+			RaiseIssue, "the user moved this task back to In progress; hand it to an agent that builds it"},
+		{"moved to Shipping, not to a builder", shipping.turn("turn-1", "tech-lead", assign("engineer")).task(), RaiseIssue, toShip},
+		{"nor to a checker", shipping.turn("turn-1", "tech-lead", assign("reviewer")).task(), RaiseIssue, toShip},
+		{"nor finished first", shipping.turn("turn-1", "tech-lead", `{"action": "done", "summary": "x"}`).task(),
+			RaiseIssue, toShip + " before you finish"},
+		{"but to a shipper", shipping.turn("turn-1", "tech-lead", assign("deployer")).task(), ApplyDecision, ""},
 	}
 	for _, c := range cases {
 		if move := Next(c.task, defaultRoster()); move.Kind != c.want || move.Reason != c.says {
@@ -318,6 +327,40 @@ func TestTokens(t *testing.T) {
 	for n, want := range map[int]string{950: "950", 12_400: "12.4k", 5_000_000: "5M", 3_140_000: "3.1M"} {
 		if got := Tokens(n); got != want {
 			t.Errorf("Tokens(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// Work you moved to Shipping ships as it is: once an agent that ships work
+// has shipped it, the coordinator can finish without another check. Only a
+// change after that needs checking again, and a ship the coordinator chose
+// waives nothing.
+func TestYourShipTakesTheWorkAsItIs(t *testing.T) {
+	const finish = `{"action": "done", "summary": "Shipped."}`
+	built := started().
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Remove them."}).
+		turn("turn-1", "engineer", "Removed 3.").
+		turn("turn-2", "tech-lead", `{"action": "assign", "agent": "deployer", "instructions": "ship"}`)
+	toDeployer := map[string]any{"agent": "deployer", "instructions": "Ship it.", "ships": true}
+	yours := built.add(you, events.TaskDirected, "", map[string]any{"text": "Ship this task now.", "column": "shipping"}).
+		add(coordinator, events.TaskAssigned, "", toDeployer).
+		turn("turn-3", "deployer", "Pushed.")
+	theirs := built.add(coordinator, events.TaskAssigned, "", toDeployer).
+		turn("turn-3", "deployer", "Pushed.")
+	changed := yours.add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "One more."}).
+		turn("turn-4", "engineer", "Changed it.")
+	cases := []struct {
+		name string
+		h    history
+		want MoveKind
+	}{
+		{"shipped as you chose", yours.turn("turn-9", "tech-lead", finish), ApplyDecision},
+		{"shipped as the coordinator chose", theirs.turn("turn-9", "tech-lead", finish), RaiseIssue},
+		{"changed after your ship", changed.turn("turn-9", "tech-lead", finish), RaiseIssue},
+	}
+	for _, c := range cases {
+		if move := Next(c.h.task(), defaultRoster()); move.Kind != c.want || c.want == RaiseIssue && !strings.Contains(move.Reason, "the work isn't checked yet") {
+			t.Errorf("%s: got %s (%q), want %s", c.name, move.Kind, move.Reason, c.want)
 		}
 	}
 }
