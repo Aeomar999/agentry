@@ -1,6 +1,7 @@
 import { Fragment, ReactNode } from "react";
-import { Square, SquareCheck } from "lucide-react";
+import { ArrowUpRight, Square, SquareCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { LinkTo, safeHref } from "@/lib/links";
 
 // The Markdown people and agents write, as text to read: headings, lists
 // (nested, and task lists), tables, code blocks, quotes, rules, paragraphs;
@@ -12,6 +13,9 @@ import { cn } from "@/lib/cn";
 // editor's preview shows a README, with headings that can be linked to. A
 // document's host draws its images and code blocks, so images can come from
 // the workspace and code can be highlighted.
+//
+// A link goes where the host's link hook says, or, without one, where
+// safeHref allows; anything else reads as its label.
 
 export interface MarkdownProps {
   text: string;
@@ -19,7 +23,8 @@ export interface MarkdownProps {
   doc?: boolean;
   image?: (src: string, alt: string) => ReactNode;
   code?: (code: string, language: string) => ReactNode;
-  link?: (href: string) => { href: string; onClick?: () => void; external: boolean }; // where a link goes
+  link?: (href: string) => LinkTo | null; // where a link goes; null: not a link
+  marks?: boolean; // links in the link colour, underlined, with ↗ on those that open a new tab
 }
 
 export interface Heading {
@@ -292,23 +297,39 @@ function inline(text: string, props: MarkdownProps): ReactNode {
     if (link || bare) {
       const href = link ? link[2] : bare;
       const label = link ? inline(link[1], props) : bare;
-      const to = props.link ? props.link(href) : { href, external: /^https?:\/\//.test(href) };
-      if (!/^(https?:\/\/|#|\/|\.|[\w-])/.test(to.href) || /^javascript:/i.test(to.href)) return <Fragment key={i}>{label}</Fragment>;
-      return (
-        <a
-          key={i}
-          href={to.href}
-          onClick={to.onClick ? (event) => (event.preventDefault(), to.onClick!()) : undefined}
-          target={to.external ? "_blank" : undefined}
-          rel={to.external ? "noreferrer noopener" : undefined}
-          className="text-info underline-offset-2 hover:underline"
-        >
-          {label}
-        </a>
-      );
+      const to = props.link ? props.link(href) : fallback(href);
+      // A hook's href is the host's own, but it can't send a link anywhere safeHref refuses.
+      if (!to || !safeHref(to.href)) return <Fragment key={i}>{label}</Fragment>;
+      return <Fragment key={i}>{anchor(to, label, props)}</Fragment>;
     }
     return <em key={i}>{inline(part.slice(1, -1), props)}</em>;
   });
+}
+
+// Without a link hook, a link goes where safeHref allows, to the href it returns.
+function fallback(href: string): LinkTo | null {
+  const safe = safeHref(href);
+  return safe && { href: safe.href, external: safe.kind === "external" };
+}
+
+function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps): ReactNode {
+  const marked = props.marks && to.external;
+  return (
+    <a
+      href={to.href}
+      onClick={to.onClick ? (event) => (event.preventDefault(), to.onClick!()) : undefined}
+      target={to.external ? "_blank" : undefined}
+      rel={to.external ? "noopener noreferrer" : undefined}
+      title={to.title}
+      aria-label={to.name}
+      className={props.marks ? "text-link underline underline-offset-2" : "text-info underline-offset-2 hover:underline"}
+    >
+      {label}
+      {marked && " "}
+      {marked && <ArrowUpRight aria-hidden className="inline size-3 align-[-1px]" />}
+      {marked && !to.name && <span className="sr-only">(opens in a new tab)</span>}
+    </a>
+  );
 }
 
 function plain(text: string): string {

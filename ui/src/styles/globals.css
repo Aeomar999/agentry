@@ -46,6 +46,9 @@
   --color-info: #38bdf8;
   --color-info-soft: #38bdf81f;
 
+  /* Links in text: info, made darker in light so it reads at 4.5:1. */
+  --color-link: var(--color-info);
+
   /* The terminals' screen. It follows the theme, and Agentry starts each
      Claude session in the page's theme so its colours suit it. */
   --color-terminal: #0e1014;
@@ -96,6 +99,7 @@ html.light {
   --color-success: #16a34a;
   --color-warning: #b45309;
   --color-info: #0284c7;
+  --color-link: color-mix(in srgb, var(--color-info) 85%, var(--color-ink-primary));
 
   --color-terminal: #ffffff;
 }
