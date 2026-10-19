@@ -183,7 +183,7 @@ func TestNewCatalogueRefusesFeaturesStreamsThatWouldCollide(t *testing.T) {
 		{"a prefix ideas took", []features.Feature{ideas.Feature(), streams(ideas.Prefix, "note.written")}, `prefix "idea-" is taken`},
 		{"a prefix overlapping another", []features.Feature{streams("note-", "note.written"), streams("note-pad-", "pad.written")}, `prefix "note-pad-" is taken`},
 		{"a task- prefix", []features.Feature{streams("task-notes-", "note.written")}, `prefix "task-notes-" overlaps task-`},
-		{"a core type", []features.Feature{streams("note-", events.TaskCreated)}, "task.created is taken"},
+		{"a core type", []features.Feature{streams("note-", events.TaskCreated)}, `stream type task.created is outside the note. namespace of stream prefix "note-"`},
 		{"stream types with no prefix", []features.Feature{streams("", "note.written")}, "need a stream prefix"},
 	}
 	for _, c := range cases {

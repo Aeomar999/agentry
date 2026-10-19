@@ -15,8 +15,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
-// noted is the one type in a fake feature's streams.
-const noted events.Type = "fake.noted"
+// noted is the one type in a fake feature's streams. It is in the fragile.
+// namespace, so only a feature with the fragile- prefix registers it.
+const noted events.Type = "fragile.noted"
 
 // fake is a feature that owns the streams prefix starts, holding noted
 // events, with check as its Streams.Check and guards as its Guards. Its
@@ -153,7 +154,7 @@ func TestAPanickingStreamsCheckRefusesOnlyItsProposal(t *testing.T) {
 	}
 
 	_, rejection, err := s.Propose(note("fragile-1", "boom"))
-	if err != nil || rejection == nil || rejection.Reason != "the fragile feature's rules failed on this fake.noted, so it is refused" {
+	if err != nil || rejection == nil || rejection.Reason != "the fragile feature's rules failed on this fragile.noted, so it is refused" {
 		t.Errorf("the panicking check: %v %v", rejection, err)
 	}
 	if lines := strings.Count(said.String(), "a feature's rule panicked"); lines != 1 || !strings.Contains(said.String(), "feature=fragile") ||
