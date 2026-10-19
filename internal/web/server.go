@@ -37,6 +37,7 @@ type Config struct {
 	Fleet       *machines.Fleet    // where tasks' work is: for their Workspace page
 	Workers     *workerlink.Server // the server's end of the workers' links; nil for none
 	PublicURL   string             // the address people and workers reach; "" for the one a request came to
+	CA          string             // Agentry's own CA certificate, PEM, when the server is served with it (-https); "" for none
 	NetworkURLs []string           // the server on each of this machine's network addresses, when it listens on every one
 	LocalURL    string             // the server on this computer, http://localhost:port; "" when localhost doesn't reach it
 	Binary      string             // this agentry, which a joining machine can download

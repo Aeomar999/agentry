@@ -1,10 +1,13 @@
 package web
 
 import (
+	"encoding/pem"
 	"net"
 	"net/http"
 	"slices"
 	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
 // The addresses other machines can reach this server at, for the install
@@ -88,13 +91,51 @@ func isLoopback(host string) bool {
 // code, for every address, and the default one at the top level as before.
 func (s *Server) installCommands(r *http.Request, path, code string) map[string]any {
 	list, chosen := s.addresses(r)
-	answer := commands(chosen, path, code)
+	answer := s.commandsAt(r, chosen, path, code)
 	all := make([]map[string]any, 0, len(list))
 	for _, a := range list {
-		each := commands(a.URL, path, code)
+		each := s.commandsAt(r, a.URL, path, code)
 		each["url"], each["label"] = a.URL, a.Label
 		all = append(all, each)
 	}
 	answer["addresses"], answer["address"] = all, chosen
 	return answer
+}
+
+// commandsAt are the commands for the script at url, pinned to the
+// server's own CA over https where it serves url with it.
+func (s *Server) commandsAt(r *http.Request, url, path, code string) map[string]any {
+	if !s.servedWithOwnCA(r, url) {
+		return commands(url, path, code, "")
+	}
+	if rest, plain := strings.CutPrefix(url, "http://"); plain {
+		url = "https://" + rest
+	}
+	return commands(url, path, code, s.caFingerprint())
+}
+
+// servedWithOwnCA is whether url, the server's address r came to or one it
+// was offered, is served with Agentry's own CA (-https): every address but
+// the public URL, or one a reverse proxy doing TLS in front passed r on
+// from. Plain HTTP this machine sends (localhost) counts, as https reaches
+// it too.
+func (s *Server) servedWithOwnCA(r *http.Request, url string) bool {
+	switch {
+	case s.config.CA == "" || url == strings.TrimSuffix(s.config.PublicURL, "/"):
+		return false
+	case url == requestURL(r):
+		return r.TLS != nil || !overHTTPS(r)
+	default:
+		return true
+	}
+}
+
+// caFingerprint is the SHA-256 of the server's own CA, as `agentry ca`
+// shows it.
+func (s *Server) caFingerprint() string {
+	block, _ := pem.Decode([]byte(s.config.CA))
+	if block == nil {
+		return ""
+	}
+	return tlsca.FingerprintOf(block.Bytes)
 }
