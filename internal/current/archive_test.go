@@ -159,6 +159,12 @@ func TestTheSummariserGivesNilForATaskTheStateCantHandOut(t *testing.T) {
 	}
 	defer s.Close()
 	archiveTask(t, s, state, "task-1", sharedfiles.Disk{Dir: t.TempDir()})
+	if _, err := state.Task("task-1"); !errors.Is(err, ErrArchived) {
+		t.Fatalf("task-1 should be archived: %v", err)
+	}
+	if state.Broken("task-3") == nil {
+		t.Fatal("task-3 should be broken")
+	}
 	for _, id := range []string{"task-1", "task-3"} { // archived, broken
 		if summary := summarise(state, id)(); summary != nil {
 			t.Errorf("the summary of %s is %v, want nil", id, summary)

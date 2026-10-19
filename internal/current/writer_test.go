@@ -165,6 +165,21 @@ func TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent(t *testing.T) {
 	}
 }
 
+// WriteSoon writes the state as it is now, with fewer events than call for
+// a snapshot and the interval not passed, as after an archiving round.
+func TestWriteSoonWritesTheStateAsItIs(t *testing.T) {
+	logPath, _ := seededLog(t, someProposals()...)
+	l := started(t, logPath, 1000, nil)
+	first := l.state.Position()
+	awaitSnapshot(t, l.path, first)
+	l.rename(t, "Renamed")
+	l.writer.WriteSoon()
+	awaitSnapshot(t, l.path, first+1)
+	if writes := l.writes.Load(); writes != 2 {
+		t.Errorf("%d writes, want 2: one at the start, one asked for", writes)
+	}
+}
+
 // Target 6: the writer holds no lock of the store's. A proposal commits,
 // and the state takes it, while a write is held part way through.
 func TestAProposalCommitsWhileTheWriterIsMidWrite(t *testing.T) {

@@ -31,8 +31,9 @@ type SnapshotWriter struct {
 	after      func(time.Duration) <-chan time.Time                 // the clock
 	atomically func(path string, write func(io.Writer) error) error // how a file is written
 
-	tried   int64 // the position of the last snapshot written or tried
-	written int64 // the position of the snapshot on disk, 0 for none of this state's
+	tried   int64         // the position of the last snapshot written or tried
+	written int64         // the position of the snapshot on disk, 0 for none of this state's
+	asked   chan struct{} // WriteSoon's, holding one ask
 	stop    chan struct{}
 	done    chan struct{}
 }
@@ -45,7 +46,17 @@ func NewSnapshotWriter(path, build string, state *State, log *store.Store) *Snap
 	resumed := state.Resumed()
 	return &SnapshotWriter{path: path, build: build, state: state, log: log,
 		every: snapshotEvery, interval: snapshotInterval, after: time.After, atomically: writeAtomically,
-		tried: resumed, written: resumed, stop: make(chan struct{}), done: make(chan struct{})}
+		tried: resumed, written: resumed, asked: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
+}
+
+// WriteSoon asks for a snapshot of the state as it is now, without waiting
+// for it, as after an archiving round, which shrinks the state. Asks that
+// come while one waits are one.
+func (w *SnapshotWriter) WriteSoon() {
+	select {
+	case w.asked <- struct{}{}:
+	default:
+	}
 }
 
 // Start writes snapshots in the background until Close.
@@ -77,6 +88,7 @@ func (w *SnapshotWriter) run() {
 			if w.state.Position()-w.tried < w.every {
 				continue
 			}
+		case <-w.asked:
 		case <-timer:
 			if w.state.Position() == w.tried {
 				timer = w.after(w.interval)
