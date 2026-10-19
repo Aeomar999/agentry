@@ -122,7 +122,7 @@ func (w *Watchdog) findProblem(now time.Time, task *tasks.Task, turn *tasks.Turn
 		return fmt.Sprintf("%s requested the same command %d times in a row, so it may be stuck in a loop: %s", turn.Agent, times, command)
 	}
 	if action := runningTool(task, turn); action != nil {
-		if now.Sub(action.RequestedAt) > w.limits.Tool {
+		if now.Sub(toolClock(action, turn)) > w.limits.Tool {
 			return fmt.Sprintf("%s's tool call has run for over %s with no result: %s", turn.Agent, w.limits.Tool, action.Command)
 		}
 		return ""
@@ -204,6 +204,16 @@ func runningTool(task *tasks.Task, turn *tasks.Turn) *tasks.Action {
 		}
 	}
 	return nil
+}
+
+// toolClock is when a running tool's limit counts from: its start, or the
+// turn's last resume after a usage limit if that came later, since the time
+// spent waiting for the limit to reset isn't the tool's.
+func toolClock(action *tasks.Action, turn *tasks.Turn) time.Time {
+	if turn.ResumedAt.After(action.RequestedAt) {
+		return turn.ResumedAt
+	}
+	return action.RequestedAt
 }
 
 // repeatedCommand is the turn's last command and how many times in a row it

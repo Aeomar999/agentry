@@ -367,7 +367,7 @@ func (t *Task) Apply(e events.Event) {
 		// agent's) changes nothing.
 		if turn := t.Turn(e.Correlation); !turn.Ended && turn.Limited != "" && e.Text("agent") == turn.Agent {
 			turn.Limited, turn.ResetsAt = "", time.Time{}
-			turn.Resumes++
+			turn.Resumes, turn.ResumedAt = turn.Resumes+1, e.At
 			if e.Text("reason") == "reset" {
 				turn.RetriedAt = e.At
 			}

@@ -386,6 +386,46 @@ func TestALimitedTurnWithAToolStillOpenIsNotAStall(t *testing.T) {
 	}
 }
 
+// A tool call still open at a usage limit is timed from the resume: the
+// hours spent waiting for the reset aren't the tool's.
+func TestAToolOpenAtALimitIsTimedFromTheResume(t *testing.T) {
+	w := newWorld(t)
+	coordinator := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	w.propose(coordinator, events.ActionRequested, "toolu_1", map[string]any{"tool": "Bash", "command": "npm test"})
+	w.propose(policy, events.ActionApproved, "toolu_1", map[string]any{"reason": "ok"})
+	w.limit(at(2 * time.Hour))
+	retried := time.Now().Add(2*time.Hour + time.Minute + time.Second)
+	w.dog.Check(retried)
+	w.dog.Wait()
+	if issue := w.task().LastTurn().Issue; issue != "" || len(w.typed) != 1 {
+		t.Fatalf("the turn should be retried at its reset: issue %q, typed %q", issue, w.typed)
+	}
+
+	// The store stamps events with the wall clock, so the resume is moved
+	// to when the watchdog, running ahead, retried the turn.
+	stream, _ := w.store.Stream("task-1")
+	if resumed := &stream[len(stream)-1]; resumed.Type == events.TurnResumed {
+		resumed.At = retried
+	} else {
+		t.Fatalf("the last event should be the resume, got %s", resumed.Type)
+	}
+	task := tasks.FromEvents(stream)
+	for _, check := range []struct {
+		at    time.Time
+		issue bool
+	}{
+		{retried, false},
+		{time.Now().Add(2*time.Hour + 2*time.Minute), false},
+		{retried.Add(DefaultLimits.Tool - time.Second), false},
+		{retried.Add(DefaultLimits.Tool + time.Second), true},
+	} {
+		issue := w.dog.findProblem(check.at, task, task.OpenTurn())
+		if got := strings.Contains(issue, "tool call has run for over"); got != check.issue || !got && issue != "" {
+			t.Errorf("%s after the retry: issue %q", check.at.Sub(retried), issue)
+		}
+	}
+}
+
 func TestALimitedTurnWhoseProcessExitedIsACrash(t *testing.T) {
 	w := newWorld(t)
 	w.limit(at(time.Hour))
