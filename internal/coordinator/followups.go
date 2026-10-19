@@ -90,8 +90,8 @@ func followUpBrief(epic *tasks.Task, f family) string {
 		"the follow-ups it left, the next steps it makes possible, and any gap between what it set out to do and what it did. "+
 		"Its work is in dev: check what the summaries say against the code. Give each follow-up as an idea whose \"epic\" is %q.\n\n",
 		epic.ID, epic.Title, epic.ID)
-	fmt.Fprintf(&b, "The epic, as it was asked for:\n\n%s\n\n", shorten(strings.TrimSpace(epic.Description), 2000))
-	fmt.Fprintf(&b, "Its closing summary:\n\n%s\n\n", shorten(strings.TrimSpace(epic.Summary), 4000))
+	fmt.Fprintf(&b, "The epic, as it was asked for:\n\n%s\n\n", tasks.Shorten(strings.TrimSpace(epic.Description), 2000))
+	fmt.Fprintf(&b, "Its closing summary:\n\n%s\n\n", tasks.Shorten(strings.TrimSpace(epic.Summary), 4000))
 	if len(f.stories) == 0 {
 		b.WriteString("It had no stories.\n\n")
 	} else {
@@ -100,7 +100,7 @@ func followUpBrief(epic *tasks.Task, f family) string {
 	for _, story := range f.stories {
 		fmt.Fprintf(&b, "- %s: %s\n", story.ID, story.Title)
 		if summary := strings.TrimSpace(story.Summary); summary != "" {
-			fmt.Fprintf(&b, "  Its summary: %s\n", shorten(summary, 1500))
+			fmt.Fprintf(&b, "  Its summary: %s\n", tasks.Shorten(summary, 1500))
 		}
 	}
 	b.WriteString("\nA summary cut short ends in [...]. The whole of it is on that task's page in Agentry, and a story's " +

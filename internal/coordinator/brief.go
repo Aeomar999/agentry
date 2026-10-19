@@ -3,7 +3,6 @@ package coordinator
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
@@ -45,7 +44,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 
 	var trail strings.Builder
 	for i, step := range task.Trail {
-		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", i+1, step.From, step.To, shorten(step.Text, longestStep))
+		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", i+1, step.From, step.To, tasks.Shorten(step.Text, longestStep))
 	}
 	section(&b, "What has happened so far", trail.String()+"The last step is the newest. Decide what happens next.")
 
@@ -277,24 +276,8 @@ func refusedActions(task *tasks.Task) string {
 	var refused strings.Builder
 	for _, action := range task.Actions {
 		if action.Decision == tasks.Denied {
-			fmt.Fprintf(&refused, "- %s (%s, %s): `%s`: %s\n", action.Agent, action.Turn, action.Tool, shorten(action.Command, 200), action.Reason)
+			fmt.Fprintf(&refused, "- %s (%s, %s): `%s`: %s\n", action.Agent, action.Turn, action.Tool, tasks.Shorten(action.Command, 200), action.Reason)
 		}
 	}
 	return refused.String()
-}
-
-// shorten cuts text to at most limit bytes, backing off to the start of a
-// character so none is split. A negative limit counts as 0.
-func shorten(text string, limit int) string {
-	if limit < 0 {
-		limit = 0
-	}
-	if len(text) <= limit {
-		return text
-	}
-	cut := limit
-	for cut > 0 && !utf8.RuneStart(text[cut]) {
-		cut--
-	}
-	return text[:cut] + " [...]"
 }
