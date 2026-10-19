@@ -65,6 +65,13 @@ func serving(t *testing.T, ca *tlsca.CA, handler http.Handler) string {
 	return listener.Addr().String()
 }
 
+// doorOf is what the front door needs for ca, with a certificate naming
+// hosts, besides localhost and loopback.
+func doorOf(ca *tlsca.CA, hosts ...string) trust {
+	issuer := tlsca.NewIssuer(ca, func() []string { return hosts }, time.Now)
+	return trust{ca: ca, issuer: issuer, addresses: []string{"https://localhost:7800"}}
+}
+
 // trusting is a client that trusts only ca, and doesn't follow redirects.
 func trusting(ca *tlsca.CA) *http.Client {
 	return &http.Client{Timeout: 5 * time.Second,
@@ -126,7 +133,7 @@ func TestASilentConnectionHoldsUpNoOther(t *testing.T) {
 // and query kept. Over TLS everyone is served.
 func TestTheFrontDoor(t *testing.T) {
 	ca, _ := testCA(t)
-	door := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), ca)
+	door := frontDoor(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "served") }), doorOf(ca, "192.168.1.160"))
 	cases := []struct {
 		name, from, path string
 		overTLS          bool
@@ -136,16 +143,15 @@ func TestTheFrontDoor(t *testing.T) {
 		{"this machine", "127.0.0.1:5000", "/api/config", false, "served", ""},
 		{"this machine on IPv6", "[::1]:5000", "/api/config", false, "served", ""},
 		{"this machine, IPv4 in IPv6", "[::ffff:127.0.0.1]:5000", "/", false, "served", ""},
-		{"another machine", "192.168.1.20:5000", "/tasks/task-1?tab=log&x=1", false, "https://box:7800/tasks/task-1?tab=log&x=1", ""},
-		{"another machine at the root", "100.64.0.7:5000", "/", false, "https://box:7800/", ""},
+		{"another machine", "192.168.1.20:5000", "/tasks/task-1?tab=log&x=1", false, "https://192.168.1.160:7800/tasks/task-1?tab=log&x=1", ""},
+		{"another machine at the root", "100.64.0.7:5000", "/", false, "https://192.168.1.160:7800/", ""},
 		{"another machine over TLS", "192.168.1.20:5000", "/api/config", true, "served", ""},
-		{"the trust pages", "192.168.1.20:5000", "/trust/", false, "served", ""},
 		{"this machine on the LAN address it serves", "192.168.1.160:5000", "/api/config", false, "served", "192.168.1.160:7800"},
 		{"this machine, IPv4 in IPv6 on its LAN address", "[::ffff:192.168.1.160]:5000", "/", false, "served", "192.168.1.160:7800"},
-		{"another machine on that LAN address", "192.168.1.20:5000", "/api/config", false, "https://box:7800/api/config", "192.168.1.160:7800"},
+		{"another machine on that LAN address", "192.168.1.20:5000", "/api/config", false, "https://192.168.1.160:7800/api/config", "192.168.1.160:7800"},
 	}
 	for _, c := range cases {
-		r := httptest.NewRequest("GET", "http://box:7800"+c.path, nil)
+		r := httptest.NewRequest("GET", "http://192.168.1.160:7800"+c.path, nil)
 		r.RemoteAddr = c.from
 		if c.arrivedOn != "" {
 			r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, net.TCPAddrFromAddrPort(netip.MustParseAddrPort(c.arrivedOn))))
@@ -171,7 +177,7 @@ func TestTheCACertificateIsServedToAnyone(t *testing.T) {
 	ca, dataDir := testCA(t)
 	s, state := storetest.Open(t, filepath.Join(dataDir, "agentry.db"))
 	server := web.NewServer(s, state, web.Config{UIToken: "0123456789abcdef0123456789abcdef"}, http.NotFoundHandler(), nil)
-	door := frontDoor(server.Handler(), ca)
+	door := frontDoor(server.Handler(), doorOf(ca))
 	for _, overTLS := range []bool{false, true} {
 		for path, want := range map[string][]byte{"/trust/ca.crt": ca.DER(), "/trust/ca.pem": ca.PEM()} {
 			r := httptest.NewRequest("GET", "http://box:7800"+path, nil)
@@ -205,11 +211,12 @@ func TestTheCAKeyIsNeverServed(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(dataDir, "agentry.db"))
 	server := web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: t.TempDir(), Blobs: sharedfiles.Disk{Dir: filepath.Join(dataDir, "files")},
 		Worktrees: filepath.Join(dataDir, "worktrees")}, http.NotFoundHandler(), nil)
-	door := frontDoor(server.Handler(), ca)
+	door := frontDoor(server.Handler(), doorOf(ca))
 	paths := []string{
 		"/tls/ca.key", "/trust/ca.key", "/trust/../tls/ca.key", "/trust/..%2ftls/ca.key", "/trust/%2e%2e/tls/ca.key",
 		"/trust/..%5ctls%5cca.key", "/trust//../../tls/ca.key", "/trust/ca.crt/../ca.key", "/trust/./../tls/ca.key",
 		"/../tls/ca.key", "/static/../../tls/ca.key", "/assets/..%2f..%2ftls%2fca.key",
+		"/trust/", "/trust", "/trust/ca.crt", "/trust/ca.pem", "/trust/agentry.mobileconfig",
 	}
 	// task-1's worktree is dataDir/worktrees/task-1, two folders below the
 	// data folder, and holds a link to the key.
@@ -307,7 +314,7 @@ func TestTheCookieIsSecureOverTLS(t *testing.T) {
 	const token = "0123456789abcdef0123456789abcdef"
 	s, state := storetest.Open(t, filepath.Join(dataDir, "agentry.db"))
 	server := web.NewServer(s, state, web.Config{UIToken: token}, http.NotFoundHandler(), nil)
-	address := serving(t, ca, frontDoor(server.Handler(), ca))
+	address := serving(t, ca, frontDoor(server.Handler(), doorOf(ca)))
 	c := trusting(ca)
 	for url, secure := range map[string]bool{"https://" + address: true, "http://" + address: false} {
 		response, _ := get(t, c, url+"/?token="+token)

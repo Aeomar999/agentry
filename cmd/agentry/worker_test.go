@@ -31,7 +31,7 @@ func joinable(t *testing.T) (ca *tlsca.CA, address string, joins *atomic.Int32) 
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
-	return ca, serving(t, ca, frontDoor(mux, ca)), joins
+	return ca, serving(t, ca, frontDoor(mux, doorOf(ca))), joins
 }
 
 func join(dir string, args ...string) (int, string) {

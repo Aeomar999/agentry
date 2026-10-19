@@ -35,7 +35,7 @@ func connectable(t *testing.T) (ca *tlsca.CA, address string, codes *atomic.Int3
 		w.Write([]byte("{}"))
 	})
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // not this machine's real connection
-	return ca, serving(t, ca, frontDoor(mux, ca)), codes
+	return ca, serving(t, ca, frontDoor(mux, doorOf(ca))), codes
 }
 
 func mcpConnect(args ...string) (int, string) {
@@ -111,7 +111,7 @@ func hookServer(t *testing.T) (ca *tlsca.CA, address string, caRequests *atomic.
 	caRequests = &atomic.Int32{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("{}")) })
-	door := frontDoor(mux, ca)
+	door := frontDoor(mux, doorOf(ca))
 	address = serving(t, ca, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == caPath {
 			caRequests.Add(1)

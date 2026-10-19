@@ -263,7 +263,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "Served over https with Agentry's own CA, SHA-256 %s.\n", ca.Fingerprint())
 	fmt.Fprintf(stdout, "Trust it once on each device: %s%sca.crt\n", cmp.Or(plainURLs(append(slices.Clip(network), serverURL))...), trustPrefix)
 	issuer := tlsca.NewIssuer(ca, tlsca.Hosts, time.Now)
-	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), ca), tlsConfig(issuer))
+	door := trust{ca: ca, issuer: issuer, addresses: append(slices.Clip(network), serverURL)}
+	return serveUntilDone(ctx, listener, frontDoor(server.Handler(), door), tlsConfig(issuer))
 }
 
 // localURL is the server as seen from this machine, over scheme (http or

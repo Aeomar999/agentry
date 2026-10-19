@@ -27,20 +27,31 @@ const trustPrefix = "/trust/"
 // frontDoor is the server with -https on. Over TLS it is next. Over plain
 // HTTP it is next only for this machine, whose hooks, `agentry mcp`, status
 // line and desk call it on loopback or on the address it serves (serve
-// -addr <LAN IP>), and for trustPrefix; anyone else is sent to the same
-// address over https. The CA certificate is at
-// /trust/ca.crt (DER, as phones install it) and /trust/ca.pem; its key is
-// never served.
-func frontDoor(next http.Handler, ca *tlsca.CA) http.Handler {
+// -addr <LAN IP>); anyone else is sent to the same address over https.
+// Under trustPrefix, over either, without the token, is what a device needs
+// to trust the CA: the trust page, the CA certificate at /trust/ca.crt (DER,
+// as phones install it) and /trust/ca.pem, and an iOS profile holding it;
+// the CA's key is never served.
+func frontDoor(next http.Handler, door trust) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+trustPrefix+"{$}", func(w http.ResponseWriter, r *http.Request) {
+		door.page(w, r, http.StatusOK, "")
+	})
+	mux.HandleFunc("GET "+strings.TrimSuffix(trustPrefix, "/"), func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, trustPrefix, http.StatusPermanentRedirect)
+	})
 	mux.HandleFunc("GET "+trustPrefix+"ca.crt", func(w http.ResponseWriter, r *http.Request) {
-		serveCA(w, r, "application/x-x509-ca-cert", "ca.crt", ca.DER())
+		serveCA(w, r, "application/x-x509-ca-cert", "ca.crt", door.ca.DER())
 	})
 	mux.HandleFunc("GET "+trustPrefix+"ca.pem", func(w http.ResponseWriter, r *http.Request) {
-		serveCA(w, r, "application/x-pem-file", "ca.pem", ca.PEM())
+		serveCA(w, r, "application/x-pem-file", "ca.pem", door.ca.PEM())
 	})
+	mux.HandleFunc("GET "+trustPrefix+profileName, func(w http.ResponseWriter, r *http.Request) {
+		serveProfile(w, r, door.ca)
+	})
+	mux.HandleFunc(trustPrefix, http.NotFound) // nothing else is under it
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.TLS != nil || fromThisMachine(r) || strings.HasPrefix(r.URL.Path, trustPrefix) {
+		if r.TLS != nil || fromThisMachine(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -57,6 +68,15 @@ func serveCA(w http.ResponseWriter, r *http.Request, contentType, name string, b
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", `attachment; filename="agentry-`+name+`"`)
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+}
+
+// hostOf is a Host header's host, without its port or an IPv6 address's
+// brackets.
+func hostOf(hostPort string) string {
+	if host, _, err := net.SplitHostPort(hostPort); err == nil {
+		return host
+	}
+	return strings.Trim(hostPort, "[]")
 }
 
 // fromThisMachine is a request this machine sent: from loopback, or from
