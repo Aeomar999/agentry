@@ -99,7 +99,7 @@ func TestOpenPassesItsServeFlagsOn(t *testing.T) {
 // wait for the next start.
 func TestOpenSaysFlagsWaitForTheNextStart(t *testing.T) {
 	for passed, want := range map[string]string{
-		"-https=true -budget=0 -max-turns=5": "Agentry is already running; -https -budget -max-turns apply only when it next starts.",
+		"-https=true -budget=0 -max-turns=5": "Agentry is already running; -https -budget -max-turns apply only when it next starts. Give -https on every start: Start Agentry doesn't pass it.",
 		"-budget=2000000":                    "Agentry is already running; -budget applies only when it next starts.",
 	} {
 		if said := waitingForNextStart(strings.Fields(passed)); said != want {

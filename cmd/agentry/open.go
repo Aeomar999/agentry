@@ -135,7 +135,12 @@ func waitingForNextStart(passed []string) string {
 	if len(names) == 1 {
 		verb = "applies"
 	}
-	return fmt.Sprintf("Agentry is already running; %s %s only when it next starts.", strings.Join(names, " "), verb)
+	said := fmt.Sprintf("Agentry is already running; %s %s only when it next starts.", strings.Join(names, " "), verb)
+	if slices.Contains(names, "-https") {
+		// Nothing saves -https, and Start Agentry runs plain `agentry open`.
+		said += " Give -https on every start: Start Agentry doesn't pass it."
+	}
+	return said
 }
 
 // startServer runs `agentry serve` in the background, its output in the
