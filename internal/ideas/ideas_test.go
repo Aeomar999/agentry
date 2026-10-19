@@ -211,6 +211,63 @@ func TestAnIdeaIsAcceptedOrDismissedOnce(t *testing.T) {
 	}
 }
 
+// A task made from the idea but never marked, as after a crash between the
+// two writes, is the one Accept marks; no second task is made.
+func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
+	s, repo := openSeeded(t)
+	id := suggest(t, s, repo, nil)
+	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
+		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "idea": id}})
+
+	got, err := ideas.Accept(s, id, ideas.Choice{Note: "At last"})
+	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+		t.Fatalf("accept: %+v %v", got, err)
+	}
+	if n := taskCount(t, s); n != 2 {
+		t.Errorf("%d tasks, want task-1 and task-2", n)
+	}
+	if idea := load(t, s, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
+		t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+	}
+}
+
+// You dismiss the idea after its task is made but before it is marked: the
+// task stays, and Acceptance says so.
+func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
+	s, repo := openSeeded(t)
+	id := suggest(t, s, repo, nil)
+	ideas.BeforeMarking(t, func() {
+		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "No"}})
+	})
+
+	got, err := ideas.Accept(s, id, ideas.Choice{})
+	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "wasn't marked accepted") {
+		t.Errorf("accept: %+v %v", got, err)
+	}
+	if idea := load(t, s, id); idea.State != ideas.Dismissed {
+		t.Errorf("idea is %s", idea.State)
+	}
+}
+
+// Two Accepts at once, as from a double click, make one task.
+func TestAcceptsAtOnceMakeOneTask(t *testing.T) {
+	s, repo := openSeeded(t)
+	id := suggest(t, s, repo, nil)
+	results := make(chan ideas.Acceptance, 2)
+	for range 2 {
+		go func() {
+			got, _ := ideas.Accept(s, id, ideas.Choice{})
+			results <- got
+		}()
+	}
+	if first, second := <-results, <-results; first.Accepted == second.Accepted {
+		t.Errorf("want one accepted: %+v, %+v", first, second)
+	}
+	if n := taskCount(t, s); n != 2 {
+		t.Errorf("%d tasks, want task-1 and one made from the idea", n)
+	}
+}
+
 func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 	s, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)

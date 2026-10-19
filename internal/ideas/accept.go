@@ -2,6 +2,7 @@ package ideas
 
 import (
 	"strings"
+	"sync"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -32,9 +33,13 @@ type Acceptance struct {
 // the first team's coordinator, then marks the idea accepted with it. The
 // task is made first, and the rules accept an idea only for a task made from
 // it, so a crash in between leaves a task and an idea still open, never an
-// accepted idea that points at no task. The error is for the log failing,
-// not for a refusal.
+// accepted idea that points at no task. The next Accept finds that task and
+// only marks the idea, and Accepts run one at a time, so a double click or
+// the UI and MCP at once still make one task. The error is for the log
+// failing, not for a refusal.
 func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
+	accepting.Lock()
+	defer accepting.Unlock()
 	idea, err := Load(log, id)
 	switch {
 	case err != nil:
@@ -44,6 +49,58 @@ func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
 	case idea.State != Open:
 		return Acceptance{Refused: "idea " + id + " was " + string(idea.State) + " already"}, nil
 	}
+	made, err := madeFrom(log, idea.ID)
+	if err != nil {
+		return Acceptance{}, err
+	}
+	if made.Task == "" {
+		if made, err = makeTask(log, idea, choice); err != nil || made.Task == "" {
+			return made, err
+		}
+	}
+	beforeMarking()
+	_, rejection, err := log.Propose(events.Proposal{Stream: idea.ID, Actor: you, Type: events.IdeaAccepted,
+		Data: map[string]any{"task": made.Task, "note": choice.Note}})
+	switch {
+	case err != nil:
+		return made, err
+	case rejection != nil:
+		made.Refused = made.Task + " was made, but the idea wasn't marked accepted: " + rejection.Reason
+		return made, nil
+	}
+	made.Accepted = true
+	return made, nil
+}
+
+// accepting runs one Accept at a time.
+var accepting sync.Mutex
+
+// beforeMarking runs between making the task and marking the idea; tests
+// use it to act in that gap.
+var beforeMarking = func() {}
+
+// madeFrom finds a task an earlier Accept made from the idea but stopped
+// before marking it.
+func madeFrom(log *store.Store, id string) (Acceptance, error) {
+	ids, err := log.TaskIDs()
+	if err != nil {
+		return Acceptance{}, err
+	}
+	for _, taskID := range ids {
+		stream, err := log.Stream(taskID)
+		if err != nil {
+			return Acceptance{}, err
+		}
+		if task := tasks.FromEvents(stream); task != nil && task.Idea == id {
+			return Acceptance{Task: task.ID}, nil
+		}
+	}
+	return Acceptance{}, nil
+}
+
+// makeTask makes the idea's task, parked in the Backlog. Task is "" and
+// Refused says why when it can't.
+func makeTask(log *store.Store, idea *Idea, choice Choice) (Acceptance, error) {
 	kind, known := kindOf(choice.Kind, idea)
 	if !known {
 		return Acceptance{Refused: "an idea becomes a task or an epic, not " + choice.Kind}, nil
@@ -59,7 +116,6 @@ func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
 	if !ok {
 		return Acceptance{Refused: "there is no coordinator in the first team"}, nil
 	}
-
 	created, rejection, err := log.Create("task-", events.Proposal{Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": idea.Title, "description": description(idea, choice.Note), "repo": idea.Repo, "coordinator": coordinator.Name,
 		"budget": choice.Budget, "kind": string(kind), "kindChosen": true, "parked": "backlog", "idea": idea.ID}})
@@ -69,18 +125,7 @@ func Accept(log *store.Store, id string, choice Choice) (Acceptance, error) {
 	case rejection != nil:
 		return Acceptance{Refused: "the task wasn't made: " + rejection.Reason}, nil
 	}
-	made := Acceptance{Task: created.Stream}
-	_, rejection, err = log.Propose(events.Proposal{Stream: idea.ID, Actor: you, Type: events.IdeaAccepted,
-		Data: map[string]any{"task": made.Task, "note": choice.Note}})
-	switch {
-	case err != nil:
-		return made, err
-	case rejection != nil:
-		made.Refused = made.Task + " was made, but the idea wasn't marked accepted: " + rejection.Reason
-		return made, nil
-	}
-	made.Accepted = true
-	return made, nil
+	return Acceptance{Task: created.Stream}, nil
 }
 
 // kindOf is the kind of task you chose, or the idea's suggestion.
