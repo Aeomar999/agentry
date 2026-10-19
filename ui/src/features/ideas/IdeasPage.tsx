@@ -14,12 +14,11 @@ import { Panel } from "@/components/molecules/Panel";
 import { changeSettings } from "@/api/client";
 import type { AutoAcceptRule, Settings, TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
-import { VISIONARIES } from "@/lib/teams";
 import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
 import type { Idea } from "./types";
-import { useAskVisionaries } from "./visionaries";
+import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
 // here, grouped by the session that suggested them, newest first (the
@@ -30,7 +29,9 @@ import { useAskVisionaries } from "./visionaries";
 // whether closing an epic starts a session about its follow-ups, and whether
 // Agentry accepts, and starts, the ideas the Visionaries agreed on, by your
 // rule; those show in the history as Agentry's, and an open idea says why
-// Agentry didn't accept it.
+// Agentry didn't accept it. With no Visionaries team and no ideas, Ideas is
+// off: the page only says what it is and offers to ask the visionaries,
+// which adds the team; the settings wait until there is a team or an idea.
 
 export function IdeasPage() {
   useBreadcrumb({ label: "Ideas" });
@@ -51,35 +52,43 @@ export function IdeasPage() {
   const open = ideas.filter((idea) => idea.state === "open");
   const decided = ideas.filter((idea) => idea.state !== "open");
   const ask = visionaries.has ? "Ask the visionaries" : "Add the Visionaries team";
+  // Off waits for the ideas, so a slow or failed load never shows the
+  // explainer to someone who has ideas.
+  const off = visionaries.ready && !visionaries.has && loaded && !error && ideas.length === 0;
 
   return (
     <>
       <PageHeader
         title="Ideas"
         meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
-        actions={[
-          {
-            label: visionaries.adding ? "Adding the team…" : ask,
-            icon: visionaries.has ? <Lightbulb /> : <Users />,
-            onClick: visionaries.ask,
-            primary: true,
-            disabled: !visionaries.ready || visionaries.adding,
-          },
-        ]}
+        actions={
+          off
+            ? []
+            : [
+                {
+                  label: visionaries.adding ? "Adding the team…" : ask,
+                  icon: visionaries.has ? <Lightbulb /> : <Users />,
+                  onClick: visionaries.ask,
+                  primary: true,
+                  disabled: !visionaries.ready || visionaries.adding,
+                },
+              ]
+        }
       />
       <div className="flex flex-col gap-8 p-6">
         {error && <Banner title="Couldn't load the ideas">{error}</Banner>}
         {visionaries.missingProfiles.length > 0 && (
           <MissingProfilesOffer
-            team={VISIONARIES}
+            team={visionaries.team}
             profiles={visionaries.missingProfiles}
             adding={visionaries.adding}
             onAdd={visionaries.askAddingProfiles}
           />
         )}
         {visionaries.error && <Banner title="The Visionaries team wasn't added">{visionaries.error}</Banner>}
-        <IdeaSettings />
-        {data && ideas.length === 0 && (
+        {off && <IdeasOff visionaries={visionaries} />}
+        {!off && <IdeaSettings />}
+        {!off && data && ideas.length === 0 && (
           <EmptyState icon={<Lightbulb />} title="No ideas yet">
             <div className="flex flex-col items-center gap-3">
               <p>
@@ -140,6 +149,30 @@ export function IdeasPage() {
       {acting?.action === "accept" && <AcceptIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
       {acting?.action === "dismiss" && <DismissIdeaDialog idea={acting.idea} onClose={() => setActing(null)} />}
     </>
+  );
+}
+
+// IdeasOff is the page with Ideas off: what Ideas is, and the one way to
+// turn it on, asking the visionaries, which adds the team first.
+function IdeasOff({ visionaries }: { visionaries: AskVisionaries }) {
+  return (
+    <EmptyState icon={<Lightbulb />} title="Ideas: features the Visionaries suggest">
+      <div className="flex flex-col items-center gap-4">
+        <p>
+          The Visionaries are a team of agents that think about what to build next. Give them a theme or a question: they read what exists,
+          argue it out from several viewpoints, and change no code. The features they agree are worth it come here as ideas, for you to
+          accept into your Backlog as a task or an epic, or dismiss.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button variant="primary" icon={<Lightbulb />} disabled={!visionaries.ready || visionaries.adding} onClick={visionaries.ask}>
+            {visionaries.adding ? "Adding the team…" : "Ask the visionaries"}
+          </Button>
+        </div>
+        <p className="text-ink-faint">
+          This adds the {visionaries.team} team from its template, then opens New task for your theme or question.
+        </p>
+      </div>
+    </EmptyState>
   );
 }
 
