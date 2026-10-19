@@ -49,10 +49,7 @@ func agreedDone(t *testing.T, s *store.Store, state *current.State, repo string,
 		{"title": "dark mode", "problem": "p", "proposal": "f", "size": "S", "backedBy": `+everyViewpoint+`},
 		{"title": "Export", "problem": "p", "proposal": "f", "size": "S", "backedBy": `+everyViewpoint+`}]}`)
 	waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
-	list, err := ideas.List(s, repo)
-	if err != nil {
-		t.Fatal(err)
-	}
+	list := ideas.List(state, repo)
 	byTitle := map[string]*ideas.Idea{}
 	for _, idea := range list {
 		if idea.Task == id {

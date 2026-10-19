@@ -115,6 +115,17 @@ func decode(text []byte) (policyFile, error) {
 	return f, nil
 }
 
+// UseForEveryoneOf is the profile a policy's text puts every agent under,
+// "" when use_for_everyone isn't set. It only reads the TOML: it doesn't
+// check the policy as Parse does.
+func UseForEveryoneOf(text []byte) (string, error) {
+	f, err := decode(text)
+	if err != nil {
+		return "", err
+	}
+	return f.UseForEveryone, nil
+}
+
 func (f policyFile) check() error {
 	if f.Version != 1 {
 		return fmt.Errorf("version must be 1, got %d", f.Version)

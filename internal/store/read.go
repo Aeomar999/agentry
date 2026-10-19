@@ -29,26 +29,6 @@ func (s *Store) After(position int64, limit int) ([]events.Event, error) {
 		WHERE position > ? AND position <= ? ORDER BY position LIMIT ?`, position, s.applied.Load(), limit)
 }
 
-// IdeaIDs returns every idea's stream name, oldest first.
-func (s *Store) IdeaIDs() ([]string, error) { return s.streamsStartedBy(events.IdeaSuggested) }
-
-func (s *Store) streamsStartedBy(kind events.Type) ([]string, error) {
-	rows, err := s.reads.Query(`SELECT stream FROM events WHERE type = ? AND position <= ? ORDER BY position`, kind, s.applied.Load())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 type querier interface {
 	Query(query string, args ...any) (*sql.Rows, error)
 }

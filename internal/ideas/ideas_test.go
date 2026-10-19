@@ -1,13 +1,11 @@
 package ideas_test
 
 import (
-	"database/sql"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -71,9 +69,9 @@ func suggest(t *testing.T, s *store.Store, repo string, data map[string]any) str
 	return created.Stream
 }
 
-func load(t *testing.T, s *store.Store, id string) *ideas.Idea {
+func load(t *testing.T, state *current.State, id string) *ideas.Idea {
 	t.Helper()
-	idea, err := ideas.Load(s, id)
+	idea, err := state.Idea(id)
 	if err != nil || idea == nil {
 		t.Fatalf("loading %s: %v %v", id, idea, err)
 	}
@@ -91,7 +89,7 @@ func loadTask(t *testing.T, s *store.Store, id string) *tasks.Task {
 
 func TestASuggestedIdeaKeepsEveryField(t *testing.T) {
 	s, state, repo := openSeeded(t)
-	idea := load(t, s, suggest(t, s, repo, map[string]any{"kind": "epic"}))
+	idea := load(t, state, suggest(t, s, repo, map[string]any{"kind": "epic"}))
 
 	got := []string{idea.ID, idea.Title, idea.Problem, idea.Proposal, idea.WhyNow, idea.Size, idea.Risks,
 		strings.Join(idea.BackedBy, ","), strings.Join(idea.DoubtedBy, ","), idea.Task, idea.Repo, idea.Epic, string(idea.Kind), string(idea.State)}
@@ -140,7 +138,7 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 					t.Errorf("description has no %s:\n%s", link, task.Description)
 				}
 			}
-			if idea := load(t, s, id); idea.State != ideas.Accepted || idea.Became != "task-2" || idea.Note != "Yes, soon" {
+			if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" || idea.Note != "Yes, soon" {
 				t.Errorf("idea: %s, became %q, note %q", idea.State, idea.Became, idea.Note)
 			}
 		})
@@ -148,59 +146,25 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 }
 
 func TestDismissKeepsYourNote(t *testing.T) {
-	s, _, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	kept, dropped := suggest(t, s, repo, nil), suggest(t, s, repo, map[string]any{"title": "Dark mode"})
 	other := suggest(t, s, gitRepo(t), map[string]any{"title": "Elsewhere"})
 	for _, id := range []string{dropped, other} {
 		mustPropose(t, s, events.Proposal{Stream: id, Actor: you, Type: events.IdeaDismissed, Data: map[string]any{"note": "Not now"}})
 	}
 
-	if idea := load(t, s, dropped); idea.State != ideas.Dismissed || idea.Note != "Not now" {
+	if idea := load(t, state, dropped); idea.State != ideas.Dismissed || idea.Note != "Not now" {
 		t.Errorf("dismissed: %s %q", idea.State, idea.Note)
 	}
-	list, err := ideas.List(s, repo)
-	if err != nil || len(list) != 2 || list[0].ID != dropped || list[1].ID != kept {
-		t.Fatalf("the repo's ideas, newest first: %v %v", list, err)
+	list := ideas.List(state, repo)
+	if len(list) != 2 || list[0].ID != dropped || list[1].ID != kept {
+		t.Fatalf("the repo's ideas, newest first: %v", list)
 	}
 	if dismissed := ideas.Dismissals(list); len(dismissed) != 1 || dismissed[0].Title != "Dark mode" || dismissed[0].Note != "Not now" {
 		t.Errorf("dismissals: %v", dismissed)
 	}
-	if all, _ := ideas.List(s, ""); len(all) != 3 {
+	if all := ideas.List(state, ""); len(all) != 3 {
 		t.Errorf("every repo's ideas: %d", len(all))
-	}
-}
-
-// One idea the log can't read back, such as a row whose data isn't JSON,
-// is left out of the list; the others are still listed.
-func TestTheListSkipsAnIdeaItCantLoad(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "agentry.db")
-	s, err := store.Open(path, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo := gitRepo(t)
-	first := suggest(t, s, repo, nil)
-	s.Close()
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.Exec(`INSERT INTO events (at, stream, actor_kind, actor_id, type, data) VALUES (?, 'idea-2', 'system', 'agentry', ?, 'not json')`,
-		time.Now().UTC().Format(time.RFC3339Nano), events.IdeaSuggested)
-	db.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, err = store.Open(path, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { s.Close() })
-	last := suggest(t, s, repo, map[string]any{"title": "Dark mode"})
-
-	list, err := ideas.List(s, "")
-	if err != nil || len(list) != 2 || list[0].ID != last || list[1].ID != first {
-		t.Errorf("the ideas but idea-2, newest first: %v %v", list, err)
 	}
 }
 
@@ -250,7 +214,7 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 	if n := len(state.TaskIDs()); n != 2 {
 		t.Errorf("%d tasks, want task-1 and task-2", n)
 	}
-	if idea := load(t, s, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
+	if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
 		t.Errorf("idea: %s, became %q", idea.State, idea.Became)
 	}
 }
@@ -291,7 +255,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	if n := len(state.TaskIDs()); n != 3 {
 		t.Errorf("%d tasks, want no task made beside task-1 to task-3", n)
 	}
-	if idea := load(t, s, fromBroken); idea.State != ideas.Open {
+	if idea := load(t, state, fromBroken); idea.State != ideas.Open {
 		t.Errorf("%s is %s", fromBroken, idea.State)
 	}
 	if got, err := ideas.Accept(s, state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Accepted: true}) {
@@ -312,7 +276,7 @@ func TestAcceptRefusesAnUnknownKind(t *testing.T) {
 		if err != nil || got != (ideas.Acceptance{Refused: "an idea becomes a task or an epic, not bogus"}) {
 			t.Errorf("accepting %s as bogus: %+v %v", id, got, err)
 		}
-		if idea := load(t, s, id); idea.State != ideas.Open {
+		if idea := load(t, state, id); idea.State != ideas.Open {
 			t.Errorf("%s is %s", id, idea.State)
 		}
 	}
@@ -331,7 +295,7 @@ func TestAcceptSaysWhenTheTaskWasMadeButTheIdeaNotMarked(t *testing.T) {
 	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "wasn't marked accepted") {
 		t.Errorf("accept: %+v %v", got, err)
 	}
-	if idea := load(t, s, id); idea.State != ideas.Dismissed {
+	if idea := load(t, state, id); idea.State != ideas.Dismissed {
 		t.Errorf("idea is %s", idea.State)
 	}
 }
@@ -358,7 +322,7 @@ func TestAcceptsAtOnceMakeOneTask(t *testing.T) {
 // Agentry may accept an idea, but only for a task made from it (see
 // TestTheRulesKeepAgentryToIdeasItAccepted).
 func TestOnlyYouAcceptOrDismiss(t *testing.T) {
-	s, _, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	id := suggest(t, s, repo, nil)
 	for _, by := range []events.Actor{coordinator, agentry} {
 		for _, p := range []events.Proposal{
@@ -374,7 +338,7 @@ func TestOnlyYouAcceptOrDismiss(t *testing.T) {
 			}
 		}
 	}
-	if idea := load(t, s, id); idea.State != ideas.Open {
+	if idea := load(t, state, id); idea.State != ideas.Open {
 		t.Errorf("idea is %s", idea.State)
 	}
 }
@@ -390,7 +354,7 @@ func TestAcceptRefusesAnUnknownRepo(t *testing.T) {
 	if n := len(state.TaskIDs()); n != 1 {
 		t.Errorf("%d tasks, want only task-1", n)
 	}
-	if idea := load(t, s, id); idea.State != ideas.Open {
+	if idea := load(t, state, id); idea.State != ideas.Open {
 		t.Errorf("idea is %s", idea.State)
 	}
 }
@@ -443,10 +407,10 @@ func TestASuggestionComesFromATask(t *testing.T) {
 // A log from before ideas has none: its tasks build as they did, and the
 // next task and the first idea are named as before.
 func TestALogWithNoIdeas(t *testing.T) {
-	s, _, repo := openSeeded(t)
+	s, state, repo := openSeeded(t)
 	before := loadTask(t, s, "task-1")
-	if list, err := ideas.List(s, ""); err != nil || list != nil {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, ""); list != nil {
+		t.Errorf("ideas: %v", list)
 	}
 	if before.Idea != "" || before.Parked != "" || before.Status() != tasks.Working {
 		t.Errorf("task-1: idea %q parked %q status %s", before.Idea, before.Parked, before.Status())

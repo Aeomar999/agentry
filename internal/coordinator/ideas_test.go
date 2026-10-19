@@ -20,11 +20,11 @@ import (
 // Software and a Visionaries team on a real loop. The Visionaries team is
 // Writing's agents made as the Visionaries' template, so its coordinator is
 // editor.
-func withVisionaries(t *testing.T) (*store.Store, string) {
+func withVisionaries(t *testing.T) (*store.Store, *current.State, string) {
 	t.Helper()
 	s, state, repo := withTeams(t, true)
 	runLoop(t, s, state)
-	return s, repo
+	return s, state, repo
 }
 
 // withTeams is a store with the Software team, and the Visionaries if
@@ -86,7 +86,7 @@ func startTask(t *testing.T, s *store.Store, id, repo, coordinator string) *task
 }
 
 func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	const id = "task-vision-1"
 	task := startTask(t, s, id, repo, "editor")
 	if brief := readBrief(t, task, "turn-1"); !strings.Contains(brief, IdeasFormat) {
@@ -100,9 +100,9 @@ func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
 	if task.Summary != "Two ideas." {
 		t.Errorf("summary %q", task.Summary)
 	}
-	list, err := ideas.List(s, repo)
-	if err != nil || len(list) != 2 {
-		t.Fatalf("ideas: %v %v", list, err)
+	list := ideas.List(state, repo)
+	if len(list) != 2 {
+		t.Fatalf("ideas: %v", list)
 	}
 	for _, idea := range list {
 		if idea.State != ideas.Open || idea.Task != id || idea.Repo != repo {
@@ -115,7 +115,7 @@ func TestAVisionariesDoneKeepsItsIdeas(t *testing.T) {
 }
 
 func TestARefusedIdeaDoesntStopTheDone(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	const id = "task-vision-2"
 	startTask(t, s, id, repo, "editor")
 
@@ -126,13 +126,13 @@ func TestARefusedIdeaDoesntStopTheDone(t *testing.T) {
 	if !strings.HasPrefix(task.Summary, "One good idea.") || !strings.Contains(task.Summary, `"Huge": an idea's size is S, M or L, not XL`) {
 		t.Errorf("the summary should say which idea was refused:\n%s", task.Summary)
 	}
-	if list, _ := ideas.List(s, repo); len(list) != 1 || list[0].Title != "Search the board" {
+	if list := ideas.List(state, repo); len(list) != 1 || list[0].Title != "Search the board" {
 		t.Errorf("ideas: %v", list)
 	}
 }
 
 func TestADoneNamingOneTitleTwiceKeepsOneIdea(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	const id = "task-vision-7"
 	startTask(t, s, id, repo, "editor")
 
@@ -140,15 +140,15 @@ func TestADoneNamingOneTitleTwiceKeepsOneIdea(t *testing.T) {
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"},
 		{"title": "Search the board", "problem": "Scrolling", "proposal": "A search box", "size": "M"}]}`)
 	waitUntil(t, s, id, "done", func(task *tasks.Task) bool { return task.IsDone })
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 1 {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, repo); len(list) != 1 {
+		t.Errorf("ideas: %v", list)
 	}
 }
 
 // Only a Visionaries session suggests ideas: a Software done carrying some
 // goes through, keeps none and says so.
 func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	const id = "task-vision-6"
 	startTask(t, s, id, repo, "tech-lead")
 
@@ -158,15 +158,15 @@ func TestASoftwareDoneKeepsNoIdeas(t *testing.T) {
 	if !strings.HasPrefix(task.Summary, "Built it.\n\n") || !strings.Contains(task.Summary, "couldn't keep these ideas") {
 		t.Errorf("the summary should say the ideas weren't kept:\n%s", task.Summary)
 	}
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 0 {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, repo); len(list) != 0 {
+		t.Errorf("ideas: %v", list)
 	}
 }
 
 // A done from a coordinator the roster no longer has, here renamed while its
 // session ran, keeps no ideas and says so.
 func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, state, repo := withVisionaries(t)
 	const id = "task-vision-8"
 	startTask(t, s, id, repo, "editor")
 	if _, rejection, err := s.Propose(agents.Agent{Name: "editor"}.Renaming(you, "chief-editor")); rejection != nil || err != nil {
@@ -179,8 +179,8 @@ func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) 
 	if !strings.Contains(task.Summary, "couldn't keep these ideas") {
 		t.Errorf("the summary should say the ideas weren't kept:\n%s", task.Summary)
 	}
-	if list, err := ideas.List(s, repo); err != nil || len(list) != 0 {
-		t.Errorf("ideas: %v %v", list, err)
+	if list := ideas.List(state, repo); len(list) != 0 {
+		t.Errorf("ideas: %v", list)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestADoneFromACoordinatorNoLongerThereSaysItsIdeasWerentKept(t *testing.T) 
 // coordinator reads what you dismissed in its repo, and a Software one
 // doesn't, nor how to suggest ideas.
 func TestAVisionariesBriefNamesTheDismissedIdeas(t *testing.T) {
-	s, repo := withVisionaries(t)
+	s, _, repo := withVisionaries(t)
 	startTask(t, s, "task-vision-3", repo, "editor")
 	endTurn(t, s, "task-vision-3", "turn-1", "editor", `{"action": "done", "summary": "One idea.", "ideas": [
 		{"title": "Dark mode", "problem": "Bright at night", "proposal": "A dark theme", "size": "S"}]}`)
