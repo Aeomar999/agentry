@@ -246,6 +246,48 @@ func TestTheVisionariesTeam(t *testing.T) {
 	}
 }
 
+// The Networking team diagnoses with its two checkers and changes config
+// with its engineer, under the lead.
+func TestTheNetworkingTeam(t *testing.T) {
+	networking, ok := TemplateNamed("networking")
+	if !ok {
+		t.Fatal("no Networking template")
+	}
+	log := seeded()
+	for _, p := range AddTeam(networking, FromEvents(log), you) {
+		log = append(log, events.Event{Proposal: p})
+	}
+	roster := FromEvents(log)
+	if len(roster) != 9 {
+		t.Fatalf("want the 5 defaults and 4 networking agents, got %d agents", len(roster))
+	}
+	lead, ok := roster.Coordinator("Networking")
+	if !ok || lead.Name != "network-lead" || lead.Team != "Networking" {
+		t.Errorf("the Networking team's coordinator: %+v", lead)
+	}
+	var names []string
+	for _, agent := range roster.Assignees("Networking") {
+		names = append(names, agent.Name)
+	}
+	if strings.Join(names, " ") != "network-engineer network-verifier network-security" {
+		t.Errorf("the Networking team's agents: %v", names)
+	}
+	for _, want := range []struct{ name, profile, column string }{
+		{"network-lead", "read-only", ""},
+		{"network-engineer", "developer", ""},
+		{"network-verifier", "network-diagnosis", Reviews},
+		{"network-security", "network-diagnosis", Reviews},
+	} {
+		agent, _ := roster.Get(want.name)
+		if agent.Team != "Networking" || agent.Profile != want.profile || agent.Column != want.column || agent.Engine != "claude" || len(agent.Prompt) < 400 {
+			t.Errorf("%s: team %q, profile %q, column %q, engine %q, prompt %d chars", want.name, agent.Team, agent.Profile, agent.Column, agent.Engine, len(agent.Prompt))
+		}
+		if agent.Coordinates != (want.name == "network-lead") {
+			t.Errorf("%s coordinates: %v", want.name, agent.Coordinates)
+		}
+	}
+}
+
 // Adding a template must not rename or reorder the teams people already add.
 func TestTheTemplatesAndTheirAgents(t *testing.T) {
 	want := map[string]string{
@@ -254,6 +296,7 @@ func TestTheTemplatesAndTheirAgents(t *testing.T) {
 		"Research":    "research-lead investigator analyst critic",
 		"Design":      "product-lead product-designer ux-writer design-critic",
 		"Visionaries": "visionary-lead product-strategist user-advocate technologist skeptic",
+		"Networking":  "network-lead network-engineer network-verifier network-security",
 	}
 	var teams []string
 	for _, template := range Templates {
@@ -266,7 +309,7 @@ func TestTheTemplatesAndTheirAgents(t *testing.T) {
 			t.Errorf("%s: %s, want %s", template.Team, got, want[template.Team])
 		}
 	}
-	if got := strings.Join(teams, ", "); got != DefaultTeam+", Writing, Research, Design, Visionaries" {
+	if got := strings.Join(teams, ", "); got != DefaultTeam+", Writing, Research, Design, Visionaries, Networking" {
 		t.Errorf("templates: %s", got)
 	}
 }

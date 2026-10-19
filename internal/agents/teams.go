@@ -76,6 +76,18 @@ var Templates = []Template{
 			{Name: "skeptic", Engine: "claude", Profile: "read-mostly", Color: "violet", Column: Reviews,
 				Description: "Pushes back on every idea: cost, risk, scope creep, and whether we need it at all"},
 		}},
+	{ID: "networking", Team: "Networking", Folder: "networking",
+		Description: "Diagnoses and changes networks: connectivity, DNS, TLS, proxies, VPNs and firewalls. Works on config in repos, proves each change from where it matters, and touches nothing live without your go-ahead.",
+		Agents: []Agent{
+			{Name: "network-lead", Coordinates: true, Engine: "claude", Profile: "read-only", Color: "orange",
+				Description: "Takes every networking task, splits and plans it, and decides who works on it next and what needs your go-ahead"},
+			{Name: "network-engineer", Engine: "claude", Profile: "developer", Color: "blue",
+				Description: "Investigates and changes the config in the repo: proxy and firewall config, compose and stack files, IaC, docs and diagrams"},
+			{Name: "network-verifier", Engine: "claude", Profile: "network-diagnosis", Color: "teal", Column: Reviews,
+				Description: "Proves a change works, or finds where it breaks, from inside the host or container, the LAN, the private network and the public internet, with the evidence"},
+			{Name: "network-security", Engine: "claude", Profile: "network-diagnosis", Color: "violet", Column: Reviews,
+				Description: "Checks every change for exposure, auth, TLS and a tested rollback before it lands"},
+		}},
 }
 
 // prompted is the template's agents with their prompts, its team and its ID.
