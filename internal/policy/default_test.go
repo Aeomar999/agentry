@@ -401,6 +401,9 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 		{"unset hides a push to main", bash("c=status; unset c; git $c push -f origin main"), Ask},
 		{"a plain variable still runs", bash("c=status; git $c"), Allow},
 		{"an empty assignment", bash("c=; git $c status"), Allow},
+		// a loop gives a word a new value after the walk has passed it (review round 5)
+		{"printf -v through a variable set later in a loop", bash("p=echo; c=status; for i in 1 2; do $p -v c 'push -f origin main'; p=printf; done; git $c"), Ask},
+		{"a value set later in a loop", bash("x=status; for i in 1 2; do c=$x; x='push -f origin main'; done; git $c"), Deny},
 	})
 	check(t, p, "autonomous", []decisionCase{
 		{"an empty loop hides nothing", bash("for c in; do :; done; git push origin main $c"), Ask},
@@ -449,6 +452,15 @@ func TestEveryValueOfAVariableIsJudged(t *testing.T) {
 			{"a plain variable with options", bash("c=log; git $c --grep commit"), Allow},
 			{"the go test command", bash("GOTOOLCHAIN=local GOPROXY=off go test ./..."), Allow},
 			{"a loop over a glob", bash("for f in *.go; do gofmt -l $f; done"), Allow},
+
+			// a loop gives a word a new value after the walk has passed it (review round 5)
+			{"printf named later in a for loop", bash("p=echo; c=status; for i in 1 2; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"-v given later in a for loop", bash("o=-x; c=status; for i in 1 2; do printf $o c commit; o=-v; done; git $c -m x"), Ask},
+			{"printf named later in an until loop", bash("p=echo; c=status; until false; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"printf named later in a while loop", bash("p=echo; c=status; while true; do $p -v c commit; p=printf; done; git $c -m x"), Ask},
+			{"a value set later in a loop", bash("x=status; for i in 1 2; do c=$x; x=commit; done; git $c -m x"), Deny},
+			{"a loop item set later in a loop", bash("x=status; for i in 1 2; do for c in $x; do git $c -m x; done; x=commit; done"), Deny},
+			{"the read list after a loop", bash("for f in a b; do cat $f; done; git -C . log --grep commit; gofmt -l $f"), Allow},
 
 			// npm reads npm_config_* in any case, and make takes every variable it is given
 			{"npm_config_node_options", bash("npm_config_node_options='--import=data:text/javascript,x' npm test"), Ask},

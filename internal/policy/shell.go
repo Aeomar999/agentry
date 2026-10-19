@@ -51,8 +51,39 @@ type shellInspector struct {
 // ways name their variable in arguments only the builtin can read. So when
 // any of them appears, no variable is known, Agentry's own included, and
 // every command that uses one asks.
+//
+// A loop can give a word a new value after the walk has passed it, so the
+// walk runs again until no variable gains a value; its last run judges every
+// word against all the values it can hold. A variable whose values never
+// stop growing (c=${c}x) isn't known either.
 func (s *shellInspector) learnVariables(file *syntax.File) {
-	unsure := false
+	for range maxLearningRounds {
+		before := valueCount(s.variables)
+		if s.learnOnce(file) {
+			break
+		}
+		if valueCount(s.variables) == before {
+			return
+		}
+	}
+	s.variables = map[string][]string{}
+}
+
+// maxLearningRounds is how many times learnVariables walks the command before
+// it gives up on the values settling.
+const maxLearningRounds = 8
+
+func valueCount(variables map[string][]string) int {
+	count := 0
+	for _, values := range variables {
+		count += len(values)
+	}
+	return count
+}
+
+// learnOnce walks the command once, adding the values it finds, and says
+// whether a variable is set in a way that can't be read.
+func (s *shellInspector) learnOnce(file *syntax.File) (unsure bool) {
 	syntax.Walk(file, func(node syntax.Node) bool {
 		switch n := node.(type) {
 		case *syntax.Assign:
@@ -60,7 +91,7 @@ func (s *shellInspector) learnVariables(file *syntax.File) {
 				return true
 			}
 			if values, ok := s.assignedValues(n); ok {
-				s.variables[n.Name.Value] = append(s.variables[n.Name.Value], values...)
+				s.learn(n.Name.Value, values)
 			} else {
 				unsure = true
 			}
@@ -75,7 +106,7 @@ func (s *shellInspector) learnVariables(file *syntax.File) {
 				if !ok {
 					unsure = true
 				} else if len(items) > 0 {
-					s.variables[iteration.Name.Value] = append(s.variables[iteration.Name.Value], items...)
+					s.learn(iteration.Name.Value, items)
 				}
 			}
 		case *syntax.ParamExp:
@@ -89,8 +120,15 @@ func (s *shellInspector) learnVariables(file *syntax.File) {
 		}
 		return true
 	})
-	if unsure {
-		s.variables = map[string][]string{}
+	return unsure
+}
+
+// learn adds the values a variable doesn't have yet.
+func (s *shellInspector) learn(name string, values []string) {
+	for _, value := range values {
+		if !slices.Contains(s.variables[name], value) {
+			s.variables[name] = append(s.variables[name], value)
+		}
 	}
 }
 
@@ -156,6 +194,9 @@ func (s *shellInspector) setsVariables(args []*syntax.Word) bool {
 		if name == "printf" && slices.ContainsFunc(args[1:], s.mayBeVariableOption) {
 			return true
 		}
+		if name == "wait" && slices.ContainsFunc(args[1:], s.mayBeWaitVariableOption) {
+			return true
+		}
 	}
 	return false
 }
@@ -172,6 +213,15 @@ func withoutOption(words []*syntax.Word, option string) []*syntax.Word {
 func (s *shellInspector) mayBeVariableOption(word *syntax.Word) bool {
 	values, ok := s.values(word)
 	return !ok || slices.ContainsFunc(values, func(value string) bool { return strings.HasPrefix(value, "-v") })
+}
+
+// mayBeWaitVariableOption: the word may be wait's -p NAME, alone or in a
+// cluster of its options (-np NAME).
+func (s *shellInspector) mayBeWaitVariableOption(word *syntax.Word) bool {
+	values, ok := s.values(word)
+	return !ok || slices.ContainsFunc(values, func(value string) bool {
+		return strings.HasPrefix(value, "-") && strings.Contains(value, "p")
+	})
 }
 
 func (s *shellInspector) visit(node syntax.Node) bool {
