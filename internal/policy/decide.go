@@ -27,13 +27,14 @@ type profile struct {
 }
 
 type rule struct {
-	name, why string
-	decision  Decision
-	tools     []string
-	runsAny   []glob
-	runsOnly  []glob
-	paths     []glob
-	where     string
+	name, why       string
+	decision        Decision
+	tools           []string
+	runsAny         []glob
+	runsOnly        []glob
+	paths           []glob
+	where           string
+	redirectsToFile bool // a redirect writes a file other than /dev/null and scratch
 }
 
 // Hash identifies this version of the policy in the log.
@@ -100,6 +101,7 @@ type facts struct {
 	isShell bool
 	shell   shellCall
 	paths   []string // absolute and cleaned
+	writes  []string // redirect targets, absolute and cleaned
 }
 
 func (p *Policy) inspect(call Call) facts {
@@ -113,6 +115,9 @@ func (p *Policy) inspect(call Call) facts {
 	}
 	for _, path := range raw {
 		f.paths = append(f.paths, p.absolute(path, call.Workspace))
+	}
+	for _, path := range f.shell.writes {
+		f.writes = append(f.writes, p.absolute(path, call.Workspace))
 	}
 	return f
 }
@@ -153,6 +158,9 @@ func (r rule) matches(call Call, f facts, prof *profile) bool {
 	if len(r.runsOnly) > 0 && !(f.isShell && runsOnly(r.runsOnly, f.shell)) {
 		return false
 	}
+	if r.redirectsToFile && !slices.ContainsFunc(f.writes, func(path string) bool { return writesAFile(path, prof.scratch) }) {
+		return false
+	}
 	if len(r.paths) > 0 && !slices.ContainsFunc(f.paths, func(path string) bool { return anyMatches(r.paths, path) }) {
 		return false
 	}
@@ -187,6 +195,12 @@ func runsOnly(patterns []glob, s shellCall) bool {
 		}
 	}
 	return true
+}
+
+// writesAFile: writing to path changes a file someone keeps. /dev/null keeps
+// nothing, and the profile's scratch places are the agent's own.
+func writesAFile(path string, scratch []glob) bool {
+	return path != "/dev/null" && !anyMatches(scratch, path)
 }
 
 // staysInside: every path is in the workspace or a scratch place, and (for a

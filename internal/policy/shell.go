@@ -14,6 +14,7 @@ type shellCall struct {
 	commands  []string // each simple command, its words joined by single spaces
 	pipelines []string // each pipeline of two or more commands, as "a | b"
 	paths     []string // every word that may name a file, and every redirect target
+	writes    []string // redirect targets written to: > f, >> f, &> f, >| f, <> f
 	opaque    bool     // part of it can't be known before it runs: $(...), an unknown variable
 	invalid   bool     // the shell couldn't parse it
 }
@@ -120,12 +121,29 @@ func (s *shellInspector) addDeclaration(n *syntax.DeclClause) {
 
 func (s *shellInspector) addRedirect(r *syntax.Redirect) {
 	switch r.Op {
-	case syntax.DplIn, syntax.DplOut, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
-		return // 2>&1 joins outputs; a heredoc is the command's input, not a file
+	case syntax.DplIn, syntax.Hdoc, syntax.DashHdoc, syntax.WordHdoc:
+		return // a heredoc is the command's input, not a file
+	case syntax.DplOut:
+		if r.Word == nil || isDescriptor(s.wordText(r.Word)) {
+			return // 2>&1 joins outputs; only bash's >&file names a file
+		}
 	}
-	if r.Word != nil {
-		s.addWordAsPath(r.Word, true)
+	if r.Word == nil {
+		return
 	}
+	s.addWordAsPath(r.Word, true)
+	if r.Op != syntax.RdrIn {
+		values, ok := s.values(r.Word)
+		if !ok {
+			values = []string{"$?"} // a file it can't name is still written
+		}
+		s.call.writes = append(s.call.writes, values...)
+	}
+}
+
+// isDescriptor: the target of >& is a file descriptor (2>&1) or "-" (close).
+func isDescriptor(target string) bool {
+	return target == "-" || target != "" && strings.Trim(target, "0123456789") == ""
 }
 
 // addPath records a command argument that may name a file. Flags, URLs and
@@ -151,7 +169,55 @@ func (s *shellInspector) commandText(args []*syntax.Word) string {
 	for i, arg := range args {
 		words[i] = s.wordText(arg)
 	}
+	if words[0] == "git" {
+		words = s.withoutGitOptions(words)
+	}
 	return strings.Join(words, " ")
+}
+
+// git's options before its subcommand that take a value: -C dir, -c k=v,
+// --git-dir dir or --git-dir=dir, and the like.
+var gitOptionsWithValue = map[string]bool{
+	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true, "--attr-source": true,
+}
+
+var gitOptions = map[string]bool{
+	"-p": true, "--paginate": true, "-P": true, "--no-pager": true, "--bare": true, "--no-replace-objects": true,
+	"--no-lazy-fetch": true, "--no-optional-locks": true, "--no-advice": true, "--literal-pathspecs": true,
+	"--glob-pathspecs": true, "--noglob-pathspecs": true, "--icase-pathspecs": true,
+}
+
+// withoutGitOptions drops git's options before its subcommand, so one
+// pattern, 'git commit *', matches `git -C dir commit` and `git --git-dir=x
+// commit` too. A directory they name stays a path, judged by `where`. A
+// setting (-c, --config-env, --exec-path=) can make git run a command of its
+// own, core.pager or core.fsmonitor, so it makes the call opaque. An option
+// it doesn't know stops the dropping: what is left then matches no git
+// pattern, so it is asked about rather than guessed.
+func (s *shellInspector) withoutGitOptions(words []string) []string {
+	for i := 1; i < len(words); {
+		word := words[i]
+		name, value, joined := strings.Cut(word, "=")
+		switch {
+		case gitOptions[word]:
+			i++
+			continue
+		case gitOptionsWithValue[word] && i+1 < len(words):
+			name, value, joined = word, words[i+1], false
+			i += 2
+		case joined && strings.HasPrefix(name, "--") && (gitOptionsWithValue[name] || name == "--exec-path"):
+			i++
+		default:
+			return append([]string{"git"}, words[i:]...)
+		}
+		if name == "-c" || name == "--config-env" || name == "--exec-path" {
+			s.call.opaque = true
+		}
+		if joined && (name == "--git-dir" || name == "--work-tree") {
+			s.call.paths = append(s.call.paths, value) // addPath skips the whole word: it starts with "-"
+		}
+	}
+	return []string{"git"}
 }
 
 // wordText is a word as the rules match it: its value, or its first value
