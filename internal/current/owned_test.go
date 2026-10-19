@@ -245,3 +245,28 @@ func TestEveryTestLogAppliedOrLoadedEqualsAReplay(t *testing.T) {
 		s.Close()
 	}
 }
+
+// A prefix no feature here owns lists no streams, a stream no feature here
+// owns holds nothing, though the catalogue knows it, and what OwnedIDs hands
+// out is the caller's to change.
+func TestWhatNoFeatureHereOwnsHoldsNothing(t *testing.T) {
+	log := notesLog()
+	for name, s := range map[string]*State{"applied": applyInto(New(withNotes, ideas.Streams()), log), "loaded": loadInto(New(withNotes, ideas.Streams()), log)} {
+		if order := s.OwnedIDs(notes.Prefix); len(order) != 0 {
+			t.Errorf("%s: with no notes feature the notes are %v, want none", name, order)
+		}
+		if order := s.OwnedIDs("nope-"); len(order) != 0 {
+			t.Errorf("%s: an unknown prefix lists %v, want none", name, order)
+		}
+		for _, stream := range []string{"note-2", "task-1", "nope-1"} {
+			if held, err := s.Owned(stream); held != nil || err != nil {
+				t.Errorf("%s: %s should hold nothing, got %+v, %v", name, stream, held, err)
+			}
+		}
+		order := s.OwnedIDs(ideas.Prefix)
+		order[0] = "idea-9"
+		if again := s.OwnedIDs(ideas.Prefix); !slices.Equal(again, []string{"idea-1", "idea-2"}) {
+			t.Errorf("%s: changing what OwnedIDs gave changed the state: %v", name, again)
+		}
+	}
+}
