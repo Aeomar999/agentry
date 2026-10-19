@@ -14,6 +14,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
 // Started from inside a Claude Code session, serve, open and the worker
@@ -168,5 +171,40 @@ func TestServeKeepsTheSnapshotAcrossARestart(t *testing.T) {
 	}
 	if said := servedOnce(t, dataDir); strings.Contains(said, "replayed") {
 		t.Errorf("the second start didn't go on from the snapshot; it logged:\n%s", said)
+	}
+}
+
+// A binary serve can run but not read gets a build no snapshot was written
+// under, not even by the start before: every start replays the whole log.
+func TestAnUnhashedBuildNeverUsesASnapshot(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "agentry")
+	if _, err := buildOf(missing); err == nil {
+		t.Fatal("buildOf hashed a binary that isn't there")
+	}
+	logPath := filepath.Join(t.TempDir(), "agentry.db")
+	snapshot := filepath.Join(filepath.Dir(logPath), snapshotFile)
+	startedAs := func(build string) (resumed int64) {
+		t.Helper()
+		state := current.Restore(snapshot, build, storetest.WithIdeas(), ideas.Streams())
+		log, err := store.Open(logPath, storetest.WithIdeas(), state, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer log.Close()
+		writer := current.NewSnapshotWriter(snapshot, build, state, log)
+		writer.Start()
+		defer writer.Close()
+		if err := seedAgents(log, state); err != nil {
+			t.Fatal(err)
+		}
+		return state.Resumed()
+	}
+	unhashed := buildOrUnhashed(missing)
+	startedAs(unhashed)
+	if startedAs(unhashed) == 0 {
+		t.Fatal("the same build didn't go on from its snapshot, so this test shows nothing")
+	}
+	if startedAs(buildOrUnhashed(missing)) != 0 {
+		t.Error("an unhashed start went on from the snapshot of the start before")
 	}
 }

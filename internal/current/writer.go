@@ -54,6 +54,7 @@ func (w *SnapshotWriter) Start() { go w.run() }
 // Close stops the writer, waits for a write under way, and then writes the
 // state as it is now, unless the snapshot on disk already holds it: the
 // snapshot a clean shutdown leaves, which the next start goes on from.
+// Start must have been called first.
 func (w *SnapshotWriter) Close() {
 	close(w.stop)
 	<-w.done

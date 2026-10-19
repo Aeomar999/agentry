@@ -703,13 +703,17 @@ again. Its clock, thresholds and file writer are fields a test sets.
 `RemoveLeftovers` and `Restore` before `store.Open`, starts the writer
 once the log is open and closes it, which writes the last snapshot,
 before the log closes. The build is the sha256 of the running binary,
-read at startup. The write after each archiving round waits for the
-archiver (step 7). Tests: `TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent`
+read at startup; a binary that runs but can't be read logs a warning and
+gets a build that differs on every start (`buildOrUnhashed`), so no
+snapshot is used and every start replays the whole log. The write after
+each archiving round waits for the archiver (step 7). Tests: `TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent`
 (Target 3's rule, with a fake clock), `TestAProposalCommitsWhileTheWriterIsMidWrite`
 (Target 6's "never under `Store.mu`"), `TestCloseWritesASnapshotTheNextStartGoesOnFrom`,
-`TestAFailedWriteIsLoggedAndTheWriterGoesOn`, `TestAStartAfterAFallbackWritesAFreshSnapshot`
-and `TestServeKeepsTheSnapshotAcrossARestart` in `cmd/agentry`; equivalence
-test 2 is `TestARealLogThroughASnapshotEqualsAReplay`, and
+`TestAFailedWriteIsLoggedAndTheWriterGoesOn`, `TestAStartAfterAFallbackWritesAFreshSnapshot`,
+`TestAResumedStartWritesNothingNew`, and `TestServeKeepsTheSnapshotAcrossARestart`
+and `TestAnUnhashedBuildNeverUsesASnapshot` in `cmd/agentry`; equivalence
+test 2 is `TestARealLogThroughASnapshotEqualsAReplay` on the copy and
+`TestAFixtureLogThroughASnapshotEqualsAReplay` on fixture logs, and
 `TestStartupBench` times Targets 1, 3 and 6.
 
 ### The equivalence test
@@ -1405,7 +1409,8 @@ task-21.
 of history once archiving bounds the state, and they need only task-21's
 state. The projections add one thing to section 2: the body's `tasks`
 and `archived` arrays are written one entry to a line (still one JSON
-value, since JSON allows a newline between elements), and the loader
+value, since JSON allows a newline between elements; at build step 2 it
+gave way to gob chunks, see section 2), and the loader
 splits on newlines and decodes the entries on up to 8 goroutines: 0.22
 to 0.24 s on 8 cores (estimate; one core: 0.52 to 0.68 s). JSON keeps
 `nil` and empty apart for the equivalence test. Whether it gives way to

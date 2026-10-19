@@ -122,10 +122,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	build, err := buildOf(self)
-	if err != nil {
-		return err
-	}
+	build := buildOrUnhashed(self)
 	// The state starts from its snapshot when it can, and goes on from it.
 	snapshot := filepath.Join(o.dataDir, snapshotFile)
 	if err := current.RemoveLeftovers(snapshot); err != nil {
@@ -404,6 +401,18 @@ func buildOf(binary string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// buildOrUnhashed is buildOf(binary), or, when the binary can be run but not
+// read, a build that differs on every start: no snapshot is ever used then,
+// and every start replays the whole log, as before snapshots.
+func buildOrUnhashed(binary string) string {
+	build, err := buildOf(binary)
+	if err != nil {
+		slog.Warn("agentry: the binary can't be hashed, so snapshots are off", "err", err)
+		return "unhashed-" + rand.Text()
+	}
+	return build
 }
 
 // The tokens kept in the data folder, next to the UI token.
