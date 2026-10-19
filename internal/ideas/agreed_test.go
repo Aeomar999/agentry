@@ -383,7 +383,8 @@ func TestTheRulesRefuseAgentryADuplicate(t *testing.T) {
 	}
 }
 
-// Agentry makes a task from an idea only while it is open, and starts only
+// Agentry makes a task from an idea only while it is open, only in your
+// Backlog, and starts only
 // a task it made from an idea it accepted, once, out of the Backlog into
 // In progress, before it has run; no agent accepts an idea.
 func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
@@ -417,6 +418,10 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": "idea-99"}}},
 		{"a task whose from and idea differ", events.Proposal{Stream: next, Actor: agentry, Type: events.TaskCreated,
 			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": open, "idea": "idea-99"}}},
+		{"a started task from an open idea", events.Proposal{Stream: next, Actor: agentry, Type: events.TaskCreated,
+			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": open, "idea": open}}},
+		{"a task parked in To do from an open idea", events.Proposal{Stream: next, Actor: agentry, Type: events.TaskCreated,
+			Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "parked": "todo", "from": open, "idea": open}}},
 		{"starting the task you accepted", start("task-3")},
 		{"starting the Visionaries' task", start("task-1")},
 		{"parking its own", events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld, Data: map[string]any{"place": "todo"}}},
@@ -432,7 +437,7 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 		}
 	}
 	mustPropose(t, s, events.Proposal{Stream: next, Actor: agentry, Type: events.TaskCreated,
-		Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "from": open}})
+		Data: map[string]any{"title": "x", "repo": repo, "coordinator": "tech-lead", "parked": "backlog", "from": open}})
 	mustPropose(t, s, start("task-2"))
 	if task := loadTask(t, s, "task-2"); task.Parked != "" || task.Column != "in-progress" {
 		t.Errorf("started: parked %q column %q", task.Parked, task.Column)
