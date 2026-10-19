@@ -30,7 +30,7 @@ func withIdeasLog() []events.Event {
 // and rosters are what a build with ideas makes of the same log.
 func TestIdeasStreamsAreSkippedAndCountedWithoutIdeas(t *testing.T) {
 	log := withIdeasLog()
-	want := []Unknown{{Prefix: ideas.Prefix, Streams: 2, Events: 3, Last: 23}}
+	want := []Unknown{{Prefix: ideas.Prefix, Streams: 2, Events: 3, Last: 24}}
 	for name, s := range map[string]*State{"loaded": loadedWith(events.Core(), log), "applied": appliedWith(events.Core(), log)} {
 		with := loaded(log)
 		if got := s.Unknown(); !reflect.DeepEqual(got, want) {
@@ -48,8 +48,8 @@ func TestIdeasStreamsAreSkippedAndCountedWithoutIdeas(t *testing.T) {
 		if task, err := s.Task("idea-1"); task != nil || err != nil {
 			t.Errorf("%s: idea-1 reads as a task: %+v, %v", name, task, err)
 		}
-		if got := s.StreamPosition("idea-2"); got != 23 {
-			t.Errorf("%s: idea-2's last position %d, want 23", name, got)
+		if got := s.StreamPosition("idea-2"); got != 24 {
+			t.Errorf("%s: idea-2's last position %d, want 24", name, got)
 		}
 		if len(with.Unknown()) != 0 {
 			t.Errorf("with ideas, unknown %+v, want none", with.Unknown())

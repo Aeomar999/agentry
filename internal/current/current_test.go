@@ -61,6 +61,7 @@ func everyStream() []events.Event {
 		proposal(events.ConnectionsStream, you, events.ConnectionInvited, map[string]any{"code": "c2", "expires": "2026-10-18T10:00:00Z"}),
 		proposal("task-1", lead, events.TaskAssigned, map[string]any{"agent": "engineer", "instructions": "Profile it."}),
 		proposal(events.AgentsStream, you, events.AgentLearned, map[string]any{"name": "engineer", "knowledge": "Measure first."}),
+		agents.Agent{Name: "engineer"}.Patching(you, agents.Diff("Measure first.", "Measure first, then cut.")),
 		proposal(events.ConnectionsStream, system, events.ConnectionMade, map[string]any{"id": "m1", "code": "c2", "credential": "k2"}),
 		proposal(events.WorkersStream, system, events.WorkerConnected, map[string]any{"name": "laptop", "engines": []any{"claude 2"}}),
 		proposal("task-2", lead, events.TaskRenamed, map[string]any{"title": "Second, renamed"}),

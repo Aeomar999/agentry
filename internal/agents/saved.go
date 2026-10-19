@@ -9,8 +9,9 @@ type Saved []SavedAgent
 // SavedAgent is an agent, and beside it what Agent keeps unexported, which
 // JSON would leave out.
 type SavedAgent struct {
-	Agent     Agent `json:"agent"` // untouched left false: it is the field below
+	Agent     Agent `json:"agent"` // untouched and patched left zero: they are the fields below
 	Untouched bool  `json:"untouched"`
+	Patched   int   `json:"patched"`
 }
 
 // Save is the roster's saved form. It shares nothing with the roster.
@@ -20,8 +21,8 @@ func (r Roster) Save() Saved {
 	}
 	saved := make(Saved, len(r))
 	for i, a := range r {
-		saved[i] = SavedAgent{Agent: a.clone(), Untouched: a.untouched}
-		saved[i].Agent.untouched = false
+		saved[i] = SavedAgent{Agent: a.clone(), Untouched: a.untouched, Patched: a.patched}
+		saved[i].Agent.untouched, saved[i].Agent.patched = false, 0
 	}
 	return saved
 }
@@ -34,7 +35,7 @@ func Restore(s Saved) Roster {
 	r := make(Roster, len(s))
 	for i, saved := range s {
 		r[i] = saved.Agent.clone()
-		r[i].untouched = saved.Untouched
+		r[i].untouched, r[i].patched = saved.Untouched, saved.Patched
 	}
 	return r
 }

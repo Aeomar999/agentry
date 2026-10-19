@@ -46,6 +46,7 @@ func everyAgentEvent(roster Roster) []events.Event {
 	engineer.Prompt = "Only write Go."
 	return []events.Event{
 		asEvent(designer.Proposal(you, false)),
+		asEvent(engineer.Patching(you, Diff(engineer.Knowledge, "Use gofmt."))),
 		asEvent(engineer.Proposal(you, true)),
 		asEvent(tester.Learned(you, "Run the slow tests too.")),
 		asEvent(engineer.Renaming(you, "builder")),

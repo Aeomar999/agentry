@@ -8,7 +8,7 @@ const (
 	AgentCreated Type = "agent.created"
 	AgentChanged Type = "agent.changed"
 	AgentRemoved Type = "agent.removed"
-	AgentLearned Type = "agent.learned" // an agent's knowledge, all of it: changed by the agent as it works, or by you
+	AgentLearned Type = "agent.learned" // an agent's knowledge, changed by the agent as it works, or by you: all of it ("knowledge"), or a patch on the version before ("head", "tail", "middle", "sha256"; agents.Patch)
 	AgentRenamed Type = "agent.renamed" // an agent goes by a new name, keeping everything else
 )
 

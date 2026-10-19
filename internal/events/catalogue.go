@@ -128,7 +128,7 @@ var coreTypes = map[Type]Spec{
 	AgentCreated: {Fields: []string{"name", "prompt", "engine"}, Writers: []ActorKind{Human, System}},
 	AgentChanged: {Fields: []string{"name", "prompt", "engine"}, Writers: []ActorKind{Human, System}},
 	AgentRemoved: {Fields: []string{"name"}, Writers: []ActorKind{Human}},
-	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty
+	AgentLearned: {Fields: []string{"name"}, Writers: []ActorKind{Human, Agent}}, // "knowledge" may be empty; a patch has "middle" instead, which the rules check
 	AgentRenamed: {Fields: []string{"name", "to"}, Writers: []ActorKind{Human}},
 
 	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)
