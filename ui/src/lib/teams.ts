@@ -11,6 +11,14 @@ export const VISIONARIES = "Visionaries";
 
 export const teamOf = (agent: Agent) => agent.team || DEFAULT_TEAM;
 
+// roleOf is the agent's part in its team, in words: coordinator, or what its
+// column's work counts as; "" when it has none, or when the word is only its
+// own name again ("reviewer, Software · reviewer" reads as a glitch).
+export function roleOf(agent: Agent): string {
+  const role = agent.coordinates ? "coordinator" : { "": "", review: "reviewer", ship: "deployer" }[agent.column];
+  return role === agent.name ? "" : role;
+}
+
 // teamsOf groups agents by team, in the order the first agent of each was
 // made, the coordinator first in each.
 export function teamsOf(agents: Agent[]): { team: string; agents: Agent[] }[] {
