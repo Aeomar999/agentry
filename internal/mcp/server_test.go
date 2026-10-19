@@ -177,9 +177,9 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 }
 
-// A held action was refused long ago: the user hears that, when, and what
-// approving it does now.
-func TestAHeldApprovalSaysItTimedOut(t *testing.T) {
+// A held action was refused long ago: the user hears that, when it was held
+// (with the zone), and what approving it does now.
+func TestAHeldApprovalSaysWhenItWasHeld(t *testing.T) {
 	heldAt := time.Date(2026, 10, 19, 2, 30, 0, 0, time.UTC)
 	agentry := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method + " " + r.URL.Path {
@@ -201,7 +201,7 @@ func TestAHeldApprovalSaysItTimedOut(t *testing.T) {
 		return map[string]any{"action": "decline"}
 	})
 	c.tool("review_approvals", map[string]any{})
-	for _, want := range []string{"Bash: git push origin dev", "timed out at " + heldAt.Local().Format("Mon 2 Jan 15:04"), "deployer was told no",
+	for _, want := range []string{"Bash: git push origin dev", "it was held at " + heldAt.Local().Format("Mon 2 Jan 15:04 MST") + ",", "deployer was told no",
 		"deployer may run this exact command once, in its next turn"} {
 		if !strings.Contains(asked, want) {
 			t.Errorf("the question should say %q:\n%s", want, asked)

@@ -493,14 +493,18 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 	return strings.Join(done, "\n"), nil
 }
 
+// heldAtLayout shows when an action was held in local time, with its zone,
+// since the coordinator's hand-back message gives the time in UTC.
+const heldAtLayout = "Mon 2 Jan 15:04 MST"
+
 // approvalText asks about one action. A held one was refused long ago, so
 // approving it now means something else, and the branch may have moved.
 func approvalText(q question) string {
 	text := fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.Task, q.TaskTitle, q.Tool, q.Text, q.Reason)
 	if q.Held {
-		text += fmt.Sprintf("\n\nNo answer came in time: it timed out at %s, and %s was told no and carried on. "+
+		text += fmt.Sprintf("\n\nNo answer came in time: it was held at %s, and %s was told no and carried on. "+
 			"If you approve, the coordinator hears of it and %s may run this exact command once, in its next turn. Check it still fits the branch.",
-			q.HeldAt.Local().Format("Mon 2 Jan 15:04"), q.Agent, q.Agent)
+			q.HeldAt.Local().Format(heldAtLayout), q.Agent, q.Agent)
 	}
 	return text
 }
