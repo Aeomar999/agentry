@@ -365,9 +365,9 @@ function anchor(to: LinkTo, label: ReactNode, props: MarkdownProps, mono = false
       )}
     >
       {label}
-      {marked && " "}
-      {marked && <ArrowUpRight aria-hidden className="inline size-3 align-[-1px]" />}
-      {marked && !to.name && <span className="sr-only">(opens in a new tab)</span>}
+      {/* A margin, not a space, so the underline stops at the label. */}
+      {marked && <ArrowUpRight aria-hidden className="ml-1 inline size-3 align-[-1px]" />}
+      {marked && !to.name && <span className="sr-only"> (opens in a new tab)</span>}
     </a>
   );
 }

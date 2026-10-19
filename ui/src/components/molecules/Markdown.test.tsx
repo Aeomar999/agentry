@@ -83,6 +83,13 @@ describe("Markdown marks", () => {
     expect(a.className).toContain("text-link");
   });
 
+  test("underlines the label but not the gap before ↗: a margin, no space", () => {
+    const [a] = links("[the design](docs/design.md)", { link: hook, marks: true });
+    const mark = a.querySelector("svg")!;
+    expect(mark.previousSibling?.textContent).toBe("the design");
+    expect(mark.getAttribute("class")).toContain("ml-1");
+  });
+
   test("leaves an anchor unmarked", () => {
     const [a] = links("[x](#strings)", { marks: true });
     expect(a.querySelector("svg")).toBeNull();
@@ -126,7 +133,7 @@ describe("Markdown refs", () => {
     expect(a.getAttribute("href")).toBe("/tasks/task-75/workspace?commit=3f2a9c1d0e4b5a6978877665544332211aabbccd");
     expect(a.getAttribute("target")).toBe("_blank");
     expect(a.getAttribute("aria-label")).toBe("commit 3f2a9c1 (opens in a new tab)");
-    expect(a.textContent).toBe("3f2a9c1 "); // the label, then a space before ↗
+    expect(a.textContent).toBe("3f2a9c1"); // its name says the rest
     expect(a.querySelector("svg")).not.toBeNull();
   });
 
