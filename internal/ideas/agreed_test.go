@@ -322,7 +322,7 @@ func TestAgentryAcceptsAnIdeaAsItself(t *testing.T) {
 	turnOn(t, s, state)
 	id := suggestAgreed(t, s, repo, nil)
 	got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "auto-accepted: all Visionaries agreed", By: agentry})
-	if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+	if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %+v %v", got, err)
 	}
 	idea := load(t, state, id)
@@ -493,7 +493,7 @@ func TestTheRulesKeepAgentryToIdeasItAccepted(t *testing.T) {
 func TestAgentryStartsATaskOnce(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	turnOn(t, s, state)
-	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %+v", got)
 	}
 	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,
@@ -513,7 +513,7 @@ func TestAgentryStartsATaskOnce(t *testing.T) {
 func TestAgentryStartsOnlyWhileTheSettingsSay(t *testing.T) {
 	s, state, repo := openSeeded(t)
 	turnOn(t, s, state)
-	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+	if got, _ := ideas.Accept(s, state, suggestAgreed(t, s, repo, nil), ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %+v", got)
 	}
 	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,
@@ -535,7 +535,7 @@ func TestAgentryStartsNoTaskYouMade(t *testing.T) {
 	id := suggestAgreed(t, s, repo, nil)
 	mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated,
 		Data: map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "idea": id, "parked": "backlog"}})
-	if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+	if got, _ := ideas.Accept(s, state, id, ideas.Choice{By: agentry}); got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 		t.Fatalf("accept: %+v", got)
 	}
 	start := events.Proposal{Stream: "task-2", Actor: agentry, Type: events.TaskHeld,

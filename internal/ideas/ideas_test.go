@@ -124,7 +124,7 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 			id := suggest(t, s, repo, map[string]any{"kind": c.suggested})
 
 			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Defaults: tasks.Limits{Budget: 500, MaxTurns: 7}})
-			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			task := loadTask(t, s, "task-2")
@@ -158,7 +158,7 @@ func TestAcceptAndStartMakesATaskOutOfTheBacklog(t *testing.T) {
 			id := suggest(t, s, repo, nil)
 
 			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: kind, Defaults: tasks.Limits{Budget: 700, MaxTurns: 9}, Start: true})
-			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "in-progress", Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			stream, err := s.Stream("task-2")
@@ -273,7 +273,7 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 			mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: data})
 
 			got, err := ideas.Accept(s, state, id, ideas.Choice{Note: "At last"})
-			if err != nil || got != (ideas.Acceptance{Task: "task-2", Accepted: true}) {
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			if n := len(state.TaskIDs()); n != 2 {
@@ -281,6 +281,35 @@ func TestAcceptReusesATaskAlreadyMadeFromTheIdea(t *testing.T) {
 			}
 			if idea := load(t, state, id); idea.State != ideas.Accepted || idea.Became != "task-2" {
 				t.Errorf("idea: %s, became %q", idea.State, idea.Became)
+			}
+		})
+	}
+}
+
+// A retry that asks the opposite of the Accept that made the task and
+// crashed reuses the task where it is, and says where that is, not where
+// the retry asked for it.
+func TestARetryReportsWhereTheTaskReallyIs(t *testing.T) {
+	for _, made := range []struct {
+		parked string
+		start  bool // what the retry asks
+		want   string
+	}{{"backlog", true, "backlog"}, {"", false, "in-progress"}} {
+		t.Run(made.want, func(t *testing.T) {
+			s, state, repo := openSeeded(t)
+			id := suggest(t, s, repo, nil)
+			data := map[string]any{"title": "Search the board", "repo": repo, "coordinator": "tech-lead", "from": id, "idea": id}
+			if made.parked != "" {
+				data["parked"] = made.parked
+			}
+			mustPropose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: data})
+
+			got, err := ideas.Accept(s, state, id, ideas.Choice{Start: made.start})
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: made.want, Accepted: true}) {
+				t.Fatalf("accept: %+v %v", got, err)
+			}
+			if column := mustTask(t, state, "task-2").BoardColumn(state.Roster()); column != made.want {
+				t.Errorf("task-2 moved to %s", column)
 			}
 		})
 	}
@@ -316,7 +345,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	}
 
 	got, err := ideas.Accept(s, state, fromBroken, ideas.Choice{})
-	if err != nil || got.Task != "task-2" || got.Accepted || !strings.Contains(got.Refused, "can't be read") {
+	if err != nil || got.Task != "task-2" || got.Column != "" || got.Accepted || !strings.Contains(got.Refused, "can't be read") {
 		t.Errorf("accepting %s: %+v %v", fromBroken, got, err)
 	}
 	if n := len(state.TaskIDs()); n != 3 {
@@ -325,7 +354,7 @@ func TestAcceptRefusesWhenTheTaskMadeFromTheIdeaIsBroken(t *testing.T) {
 	if idea := load(t, state, fromBroken); idea.State != ideas.Open {
 		t.Errorf("%s is %s", fromBroken, idea.State)
 	}
-	if got, err := ideas.Accept(s, state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Accepted: true}) {
+	if got, err := ideas.Accept(s, state, fresh, ideas.Choice{}); err != nil || got != (ideas.Acceptance{Task: "task-4", Column: "backlog", Accepted: true}) {
 		t.Errorf("accepting %s past the broken tasks: %+v %v", fresh, got, err)
 	}
 }

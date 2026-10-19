@@ -29,6 +29,7 @@ type Choice struct {
 // Task names the task and Refused says why.
 type Acceptance struct {
 	Task     string // the task made from the idea, "" when none was
+	Column   string // Task's column on the board once Accept is done (tasks.Task.BoardColumn), "" when it can't be read
 	Accepted bool   // the idea is marked accepted, pointing at Task
 	Refused  string // why it stopped short, "" once Accepted
 }
@@ -47,13 +48,23 @@ type Board interface {
 // then marks the idea accepted with it. The task is made first, and the
 // rules accept an idea only for a task made from it, so a crash in between
 // leaves a task and an idea still open, never an accepted idea that points
-// at no task. The next Accept finds that task and
-// only marks the idea, and Accepts run one at a time, so a double click or
-// the UI and MCP at once still make one task. The error is for the log
-// failing, not for a refusal.
+// at no task. The next Accept finds that task and only marks the idea, so
+// the task stays where it was made, started or not, whatever that Accept
+// chose; Column says where it is. Accepts run one at a time, so a double
+// click or the UI and MCP at once still make one task. The error is for the
+// log failing, not for a refusal.
 func Accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
 	accepting.Lock()
 	defer accepting.Unlock()
+	got, err := accept(log, board, id, choice)
+	if err == nil && got.Task != "" {
+		got.Column = columnOf(board, got.Task)
+	}
+	return got, err
+}
+
+// accept is Accept, under its lock, before the column is read.
+func accept(log *store.Store, board Board, id string, choice Choice) (Acceptance, error) {
 	idea, err := board.Idea(id)
 	switch {
 	case err != nil:
@@ -95,6 +106,15 @@ func (choice Choice) acceptor() events.Actor {
 		return you
 	}
 	return choice.By
+}
+
+// columnOf is the task's column on the board, "" when it can't be read.
+func columnOf(board Board, taskID string) string {
+	task, err := board.Task(taskID)
+	if err != nil || task == nil {
+		return ""
+	}
+	return task.BoardColumn(board.Roster())
 }
 
 // accepting runs one Accept at a time.
