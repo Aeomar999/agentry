@@ -394,12 +394,13 @@ func TestAVersionShowsWhatRevertingToItWouldChange(t *testing.T) {
 	noText, firstLoaded, badText, inForce := stream[0].Position, stream[1].Position, stream[2].Position, stream[3].Position
 
 	code, body := call(t, server.Server, "GET", "/api/policy/history/"+itoa(firstLoaded), "")
-	var version struct {
+	type versionChange struct {
 		Position              int64
 		Diff                  string
 		UseForEveryone        string
 		InForceUseForEveryone string
 	}
+	var version versionChange
 	if err := json.Unmarshal([]byte(body), &version); code != 200 || err != nil {
 		t.Fatalf("the first version: %d %s", code, body)
 	}
@@ -415,7 +416,8 @@ func TestAVersionShowsWhatRevertingToItWouldChange(t *testing.T) {
 	}
 
 	code, body = call(t, server.Server, "GET", "/api/policy/history/"+itoa(inForce), "")
-	if json.Unmarshal([]byte(body), &version); code != 200 || version.Diff != "" || version.UseForEveryone != "" {
+	var inForceVersion versionChange
+	if err := json.Unmarshal([]byte(body), &inForceVersion); code != 200 || err != nil || inForceVersion.Diff != "" || inForceVersion.UseForEveryone != "" {
 		t.Errorf("the version in force changes nothing: %d %s", code, body)
 	}
 	for _, c := range []struct {
