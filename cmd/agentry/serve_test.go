@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"os"
@@ -13,8 +14,10 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
+	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
@@ -124,6 +127,13 @@ func TestStartingSaysOncePerSkippedPrefix(t *testing.T) {
 // it cleanly. It returns what it logged.
 func servedOnce(t *testing.T, dataDir string) string {
 	t.Helper()
+	return servedWith(t, serveOptions{dataDir: dataDir})
+}
+
+// servedWith is servedOnce with more options, listening on any free port
+// of loopback.
+func servedWith(t *testing.T, o serveOptions) string {
+	t.Helper()
 	var logged, out syncBuffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
@@ -131,7 +141,8 @@ func servedOnce(t *testing.T, dataDir string) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- serve(ctx, serveOptions{address: "127.0.0.1:0", repo: t.TempDir(), dataDir: dataDir}, &out)
+		o.address, o.repo = "127.0.0.1:0", t.TempDir()
+		done <- serve(ctx, o, &out)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(out.String(), "Agentry is running"); time.Sleep(20 * time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -207,4 +218,77 @@ func TestAnUnhashedBuildNeverUsesASnapshot(t *testing.T) {
 	if startedAs(buildOrUnhashed(missing)) != 0 {
 		t.Error("an unhashed start went on from the snapshot of the start before")
 	}
+}
+
+// -archive-after is a duration, 0 by default; a negative one is refused.
+func TestServeParsesArchiveAfter(t *testing.T) {
+	for args, want := range map[string]time.Duration{"": 0, "-archive-after=720h": 720 * time.Hour, "-archive-after=0": 0} {
+		var said strings.Builder
+		options, ok := parseServe(strings.Fields(args), &said)
+		if !ok || options.archiveAfter != want {
+			t.Errorf("%q: archive after %v, ok %v, want %v; it said %q", args, options.archiveAfter, ok, want, said.String())
+		}
+	}
+	var said strings.Builder
+	if code := runServe([]string{"-archive-after=-1h"}, nil, &said, &said); code != 2 || !strings.Contains(said.String(), "-archive-after is 0 or above") {
+		t.Errorf("a negative age: exit %d, said %q; want 2 and why", code, said.String())
+	}
+}
+
+// serve archives a task done for -archive-after, at start; with the default
+// 0 it archives nothing, however long a task has been done.
+func TestServeArchivesOnlyWithArchiveAfter(t *testing.T) {
+	for _, after := range []time.Duration{0, time.Nanosecond} {
+		dataDir := t.TempDir()
+		withADoneTask(t, dataDir, "task-1")
+		servedWith(t, serveOptions{dataDir: dataDir, archiveAfter: after})
+		if archived := isArchived(t, dataDir, "task-1"); archived != (after > 0) {
+			t.Errorf("with -archive-after=%v, task-1 archived %v", after, archived)
+		}
+	}
+}
+
+// withADoneTask starts the log in dataDir with the default agents and a
+// task of yours, done.
+func withADoneTask(t *testing.T, dataDir, id string) {
+	t.Helper()
+	log, state := openLog(t, dataDir)
+	defer log.Close()
+	if err := seedAgents(log, state); err != nil {
+		t.Fatal(err)
+	}
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	for _, p := range []events.Proposal{
+		{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "A task", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: id, Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Done.", "moved": true}},
+	} {
+		if _, rejection, err := log.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("%s: %v, %v", p.Type, rejection, err)
+		}
+	}
+}
+
+// isArchived replays the log in dataDir and says whether it holds the task
+// as its summary alone.
+func isArchived(t *testing.T, dataDir, id string) bool {
+	t.Helper()
+	log, state := openLog(t, dataDir)
+	defer log.Close()
+	task, err := state.Task(id)
+	if task == nil && !errors.Is(err, current.ErrArchived) {
+		t.Fatalf("%s is neither in the state nor archived: %v", id, err)
+	}
+	return errors.Is(err, current.ErrArchived)
+}
+
+// openLog opens the log in dataDir as serve does, replayed from the start.
+func openLog(t *testing.T, dataDir string) (*store.Store, *current.State) {
+	t.Helper()
+	catalogue := storetest.WithIdeas()
+	state := storetest.NewState(catalogue)
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return log, state
 }

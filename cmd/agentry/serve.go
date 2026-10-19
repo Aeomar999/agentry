@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/archive"
 	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
@@ -60,9 +61,28 @@ type serveOptions struct {
 	maxTurns  int    // turns a new task may have without your answer before it asks you; 0 is no limit
 	publicURL string // the address people open; "" for the address listened on
 	https     bool   // serve TLS with Agentry's own CA, on the same port as plain HTTP
+
+	archiveAfter time.Duration // how long a task is done before it is archived; 0 never archives
 }
 
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
+	options, ok := parseServe(args, stderr)
+	if !ok {
+		return 2
+	}
+	dropParentSession(stderr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := serve(ctx, options, stdout); err != nil {
+		fmt.Fprintln(stderr, "agentry serve:", err)
+		return 1
+	}
+	return 0
+}
+
+// parseServe reads serve's options from args, and says on stderr why it
+// can't.
+func parseServe(args []string, stderr io.Writer) (serveOptions, bool) {
 	home, _ := os.UserHomeDir()
 	here, _ := os.Getwd()
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -75,22 +95,19 @@ func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
+	flags.DurationVar(&options.archiveAfter, "archive-after", 0, "archive tasks done for this long, such as 720h; 0 (the default) never archives, until opening and reopening an archived task are built")
 	if flags.Parse(args) != nil {
-		return 2
+		return options, false
 	}
 	if options.budget < 0 || options.maxTurns < 0 {
 		fmt.Fprintln(stderr, "agentry serve: -budget and -max-turns are 0 or above, 0 for no limit")
-		return 2
+		return options, false
 	}
-
-	dropParentSession(stderr)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := serve(ctx, options, stdout); err != nil {
-		fmt.Fprintln(stderr, "agentry serve:", err)
-		return 1
+	if options.archiveAfter < 0 {
+		fmt.Fprintln(stderr, "agentry serve: -archive-after is 0 or above, 0 to never archive")
+		return options, false
 	}
-	return 0
+	return options, true
 }
 
 // dropParentSession removes what ties this process to an engine session it
@@ -139,6 +156,13 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	snapshots := current.NewSnapshotWriter(snapshot, build, state, log)
 	snapshots.Start()
 	defer snapshots.Close() // the last snapshot, before the log closes
+	// Tasks' shared files, and the rows of archived tasks.
+	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")}
+	if o.archiveAfter > 0 {
+		archiver := archive.New(log, state, blobs, snapshots, o.archiveAfter)
+		archiver.Start()
+		defer archiver.Close() // a round under way finishes before the last snapshot
+	}
 	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {
 		return err
@@ -201,8 +225,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	currentTheme := func() string { return theme.Load().(string) }
 
 	// Agents work here, and on any worker that joins and is online.
-	clones := filepath.Join(o.dataDir, "repos")                       // repos named by a git address or an archive link
-	blobs := sharedfiles.Disk{Dir: filepath.Join(o.dataDir, "files")} // tasks' shared files
+	clones := filepath.Join(o.dataDir, "repos") // repos named by a git address or an archive link
 	worktreeRoot := filepath.Join(o.dataDir, "worktrees")
 	here := &machines.Local{Label: workers.Local, ServerURL: serverURL, ServerCA: serverCA, HookCommand: shellQuote(self) + " hook", Blobs: blobs,
 		WorktreeRoot: worktreeRoot}

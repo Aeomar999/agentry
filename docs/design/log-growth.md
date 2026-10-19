@@ -1611,6 +1611,23 @@ since the steps cite section 2's equivalence tests and the task-21 items.
      mismatch (a test trigger) rolls back; an epic with an open story is
      not chosen; a snapshot whose anchor was archived falls back.
    - Targets 1, 2, 4 and 5 at 1 and 10 GB; Targets 8 and 10.
+
+   **Built in step 7b.** `internal/archive` is the archiver: `New(log,
+   state, blobs, snapshots, age)`, `Start` runs a round at once and then
+   hourly, and `Close` waits for a round under way. A round archives the
+   tasks chosen one at a time through `Store.Archive`; after a round that
+   archived any it gives the space back (`GiveBackSpace`), runs the one
+   full `VACUUM` that switches an older file to incremental mode
+   (`VacuumOnce`, tried again at the next start until it has run), and
+   asks the snapshot writer for a snapshot. `serve` takes
+   `-archive-after`, a duration such as `720h`, and starts the archiver
+   with the log, the state, the shared files' blob folder and the
+   snapshot writer; it closes the archiver before the last snapshot and
+   the log. Unlike the plan above, the default is 0, which starts no
+   archiver: until steps 8 and 9 an archived task can't be opened or
+   reopened, so a restart must not archive anything. Left for steps 8
+   and 9: reading an archived task's history from its blob, and
+   unarchiving it; then the default can become 30 days.
 8. **Opening an archived task.** Depends on step 7.
    - Files: `internal/store` (one function for a stream's whole history:
      the blob's rows up to `through`, then the live rows; every reader of
