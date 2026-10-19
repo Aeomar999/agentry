@@ -77,7 +77,7 @@ func plainPush(command string) (branch string, ok bool) {
 	if mapped && src == "" { // ":branch" deletes it
 		return "", false
 	}
-	if dst == "HEAD" || dst == "" {
+	if dst == "HEAD" || dst == "@" || dst == "" { // @ is git's short HEAD
 		return "", true
 	}
 	return strings.TrimPrefix(dst, "refs/heads/"), true

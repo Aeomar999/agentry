@@ -19,6 +19,8 @@ func TestAHeldPushNamesItsBranch(t *testing.T) {
 		{"git push", "Waiting for you to approve a push"},
 		{"git push origin", "Waiting for you to approve a push"},
 		{"git push origin HEAD", "Waiting for you to approve a push"},
+		{"git push origin @", "Waiting for you to approve a push"}, // @ is HEAD
+		{"git push origin @:dev", "Waiting for you to approve the push to dev"},
 		{"git push origin a:b c:d", "Waiting for you to approve a push"}, // more than one branch
 		// not a plain push: the whole command stays in view
 		{"git push origin --delete dev", "deployer asks to run: git push origin --delete dev"},
