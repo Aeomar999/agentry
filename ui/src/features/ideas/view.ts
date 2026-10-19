@@ -27,3 +27,10 @@ export function ideasView(ideas: IdeasLoad, teams: Pick<AskVisionaries, "read" |
   if (teams.loadError) return ideas.count > 0 ? "on" : "unknown";
   return "waiting";
 }
+
+// canAsk says whether the page offers the button that asks the visionaries:
+// not once the teams are read and no template turns Ideas on, since it
+// could never work. While they load or can't be read it shows, disabled.
+export function canAsk(teams: Pick<AskVisionaries, "read" | "ready">): boolean {
+  return !teams.read || teams.ready;
+}

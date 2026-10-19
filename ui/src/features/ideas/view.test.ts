@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { ideasView } from "./view";
+import { canAsk, ideasView } from "./view";
 
 const none = { loaded: true, failed: false, count: 0 };
 const some = { loaded: true, failed: false, count: 2 };
@@ -40,5 +40,17 @@ describe("ideasView", () => {
 
   test("is on when the ideas can't be read", () => {
     expect(ideasView({ loaded: false, failed: true, count: 0 }, loading)).toBe("on");
+  });
+});
+
+describe("canAsk", () => {
+  test("offers the button while the teams load or can't be read, and once a template turns Ideas on", () => {
+    expect(canAsk(loading)).toBe(true);
+    expect(canAsk(failed)).toBe(true);
+    expect(canAsk(noTeam)).toBe(true);
+  });
+
+  test("hides it when no template turns Ideas on", () => {
+    expect(canAsk(noTemplate)).toBe(false);
   });
 });

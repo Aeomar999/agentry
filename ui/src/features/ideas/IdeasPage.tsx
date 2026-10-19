@@ -18,7 +18,7 @@ import { dateTime } from "@/lib/time";
 import { IdeaCard, TaskLink } from "./IdeaCard";
 import { AcceptIdeaDialog, DismissIdeaDialog } from "./IdeaDialogs";
 import type { Idea } from "./types";
-import { ideasView } from "./view";
+import { canAsk, ideasView } from "./view";
 import { type AskVisionaries, useAskVisionaries } from "./visionaries";
 
 // Ideas are the features Visionaries sessions suggest. The open ones wait
@@ -63,7 +63,7 @@ export function IdeasPage() {
         title="Ideas"
         meta="Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog."
         actions={
-          !on
+          !on || !canAsk(visionaries)
             ? []
             : [
                 {

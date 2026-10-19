@@ -23,7 +23,7 @@ export interface AskVisionaries {
 // if the agents read after adding it lack it (it was removed at once), or
 // that they couldn't be read.
 export function useAskVisionaries(): AskVisionaries {
-  const { ready, error: loadError, template, team, reload } = useTeamWith(IDEAS);
+  const { ready, error: loadError, agentsError, template, team, reload } = useTeamWith(IDEAS);
   const newTask = useNewTask();
   const [adding, setAdding] = useState(false);
   const [opening, setOpening] = useState(false); // added: New task opens when the team shows
@@ -39,10 +39,12 @@ export function useAskVisionaries(): AskVisionaries {
     } else if (reloaded) {
       setOpening(false);
       setError(
-        loadError ? "The team was added, but the agents couldn't be read; try again." : "The team was added but didn't show up; try again.",
+        agentsError
+          ? "The team was added, but the agents couldn't be read; try again."
+          : "The team was added but didn't show up; try again.",
       );
     }
-  }, [opening, reloaded, team, loadError, newTask]);
+  }, [opening, reloaded, team, agentsError, newTask]);
 
   async function ask(addingProfiles = false) {
     if (team) {
