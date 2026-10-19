@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -86,6 +87,49 @@ func TestTheTaskOrderIsByPositionWhateverTheLoadOrder(t *testing.T) {
 			t.Errorf("loaded the first %d events backwards: task order %v, want %v", cut, order, want)
 		}
 	}
+}
+
+// The ideas are in the order of their idea.suggested positions too, however
+// the state took them, and a broken idea is left out of the list.
+func TestTheIdeasAreInLogOrderWithoutBrokenOnes(t *testing.T) {
+	suggested := func(stream, title string) events.Proposal {
+		return proposal(stream, system, events.IdeaSuggested, map[string]any{"title": title, "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"})
+	}
+	log := everyStream()
+	log = append(log, logOf(suggested("idea-3", "Third"), suggested("idea-2", "Second"), suggested("idea-4", "Fourth"))...)
+	for i := range log {
+		log[i].Position = int64(i + 1)
+	}
+	for cut := range len(log) + 1 {
+		s := New()
+		streams := streamsOf(log[:cut])
+		slices.Reverse(streams)
+		for _, stream := range streams {
+			s.Load(stream, accepted(log[:cut], stream))
+		}
+		s.Loaded(int64(cut))
+		for _, e := range log[cut:] {
+			s.Apply(e)
+		}
+		if got := ideaIDsOf(s.Ideas()); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
+			t.Errorf("loaded the first %d events backwards: ideas %v", cut, got)
+		}
+		s.guard("idea-2", func() string { return "applying idea.exploded to idea-2" }, func() { panic("boom") })
+		if got := ideaIDsOf(s.Ideas()); !slices.Equal(got, []string{"idea-1", "idea-3", "idea-4"}) {
+			t.Errorf("loaded the first %d events backwards: with idea-2 broken, ideas %v", cut, got)
+		}
+		if order := s.ideaIDs(); !slices.Equal(order, []string{"idea-1", "idea-3", "idea-2", "idea-4"}) {
+			t.Errorf("loaded the first %d events backwards: the idea order should still list idea-2, as the log does: %v", cut, order)
+		}
+	}
+}
+
+func ideaIDsOf(list []*ideas.Idea) []string {
+	var ids []string
+	for _, idea := range list {
+		ids = append(ids, idea.ID)
+	}
+	return ids
 }
 
 // A state that started part way goes on like one that loaded the whole log:

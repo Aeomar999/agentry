@@ -135,6 +135,18 @@ func TestEqualCatchesTheWrongTaskOrder(t *testing.T) {
 	}
 }
 
+func TestEqualCatchesTheWrongIdeaOrder(t *testing.T) {
+	s := openStore(t, append(someProposals(), proposal("idea-2", system, events.IdeaSuggested,
+		map[string]any{"title": "Later", "problem": "p", "proposal": "p", "size": "S", "repo": "/r", "task": "task-1"}))...)
+	state := New()
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	state.suggested[0].id, state.suggested[1].id = state.suggested[1].id, state.suggested[0].id
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "idea order:") {
+		t.Errorf("Equal with idea-1 and idea-2 swapped: %v", err)
+	}
+}
+
 // Equal compares every field of a task, so it sees a DoneAt the state got
 // wrong though every other field is right.
 func TestEqualSeesAWrongDoneAt(t *testing.T) {
