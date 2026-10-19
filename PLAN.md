@@ -111,6 +111,7 @@ Nothing in Next. v0.10.0 is released (7c8591e, 2026-10-19: Revert in the policy 
 | T-073 | Revert in the policy History asks before it replaces the policy in force (v0.10.0) | 2026-10-19 | `feat(ui): Revert in the policy History asks before it replaces the policy in force`, `build: rebuild the UI with the Revert confirm` |
 | T-074 | A team records the template it came from; the Visionaries are known by their template's features, not the team name | 2026-10-19 | `feat(agents): record the template a team came from`, `test(web): editing an agent keeps the template it came from` |
 | T-075 | A `policy.toml` that doesn't load at start names the file, the line and the newest backup to copy back | 2026-10-19 | `fix(policy): a policy.toml that doesn't load at start names the file, the line and the newest backup`, `fix(policy): a multi-line startup error starts on its own line, after "is refused:"` |
+| T-076 | Hand edits of `policy.toml` show as "on disk" in the policy history (task-95); on dev after v0.10.0, ships with v0.11.0 | 2026-10-19 | `feat(policy): mark hand edits of policy.toml with onDisk on policy.loaded`, `feat(ui): the policy history shows 'on disk' for hand edits, by the onDisk flag`, `fix(policy): count 'changed on disk' as a hand edit in old policy history`, `build: rebuild the UI with 'on disk' in the policy history` |
 
 Earlier work: seven proofs, run before the main build. Their findings are in "From the proofs" below; the proof code isn't in this repository.
 
