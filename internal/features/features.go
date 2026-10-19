@@ -86,6 +86,14 @@ type EventLog interface {
 	Stream(name string) ([]events.Event, error)
 }
 
+// ReadOnly is log with only EventLog's methods: no type assertion on what
+// it returns gets the store, or a way to write, back.
+func ReadOnly(log EventLog) EventLog { return readOnly{log} }
+
+type readOnly struct{ log EventLog }
+
+func (r readOnly) Stream(name string) ([]events.Event, error) { return r.log.Stream(name) }
+
 // Core is all a feature's hooks and routes may use: it has no store. Events reads the
 // log and never writes to it. Defaults are the server's limits for a task
 // Agentry makes that comes from no other task. Settings are the feature's

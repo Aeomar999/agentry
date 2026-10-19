@@ -466,7 +466,7 @@ func startJobs(ctx context.Context, settingsPath string, every time.Duration, in
 	log *store.Store, state *current.State, defaults tasks.Limits) {
 	settings := settingsfile.Open(settingsPath)
 	go settings.Watch(ctx, every)
-	readOnly := struct{ features.EventLog }{log}
+	readOnly := features.ReadOnly(log)
 	features.StartJobs(ctx, installed, func(f features.Feature) features.Core {
 		return features.Core{Log: proposerOf(logs, f), Events: readOnly, Read: state, Defaults: defaults, Settings: settings.For(f.Name)}
 	})
