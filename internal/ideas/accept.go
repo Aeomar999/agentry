@@ -92,7 +92,7 @@ var accepting sync.Mutex
 var beforeMarking = func() {}
 
 // madeFrom finds a task an earlier Accept made from the idea but stopped
-// before marking it. A task the state can't hand out, as a broken one, is
+// before marking it. A task the state can't hand out, such as a broken one, is
 // skipped unless its task.created names the idea: then it can't be marked,
 // and Refused says so, but no second task is made from the idea either.
 func madeFrom(log *store.Store, board Board, id string) (Acceptance, error) {

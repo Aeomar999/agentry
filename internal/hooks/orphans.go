@@ -10,7 +10,7 @@ import (
 // decision is held by its hook call, and no hook call survives a restart: the
 // hook failed closed and the agent was already told no. So each such action
 // is denied, and the task stops showing an approval nothing is waiting on.
-// A task the state can't hand out, as a broken one, is skipped: it can't
+// A task the state can't hand out, such as a broken one, is skipped: it can't
 // take an event either, and it must not keep the server from starting.
 func DenyOrphanedAsks(s *store.Store, state *current.State) error {
 	for _, id := range state.TaskIDs() {
