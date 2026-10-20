@@ -5,6 +5,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -231,6 +232,62 @@ func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
 	}
 	if saving.Data["basedOn"] != "visionaries" {
 		t.Errorf("saved %+v, want based on visionaries", saving.Data)
+	}
+}
+
+// Updating a template saves its team's agents as they are now over it,
+// keeping its id, name and base, and its description unless another is
+// given.
+func TestATemplateIsUpdatedFromItsTeam(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	ideas := papers()
+	ideas.BasedOn = "visionaries"
+	roster := FromEvents(added(ideas.Template(), seeded()))
+	for i, a := range roster {
+		if a.Name == "reader" {
+			roster[i].Prompt = "Read the papers twice."
+		}
+	}
+	for _, c := range []struct {
+		name, description, want string
+	}{
+		{"no description", "", "Reads papers."},
+		{"a description", "Reads closely.", "Reads closely."},
+	} {
+		saving, err := UpdateTemplate(roster, UserTemplates{ideas}, nil, "Papers", c.description, you)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		saved, _ := UserTemplatesFromEvents([]events.Event{logged(t, papers().Save(you)), logged(t, saving)}).WithID("papers")
+		reader := saved.Agents[slices.IndexFunc(saved.Agents, func(a Agent) bool { return a.Name == "reader" })]
+		if saved.Team != "Papers" || saved.BasedOn != "visionaries" || saved.Description != c.want || reader.Prompt != "Read the papers twice." {
+			t.Errorf("%s: updated to %+v", c.name, saved)
+		}
+		if !saving.Flag("replacing") || saving.Flag("new") {
+			t.Errorf("%s: saved %+v, want replacing", c.name, saving.Data)
+		}
+	}
+}
+
+// Only a team linked to a template of yours you still have has one to
+// update.
+func TestATeamNotFromATemplateOfYoursHasNoneToUpdate(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	fromPapers := FromEvents(added(papers().Template(), seeded()))
+	for _, c := range []struct {
+		name   string
+		roster Roster
+		yours  UserTemplates
+		team   string
+	}{
+		{"a built-in template's team", FromEvents(seeded()), UserTemplates{papers()}, DefaultTeam},
+		{"a removed template's team", fromPapers, nil, "Papers"},
+		{"no team", fromPapers, UserTemplates{papers()}, "Nowhere"},
+	} {
+		_, err := UpdateTemplate(c.roster, c.yours, RemovedTemplates{"papers": ""}, c.team, "", you)
+		if !errors.Is(err, ErrNoTemplateToUpdate) || !strings.HasPrefix(err.Error(), c.team+" isn't made from a template of yours") {
+			t.Errorf("%s: %v", c.name, err)
+		}
 	}
 }
 

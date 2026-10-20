@@ -1,8 +1,10 @@
 package agents
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -31,13 +33,45 @@ func (u UserTemplate) Template() Template {
 }
 
 // SaveTemplate is the event that saves team's agents, as they are now, as
-// the template id, whose teams are called name. It keeps what makes each agent and drops what is this
-// install's or this team's alone: its knowledge, the machines it runs on
-// (which another install, or this one later, may not have) and its team
-// and template, which adding the template sets again. It is based on the
-// built-in template the team is linked to, directly or through one of
-// yours.
+// the new template id, whose teams are called name. It keeps what makes
+// each agent and drops what is this install's or this team's alone: its
+// knowledge, the machines it runs on (which another install, or this one
+// later, may not have) and its team and template, which adding the template
+// sets again. It is based on the built-in template the team is linked to,
+// directly or through one of yours.
 func SaveTemplate(roster Roster, yours UserTemplates, removed RemovedTemplates, team, name, id, description string, by events.Actor) (events.Proposal, error) {
+	saving, err := savedFrom(roster, Bases{Yours: yours, Removed: removed}, team, name, id, description, by)
+	if err != nil {
+		return events.Proposal{}, err
+	}
+	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
+	return saving, nil
+}
+
+// ErrNoTemplateToUpdate is UpdateTemplate's error for a team that isn't
+// linked to a template of yours you still have.
+var ErrNoTemplateToUpdate = errors.New("isn't made from a template of yours, so there is none to update: save it as a new one")
+
+// UpdateTemplate is the event that saves team's agents, as they are now,
+// over the template of yours the team is linked to, as SaveTemplate saves
+// them: the template keeps its id, its name and its base, and its
+// description unless another is given.
+func UpdateTemplate(roster Roster, yours UserTemplates, removed RemovedTemplates, team, description string, by events.Actor) (events.Proposal, error) {
+	linked, ok := yours.WithID(roster.TemplateOf(team))
+	if !ok {
+		return events.Proposal{}, fmt.Errorf("%s %w", team, ErrNoTemplateToUpdate)
+	}
+	saving, err := savedFrom(roster, Bases{Yours: yours, Removed: removed}, team, linked.Team, linked.ID, cmp.Or(description, linked.Description), by)
+	if err != nil {
+		return events.Proposal{}, err
+	}
+	saving.Data["replacing"] = true // the rules check it replaces a template of yours you still have
+	return saving, nil
+}
+
+// savedFrom is the event that saves team's agents, as they are now, as
+// the template id, for SaveTemplate and UpdateTemplate.
+func savedFrom(roster Roster, bases Bases, team, name, id, description string, by events.Actor) (events.Proposal, error) {
 	var members []Agent
 	for _, a := range roster {
 		if a.TeamName() == team {
@@ -50,9 +84,8 @@ func SaveTemplate(roster Roster, yours UserTemplates, removed RemovedTemplates, 
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
 	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team,
-		BasedOn: Bases{Yours: yours, Removed: removed}.Of(roster.TemplateOf(team))}.Save(by)
-	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
-	return saving, nil
+		BasedOn: bases.Of(roster.TemplateOf(team))}
+	return saving.Save(by), nil
 }
 
 // Bases resolve a team's template link to the built-in template whose
