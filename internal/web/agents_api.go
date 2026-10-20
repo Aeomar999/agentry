@@ -114,8 +114,8 @@ func (s *Server) renameTeam(w http.ResponseWriter, r *http.Request) {
 // whole or not at all. Then its unfinished tasks follow: those naming an
 // agent by a name it had take its new one, and those another agent of the
 // team coordinates, or did until the team removed it, move to its
-// coordinator. Saving again with the version
-// the reply gives, a refusal's too, finishes those a refusal cut short.
+// coordinator. Saving again with the version the reply gives, a refusal's
+// too, finishes those a refusal cut short.
 func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	w := &jsonErrors{ResponseWriter: writer}
 	var request struct {
