@@ -194,6 +194,8 @@ function EditTeamForm(props: EditTeamFormProps) {
   // at a time: Back or a link held while it asks puts the close question in
   // its place until that is answered.
   const removeAsks = removal.asking !== null && !guard.asking;
+  // Nothing else saves while Remove team asks or runs.
+  const removeHolds = removeAsks || removal.busy;
   const removeQuestion = (place: "footer" | "body") =>
     loaded && (
       <RemoveTeamQuestion
@@ -225,7 +227,7 @@ function EditTeamForm(props: EditTeamFormProps) {
           text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
           saving={saving}
           off={loading || !changed}
-          locked={removeAsks || removal.busy}
+          locked={removeHolds}
           primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
           onCancel={guard.ask}
           start={!loading && <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving} />}
@@ -276,7 +278,11 @@ function EditTeamForm(props: EditTeamFormProps) {
               />
             )}
             {refused?.kind === "cut short" && (
-              <CutShort refusal={refused} busy={saving || reloading} onSaveAgain={() => sending(() => saveAgain(loaded), loaded, loaded)} />
+              <CutShort
+                refusal={refused}
+                busy={saving || reloading || removeHolds}
+                onSaveAgain={() => sending(() => saveAgain(loaded), loaded, loaded)}
+              />
             )}
             {((tried && problems.length > 0) || refused?.kind === "failed") && (
               <ErrorSummary
@@ -293,6 +299,7 @@ function EditTeamForm(props: EditTeamFormProps) {
                   profiles={offer}
                   then="save"
                   adding={saving}
+                  disabled={removeHolds}
                   onAdd={() => save(ready.policy.hash)}
                 />
               </div>
@@ -415,7 +422,7 @@ function ChangedElsewhere({ refusal, changed, onReload, onKeep }: ChangedElsewhe
 
 interface CutShortProps {
   refusal: Extract<EditRefusal, { kind: "cut short" }>;
-  busy: boolean; // the team is reloading, or saving again
+  busy: boolean; // the team is reloading or saving again, or Remove team asks or runs
   onSaveAgain: () => void;
 }
 

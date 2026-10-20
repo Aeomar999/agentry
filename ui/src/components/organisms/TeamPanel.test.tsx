@@ -1481,7 +1481,10 @@ describe("Edit team: Remove team", () => {
     expect(saveButton().hasAttribute("disabled")).toBe(false);
   });
 
-  test("on a phone, a save started under the question, as the profile offer's, turns its Remove off", async () => {
+  test.each([
+    ["asks", false],
+    ["removes", true],
+  ])("while Remove team %s, the profile offer's add-and-save is off", async (_, removing) => {
     reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, profile: "read-mostly" } : a))];
     vi.mocked(api)
       .mockRejectedValueOnce(new ApiError("policy.toml lacks read-mostly", 409, { missingProfiles: ["read-mostly"] }))
@@ -1489,11 +1492,38 @@ describe("Edit team: Remove team", () => {
     openAt("/agents?team=Docs");
     typeInto("Team name", "Handbook");
     await save();
+    const add = within(inSheet().getByRole("alert")).getByRole("button", { name: "Add the profile and save the team" });
     fireEvent.click(removeButton("body"));
-    const offer = inSheet().getByRole("alert");
-    await act(async () => fireEvent.click(within(offer).getByRole("button", { name: "Add the profile and save the team" })));
+    if (removing) await act(async () => fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Remove" })));
 
-    expect(within(removeQuestion("body")!).getByRole("button", { name: "Remove" }).hasAttribute("disabled")).toBe(true);
+    expect(add.hasAttribute("disabled")).toBe(true);
+    if (removing) return;
+    fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
+    expect(add.hasAttribute("disabled")).toBe(false);
+  });
+
+  test.each([
+    ["asks", false],
+    ["removes", true],
+  ])("while Remove team %s, a cut-short save's Save again is off", async (_, removing) => {
+    const error = "saved the Handbook team, but 1 task still needs moving: save again to finish (task-1: busy)";
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError(error, 409, { error, version: "v3" }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "Handbook", teamVersion: "v3" }))] };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    await settle();
+    const again = within(summary()).getByRole("button", { name: "Save again" });
+    expect(again.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(removeButton());
+    if (removing) await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    expect(again.hasAttribute("disabled")).toBe(true);
+    if (removing) return;
+    fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Keep" }));
+    expect(again.hasAttribute("disabled")).toBe(false);
   });
 
   test("Back with changes while Remove team asks asks only about the changes; Keep editing asks about removing again", async () => {
