@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -166,6 +167,49 @@ func TestEraseDeletesTheArchivesBlobs(t *testing.T) {
 	}
 	if left, err := s.Log("task-1"); err != nil || len(left) != 1 {
 		t.Errorf("task-1 should be its marker alone, its archive markers gone too: %v, %v", left, err)
+	}
+}
+
+// A blob that can't be read, missing or corrupt, doesn't stop the erasure:
+// the rows go, the marker names the blob the live marker names, the
+// error after the commit names that blob, and a corrupt one is deleted.
+// Archived twice, the first blob is named only in the second, so with the
+// second unreadable the marker can't name it.
+func TestAnUnreadableBlobDoesNotStopTheErasure(t *testing.T) {
+	for name, spoil := range map[string]func(path string) error{
+		"missing": os.Remove,
+		"corrupt": func(path string) error { return os.WriteFile(path, []byte("not gzip"), 0o600) },
+	} {
+		s := archivable(t)
+		blobs := sharedfiles.Disk{Dir: t.TempDir()}
+		if _, rejection, err := s.Archive("task-1", summary, blobs); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		if _, rejection, err := s.Unarchive("task-1", blobs); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		acceptAll(t, s, renamed("task-1")) // so the second blob differs
+		second, rejection, err := s.Archive("task-1", summary, blobs)
+		if rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		hash := second.Text("archive")
+		if err := spoil(filepath.Join(blobs.Dir, hash[:2], hash)); err != nil {
+			t.Fatal(err)
+		}
+		erased, rejection, err := s.Erase("task-1", you, "", blobs)
+		if want := "the blob " + hash + " can't be read"; rejection != nil || err == nil || !strings.Contains(err.Error(), want) || erased.Type != events.TaskErased {
+			t.Fatalf("%s: %+v, %v, %v, want erased, the error saying %q", name, erased, rejection, err, want)
+		}
+		if got := erased.List("archives"); !slices.Equal(got, []string{hash}) {
+			t.Errorf("%s: the marker names %v, want the live marker's %s", name, got, hash)
+		}
+		if left, err := s.Log("task-1"); err != nil || len(left) != 1 || left[0].Type != events.TaskErased {
+			t.Errorf("%s: task-1 should be its marker alone: %v, %v", name, left, err)
+		}
+		if blobs.Has(hash) {
+			t.Errorf("%s: the unreadable blob is still there", name)
+		}
 	}
 }
 

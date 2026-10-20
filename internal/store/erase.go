@@ -37,20 +37,32 @@ type Remover interface {
 // pages back and empties the WAL (giveBackSpace), which still held the rows,
 // and deletes the blobs.
 //
+// A blob that can't be read, lost or corrupt, doesn't stop it, or a lost
+// blob would leave the task with no way to be erased: the live marker still
+// names that blob, which is deleted with the rest, but the blobs its rows
+// name, from earlier archives, can't be found, and the error after the
+// commit names it.
+//
 // It returns the marker and, when it is refused, the rejection: by the
 // rules, or because the stream took an event since its rows were read. A
 // refusal writes nothing, as Archive's does. The error is for the database
-// or the blobs failing: a blob that can't be read stops it before it writes
-// anything, as its earlier blobs can't then be found. One after the commit
-// comes with the marker: the task is erased, but some of its text may stay
-// in the WAL, the free pages or a blob until GiveBackSpace runs again or the
-// blob is removed.
+// or the blobs failing. One after the commit comes with the marker: the
+// task is erased, but some of its text may stay in the WAL, the free pages
+// or a blob until GiveBackSpace runs again or the blob is removed, or in an
+// earlier blob that an unreadable one named.
 func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover) (events.Event, *events.Rejection, error) {
 	live, err := s.Log(stream)
 	if err != nil {
 		return events.Event{}, nil, err
 	}
-	history, err := s.History(stream, FromBlobs(blobs))
+	var unread error
+	history, err := s.History(stream, func(marker events.Event) ([]events.Event, error) {
+		kept, err := FromBlobs(blobs)(marker)
+		if err != nil { // the live marker still names it, and the erasure goes on
+			unread = fmt.Errorf("the blob %s can't be read, so the blobs its rows name can't be found: %w", marker.Text("archive"), err)
+		}
+		return kept, nil
+	})
 	if err != nil {
 		return events.Event{}, nil, fmt.Errorf("erasing %s: %w", stream, err)
 	}
@@ -73,7 +85,7 @@ func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover
 	}
 	s.applied.Store(event.Position)
 	s.changes.notify()
-	return event, nil, s.forget(marker, blobs)
+	return event, nil, s.forget(marker, blobs, unread)
 }
 
 // erasureOf is the marker that erases a stream's live rows, and the blobs
@@ -139,9 +151,10 @@ func (s *Store) commitErase(marker events.Proposal) (events.Event, error) {
 
 // forget is the rest of an erasure, once the marker has committed: the
 // free pages given back, the WAL emptied and the blobs the marker names
-// deleted, each tried whatever the others do.
-func (s *Store) forget(marker events.Proposal, blobs Remover) error {
-	failed := s.giveBackSpace()
+// deleted, each tried whatever the others do. unread is why a blob
+// couldn't be read for the marker, if one couldn't.
+func (s *Store) forget(marker events.Proposal, blobs Remover, unread error) error {
+	failed := errors.Join(unread, s.giveBackSpace())
 	for _, hash := range marker.List("archives") {
 		if err := blobs.Remove(hash); err != nil {
 			failed = errors.Join(failed, err)
