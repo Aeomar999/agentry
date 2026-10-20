@@ -10,7 +10,7 @@ import { ColorSwatches } from "@/components/molecules/ColorSwatches";
 import { errorId, Field } from "@/components/molecules/Field";
 import { MODELS } from "@/components/organisms/AgentForm";
 import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
-import type { AgentField, DraftAgent, Problem } from "@/lib/custom-team";
+import { type AgentField, type DraftAgent, type Problem, problemCount, shownName } from "@/lib/custom-team";
 import { shippedProfiles } from "@/lib/profiles";
 import { cn } from "@/lib/cn";
 
@@ -45,7 +45,7 @@ const COLUMN_HINTS: Record<string, string> = {
 
 export function AgentRow(props: AgentRowProps) {
   const { agent, open, onToggle, problems, profileMissing, saving, onChange, onRemove } = props;
-  const name = agent.name.trim() || "New agent";
+  const name = shownName(agent);
   const marks = [problems.length > 0 && problemCount(problems.length), profileMissing && "profile missing"].filter(Boolean);
   const column = agent.coordinates ? "" : columnOfAgent(agent);
   return (
@@ -114,8 +114,6 @@ export function AgentRow(props: AgentRowProps) {
     </li>
   );
 }
-
-const problemCount = (n: number) => (n === 1 ? "1 problem" : `${n} problems`);
 
 function AgentFields({ agent, problems, profileMissing, engines, policy, saving, onChange }: AgentRowProps) {
   const id = (field: Parameters<typeof fieldId>[1]) => fieldId(agent.key, field);

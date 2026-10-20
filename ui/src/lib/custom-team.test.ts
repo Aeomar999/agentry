@@ -3,15 +3,24 @@ import { api } from "@/api/client";
 import type { Agent, Policy, PolicyProfile, TeamTemplate } from "@/api/types";
 import {
   addCustomTeam,
+  agentCount,
   blankTeam,
   checkTeam,
   changedAgents,
   copyTemplate,
   type DraftAgent,
+  footerLine,
+  listed,
+  missingLine,
   missingProfiles,
   newAgent,
+  problemCount,
+  replaceDetail,
+  replaceQuestion,
+  summaryTitle,
   type TeamDraft,
   type TeamRules,
+  thingCount,
 } from "./custom-team";
 
 // The client reads the address when it loads, and there is none here.
@@ -354,6 +363,63 @@ describe("missingProfiles", () => {
 
   test("is empty when policy.toml has them all", () => {
     expect(missingProfiles(draft(row("a1", { profile: "read-mostly" })), policy)).toEqual([]);
+  });
+});
+
+describe("the panel's sentences", () => {
+  const research = { team: "Research", agents: [row("r1"), row("r2"), row("r3")] };
+
+  test("listed joins with or, or with and", () => {
+    expect(listed([])).toBe("");
+    expect(listed(["a"])).toBe("a");
+    expect(listed(["a", "b"])).toBe("a or b");
+    expect(listed(["a", "b", "c"], "and")).toBe("a, b and c");
+  });
+
+  test("counts say 1 of one, n of many", () => {
+    expect([agentCount(1), agentCount(0), thingCount(1), thingCount(3), problemCount(1), problemCount(2)]).toEqual([
+      "1 agent",
+      "0 agents",
+      "1 thing",
+      "3 things",
+      "1 problem",
+      "2 problems",
+    ]);
+  });
+
+  test("footerLine says what Create team does, or why it won't yet", () => {
+    expect(footerLine(draft(), 0, true)).toBe("Creating the team…");
+    expect(footerLine(draft(), 2, false)).toBe("2 things to fix, listed at the top.");
+    expect(footerLine(draft(), 1, false)).toBe("1 thing to fix, listed at the top.");
+    expect(footerLine({ team: "", agents: [row("chief", { coordinates: true })] }, 0, false)).toBe("Creates the team and its coordinator.");
+    expect(footerLine({ team: "", agents: [row("a1")] }, 0, false)).toBe("Creates the team and its 1 agent.");
+    expect(footerLine(draft(row("a1")), 0, false)).toBe("Creates the team and its 2 agents.");
+  });
+
+  test("summaryTitle counts the things to fix, if any", () => {
+    expect(summaryTitle(1)).toBe("Couldn't create the team: 1 thing to fix");
+    expect(summaryTitle(0)).toBe("Couldn't create the team");
+  });
+
+  test("missingLine names who uses which profiles policy.toml lacks", () => {
+    const one = draft(row("a1", { profile: " research-only " }));
+    expect(missingLine(one, ["research-only"])).toBe(
+      "1 agent uses research-only, which policy.toml doesn't have. Create team offers to add it.",
+    );
+    const two = draft(row("a1", { profile: "x" }), row("a2", { profile: "y" }), row("a3", { profile: "z" }));
+    expect(missingLine(two, ["x", "y", "z"])).toBe(
+      "3 agents use x, y and z, which policy.toml doesn't have. Create team offers to add them.",
+    );
+  });
+
+  test("replaceQuestion and replaceDetail say what replacing changes", () => {
+    expect(replaceQuestion(["a1"], research)).toBe("Replace your changed agent with Research's?");
+    expect(replaceQuestion(["a1", "a2"])).toBe("Replace your 2 changed agents with a blank team?");
+    expect(replaceDetail(["a1", "a2"], research, { team: "Writing" })).toBe(
+      "Research's 3 agents replace Writing's; your changes to a1 and a2 go.",
+    );
+    expect(replaceDetail(["a1"], research)).toBe("Research's 3 agents replace yours; your changes to a1 go.");
+    expect(replaceDetail(["a1"])).toBe("A blank team has one agent, its coordinator.");
   });
 });
 

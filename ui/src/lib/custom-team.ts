@@ -205,8 +205,8 @@ const AGENT_CHECKS: [AgentField, AgentCheck][] = [
   ["profile", checkProfile],
 ];
 
-// shownName is how the summary names the row's agent.
-const shownName = (agent: DraftAgent) => agent.name.trim() || "New agent";
+// shownName is how the panel names a row's agent, as yet unnamed too.
+export const shownName = (agent: DraftAgent) => agent.name.trim() || "New agent";
 
 function checkName(agent: DraftAgent, { earlier, roster }: RowContext): Words | undefined {
   const name = agent.name.trim();
@@ -290,7 +290,7 @@ function checkProfile(agent: DraftAgent, { rules }: RowContext): Words | undefin
 const inPolicy = (profile: string, policy: Pick<Policy, "profiles">) => policy.profiles.some((p) => p.name === profile);
 
 // listed is "a", "a or b", "a, b or c", or with "and".
-function listed(words: string[], last = "or"): string {
+export function listed(words: string[], last = "or"): string {
   return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} ${last} ${words[words.length - 1]}`;
 }
 
@@ -305,6 +305,46 @@ export function missingProfiles(draft: TeamDraft, policy: Pick<Policy, "profiles
     if (shipped.has(profile) && !inPolicy(profile, policy) && !missing.includes(profile)) missing.push(profile);
   }
   return missing;
+}
+
+// The panel's sentences, in the copy deck's words (docs/design/custom-teams/copy.md).
+
+const counted = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+export const agentCount = (n: number) => counted(n, "agent", "agents");
+export const thingCount = (n: number) => counted(n, "thing", "things");
+export const problemCount = (n: number) => counted(n, "problem", "problems");
+
+// footerLine is the line beside Create team: what it does, or why it won't yet.
+export function footerLine(draft: TeamDraft, problems: number, saving: boolean): string {
+  if (saving) return "Creating the team…";
+  if (problems > 0) return `${thingCount(problems)} to fix, listed at the top.`;
+  if (draft.agents.length === 1 && draft.agents[0].coordinates) return "Creates the team and its coordinator.";
+  return `Creates the team and its ${agentCount(draft.agents.length)}.`;
+}
+
+// summaryTitle heads the summary of why Create team didn't create the team.
+export const summaryTitle = (problems: number) =>
+  problems > 0 ? `Couldn't create the team: ${thingCount(problems)} to fix` : "Couldn't create the team";
+
+// missingLine says, under the agents, which profiles creating the team offers to add.
+export function missingLine(draft: TeamDraft, missing: string[]): string {
+  const users = draft.agents.filter((agent) => missing.includes(agent.profile.trim())).length;
+  const who = users === 1 ? "1 agent uses" : `${users} agents use`;
+  return `${who} ${listed(missing, "and")}, which policy.toml doesn't have. Create team offers to add ${missing.length === 1 ? "it" : "them"}.`;
+}
+
+// replaceQuestion asks before Start from replaces the agents you changed,
+// with a template's (to) or a blank team (none).
+export function replaceQuestion(changed: string[], to?: Pick<TeamTemplate, "team">): string {
+  const yours = changed.length === 1 ? "your changed agent" : `your ${changed.length} changed agents`;
+  return `Replace ${yours} with ${to ? `${to.team}'s` : "a blank team"}?`;
+}
+
+// replaceDetail says under the question what replacing does; from is the
+// template the agents were copied from, if any.
+export function replaceDetail(changed: string[], to?: Pick<TeamTemplate, "team" | "agents">, from?: Pick<TeamTemplate, "team">): string {
+  if (!to) return "A blank team has one agent, its coordinator.";
+  return `${to.team}'s ${to.agents.length} agents replace ${from ? `${from.team}'s` : "yours"}; your changes to ${listed(changed, "and")} go.`;
 }
 
 // whyNotCreated is a refusal in words: the server's own, or ours when

@@ -11,14 +11,21 @@ import { SideSheet } from "@/components/molecules/SideSheet";
 import { useToast } from "@/components/organisms/Toasts";
 import {
   addCustomTeam,
+  agentCount,
   blankTeam,
   changedAgents,
   checkTeam,
   copyTemplate,
   type DraftAgent,
+  footerLine,
+  missingLine,
   missingProfiles,
   newAgent,
   type Problem,
+  replaceDetail,
+  replaceQuestion,
+  shownName,
+  summaryTitle,
   type TeamDraft,
   whyNotCreated,
 } from "@/lib/custom-team";
@@ -202,13 +209,6 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   const count = draft.agents.length;
-  const footerText = saving
-    ? "Creating the team…"
-    : problems.length > 0
-      ? `${things(problems.length)} to fix, listed at the top.`
-      : count === 1 && draft.agents[0].coordinates
-        ? "Creates the team and its coordinator."
-        : `Creates the team and its ${count} ${count === 1 ? "agent" : "agents"}.`;
 
   return (
     <SideSheet
@@ -216,7 +216,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
       returnTo={returnTo}
       onClose={onClose}
       canClose={!saving}
-      footer={<Footer text={footerText} saving={saving} onClose={onClose} onCreate={() => create()} />}
+      footer={<Footer text={footerLine(draft, problems.length, saving)} saving={saving} onClose={onClose} onCreate={() => create()} />}
     >
       <div className="flex flex-col gap-5">
         {(problems.length > 0 || failure) && <ErrorSummary problems={problems} failure={failure} onFollow={follow} />}
@@ -254,7 +254,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
             className="mb-2 flex w-full items-baseline justify-between text-[12px] font-medium text-ink-secondary outline-none"
           >
             Agents · one coordinates
-            <span className="font-normal text-ink-muted">{count === 1 ? "1 agent" : `${count} agents`}</span>
+            <span className="font-normal text-ink-muted">{agentCount(count)}</span>
           </legend>
           {problemAt("agents") && <FieldError id={errorId("team-agents")}>{problemAt("agents")}</FieldError>}
           {missing.length > 0 && (
@@ -309,16 +309,6 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
 // startOf is the team a form starts with: a copy of the template, or Blank.
 const startOf = (template: TeamTemplate | undefined, roster: Agent[]) => (template ? copyTemplate(template, roster) : blankTeam(roster));
 
-const things = (n: number) => (n === 1 ? "1 thing" : `${n} things`);
-
-// missingLine says, under the agents, which profiles creating the team offers to add.
-function missingLine(draft: TeamDraft, missing: string[]): string {
-  const users = draft.agents.filter((agent) => missing.includes(agent.profile.trim())).length;
-  const who = users === 1 ? "1 agent uses" : `${users} agents use`;
-  const which = missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
-  return `${who} ${which}, which policy.toml doesn't have. Create team offers to add ${missing.length === 1 ? "it" : "them"}.`;
-}
-
 interface ErrorSummaryProps {
   problems: Problem[];
   failure: string;
@@ -329,7 +319,6 @@ interface ErrorSummaryProps {
 // problem, in screen order, or the server's words. It takes focus, which
 // reads it out, so it is no alert.
 function ErrorSummary({ problems, failure, onFollow }: ErrorSummaryProps) {
-  const title = problems.length > 0 ? `Couldn't create the team: ${things(problems.length)} to fix` : "Couldn't create the team";
   return (
     <div
       id="team-summary"
@@ -338,7 +327,7 @@ function ErrorSummary({ problems, failure, onFollow }: ErrorSummaryProps) {
       className="flex flex-col gap-1.5 rounded-md border border-danger/40 bg-danger-soft px-3 py-2.5 outline-none focus-visible:border-focus"
     >
       <h3 id="team-summary-title" className="text-[13px] font-medium text-danger-ink">
-        {title}
+        {summaryTitle(problems.length)}
       </h3>
       {failure && <p className="text-[13px] text-ink-secondary">{failure}</p>}
       {problems.length > 0 && (
@@ -385,7 +374,7 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
     if (segment === "blank" && copying) onChoose("");
     if (segment === "copy" && !copying && templates.length > 0) onChoose(templates[0].id);
   };
-  const to = replacing && templates.find((t) => t.id === replacing.to);
+  const to = replacing ? templates.find((t) => t.id === replacing.to) : undefined;
   const from = templates.find((t) => t.id === copy);
   return (
     <div className="flex flex-col gap-2">
@@ -434,13 +423,9 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
           className="flex flex-col gap-2 rounded-md border border-divider bg-surface-0 px-3 py-2.5"
         >
           <p id="team-replace" className="text-[13px] font-medium text-ink-primary">
-            {replaceQuestion(replacing, to)}
+            {replaceQuestion(replacing.changed, to)}
           </p>
-          <p className="text-[12px] text-ink-secondary">
-            {to
-              ? `${to.team}'s ${to.agents.length} agents replace ${from ? `${from.team}'s` : "yours"}; your changes to ${listed(replacing.changed)} go.`
-              : "A blank team has one agent, its coordinator."}
-          </p>
+          <p className="text-[12px] text-ink-secondary">{replaceDetail(replacing.changed, to, from)}</p>
           <span className="flex gap-2">
             <Button ref={keep} size="sm" onClick={onKeep}>
               Keep mine
@@ -455,16 +440,9 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
   );
 }
 
-function replaceQuestion({ changed }: Replacing, to: TeamTemplate | undefined | null): string {
-  const yours = changed.length === 1 ? "your changed agent" : `your ${changed.length} changed agents`;
-  return `Replace ${yours} with ${to ? `${to.team}'s` : "a blank team"}?`;
-}
-
-const listed = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
-
 // RemovedStub stands where a removed agent was, with Undo, while the panel is open.
 function RemovedStub({ agent, saving, onUndo }: { agent: DraftAgent; saving: boolean; onUndo: () => void }) {
-  const name = agent.name.trim() || "New agent";
+  const name = shownName(agent);
   return (
     <li className="flex min-h-11 items-center gap-3 border-b border-divider px-4 text-[12px] text-ink-muted last:border-b-0">
       <span className="font-mono">{name} removed</span>
