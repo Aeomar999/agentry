@@ -543,7 +543,7 @@ func TestACheckedCustomTeamIsAddedWhole(t *testing.T) {
 	if problem := agents.CheckCustomTeam("Data", members, state.Roster()); problem != "" {
 		t.Fatal(problem)
 	}
-	for _, p := range agents.CustomTeam("Data", members, you) {
+	for _, p := range agents.CustomTeam("Data", "", members, you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Errorf("adding %s: %v %v", p.Text("name"), rejection, err)
 		}

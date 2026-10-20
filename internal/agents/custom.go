@@ -93,8 +93,9 @@ func checkMember(team string, agent Agent, current Roster, seen map[string]bool)
 // CustomTeam is the events that add the team of these members to the
 // roster, as CheckCustomTeam allowed it: the coordinator first, as in every
 // template, so a team never has agents and no coordinator. An empty prompt
-// gets a default one.
-func CustomTeam(team string, members []Agent, by events.Actor) []events.Proposal {
+// gets a default one. template is the built-in template the team was copied
+// from, or "": every agent is made from it, so the team keeps its features.
+func CustomTeam(team, template string, members []Agent, by events.Actor) []events.Proposal {
 	team, members = trimmed(team, members)
 	slices.SortStableFunc(members, func(a, b Agent) int {
 		if a.Coordinates == b.Coordinates {
@@ -106,7 +107,7 @@ func CustomTeam(team string, members []Agent, by events.Actor) []events.Proposal
 	})
 	var proposals []events.Proposal
 	for _, agent := range members {
-		agent.Team, agent.Template = team, ""
+		agent.Team, agent.Template = team, template
 		if agent.Prompt == "" {
 			agent.Prompt = defaultPrompt(agent)
 		}

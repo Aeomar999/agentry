@@ -103,7 +103,7 @@ func TestACustomTeamTakesTasksLikeAnyOther(t *testing.T) {
 	if problem := agents.CheckCustomTeam("Data", members, agents.FromEvents(stream)); problem != "" {
 		t.Fatal(problem)
 	}
-	for _, p := range agents.CustomTeam("Data", members, you) {
+	for _, p := range agents.CustomTeam("Data", "", members, you) {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}
@@ -192,7 +192,7 @@ func TestTheRoutingSentenceOfTheDefaultTeamsIsUnchanged(t *testing.T) {
 
 // The routing sentence names only the teams there are, by their names now.
 func TestTheRoutingSentenceNamesTheTeamsThereAre(t *testing.T) {
-	data := rosterWith(agents.CustomTeam("Data", []agents.Agent{
+	data := rosterWith(agents.CustomTeam("Data", "", []agents.Agent{
 		{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true},
 	}, you)...)
 	if section := otherTeamsOf(t, data, "data-lead"); !strings.Contains(section, "only another team does well (code from Software), ask") {
@@ -203,7 +203,7 @@ func TestTheRoutingSentenceNamesTheTeamsThereAre(t *testing.T) {
 	if section := otherTeamsOf(t, docs, "tech-lead"); !strings.Contains(section, "(a document from Docs, research from Research, a design from Design, code from Software)") {
 		t.Errorf("a renamed Writing team:\n%s", section)
 	}
-	alone := rosterWith(agents.CustomTeam("Legal", []agents.Agent{
+	alone := rosterWith(agents.CustomTeam("Legal", "", []agents.Agent{
 		{Name: "counsel", Engine: "claude", Coordinates: true},
 	}, you)...)
 	alone = alone.Next(events.Event{Proposal: agents.TeamRenaming("Software", "Build", you)})
@@ -223,8 +223,8 @@ func TestOtherTeamsAreDescribedByTheirTemplateOrTheirCoordinator(t *testing.T) {
 	}
 
 	custom := rosterWith(
-		append(agents.CustomTeam("Data", []agents.Agent{{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true}}, you),
-			agents.CustomTeam("Legal", []agents.Agent{{Name: "counsel", Engine: "claude", Coordinates: true}}, you)...)...)
+		append(agents.CustomTeam("Data", "", []agents.Agent{{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true}}, you),
+			agents.CustomTeam("Legal", "", []agents.Agent{{Name: "counsel", Engine: "claude", Coordinates: true}}, you)...)...)
 	section := otherTeamsOf(t, custom, "tech-lead")
 	if !strings.Contains(section, "- Data, coordinated by data-lead: Leads the data work.\n") {
 		t.Errorf("a custom team is described by its coordinator:\n%s", section)
@@ -234,7 +234,7 @@ func TestOtherTeamsAreDescribedByTheirTemplateOrTheirCoordinator(t *testing.T) {
 	}
 
 	// A custom team named like a template isn't described as one.
-	named := rosterWith(agents.CustomTeam("Writing", []agents.Agent{
+	named := rosterWith(agents.CustomTeam("Writing", "", []agents.Agent{
 		{Name: "scribe", Description: "Takes notes.", Engine: "claude", Coordinates: true},
 	}, you)...)
 	if section := otherTeamsOf(t, named, "tech-lead"); !strings.Contains(section, "- Writing, coordinated by scribe: Takes notes.\n") {
@@ -244,7 +244,7 @@ func TestOtherTeamsAreDescribedByTheirTemplateOrTheirCoordinator(t *testing.T) {
 
 // An agent with no description is listed by its name alone.
 func TestAnAgentWithNoDescriptionIsListedByName(t *testing.T) {
-	roster := rosterWith(agents.CustomTeam("Legal", []agents.Agent{
+	roster := rosterWith(agents.CustomTeam("Legal", "", []agents.Agent{
 		{Name: "counsel", Engine: "claude", Coordinates: true},
 		{Name: "drafter", Engine: "claude"},
 		{Name: "checker", Description: "Checks the drafts.", Engine: "claude"},

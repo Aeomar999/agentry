@@ -495,7 +495,8 @@ func viewOf(t agents.Template, userMade bool) templateView {
 
 // addTeam adds a team, made from a template ({template}: a built-in one's
 // team, or the id of one you saved) or from agents you define ({team,
-// agents}): its coordinator first, so the team always has
+// agents}, and copiedFrom: the id of the built-in template they were copied
+// from, if they were): its coordinator first, so the team always has
 // one, then its agents, each with its own prompt. When the policy lacks a
 // profile the team needs, it refuses with the profiles missing, unless asked
 // to add them first (addMissingProfiles), which it does in one change of the
@@ -507,19 +508,21 @@ func (s *Server) addTeam(writer http.ResponseWriter, r *http.Request) {
 		Template           string
 		Team               string
 		Agents             []agents.Agent
+		CopiedFrom         string
 		AddMissingProfiles bool
 		Hash               string
 	}
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	custom := strings.TrimSpace(request.Team) != "" || len(request.Agents) > 0
+	copiedFrom := strings.TrimSpace(request.CopiedFrom)
+	custom := strings.TrimSpace(request.Team) != "" || len(request.Agents) > 0 || copiedFrom != ""
 	switch {
 	case request.Template != "" && custom:
 		http.Error(w, "a team comes from a template or from agents you define, not both", http.StatusBadRequest)
 		return
 	case custom:
-		s.addCustomTeam(w, strings.TrimSpace(request.Team), request.Agents, request.AddMissingProfiles, request.Hash)
+		s.addCustomTeam(w, strings.TrimSpace(request.Team), copiedFrom, request.Agents, request.AddMissingProfiles, request.Hash)
 		return
 	case request.Template == "":
 		http.Error(w, "name a template, or a team and its agents", http.StatusBadRequest)
@@ -569,8 +572,13 @@ func (s *Server) addFromYourTemplate(w http.ResponseWriter, id string, addMissin
 }
 
 // addCustomTeam adds the team of the agents you define, once every agent
-// passes: nothing is proposed before then, so a team is never half made.
-func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []agents.Agent, addMissing bool, hash string) {
+// passes: nothing is proposed before then, so a team is never half made. A
+// team copied from a built-in template is made from it, as AddTeam's are.
+func (s *Server) addCustomTeam(w http.ResponseWriter, team, copiedFrom string, members []agents.Agent, addMissing bool, hash string) {
+	if _, builtIn := agents.TemplateWithID(copiedFrom); copiedFrom != "" && !builtIn {
+		http.Error(w, "a team is copied from a built-in template, and "+copiedFrom+" isn't the id of one", http.StatusBadRequest)
+		return
+	}
 	roster, err := s.roster()
 	if err != nil {
 		httpapi.Failed(w, err)
@@ -579,7 +587,7 @@ func (s *Server) addCustomTeam(w http.ResponseWriter, team string, members []age
 	if !s.mayAddTeam(w, team, members, roster, addMissing, hash) {
 		return
 	}
-	s.proposeTeam(w, agents.CustomTeam(team, members, httpapi.You))
+	s.proposeTeam(w, agents.CustomTeam(team, copiedFrom, members, httpapi.You))
 }
 
 // mayAddTeam says whether the team of these members passes every check a

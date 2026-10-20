@@ -91,7 +91,7 @@ func TestACustomTeamIsMadeCoordinatorFirst(t *testing.T) {
 	members[0], members[2] = members[2], members[0] // taster, cook, chef
 	members[1].Name, members[1].Description = "  cook ", " Cooks the dishes "
 	members[1].Template = "software"
-	proposals := CustomTeam(" Kitchen ", members, you)
+	proposals := CustomTeam(" Kitchen ", "", members, you)
 	var names []string
 	for _, p := range proposals {
 		names = append(names, p.Text("name"))
@@ -121,6 +121,25 @@ func TestACustomTeamIsMadeCoordinatorFirst(t *testing.T) {
 	}
 }
 
+// A team copied from a built-in template is made from it, every agent,
+// whatever template an agent sent says.
+func TestACopiedTeamIsMadeFromItsTemplate(t *testing.T) {
+	members := crew()
+	members[1].Template = "software"
+	roster := FromEvents(seeded())
+	for _, p := range CustomTeam("Kitchen", "visionaries", members, you) {
+		roster.Apply(events.Event{Proposal: p})
+	}
+	for _, agent := range roster {
+		if agent.TeamName() == "Kitchen" && agent.Template != "visionaries" {
+			t.Errorf("%s is made from %q", agent.Name, agent.Template)
+		}
+	}
+	if roster.TemplateOf("Kitchen") != "visionaries" {
+		t.Errorf("the Kitchen team is made from %q", roster.TemplateOf("Kitchen"))
+	}
+}
+
 func TestACustomTeamIsTrimmed(t *testing.T) {
 	members := crew()
 	members[1].Engine, members[1].Model, members[1].Profile = " claude ", " opus\t", " developer "
@@ -128,7 +147,7 @@ func TestACustomTeamIsTrimmed(t *testing.T) {
 	if problem := CheckCustomTeam("Kitchen", members, nil); problem != "" {
 		t.Fatalf("a padded column and colour were refused: %s", problem)
 	}
-	proposals := CustomTeam("Kitchen", members, you)
+	proposals := CustomTeam("Kitchen", "", members, you)
 	cook, taster := proposals[1], proposals[2]
 	if cook.Text("engine") != "claude" || cook.Text("model") != "opus" || cook.Text("profile") != "developer" || cook.Text("color") != "teal" {
 		t.Errorf("the cook's proposal wasn't trimmed: %v", cook.Data)
@@ -142,7 +161,7 @@ func TestACustomTeamGetsDefaultPrompts(t *testing.T) {
 	members := crew()
 	members[0].Prompt, members[1].Prompt, members[2].Prompt = "", " ", ""
 	members[1].Description = "Cooks the dishes."
-	proposals := CustomTeam("Kitchen", members, you)
+	proposals := CustomTeam("Kitchen", "", members, you)
 	prompts := map[string]string{}
 	for _, p := range proposals {
 		prompts[p.Text("name")] = p.Text("prompt")
@@ -158,7 +177,7 @@ func TestACustomTeamGetsDefaultPrompts(t *testing.T) {
 		t.Errorf("only a reviewer ends with a verdict:\n%s\n%s", cook, prompts["taster"])
 	}
 
-	given := CustomTeam("Kitchen", crew(), you)
+	given := CustomTeam("Kitchen", "", crew(), you)
 	if given[1].Text("prompt") != "Cook." {
 		t.Errorf("a given prompt was replaced: %q", given[1].Text("prompt"))
 	}

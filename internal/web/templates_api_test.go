@@ -385,7 +385,7 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	members := []agents.Agent{{Name: "planner", Engine: "claude", Prompt: "Plan it.", Coordinates: true}}
-	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", members, httpapi.You)...) {
+	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", "", members, httpapi.You)...) {
 		written.Propose(p)
 	}
 	saving, err := agents.SaveTemplate(state.Roster(), state.Templates(), state.RemovedTemplates(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)

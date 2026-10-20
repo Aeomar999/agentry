@@ -23,6 +23,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -1686,11 +1687,19 @@ func TestACustomTeamIsAddedFromYourAgents(t *testing.T) {
 }
 
 // A custom team that can't be added is refused whole: no agent of it is
-// made, even when only the last one is wrong.
+// made, even when only the last one is wrong. A team is copied only from a
+// built-in template, not from one of yours.
 func TestACustomTeamIsRefusedWhole(t *testing.T) {
 	server, s := newTestServer(t)
+	yours := `{"id":"ideas","team":"Ideas","agents":[{"name":"dreamer","engine":"claude","prompt":"Dream.","coordinates":true}]}`
+	if code, body := call(t, server, "POST", "/api/teams/templates/import", yours); code != 200 {
+		t.Fatalf("import: %d %s", code, body)
+	}
 	lead := `{"name":"data-lead","engine":"claude","coordinates":true}`
 	for request, want := range map[string]string{
+		`{"team":"Data","copiedFrom":"nowhere","agents":[` + lead + `]}`:                                     "nowhere isn't the id of one",
+		`{"team":"Data","copiedFrom":"ideas","agents":[` + lead + `]}`:                                       "ideas isn't the id of one",
+		`{"template":"research","copiedFrom":"research"}`:                                                    "not both",
 		`{"team":"Data","agents":[` + lead + `,{"name":"analyst","engine":"claude","coordinates":true}]}`:    "exactly one coordinator",
 		`{"team":"writing","agents":[` + lead + `]}`:                                                         "Writing template",
 		`{"team":"software","agents":[` + lead + `]}`:                                                        "a team called software already",
@@ -1711,6 +1720,28 @@ func TestACustomTeamIsRefusedWhole(t *testing.T) {
 		if after, _ := s.Stream(events.AgentsStream); len(after) != len(before) {
 			t.Errorf("%s: %d agent events written", request, len(after)-len(before))
 		}
+	}
+}
+
+// A team copied from a built-in template is made from it, every agent of
+// it, so it keeps the template's features: one copied from the Visionaries
+// suggests ideas.
+func TestACopiedTeamIsMadeFromItsTemplate(t *testing.T) {
+	server, s, state := newTestStateChecking(t, func(events.Proposal) *events.Rejection { return nil })
+	request := `{"team":"Dreamers","copiedFrom":" visionaries ","agents":[
+		{"name":"dream-lead","engine":"claude","coordinates":true},
+		{"name":"dreamer","engine":"claude","prompt":"Dream."}]}`
+	if code, body := call(t, server, "POST", "/api/teams", request); code != 200 {
+		t.Fatalf("adding the Dreamers team: %d %s", code, body)
+	}
+	team := teamIn(t, s, "Dreamers")
+	for _, agent := range team {
+		if agent.Template != "visionaries" {
+			t.Errorf("%s is made from %q", agent.Name, agent.Template)
+		}
+	}
+	if lead, _ := state.Roster().Coordinator("Dreamers"); len(team) != 2 || !ideas.Suggests(lead, agents.BasesIn(state)) {
+		t.Errorf("the Dreamers' coordinator %+v doesn't suggest ideas", lead)
 	}
 }
 

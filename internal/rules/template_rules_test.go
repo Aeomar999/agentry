@@ -374,7 +374,7 @@ func TestARemovalNeedsAnID(t *testing.T) {
 
 func TestASavedTeamIsAccepted(t *testing.T) {
 	s, state := openSeededState(t)
-	for _, p := range agents.CustomTeam("Readers", research(), you) {
+	for _, p := range agents.CustomTeam("Readers", "", research(), you) {
 		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
 			t.Fatalf("adding the Readers team: %v, %v", rejection, err)
 		}
