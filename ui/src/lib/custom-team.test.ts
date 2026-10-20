@@ -882,7 +882,8 @@ describe("whyNotSaved", () => {
     expect(refused(409, { error: "changed elsewhere", version: "v2", message })).toEqual({
       kind: "changed",
       title: "Couldn't save the team: it changed since you opened it",
-      detail: "The Docs team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.",
+      detail:
+        "The Docs team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.",
     });
   });
 
