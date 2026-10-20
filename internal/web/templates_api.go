@@ -2,6 +2,7 @@ package web
 
 import (
 	"cmp"
+	"errors"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -21,14 +22,18 @@ import (
 // name (by default the team's): a team made from it is called that. Its id,
 // unless given, comes from the name and is always one a template may have.
 // A name you or Agentry have a template called already, in any case, or an
-// id given that one of yours has, is refused with a 409: saving never
+// id given that one of yours has, is refused with a 409: a new save never
 // replaces a template. The rules refuse it too, for a save that came in at
 // the same time; that refusal is the same 409. Once saved, the team is
 // linked to the template, so it keeps the features of the built-in one the
 // template is based on; a link refused leaves the template saved, and the
-// reply says why the team isn't linked (notLinked).
+// reply says why the team isn't linked (notLinked). With replacing, and no
+// name or id, it updates the team's own template instead (updateTemplate).
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
-	var request struct{ Name, ID, Description string }
+	var request struct {
+		Name, ID, Description string
+		Replacing             bool
+	}
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
@@ -40,6 +45,14 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	team := roster.TeamNamed(r.PathValue("team"))
 	if team == "" {
 		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
+		return
+	}
+	if request.Replacing {
+		if request.Name != "" || request.ID != "" {
+			http.Error(w, "an update keeps the name and id of the template it updates, so it is given neither", http.StatusBadRequest)
+			return
+		}
+		s.updateTemplate(w, roster, team, strings.TrimSpace(request.Description))
 		return
 	}
 	name, id := cmp.Or(strings.TrimSpace(request.Name), team), strings.TrimSpace(request.ID)
@@ -60,6 +73,26 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpapi.Reply(w, savedView{templateView: yourView(saved), NotLinked: s.link(team, id)})
+}
+
+// updateTemplate saves team's agents, as they are now, over the template of
+// yours it is linked to, keeping its id and name, and its description
+// unless another is given. A team linked to no template of yours you still
+// have has none to update: a 400. The team is linked to it already.
+func (s *Server) updateTemplate(w http.ResponseWriter, roster agents.Roster, team, description string) {
+	proposal, err := agents.UpdateTemplate(roster, s.state.Templates(), s.state.RemovedTemplates(), team, description, httpapi.You)
+	switch {
+	case errors.Is(err, agents.ErrNoTemplateToUpdate):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	case err != nil:
+		httpapi.Failed(w, err)
+		return
+	}
+	name, id := proposal.Text("team"), proposal.Text("id")
+	if saved, ok := s.proposeTemplate(w, proposal, id, func() string { return s.importTaken(name, id) }); ok {
+		httpapi.Reply(w, savedView{templateView: yourView(saved)})
+	}
 }
 
 // savedView is a template you saved from a team, and why that team isn't
@@ -189,9 +222,9 @@ func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// importTaken is why an import can't be called name, or "" when it can: as
-// templateCalled, except that the template of yours with its id is the one
-// it replaces, so its own name is free.
+// importTaken is why an import or an update can't be called name, or ""
+// when it can: as templateCalled, except that the template of yours with
+// its id is the one it replaces, so its own name is free.
 func (s *Server) importTaken(name, id string) string {
 	if builtIn, ok := agents.TemplateNamed(name); ok {
 		return builtInCalled(builtIn.Team)

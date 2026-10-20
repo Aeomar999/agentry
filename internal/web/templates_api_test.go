@@ -756,6 +756,93 @@ func TestATeamIsLinkedToATemplate(t *testing.T) {
 	}
 }
 
+// The story: a team copied from the Visionaries, saved as Dreams, then
+// changed, updates Dreams in place: the same id and name, the agents as
+// they are now, still based on the Visionaries, so the team still suggests
+// ideas. The description stays unless another is given.
+func TestATemplateIsUpdatedFromItsTeam(t *testing.T) {
+	server, s, state := newTestStateChecking(t, func(events.Proposal) *events.Rejection { return nil })
+	dreamers := `{"team":"Dreamers","copiedFrom":"visionaries","agents":[{"name":"dream-lead","engine":"claude","coordinates":true}]}`
+	if code, body := call(t, server, "POST", "/api/teams", dreamers); code != 200 {
+		t.Fatalf("add Dreamers: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Dreamers/template", `{"name":"Dreams","description":"Big ideas."}`); code != 200 {
+		t.Fatalf("save Dreams: %d %s", code, body)
+	}
+	if code, body := call(t, server, "PUT", "/api/agents/dream-lead", `{"engine":"claude","prompt":"Dream bigger.","team":"Dreamers","coordinates":true}`); code != 200 {
+		t.Fatalf("change dream-lead: %d %s", code, body)
+	}
+
+	for _, update := range []struct {
+		name, body, want string
+	}{
+		{"no description", `{"replacing":true}`, "Big ideas."},
+		{"a description", `{"replacing":true,"description":" Bigger ideas. "}`, "Bigger ideas."},
+	} {
+		code, body := call(t, server, "POST", "/api/teams/dreamers/template", update.body)
+		var reply struct{ ID, Team, Description, NotLinked string }
+		if json.Unmarshal([]byte(body), &reply); code != 200 || reply.ID != "dreams" || reply.Team != "Dreams" || reply.Description != update.want || strings.Contains(body, "notLinked") {
+			t.Fatalf("%s: %d %s", update.name, code, body)
+		}
+		saved, _ := savedTemplates(t, s).WithID("dreams")
+		if len(saved.Agents) != 1 || saved.Agents[0].Prompt != "Dream bigger." || saved.BasedOn != "visionaries" || saved.Description != update.want {
+			t.Errorf("%s: Dreams is %+v", update.name, saved)
+		}
+	}
+	if _, list := call(t, server, "GET", "/api/teams/templates", ""); len(userTemplates(t, list)) != 1 {
+		t.Errorf("your templates: %s", list)
+	}
+	lead, _ := state.Roster().Coordinator("Dreamers")
+	if lead.Template != "dreams" || !ideas.Suggests(lead, agents.BasesIn(state)) {
+		t.Errorf("after the update, the Dreamers' coordinator %+v doesn't suggest ideas", lead)
+	}
+}
+
+// Only a team linked to a template of yours you still have updates it,
+// and an update takes no name or id: it keeps the template's.
+func TestATemplateUpdateIsRefused(t *testing.T) {
+	server, s := newTestServer(t)
+	planningTeam(t, server, s)
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"gone"}`); code != 200 {
+		t.Fatalf("save Planning: %d %s", code, body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/teams/templates/gone", ""); code != 200 {
+		t.Fatalf("remove gone: %d %s", code, body)
+	}
+	madeAgent(t, server, "writer", "Letters", true)
+	if code, body := call(t, server, "POST", "/api/teams/Letters/template", `{"id":"letters"}`); code != 200 {
+		t.Fatalf("save Letters: %d %s", code, body)
+	}
+	madeAgent(t, server, "drafter", "Drafts", true)
+	for _, update := range []struct {
+		name, team, body string
+		code             int
+		want             string
+	}{
+		{"a team with no link", "Drafts", `{"replacing":true}`, http.StatusBadRequest,
+			"Drafts isn't made from a template of yours, so there is none to update: save it as a new one"},
+		{"a built-in template's team", "Software", `{"replacing":true}`, http.StatusBadRequest,
+			"Software isn't made from a template of yours, so there is none to update: save it as a new one"},
+		{"a removed template's team", "Planning", `{"replacing":true}`, http.StatusBadRequest,
+			"Planning isn't made from a template of yours, so there is none to update: save it as a new one"},
+		{"no such team", "Nowhere", `{"replacing":true}`, http.StatusNotFound, "there is no team called Nowhere"},
+		{"a name", "Letters", `{"replacing":true,"name":"Notes"}`, http.StatusBadRequest,
+			"an update keeps the name and id of the template it updates, so it is given neither"},
+		{"an id", "Letters", `{"replacing":true,"id":"letters"}`, http.StatusBadRequest,
+			"an update keeps the name and id of the template it updates, so it is given neither"},
+	} {
+		if code, body := call(t, server, "POST", "/api/teams/"+update.team+"/template", update.body); code != update.code || strings.TrimSpace(body) != update.want {
+			t.Errorf("%s: %d %s", update.name, code, body)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Letters/template", `{"replacing":true}`); code != 200 {
+		t.Errorf("updating Letters: %d %s", code, body)
+	}
+	if _, back := savedTemplates(t, s).WithID("gone"); back {
+		t.Error("an update brought back the removed template")
+	}
+}
+
 // planningTeam makes a team of your own, Planning, whose agents differ in
 // everything a template keeps, and returns it as the roster has it.
 func planningTeam(t *testing.T, server *httptest.Server, s *store.Store) agents.Roster {
