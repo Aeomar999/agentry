@@ -84,6 +84,7 @@ export function AgentsPage() {
   // A change to the policy changes the profiles in force, so both are read again.
   const reloadAll = () => Promise.all([reload(), policy.reload()]);
   const [adding, setAdding] = useState(false);
+  const [addBusy, setAddBusy] = useState(false); // a request in Add a team runs, which holds it open
   const [removing, setRemoving] = useState<Removing | null>(null);
   const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
   // The team the panel created or saved, whose heading takes focus as it
@@ -205,13 +206,14 @@ export function AgentsPage() {
         />
       )}
       {adding && (
-        <Dialog title="Add a team" onClose={() => setAdding(false)} wide>
+        <Dialog title="Add a team" onClose={() => setAdding(false)} wide held={addBusy}>
           <AddTeam
             templates={templates}
             existing={teams.map((t) => t.team)}
             policyHash={policy.data?.hash ?? ""}
             onBuild={buildTeam}
             onTemplatesChanged={templatesRead.reload}
+            onBusyChange={setAddBusy}
             onAdded={(team) => {
               setAdding(false);
               reloadAll();

@@ -3,30 +3,34 @@ import { cn } from "@/lib/cn";
 
 // A modal: a dimmed page behind, Esc or a click outside closes it. Wide fits
 // a line of shell; large fits a form. A body taller than the window scrolls,
-// the dialog ending above the window's bottom edge.
+// the dialog ending above the window's bottom edge. Held, as while a
+// request in it runs, neither Esc nor a click outside closes it.
 export function Dialog({
   title,
   onClose,
   wide,
   large,
+  held,
   children,
 }: {
   title: string;
   onClose: () => void;
   wide?: boolean;
   large?: boolean;
+  held?: boolean;
   children: ReactNode;
 }) {
   useEffect(() => {
+    if (held) return;
     const close = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
-  }, [onClose]);
+  }, [onClose, held]);
 
   return (
     <div
       className={cn("fixed inset-0 z-40 flex items-start justify-center bg-black/50 px-4", large ? "pt-[6vh]" : "pt-[15vh]")}
-      onMouseDown={onClose}
+      onMouseDown={() => held || onClose()}
     >
       <div
         role="dialog"

@@ -26,7 +26,8 @@ import { cn } from "@/lib/cn";
 // made against the version the page saw (policyHash). The offer shows in
 // the refused card, next to what you clicked. A template of yours can also
 // be exported as a file, or deleted after a question in its card; Build
-// your own imports one. While any request runs, nothing else can start.
+// your own imports one. While any request runs, nothing else can start,
+// and the dialog is told, so it stays open.
 
 interface AddTeamProps {
   templates: TeamTemplate[];
@@ -35,6 +36,7 @@ interface AddTeamProps {
   onBuild: (template?: string) => void; // opens the New team panel, blank or copying the template
   onAdded: (team: string) => void;
   onTemplatesChanged: () => Promise<unknown>; // reads the templates again, once one is deleted or imported
+  onBusyChange?: (busy: boolean) => void; // a request starts, or ends
 }
 
 // What runs, if anything: adding, or deleting, the template with id, or an import.
@@ -49,10 +51,13 @@ interface NeedsProfiles {
 const buildId = "team-build";
 const addId = (template: TeamTemplate) => `template-add-${template.id}`;
 
-export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onTemplatesChanged }: AddTeamProps) {
+export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onTemplatesChanged, onBusyChange }: AddTeamProps) {
   const notify = useToast();
   const [busy, setBusy] = useState<Busy | null>(null);
   const running = busy !== null;
+  useEffect(() => {
+    onBusyChange?.(running);
+  }, [running, onBusyChange]);
   const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
   const deletion = useDeleteTemplate(onTemplatesChanged, setBusy);
   const { yours, builtIn } = templateGroups(templates);
