@@ -93,8 +93,9 @@ var Templates = []Template{
 		}},
 }
 
-// prompted is the template's agents with their prompts, its team and its ID.
-func (t Template) prompted() []Agent {
+// Prompted is the template's agents with their prompts, its team and its ID:
+// what a team made from it gets.
+func (t Template) Prompted() []Agent {
 	agents := make([]Agent, len(t.Agents))
 	for i, agent := range t.Agents {
 		agent.Template = t.ID
@@ -183,7 +184,7 @@ func (t Template) MadeFor(current Roster) []Agent {
 		taken[agent.Name] = true
 	}
 	var made []Agent
-	for _, agent := range t.prompted() {
+	for _, agent := range t.Prompted() {
 		name := agent.Name
 		for n := 2; taken[name]; n++ {
 			name = fmt.Sprintf("%s-%d", agent.Name, n)

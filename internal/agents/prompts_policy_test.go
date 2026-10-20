@@ -22,7 +22,7 @@ func TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits(t *testing.T) {
 	quoted := regexp.MustCompile("`((?:git|gh|glab) [^`]+)`")
 	pushes, pipelines := 0, 0
 	for _, template := range Templates {
-		for _, agent := range template.prompted() {
+		for _, agent := range template.Prompted() {
 			for _, match := range quoted.FindAllStringSubmatch(agent.Prompt, -1) {
 				for _, command := range strings.Split(match[1], " then ") {
 					command = strings.ReplaceAll(command, "<hash>", "60c4a34dc947614f669110a4621eafe214f1527a")
@@ -111,7 +111,7 @@ func TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging(t *testing.T) {
 	quoted := regexp.MustCompile("`((?:ping|traceroute|mtr|dig|ss|ip|docker|ufw|nft|iptables|wg) [^`]+)`")
 	placeholders := strings.NewReplacer("<host>", "example.com", "<name>", "example.com", "<server>", "1.1.1.1", "<network>", "ingress")
 	var diagnoses []string
-	for _, agent := range networking.prompted() {
+	for _, agent := range networking.Prompted() {
 		if agent.Column != Reviews {
 			continue
 		}

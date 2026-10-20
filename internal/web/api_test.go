@@ -1989,6 +1989,52 @@ func TestTeamTemplatesSayTheirIDAndFeatures(t *testing.T) {
 	}
 }
 
+// Each template's agents come with what a team made from it gets, so the
+// page can copy one: the prompt POST /api/teams {template} writes, its
+// engine, profile, colour and column.
+func TestTeamTemplatesSayWhatTheirAgentsGet(t *testing.T) {
+	server, _ := newTestServer(t)
+	_, body := call(t, server, "GET", "/api/teams/templates", "")
+	var templates []struct {
+		Team   string
+		Agents []agents.Agent
+	}
+	if err := json.Unmarshal([]byte(body), &templates); err != nil || len(templates) != len(agents.Templates) {
+		t.Fatalf("templates: %v %s", err, body)
+	}
+	for _, template := range templates {
+		added := addedFrom(t, template.Team)
+		if len(added) != len(template.Agents) {
+			t.Fatalf("%s: the page shows %d agents, adding it makes %d", template.Team, len(template.Agents), len(added))
+		}
+		for i, shown := range template.Agents {
+			made := added[i]
+			if shown.Prompt == "" || shown.Engine == "" {
+				t.Errorf("%s's %s has no prompt or engine: %+v", template.Team, shown.Name, shown)
+			}
+			if shown.Prompt != made.Prompt || shown.Engine != made.Engine || shown.Model != made.Model || shown.Profile != made.Profile ||
+				shown.Color != made.Color || shown.Column != made.Column || shown.Coordinates != made.Coordinates {
+				t.Errorf("%s's %s shows\n%+v\nbut is added as\n%+v", template.Team, shown.Name, shown, made)
+			}
+		}
+	}
+}
+
+// addedFrom is the agents POST /api/teams {template} adds for this template,
+// in the order it adds them, on a fresh server.
+func addedFrom(t *testing.T, template string) []agents.Agent {
+	t.Helper()
+	server, s := newTestServer(t)
+	stream, _ := s.Stream(events.AgentsStream)
+	before := len(stream)
+	request, _ := json.Marshal(map[string]any{"template": template, "addMissingProfiles": true})
+	if code, body := call(t, server, "POST", "/api/teams", string(request)); code != 200 {
+		t.Fatalf("adding %s: %d %s", template, code, body)
+	}
+	stream, _ = s.Stream(events.AgentsStream)
+	return agents.FromEvents(stream[before:])
+}
+
 // Editing an agent keeps the template it came from, whatever the page sends,
 // so its team keeps the features the template turns on.
 func TestEditingAnAgentKeepsItsTemplate(t *testing.T) {

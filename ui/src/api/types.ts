@@ -353,8 +353,14 @@ export interface TeamTemplate {
   team: string; // the name a team made from it gets, with a number if it is taken
   description: string;
   features: string[]; // what a team made from it turns on, such as "ideas"
-  agents: { name: string; description: string; coordinates: boolean }[];
+  agents: TemplateAgent[];
 }
+
+// An agent of a template, with what a team made from it gets, prompt included.
+export type TemplateAgent = Pick<
+  Agent,
+  "name" | "description" | "coordinates" | "prompt" | "engine" | "model" | "profile" | "color" | "column"
+>;
 
 export interface CreatedEvent {
   stream: string;

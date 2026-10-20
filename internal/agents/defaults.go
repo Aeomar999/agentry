@@ -34,7 +34,7 @@ func SeedProposals(current Roster) []events.Proposal {
 	}
 	seeder := events.Actor{Kind: events.System, ID: "defaults"}
 	var proposals []events.Proposal
-	for _, agent := range Templates[0].prompted() {
+	for _, agent := range Templates[0].Prompted() {
 		proposals = append(proposals, agent.Proposal(seeder, false))
 	}
 	return proposals
@@ -47,7 +47,7 @@ func SeedProposals(current Roster) []events.Proposal {
 func Upgrades(current Roster) []events.Proposal {
 	upgrader := events.Actor{Kind: events.System, ID: "defaults"}
 	var proposals []events.Proposal
-	for _, shipped := range Templates[0].prompted() {
+	for _, shipped := range Templates[0].Prompted() {
 		agent, exists := current.Get(shipped.Name)
 		if !exists || !agent.untouched {
 			continue

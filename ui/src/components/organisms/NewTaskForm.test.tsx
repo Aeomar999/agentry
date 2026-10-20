@@ -14,7 +14,19 @@ const TEMPLATES: TeamTemplate[] = [
     team: "Visionaries",
     description: "",
     features: ["ideas"],
-    agents: [{ name: "visionary", description: "", coordinates: true }],
+    agents: [
+      {
+        name: "visionary",
+        description: "",
+        coordinates: true,
+        prompt: "",
+        engine: "claude",
+        model: "",
+        profile: "read-only",
+        color: "orange",
+        column: "",
+      },
+    ],
   },
 ];
 const READS: Record<string, unknown> = { "/api/agents": AGENTS, "/api/teams/templates": TEMPLATES, "/api/tasks": [] };

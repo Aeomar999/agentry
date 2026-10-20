@@ -329,7 +329,7 @@ func TestEveryTemplatesIDIsItsTeamInLowercase(t *testing.T) {
 func TestEveryTemplateHasACoordinatorAndPrompts(t *testing.T) {
 	for _, template := range Templates {
 		coordinators := 0
-		for _, agent := range template.prompted() {
+		for _, agent := range template.Prompted() {
 			if len(agent.Prompt) < 400 || agent.Description == "" {
 				t.Errorf("%s/%s: prompt %d chars, description %q", template.Team, agent.Name, len(agent.Prompt), agent.Description)
 			}

@@ -26,7 +26,7 @@ type listedTemplate struct {
 	Team        string
 	Description string
 	UserMade    bool
-	Agents      []struct{ Name string }
+	Agents      []struct{ Name, Prompt string }
 }
 
 // userTemplates are the templates you saved, as GET lists them.
@@ -73,9 +73,12 @@ func TestASavedTeamIsListedWithEveryAgent(t *testing.T) {
 		if yours[0].Agents[i].Name != agent.Name {
 			t.Errorf("agent %d is %s, not %s", i, yours[0].Agents[i].Name, agent.Name)
 		}
+		if yours[0].Agents[i].Prompt != agent.Prompt {
+			t.Errorf("%s lists the prompt %q, not its own %q", agent.Name, yours[0].Agents[i].Prompt, agent.Prompt)
+		}
 	}
-	if !strings.HasPrefix(list, `[{"id":"software"`) || strings.Contains(list, `"prompt"`) {
-		t.Errorf("the built-in templates come first, and nothing lists prompts: %s", list)
+	if !strings.HasPrefix(list, `[{"id":"software"`) {
+		t.Errorf("the built-in templates come first: %s", list)
 	}
 }
 

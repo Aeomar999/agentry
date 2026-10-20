@@ -172,8 +172,9 @@ func (s *Server) needing(names ...string) ([]string, error) {
 	return busy, nil
 }
 
-// teamTemplates are the teams you can add, without their prompts: the
-// ready-made ones, then yours in the order you saved them.
+// teamTemplates are the teams you can add, each agent with what a team made
+// from it gets, prompt included, so the page can copy one: the ready-made
+// ones, then yours in the order you saved them.
 func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 	list := []templateView{}
 	for _, t := range agents.Templates {
@@ -185,7 +186,7 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 	httpapi.Reply(w, list)
 }
 
-// templateView is a team template as the page lists it, without its prompts.
+// templateView is a team template as the page lists it.
 type templateView struct {
 	ID          string       `json:"id"` // what GET /api/agents says an agent was made from
 	Team        string       `json:"team"`
@@ -199,6 +200,12 @@ type memberView struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Coordinates bool   `json:"coordinates"`
+	Prompt      string `json:"prompt"`
+	Engine      string `json:"engine"`
+	Model       string `json:"model"`
+	Profile     string `json:"profile"`
+	Color       string `json:"color"`
+	Column      string `json:"column"`
 }
 
 func viewOf(t agents.Template, userMade bool) templateView {
@@ -206,8 +213,9 @@ func viewOf(t agents.Template, userMade bool) templateView {
 	if view.Features == nil {
 		view.Features = []string{}
 	}
-	for _, a := range t.Agents {
-		view.Agents = append(view.Agents, memberView{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates})
+	for _, a := range t.Prompted() {
+		view.Agents = append(view.Agents, memberView{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates,
+			Prompt: a.Prompt, Engine: a.Engine, Model: a.Model, Profile: a.Profile, Color: a.Color, Column: a.Column})
 	}
 	return view
 }

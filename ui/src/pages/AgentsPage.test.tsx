@@ -11,7 +11,19 @@ const template = (team: string): TeamTemplate => ({
   team,
   description: `The ${team} team.`,
   features: [],
-  agents: [{ name: `${team.toLowerCase()}-lead`, description: "", coordinates: true }],
+  agents: [
+    {
+      name: `${team.toLowerCase()}-lead`,
+      description: "",
+      coordinates: true,
+      prompt: "",
+      engine: "claude",
+      model: "",
+      profile: "read-only",
+      color: "orange",
+      column: "",
+    },
+  ],
 });
 const TEMPLATES = [template("Software"), template("Writing"), template("Visionaries")];
 
