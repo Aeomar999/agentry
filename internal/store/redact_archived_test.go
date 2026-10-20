@@ -73,7 +73,7 @@ func TestARefusedArchivedRedactionWritesNothing(t *testing.T) {
 			"the row at 2 isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret", ""},
 		{"not archived", "task-2", events.TaskRenamed, holdingSecret, "", "task-2 isn't archived: it is redacted as it is", ""},
 		{"left in a number", "task-1", events.TaskRenamed, `{"title":"PIN ` + pin + `","extra":` + pin + `}`, "",
-			"the row at 2 would still hold the secret outside the strings redacting rewrites, as in a number", pin},
+			"the row at 2 holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text", pin},
 	} {
 		path := filepath.Join(t.TempDir(), "agentry.db")
 		s, blobs, marker := archivedWithRow(t, path, acceptEvery, c.kind, c.data)
@@ -489,7 +489,7 @@ func TestPreviewArchivedSeesTheRowTheUnarchivingAdds(t *testing.T) {
 		s, blobs, marker := archivedWithRow(t, path, acceptEvery, events.TaskRenamed, `{"title":"Use code 93"}`)
 		inPosition := strconv.FormatInt(marker.Position, 10)
 		before := rowsAt(t, path)
-		want := "the row at 5 would still hold the secret outside the strings redacting rewrites, as in a number"
+		want := "the row at 5 holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text"
 		if count, rejection, err := s.PreviewArchived("task-1", inPosition, blobs); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
 			t.Errorf("PreviewArchived: %d, %v, %v, want %q", count, rejection, err, want)
 		}

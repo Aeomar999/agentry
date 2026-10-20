@@ -281,7 +281,7 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 	case found.survives:
 		rw.refused = "would still show the secret next to " + Redacted
 	case leftOver:
-		rw.refused = "would still hold the secret outside the strings redacting rewrites, as in a number"
+		rw.refused = "holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text"
 	}
 	return rw, nil
 }

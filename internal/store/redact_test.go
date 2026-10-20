@@ -532,7 +532,7 @@ func TestASecretLeftInANumberIsRefused(t *testing.T) {
 		maps.Copy(created.Data, data)
 		acceptAll(t, s, created)
 		before := rowsAt(t, path)
-		want := "the row at 1 would still hold the secret outside the strings redacting rewrites, as in a number"
+		want := "the row at 1 holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text"
 		if count, rejection, err := s.Preview("task-1", pin); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
 			t.Errorf("%s: Preview %d, %v, %v, want %q", name, count, rejection, err, want)
 		}

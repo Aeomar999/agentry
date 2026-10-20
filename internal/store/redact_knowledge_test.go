@@ -170,7 +170,7 @@ func TestAKnowledgeVersionLeavingTheSecretInANumberIsRefused(t *testing.T) {
 	acceptAll(t, s, learned)
 	before := rowsAt(t, path)
 	_, rejection, err := s.Redact(events.AgentsStream, pin, you, "")
-	if want := "the row at 2 would still hold the secret outside the strings redacting rewrites, as in a number"; err != nil || rejection == nil || rejection.Reason != want {
+	if want := "the row at 2 holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text"; err != nil || rejection == nil || rejection.Reason != want {
 		t.Errorf("%v, %v, want %q", rejection, err, want)
 	}
 	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
