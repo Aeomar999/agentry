@@ -1306,8 +1306,8 @@ widely) whose `data` contains it, and shows the user the count first.
 4. **A secret in a knowledge file** is in every version after it was
    written. The same `event.redacted` rewrites, in place, each version
    that holds it, or whose base holds it, as a full copy of its redacted
-   text, up to the current one; no version is added, so the agent keeps
-   as many versions as it had. A patch's `head` and `tail` would be wrong
+   text, and leaves the others as they were; no version is added, so the
+   agent keeps as many versions as it had. A patch's `head` and `tail` would be wrong
    against a redacted base; full copies leave nothing to mismatch, and
    versions before the secret are untouched.
 5. **A secret in an archived task:** unarchive it, redact, archive it

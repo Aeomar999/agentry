@@ -27,17 +27,17 @@ type ArchiveBlobs interface {
 // who. First, with no lock held, it reads the rows from its marker's blob
 // and the live log, with the task.unarchived the unarchiving adds, and
 // deletes the blobs an earlier redaction among them named but couldn't
-// delete (removeRedacted). Then it finds the secret in
-// the rows as Redact does, so what Redact would refuse for the rows
-// themselves (no row holds it, a row is a knowledge version, holds it in a
-// key, can't be rewritten leaving the rest as it was or would still hold
-// it once rewritten, or the reason holds it) is refused before anything is written. Then it unarchives the
-// task (Unarchive), redacts it, with the blobs every task.archived among
-// its rows names in "archives", and archives it again (Archive), summarise
-// reading the state the redaction refolded; each takes the lock for
-// itself, as when called alone, so other events may come between them.
-// Last it deletes those blobs. It writes no snapshot, as Redact doesn't:
-// its caller writes a new one.
+// delete (removeRedacted). Then it finds the secret in the rows as Redact
+// does, so what Redact would refuse for the rows themselves (no row holds
+// it, a row is a knowledge version, holds it in a key, can't be rewritten
+// leaving the rest as it was or would still hold it once rewritten, or the
+// reason holds it) is refused before anything is written. Then it
+// unarchives the task (Unarchive), redacts it, with the blobs every
+// task.archived among its rows names in "archives", and archives it again
+// (Archive), summarise reading the state the redaction refolded; each
+// takes the lock for itself, as when called alone, so other events may
+// come between them. Last it deletes those blobs. It writes no snapshot,
+// as Redact doesn't: its caller writes a new one.
 //
 // It returns the redaction or, when nothing is redacted, the rejection.
 // Refused before the unarchiving, or by Unarchive, nothing is written.
@@ -147,10 +147,11 @@ func checkArchived(stream string, rows []row, secret string, who events.Actor, w
 
 // PreviewArchived is Preview for RedactArchived: the number of an archived
 // task's rows, read through its marker's blob and the live log, with the
-// task.unarchived the unarchiving adds, that it would rewrite or, when it would refuse them before unarchiving the task,
-// its rejection and none. It writes nothing: not even the blobs an earlier
-// redaction couldn't delete, which RedactArchived deletes first. The rules
-// see the redaction only once the task is unarchived, so they aren't asked.
+// task.unarchived the unarchiving adds, that it would rewrite or, when it
+// would refuse them before unarchiving the task, its rejection and none.
+// It writes nothing: not even the blobs an earlier redaction couldn't
+// delete, which RedactArchived deletes first. The rules see the redaction
+// only once the task is unarchived, so they aren't asked.
 func (s *Store) PreviewArchived(stream, secret string, blobs Opener) (int, *events.Rejection, error) {
 	kept, live, unarchived, rejection, err := s.archivedRows(stream, blobs)
 	if rejection != nil || err != nil {

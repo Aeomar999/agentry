@@ -61,7 +61,7 @@ func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover
 	history, err := s.History(stream, func(marker events.Event) ([]events.Event, error) {
 		kept, err := FromBlobs(blobs)(marker)
 		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, errNotAnArchive) { // the live marker still names it, and the erasure goes on
-			unread = fmt.Errorf("the blob %s can't be read, so the blobs its rows name can't be found: %w", marker.Text("archive"), err)
+			unread = fmt.Errorf("the blob %s can't be read, so any earlier blobs its rows name can't be found: %w", marker.Text("archive"), err)
 			return nil, nil
 		}
 		return kept, err
