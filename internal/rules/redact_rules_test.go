@@ -50,6 +50,10 @@ func TestARedactionNamesTheRowsAndFieldsItChanged(t *testing.T) {
 		{redactedData(func(d map[string]any) { d["fields"] = []any{[]any{"$.title"}, []any{7.0}} }), "a redaction names, for each row, the fields it changed"},
 		{redactedData(func(d map[string]any) { d["removed"] = 0 }), "a redaction says how many bytes it removed"},
 		{redactedData(func(d map[string]any) { d["who"] = "" }), "a redaction says who asked for it"},
+		{redactedData(func(d map[string]any) { d["archives"] = []string{} }), "a redaction names the blobs it deleted by their hashes"},
+		{redactedData(func(d map[string]any) { d["archives"] = []string{"not-a-hash"} }), "a redaction names the blobs it deleted by their hashes"},
+		{redactedData(func(d map[string]any) { d["archives"] = []any{blob, 7.0} }), "a redaction names the blobs it deleted by their hashes"},
+		{redactedData(func(d map[string]any) { d["archives"] = blob }), "a redaction names the blobs it deleted by their hashes"},
 	} {
 		if rejection := redacting("task-1", c.data); rejection == nil || rejection.Reason != c.want {
 			t.Errorf("redacting with %v: %v, want %q", c.data, rejection, c.want)
@@ -69,6 +73,12 @@ func TestARedactionNamesTheRowsAndFieldsItChanged(t *testing.T) {
 	})
 	if rejection := redacting("task-1", read); rejection != nil {
 		t.Errorf("redacting with the data as the log reads it: %v", rejection)
+	}
+	// An archived task's redaction names the blobs it deleted.
+	for _, archives := range []any{[]string{blob}, []any{blob, blob}} {
+		if rejection := redacting("task-1", redactedData(func(d map[string]any) { d["archives"] = archives })); rejection != nil {
+			t.Errorf("redacting with the archives %v: %v", archives, rejection)
+		}
 	}
 
 	_, archived := openArchived(t)

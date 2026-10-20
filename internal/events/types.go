@@ -96,7 +96,7 @@ const (
 // Redacting (docs/design/log-growth.md section 5): only the store writes
 // it, for you, in the stream whose rows it rewrote. It never holds the
 // secret, nor its hash: a short secret's hash can be guessed.
-const EventRedacted Type = "event.redacted" // the rows at "positions" had a secret replaced by [redacted] in their "fields" (one list of JSON paths per row), "removed" bytes in all; "who" asked, "why" says what for
+const EventRedacted Type = "event.redacted" // the rows at "positions" had a secret replaced by [redacted] in their "fields" (one list of JSON paths per row), "removed" bytes in all; "who" asked, "why" says what for; for an archived task, the "archives" blobs that held its rows are deleted
 
 // The workers stream: the machines, besides Agentry's own, that run agents.
 const (
