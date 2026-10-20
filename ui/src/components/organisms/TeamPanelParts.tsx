@@ -11,6 +11,7 @@ import {
   changedAgents,
   type DraftAgent,
   missingLine,
+  type NeededBy,
   type Problem,
   removedNotice,
   removingNotice,
@@ -192,7 +193,7 @@ export function TeamAgents({ list, loaded, problems, missing, engines, policy, s
                 row={agent.key}
                 name={name}
                 editing={Boolean(loaded)}
-                needed={problems.find((p) => p.removed?.agent === name)?.removed?.tasks}
+                needed={problems.find((p) => p.removed?.agent === name)?.removed}
                 saving={saving}
                 onUndo={() => list.undo(agent)}
               />
@@ -239,7 +240,7 @@ interface RemovedStubProps {
   row: string;
   name: string;
   editing: boolean; // the agent goes when the team is saved
-  needed?: string[]; // the unfinished tasks that refused its removal
+  needed?: NeededBy; // the unfinished tasks that refused its removal
   saving: boolean;
   onUndo: () => void;
 }
@@ -260,22 +261,31 @@ function RemovedStub({ row, name, editing, needed, saving, onUndo }: RemovedStub
       >
         Undo
       </Button>
-      {needed && <StillNeeded agent={name} tasks={needed} />}
+      {needed && <StillNeeded agent={name} needed={needed} />}
     </li>
   );
 }
 
 // StillNeeded is a refused removal on its stub, each task a link to it.
-function StillNeeded({ agent, tasks }: { agent: string; tasks: string[] }) {
+function StillNeeded({ agent, needed: { tasks, turns } }: { agent: string; needed: NeededBy }) {
   const links = tasks.map((task) => (
     <Link key={task} to={`/tasks/${task}`} className="font-mono text-ink-primary underline hover:no-underline">
       {task}
     </Link>
   ));
   const joined = links.flatMap((link, i) => (i === 0 ? [link] : [i === links.length - 1 ? " and " : ", ", link]));
+  const it = tasks.length === 1 ? "it" : "them";
   return (
     <p className="basis-full pb-1.5 text-danger-ink">
-      Still needed by {joined}. Finish {tasks.length === 1 ? "it" : "them"} first, or undo to keep {agent}.
+      {turns ? (
+        <>
+          {tasks.length === 1 ? "A turn" : "Turns"} running on {joined}. Wait for {it} to end, or undo to keep {agent}.
+        </>
+      ) : (
+        <>
+          Still needed by {joined}. Finish {it} first, or undo to keep {agent}.
+        </>
+      )}
     </p>
   );
 }

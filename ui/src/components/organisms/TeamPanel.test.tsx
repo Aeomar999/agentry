@@ -1208,6 +1208,25 @@ describe("Edit team: saving", () => {
     expect(document.getElementById("team-summary")).toBeNull();
   });
 
+  test("a removed agent only its turn still needs says on its stub to wait for the turn to end", async () => {
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError("the Docs team can't be saved", 409, {
+        problems: [
+          { field: "removed", agent: "proofer", error: "proofer has a turn running on task-1: wait for it to end, or keep proofer" },
+        ],
+      }),
+    );
+    openAt("/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
+    await save();
+
+    const stub = inSheet().getByText("proofer will be removed when you save").closest("li")!;
+    expect(stub.textContent).toContain("A turn running on task-1. Wait for it to end, or undo to keep proofer.");
+    expect(within(stub).getByRole("link", { name: "task-1" }).getAttribute("href")).toBe("/tasks/task-1");
+    fireEvent.click(within(summary()).getByRole("button", { name: "proofer: a turn running on task-1" }));
+    expect(document.activeElement).toBe(within(stub).getByRole("button", { name: "Undo, keep proofer" }));
+  });
+
   test("changed elsewhere: keep my changes closes the box, focus on the title, and saving is refused again", async () => {
     const changedElsewhere = new ApiError("changed elsewhere", 409, { error: "changed elsewhere", version: "v2" });
     vi.mocked(api).mockRejectedValueOnce(changedElsewhere).mockRejectedValueOnce(changedElsewhere);

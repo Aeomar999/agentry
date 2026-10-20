@@ -739,6 +739,30 @@ describe("problemsOfEdit", () => {
     ]);
   });
 
+  test("a removed coordinator only its turns still need says to wait for them to end", () => {
+    const [one] = problemsOfEdit(
+      [{ field: "removed", agent: "proofer", error: "proofer has a turn running on task-1: wait for it to end, or keep proofer" }],
+      draft,
+      loaded,
+    );
+    expect(one).toEqual({
+      field: "agents",
+      message: "proofer has a turn running on task-1. Wait for it to end, or undo to keep proofer.",
+      summary: "proofer: a turn running on task-1",
+      removed: { agent: "proofer", tasks: ["task-1"], turns: true },
+    });
+    const [two] = problemsOfEdit(
+      [{ field: "removed", agent: "proofer", error: "proofer has turns running on task-1, task-2: wait for them to end, or keep proofer" }],
+      draft,
+      loaded,
+    );
+    expect([two.message, two.summary, two.removed]).toEqual([
+      "proofer has turns running on task-1 and task-2. Wait for them to end, or undo to keep proofer.",
+      "proofer: turns running on task-1 and task-2",
+      { agent: "proofer", tasks: ["task-1", "task-2"], turns: true },
+    ]);
+  });
+
   test("a removed agent's other problem keeps the server's words, and no stub of a removed agent tasks need", () => {
     const problems = problemsOfEdit(
       [

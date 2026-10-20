@@ -31,7 +31,7 @@ export interface Problem {
   field: ProblemField;
   message: string; // under the field
   summary: string; // the summary's link, "{where}: {what}"
-  removed?: { agent: string; tasks: string[] }; // a removed agent unfinished tasks still need, for its stub
+  removed?: NeededBy; // a removed agent unfinished tasks still need, for its stub
 }
 
 // A team you have, as the edit panel loaded it: the draft it starts from,
@@ -577,8 +577,18 @@ const SHOWN_FIELDS: Record<string, AgentField> = {
   profile: "profile",
 };
 
-// How the rules word a removed agent that unfinished tasks need.
+// The unfinished tasks that refused an agent's removal; turns when only the
+// turns it is taking on them did, so they need only end.
+export interface NeededBy {
+  agent: string;
+  tasks: string[];
+  turns?: boolean;
+}
+
+// How the rules word a removed agent that unfinished tasks need, and one
+// that only its turns on them need.
 const STILL_NEEDED = /^.+ is still needed by (.+): finish those first, or keep .+$/;
+const TURNS_RUNNING = /^.+ has (?:a turn|turns) running on (.+): wait for (?:it|them) to end, or keep .+$/;
 
 // problemsOfEdit puts the server's problems with an edit of loaded where
 // the panel shows them: a row's under its field, by the row's key; the team
@@ -602,12 +612,23 @@ export function problemsOfEdit(problems: ServerProblem[], draft: TeamDraft, load
 // removedProblem is a problem with removing an agent: when unfinished tasks
 // need it, in the stub's words, naming them; else in the server's (said).
 function removedProblem(agent: string, error: string, said: string): Problem {
-  const tasks = STILL_NEEDED.exec(error)?.[1].split(", ") ?? [];
+  const running = TURNS_RUNNING.exec(error);
+  const tasks = (running ?? STILL_NEEDED.exec(error))?.[1].split(", ") ?? [];
   if (tasks.length === 0) return { field: "agents", message: said, summary: `${agent}: ${error}` };
   const by = listed(tasks, "and");
+  const it = tasks.length === 1 ? "it" : "them";
+  if (running) {
+    const turns = tasks.length === 1 ? "a turn" : "turns";
+    return {
+      field: "agents",
+      message: `${agent} has ${turns} running on ${by}. Wait for ${it} to end, or undo to keep ${agent}.`,
+      summary: `${agent}: ${turns} running on ${by}`,
+      removed: { agent, tasks, turns: true },
+    };
+  }
   return {
     field: "agents",
-    message: `${agent} is still needed by ${by}. Finish ${tasks.length === 1 ? "it" : "them"} first, or undo to keep ${agent}.`,
+    message: `${agent} is still needed by ${by}. Finish ${it} first, or undo to keep ${agent}.`,
     summary: `${agent}: still needed by ${by}`,
     removed: { agent, tasks },
   };
