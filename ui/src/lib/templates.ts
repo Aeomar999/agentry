@@ -44,13 +44,19 @@ export function saveAsTemplate(team: string, form: TemplateForm): Promise<SavedT
   return api("POST", `/api/teams/${encodeURIComponent(team)}/template`, { name: form.name.trim(), description: form.description.trim() });
 }
 
-// yourLinkedTemplate is the template of yours, still there, that team's
-// coordinator is linked to: the one Update my template saves it over.
-export function yourLinkedTemplate(roster: Agent[], templates: TeamTemplate[], team: string): TeamTemplate | undefined {
+// teamLink is the template id team's coordinator is linked to, if any.
+export function teamLink(roster: Agent[], team: string): string | undefined {
   const lead = teamsOf(roster)
     .find((group) => sameName(group.team, team))
     ?.agents.find((agent) => agent.coordinates);
-  return lead?.template ? templates.find((template) => template.userMade && template.id === lead.template) : undefined;
+  return lead?.template || undefined;
+}
+
+// yourLinkedTemplate is the template of yours, still there, that team's
+// coordinator is linked to: the one Update my template saves it over.
+export function yourLinkedTemplate(roster: Agent[], templates: TeamTemplate[], team: string): TeamTemplate | undefined {
+  const link = teamLink(roster, team);
+  return link ? templates.find((template) => template.userMade && template.id === link) : undefined;
 }
 
 // updateTemplate saves the team, as it was last saved, over the template of

@@ -2159,6 +2159,50 @@ describe("Edit team: Update my template", () => {
     fireEvent.click(removeButton("body"));
     expect(updateButton()!.hasAttribute("disabled")).toBe(true);
   });
+
+  test("an update puts focus back on Update my template", async () => {
+    vi.mocked(api).mockResolvedValueOnce(DOCS_KIT);
+    openAt("/agents?team=Docs");
+    await act(async () => fireEvent.click(updateButton()!));
+
+    expect(document.activeElement).toBe(updateButton());
+  });
+
+  // refuseUpdate opens Docs and has Update my template refused in the footer.
+  const refuseUpdate = async () => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError("the log failed: disk full", 500));
+    openAt("/agents?team=Docs");
+    await act(async () => fireEvent.click(updateButton()!));
+    expect(updateFailure()).toBeTruthy();
+  };
+
+  test("a refusal goes once Save as a template opens, and stays gone after Cancel", async () => {
+    await refuseUpdate();
+    fireEvent.click(templateButton()!);
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+
+    expect(updateFailure()).toBeNull();
+  });
+
+  test("a refusal goes once Remove team asks, and stays gone after Keep", async () => {
+    await refuseUpdate();
+    fireEvent.click(removeButton());
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(removeButton()).toBeTruthy();
+    expect(updateFailure()).toBeNull();
+  });
+
+  test.each(["footer", "body"] as const)("a refusal in the %s goes once its template is removed", async (place) => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError("the log failed: disk full", 500));
+    openAt("/agents?team=Docs");
+    await act(async () => fireEvent.click(updateButton(place)!));
+    reads["/api/teams/templates"] = [WRITING, IDEAS];
+    act(() => changed());
+
+    expect(updateButton(place)).toBeNull();
+    expect(updateFailure(place)).toBeNull();
+  });
 });
 
 const linkOffer = () => document.getElementById("team-link");
@@ -2234,6 +2278,14 @@ describe("Edit team: Link this team", () => {
     expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
     expect(templateButton()!.hasAttribute("disabled")).toBe(true);
     expect(removeButton("body").hasAttribute("disabled")).toBe(true);
+  });
+
+  test("the offer goes once the roster has the team linked to the template, as after a link from another tab", async () => {
+    await saveUnlinked();
+    reads["/api/agents"] = linkedTo("docs-kit");
+    act(() => changed());
+
+    expect(linkOffer()).toBeNull();
   });
 });
 

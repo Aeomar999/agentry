@@ -33,7 +33,7 @@ import {
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { teamsOf } from "@/lib/teams";
-import { builtInTemplateOf, isBuiltInTeam, yourLinkedTemplate } from "@/lib/templates";
+import { builtInTemplateOf, isBuiltInTeam, teamLink, yourLinkedTemplate } from "@/lib/templates";
 import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
 import {
   LinkTeamOffer,
@@ -132,8 +132,9 @@ function EditTeamForm(props: EditTeamFormProps) {
     guard.leave();
   });
   const coordinator = loaded?.agents.find((row) => row.coordinates);
-  const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", changed, list.focus);
-  const update = useUpdateTemplate(loaded?.team ?? props.team, changed);
+  const linked = roster ? teamLink(roster, loaded?.team ?? props.team) : undefined;
+  const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", changed, linked, list.focus);
+  const update = useUpdateTemplate(loaded?.team ?? props.team, changed, list.focus);
   const running = saving || removal.busy || template.busy || template.linking || update.busy;
   const guard = useCloseGuard(changed, running, onClose);
   const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
@@ -222,6 +223,8 @@ function EditTeamForm(props: EditTeamFormProps) {
   const templateHolds = templateAsks || template.busy || template.linking;
   // Nothing else saves while any of them asks or runs, Update my template too.
   const holds = removeHolds || templateHolds || update.busy;
+  // Update my template's refusal is old once anything else asks or runs.
+  if (update.refused && (saving || removeHolds || templateHolds)) update.forget();
   const removeQuestion = (place: "footer" | "body") =>
     loaded && (
       <RemoveTeamQuestion
@@ -251,7 +254,7 @@ function EditTeamForm(props: EditTeamFormProps) {
     <>
       {removeAsks && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
       {templateAsks && <div className="max-sm:hidden">{templateForm("footer")}</div>}
-      {!removeAsks && !templateAsks && (
+      {updatesTemplate && !removeAsks && !templateAsks && (
         <div className="max-sm:hidden">
           <UpdateTemplateRefusal place="footer" update={update} />
         </div>

@@ -31,9 +31,16 @@ import type { Place } from "./RemoveTeam";
 // defaults; changed says the panel has unsaved changes, so save refuses as
 // the form says. Cancel and success put focus back on the button it came
 // from. A template saved that the team couldn't be linked to is unlinked,
-// with Link this team's request and refusal, until it is linked or another
-// is saved.
-export function useSaveTemplate(team: string, description: string, changed: boolean, focus: (id: string) => void) {
+// with Link this team's request and refusal, until it is linked, here or
+// as linked says (the template id the roster has the team linked to now),
+// or another is saved.
+export function useSaveTemplate(
+  team: string,
+  description: string,
+  changed: boolean,
+  linked: string | undefined,
+  focus: (id: string) => void,
+) {
   const notify = useToast();
   const [asking, setAsking] = useState<Place | null>(null);
   const [form, setForm] = useState<TemplateForm>({ name: "", description: "" });
@@ -99,7 +106,10 @@ export function useSaveTemplate(team: string, description: string, changed: bool
     focus(idOf(unlinked.place, "button"));
   }
 
-  return { asking, form, busy, refused, unlinked, linking, linkRefused, ask, change: setForm, cancel, save, link };
+  // A link made elsewhere, from another tab say, shows in the roster as it reloads.
+  const stillUnlinked = unlinked?.saved.id === linked ? null : unlinked;
+
+  return { asking, form, busy, refused, unlinked: stillUnlinked, linking, linkRefused, ask, change: setForm, cancel, save, link };
 }
 
 export type TeamTemplateSave = ReturnType<typeof useSaveTemplate>;
@@ -263,8 +273,9 @@ export function LinkTeamOffer({ template, off }: LinkTeamOfferProps) {
 
 // useUpdateTemplate is Update my template's state: the request while it
 // runs, and the last refusal with where it was pressed. Like Save as a
-// template it saves the team as last saved, so changed holds it.
-export function useUpdateTemplate(team: string, changed: boolean) {
+// template it saves the team as last saved, so changed holds it. Success
+// puts focus back on the button pressed; forget drops an old refusal.
+export function useUpdateTemplate(team: string, changed: boolean, focus: (id: string) => void) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<{ place: Place; failure: TemplateFailure } | null>(null);
@@ -276,6 +287,7 @@ export function useUpdateTemplate(team: string, changed: boolean) {
     try {
       const updated = await updateTemplate(team);
       notify("success", `Updated ${updated.team} in your templates`, `It has the ${team} team as last saved.`);
+      focus(updateIdOf(place, "button"));
     } catch (failure) {
       setRefused({ place, failure: whyTemplateNotUpdated(failure) });
     } finally {
@@ -283,7 +295,7 @@ export function useUpdateTemplate(team: string, changed: boolean) {
     }
   }
 
-  return { busy, refused, update };
+  return { busy, refused, update, forget: () => setRefused(null) };
 }
 
 export type TeamTemplateUpdate = ReturnType<typeof useUpdateTemplate>;
