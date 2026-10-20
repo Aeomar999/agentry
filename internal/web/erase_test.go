@@ -510,3 +510,19 @@ func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
 		})
 	}
 }
+
+// An epic that still lists an erased story, as when the erasure got past
+// the epic some other way, closes from the page: there is nothing of the
+// story left to park.
+func TestClosingAnEpicSkipsAnErasedStory(t *testing.T) {
+	f := newEraseFixture(t)
+	if _, rejection, err := f.log.Erase("task-2", you, "Gone.", f.blobs); rejection != nil || err != nil {
+		t.Fatalf("erasing task-2 in the store: %v, %v", rejection, err)
+	}
+	if epic, err := f.state.Task("task-3"); err != nil || !slices.Contains(epic.Stories, "task-2") {
+		t.Fatalf("the epic should still list the erased story: %v", err)
+	}
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+		t.Errorf("closing the epic: %d %s, want 200", code, body)
+	}
+}

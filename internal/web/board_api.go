@@ -189,6 +189,9 @@ func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note strin
 		if errors.Is(err, current.ErrArchived) {
 			continue // done, and kept as done
 		}
+		if errors.Is(err, current.ErrErased) {
+			continue // gone, though the epic still lists it: nothing is left to park
+		}
 		if err != nil {
 			httpapi.Failed(w, err)
 			return false
