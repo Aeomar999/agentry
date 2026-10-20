@@ -219,14 +219,15 @@ func turnOf(t *tasks.Task, s tasks.Step) string {
 }
 
 // agentView is an agent with the profile that judges its calls, when there
-// is a policy.
+// is a policy, and the built-in template its template comes from.
 type agentView struct {
 	agents.Agent
+	Base        string         `json:"base,omitempty"` // the built-in template its Template resolves to, live or removed
 	Effective   *effectiveView `json:"effective,omitempty"`
 	TeamVersion string         `json:"teamVersion"` // its team's, which PUT /api/teams/{team} checks
 }
 
-func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
+func agentsOf(roster agents.Roster, bases agents.Bases, p *policy.Policy) []agentView {
 	list := []agentView{}
 	versions := map[string]string{}
 	for _, team := range roster.Teams() {
@@ -236,7 +237,7 @@ func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
 		if a.Workers == nil {
 			a.Workers = []string{} // the page reads a list, never null
 		}
-		view := agentView{Agent: a, TeamVersion: versions[a.TeamName()]}
+		view := agentView{Agent: a, Base: bases.Of(a.Template), TeamVersion: versions[a.TeamName()]}
 		if p != nil {
 			effective := effectiveOf(p, a.Profile)
 			view.Effective = &effective

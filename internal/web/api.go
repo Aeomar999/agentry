@@ -477,7 +477,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	if s.config.Policy != nil {
 		inForce = s.config.Policy.Current()
 	}
-	httpapi.Reply(w, agentsOf(roster, inForce))
+	httpapi.Reply(w, agentsOf(roster, agents.BasesIn(s.state), inForce))
 }
 
 // showConfig is what the page needs to know about the server. policyProblem

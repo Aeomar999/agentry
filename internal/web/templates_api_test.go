@@ -533,6 +533,44 @@ func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
 	}
 }
 
+// GET /api/agents gives each agent the built-in template its own resolves
+// to, so the page finds a team from a removed template by its feature. An
+// agent you made has none.
+func TestAnAgentFromARemovedTemplateListsItsBase(t *testing.T) {
+	server, _ := newTestServer(t)
+	dreams := map[string]any{"id": "dreams", "team": "Dreamers", "basedOn": "visionaries", "agents": []any{
+		map[string]any{"name": "dreamer", "engine": "claude", "prompt": "Dream.", "coordinates": true}}}
+	body, _ := json.Marshal(dreams)
+	if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != 200 {
+		t.Fatalf("import Dreams: %d %s", code, reply)
+	}
+	if code, reply := call(t, server, "POST", "/api/teams", `{"template":"dreams"}`); code != 200 {
+		t.Fatalf("add Dreamers: %d %s", code, reply)
+	}
+	if code, reply := call(t, server, "DELETE", "/api/teams/templates/dreams", ""); code != 200 {
+		t.Fatalf("remove Dreams: %d %s", code, reply)
+	}
+	madeAgent(t, server, "planner", "Planning", true)
+
+	_, list := call(t, server, "GET", "/api/agents", "")
+	var listed []map[string]any
+	if err := json.Unmarshal([]byte(list), &listed); err != nil {
+		t.Fatalf("agents: %v %s", err, list)
+	}
+	bases := map[string]any{}
+	for _, agent := range listed {
+		if base, ok := agent["base"]; ok {
+			bases[agent["name"].(string)] = base
+		}
+	}
+	if bases["dreamer"] != "visionaries" {
+		t.Errorf("the lead of a team from a removed template has base %v, of %v", bases["dreamer"], bases)
+	}
+	if _, ok := bases["planner"]; ok {
+		t.Errorf("an agent you made lists a base: %v", bases)
+	}
+}
+
 // A removed template's id stays taken, as its teams still name it: a save
 // giving it is refused, one without an id gets another, and only importing
 // the removed template's file brings it back.
