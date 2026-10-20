@@ -2,12 +2,17 @@ package hooks
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
 const secret = "sk-live-7f3a90b2"
@@ -147,6 +152,62 @@ func TestASecretALaterReplacementLeavesShowingKeepsNothing(t *testing.T) {
 			t.Fatalf("%q reported clean", learned)
 		}
 	}
+}
+
+// An older log can hold an archived task whose wrap-up turn never ended,
+// archived before the rules made a running turn wait. The state shows no
+// turn of it, so a redaction can't hold it, and its end, refused on the
+// archived task, keeps nothing it learned.
+func TestATurnOnAnArchivedTaskKeepsNothingItLearned(t *testing.T) {
+	s, state := olderLog(t)
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	for _, p := range append(agents.SeedProposals(nil),
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": t.TempDir(), "branch": "b", "port": 7901}},
+		events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "engineer", "hash": "h"}},
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}}, // stops turn-1
+		events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2", Data: map[string]any{"agent": "engineer", "hash": "h"}},
+	) {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	storetest.Archive(t, s, state, "task-1")
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "The key is "+secret+".")
+	settle := h.Redactions().Hold(secret)
+	redaction, rejection, err := s.Redact(events.AgentsStream, secret, you, "Pasted.")
+	settle(redaction.Position != 0)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	endTurn(h, "task-1", "turn-2", "engineer", "The key is "+secret+".\n\nDeploy on Fridays.")
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "The key is [redacted]." {
+		t.Errorf("the engineer knows %q after a turn on an archived task ended, want the redacted knowledge alone", engineer.Knowledge)
+	}
+}
+
+// olderLog is a log as the rules were before a task with a turn running
+// waited for it to end to be archived: they let its marker through.
+func olderLog(t *testing.T) (*store.Store, *current.State) {
+	t.Helper()
+	state := storetest.NewState(events.Core())
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), events.Core(), state, func(p events.Proposal) *events.Rejection {
+		rejection := rules.Check(p, state, events.Core(), storetest.Installed()...)
+		if p.Type == events.TaskArchived && rejection != nil && strings.Contains(rejection.Reason, "turn running") {
+			return nil
+		}
+		return rejection
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		storetest.CheckEqual(t, s, state)
+		s.Close()
+	})
+	return s, state
 }
 
 // Without a hooks handler, as in a test of the routes, nothing is held.

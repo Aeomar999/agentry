@@ -16,6 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // Redacting a secret pasted widely, across the whole log
@@ -289,6 +290,41 @@ func TestATurnRunningAsTheLogIsRedactedDoesNotWriteTheSecretBack(t *testing.T) {
 	}
 	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
 		t.Errorf("after the turn these files still hold the secret: %v", holding)
+	}
+}
+
+// The tester's case: a done task whose wrap-up turn runs isn't archived,
+// so a redaction across the log holds the turn, and its end through the
+// hook doesn't write the secret back. (An archived task with a turn left
+// open, from an older log, keeps nothing its end learned:
+// hooks.TestATurnOnAnArchivedTaskKeepsNothingItLearned.)
+func TestAWrapUpTurnRunningAsTheLogIsRedactedDoesNotWriteTheSecretBack(t *testing.T) {
+	f := newEraseFixture(t)
+	written := "# Notes\n\nThe key is " + secretHere + "."
+	f.teach(t, written)
+	f.startTurn(t)
+	f.propose(t,
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}}, // stops turn-1
+		events.Proposal{Stream: "task-1", Actor: machine, Type: events.TurnStarted, Correlation: "turn-2", Data: map[string]any{"agent": "engineer", "hash": "h"}},
+	)
+	task, _ := f.state.Task("task-1")
+	summary := tasks.SummaryOf(task, f.state.Roster())
+	if _, rejection, err := f.log.Archive("task-1", func() any { return summary }, f.blobs); err != nil || rejection == nil || !strings.Contains(rejection.Reason, "turn running") {
+		t.Fatalf("archiving task-1 while its wrap-up turn runs: %v, %v, want refused", rejection, err)
+	}
+	if answer := redactAcross(t, f.server, secretHere); !slices.Equal(answer.Warnings, []string{stillRunning}) {
+		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
+	}
+	f.endTurnOf(t, "turn-2", written+"\n\nDeploy on Fridays.\n")
+	engineer, _ := f.state.Roster().Get("engineer")
+	if want := "# Notes\n\nThe key is [redacted].\n\nDeploy on Fridays."; engineer.Knowledge != want {
+		t.Errorf("the engineer's knowledge after the wrap-up turn: %q, want %q", engineer.Knowledge, want)
+	}
+	if err := f.snapshots.WriteNow(); err != nil {
+		t.Fatal(err)
+	}
+	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
+		t.Errorf("after the wrap-up turn these files still hold the secret: %v", holding)
 	}
 }
 

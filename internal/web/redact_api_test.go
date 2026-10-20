@@ -215,7 +215,13 @@ func (f *eraseFixture) startTurn(t *testing.T) {
 // learned, and fails the test unless it ended.
 func (f *eraseFixture) endTurn(t *testing.T, learned string) {
 	t.Helper()
-	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: "turn-1", Agent: "engineer", Engine: "claude", Event: "Stop",
+	f.endTurnOf(t, "turn-1", learned)
+}
+
+// endTurnOf is endTurn of the engineer's turn in task-1.
+func (f *eraseFixture) endTurnOf(t *testing.T, turn, learned string) {
+	t.Helper()
+	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: turn, Agent: "engineer", Engine: "claude", Event: "Stop",
 		Payload: json.RawMessage(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
 	if task, _ := f.state.Task("task-1"); task.OpenTurn() != nil {
 		t.Errorf("turn-1 should have ended: %+v", task.OpenTurn())

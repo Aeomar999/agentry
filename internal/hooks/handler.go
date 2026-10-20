@@ -6,6 +6,7 @@ package hooks
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -142,7 +143,9 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 
 // endTurn keeps what the agent left in its knowledge file, if the hook could
 // read it, with each secret you redacted while the turn ran redacted again.
-// If one would still show, none of it is kept.
+// If one would still show, none of it is kept; nor is anything from a turn
+// on an archived task, which an older log can hold: the state shows no
+// turn of it, so no redaction held it.
 func (h *Handler) endTurn(call hookcall.Call) {
 	var learned string
 	if call.Ending != nil && call.Ending.Knowledge != nil {
@@ -151,11 +154,19 @@ func (h *Handler) endTurn(call hookcall.Call) {
 	learned, clean := h.redactions.Ended(Turn{call.Task, call.Turn}, learned)
 	switch {
 	case call.Ending == nil || call.Ending.Knowledge == nil:
+	case h.archived(call.Task):
+		slog.Warn("hooks: a turn ended on an archived task, so nothing it learned is kept", "task", call.Task, "turn", call.Turn)
 	case !clean:
 		slog.Warn("hooks: a redacted secret would still show in what a turn learned, so none of it is kept", "task", call.Task, "turn", call.Turn)
 	default:
 		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(learned))
 	}
+}
+
+// archived says whether the state holds the task as its summary alone.
+func (h *Handler) archived(id string) bool {
+	_, err := h.state.Task(id)
+	return errors.Is(err, current.ErrArchived)
 }
 
 // stillLimited says why a turn that hits the usage limit again, straight
