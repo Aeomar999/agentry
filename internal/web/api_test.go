@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1529,6 +1530,46 @@ func TestTheKnowledgeHistoryIsTheSameFromPatches(t *testing.T) {
 	}
 	if patches != copies {
 		t.Errorf("from patches: %s\nfrom full copies: %s", patches, copies)
+	}
+}
+
+// After a secret in an agent's knowledge is redacted, its history lists
+// the same versions, each showing [redacted] where the secret was, those
+// rebuilt from patches on it too.
+func TestARedactedKnowledgeKeepsItsHistory(t *testing.T) {
+	const secret = "sk-7c1e90"
+	server, s := newTestServer(t)
+	engineer, before := agents.Agent{Name: "engineer"}, ""
+	for i, text := range []string{"Use gofmt.", "Use gofmt.\nThe token is " + secret + ".", "Use gofmt -s.\nThe token is " + secret + ".", "Use gofmt -s.\nThe token is " + secret + ".\nRun go vet."} {
+		p := engineer.Patching(httpapi.You, agents.Diff(before, text))
+		if i == 0 {
+			p = engineer.Learned(httpapi.You, text)
+		}
+		if _, rejection, err := s.Propose(p); err != nil || rejection != nil {
+			t.Fatal(err, rejection)
+		}
+		before = text
+	}
+	history := func() []string {
+		_, body := call(t, server, "GET", "/api/agents/engineer/knowledge", "")
+		var changes []struct{ Knowledge string }
+		json.Unmarshal([]byte(body), &changes)
+		var texts []string
+		for _, change := range changes {
+			texts = append(texts, change.Knowledge)
+		}
+		return texts
+	}
+	listed := history()
+	if _, rejection, err := s.Redact(events.AgentsStream, secret, httpapi.You, ""); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	var want []string
+	for _, text := range listed {
+		want = append(want, strings.ReplaceAll(text, secret, "[redacted]"))
+	}
+	if got := history(); len(listed) != 4 || !reflect.DeepEqual(got, want) {
+		t.Errorf("the history after: %q\nwant %q", got, want)
 	}
 }
 

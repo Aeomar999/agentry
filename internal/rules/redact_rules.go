@@ -13,10 +13,11 @@ import (
 // done task's too, but not an erased task, which takes no event, nor an
 // archived one, whose rows are in a blob: Store.RedactArchived unarchives
 // it, redacts it and archives it again, and its redaction names the blobs
-// that held the rows before, deleted, in "archives". What these rules
-// can't see is left to Store.Redact: that "positions" are rows of the
-// stream below the marker, as it reads them under its lock, and that none
-// is an agent.learned.
+// that held the rows before, deleted, in "archives". A knowledge version
+// written again as a full copy names "$.knowledge", the field it now has.
+// What these rules can't see is left to Store.Redact: that "positions" are
+// rows of the stream below the marker, as it reads them under its lock,
+// and that an agent.learned among them is in the agents stream.
 
 // aRedaction says which rows it rewrote, and what in them, never the
 // secret: one list of JSON paths per row, in the order of the rows,

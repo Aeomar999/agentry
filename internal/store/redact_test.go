@@ -280,19 +280,16 @@ func TestASecretWithJSONsSpecialCharactersIsRedacted(t *testing.T) {
 	}
 }
 
-// Redact refuses, and writes nothing, when no row holds the secret, a
-// row that does is a knowledge version, the reason given holds it, the
-// secret is empty or part of [redacted], or the stream took an event
-// since its rows were read.
+// Redact refuses, and writes nothing, when no row holds the secret, the
+// reason given holds it, the secret is empty or part of [redacted], or the
+// stream took an event since its rows were read.
 func TestARefusedRedactionWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	s := openWithSecret(t, path, newCreated())
-	acceptAll(t, s, events.Proposal{Stream: events.AgentsStream, Actor: you, Type: events.AgentLearned, Data: map[string]any{"name": "engineer", "knowledge": "Use " + secret + "."}})
 	for _, c := range []struct {
 		name, stream, secret, why, want string
 	}{
 		{"no row holds it", "task-1", "not-there", "", "no row of task-1 holds the secret"},
-		{"a knowledge version", events.AgentsStream, secret, "", "the row at 5 is a knowledge version, which is redacted by writing it again in full"},
 		{"the reason holds it", "task-1", secret, "Remove " + secret + ".", "the reason holds the secret, which the log would then keep"},
 		{"an empty secret", "task-1", "", "", "a secret to redact is some text, and not part of [redacted]"},
 		{"part of [redacted]", "task-1", "dact", "", "a secret to redact is some text, and not part of [redacted]"},

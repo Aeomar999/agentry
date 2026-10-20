@@ -20,10 +20,10 @@ import (
 // trigger lets exactly the rows it names change, and only their data.
 //
 // A secret in an archived task is redacted by RedactArchived, which
-// unarchives it, redacts it and archives it again. What the store can't do
-// is left to its caller: a secret in a knowledge file, whose versions are
-// rewritten as full copies; the copies in other streams; and writing a new
-// snapshot.
+// unarchives it, redacts it and archives it again; one in an agent's
+// knowledge rewrites its versions from the first that holds it as full
+// copies (redact_knowledge.go). What the store can't do is left to its
+// caller: the copies in other streams, and writing a new snapshot.
 
 // Redacted is what a secret becomes.
 const Redacted = "[redacted]"
@@ -35,22 +35,24 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // event.redacted. First, with no lock held, it reads the stream's rows,
 // rejections included, and finds the ones whose text holds the secret: in
 // the strings of their data, decoded, so a secret with quotes, backslashes
-// or any other text JSON escapes is found as it was written. Only those
-// strings are encoded again, in place, so each row stays valid JSON with
-// every other byte as it was, whatever order its keys are in. Then, under
-// the lock, it checks the stream took nothing since and the rules allow the
-// redaction, and in one transaction appends it and updates the rows it
-// names, the old bytes zeroed by the connection's secure_delete (Open);
-// the model refolds the stream from the rewritten rows once that commits.
-// Last, still under the lock, it empties the WAL (giveBackSpace), which
-// still held the old rows. It writes no snapshot: the one on disk may
-// still hold the secret, and its caller writes a new one.
+// or any other text JSON escapes is found as it was written, and in the
+// agents stream in the knowledge each version rebuilds, so a patch whose
+// text holds it, or whose base does, is written again as a full copy
+// (knowledgeRewrites). Only those strings are encoded again, in place, so
+// each row stays valid JSON with every other byte as it was, whatever order
+// its keys are in. Then, under the lock, it checks the stream took nothing
+// since and the rules allow the redaction, and in one transaction appends it
+// and updates the rows it names, the old bytes zeroed by the connection's
+// secure_delete (Open); the model refolds the stream from the rewritten rows
+// once that commits. Last, still under the lock, it empties the WAL
+// (giveBackSpace), which still held the old rows. It writes no snapshot: the
+// one on disk may still hold the secret, and its caller writes a new one.
 //
 // It returns the redaction and, when it is refused, the rejection: no row
-// holds the secret, a row that does is a knowledge version, holds it in a
-// key or can't be rewritten leaving the rest as it was, the reason given
-// holds it, the rules refuse it, or the stream took an event since its
-// rows were read.
+// holds the secret, a row that does is a knowledge version outside the
+// agents stream, holds it in a key or can't be rewritten leaving the rest as
+// it was, the reason given holds it, the rules refuse it, or the stream took
+// an event since its rows were read.
 // A refusal writes nothing, as Archive's does. The error is for the
 // database failing. One after the commit comes with the redaction: the
 // rows are rewritten, but the old text may stay in the WAL until
@@ -91,7 +93,7 @@ func findIn(stream string, rows []row, secret string, who events.Actor, why stri
 	if strings.Contains(why, secret) {
 		return pending{}, &events.Rejection{Check: "redact", Reason: "the reason holds the secret, which the log would then keep"}, nil
 	}
-	found, err := rewritten(rows, secret)
+	found, err := rewrittenIn(stream, rows, secret)
 	if err != nil {
 		return pending{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
@@ -142,7 +144,7 @@ func (s *Store) Matches(stream, secret string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	rewrites, err := rewritten(rows, secret)
+	rewrites, err := rewrittenIn(stream, rows, secret)
 	return len(rewrites), err
 }
 
@@ -372,17 +374,16 @@ func pathKey(key string) string {
 }
 
 // redactable refuses a redaction the rows found can't make: none holds the
-// secret; one is a knowledge version, which later versions patch: a
-// patch's head and tail would be wrong against a redacted text, so those
-// are rewritten as full copies instead; or one holds it in a key, which
-// is refused here, before the rules would refuse its redaction for
-// naming no fields.
+// secret; one is a knowledge version outside the agents stream, whose
+// versions rewrittenIn doesn't follow; or one holds it in a key, which is
+// refused here, before the rules would refuse its redaction for naming no
+// fields.
 func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	if len(rewrites) == 0 {
 		return &events.Rejection{Check: "redact", Reason: "no row of " + stream + " holds the secret"}
 	}
 	for _, rw := range rewrites {
-		if rw.kind == events.AgentLearned {
+		if rw.kind == events.AgentLearned && stream != events.AgentsStream {
 			return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("the row at %d is a knowledge version, which is redacted by writing it again in full", rw.position)}
 		}
 	}
