@@ -390,6 +390,40 @@ describe("a server on a shorter log", () => {
     expect(positions(pages, newest)).toEqual([30, 35, 40]);
   });
 
+  test("an earlier page asked for on the old log is dropped, even when the new log has no events", async () => {
+    const { server, pages } = await newestAt100();
+    pages.loadEarlier(newest);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?before=98"]);
+    server.restart();
+    pages.moved(40);
+    expect(pages.snapshot(newest).loadingEarlier).toBe(false);
+
+    await server.answer(40); // the earlier page, from the old log: thrown away
+    await server.answer(40);
+    expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?before=41"]);
+    expect(pages.snapshot(newest)).toMatchObject({ events: [], loading: false, earlier: false, loadingEarlier: false });
+
+    server.add(41);
+    pages.moved(41);
+    await server.answer(41);
+    expect(server.reads.slice(3)).toEqual(["/api/tasks/task-8/events?after=40"]);
+    expect(positions(pages, newest)).toEqual([41]);
+  });
+
+  test("load earlier waits for the new log's first page: the events shown are the old log's", async () => {
+    const { server, pages } = await newestAt100();
+    server.restart(10, 20, 30, 35, 40);
+    pages.moved(40);
+    pages.loadEarlier(newest);
+    expect(pages.snapshot(newest).loadingEarlier).toBe(false);
+
+    await server.answer(40);
+    expect(server.reads.slice(1)).toEqual(["/api/tasks/task-8/events?before=41"]);
+    pages.loadEarlier(newest);
+    await server.answer(40);
+    expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?before=30"]);
+  });
+
   test("after the reset the new log is followed as usual, with no reset again", async () => {
     const { server, pages } = await newestAt100();
     server.restart(10, 20, 30, 35, 40);

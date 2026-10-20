@@ -106,11 +106,12 @@ export class EventPages {
   }
 
   // loadEarlier reads the page before the oldest event held, now or once
-  // the read in flight is back.
+  // the read in flight is back. Not while a reset reads the list again: the
+  // events shown are the old log's.
   loadEarlier(wanted: EventsWanted) {
     const key = keyOf(wanted);
     const list = this.lists.get(key);
-    if (!list || !list.shown.earlier || list.earlierAsked) return;
+    if (!list || !list.shown.earlier || list.earlierAsked || list.fresh) return;
     list.earlierAsked = true;
     this.show(list, { loadingEarlier: true });
     this.readIfDue(key, list);
@@ -133,7 +134,8 @@ export class EventPages {
   // reset reads every list again from its first page, as of the shorter
   // log's position: the events it holds may not be in the new log. It keeps
   // showing them until the new ones are read, so the view doesn't flash
-  // empty. A newest page starts at the new position, not the old bound.
+  // empty. A newest page starts at the new position, not the old bound. An
+  // earlier page asked for is of the old log, so the ask is dropped.
   private reset(position: number) {
     this.live = position;
     this.lists.forEach((list, key) => {
@@ -141,8 +143,10 @@ export class EventPages {
       list.position = -1;
       list.started = false;
       list.ahead = false;
+      list.earlierAsked = false;
       list.failed = null;
       list.fresh = [];
+      this.show(list, { loadingEarlier: false });
       this.readIfDue(key, list);
     });
   }
@@ -161,7 +165,8 @@ export class EventPages {
     // that failed half way leaves nothing out.
     const newest = held.length ? held[held.length - 1].position : list.position;
     if (list.ahead) return { side: "after", path: page(`after=${newest}`) };
-    if (list.earlierAsked) return { side: "before", path: page(`before=${held[0].position}`) };
+    // With nothing held there is no oldest event to read before.
+    if (list.earlierAsked && held.length) return { side: "before", path: page(`before=${held[0].position}`) };
     if (list.position < this.live) return { side: "after", path: page(`after=${newest}`) };
     return null;
   }
