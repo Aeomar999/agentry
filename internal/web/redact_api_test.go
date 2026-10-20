@@ -224,7 +224,7 @@ func (f *eraseFixture) endTurnOf(t *testing.T, turn, learned string) {
 	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: turn, Agent: "engineer", Engine: "claude", Event: "Stop",
 		Payload: json.RawMessage(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
 	if task, _ := f.state.Task("task-1"); task.OpenTurn() != nil {
-		t.Errorf("turn-1 should have ended: %+v", task.OpenTurn())
+		t.Errorf("%s should have ended: %+v", turn, task.OpenTurn())
 	}
 }
 
