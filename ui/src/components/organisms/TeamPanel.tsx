@@ -145,11 +145,15 @@ function TeamForm(props: TeamFormProps) {
 
   const focus = (id: string) => setFocusOn({ id });
   // say empties the live region first and speaks on the next frame, so the
-  // same words twice in a row are read again.
+  // same words twice in a row are read again. Saying again drops what the
+  // last frame was going to say.
+  const speaking = useRef(0);
   const say = (text: string) => {
+    cancelAnimationFrame(speaking.current);
     setNotice("");
-    requestAnimationFrame(() => setNotice(text));
+    speaking.current = requestAnimationFrame(() => setNotice(text));
   };
+  useEffect(() => () => cancelAnimationFrame(speaking.current), []);
   const change = (key: string, change: Partial<DraftAgent>) =>
     setRows((rows) =>
       rows.map((agent) => (agent.key === key ? { ...agent, ...change } : change.coordinates ? { ...agent, coordinates: false } : agent)),

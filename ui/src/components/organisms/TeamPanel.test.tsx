@@ -357,6 +357,19 @@ describe("New team: agents", () => {
     await said("New agent removed. Undo is next.");
   });
 
+  test("what was to be said next frame isn't, once the panel is gone", () => {
+    const cancelled = vi.spyOn(window, "cancelAnimationFrame");
+    const { unmount } = openAt("/agents?team=new");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    const scheduled = vi.spyOn(window, "requestAnimationFrame");
+    fireEvent.click(within(panel()).getAllByRole("button", { name: "Remove New agent" })[0]);
+    const frame = scheduled.mock.results[0].value;
+    unmount();
+    expect(cancelled).toHaveBeenCalledWith(frame);
+    scheduled.mockRestore();
+    cancelled.mockRestore();
+  });
+
   test("the prompt editor is 8 to 24 lines, and lets Tab move on and the wheel scroll the panel", () => {
     openAt("/agents?team=new&template=writing");
     const prompt = within(panel()).getByRole("group", { name: "Prompt" }).querySelector("textarea")!;
