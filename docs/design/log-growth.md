@@ -1304,12 +1304,12 @@ widely) whose `data` contains it, and shows the user the count first.
    `event.redacted`, which are the rewritten rows, never the stream's
    current rows. A new snapshot is written at once.
 4. **A secret in a knowledge file** is in every version after it was
-   written. The path first proposes a full copy of the current file
-   without it, then rewrites each earlier version that holds it as a full
-   copy of its redacted text, from the first such version up to that new
-   one. A patch's `head` and `tail` would be wrong against a redacted
-   base; full copies leave nothing to mismatch, and versions before the
-   secret are untouched.
+   written. The same `event.redacted` rewrites, in place, each version
+   that holds it, or whose base holds it, as a full copy of its redacted
+   text, up to the current one; no version is added, so the agent keeps
+   as many versions as it had. A patch's `head` and `tail` would be wrong
+   against a redacted base; full copies leave nothing to mismatch, and
+   versions before the secret are untouched.
 5. **A secret in an archived task:** unarchive it, redact, archive it
    again (a new blob), then delete the old blob. The `event.redacted` names
    the deleted blob, so a reader that meets the old marker knows the blob
