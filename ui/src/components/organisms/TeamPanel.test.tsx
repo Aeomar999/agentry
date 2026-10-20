@@ -918,6 +918,35 @@ describe("Edit team: changing it", () => {
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Handbook" }));
   });
 
+  test("renamed only in case from its Edit team button, the heading takes focus: the button has gone", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "docs", version: "v2" });
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "docs" }))] };
+    openAt("/agents");
+    const edit = screen.getByRole("button", { name: "Edit team, Docs" });
+    edit.focus();
+    fireEvent.click(edit);
+    typeInto("Team name", "docs");
+    await save();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(edit.isConnected).toBe(false);
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "docs" }));
+  });
+
+  test("saved unrenamed from its Edit team button, focus goes back to the button", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/agents");
+    const edit = screen.getByRole("button", { name: "Edit team, Docs" });
+    edit.focus();
+    fireEvent.click(edit);
+    fireEvent.click(docsRow("writer"));
+    typeInto("Description", "Drafts.");
+    await save();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit team, Docs" }));
+  });
+
   test("a renamed, changed, added and removed agent each say so until saved, and all go in the PUT", async () => {
     vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
     openAt("/agents?team=Docs");

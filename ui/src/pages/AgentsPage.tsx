@@ -231,6 +231,8 @@ export function AgentsPage() {
           onSaved={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
             // Renamed, its Edit team button is gone, so focus goes to its heading.
+            // In any case: a team's section is keyed by its exact name. A link
+            // in another case has no Edit team button to go back to either.
             if (team !== panel) landed.current = team;
           }}
         />
