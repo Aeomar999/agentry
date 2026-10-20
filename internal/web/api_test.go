@@ -1989,6 +1989,7 @@ func TestMovingATeamsCoordinatorAgainFinishesTheMove(t *testing.T) {
 	}
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Write the notes"}`) // Software's, which no move of Data's touches
 	worker := events.Actor{Kind: events.Worker, ID: "local"}
 	for _, p := range []events.Proposal{
 		agents.CoordinatorMoving("Data", "analyst", httpapi.You),
@@ -2017,6 +2018,12 @@ func TestMovingATeamsCoordinatorAgainFinishesTheMove(t *testing.T) {
 		if detail.Coordinator != "analyst" {
 			t.Errorf("%s is %s's, want analyst's", id, detail.Coordinator)
 		}
+	}
+	_, body := call(t, server, "GET", "/api/tasks/task-3", "")
+	var other taskDetail
+	json.Unmarshal([]byte(body), &other)
+	if other.Coordinator != "tech-lead" {
+		t.Errorf("Software's task-3 is %s's, want tech-lead's", other.Coordinator)
 	}
 	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != http.StatusConflict || !strings.Contains(body, "analyst coordinates the Data team already") {
 		t.Errorf("moving it once more: %d %s, want 409", code, body)
