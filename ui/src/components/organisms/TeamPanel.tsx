@@ -41,6 +41,7 @@ import {
   templateToCopy,
   unsaved,
   whyNotCreated,
+  whyNotLoaded,
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { missingProfilesOf } from "@/lib/teams";
@@ -76,7 +77,7 @@ export function TeamPanel(props: TeamPanelProps) {
       templates={templates.data}
       policy={policy.data}
       engines={config.data?.engines}
-      loadError={failed[0]?.error ?? ""}
+      loadError={failed[0] ? whyNotLoaded(failed[0].error) : ""}
       onRetry={() => failed.forEach((read) => read.reload())}
     />
   );
@@ -586,7 +587,8 @@ function DiscardQuestion({ onKeep, onDiscard }: { onKeep: () => void; onDiscard:
   );
 }
 
-// LoadFailure says what didn't load, in the server's words, and tries again. Try again takes focus.
+// LoadFailure says what didn't load, in the server's words or ours when it
+// couldn't be reached, and tries again. Try again takes focus.
 function LoadFailure({ error, onRetry }: { error: string; onRetry: () => void }) {
   const retry = useRef<HTMLButtonElement>(null);
   useEffect(() => retry.current?.focus(), []);

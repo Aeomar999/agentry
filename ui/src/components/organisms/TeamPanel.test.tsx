@@ -722,4 +722,14 @@ describe("New team: opened cold", () => {
     expect(within(panel()).queryByRole("alert")).toBeNull();
     expect(rowButton("coordinator")).toBeTruthy();
   });
+
+  test("a load that couldn't reach Agentry says so in our words", () => {
+    delete reads["/api/teams/templates"];
+    errors["/api/teams/templates"] = new TypeError("Failed to fetch").message;
+    openAt("/agents?team=new");
+
+    const alert = within(panel()).getByRole("alert");
+    expect(alert.textContent).toContain("Couldn't reach Agentry. Check it's running, then try again.");
+    expect(alert.textContent).not.toContain("Failed to fetch");
+  });
 });

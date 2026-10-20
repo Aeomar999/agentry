@@ -374,12 +374,22 @@ export const loadFailed = "Couldn't load what a new team needs";
 export const discardQuestion = "Discard this new team?";
 export const discardDetail = "It hasn't been created yet.";
 
+const unreachable = "Couldn't reach Agentry. Check it's running, then try again.";
+
 // whyNotCreated is a refusal in words: the server's own, or ours when
 // Agentry couldn't be reached at all.
 export function whyNotCreated(failure: unknown): string {
   if (failure instanceof ApiError || !(failure instanceof TypeError)) return (failure as Error).message;
-  return "Couldn't reach Agentry. Check it's running, then try again.";
+  return unreachable;
 }
+
+// What fetch's TypeError says when the server can't be reached: Chrome's,
+// Firefox's and Safari's words.
+const NETWORK_FAILURES = [/^Failed to fetch/, /^NetworkError when attempting to fetch resource/, /^Load failed$/];
+
+// whyNotLoaded is a failed read in words, as whyNotCreated: a read keeps
+// only its error's message, so an unreachable server is known by its words.
+export const whyNotLoaded = (error: string): string => (NETWORK_FAILURES.some((words) => words.test(error)) ? unreachable : error);
 
 // addCustomTeam adds the team as drafted, trimmed. With policyHash, as for
 // addTeam, it also adds the shipped profiles policy.toml lacks.

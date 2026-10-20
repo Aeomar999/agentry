@@ -28,6 +28,7 @@ import {
   templateToCopy,
   thingCount,
   unsaved,
+  whyNotLoaded,
 } from "./custom-team";
 
 // The client reads the address when it loads, and there is none here.
@@ -459,6 +460,14 @@ describe("the panel's sentences", () => {
     expect(backNotice(row("a1"))).toBe("a1 is back.");
     expect(replacedNotice(research)).toBe("Replaced with Research's 3 agents.");
     expect(blankNotice).toBe("Replaced with a blank team: one agent, its coordinator.");
+  });
+
+  test("a read that couldn't reach Agentry says so in our words; the server's own words stay", () => {
+    const unreachable = "Couldn't reach Agentry. Check it's running, then try again.";
+    expect(whyNotLoaded("Failed to fetch")).toBe(unreachable);
+    expect(whyNotLoaded("NetworkError when attempting to fetch resource.")).toBe(unreachable);
+    expect(whyNotLoaded("Load failed")).toBe(unreachable);
+    expect(whyNotLoaded("the config is unreadable")).toBe("the config is unreadable");
   });
 });
 
