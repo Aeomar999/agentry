@@ -124,11 +124,10 @@ func membershipProblems(roster agents.Roster, edit agents.TeamEdit) []TeamProble
 }
 
 // neededProblems: no removed agent is needed by an unfinished task. The
-// tasks a coordinator the edit replaces coordinates move to the new one,
+// tasks the team's coordinator coordinates move to the one the edit names,
 // with any step handed to it, so they need it only for a turn it is taking.
 func neededProblems(state State, edit agents.TeamEdit) []TeamProblem {
 	lead, _ := state.Roster().Coordinator(edit.Team)
-	replaced := slices.ContainsFunc(edit.Agents, func(e agents.EditedAgent) bool { return e.Coordinates && e.Was != lead.Name })
 	var problems []TeamProblem
 	for _, name := range edit.Removed {
 		var needing []string
@@ -137,7 +136,7 @@ func neededProblems(state State, edit agents.TeamEdit) []TeamProblem {
 			if err != nil || task == nil || !task.Needs(name) {
 				continue
 			}
-			if name != lead.Name || !replaced || neededBeyondMoving(task, name) {
+			if name != lead.Name || neededBeyondMoving(task, name) {
 				needing = append(needing, id)
 			}
 		}
