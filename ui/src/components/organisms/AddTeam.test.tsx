@@ -253,7 +253,9 @@ describe("AddTeam: deleting a template of yours", () => {
   // An add that goes through closes the dialog, so the one here fails, to end it with the dialog still open.
   test("asked, and an add starts on another card, Delete and Keep are off until it ends", async () => {
     let fail = (_: Error) => {};
-    vi.mocked(api).mockRejectedValueOnce(refused).mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
+    vi.mocked(api)
+      .mockRejectedValueOnce(refused)
+      .mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
     list([...TEMPLATES, PAPERS]);
     await click(within(card("Software")).getByRole("button", { name: "Add this team, Software" })); // refused: the offer stays live
     await ask("Papers");
