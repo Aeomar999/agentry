@@ -21,13 +21,15 @@ export function useCloseGuard(changed: boolean, busy: boolean, onClose: () => vo
   const from = useRef<Element | null>(null); // where focus was when ask was called
   const blocker = useBlocker(() => {
     const hold = changed && !leaving.current;
-    if (hold) from.current = document.activeElement;
+    if (hold && !from.current) from.current = document.activeElement; // asking from Close already knows
     return hold;
   });
   const asking = asked || (blocker.state === "blocked" && !busy);
 
   useEffect(() => {
-    if (blocker.state === "blocked" && busy) blocker.reset();
+    if (blocker.state !== "blocked" || !busy) return;
+    from.current = null;
+    blocker.reset();
   }, [blocker, busy]);
 
   useEffect(() => {

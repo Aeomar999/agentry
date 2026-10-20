@@ -619,6 +619,17 @@ describe("New team: history and unsaved changes", () => {
     expect(address()).toBe("/agents");
   });
 
+  test("Back while it asks still puts focus back where it was on Keep editing", async () => {
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    teamName().focus();
+    fireEvent.click(closeButton());
+    await back();
+    fireEvent.click(within(question()!).getByRole("button", { name: "Keep editing" }));
+    expect(document.activeElement).toBe(teamName());
+  });
+
   test("opened from a link, closing takes the panel off the address instead", async () => {
     openAt("/tasks", "/agents?view=org&team=new&template=writing");
     fireEvent.click(cancel());
