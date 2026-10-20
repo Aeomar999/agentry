@@ -6,13 +6,18 @@ import {
   checkTemplateName,
   deleteTemplate,
   importTemplate,
+  linkTeam,
   savedLine,
   saveAsTemplate,
   templateExportURL,
   templateGroups,
+  updateTemplate,
+  whyTeamNotLinked,
   whyTemplateNotDeleted,
   whyTemplateNotImported,
   whyTemplateNotSaved,
+  whyTemplateNotUpdated,
+  yourLinkedTemplate,
 } from "./templates";
 
 // The client reads the address when it loads, and there is none here.
@@ -83,6 +88,71 @@ describe("whyTemplateNotSaved", () => {
       kind: "failed",
       title: "Couldn't save the template",
       detail: "Couldn't reach Agentry. Check it's running, then try again.",
+    });
+  });
+});
+
+describe("yourLinkedTemplate", () => {
+  const member = (name: string, team: string, linked: string, coordinates = false) =>
+    ({ name, team, template: linked, coordinates }) as Agent;
+  const templates = [template("software"), template("papers", { savedAt: "2026-10-01T09:00:00Z" })];
+
+  test("is the template of yours the team's coordinator is linked to, the team named in any case", () => {
+    const roster = [member("reader", "Papers", ""), member("lead", "Papers", "papers", true)];
+    expect(yourLinkedTemplate(roster, templates, "papers")?.id).toBe("papers");
+  });
+
+  test.each([
+    ["a built-in template", "software"],
+    ["a template of yours you removed", "orders"],
+    ["no template", ""],
+  ])("is none for a coordinator linked to %s", (_, linked) => {
+    expect(yourLinkedTemplate([member("lead", "Papers", linked, true)], templates, "Papers")).toBeUndefined();
+  });
+
+  test("reads the coordinator's link, not another agent's", () => {
+    const roster = [member("reader", "Papers", "papers"), member("lead", "Papers", "", true)];
+    expect(yourLinkedTemplate(roster, templates, "Papers")).toBeUndefined();
+  });
+
+  test("is none for a team you don't have", () => {
+    expect(yourLinkedTemplate([member("lead", "Papers", "papers", true)], templates, "Orders")).toBeUndefined();
+  });
+});
+
+describe("updateTemplate", () => {
+  beforeEach(() => vi.mocked(api).mockReset());
+
+  test("posts replacing, and nothing else, to the team's template route", async () => {
+    vi.mocked(api).mockResolvedValueOnce(template("papers", { savedAt: "2026-10-12T09:30:00Z" }));
+    expect((await updateTemplate("R&D 2")).id).toBe("papers");
+    expect(api).toHaveBeenCalledWith("POST", "/api/teams/R%26D%202/template", { replacing: true });
+  });
+
+  test("a refusal is a failure in the server's words", () => {
+    const refusal = new ApiError("isn't made from a template of yours, so there is none to update: save it as a new one", 400);
+    expect(whyTemplateNotUpdated(refusal)).toEqual({
+      kind: "failed",
+      title: "Couldn't update the template",
+      detail: "isn't made from a template of yours, so there is none to update: save it as a new one",
+    });
+  });
+});
+
+describe("linkTeam", () => {
+  beforeEach(() => vi.mocked(api).mockReset());
+
+  test("posts the template's id to the team's link route", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "R&D 2", template: "papers" });
+    await linkTeam("R&D 2", "papers");
+    expect(api).toHaveBeenCalledWith("POST", "/api/teams/R%26D%202/link", { template: "papers" });
+  });
+
+  test("a refusal is a failure in the server's words", () => {
+    expect(whyTeamNotLinked(new ApiError("there is no template papers", 400))).toEqual({
+      kind: "failed",
+      title: "Couldn't link the team",
+      detail: "there is no template papers",
     });
   });
 });

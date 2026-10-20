@@ -2059,6 +2059,184 @@ describe("Edit team: Save as a template", () => {
   });
 });
 
+const updateButton = (place: "footer" | "body" = "footer") =>
+  document.getElementById(`team-update-${place}-button`) as HTMLButtonElement | null;
+const updateFailure = (place: "footer" | "body" = "footer") => document.getElementById(`team-update-${place}-failure`);
+const DOCS_KIT: TeamTemplate = { ...WRITING, id: "docs-kit", team: "Docs kit", userMade: true, basedOn: "writing" };
+// linkedTo is the Docs team with its agents linked to the template id.
+const linkedTo = (id: string) => [...ROSTER, ...DOCS.map((a) => ({ ...a, template: id }))];
+
+describe("Edit team: Update my template", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = linkedTo("docs-kit");
+    reads["/api/teams/templates"] = [WRITING, IDEAS, DOCS_KIT];
+  });
+
+  test("a team linked to a template of yours has it beside Save as a template, in the footer and under This team", () => {
+    openAt("/agents?team=Docs");
+
+    for (const place of ["footer", "body"] as const) {
+      expect(updateButton(place)!.textContent).toBe("Update my template");
+      expect(updateButton(place)!.hasAttribute("disabled")).toBe(false);
+      expect(templateButton(place)!.compareDocumentPosition(updateButton(place)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(inSheet().getByRole("region", { name: "This team" }).contains(updateButton("body"))).toBe(true);
+  });
+
+  test.each([
+    ["a built-in template", linkedTo("writing")],
+    ["a template of yours you removed", linkedTo("docs-old")],
+    ["no template, made by hand", linkedTo("")],
+  ])("a team linked to %s has none", (_, roster) => {
+    reads["/api/agents"] = roster;
+    openAt("/agents?team=Docs");
+
+    expect(templateButton()).toBeTruthy();
+    expect(updateButton("footer")).toBeNull();
+    expect(updateButton("body")).toBeNull();
+  });
+
+  test("it updates the template with the team as last saved, and says so", async () => {
+    vi.mocked(api).mockResolvedValueOnce(DOCS_KIT);
+    openAt("/agents?team=Docs");
+    await act(async () => fireEvent.click(updateButton()!));
+
+    expect(sent()).toEqual([["POST", "/api/teams/Docs/template", { replacing: true }]]);
+    expect(notify).toHaveBeenCalledWith("success", "Updated Docs kit in your templates", "It has the Docs team as last saved.");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("with unsaved changes it is off and says why beside it, as on a phone", async () => {
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+
+    for (const place of ["footer", "body"] as const) {
+      const button = updateButton(place)!;
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(document.getElementById(button.getAttribute("aria-describedby")!)!.textContent).toBe("Save your changes first.");
+    }
+    typeInto("Team name", "Docs");
+    expect(updateButton()!.hasAttribute("disabled")).toBe(false);
+  });
+
+  test.each(["footer", "body"] as const)(
+    "a refusal pressed in the %s is said there in the server's words, and takes focus",
+    async (place) => {
+      const words = "the Docs team isn't made from a template of yours, so there is none to update: save it as a new one";
+      vi.mocked(api).mockRejectedValueOnce(new ApiError(words, 400));
+      openAt("/agents?team=Docs");
+      await act(async () => fireEvent.click(updateButton(place)!));
+
+      const failure = updateFailure(place)!;
+      expect(failure.textContent).toBe(`Couldn't update the template${words}`);
+      expect(document.activeElement).toBe(failure);
+      expect(updateFailure(place === "footer" ? "body" : "footer")).toBeNull();
+      expect(notify).not.toHaveBeenCalled();
+    },
+  );
+
+  test("while it runs, nothing else closes or saves", async () => {
+    vi.mocked(api).mockReturnValueOnce(new Promise(() => {}));
+    openAt("/agents?team=Docs");
+    await act(async () => fireEvent.click(updateButton()!));
+
+    expect(updateButton()!.textContent).toBe("Updating…");
+    expect(updateButton()!.hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
+    expect(templateButton()!.hasAttribute("disabled")).toBe(true);
+    expect(removeButton("footer").hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("while Save as a template's form is open, or Remove team asks, it is off", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    expect(updateButton()!.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+    expect(updateButton()!.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(removeButton("body"));
+    expect(updateButton()!.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+const linkOffer = () => document.getElementById("team-link");
+const linkButton = () => within(linkOffer()!).getByRole("button", { name: /^(Link this team|Linking…)$/ });
+const NOT_LINKED = "the log failed: disk full";
+
+describe("Edit team: Link this team", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  // saveUnlinked saves Docs as Docs kit, which the server can't link it to.
+  const saveUnlinked = async () => {
+    vi.mocked(api).mockResolvedValueOnce({ ...DOCS_KIT, notLinked: NOT_LINKED });
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.change(templateName(), { target: { value: "Docs kit" } });
+    await saveTemplate();
+  };
+
+  test("a save that couldn't link the team says so at the top of the panel, with why, and takes focus", async () => {
+    await saveUnlinked();
+
+    const offer = linkOffer()!;
+    expect(within(offer).getByRole("heading").textContent).toBe("Saved Docs kit to your templates, but this team isn't linked to it yet");
+    expect(offer.textContent).toContain(NOT_LINKED);
+    expect(linkButton().textContent).toBe("Link this team");
+    expect(document.activeElement).toBe(offer);
+    expect(templateForm()).toBeNull();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("a save that linked the team offers nothing", async () => {
+    vi.mocked(api).mockResolvedValueOnce(DOCS_KIT);
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    await saveTemplate();
+
+    expect(linkOffer()).toBeNull();
+  });
+
+  test("Link this team links it to the template saved, says so and goes", async () => {
+    await saveUnlinked();
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", template: "docs-kit" });
+    await act(async () => fireEvent.click(linkButton()));
+
+    expect(sent()[1]).toEqual(["POST", "/api/teams/Docs/link", { template: "docs-kit" }]);
+    expect(notify).toHaveBeenCalledWith("success", "Linked the Docs team to Docs kit", "It keeps the template's features.");
+    expect(linkOffer()).toBeNull();
+    expect(document.activeElement).toBe(templateButton());
+  });
+
+  test("a refused link says why in the server's words, and the offer stays", async () => {
+    const words = "there is no template docs-kit to link the Docs team to";
+    await saveUnlinked();
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(words, 400));
+    await act(async () => fireEvent.click(linkButton()));
+
+    const alert = within(linkOffer()!).getByRole("alert");
+    expect(alert.textContent).toBe(`Couldn't link the team${words}`);
+    expect(linkButton().hasAttribute("disabled")).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("while it links, nothing else closes or saves", async () => {
+    await saveUnlinked();
+    vi.mocked(api).mockReturnValueOnce(new Promise(() => {}));
+    await act(async () => fireEvent.click(linkButton()));
+
+    expect(linkButton().textContent).toBe("Linking…");
+    expect(linkButton().hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
+    expect(templateButton()!.hasAttribute("disabled")).toBe(true);
+    expect(removeButton("body").hasAttribute("disabled")).toBe(true);
+  });
+});
+
 describe("Edit team: history", () => {
   beforeEach(() => {
     reads["/api/agents"] = [...ROSTER, ...DOCS];
