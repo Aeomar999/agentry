@@ -140,6 +140,8 @@ func (s *Server) Handler() http.Handler {
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
 	api("POST /api/agents/redact/preview", s.previewAgentsRedaction)
 	api("POST /api/agents/redact", s.redactAgents) // never the desk's: nothing undoes it
+	api("POST /api/redact/preview", s.previewLogRedaction)
+	api("POST /api/redact", s.redactLog) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
 	api("GET /api/settings", s.showSettings)
 	api("PUT /api/settings", s.changeSettings)

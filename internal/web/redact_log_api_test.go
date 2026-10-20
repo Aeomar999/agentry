@@ -1,0 +1,259 @@
+package web
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/current"
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+	"gitlab.com/dev.chempa/agentry/internal/storetest"
+)
+
+// Redacting a secret pasted widely, across the whole log
+// (docs/design/log-growth.md section 5, "Removing a secret"). Each
+// stream's redaction is the per-stream routes' own, tested in
+// redact_api_test.go; these see what the log-wide routes add: which
+// streams they read, the snapshot written once, and a stream refused
+// leaving the rest redacted.
+
+// widely has secretHere in task-4 (two rows, withSecret), task-5 (one),
+// the archived task-6 (one, in its blob), the engineer's knowledge and
+// idea-1, and is the old blob of task-6.
+func widely(t *testing.T) (f *eraseFixture, oldBlob string) {
+	t.Helper()
+	f = withSecret(t)
+	f.propose(t,
+		events.Proposal{Stream: "task-5", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Rotate " + secretHere, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-6", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Old", "description": "It was " + secretHere + ".",
+			"repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-6", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Done.", "moved": true}},
+	)
+	storetest.ArchiveIn(t, f.log, f.state, "task-6", f.blobs)
+	f.teach(t, "# Notes\n\nThe key is "+secretHere+".")
+	if _, rejection, err := f.log.Create(ideas.Prefix, events.Proposal{Actor: loop, Type: ideas.IdeaSuggested, Data: map[string]any{"title": "Vault",
+		"problem": "The key " + secretHere + " is pasted around.", "proposal": "Keep keys in a vault.", "size": "S", "task": "task-1", "repo": "/r"}}); rejection != nil || err != nil {
+		t.Fatalf("suggesting idea-1: %v, %v", rejection, err)
+	}
+	return f, markerOf(t, f, "task-6")
+}
+
+// previewAcross is the preview across the log of text, through the
+// route at server.
+func previewAcross(t *testing.T, server *httptest.Server, text string) logPreview {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"text": text})
+	code, answer := call(t, server, "POST", "/api/redact/preview", string(body))
+	if code != http.StatusOK {
+		t.Fatalf("previewing the log: %d %s", code, answer)
+	}
+	var preview logPreview
+	if err := json.Unmarshal([]byte(answer), &preview); err != nil {
+		t.Fatal(err)
+	}
+	return preview
+}
+
+// redactAcross redacts text across the log through the route at server,
+// and is its answer.
+func redactAcross(t *testing.T, server *httptest.Server, text string) logRedacted {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"text": text, "why": "Pasted everywhere."})
+	code, answer := call(t, server, "POST", "/api/redact", string(body))
+	if code != http.StatusOK {
+		t.Fatalf("redacting the log: %d %s", code, answer)
+	}
+	var got logRedacted
+	if err := json.Unmarshal([]byte(answer), &got); err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+// matches fails the test unless the redaction rewrote the streams the
+// preview listed, as many rows in each, just now.
+func matches(t *testing.T, answer logRedacted, preview logPreview) {
+	t.Helper()
+	var listed, rewrote []string
+	for _, p := range preview.Streams {
+		listed = append(listed, p.Stream+": "+strconv.Itoa(p.Rows))
+	}
+	for _, r := range answer.Streams {
+		rewrote = append(rewrote, r.Stream+": "+strconv.Itoa(r.Rows))
+		if time.Since(r.At) > time.Minute {
+			t.Errorf("%s was redacted at %s", r.Stream, r.At)
+		}
+	}
+	if answer.Rows != preview.Rows || !slices.Equal(rewrote, listed) {
+		t.Errorf("the redaction rewrote %d rows, %q; the preview listed %d, %q", answer.Rows, rewrote, preview.Rows, listed)
+	}
+}
+
+// redactedStreams is every stream an event.redacted is in, in log order.
+func redactedStreams(t *testing.T, s *store.Store) []string {
+	t.Helper()
+	all, err := s.After(0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var streams []string
+	for _, e := range all {
+		if e.Type == events.EventRedacted {
+			streams = append(streams, e.Stream)
+		}
+	}
+	return streams
+}
+
+// The step's proof: a secret pasted into two live tasks, an archived one,
+// an agent's knowledge and an idea is previewed in each, in task order
+// and then the rest, and redacted from each, one event.redacted per
+// stream, as many rows as the preview counted. Then no file holds it: no
+// row, WAL, snapshot or blob. The archived task is archived again, its
+// old blob gone.
+func TestRedactingASecretAcrossTheLogLeavesNoTraceOnDisk(t *testing.T) {
+	f, old := widely(t)
+	f.holdsSecret(t, "state.snapshot", old)
+	preview := previewAcross(t, f.server, secretHere)
+	want := []streamPreview{{Stream: "task-4", Rows: 2}, {Stream: "task-5", Rows: 1}, {Stream: "task-6", Rows: 1, Archived: true},
+		{Stream: events.AgentsStream, Rows: 1}, {Stream: "idea-1", Rows: 1}}
+	if !slices.Equal(preview.Streams, want) || preview.Rows != 6 {
+		t.Fatalf("the preview: %+v, want 6 rows in %+v", preview, want)
+	}
+	before := redactedStreams(t, f.log)
+
+	answer := redactAcross(t, f.server, secretHere)
+	matches(t, answer, preview)
+	if len(answer.Warnings) != 0 {
+		t.Errorf("the redaction warned %q", answer.Warnings)
+	}
+	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
+		t.Errorf("after the redaction these files still hold the secret: %v", holding)
+	}
+	// task-6's event.redacted is archived with it, in its new blob.
+	if got := redactedStreams(t, f.log)[len(before):]; !slices.Equal(got, []string{"task-4", "task-5", events.AgentsStream, "idea-1"}) {
+		t.Errorf("the redaction wrote an event.redacted in %q", got)
+	}
+	for id, want := range map[string]string{"task-4": "Use the key [redacted] to deploy.", "task-5": "Rotate [redacted]"} {
+		task, err := f.state.Task(id)
+		if err != nil || task == nil || (task.Description != want && task.Title != want) {
+			t.Errorf("%s after the redaction: %+v, %v; want %q", id, task, err, want)
+		}
+	}
+	if _, err := f.state.Task("task-6"); !errors.Is(err, current.ErrArchived) {
+		t.Errorf("task-6, redacted, should be archived again: %v", err)
+	}
+	if f.blobs.Has(old) {
+		t.Errorf("task-6's old archive blob %s is still there", old)
+	}
+}
+
+// What doesn't hold the secret is left as it is: an erased task isn't
+// read, though its preview would be refused rather than hold none, and a
+// stream without the secret gets no event.redacted. The snapshot, written
+// once at the end, no longer holds the secret.
+func TestARedactionAcrossTheLogLeavesWhatDoesNotHoldTheSecret(t *testing.T) {
+	f := withSecret(t)
+	f.erase(t, "task-2")
+	f.holdsSecret(t, "state.snapshot")
+	before := redactedStreams(t, f.log)
+	preview := previewAcross(t, f.server, secretHere)
+	if want := []streamPreview{{Stream: "task-4", Rows: 2}}; !slices.Equal(preview.Streams, want) {
+		t.Fatalf("the preview listed %+v, want only %+v", preview.Streams, want)
+	}
+	matches(t, redactAcross(t, f.server, secretHere), preview)
+	if got := redactedStreams(t, f.log)[len(before):]; !slices.Equal(got, []string{"task-4"}) {
+		t.Errorf("the redaction wrote an event.redacted in %q, want only task-4", got)
+	}
+	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
+		t.Errorf("after the redaction these files still hold the secret: %v", holding)
+	}
+}
+
+// A stream refused, in its preview or once it is asked to redact, is
+// named in the warnings, and the others are redacted still. When every
+// stream that holds the secret is refused, the redaction is refused 409
+// with their reasons, as one stream's is.
+func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
+	// The rules let task-2's redaction be previewed and refuse it once it
+	// is asked for, with a reason, and refuse task-3's both times.
+	server, s := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type != events.EventRedacted {
+			return nil
+		}
+		if p.Stream == "task-3" || p.Stream == "task-2" && p.Data["why"] != "" {
+			return &events.Rejection{Check: "order", Reason: p.Stream + " is kept as it is"}
+		}
+		return nil
+	})
+	for _, id := range []string{"task-1", "task-2", "task-3"} {
+		if _, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Use " + secretHere,
+			"repo": "/r", "coordinator": "tech-lead"}}); rejection != nil || err != nil {
+			t.Fatalf("creating %s: %v, %v", id, rejection, err)
+		}
+	}
+	preview := previewAcross(t, server, secretHere)
+	want := []streamPreview{{Stream: "task-1", Rows: 1}, {Stream: "task-2", Rows: 1}, {Stream: "task-3", Error: "task-3 is kept as it is"}}
+	if !slices.Equal(preview.Streams, want) || preview.Rows != 2 {
+		t.Fatalf("the preview: %+v, want 2 rows in %+v", preview, want)
+	}
+	answer := redactAcross(t, server, secretHere)
+	if len(answer.Streams) != 1 || answer.Streams[0].Stream != "task-1" || answer.Rows != 1 {
+		t.Errorf("the redaction rewrote %+v, want only task-1's row", answer)
+	}
+	if want := []string{"task-2: task-2 is kept as it is", "task-3: task-3 is kept as it is"}; !slices.Equal(answer.Warnings, want) {
+		t.Errorf("the redaction warned %q, want %q", answer.Warnings, want)
+	}
+	if got := redactedStreams(t, s); !slices.Equal(got, []string{"task-1"}) {
+		t.Errorf("event.redacted in %q, want only task-1", got)
+	}
+
+	for _, id := range []string{"task-2", "task-3"} {
+		if _, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use " + plantedHere}}); rejection != nil || err != nil {
+			t.Fatalf("renaming %s: %v, %v", id, rejection, err)
+		}
+	}
+	last := s.LastPosition()
+	if preview := previewAcross(t, server, plantedHere); preview.Rows != 1 {
+		t.Fatalf("the preview of a text task-2 and task-3 hold: %+v", preview)
+	}
+	code, body := call(t, server, "POST", "/api/redact", `{"text":"`+plantedHere+`","why":"Pasted."}`)
+	if want := "task-2: task-2 is kept as it is; task-3: task-3 is kept as it is"; code != http.StatusConflict || strings.TrimSpace(body) != want {
+		t.Errorf("redacting a text only refused streams hold: %d %q, want 409 %q", code, body, want)
+	}
+	if s.LastPosition() != last {
+		t.Errorf("the refused redaction wrote up to %d from %d", s.LastPosition(), last)
+	}
+}
+
+// A redaction across the log that can't be is answered as such, and
+// writes nothing: a blank text 400, a text no row holds 409, and the desk
+// 401 on both routes.
+func TestARefusedRedactionAcrossTheLogWritesNothing(t *testing.T) {
+	f := withSecret(t)
+	last := f.log.LastPosition()
+	for _, path := range []string{"/api/redact/preview", "/api/redact"} {
+		for _, blank := range []string{`{}`, `{"text":" \n "}`} {
+			if code, body := call(t, f.server, "POST", path, blank); code != http.StatusBadRequest {
+				t.Errorf("%s %s: %d %s, want 400", path, blank, code, body)
+			}
+		}
+		if code, body := call(t, f.server, "POST", path, `{"text":"nowhere-to-be-found"}`); code != http.StatusConflict || strings.TrimSpace(body) != "no row of the log holds the secret" {
+			t.Errorf("%s a text no row holds: %d %q, want 409", path, code, body)
+		}
+		if code, body := callAs(t, f.server, "desk-secret", "POST", path); code != http.StatusUnauthorized {
+			t.Errorf("the desk on %s: %d %s, want 401", path, code, body)
+		}
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+}
