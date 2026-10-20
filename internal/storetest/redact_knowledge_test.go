@@ -258,3 +258,67 @@ func TestARefusedKnowledgeRedactionChangesNothing(t *testing.T) {
 	}
 	CheckEqual(t, s, state)
 }
+
+// Test 6: a patch whose text no longer holds the secret but whose base did
+// is written again as a full copy, though it keeps part of the secret in
+// its head and tail: "use sek-12 now" on "use sek-1234 now" keeps "use
+// sek-12" and " now", which would rebuild as "use [redac now" on the
+// redacted base, and the state would fold the same wrong text.
+func TestAPatchKeepingPartOfTheSecretIsWrittenAsAFullCopy(t *testing.T) {
+	s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		mustPropose(t, s, p)
+	}
+	const secret = "sek-1234"
+	learnIn(t, s, state, "engineer", "use sek-", true)
+	learnIn(t, s, state, "engineer", "use sek-12", false)
+	held := learnIn(t, s, state, "engineer", "use sek-1234 now", false)
+	kept := learnIn(t, s, state, "engineer", "use sek-12 now", false)
+	if patch := patchAt(t, s, kept); patch.Head != len("use sek-12") || patch.Tail != len(" now") {
+		t.Fatalf("the patch at %d keeps head %d and tail %d, want 10 and 4", kept, patch.Head, patch.Tail)
+	}
+	before := versionsIn(t, s)
+
+	redaction := redact(t, s, events.AgentsStream, secret)
+	if positions := redaction.Numbers("positions"); !slices.Equal(positions, []int64{held, kept}) {
+		t.Errorf("the redaction names %v, want %d and %d", positions, held, kept)
+	}
+	knowledge := []any{"$.knowledge"}
+	if fields := redaction.Data["fields"]; !reflect.DeepEqual(fields, []any{knowledge, knowledge}) {
+		t.Errorf("the redaction names the fields %v, want $.knowledge twice", fields)
+	}
+	checkRedactedFrom(t, before, versionsIn(t, s), held, secret)
+	if newest := eventAt(t, s, kept); agents.IsPatch(newest.Proposal) || newest.Text("knowledge") != "use sek-12 now" {
+		t.Errorf("the newest version is %+v, want a full copy of its text", newest)
+	}
+	CheckEqual(t, s, state)
+	if count, err := s.Matches(events.AgentsStream, secret); count != 0 || err != nil {
+		t.Errorf("%d rows still hold the secret, %v", count, err)
+	}
+}
+
+// patchAt is the patch the agent.learned at position carries.
+func patchAt(t *testing.T, s *store.Store, position int64) agents.Patch {
+	t.Helper()
+	patch, err := agents.PatchOf(eventAt(t, s, position).Proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return patch
+}
+
+// eventAt is the agents stream's event at position.
+func eventAt(t *testing.T, s *store.Store, position int64) events.Event {
+	t.Helper()
+	stream, err := s.Stream(events.AgentsStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range stream {
+		if e.Position == position {
+			return e
+		}
+	}
+	t.Fatalf("no event at %d", position)
+	return events.Event{}
+}

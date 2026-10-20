@@ -30,12 +30,13 @@ type ArchiveBlobs interface {
 // the rows as Redact does, so what Redact would refuse for the rows
 // themselves (no row holds it, a row is a knowledge version, holds it in a
 // key or can't be rewritten leaving the rest as it was, or the reason
-// holds it) is refused before anything is written. Then it unarchives the task (Unarchive), redacts it, with the
-// blobs every task.archived among its rows names in "archives", and
-// archives it again (Archive), summarise reading the state the redaction
-// refolded; each takes the lock for itself, as when called alone, so other
-// events may come between them. Last it deletes those blobs. It writes no
-// snapshot, as Redact doesn't: its caller writes a new one.
+// holds it) is refused before anything is written. Then it unarchives the
+// task (Unarchive), redacts it, with the blobs every task.archived among
+// its rows names in "archives", and archives it again (Archive), summarise
+// reading the state the redaction refolded; each takes the lock for
+// itself, as when called alone, so other events may come between them.
+// Last it deletes those blobs. It writes no snapshot, as Redact doesn't:
+// its caller writes a new one.
 //
 // It returns the redaction or, when nothing is redacted, the rejection.
 // Refused before the unarchiving, or by Unarchive, nothing is written.
@@ -54,7 +55,8 @@ type ArchiveBlobs interface {
 // later run would, and after a refused redaction it holds the secret.
 // When it was refused because another writer archived the task between
 // the steps, a committed redaction is done and comes back with no error,
-// unless an old blob won't delete; a refused one's error says another
+// unless something after the commit fails: an old blob or the one it put
+// won't delete, or the WAL won't empty. A refused one's error says another
 // writer archived the task instead of that it is left unarchived.
 func (s *Store) RedactArchived(stream, secret string, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
 	kept, live, rejection, err := s.archivedRows(stream, blobs)
@@ -145,6 +147,8 @@ func removeRedacted(kept, live []row, blobs Remover) error {
 			return fmt.Errorf("the redaction at %d: %w", r.Position, err)
 		}
 		for _, hash := range redaction.Archives {
+			// A safety net: blobs are named by their content, so none made
+			// after a redaction can be one it named.
 			if slices.Contains(named, hash) {
 				continue
 			}
