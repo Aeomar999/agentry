@@ -1909,6 +1909,73 @@ func TestATeamIsRenamedWithItsTasks(t *testing.T) {
 	}
 }
 
+// A team's coordinator, named in any case, moves to another of its agents
+// with the team's open tasks; a finished task keeps the one it had, and a
+// turn under way holds the move back.
+func TestATeamsCoordinatorMovesWithItsOpenTasks(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-2", Actor: httpapi.You, Type: events.TaskDone,
+		Data: map[string]any{"summary": "Charted.", "moved": true}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	if code, body := call(t, server, "POST", "/api/teams/data/coordinator", `{"agent":" analyst "}`); code != 200 || body != `{"coordinator":"analyst","team":"Data"}`+"\n" {
+		t.Fatalf("moving Data's coordinator: %d %s", code, body)
+	}
+	stream, _ := s.Stream(events.AgentsStream)
+	roster := agents.FromEvents(stream)
+	if lead, ok := roster.Coordinator("Data"); !ok || lead.Name != "analyst" || len(roster.Assignees("Data")) != 2 {
+		t.Errorf("Data's coordinator is %+v, %v, want analyst with two others", lead, ok)
+	}
+	coordinatorOf := func(id string) string {
+		_, body := call(t, server, "GET", "/api/tasks/"+id, "")
+		var detail taskDetail
+		json.Unmarshal([]byte(body), &detail)
+		return detail.Coordinator
+	}
+	if open, done := coordinatorOf("task-1"), coordinatorOf("task-2"); open != "analyst" || done != "data-lead" {
+		t.Errorf("the open task is analyst's, not %q; the done one data-lead's, not %q", open, done)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the visits","team":"Data"}`)
+	if got := coordinatorOf("task-3"); got != "analyst" {
+		t.Errorf("a new task for Data goes to analyst, not %q", got)
+	}
+
+	for _, c := range []struct {
+		team, agent string
+		code        int
+		reason      string
+	}{
+		{"Numbers", "charter", http.StatusNotFound, "there is no team called Numbers"},
+		{"Data", "nobody", http.StatusNotFound, "no agent called nobody"},
+		{"Data", "tech-lead", http.StatusConflict, "tech-lead is in the Software team, not Data"},
+		{"Data", "analyst", http.StatusConflict, "analyst coordinates the Data team already"},
+	} {
+		code, body := call(t, server, "POST", "/api/teams/"+c.team+"/coordinator", `{"agent":"`+c.agent+`"}`)
+		if code != c.code || !strings.Contains(body, c.reason) {
+			t.Errorf("moving %s's coordinator to %s: %d %s, want %d %s", c.team, c.agent, code, body, c.code, c.reason)
+		}
+	}
+
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "analyst", "hash": "h"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"charter"}`); code != http.StatusConflict || !strings.Contains(body, "while task-1 has analyst or charter at work") {
+		t.Errorf("moving it during analyst's turn: %d %s, want 409", code, body)
+	}
+}
+
 // An agent sent with no team joins the default team, as agents from before
 // teams do, and once Software is respelled it joins the respelled team, not a
 // coordinator-less twin of it.

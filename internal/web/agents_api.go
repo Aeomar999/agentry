@@ -104,6 +104,56 @@ func (s *Server) renameTeam(w http.ResponseWriter, r *http.Request) {
 	httpapi.Reply(w, map[string]string{"team": team, "to": to})
 }
 
+// moveCoordinator makes another agent of a team, named in any case, its
+// coordinator, and hands it the team's open tasks; finished ones keep the
+// coordinator they had. It waits while either agent is at work on a task,
+// as a turn under way goes on as the agent it started as.
+func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Agent string }
+	if !httpapi.Decode(w, r, &request) {
+		return
+	}
+	roster, err := s.roster()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	team, to := roster.TeamNamed(r.PathValue("team")), strings.TrimSpace(request.Agent)
+	if team == "" {
+		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
+		return
+	}
+	if _, ok := roster.Get(to); !ok {
+		http.Error(w, "no agent called "+to, http.StatusNotFound)
+		return
+	}
+	var leads []string // an old log can have left a team two
+	for _, agent := range roster {
+		if agent.Coordinates && agent.TeamName() == team {
+			leads = append(leads, agent.Name)
+		}
+	}
+	involved := append(slices.Clone(leads), to)
+	if busy := s.atWork(involved...); len(busy) > 0 {
+		http.Error(w, "the "+team+" team's coordinator can't move while "+strings.Join(busy, ", ")+" has "+strings.Join(involved, " or ")+" at work: try again once that turn ends",
+			http.StatusConflict)
+		return
+	}
+	if !httpapi.ProposeOrRefuse(w, s.store, agents.CoordinatorMoving(team, to, httpapi.You)) {
+		return
+	}
+	for _, task := range s.state.Tasks() {
+		if task.IsDone || !slices.Contains(leads, task.Coordinator) {
+			continue
+		}
+		if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.CoordinatorMoved,
+			Data: map[string]any{"from": task.Coordinator, "to": to}}) {
+			return
+		}
+	}
+	httpapi.Reply(w, map[string]string{"team": team, "coordinator": to})
+}
+
 // removeTeam removes a team and all its agents, its coordinator last, once
 // no unfinished task needs any of them. The last team stays: every task
 // needs a coordinator.
@@ -170,6 +220,22 @@ func (s *Server) needing(names ...string) ([]string, error) {
 		}
 	}
 	return busy, nil
+}
+
+// atWork lists the unfinished tasks one of the agents works on now, or is
+// about to as other than the task's coordinator.
+func (s *Server) atWork(names ...string) []string {
+	var busy []string
+	for _, task := range s.state.Tasks() {
+		open, next := task.OpenTurn(), task.Handoff
+		switch {
+		case task.IsDone:
+		case open != nil && slices.Contains(names, open.Agent),
+			next != nil && next.To != task.Coordinator && slices.Contains(names, next.To):
+			busy = append(busy, task.ID)
+		}
+	}
+	return busy
 }
 
 // teamTemplates are the teams you can add, each agent with what a team made
