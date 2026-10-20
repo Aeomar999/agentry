@@ -25,7 +25,7 @@ var asAnAgent = allOf(nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, colum
 // AddTeam gives it when the name is taken: "-99" still fits the agent rules.
 const templateAgentNameLimit = 28
 
-func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
+func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
 	switch team := p.Text("team"); {
 	case strings.TrimSpace(team) == "":
 		return "a template needs a team name"
@@ -39,6 +39,11 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	}
 	if reason := CheckTemplateID(p.Text("id")); reason != "" {
 		return reason
+	}
+	if p.Flag("new") {
+		if reason := notYoursYet(saved, p.Text("team"), p.Text("id")); reason != "" {
+			return reason
+		}
 	}
 	members, err := agents.TemplateAgents(p.Data)
 	if err != nil {
@@ -68,6 +73,22 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 	}
 	if coordinators != 1 {
 		return "a template has exactly one coordinator"
+	}
+	return ""
+}
+
+// notYoursYet refuses a new template, saved from a team, a name or id one of
+// yours has: the web checks before saving too, and this keeps two saves at
+// once from both passing it, the second replacing the first. Only Propose
+// runs it, so older logs holding a save that replaced one still replay.
+func notYoursYet(saved agents.UserTemplates, team, id string) string {
+	for _, yours := range saved {
+		switch {
+		case strings.EqualFold(yours.Team, team):
+			return "you have a template called " + yours.Team + " already"
+		case yours.ID == id:
+			return "your template " + yours.Team + " has the id " + id
+		}
 	}
 	return ""
 }

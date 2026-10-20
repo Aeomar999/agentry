@@ -22,7 +22,8 @@ import (
 // unless given, comes from the name and is always one a template may have.
 // A name you or Agentry have a template called already, in any case, or an
 // id given that one of yours has, is refused with a 409: saving never
-// replaces a template.
+// replaces a template. The rules refuse it too, for a save that came in at
+// the same time; that refusal is the same 409.
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Name, ID, Description string }
 	if !httpapi.Decode(w, r, &request) {
@@ -38,29 +39,37 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
 		return
 	}
-	name := cmp.Or(strings.TrimSpace(request.Name), team)
-	if taken := s.templateCalled(name); taken != "" {
+	name, id := cmp.Or(strings.TrimSpace(request.Name), team), strings.TrimSpace(request.ID)
+	if taken := s.templateTaken(name, id); taken != "" {
 		http.Error(w, taken, http.StatusConflict)
 		return
 	}
-	id := strings.TrimSpace(request.ID)
 	if id == "" {
 		id = templateIDFor(name, s.templateIDTaken)
-	} else if yours, taken := s.state.Templates().WithID(id); taken {
-		http.Error(w, yoursCalled(yours.Team), http.StatusConflict)
-		return
 	}
 	proposal, err := agents.SaveTemplate(roster, team, name, id, strings.TrimSpace(request.Description), httpapi.You)
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
 	}
-	s.proposeTemplate(w, proposal, id)
+	s.proposeTemplate(w, proposal, id, func() string { return s.templateTaken(name, id) })
 }
 
-// templateCalled is why name can't be a new template's, in the words the
-// page shows under its name, or "" when it can: a template, yours or
-// built in, already has it in any case.
+// templateTaken is why a new template can't be called name or have id (""
+// for one still to be made), in the words the page shows under its name, or
+// "" when it can.
+func (s *Server) templateTaken(name, id string) string {
+	if taken := s.templateCalled(name); taken != "" {
+		return taken
+	}
+	if yours, taken := s.state.Templates().WithID(id); id != "" && taken {
+		return yoursCalled(yours.Team)
+	}
+	return ""
+}
+
+// templateCalled is why name can't be a new template's, or "" when it can:
+// a template, yours or built in, already has it in any case.
 func (s *Server) templateCalled(name string) string {
 	if builtIn, ok := agents.TemplateNamed(name); ok {
 		return builtIn.Team + " is a built-in template. Pick another name."
@@ -108,15 +117,19 @@ func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	template.Team, template.Description = strings.TrimSpace(template.Team), strings.TrimSpace(template.Description)
-	s.proposeTemplate(w, template.Save(httpapi.You), template.ID)
+	s.proposeTemplate(w, template.Save(httpapi.You), template.ID, nil)
 }
 
 // proposeTemplate writes a template.saved and replies with the template
-// saved, or with the rules' refusal as a 400.
-func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal, id string) {
+// saved, or with the rules' refusal as a 400. taken, if given, words a
+// refusal as a 409 when a template has its name or id by then.
+func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal, id string, taken func() string) {
 	switch _, rejection, err := s.store.Propose(proposal); {
 	case err != nil:
 		httpapi.Failed(w, err)
+		return
+	case rejection != nil && taken != nil && taken() != "":
+		http.Error(w, taken(), http.StatusConflict)
 		return
 	case rejection != nil:
 		http.Error(w, rejection.Reason, http.StatusBadRequest)

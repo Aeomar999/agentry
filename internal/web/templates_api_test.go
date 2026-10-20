@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -153,6 +154,34 @@ func TestATemplateNameOrIDTakenIsRefused(t *testing.T) {
 	}
 	if saved, _ := savedTemplates(t, s).WithID("my-planning"); saved.Description != "Ours." {
 		t.Errorf("the template stays as it was: %+v", saved)
+	}
+}
+
+// Saves sent at once can all pass the check before saving; the rules then
+// refuse all but the first, which the page hears as the same 409.
+func TestSavesOfOneNameAtOnceKeepTheFirst(t *testing.T) {
+	server, s := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	const saves = 20
+	codes, bodies := make([]int, saves), make([]string, saves)
+	var wg sync.WaitGroup
+	for i := range saves {
+		wg.Go(func() {
+			codes[i], bodies[i] = call(t, server, "POST", "/api/teams/Planning/template", `{"name":"My Planning"}`)
+		})
+	}
+	wg.Wait()
+	saved := 0
+	for i, code := range codes {
+		switch {
+		case code == 200:
+			saved++
+		case code != http.StatusConflict || strings.TrimSpace(bodies[i]) != "You have a template called My Planning already. Pick another name.":
+			t.Errorf("save %d: %d %s", i, code, bodies[i])
+		}
+	}
+	if stream, _ := s.Stream(events.TemplatesStream); saved != 1 || len(stream) != 1 {
+		t.Errorf("%d saves answered as saved and %d written, want one", saved, len(stream))
 	}
 }
 

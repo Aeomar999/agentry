@@ -94,6 +94,50 @@ func TestATemplateCantTakeABuiltInID(t *testing.T) {
 	}
 }
 
+// newTemplate is savingTemplate as a save from a team makes it: never
+// replacing one of yours.
+func newTemplate(id, team string) events.Proposal {
+	p := savingTemplate(id, team, research())
+	p.Data["new"] = true
+	return p
+}
+
+// Two saves sent at once both pass the web's check, so the rules refuse the
+// second, by name in any case or by id, and the first stays.
+func TestANewTemplateTakesNoNameOrIDOfYours(t *testing.T) {
+	for _, second := range []struct {
+		name string
+		p    events.Proposal
+		want string
+	}{
+		{"the same name", newTemplate("papers-2", "Readers"), "you have a template called Readers already"},
+		{"the name in another case", newTemplate("papers-2", "READERS"), "you have a template called Readers already"},
+		{"the same id", newTemplate("papers", "Others"), "your template Readers has the id papers"},
+	} {
+		t.Run(second.name, func(t *testing.T) {
+			s := openSeeded(t)
+			if _, rejection, err := s.Propose(newTemplate("papers", "Readers")); rejection != nil || err != nil {
+				t.Fatalf("the first save: %v %v", rejection, err)
+			}
+			_, rejection, err := s.Propose(second.p)
+			if err != nil || rejection == nil || rejection.Reason != second.want {
+				t.Errorf("the second save: %v %v, want refused with %q", rejection, err, second.want)
+			}
+		})
+	}
+}
+
+// An import replaces the template with its id, and a save already in the
+// log replays as it did, so only a new save is refused.
+func TestASaveThatIsntNewReplacesTheTemplateWithItsID(t *testing.T) {
+	s := openSeeded(t)
+	for _, p := range []events.Proposal{newTemplate("papers", "Readers"), savingTemplate("papers", "Readers", research())} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("save: %v %v", rejection, err)
+		}
+	}
+}
+
 func TestATemplateIDIsLowercaseLettersDigitsAndDashes(t *testing.T) {
 	for _, id := range []string{" research", "My Team", "Papers", "a/b", "papers-" + strings.Repeat("a", 25)} {
 		t.Run(id, func(t *testing.T) {

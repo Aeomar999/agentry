@@ -45,7 +45,9 @@ func SaveTemplate(roster Roster, team, name, id, description string, by events.A
 	if len(members) == 0 {
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
-	return UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team}.Save(by), nil
+	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team}.Save(by)
+	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
+	return saving, nil
 }
 
 // Save is the event that saves u, as SaveTemplate's does: the rules check
