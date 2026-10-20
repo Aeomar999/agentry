@@ -15,6 +15,10 @@ export interface CodeViewerProps {
   onChange?: (text: string) => void; // makes it editable
   readOnly?: boolean; // editable, but not for now, as while a form saves
   placeholder?: string; // shown while the text is empty
+  // For an editor that is one field among others, as in the team panel:
+  // Tab moves to the next field, and the wheel scrolls past it.
+  tabFocusMode?: boolean;
+  alwaysConsumeMouseWheel?: boolean;
 }
 
 const MonacoView = lazy(() => import("./MonacoView"));

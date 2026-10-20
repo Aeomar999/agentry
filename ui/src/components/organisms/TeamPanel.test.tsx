@@ -12,10 +12,11 @@ import { AgentsPage } from "@/pages/AgentsPage";
 
 vi.mock("@/api/client", async (actual) => ({ ...(await actual<typeof import("@/api/client")>()), api: vi.fn() }));
 
-// Monaco doesn't run in jsdom: the prompt is a plain box here.
+// Monaco doesn't run in jsdom: the prompt is a plain box here, which
+// keeps the editor's options it was given.
 vi.mock("@/components/molecules/CodeViewer", () => ({
-  CodeViewer: ({ text, onChange, readOnly }: { text: string; onChange: (text: string) => void; readOnly?: boolean }) => (
-    <textarea value={text} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} />
+  CodeViewer: ({ text, onChange, readOnly, ...options }: { text: string; onChange: (text: string) => void; readOnly?: boolean }) => (
+    <textarea value={text} readOnly={readOnly} onChange={(e) => onChange(e.target.value)} data-options={JSON.stringify(options)} />
   ),
 }));
 
@@ -339,6 +340,19 @@ describe("New team: agents", () => {
     fireEvent.click(second);
     expect(liveRegion().textContent).toBe("");
     await said("New agent removed. Undo is next.");
+  });
+
+  test("the prompt editor is 8 to 24 lines, and lets Tab move on and the wheel scroll the panel", () => {
+    openAt("/agents?team=new&template=writing");
+    const prompt = within(panel()).getByRole("group", { name: "Prompt" }).querySelector("textarea")!;
+    expect(JSON.parse(prompt.dataset.options!)).toEqual({
+      language: "markdown",
+      minHeight: 180,
+      maxHeight: 500,
+      tabFocusMode: true,
+      alwaysConsumeMouseWheel: false,
+      placeholder: "Empty: it uses Agentry's coordinator prompt for a team of these agents.",
+    });
   });
 
   test("the coordinator is one radio group across the rows", () => {

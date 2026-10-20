@@ -13,6 +13,8 @@ export default function MonacoView({
   onChange,
   readOnly = false,
   placeholder,
+  tabFocusMode = false,
+  alwaysConsumeMouseWheel = true,
 }: CodeViewerProps) {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -38,7 +40,8 @@ export default function MonacoView({
       overviewRulerLanes: 0,
       hideCursorInOverviewRuler: true,
       padding: { top: 10, bottom: 10 },
-      scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8, useShadows: false },
+      tabFocusMode,
+      scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8, useShadows: false, alwaysConsumeMouseWheel },
       contextmenu: false,
     });
     editor.current = instance;
@@ -60,7 +63,7 @@ export default function MonacoView({
       instance.dispose();
       editor.current = null;
     };
-  }, [language, editable, maxHeight, minHeight]); // made once; new text arrives below
+  }, [language, editable, maxHeight, minHeight, tabFocusMode, alwaysConsumeMouseWheel]); // made once; new text arrives below
 
   useEffect(() => {
     if (editor.current && editor.current.getValue() !== text) editor.current.setValue(text);

@@ -173,8 +173,10 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
           <CodeViewer
             text={agent.prompt}
             language="markdown"
-            minHeight={180}
-            maxHeight={500}
+            minHeight={180} // 8 lines
+            maxHeight={500} // 24 lines
+            tabFocusMode
+            alwaysConsumeMouseWheel={false}
             readOnly={saving}
             placeholder={agent.coordinates ? "Empty: it uses Agentry's coordinator prompt for a team of these agents." : undefined}
             onChange={(prompt) => onChange({ prompt })}
