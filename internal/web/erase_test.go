@@ -16,6 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -50,8 +51,9 @@ type eraseFixture struct {
 	snapshots *current.SnapshotWriter
 	web       *Server
 	server    *httptest.Server
-	stopped   []string // the sessions ended, and whether each task was erased already
-	own, both string   // the blobs of task-2's files
+	hooks     *hooks.Handler // ends turns, as their hooks' calls do
+	stopped   []string       // the sessions ended, and whether each task was erased already
+	own, both string         // the blobs of task-2's files
 }
 
 func newEraseFixture(t *testing.T) *eraseFixture {
@@ -71,8 +73,9 @@ func newEraseFixture(t *testing.T) *eraseFixture {
 		}
 		f.stopped = append(f.stopped, task)
 	}
+	f.hooks = hooks.NewHandler(f.log, f.state, nil)
 	f.web = NewServer(f.log, f.state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r",
-		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop}, http.NotFoundHandler(), nil)
+		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop, Redactions: f.hooks.Redactions()}, http.NotFoundHandler(), nil)
 	f.server = httptest.NewServer(f.web.Handler())
 	t.Cleanup(f.server.Close)
 

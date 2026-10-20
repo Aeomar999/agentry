@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
@@ -53,6 +54,7 @@ type Config struct {
 	Push        *webpush.Store               // the VAPID keys and the browsers subscribed to pushes; nil for none
 	StopSession func(task string)            // ends a task's agent session, wherever it runs (turns.Runner.Stop); nil for none
 	Snapshots   *current.SnapshotWriter      // writes the state's snapshot; nil for none
+	Redactions  *hooks.Redactions            // the secrets redacted from the agents' knowledge, for the turns running then; nil for none
 
 	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its routes; nil for none
 }

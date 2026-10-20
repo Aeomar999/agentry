@@ -22,8 +22,11 @@ type redacted struct {
 }
 
 // stillRunning is the warning a redaction of the agents' knowledge gives
-// while a running turn can write the secret back.
-const stillRunning = "an agent whose turn is running wrote its knowledge file as the turn started, and may write the secret back as it ends: redact again after any turn that was running ends"
+// while a turn that was running as it committed is still to end: the turn's
+// end redacts the secret again from what the agent learned, but only this
+// server remembers it, so a restart before then would let the turn write
+// it back.
+const stillRunning = "an agent whose turn is running wrote its knowledge file, secret and all, as the turn started: its end redacts it again, unless Agentry restarts first, so if it does, redact again after any turn that was running ends"
 
 // previewRedaction is how many of a task's rows hold the text you marked,
 // which the page shows you before you redact it (docs/design/log-growth.md
@@ -94,17 +97,25 @@ func (s *Server) previewAgentsRedaction(w http.ResponseWriter, r *http.Request) 
 // knowledge is in every version after it was written, and Store.Redact
 // rewrites each one that holds it as a full copy of its redacted text.
 //
-// It can be undone for now, so the answer says so: an agent whose turn is
-// running wrote its knowledge file as the turn started, secret and all,
-// and the turn's end writes what the file then holds back as its new
-// knowledge (step 10d2b2 of the design's plan stops that).
+// An agent whose turn is running wrote its knowledge file as the turn
+// started, secret and all, and the turn's end keeps what the file then
+// holds as its new knowledge. So the secret is held, in memory only, for
+// the turns running as the redaction commits, whose ends redact it again
+// (hooks.Redactions); from before it commits, so a turn ending meanwhile
+// is caught too.
 func (s *Server) redactAgents(w http.ResponseWriter, r *http.Request) {
 	text, why, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
+	settle := s.config.Redactions.Hold(text)
 	redaction, rejection, err := s.store.Redact(events.AgentsStream, text, httpapi.You, why)
-	s.answerRedaction(w, events.AgentsStream, redaction, rejection, err, stillRunning)
+	settle(redaction.Position != 0)
+	var warnings []string
+	if s.config.Redactions.Holds(text) {
+		warnings = append(warnings, stillRunning)
+	}
+	s.answerRedaction(w, events.AgentsStream, redaction, rejection, err, warnings...)
 }
 
 // secretOf is the text a redaction or its preview names and the reason

@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -26,14 +27,19 @@ import (
 type Judge func(profile string, call policy.Call) policy.Verdict
 
 type Handler struct {
-	store *store.Store   // where it records what agents do
-	state *current.State // the tasks and agents it reads
-	judge Judge
+	store      *store.Store   // where it records what agents do
+	state      *current.State // the tasks and agents it reads
+	judge      Judge
+	redactions *Redactions // the secrets to redact again from what running turns learn
 }
 
 func NewHandler(s *store.Store, state *current.State, judge Judge) *Handler {
-	return &Handler{store: s, state: state, judge: judge}
+	return &Handler{store: s, state: state, judge: judge, redactions: newRedactions(state)}
 }
+
+// Redactions is where a redaction of the agents' knowledge holds its secret
+// for the turns running as it commits.
+func (h *Handler) Redactions() *Redactions { return h.redactions }
 
 var ruleset = events.Actor{Kind: events.Policy, ID: "rules"}
 
@@ -129,8 +135,26 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 		return
 	}
 	h.store.Propose(p)
-	if signal.Kind == engines.TurnEnded && call.Ending != nil && call.Ending.Knowledge != nil {
-		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(*call.Ending.Knowledge))
+	if signal.Kind == engines.TurnEnded {
+		h.endTurn(call)
+	}
+}
+
+// endTurn keeps what the agent left in its knowledge file, if the hook could
+// read it, with each secret you redacted while the turn ran redacted again.
+// If one would still show, none of it is kept.
+func (h *Handler) endTurn(call hookcall.Call) {
+	var learned string
+	if call.Ending != nil && call.Ending.Knowledge != nil {
+		learned = strings.ToValidUTF8(*call.Ending.Knowledge, "\uFFFD") // as recordWhatWasLearned reads it
+	}
+	learned, clean := h.redactions.Ended(Turn{call.Task, call.Turn}, learned)
+	switch {
+	case call.Ending == nil || call.Ending.Knowledge == nil:
+	case !clean:
+		slog.Warn("hooks: a redacted secret would still show in what a turn learned, so none of it is kept", "task", call.Task, "turn", call.Turn)
+	default:
+		h.recordWhatWasLearned(call.Agent, strings.TrimSpace(learned))
 	}
 }
 

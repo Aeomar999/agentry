@@ -320,12 +320,13 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	})
 	defer desk.Stop()
 
+	hookHandler := hooks.NewHandler(log, state, agentPolicy.Decide)
 	server := web.NewServer(log, state, web.Config{UIToken: uiToken, DeskToken: deskToken, HelperToken: helperToken, Helper: helperTerminal,
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push, StopSession: runner.Stop, Snapshots: snapshots},
-		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
+		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push, StopSession: runner.Stop, Snapshots: snapshots,
+		Redactions: hookHandler.Redactions()}, hooks.HTTP(hookHandler, hookToken), taskTerminal)
 	startPush(ctx, log, push, o.publicURL, func() []features.Waiting { return server.Waiting("") })
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,

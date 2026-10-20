@@ -1,0 +1,142 @@
+package hooks
+
+import (
+	"context"
+	"testing"
+
+	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
+	"gitlab.com/dev.chempa/agentry/internal/store"
+)
+
+const secret = "sk-live-7f3a90b2"
+
+// startAnotherTurn opens task-2 with its coordinator's turn-1 running.
+func startAnotherTurn(t *testing.T, s *store.Store) {
+	t.Helper()
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "t", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": t.TempDir(), "branch": "b2", "port": 7902}},
+		{Stream: "task-2", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+}
+
+// endTurn ends the task's turn as its hook does, with learned in the
+// agent's knowledge file.
+func endTurn(h *Handler, task, turn, agent, learned string) {
+	h.Handle(context.Background(), hookcall.Call{Task: task, Turn: turn, Agent: agent, Engine: "claude", Event: "Stop",
+		Payload: []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
+}
+
+// A turn that starts after the redaction wrote its knowledge file from the
+// redacted text, so what it learns is kept as it is, even the secret
+// written anew. The secret is held until turn-2, running as it was
+// redacted, ends, though its end carries no knowledge.
+func TestATurnStartedAfterARedactionKeepsWhatItLearned(t *testing.T) {
+	s, state := engineerAtWorkIn(t, t.TempDir())
+	h := NewHandler(s, state, judgeByCommand)
+	h.Redactions().Hold(secret)(true)
+	startAnotherTurn(t, s)
+
+	endTurn(h, "task-2", "turn-1", "tech-lead", "The key is "+secret+".")
+	if lead, _ := state.Roster().Get("tech-lead"); lead.Knowledge != "The key is "+secret+"." {
+		t.Errorf("the tech lead, whose turn started after the redaction, knows %q", lead.Knowledge)
+	}
+	if !h.Redactions().Holds(secret) {
+		t.Fatal("the secret was let go before turn-2, running as it was redacted, ended")
+	}
+	stop := hookCall("Stop", `{"hook_event_name":"Stop","last_assistant_message":"Done."}`)
+	h.Handle(context.Background(), stop)
+	if h.Redactions().Holds(secret) {
+		t.Error("the secret is still held after every turn running as it was redacted ended")
+	}
+}
+
+// Both turns run as the secret is redacted. task-2's ends without its hook
+// (as when the session dies): the secret is let go once the state shows
+// it ended and the other turn's end comes in, and that turn's text is
+// redacted again.
+func TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded(t *testing.T) {
+	s, state := engineerAtWork(t)
+	startAnotherTurn(t, s)
+	r := NewHandler(s, state, judgeByCommand).Redactions()
+	r.Hold(secret)(true)
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-2", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1",
+		Data: map[string]any{"agent": "tech-lead", "report": "r"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if !r.Holds(secret) {
+		t.Fatal("the secret was let go while turn-2 still runs")
+	}
+	if learned, clean := r.Ended(Turn{"task-1", "turn-2"}, "a "+secret+" b "+secret); !clean || learned != "a [redacted] b [redacted]" {
+		t.Errorf("turn-2's text redacted again: %q, %v", learned, clean)
+	}
+	if r.Holds(secret) {
+		t.Error("the secret is still held after both turns ended")
+	}
+}
+
+// A turn that starts while the redaction commits wrote its knowledge file
+// from the text as it was, so it is held too.
+func TestATurnStartedAsTheRedactionCommitsIsHeldToo(t *testing.T) {
+	s, state := engineerAtWork(t)
+	r := NewHandler(s, state, judgeByCommand).Redactions()
+	settle := r.Hold(secret)
+	startAnotherTurn(t, s)
+	settle(true)
+	if learned, _ := r.Ended(Turn{"task-2", "turn-1"}, "The key is "+secret+"."); learned != "The key is [redacted]." {
+		t.Errorf("task-2's turn, started as the redaction committed: %q", learned)
+	}
+}
+
+// A redaction that doesn't commit, as when no row holds the secret since
+// an earlier one redacted it, lets go of the turns its own hold added and
+// no other: turn-2 is still held for the earlier redaction.
+func TestARedactionThatDoesNotCommitLetsGoOnlyOfItsOwnHold(t *testing.T) {
+	s, state := engineerAtWork(t)
+	r := NewHandler(s, state, judgeByCommand).Redactions()
+	r.Hold(secret)(true)
+	startAnotherTurn(t, s)
+	r.Hold(secret)(false)
+	if !r.Holds(secret) {
+		t.Fatal("the refused redaction let go of the earlier one's hold")
+	}
+	if learned, _ := r.Ended(Turn{"task-2", "turn-1"}, "The key is "+secret+"."); learned != "The key is "+secret+"." {
+		t.Errorf("task-2's turn, held only by the refused redaction, had its text changed: %q", learned)
+	}
+	if learned, _ := r.Ended(Turn{"task-1", "turn-2"}, "The key is "+secret+"."); learned != "The key is [redacted]." {
+		t.Errorf("turn-2's text: %q", learned)
+	}
+
+	r.Hold("never-redacted")(false)
+	if r.Holds("never-redacted") {
+		t.Error("a redaction that never committed is still held")
+	}
+}
+
+// A secret that would show again next to the marker, as the store refuses
+// to leave it, makes the turn's end keep nothing it learned.
+func TestASecretThatWouldStillShowKeepsNothingTheTurnLearned(t *testing.T) {
+	s, state := engineerAtWorkIn(t, t.TempDir())
+	h := NewHandler(s, state, judgeByCommand)
+	h.recordWhatWasLearned("engineer", "Use gofmt.")
+	h.Redactions().Hold("d]x")(true)
+	endTurn(h, "task-1", "turn-2", "engineer", "Use gofmt.\nd]xx")
+	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt." {
+		t.Errorf("the engineer knows %q, want what it knew before the turn", engineer.Knowledge)
+	}
+}
+
+// Without a hooks handler, as in a test of the routes, nothing is held.
+func TestNoRedactionsHoldNothing(t *testing.T) {
+	var r *Redactions
+	r.Hold(secret)(true)
+	if r.Holds(secret) {
+		t.Error("nil Redactions holds a secret")
+	}
+}

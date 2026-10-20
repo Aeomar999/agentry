@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 )
 
@@ -139,26 +141,70 @@ func TestRedactingAnArchivedTaskLeavesNoTraceOnDisk(t *testing.T) {
 	}
 }
 
-// A secret in an agent's knowledge is redacted from the agents' stream,
-// every version that holds it, and the answer says a running turn can
-// write it back.
-func TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk(t *testing.T) {
-	f := newEraseFixture(t)
-	for _, knowledge := range []string{"# Notes\n\nThe key is " + secretHere + ".", "# Notes\n\nThe key is " + secretHere + ".\n\nDeploy on Fridays."} {
-		body, _ := json.Marshal(map[string]string{"knowledge": knowledge})
+// teach has the engineer know each version of knowledge in turn, through
+// the page.
+func (f *eraseFixture) teach(t *testing.T, knowledge ...string) {
+	t.Helper()
+	for _, text := range knowledge {
+		body, _ := json.Marshal(map[string]string{"knowledge": text})
 		if code, answer := call(t, f.server, "PUT", "/api/agents/engineer/knowledge", string(body)); code != http.StatusOK {
 			t.Fatalf("teaching the engineer: %d %s", code, answer)
 		}
 	}
+}
+
+// A secret in an agent's knowledge is redacted from the agents' stream,
+// every version that holds it. With no turn running, nothing can write it
+// back, so the answer warns of nothing.
+func TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk(t *testing.T) {
+	f := newEraseFixture(t)
+	f.teach(t, "# Notes\n\nThe key is "+secretHere+".", "# Notes\n\nThe key is "+secretHere+".\n\nDeploy on Fridays.")
 	f.holdsSecret(t, "state.snapshot")
 	rows := f.preview(t, "/api/agents/redact", secretHere)
-	f.redactedFromDisk(t, f.redactAt(t, "/api/agents/redact", secretHere), events.AgentsStream, rows, stillRunning)
-	if !strings.Contains(stillRunning, "redact again after any turn that was running ends") {
-		t.Errorf("the warning %q doesn't say to redact again", stillRunning)
-	}
+	f.redactedFromDisk(t, f.redactAt(t, "/api/agents/redact", secretHere), events.AgentsStream, rows)
 	engineer, _ := f.state.Roster().Get("engineer")
 	if want := "# Notes\n\nThe key is [redacted].\n\nDeploy on Fridays."; engineer.Knowledge != want {
 		t.Errorf("the engineer's knowledge: %q, want %q", engineer.Knowledge, want)
+	}
+}
+
+// The engineer's turn starts, with its knowledge file holding the secret,
+// and you redact the secret while it runs: the answer says the turn's end
+// will redact it again, and it does. The turn ends with the file as it
+// started plus a line the engineer learned; the newest version keeps the
+// line, and no file holds the secret, nor does the server remember it.
+// storetest's cleanup checks the agents' stream replays to the state.
+func TestATurnRunningAsTheAgentsAreRedactedDoesNotWriteTheSecretBack(t *testing.T) {
+	f := newEraseFixture(t)
+	written := "# Notes\n\nThe key is " + secretHere + "."
+	f.teach(t, written)
+	f.propose(t,
+		events.Proposal{Stream: "task-1", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": t.TempDir(), "branch": "b", "port": 7901}},
+		events.Proposal{Stream: "task-1", Actor: machine, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "engineer", "hash": "h"}},
+	)
+	rows := f.preview(t, "/api/agents/redact", secretHere)
+	answer := f.redactAt(t, "/api/agents/redact", secretHere)
+	if !slices.Equal(answer.Warnings, []string{stillRunning}) {
+		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
+	}
+
+	learned := written + "\n\nDeploy on Fridays.\n"
+	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: "turn-1", Agent: "engineer", Engine: "claude", Event: "Stop",
+		Payload: json.RawMessage(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
+
+	engineer, _ := f.state.Roster().Get("engineer")
+	if want := "# Notes\n\nThe key is [redacted].\n\nDeploy on Fridays."; engineer.Knowledge != want {
+		t.Errorf("the engineer's knowledge after the turn: %q, want %q", engineer.Knowledge, want)
+	}
+	if task, _ := f.state.Task("task-1"); task.OpenTurn() != nil {
+		t.Errorf("turn-1 should have ended: %+v", task.OpenTurn())
+	}
+	if err := f.snapshots.WriteNow(); err != nil {
+		t.Fatal(err)
+	}
+	f.redactedFromDisk(t, answer, events.AgentsStream, rows, stillRunning)
+	if f.hooks.Redactions().Holds(secretHere) {
+		t.Error("the secret is still held after the only turn running as it was redacted ended")
 	}
 }
 
