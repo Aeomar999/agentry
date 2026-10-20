@@ -211,6 +211,66 @@ func TestErasingAnArchivedTaskLeavesNoTraceOnDisk(t *testing.T) {
 	}
 }
 
+// A task that can't be read, here the asker whose archive blob is lost,
+// doesn't keep the copies in the tasks after it: the epic's are redacted,
+// and the answer warns that copies may stay, naming the one passed over.
+func TestErasingRedactsPastATaskThatCantBeRead(t *testing.T) {
+	f := newEraseFixture(t)
+	f.done(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-1", f.blobs)
+	if err := f.blobs.Remove(markerOf(t, f, "task-1")); err != nil {
+		t.Fatal(err)
+	}
+	answer := f.erase(t, "task-2")
+	if !slices.ContainsFunc(answer.Warnings, func(w string) bool {
+		return strings.Contains(w, "its words may stay") && strings.Contains(w, "task-1:")
+	}) {
+		t.Errorf("the warnings %q should say task-1 can't be read", answer.Warnings)
+	}
+	for _, kind := range []events.Type{events.StoryDone, events.StoryAdded} {
+		for _, field := range []string{"summary", "title"} {
+			for _, text := range textIn(t, f, "task-3", kind, field) {
+				if strings.Contains(text, plantedHere) {
+					t.Errorf("the epic's %s %s still holds the erased task's words: %q", kind, field, text)
+				}
+			}
+		}
+	}
+}
+
+// An archived task opened from the page before it is erased is dropped
+// from the cache of opened archives, which held its words in memory; its
+// asker, opened too, is kept.
+func TestErasingForgetsAnOpenedArchivedTask(t *testing.T) {
+	f := newEraseFixture(t)
+	f.done(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+	storetest.ArchiveIn(t, f.log, f.state, "task-1", f.blobs)
+	for _, id := range []string{"task-2", "task-1"} {
+		if code, body := call(t, f.server, "GET", "/api/tasks/"+id, ""); code != http.StatusOK {
+			t.Fatalf("opening %s: %d %s", id, code, body)
+		}
+	}
+	if got := f.opened(); !slices.Equal(got, []string{"task-2", "task-1"}) {
+		t.Fatalf("opened archives %q, want task-2 and task-1", got)
+	}
+	f.erase(t, "task-2")
+	if got := f.opened(); slices.Contains(got, "task-2") {
+		t.Errorf("opened archives after the erasure %q, want no task-2", got)
+	}
+}
+
+// opened is the streams the cache of opened archives keeps, oldest first.
+func (f *eraseFixture) opened() []string {
+	f.web.archives.mu.Lock()
+	defer f.web.archives.mu.Unlock()
+	var streams []string
+	for _, o := range f.web.archives.recent {
+		streams = append(streams, o.stream)
+	}
+	return streams
+}
+
 func markerOf(t *testing.T, f *eraseFixture, id string) string {
 	t.Helper()
 	live, err := f.log.Log(id)

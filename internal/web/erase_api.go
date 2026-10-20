@@ -176,19 +176,22 @@ func keep(copies []copied, text string, position int64) []copied {
 
 // elsewhereOf reads every other task's whole record, an archived task's
 // from its blob, for what it holds of task id: the shared files it names,
-// which may be id's too, and the copies of id's words (copiesOf), with
-// the rows that keep them. Every
-// task is read, not just its epic and asker as they are now, as a story
-// taken out of its epic leaves the copies behind.
+// which may be id's too, and the copies of id's words (copiesOf), with the
+// rows that keep them. Every task is read, not just its epic and asker as
+// they are now, as a story taken out of its epic leaves the copies behind.
+// A task that can't be read is passed over, so the copies in the rest are
+// still found, and the error names each one passed over.
 func (s *Server) elsewhereOf(id string) (elsewhere, error) {
 	found := elsewhere{files: map[string]bool{}, copies: map[string][]copied{}}
+	var unread error
 	for _, other := range s.state.TaskIDs() {
 		if other == id {
 			continue
 		}
 		history, err := s.store.History(other, store.FromBlobs(s.config.Blobs))
 		if err != nil {
-			return found, err
+			unread = errors.Join(unread, fmt.Errorf("%s: %w", other, err))
+			continue
 		}
 		for _, e := range history {
 			for _, hash := range tasks.FileHashes(e) {
@@ -201,7 +204,7 @@ func (s *Server) elsewhereOf(id string) (elsewhere, error) {
 			}
 		}
 	}
-	return found, nil
+	return found, unread
 }
 
 // copiesOf are the words of task id an event of another task keeps: its
