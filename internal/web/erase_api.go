@@ -30,8 +30,12 @@ type erased struct {
 // whole task"). Only the page may ask: nothing undoes an erasure, so the
 // desk, which acts on what Claude makes of your words, can't.
 //
-// A turn that runs is stopped first, while the state still says where it
-// runs. An archived task is erased as it is, from its blob. A refusal is
+// A live task's session is stopped first, while the state still says
+// where it runs: an idle one too, as a turn's session lives on after its
+// turn.ended until the loop stops it, and the loop leaves an erased task
+// alone. A turn that starts between the stop and the erasure's read of the
+// rows is still orphaned: the log refuses what it writes, but its process
+// and worktree go on. An archived task is erased as it is, from its blob. A refusal is
 // answered 409 with its reason, and an error before the erasure commits
 // 500; neither has written anything. Once it commits the task is erased,
 // so what fails after that is a warning in the answer: a blob that won't
@@ -55,7 +59,7 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	if task != nil && task.OpenTurn() != nil && s.config.StopSession != nil {
+	if task != nil && s.config.StopSession != nil {
 		s.config.StopSession(id)
 	}
 	shared, unread := s.sharedFilesOf(id)

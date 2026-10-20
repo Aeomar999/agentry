@@ -389,15 +389,25 @@ func TestAnErasedTaskBlocksNoStory(t *testing.T) {
 }
 
 // A turn that runs is stopped while the task is still there, so the runner
-// can find the machine it runs on; a task with no turn running isn't.
+// can find the machine it runs on; so is one whose turn has ended, as its
+// session may still be there, idle, until the loop stops it. An archived
+// task has none.
 func TestErasingStopsTheTurnThatRunsFirst(t *testing.T) {
 	f := newEraseFixture(t)
 	f.propose(t, events.Proposal{Stream: "task-1", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}})
 	f.propose(t, events.Proposal{Stream: "task-1", Actor: machine, Type: events.TurnStarted, Correlation: "turn-1",
 		Data: map[string]any{"agent": "tech-lead", "engine": "claude", "hash": "h", "worker": workers.Local}})
+	f.propose(t, events.Proposal{Stream: "task-3", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-3", "branch": "b", "port": 7902}})
+	for _, kind := range []events.Type{events.TurnStarted, events.TurnEnded} {
+		f.propose(t, events.Proposal{Stream: "task-3", Actor: machine, Type: kind, Correlation: "turn-1",
+			Data: map[string]any{"agent": "tech-lead", "engine": "claude", "hash": "h", "worker": workers.Local, "report": "Waiting."}})
+	}
+	f.done(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
 	f.erase(t, "task-1")
 	f.erase(t, "task-2")
-	if want := []string{"task-1"}; !slices.Equal(f.stopped, want) {
+	f.erase(t, "task-3")
+	if want := []string{"task-1", "task-3"}; !slices.Equal(f.stopped, want) {
 		t.Errorf("sessions stopped: %q, want %q", f.stopped, want)
 	}
 }
