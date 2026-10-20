@@ -726,8 +726,12 @@ func TestATemplateSavedButNotLinkedSaysWhy(t *testing.T) {
 func TestATeamIsLinkedToATemplate(t *testing.T) {
 	server, s := newTestServer(t)
 	planningTeam(t, server, s)
-	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"gone"}`)
-	call(t, server, "DELETE", "/api/teams/templates/gone", "")
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"gone"}`); code != 200 {
+		t.Fatalf("save Planning: %d %s", code, body)
+	}
+	if code, body := call(t, server, "DELETE", "/api/teams/templates/gone", ""); code != 200 {
+		t.Fatalf("remove gone: %d %s", code, body)
+	}
 	for _, link := range []struct {
 		name, team, body string
 		code             int

@@ -710,7 +710,7 @@ func (s *Server) agentFrom(w http.ResponseWriter, r *http.Request) (agents.Agent
 		return agent, false
 	}
 	agent.Name, agent.Model = strings.TrimSpace(agent.Name), strings.TrimSpace(agent.Model)
-	agent.Template = "" // only AddTeam makes an agent from a template
+	agent.Template = "" // only adding a team makes an agent from a template
 	agent.Description, agent.Prompt = strings.TrimSpace(agent.Description), strings.TrimSpace(agent.Prompt)
 	team := cmp.Or(strings.TrimSpace(agent.Team), agents.DefaultTeam) // a blank team is the default one, however it is spelled now
 	switch named := s.state.Roster().TeamNamed(team); {
