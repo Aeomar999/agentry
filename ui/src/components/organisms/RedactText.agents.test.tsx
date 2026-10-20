@@ -31,17 +31,17 @@ async function count() {
   await act(async () => fireEvent.click(button("Count the rows")));
 }
 
-describe("RedactText, for what agents learned", () => {
+describe("RedactText, for the agents and what they learned", () => {
   test("counts the rows first, redacts the rows you confirmed, then says what it did with no worktree to remove", async () => {
     vi.mocked(previewAgentsRedaction).mockResolvedValue(2);
     vi.mocked(redactAgents).mockResolvedValue({ stream: "agents", at: AT, rows: 2, warnings: [] });
     ask();
-    expect(screen.getByText("Redact a text in what agents learned")).toBeTruthy();
+    expect(screen.getByText("Redact a text in the agents and what they learned")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Why, for the log (optional)"), { target: { value: "pasted a key" } });
     await count();
 
     expect(previewAgentsRedaction).toHaveBeenCalledWith(SECRET);
-    expect(screen.getByText(/^2 rows of what agents learned hold this text\./)).toBeTruthy();
+    expect(screen.getByText(/^2 rows of the agents and what they learned hold this text\./)).toBeTruthy();
     expect(redactAgents).not.toHaveBeenCalled();
 
     await act(async () => fireEvent.click(button("Redact 2 rows")));
@@ -49,7 +49,7 @@ describe("RedactText, for what agents learned", () => {
     expect(previewRedaction).not.toHaveBeenCalled();
     expect(redact).not.toHaveBeenCalled();
     expect(onRedacted).toHaveBeenCalled();
-    expect(screen.getByText(`Redacted 2 rows of what agents learned at ${dateTime(AT)}.`)).toBeTruthy();
+    expect(screen.getByText(`Redacted 2 rows of the agents and what they learned at ${dateTime(AT)}.`)).toBeTruthy();
     expect(screen.queryByText(/worktree/)).toBeNull();
   });
 
@@ -62,7 +62,7 @@ describe("RedactText, for what agents learned", () => {
 
     expect(redactAgents).toHaveBeenLastCalledWith(SECRET, "", 1);
     expect(previewAgentsRedaction).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/^2 rows of what agents learned hold this text\./)).toBeTruthy();
+    expect(screen.getByText(/^2 rows of the agents and what they learned hold this text\./)).toBeTruthy();
     expect(screen.getByText(/2 rows hold this text now, not 1/).textContent).toContain("so the rows were counted again");
     expect(onRedacted).not.toHaveBeenCalled();
   });

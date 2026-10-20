@@ -2,8 +2,9 @@ import { api } from "./client";
 import type { Erasure, LogPreview, LogRedaction, Redaction } from "./types";
 
 // Erasing a task and taking a secret out of one, out of what the agents
-// learned, or out of the whole log (docs/design/log-growth.md section 5). Nothing undoes either, so the page asks before each; a
-// refusal throws the server's reason as an ApiError.
+// learned, or out of the whole log (docs/design/log-growth.md section 5).
+// Nothing undoes either, so the page asks before each; a refusal throws the
+// server's reason as an ApiError.
 
 const taskPath = (task: string) => `/api/tasks/${encodeURIComponent(task)}`;
 

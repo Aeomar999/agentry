@@ -462,7 +462,7 @@ func TestARedactionAcrossTheLogHoldsEachStreamToItsCount(t *testing.T) {
 // A count below one is refused 400, as a redaction rewrites at least one
 // row, and a redaction whose every counted stream is refused is refused
 // 409 with their reasons, as one with no counts is; neither writes.
-func TestARedactionAcrossTheLogWithNoCountThatHoldsIsRefused(t *testing.T) {
+func TestARedactionAcrossTheLogWithABadOrStaleCountIsRefused(t *testing.T) {
 	f := withSecret(t)
 	last := f.log.LastPosition()
 	for _, rows := range []int{0, -1} {

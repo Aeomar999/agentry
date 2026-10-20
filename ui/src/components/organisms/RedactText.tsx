@@ -28,7 +28,7 @@ interface Target {
 type Where = { task: string } | { agents: true };
 
 function targetOf(where: Where): Target {
-  if ("agents" in where) return { name: "what agents learned", preview: previewAgentsRedaction, redact: redactAgents };
+  if ("agents" in where) return { name: "the agents and what they learned", preview: previewAgentsRedaction, redact: redactAgents };
   const { task } = where;
   return {
     name: task,
