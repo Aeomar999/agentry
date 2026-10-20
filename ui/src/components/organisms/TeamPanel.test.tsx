@@ -888,6 +888,9 @@ describe("Edit team: opening", () => {
     expect(docsRow("editor").textContent).toContain("coordinator");
     expect(docsRow("writer").textContent).toContain("coordinator");
     expect(inSheet().getByText("editor and writer both coordinate. Pick the one that takes the team's tasks.")).toBeTruthy();
+    // Said under the legend at once; the summary and the footer count wait for a save.
+    expect(document.getElementById("team-summary")).toBeNull();
+    expect(document.getElementById("team-footer-text")!.textContent).toBe("No changes to save.");
     fireEvent.click(inSheet().getByRole("radio", { name: "Coordinator, writer" }));
     expect(inSheet().queryByText(/both coordinate/)).toBeNull();
   });
@@ -1057,10 +1060,9 @@ describe("Edit team: saving", () => {
     expect(document.getElementById("team-summary")).toBeNull();
   });
 
-  test("changed elsewhere: keep my changes saves them over it with the version given", async () => {
-    vi.mocked(api)
-      .mockRejectedValueOnce(new ApiError("changed elsewhere", 409, { error: "changed elsewhere", version: "v2" }))
-      .mockResolvedValueOnce({ team: "Handbook", version: "v3" });
+  test("changed elsewhere: keep my changes closes the box, focus on the title, and saving is refused again", async () => {
+    const changedElsewhere = new ApiError("changed elsewhere", 409, { error: "changed elsewhere", version: "v2" });
+    vi.mocked(api).mockRejectedValueOnce(changedElsewhere).mockRejectedValueOnce(changedElsewhere);
     openAt("/agents?team=Docs");
     typeInto("Team name", "Handbook");
     await save();
@@ -1070,10 +1072,14 @@ describe("Edit team: saving", () => {
     expect(summary().textContent).toContain("The Docs team was changed somewhere else after you opened it.");
     fireEvent.click(within(summary()).getByRole("button", { name: "Keep my changes here" }));
     expect(document.getElementById("team-summary")).toBeNull();
+    expect(document.activeElement).toBe(inSheet().getByRole("heading", { name: "Edit the Docs team" }));
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Handbook");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
     await save();
 
-    expect(sent()[1]).toEqual(["PUT", "/api/teams/Docs", expect.objectContaining({ version: "v2", team: "Handbook" })]);
-    expect(screen.queryByRole("dialog")).toBeNull();
+    // Still the version it loaded: saving over the team would delete agents added elsewhere.
+    expect(sent()[1]).toEqual(["PUT", "/api/teams/Docs", expect.objectContaining({ version: "v1", team: "Handbook" })]);
+    expect(summary().textContent).toContain("Couldn't save the team: it changed since you opened it");
   });
 
   test("changed elsewhere: reloading asks first, then shows the team as it is now", async () => {

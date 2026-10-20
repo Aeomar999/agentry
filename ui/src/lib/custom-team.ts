@@ -591,8 +591,8 @@ function asSentence(reason: string, names: string[]): string {
 
 // Why Save changes didn't save, and what the panel does about it:
 // - problems: show them, as checkTeam's, keeping everything typed.
-// - changed: the team changed elsewhere since it was loaded. Reload it, or
-//   save over it by saving with version as the loaded team's.
+// - changed: the team changed elsewhere since it was loaded. Reload it
+//   before saving: saving over it would delete agents added there.
 // - cut short: the team is saved, but some tasks haven't followed it yet.
 //   Reload the team (its rows have their new names now), then save it
 //   again unchanged (saveAgain) to finish them.
@@ -600,7 +600,7 @@ function asSentence(reason: string, names: string[]): string {
 // - failed: anything else, in the server's words or ours.
 export type EditRefusal =
   | { kind: "problems"; problems: Problem[] }
-  | { kind: "changed"; version: string; title: string; detail: string }
+  | { kind: "changed"; title: string; detail: string }
   | { kind: "cut short"; version: string; title: string; detail: string }
   | { kind: "missing profiles"; profiles: string[] }
   | { kind: "failed"; title: string; detail: string };
@@ -614,7 +614,6 @@ export function whyNotSaved(failure: unknown, loaded: LoadedTeam, draft: TeamDra
   if (typeof body?.version === "string" && body.error === "changed elsewhere") {
     return {
       kind: "changed",
-      version: body.version,
       title: "Couldn't save the team: it changed since you opened it",
       detail: `The ${loaded.team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.${quoted(body.message)}`,
     };

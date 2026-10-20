@@ -859,11 +859,10 @@ describe("whyNotSaved", () => {
     expect(why.kind).toBe("problems");
   });
 
-  test("changed elsewhere: reload, or save over it with the version given", () => {
+  test("changed elsewhere: reload before saving", () => {
     const message = "the Docs team changed since you opened it: reload it, or save your changes over it with this version";
     expect(refused(409, { error: "changed elsewhere", version: "v2", message })).toEqual({
       kind: "changed",
-      version: "v2",
       title: "Couldn't save the team: it changed since you opened it",
       detail: `The Docs team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now. Agentry said: "${message}"`,
     });

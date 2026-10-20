@@ -152,9 +152,6 @@ function EditTeamForm(props: EditTeamFormProps) {
     setSaving(true);
     try {
       await send();
-      notify("success", `Saved the ${sent.team.trim()} team`);
-      await onSaved(sent.team.trim());
-      guard.leave();
     } catch (failure) {
       setSaving(false);
       setOffer(null);
@@ -174,7 +171,11 @@ function EditTeamForm(props: EditTeamFormProps) {
         if (why.kind === "cut short") reload(sent.team.trim(), false);
       }
       list.focus("team-summary");
+      return;
     }
+    notify("success", `Saved the ${sent.team.trim()} team`);
+    await onSaved(sent.team.trim());
+    guard.leave();
   }
 
   const loading = !ready || !loaded || reloading;
@@ -189,7 +190,7 @@ function EditTeamForm(props: EditTeamFormProps) {
     <Footer onCancel={guard.ask} />
   ) : (
     <Footer
-      text={loading ? "Loading…" : editFooterLine(problems.length, saving, changed)}
+      text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
       saving={saving}
       off={loading || !changed}
       primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
@@ -223,16 +224,18 @@ function EditTeamForm(props: EditTeamFormProps) {
                   reload(loaded.team, true);
                 }}
                 onKeep={() => {
-                  // Saving again saves over the change made elsewhere.
-                  setLoaded({ ...loaded, version: refused.version });
+                  // The version stays the one loaded, so saving is refused
+                  // again until you reload: saving over the team would
+                  // delete any agent added elsewhere.
                   setRefused(null);
+                  list.focus(TITLE_ID);
                 }}
               />
             )}
             {refused?.kind === "cut short" && (
               <CutShort refusal={refused} busy={saving || reloading} onSaveAgain={() => sending(() => saveAgain(loaded), loaded, loaded)} />
             )}
-            {(problems.length > 0 || refused?.kind === "failed") && (
+            {((tried && problems.length > 0) || refused?.kind === "failed") && (
               <ErrorSummary
                 title={refused?.kind === "failed" ? refused.title : summaryTitle(problems.length, true)}
                 problems={problems}
@@ -310,7 +313,7 @@ interface ChangedElsewhereProps {
 
 // ChangedElsewhere is a save refused because the team changed since the
 // panel loaded it: reload it as it is now, asking first in place, or keep
-// your changes and save them over it. It takes focus, as the summary does.
+// your changes here to copy them first. It takes focus, as the summary does.
 function ChangedElsewhere({ refusal, changed, onReload, onKeep }: ChangedElsewhereProps) {
   const [asking, setAsking] = useState(false);
   const keep = useRef<HTMLButtonElement>(null);
