@@ -471,3 +471,35 @@ export interface Redaction {
   rows: number;
   warnings: string[];
 }
+
+// StreamPreview is a stream that holds the text, as the preview across the
+// log lists it: how many of its rows, or why they can't be redacted.
+export interface StreamPreview {
+  stream: string;
+  rows: number;
+  archived: boolean;
+  error?: string;
+}
+
+export interface LogPreview {
+  rows: number;
+  streams: StreamPreview[];
+}
+
+// StreamFailed is a stream a redaction across the log left holding the
+// text, and whether counting its rows again would let it be redacted.
+export interface StreamFailed {
+  stream: string;
+  reason: string;
+  recount: boolean;
+}
+
+// LogRedaction is what a redaction across the log did: the rows rewritten
+// in each stream, the streams left, and what may be left for now, each
+// stream left among it too.
+export interface LogRedaction {
+  rows: number;
+  streams: { stream: string; at: string; rows: number }[];
+  failures: StreamFailed[];
+  warnings: string[];
+}
