@@ -193,7 +193,7 @@ var coreTypes = map[Type]Spec{
 	TeamEdited: {Fields: []string{"version", "team", "to", "agents", "removed"}, Writers: []ActorKind{Human}},
 	TeamLinked: {Fields: []string{"team", "template"}, Writers: []ActorKind{Human}},
 
-	TemplateSaved:   {Fields: []string{"id", "team", "agents"}, Writers: []ActorKind{Human}}, // "description", "from" (the team it was saved from), "basedOn" (the built-in template it comes from) and "new" (a name or id of yours refused) may be missing; each agent's definition, never its knowledge or workers
+	TemplateSaved:   {Fields: []string{"id", "team", "agents"}, Writers: []ActorKind{Human}}, // "description", "from" (the team it was saved from), "basedOn" (the built-in template it comes from), "new" (a name or id of yours refused) and "replacing" (only a live id of yours) may be missing; each agent's definition, never its knowledge or workers
 	TemplateRemoved: {Fields: []string{"id"}, Writers: []ActorKind{Human}},
 
 	TaskCreated:        {Fields: []string{"title", "repo", "coordinator"}, Writers: []ActorKind{Human, Agent, System}}, // an agent's: with "parent", for another team, or "epic", a story; yours may carry the "idea" it is; Agentry's: "about" the epic you closed, at "close", or the "idea" the Visionaries agreed on by your rule; any may carry the stream it was made "from" (plus the same "idea" for older binaries)

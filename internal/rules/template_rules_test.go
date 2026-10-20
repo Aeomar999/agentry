@@ -169,6 +169,54 @@ func TestASaveThatIsntNewReplacesTheTemplateWithItsID(t *testing.T) {
 	}
 }
 
+// replacingTemplate is savingTemplate as an update of your template id
+// makes it.
+func replacingTemplate(id, team string) events.Proposal {
+	p := savingTemplate(id, team, research())
+	p.Data["replacing"] = true
+	return p
+}
+
+// An update replaces a live template of yours, under a name no other of
+// yours has; it is never new as well. A save with neither flag, as older
+// logs hold, still replaces whatever has its id.
+func TestAnUpdateReplacesALiveTemplateOfYours(t *testing.T) {
+	both := replacingTemplate("papers", "Readers")
+	both.Data["new"] = true
+	for _, c := range []struct {
+		name string
+		p    events.Proposal
+		want string
+	}{
+		{"a live template", replacingTemplate("papers", "Readers"), ""},
+		{"a live template, renamed", replacingTemplate("papers", "Reading Room"), ""},
+		{"an unknown one", replacingTemplate("letters", "Letters"), "you have no template letters to update"},
+		{"a removed one", replacingTemplate("gone", "Gone"), "you removed the template gone, so there is none to update: import its file to bring it back"},
+		{"another's name", replacingTemplate("papers", "writers"), "you have a template called Writers already"},
+		{"new as well", both, "a template is saved as a new one or replacing one of yours, not both"},
+		{"neither, as older logs hold", savingTemplate("papers", "Readers", research()), ""},
+		{"neither, on a removed id", savingTemplate("gone", "Gone", research()), ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := openSeeded(t)
+			for _, first := range []events.Proposal{newTemplate("papers", "Readers"), newTemplate("writing-room", "Writers"),
+				newTemplate("gone", "Gone"), removingTemplate("gone")} {
+				if _, rejection, err := s.Propose(first); rejection != nil || err != nil {
+					t.Fatalf("the first saves: %v %v", rejection, err)
+				}
+			}
+			_, rejection, err := s.Propose(c.p)
+			reason := ""
+			if rejection != nil {
+				reason = rejection.Reason
+			}
+			if err != nil || reason != c.want {
+				t.Errorf("the update: %q %v, want %q", reason, err, c.want)
+			}
+		})
+	}
+}
+
 // Two imports sent at once both pass the web's check, so the rules refuse
 // a name, in any case, that another of yours has; the template with the id
 // is replaced, under its own name or a new one.

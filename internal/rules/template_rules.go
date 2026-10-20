@@ -43,11 +43,7 @@ func aSavedTemplate(saved agents.UserTemplates, removed agents.RemovedTemplates,
 	if reason := builtInBase(p.Text("basedOn")); reason != "" {
 		return reason
 	}
-	if p.Flag("new") {
-		if reason := notYoursYet(saved, removed, p.Text("team"), p.Text("id")); reason != "" {
-			return reason
-		}
-	} else if reason := noOtherCalled(saved, p.Text("team"), p.Text("id")); reason != "" {
+	if reason := takesNoOtherTemplate(saved, removed, p); reason != "" {
 		return reason
 	}
 	members, err := agents.TemplateAgents(p.Data)
@@ -92,6 +88,38 @@ func builtInBase(basedOn string) string {
 	return ""
 }
 
+// takesNoOtherTemplate refuses a save the name or id of a template it
+// isn't meant to replace: a new one replaces none, an update replaces the
+// live template of yours with its id, and an import, or a save older logs
+// hold, whichever has its id.
+func takesNoOtherTemplate(saved agents.UserTemplates, removed agents.RemovedTemplates, p events.Proposal) string {
+	team, id := p.Text("team"), p.Text("id")
+	switch {
+	case p.Flag("new") && p.Flag("replacing"):
+		return "a template is saved as a new one or replacing one of yours, not both"
+	case p.Flag("new"):
+		return notYoursYet(saved, removed, team, id)
+	case p.Flag("replacing"):
+		if reason := yoursToReplace(saved, removed, id); reason != "" {
+			return reason
+		}
+	}
+	return noOtherCalled(saved, team, id)
+}
+
+// yoursToReplace refuses an update of a template that isn't one of yours
+// now: one you removed comes back only by importing its file. Only Propose
+// runs it, as older logs hold no update.
+func yoursToReplace(saved agents.UserTemplates, removed agents.RemovedTemplates, id string) string {
+	if _, gone := removed[id]; gone {
+		return "you removed the template " + id + ", so there is none to update: import its file to bring it back"
+	}
+	if _, yours := saved.WithID(id); !yours {
+		return "you have no template " + id + " to update"
+	}
+	return ""
+}
+
 // notYoursYet refuses a new template, saved from a team, a name or id one of
 // yours has, or the id of one you removed, whose teams still name it: the
 // web checks before saving too, and this keeps two saves at once from both
@@ -112,11 +140,11 @@ func notYoursYet(saved agents.UserTemplates, removed agents.RemovedTemplates, te
 	return ""
 }
 
-// noOtherCalled refuses an import a name, in any case, that one of yours
-// has under another id: the web checks before importing too, and this keeps
-// two imports at once from both passing it. The template with its id is
-// the one it replaces, so its name is free. Only Propose runs it, so older
-// logs holding two templates of one name still replay.
+// noOtherCalled refuses an import or an update a name, in any case, that
+// one of yours has under another id: the web checks before saving too, and
+// this keeps two saves at once from both passing it. The template with its
+// id is the one it replaces, so its name is free. Only Propose runs it, so
+// older logs holding two templates of one name still replay.
 func noOtherCalled(saved agents.UserTemplates, team, id string) string {
 	for _, yours := range saved {
 		if yours.ID != id && strings.EqualFold(yours.Team, team) {
