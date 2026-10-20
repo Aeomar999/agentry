@@ -17,8 +17,9 @@ type UserTemplate struct {
 	Team        string    `json:"team"` // what a team made from it is called: the template's name
 	Description string    `json:"description"`
 	Agents      []Agent   `json:"agents"`
-	From        string    `json:"from,omitempty"`   // the team it was saved from; a template saved before Agentry kept it has none
-	SavedAt     time.Time `json:"savedAt,omitzero"` // when it was last saved, as the log has it
+	From        string    `json:"from,omitempty"`    // the team it was saved from; a template saved before Agentry kept it has none
+	BasedOn     string    `json:"basedOn,omitempty"` // the built-in template its team came from, if any, whose features its teams keep
+	SavedAt     time.Time `json:"savedAt,omitzero"`  // when it was last saved, as the log has it
 }
 
 // Template is the saved template as one AddTeam adds, with the prompts
@@ -32,8 +33,10 @@ func (u UserTemplate) Template() Template {
 // the template id, whose teams are called name. It keeps what makes each agent and drops what is this
 // install's or this team's alone: its knowledge, the machines it runs on
 // (which another install, or this one later, may not have) and its team
-// and template, which adding the template sets again.
-func SaveTemplate(roster Roster, team, name, id, description string, by events.Actor) (events.Proposal, error) {
+// and template, which adding the template sets again. It is based on the
+// built-in template the team is linked to, directly or through one of
+// yours.
+func SaveTemplate(roster Roster, yours UserTemplates, team, name, id, description string, by events.Actor) (events.Proposal, error) {
 	var members []Agent
 	for _, a := range roster {
 		if a.TeamName() == team {
@@ -45,9 +48,23 @@ func SaveTemplate(roster Roster, team, name, id, description string, by events.A
 	if len(members) == 0 {
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
-	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team}.Save(by)
+	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team,
+		BasedOn: baseOf(roster.TemplateOf(team), yours)}.Save(by)
 	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
 	return saving, nil
+}
+
+// baseOf is the built-in template a team linked to template comes from:
+// template itself when it is built in, the base of yours when it is yours,
+// and "" for none.
+func baseOf(template string, yours UserTemplates) string {
+	if _, builtIn := TemplateWithID(template); builtIn {
+		return template
+	}
+	if saved, ok := yours.WithID(template); ok {
+		return saved.BasedOn
+	}
+	return ""
 }
 
 // Save is the event that saves u, as SaveTemplate's does: the rules check
@@ -56,6 +73,9 @@ func (u UserTemplate) Save(by events.Actor) events.Proposal {
 	data := map[string]any{"id": u.ID, "team": u.Team, "description": u.Description, "agents": u.Agents}
 	if u.From != "" {
 		data["from"] = u.From
+	}
+	if u.BasedOn != "" {
+		data["basedOn"] = u.BasedOn
 	}
 	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateSaved, Data: data}
 }
@@ -93,7 +113,7 @@ func (t *UserTemplates) Apply(e events.Event) {
 	case events.TemplateSaved:
 		members, _ := TemplateAgents(e.Data) // the rules accepted them as agents
 		saved := UserTemplate{ID: id, Team: e.Text("team"), Description: e.Text("description"), Agents: members,
-			From: e.Text("from"), SavedAt: e.At}
+			From: e.Text("from"), BasedOn: e.Text("basedOn"), SavedAt: e.At}
 		if i := t.index(id); i >= 0 {
 			(*t)[i] = saved
 		} else {

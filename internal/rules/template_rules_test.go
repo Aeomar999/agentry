@@ -49,6 +49,37 @@ func TestATemplateIsSaved(t *testing.T) {
 	}
 }
 
+// A template is based on a built-in template or on none, as one saved
+// before templates had a base was.
+func TestATemplateIsBasedOnABuiltInTemplate(t *testing.T) {
+	based := savingTemplate("papers", "Readers", research())
+	based.Data["basedOn"] = "visionaries"
+	if reason := proposeTemplate(t, based); reason != "" {
+		t.Errorf("a template based on a built-in one was refused: %s", reason)
+	}
+	unknown := savingTemplate("papers", "Readers", research())
+	unknown.Data["basedOn"] = "dreamers"
+	refusedSaying(t, unknown, "there is no built-in template dreamers")
+}
+
+// A template of yours has no features of its own to pass on, so another
+// isn't based on it: SaveTemplate takes its base instead.
+func TestATemplateIsNotBasedOnOneOfYours(t *testing.T) {
+	s := openSeeded(t)
+	if _, rejection, err := s.Propose(savingTemplate("papers", "Readers", research())); err != nil || rejection != nil {
+		t.Fatal(rejection, err)
+	}
+	onYours := savingTemplate("more-papers", "More Readers", research())
+	onYours.Data["basedOn"] = "papers"
+	_, rejection, err := s.Propose(onYours)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rejection == nil || !strings.Contains(rejection.Reason, "there is no built-in template papers") {
+		t.Errorf("refused with %v, want no built-in template papers", rejection)
+	}
+}
+
 func TestATemplateReadBackFromTheLogIsChecked(t *testing.T) {
 	logged := []any{
 		map[string]any{"name": "lead", "prompt": "Lead.", "engine": "claude", "coordinates": true},
@@ -348,7 +379,7 @@ func TestASavedTeamIsAccepted(t *testing.T) {
 			t.Fatalf("adding the Readers team: %v, %v", rejection, err)
 		}
 	}
-	p, err := agents.SaveTemplate(state.Roster(), "Readers", "Readers", "mine", "My readers.", you)
+	p, err := agents.SaveTemplate(state.Roster(), state.Templates(), "Readers", "Readers", "mine", "My readers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}

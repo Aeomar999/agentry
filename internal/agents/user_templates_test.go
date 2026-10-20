@@ -73,7 +73,7 @@ func TestASavedTeamIsAddedBackTheSame(t *testing.T) {
 	log = append(log, events.Event{Proposal: Agent{Name: "reader"}.Learned(you, "Skim the abstract first.")})
 	made := FromEvents(log)
 
-	saving, err := SaveTemplate(made, "Papers", "Papers", "papers", "Reads papers.", you)
+	saving, err := SaveTemplate(made, nil, "Papers", "Papers", "papers", "Reads papers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,13 +112,13 @@ func equalAgents(a, b Agent) bool {
 }
 
 func TestSavingATeamThatIsntThere(t *testing.T) {
-	if _, err := SaveTemplate(FromEvents(seeded()), "Papers", "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
+	if _, err := SaveTemplate(FromEvents(seeded()), nil, "Papers", "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
 		t.Error("saved a team with no agents")
 	}
 }
 
 func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
-	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
+	saving, err := SaveTemplate(FromEvents(seeded()), nil, DefaultTeam, DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
 	if members, _ := TemplateAgents(saving.Data); err != nil || len(members) != len(defaults) {
 		t.Errorf("the %s team saved %d agents (%v)", DefaultTeam, len(members), err)
 	}
@@ -130,7 +130,7 @@ func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
 func TestATemplateKeepsItsNameItsTeamAndWhenItWasSaved(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	log := added(papers().Template(), seeded())
-	saving, err := SaveTemplate(FromEvents(log), "Papers", "Reading Room", "reading-room", "", you)
+	saving, err := SaveTemplate(FromEvents(log), nil, "Papers", "Reading Room", "reading-room", "", you)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,8 +147,8 @@ func TestATemplateKeepsItsNameItsTeamAndWhenItWasSaved(t *testing.T) {
 	}
 }
 
-// A template.saved from before templates were named has no "from": it
-// replays with none, its team as it was, and when the log says.
+// A template.saved from before templates were named has no "from" or
+// "basedOn": it replays with neither, its team as it was, and when the log says.
 func TestATemplateSavedWithoutFromReplays(t *testing.T) {
 	at := time.Date(2025, 3, 1, 8, 0, 0, 0, time.UTC)
 	old := events.Event{At: at, Proposal: events.Proposal{Stream: events.TemplatesStream, Type: events.TemplateSaved, Data: map[string]any{
@@ -156,7 +156,7 @@ func TestATemplateSavedWithoutFromReplays(t *testing.T) {
 			map[string]any{"name": "lead", "prompt": "Hand out the reading.", "engine": "claude", "coordinates": true}},
 	}}}
 	saved, ok := UserTemplatesFromEvents([]events.Event{old}).WithID("papers")
-	if !ok || saved.Team != "Papers" || saved.From != "" || !saved.SavedAt.Equal(at) || len(saved.Agents) != 1 {
+	if !ok || saved.Team != "Papers" || saved.From != "" || saved.BasedOn != "" || !saved.SavedAt.Equal(at) || len(saved.Agents) != 1 {
 		t.Errorf("an old template: %+v", saved)
 	}
 }
@@ -173,11 +173,47 @@ func TestATemplateWithNoSourceTeamSavesNoFrom(t *testing.T) {
 // so the rules refuse a name or id of yours, and an import's does not.
 func TestASavedTeamIsANewTemplate(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
-	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, DefaultTeam, "mine", "", you)
+	saving, err := SaveTemplate(FromEvents(seeded()), nil, DefaultTeam, DefaultTeam, "mine", "", you)
 	if err != nil || saving.Data["new"] != true {
 		t.Errorf("saved %+v (%v), want new", saving.Data, err)
 	}
 	if imported := papers().Save(you); imported.Data["new"] != nil {
 		t.Errorf("imported %+v, want not new", imported.Data)
+	}
+}
+
+// A template is based on the built-in template its team is linked to:
+// directly, through the base of your template it was added from, or not at
+// all for a team you made yourself.
+func TestASavedTemplateIsBasedOnTheBuiltInTemplateItsTeamCameFrom(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	ideas := papers()
+	ideas.BasedOn = "visionaries"
+	fromYours := added(ideas.Template(), seeded())
+	madeByHand := seeded()
+	for _, a := range papers().Agents {
+		a.Team = "Papers"
+		madeByHand = append(madeByHand, events.Event{Proposal: a.Proposal(you, false)})
+	}
+	for name, c := range map[string]struct {
+		log  []events.Event
+		team string
+		want string
+	}{
+		"a built-in template's team":    {seeded(), DefaultTeam, "software"},
+		"a team from yours with a base": {fromYours, "Papers", "visionaries"},
+		"a team you made yourself":      {madeByHand, "Papers", ""},
+	} {
+		saving, err := SaveTemplate(FromEvents(c.log), UserTemplates{ideas}, c.team, "Mine", "mine", "", you)
+		if err != nil {
+			t.Fatal(err)
+		}
+		saved, _ := UserTemplatesFromEvents([]events.Event{logged(t, saving)}).WithID("mine")
+		if saved.BasedOn != c.want {
+			t.Errorf("%s: based on %q, want %q", name, saved.BasedOn, c.want)
+		}
+		if _, written := saving.Data["basedOn"]; written != (c.want != "") {
+			t.Errorf("%s: saved %+v", name, saving.Data)
+		}
 	}
 }

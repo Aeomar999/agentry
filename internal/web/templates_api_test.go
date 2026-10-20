@@ -388,7 +388,7 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", members, httpapi.You)...) {
 		written.Propose(p)
 	}
-	saving, err := agents.SaveTemplate(state.Roster(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)
+	saving, err := agents.SaveTemplate(state.Roster(), state.Templates(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,6 +436,40 @@ func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
 	got.SavedAt, want.SavedAt = time.Time{}, time.Time{}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("imported:\n%+v\nwant:\n%+v", got, want)
+	}
+}
+
+// A template keeps the built-in template it is based on through an export
+// and an import, and a team added from it passes the base on to a template
+// saved from that team.
+func TestATemplateKeepsItsBase(t *testing.T) {
+	server, s := newTestServer(t)
+	ideas := map[string]any{"id": "ideas", "team": "Ideas", "basedOn": "visionaries", "agents": []any{
+		map[string]any{"name": "dreamer", "engine": "claude", "prompt": "Dream.", "coordinates": true}}}
+	body, _ := json.Marshal(ideas)
+	if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != 200 {
+		t.Fatalf("import: %d %s", code, reply)
+	}
+	code, exported := call(t, server, "GET", "/api/teams/templates/ideas/export", "")
+	call(t, server, "DELETE", "/api/teams/templates/ideas", "")
+	if code != 200 || !strings.Contains(exported, `"basedOn":"visionaries"`) {
+		t.Fatalf("export: %d %s", code, exported)
+	}
+	if code, reply := call(t, server, "POST", "/api/teams/templates/import", exported); code != 200 {
+		t.Fatalf("import again: %d %s", code, reply)
+	}
+	if imported, _ := savedTemplates(t, s).WithID("ideas"); imported.BasedOn != "visionaries" {
+		t.Fatalf("imported: %+v", imported)
+	}
+
+	if code, reply := call(t, server, "POST", "/api/teams", `{"template":"ideas"}`); code != 200 {
+		t.Fatalf("add Ideas: %d %s", code, reply)
+	}
+	if code, reply := call(t, server, "POST", "/api/teams/Ideas/template", `{"name":"More Ideas","id":"more-ideas"}`); code != 200 {
+		t.Fatalf("save: %d %s", code, reply)
+	}
+	if saved, _ := savedTemplates(t, s).WithID("more-ideas"); saved.BasedOn != "visionaries" {
+		t.Errorf("saved from a team of yours: %+v", saved)
 	}
 }
 
@@ -567,6 +601,8 @@ func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
 		{"no agents", map[string]any{"id": "ours", "team": "Ours"}, "a template needs at least one agent"},
 		{"workers", map[string]any{"id": "ours", "team": "Ours", "agents": []any{withWorkers}}, "agent lead: a template's agents name no workers, as the machines may not be there when it is added"},
 		{"nothing", map[string]any{}, "a template needs a team name"},
+		{"an unknown base", map[string]any{"id": "ours", "team": "Ours", "basedOn": "dreamers", "agents": []any{agent("lead", true)}},
+			"a template is based on a built-in template, and there is no built-in template dreamers"},
 	} {
 		body, _ := json.Marshal(refused.template)
 		if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != http.StatusBadRequest || strings.TrimSpace(reply) != refused.reason {
@@ -577,7 +613,7 @@ func TestAnImportTheRulesRefuseIsABadRequest(t *testing.T) {
 
 func TestAnImportThatIsntATemplateIsABadRequest(t *testing.T) {
 	server, _ := newTestServer(t)
-	for _, body := range []string{`{"id":"ours","agents":"lead"}`, `{"id":7}`, `[]`, `not json`} {
+	for _, body := range []string{`{"id":"ours","agents":"lead"}`, `{"id":7}`, `{"id":"ours","basedOn":7}`, `[]`, `not json`} {
 		if code, reply := call(t, server, "POST", "/api/teams/templates/import", body); code != http.StatusBadRequest || !strings.HasPrefix(reply, "bad request: ") {
 			t.Errorf("%s: %d %s", body, code, reply)
 		}

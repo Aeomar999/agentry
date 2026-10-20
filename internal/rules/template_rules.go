@@ -40,6 +40,9 @@ func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
 	if reason := CheckTemplateID(p.Text("id")); reason != "" {
 		return reason
 	}
+	if reason := builtInBase(p.Text("basedOn")); reason != "" {
+		return reason
+	}
 	if p.Flag("new") {
 		if reason := notYoursYet(saved, p.Text("team"), p.Text("id")); reason != "" {
 			return reason
@@ -75,6 +78,16 @@ func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
 	}
 	if coordinators != 1 {
 		return "a template has exactly one coordinator"
+	}
+	return ""
+}
+
+// builtInBase refuses a template based on anything but a built-in
+// template: its teams keep that template's features, and only a built-in
+// one has any. None at all is fine.
+func builtInBase(basedOn string) string {
+	if _, builtIn := agents.TemplateWithID(basedOn); basedOn != "" && !builtIn {
+		return "a template is based on a built-in template, and there is no built-in template " + basedOn
 	}
 	return ""
 }

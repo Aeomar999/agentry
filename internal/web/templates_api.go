@@ -47,7 +47,7 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = templateIDFor(name, s.templateIDTaken)
 	}
-	proposal, err := agents.SaveTemplate(roster, team, name, id, strings.TrimSpace(request.Description), httpapi.You)
+	proposal, err := agents.SaveTemplate(roster, s.state.Templates(), team, name, id, strings.TrimSpace(request.Description), httpapi.You)
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
