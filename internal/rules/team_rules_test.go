@@ -136,6 +136,34 @@ func TestATeamEditReplacingItsCoordinatorRemovesTheOldOne(t *testing.T) {
 	}
 }
 
+// Of the steps handed to the coordinator an edit replaces, one on a task it
+// coordinates moves to the new coordinator with the task, so it doesn't keep
+// the old one; one handed to it on a task another agent coordinates, before
+// it became the coordinator, does, until it is taken.
+func TestATeamEditReplacingItsCoordinatorKeepsItForAStepHandedToItBefore(t *testing.T) {
+	s, state := openSeededState(t)
+	dataTeam(t, s)
+	propose := func(p events.Proposal) {
+		t.Helper()
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("%s: %v %v", p.Type, rejection, err)
+		}
+	}
+	analystLeads := dataAsItIs(state)
+	analystLeads.Agents[0].Coordinates, analystLeads.Agents[1].Coordinates = false, true
+	propose(analystLeads.Proposal(you))
+	propose(events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Plot", "repo": "/src/app", "coordinator": "analyst"}})
+
+	replaced := dataAsItIs(state)
+	replaced.Agents[0].Coordinates = false
+	replaced.Agents[1] = agents.EditedAgent{Name: "chief", Engine: "claude", Prompt: "Lead.", Coordinates: true}
+	replaced.Removed = []string{"analyst"}
+	want := "analyst is still needed by task-1: finish those first, or keep analyst"
+	if _, rejection, err := s.Propose(replaced.Proposal(you)); err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("replacing analyst, handed task-1 by data-lead and task-2's first step: refused with %v, %v, want %q", rejection, err, want)
+	}
+}
+
 // An edit the rules accept is written whole: swapped names, a removed agent
 // no task needs, a new one, and the coordinator and the team's name moved.
 func TestATeamEditIsWrittenWhole(t *testing.T) {
