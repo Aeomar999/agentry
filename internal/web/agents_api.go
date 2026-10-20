@@ -460,6 +460,7 @@ type templateView struct {
 	UserMade    bool         `json:"userMade"`          // one you saved, not one Agentry ships
 	SavedAt     string       `json:"savedAt,omitempty"` // yours: when you last saved it, RFC 3339
 	From        string       `json:"from,omitempty"`    // yours: the team you saved it from, if the log says
+	BasedOn     string       `json:"basedOn,omitempty"` // yours: the built-in template whose features its teams keep
 }
 
 type memberView struct {
@@ -474,10 +475,14 @@ type memberView struct {
 	Column      string `json:"column"`
 }
 
-// yourView is a template you saved, with when and where from.
+// yourView is a template you saved, with when and where from, and the
+// features of the built-in template it is based on, which its teams keep.
 func yourView(u agents.UserTemplate) templateView {
 	view := viewOf(u.Template(), true)
-	view.SavedAt, view.From = u.SavedAt.UTC().Format(time.RFC3339), u.From
+	view.SavedAt, view.From, view.BasedOn = u.SavedAt.UTC().Format(time.RFC3339), u.From, u.BasedOn
+	if base, ok := agents.TemplateWithID(u.BasedOn); ok && base.Features != nil {
+		view.Features = base.Features
+	}
 	return view
 }
 

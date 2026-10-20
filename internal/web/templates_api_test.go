@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -471,6 +472,44 @@ func TestATemplateKeepsItsBase(t *testing.T) {
 	}
 	if saved, _ := savedTemplates(t, s).WithID("more-ideas"); saved.BasedOn != "visionaries" {
 		t.Errorf("saved from a team of yours: %+v", saved)
+	}
+}
+
+// The list says which built-in template one of yours is based on and gives
+// it that template's features, which its teams keep, so the page finds them;
+// one with no base turns nothing on. The built-in rows don't change.
+func TestYourTemplateListsItsBasesFeatures(t *testing.T) {
+	server, _ := newTestServer(t)
+	_, before := call(t, server, "GET", "/api/teams/templates", "")
+	for _, template := range []map[string]any{
+		{"id": "ideas", "team": "Ideas", "basedOn": "visionaries", "agents": []any{
+			map[string]any{"name": "dreamer", "engine": "claude", "prompt": "Dream.", "coordinates": true}}},
+		{"id": "ours", "team": "Ours", "agents": []any{
+			map[string]any{"name": "our-lead", "engine": "claude", "prompt": "Lead.", "coordinates": true}}},
+	} {
+		body, _ := json.Marshal(template)
+		if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != 200 {
+			t.Fatalf("import %s: %d %s", template["id"], code, reply)
+		}
+	}
+	_, list := call(t, server, "GET", "/api/teams/templates", "")
+	var templates []struct {
+		ID       string
+		BasedOn  *string
+		Features []string
+	}
+	if err := json.Unmarshal([]byte(list), &templates); err != nil {
+		t.Fatalf("templates: %v %s", err, list)
+	}
+	yours := templates[len(agents.Templates):]
+	if len(yours) != 2 || yours[0].BasedOn == nil || *yours[0].BasedOn != "visionaries" || !slices.Equal(yours[0].Features, []string{"ideas"}) {
+		t.Errorf("based on Visionaries: %+v", yours)
+	}
+	if len(yours) == 2 && (yours[1].BasedOn != nil || yours[1].Features == nil || len(yours[1].Features) != 0) {
+		t.Errorf("with no base, a template lists no base and features []: %+v %s", yours[1], list)
+	}
+	if !strings.HasPrefix(list, strings.TrimSuffix(strings.TrimSpace(before), "]")) {
+		t.Errorf("the built-in rows changed:\n%s\n%s", before, list)
 	}
 }
 
