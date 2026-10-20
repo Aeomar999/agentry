@@ -3,8 +3,10 @@ package store
 import (
 	"errors"
 	"io"
+	"io/fs"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,8 +114,9 @@ func stillArchived(t *testing.T, s *Store, stream string) events.Event {
 }
 
 // A redaction refused once the task is unarchived archives it again, in a
-// new blob, and keeps the old one, which holds the secret still; when that
-// archive fails too, the error says the task is left unarchived.
+// new blob, and keeps the old one, which holds the secret still. Once the
+// rules allow it, the redaction names both blobs, in order, and deletes
+// them.
 func TestARedactionRefusedAfterTheUnarchivingArchivesTheTaskAgain(t *testing.T) {
 	refuse := true
 	s, blobs, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), refusing(&refuse), events.TaskRenamed, holdingSecret)
@@ -132,17 +135,147 @@ func TestARedactionRefusedAfterTheUnarchivingArchivesTheTaskAgain(t *testing.T) 
 		t.Errorf("task-1's live rows holding the secret: %d, %v, want none: it is archived", count, err)
 	}
 
-	_, rejection, err = s.RedactArchived("task-1", secret, you, "", summary, failingPut{blobs})
+	refuse = false
+	redaction, rejection, err = s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	if rejection != nil || err != nil {
+		t.Fatalf("redacting once allowed: %v, %v", rejection, err)
+	}
+	both := []string{old.Text("archive"), marker.Text("archive")}
+	if names := redaction.List("archives"); !reflect.DeepEqual(names, both) {
+		t.Errorf("the redaction names %v, want the original blob and the refused run's %v", names, both)
+	}
+	latest := stillArchived(t, s, "task-1")
+	for _, hash := range both {
+		if blobs.Has(hash) {
+			t.Errorf("the blob %s is still there", hash)
+		}
+		if hash == latest.Text("archive") {
+			t.Errorf("the new marker names the old blob %s", hash)
+		}
+	}
+}
+
+// A redaction refused when there is no room to archive the task again
+// comes back with an error saying the task is left unarchived, and keeps
+// both blobs: nothing was redacted.
+func TestARefusedRedactionWithNoRoomToArchiveAgainLeavesTheTaskUnarchived(t *testing.T) {
+	refuse := true
+	s, blobs, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), refusing(&refuse), events.TaskRenamed, holdingSecret)
+	_, rejection, err := s.RedactArchived("task-1", secret, you, "", summary, failingPut{blobs})
 	if rejection == nil || err == nil || !strings.Contains(err.Error(), "task-1 is left unarchived") || !strings.Contains(err.Error(), "the disk is full") {
 		t.Errorf("redacting with no room to archive again: %v, %v, want refused and left unarchived", rejection, err)
 	}
 	if live, _ := s.Log("task-1"); len(live) < 2 {
 		t.Errorf("task-1 has %d live rows, want its rows back", len(live))
 	}
-	for _, hash := range []string{old.Text("archive"), marker.Text("archive")} {
-		if !blobs.Has(hash) {
-			t.Errorf("the blob %s is gone, though nothing was redacted", hash)
+	if !blobs.Has(old.Text("archive")) {
+		t.Error("the old blob is gone, though nothing was redacted")
+	}
+}
+
+// refusingArchives is a check that refuses every event.redacted while
+// redactions holds, and every task.archived after the first allowed, as
+// the rules refuse archiving a task that is archived.
+func refusingArchives(redactions *bool, allowed int) OrderCheck {
+	archived := 0
+	return func(p events.Proposal) *events.Rejection {
+		switch {
+		case p.Type == events.EventRedacted && *redactions:
+			return &events.Rejection{Check: "test", Reason: "no redaction now"}
+		case p.Type == events.TaskArchived:
+			if archived++; archived > allowed {
+				return &events.Rejection{Check: "test", Reason: "no archiving now"}
+			}
 		}
+		return nil
+	}
+}
+
+// blobsIn are the hashes of the blobs on disk.
+func blobsIn(t *testing.T, blobs sharedfiles.Disk) []string {
+	t.Helper()
+	var hashes []string
+	err := filepath.WalkDir(blobs.Dir, func(path string, entry fs.DirEntry, err error) error {
+		if err == nil && !entry.IsDir() {
+			hashes = append(hashes, entry.Name())
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hashes
+}
+
+// holdsSecret is whether a blob's rows hold the secret.
+func holdsSecret(t *testing.T, blobs sharedfiles.Disk, hash string) bool {
+	t.Helper()
+	blob, err := blobs.Open(hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blob.Close()
+	rows, err := decodeArchive(blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if strings.Contains(r.Data, secret) {
+			return true
+		}
+	}
+	return false
+}
+
+// Archive puts its blob before the rules refuse the marker: when archiving
+// again is refused, that blob is removed, so every blob left is one a
+// marker names, whether the redaction was refused (the blob held the
+// secret) or committed (only the old blob did, and it is deleted).
+func TestARefusedArchiveAgainLeavesNoBlobNoMarkerNames(t *testing.T) {
+	for _, refuseRedaction := range []bool{true, false} {
+		s, blobs, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), refusingArchives(&refuseRedaction, 1), events.TaskRenamed, holdingSecret)
+		_, _, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+		if err == nil || !strings.Contains(err.Error(), "task-1 is left unarchived: archiving it again was refused: no archiving now") {
+			t.Errorf("redaction refused %v: %v, want left unarchived", refuseRedaction, err)
+		}
+		var want []string
+		if refuseRedaction {
+			want = []string{old.Text("archive")} // the live marker row names it
+		}
+		if got := blobsIn(t, blobs); !reflect.DeepEqual(got, want) {
+			t.Errorf("redaction refused %v: the blobs on disk are %v, want %v", refuseRedaction, got, want)
+		}
+		for _, hash := range blobsIn(t, blobs) {
+			if hash != old.Text("archive") && holdsSecret(t, blobs, hash) {
+				t.Errorf("redaction refused %v: the blob %s, which no marker names, holds the secret", refuseRedaction, hash)
+			}
+		}
+	}
+}
+
+// When another writer archived the task between the unarchiving and
+// archiving it again, archiving again is refused, and the error says the
+// task was archived by another writer, not that it is left unarchived.
+// The blob it put is removed, and that writer's is kept.
+func TestArchivingAgainAfterAnotherWriterSaysSo(t *testing.T) {
+	redactions := false
+	s, blobs, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), refusingArchives(&redactions, 2), events.TaskRenamed, holdingSecret)
+	if _, rejection, err := s.Unarchive("task-1", blobs); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	theirs, rejection, err := s.Archive("task-1", summary, blobs) // the other writer
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	err = s.archiveAgain("task-1", summary, blobs)
+	if err == nil || !strings.Contains(err.Error(), "task-1 was archived again by another writer") || strings.Contains(err.Error(), "left unarchived") {
+		t.Errorf("archiving again: %v, want it to say another writer archived task-1", err)
+	}
+	want := []string{old.Text("archive"), theirs.Text("archive")}
+	slices.Sort(want)
+	if got := blobsIn(t, blobs); !reflect.DeepEqual(got, want) {
+		t.Errorf("the blobs on disk are %v, want the first and the other writer's %v", got, want)
 	}
 }
 
@@ -167,5 +300,50 @@ func TestARedactedTaskThatCantBeArchivedAgainIsLeftUnarchived(t *testing.T) {
 	}
 	if count, err := s.Matches("task-1", secret); count != 0 || err != nil {
 		t.Errorf("task-1's rows holding the secret: %d, %v, want none", count, err)
+	}
+}
+
+// racingPut is blobs where, once the first blob is put, another writer
+// archives the stream into the same blobs before the putter takes the
+// lock.
+type racingPut struct {
+	sharedfiles.Disk
+	s      *Store
+	stream string
+	theirs events.Event
+	raced  bool
+}
+
+func (r *racingPut) Put(blob io.Reader) (string, int64, error) {
+	hash, size, err := r.Disk.Put(blob)
+	if err == nil && !r.raced {
+		r.raced = true
+		var rejection *events.Rejection
+		r.theirs, rejection, err = r.s.Archive(r.stream, summary, r.Disk)
+		if rejection != nil {
+			err = errors.New(rejection.Reason)
+		}
+	}
+	return hash, size, err
+}
+
+// When another writer archives the same rows while RedactArchived archives
+// the task again, both put the same blob, which that writer's marker
+// names: it is kept, and the error says another writer archived the task.
+func TestARaceToArchiveAgainKeepsTheBlobTheWinnersMarkerNames(t *testing.T) {
+	s, disk, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), acceptEvery, events.TaskRenamed, holdingSecret)
+	blobs := &racingPut{Disk: disk, s: s, stream: "task-1"}
+	redaction, _, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	if redaction.Type != events.EventRedacted || err == nil || !strings.Contains(err.Error(), "task-1 was archived again by another writer") {
+		t.Fatalf("redacting: %+v, %v, want redacted and archived by another writer", redaction, err)
+	}
+	if blobs.theirs.Position == 0 {
+		t.Fatal("the other writer didn't archive task-1")
+	}
+	if marker := stillArchived(t, s, "task-1"); marker.Position != blobs.theirs.Position {
+		t.Errorf("task-1's marker %+v, want the other writer's %+v", marker, blobs.theirs)
+	}
+	if got, want := blobsIn(t, disk), []string{blobs.theirs.Text("archive")}; !reflect.DeepEqual(got, want) || got[0] == old.Text("archive") {
+		t.Errorf("the blobs on disk are %v, want the other writer's %v alone", got, want)
 	}
 }

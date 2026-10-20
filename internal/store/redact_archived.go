@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -45,6 +47,13 @@ type ArchiveBlobs interface {
 // old blobs deleted, but it stays unarchived when archiving it again fails
 // or is refused, and some of the secret may stay in the WAL or a blob that
 // won't delete, as with Erase.
+//
+// Archive puts its blob before it is refused, so when archiving again is
+// refused or fails, that blob is removed unless a marker names it: no
+// later run would, and after a refused redaction it holds the secret.
+// When it was refused because another writer archived the task between
+// the steps, the error says so instead of that the task is left
+// unarchived.
 func (s *Store) RedactArchived(stream, secret string, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
 	if rejection, err := s.checkArchived(stream, secret, who, why, blobs); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
@@ -134,15 +143,64 @@ func archivesIn(rows []row) ([]string, error) {
 	return archives, nil
 }
 
-// archiveAgain archives a stream RedactArchived unarchived, and says, when
-// it can't, that the stream is left unarchived.
-func (s *Store) archiveAgain(stream string, summarise func() any, blobs Blobs) error {
-	_, rejection, err := s.Archive(stream, summarise, blobs)
-	switch {
-	case err != nil:
-		return fmt.Errorf("%s is left unarchived: %w", stream, err)
-	case rejection != nil:
-		return fmt.Errorf("%s is left unarchived: archiving it again was refused: %s", stream, rejection.Reason)
+// archiveAgain archives a stream RedactArchived unarchived. When it can't,
+// it removes the blob its Archive put, if any, unless a marker names it
+// (dropUnnamed), and says the stream is left unarchived or, if its latest
+// marker is a task.archived, that another writer archived it again.
+func (s *Store) archiveAgain(stream string, summarise func() any, blobs ArchiveBlobs) error {
+	puts := &recordingPuts{Blobs: blobs}
+	_, rejection, err := s.Archive(stream, summarise, puts)
+	if rejection == nil && err == nil {
+		return nil
 	}
-	return nil
+	if rejection != nil {
+		err = errors.New("archiving it again was refused: " + rejection.Reason)
+	}
+	dropped := s.dropUnnamed(stream, puts.put, blobs)
+	live, read := s.Log(stream)
+	if _, archived := MarkerOf(live); archived && read == nil {
+		return errors.Join(fmt.Errorf("%s was archived again by another writer: %w", stream, err), dropped)
+	}
+	return errors.Join(fmt.Errorf("%s is left unarchived: %w", stream, err), read, dropped)
+}
+
+// recordingPuts is blobs that keep the hash of the last blob put.
+type recordingPuts struct {
+	Blobs
+	put string
+}
+
+func (r *recordingPuts) Put(blob io.Reader) (string, int64, error) {
+	hash, size, err := r.Blobs.Put(blob)
+	if err == nil {
+		r.put = hash
+	}
+	return hash, size, err
+}
+
+// dropUnnamed removes the blob hash a refused Archive of stream put, unless
+// a marker among the stream's rows names it: another writer's Archive of
+// the same rows puts the same blob. Archive puts before taking the lock,
+// so nothing else would delete it, and it holds the rows it read, the
+// secret too when the redaction was refused. The check and the removal
+// hold the lock, so no marker naming the blob commits between them. hash
+// is empty when nothing was put.
+func (s *Store) dropUnnamed(stream, hash string, blobs Remover) error {
+	if hash == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := rowsOf(s.reads, stream, s.applied.Load())
+	if err != nil {
+		return err
+	}
+	named, err := archivesIn(rows)
+	if err != nil {
+		return fmt.Errorf("removing the blob archiving %s again put: %w", stream, err)
+	}
+	if slices.Contains(named, hash) {
+		return nil
+	}
+	return blobs.Remove(hash)
 }

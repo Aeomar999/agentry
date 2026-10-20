@@ -3,6 +3,7 @@ package storetest
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -214,5 +215,47 @@ func TestARedactedArchivedTaskIsErased(t *testing.T) {
 	}
 	if _, erased := state.Erased("task-1"); !erased {
 		t.Error("task-1 isn't erased")
+	}
+}
+
+// failingPut is blobs that keep nothing more.
+type failingPut struct{ sharedfiles.Disk }
+
+func (failingPut) Put(io.Reader) (string, int64, error) { return "", 0, errors.New("the disk is full") }
+
+// Test 4: a redaction that commits but can't archive the task again leaves
+// it unarchived and redacted, the state as a replay of the log has it,
+// live and after a restart, and the secret in no file. Archived later, it
+// is redacted while archived as any task is: no row holds the secret.
+func TestARedactedTaskLeftUnarchivedIsArchivedAndRedactedLater(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agentry.db")
+	state := NewState(events.Core())
+	s := openChecked(t, path, state)
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	withLeaked(t, s, state, blobs)
+
+	redaction, rejection, err := s.RedactArchived("task-1", leaked, you, "A token pasted by mistake.", summarise(state, "task-1"), failingPut{blobs})
+	if rejection != nil || err == nil || !strings.Contains(err.Error(), "task-1 is left unarchived") || redaction.Type != events.EventRedacted {
+		t.Fatalf("redacting: %+v, %v, %v, want redacted and left unarchived", redaction, rejection, err)
+	}
+	if task, err := state.Task("task-1"); task == nil || err != nil || task.Title != "One "+store.Redacted {
+		t.Errorf("task-1 in the state: %+v, %v, want it live and redacted", task, err)
+	}
+	CheckEqual(t, s, state)
+	s.Close()
+	restarted, again := Open(t, path)
+	CheckEqual(t, restarted, again)
+	if holding := holdingAny(t, dir, leaked); len(holding) != 0 {
+		t.Errorf("after redacting, %q is still in %v", leaked, holding)
+	}
+
+	ArchiveIn(t, restarted, again, "task-1", blobs)
+	if _, rejection, err := restarted.RedactArchived("task-1", leaked, you, "", summarise(again, "task-1"), blobs); err != nil || rejection == nil ||
+		rejection.Reason != "no row of task-1 holds the secret" {
+		t.Errorf("redacting it again once archived: %v, %v, want no row holding the secret", rejection, err)
+	}
+	if _, archived := store.MarkerOf(mustLog(t, restarted, "task-1")); !archived {
+		t.Error("task-1 isn't archived")
 	}
 }
