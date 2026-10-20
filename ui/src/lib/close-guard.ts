@@ -6,10 +6,12 @@ import { useBlocker } from "react-router-dom";
 // and Esc call ask: with no changes the panel closes at once; with changes
 // asking turns on, and the panel asks in its footer. Browser Back with
 // changes is held, so the panel's history entry stays, and asks the same.
-// Reload and closing the tab get the browser's own prompt. While busy (a
+// Following a link with changes is held too; opening then says where the
+// link goes, so the panel can ask about that instead. Reload and closing the tab get the browser's own prompt. While busy (a
 // save) nothing asks and Back stays put; the save's answer decides.
 export interface CloseGuard {
   asking: boolean;
+  opening: string; // the path of the link that was held while asking, "" for closing
   ask: () => void; // Close, Cancel and Esc; Esc again while asking is Keep editing
   keepEditing: () => void; // puts focus back where it was when ask was called
   leave: () => void; // closes for good: Discard, or after a save
@@ -19,9 +21,11 @@ export function useCloseGuard(changed: boolean, busy: boolean, onClose: () => vo
   const [asked, setAsked] = useState(false);
   const leaving = useRef(false);
   const from = useRef<Element | null>(null); // where focus was when ask was called
-  const blocker = useBlocker(() => {
+  const [opening, setOpening] = useState("");
+  const blocker = useBlocker(({ nextLocation, historyAction }) => {
     const hold = changed && !leaving.current;
     if (hold && !from.current) from.current = document.activeElement; // asking from Close already knows
+    if (hold) setOpening(historyAction === "PUSH" ? nextLocation.pathname : "");
     return hold;
   });
   const asking = asked || (blocker.state === "blocked" && !busy);
@@ -70,5 +74,5 @@ export function useCloseGuard(changed: boolean, busy: boolean, onClose: () => vo
     setAsked(true);
   }
 
-  return { asking, ask, keepEditing, leave };
+  return { asking, opening: blocker.state === "blocked" ? opening : "", ask, keepEditing, leave };
 }

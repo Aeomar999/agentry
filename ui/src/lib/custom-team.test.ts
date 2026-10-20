@@ -23,11 +23,14 @@ import {
   missingLine,
   missingProfiles,
   newAgent,
+  openQuestion,
   problemCount,
   problemsOfEdit,
   removedNotice,
+  removeTeamQuestion,
   replacedNotice,
   replaceDetail,
+  tasksNeeding,
   replaceQuestion,
   rowChange,
   saveAgain,
@@ -926,5 +929,25 @@ describe("an edited team's sentences", () => {
     expect(editFooterLine(0, false, true)).toBe("");
     expect(editFooterLine(2, false, true)).toBe("2 things to fix, listed at the top.");
     expect(editFooterLine(0, true, true)).toBe("Saving the team…");
+  });
+
+  test("openQuestion asks about an agent's page or a task, by name, and nothing else", () => {
+    expect(openQuestion("/agents/writer")).toEqual({
+      question: "Open writer's page and discard your changes?",
+      detail: "Save first to keep them; the page shows what is saved.",
+    });
+    expect(openQuestion("/tasks/task-182")?.question).toBe("Open task-182 and discard your changes?");
+    expect(openQuestion("/agents")).toBeUndefined();
+    expect(openQuestion("")).toBeUndefined();
+  });
+
+  test("removeTeamQuestion counts the agents, and tasksNeeding finds the tasks a refusal names", () => {
+    expect(removeTeamQuestion("Docs", 4)).toBe("Remove the Docs team and its 4 agents?");
+    expect(removeTeamQuestion("Docs", 1)).toBe("Remove the Docs team and its 1 agent?");
+    expect(tasksNeeding("the Docs team is still needed by task-182, task-190: finish those first (dragging …)")).toEqual([
+      "task-182",
+      "task-190",
+    ]);
+    expect(tasksNeeding("the Docs team is the only one, and every task needs a coordinator: add another team first")).toEqual([]);
   });
 });

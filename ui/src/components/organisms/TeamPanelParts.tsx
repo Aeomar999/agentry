@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Plus, TriangleAlert } from "lucide-react";
 import type { Agent, Policy, ServerConfig, TeamTemplate } from "@/api/types";
@@ -20,6 +20,7 @@ import {
   whyNotLoaded,
 } from "@/lib/custom-team";
 import { useResource } from "@/live/use-resource";
+import { cn } from "@/lib/cn";
 import { AgentRow, fieldId, toggleId } from "./AgentRow";
 
 // What the New team and Edit team panels share (docs/design/custom-teams.md):
@@ -326,23 +327,26 @@ interface FooterProps {
   off?: boolean; // the primary is off for the reason in text: loading, or nothing to save
   primary?: { label: string; busy: string; onClick: () => void }; // none when the load failed: there is nothing to save
   onCancel: () => void;
+  locked?: boolean; // both buttons off while something else runs, as removing the team
+  start?: ReactNode; // the team's own actions, on the far side; not on a phone
 }
 
 // Footer is Cancel and the panel's primary button. On a phone it is the two
 // buttons alone, side by side; the line beside them is still read out.
-export function Footer({ text = "", saving = false, off = false, primary, onCancel }: FooterProps) {
+export function Footer({ text = "", saving = false, off = false, primary, onCancel, locked = false, start }: FooterProps) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 max-sm:flex-nowrap">
-      <p aria-live="polite" id="team-footer-text" className="mr-auto text-[12px] text-ink-muted max-sm:sr-only">
+      {start && <div className="mr-auto flex items-center gap-x-3 max-sm:hidden">{start}</div>}
+      <p aria-live="polite" id="team-footer-text" className={cn("text-[12px] text-ink-muted max-sm:sr-only", !start && "mr-auto")}>
         {text}
       </p>
-      <Button id="team-cancel" variant="ghost" disabled={saving} onClick={onCancel} className={PHONE_BUTTON}>
+      <Button id="team-cancel" variant="ghost" disabled={saving || locked} onClick={onCancel} className={PHONE_BUTTON}>
         Cancel
       </Button>
       {primary && (
         <Button
           variant="primary"
-          disabled={saving || off}
+          disabled={saving || off || locked}
           aria-describedby={off && !saving ? "team-footer-text" : undefined}
           onClick={primary.onClick}
           className={PHONE_BUTTON}
@@ -360,13 +364,15 @@ const PHONE_BUTTON = "max-sm:h-11 max-sm:flex-1";
 interface DiscardQuestionProps {
   question: string;
   detail: string;
+  discard?: string; // the danger answer, "Discard and open" for a link
   onKeep: () => void;
   onDiscard: () => void;
 }
 
-// DiscardQuestion takes the footer's place when closing would lose what
-// you did: a group named by the question, starting on the safe answer.
-export function DiscardQuestion({ question, detail, onKeep, onDiscard }: DiscardQuestionProps) {
+// DiscardQuestion takes the footer's place when closing, or following a
+// link, would lose what you did: a group named by the question, starting
+// on the safe answer.
+export function DiscardQuestion({ question, detail, discard = "Discard", onKeep, onDiscard }: DiscardQuestionProps) {
   const keep = useRef<HTMLButtonElement>(null);
   useEffect(() => keep.current?.focus(), []);
   return (
@@ -388,7 +394,7 @@ export function DiscardQuestion({ question, detail, onKeep, onDiscard }: Discard
         Keep editing
       </Button>
       <Button variant="danger" onClick={onDiscard} className={PHONE_BUTTON}>
-        Discard
+        {discard}
       </Button>
     </div>
   );

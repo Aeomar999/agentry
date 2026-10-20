@@ -479,6 +479,29 @@ export function discardEditDetail(loaded: TeamDraft, draft: TeamDraft): string {
 // reloading it over your changes.
 export const reloadQuestion = "Reload and lose your changes?";
 
+// openQuestion is what following a link out of the panel asks with unsaved
+// changes: to an agent's page, or to a task. Nothing for any other page.
+export function openQuestion(path: string): { question: string; detail: string } | undefined {
+  const [, page, name] = path.split("/");
+  if (!name) return;
+  const named = decodeURIComponent(name);
+  if (page === "agents")
+    return { question: `Open ${named}'s page and discard your changes?`, detail: "Save first to keep them; the page shows what is saved." };
+  if (page === "tasks") return { question: `Open ${named} and discard your changes?`, detail: "" };
+}
+
+// What Remove team asks, and why it is off for your only team.
+export const removeTeamQuestion = (team: string, agents: number) => `Remove the ${team} team and its ${agentCount(agents)}?`;
+export const removeTeamDetail = (changed: boolean) =>
+  changed ? "Their prompts, what they learned and your unsaved changes go too." : "Their prompts and what they learned go too.";
+export const onlyTeamReason = "Can't remove your only team: tasks need its coordinator.";
+
+// How the server words a team that unfinished tasks still need.
+const TEAM_NEEDED = /^.+ team is still needed by (.+?): finish those first/;
+
+// tasksNeeding are the tasks a refused removal of a team names.
+export const tasksNeeding = (refusal: string) => TEAM_NEEDED.exec(refusal)?.[1].split(", ") ?? [];
+
 const unreachable = "Couldn't reach Agentry. Check it's running, then try again.";
 
 // whyNotCreated is a refusal in words: the server's own, or ours when
