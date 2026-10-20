@@ -8,7 +8,7 @@ func TestEveryTypeIsInTheCatalogue(t *testing.T) {
 		ActionResult, PlanUpdated, AgentWaiting, TurnEnded, TurnLimited, TurnResumed, IssueRaised, TurnStopped, TaskNeedsYou, TaskAnswered, TaskDone, ProposalRejected,
 		PolicyLoaded, PolicyRefused, WorktreeMoved,
 		WorkerInvited, WorkerJoined, WorkerConnected, WorkerDisconnected, WorkerRemoved,
-		SettingsChanged, FollowUpsSkipped, TaskArchived, TaskUnarchived, TaskErased,
+		SettingsChanged, FollowUpsSkipped, TaskArchived, TaskUnarchived, TaskErased, EventRedacted,
 		TemplateSaved, TemplateRemoved}
 	for _, kind := range all {
 		if _, ok := coreTypes[kind]; !ok {

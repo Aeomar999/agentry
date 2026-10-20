@@ -63,7 +63,7 @@ func TestAnErasureAllowsDeletingOnlyTheRowsItCovers(t *testing.T) {
 	}
 }
 
-// A log at version 1, with archiving's trigger, migrates to 2: the
+// A log at version 1, with archiving's trigger, migrates on: the
 // trigger allows an erasure's rows and still an archive's, until the
 // archive is undone.
 func TestAVersionOneLogMigratesToErasing(t *testing.T) {
@@ -85,8 +85,8 @@ func TestAVersionOneLogMigratesToErasing(t *testing.T) {
 		}
 	})
 	s.Close()
-	if version, _, trigger := schemaOf(t, path); version != 2 || !strings.Contains(trigger, "task.archived") || !strings.Contains(trigger, "task.erased") {
-		t.Errorf("version %d, trigger %s; want 2 and both cases", version, trigger)
+	if version, _, trigger := schemaOf(t, path); version != len(migrations) || !strings.Contains(trigger, "task.archived") || !strings.Contains(trigger, "task.erased") {
+		t.Errorf("version %d, trigger %s; want %d and both cases", version, trigger, len(migrations))
 	}
 }
 

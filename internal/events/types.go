@@ -93,6 +93,11 @@ const (
 	TaskErased Type = "task.erased" // the task's rows up to "through" ("count" of them) are deleted for good, and the "archives" blobs that held its rows; "created" is its task.created position, "why" your reason
 )
 
+// Redacting (docs/design/log-growth.md section 5): only the store writes
+// it, for you, in the stream whose rows it rewrote. It never holds the
+// secret, nor its hash: a short secret's hash can be guessed.
+const EventRedacted Type = "event.redacted" // the rows at "positions" had a secret replaced by [redacted] in their "fields" (one list of JSON paths per row), "removed" bytes in all; "who" asked, "why" says what for
+
 // The workers stream: the machines, besides Agentry's own, that run agents.
 const (
 	WorkerInvited      Type = "worker.invited"      // a join code was made; only its hash is kept

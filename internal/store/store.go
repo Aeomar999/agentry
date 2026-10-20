@@ -3,15 +3,16 @@
 // Triggers make UPDATE and DELETE fail in the database itself, so
 // "append-only" does not depend on the code remembering; the only deletes
 // allowed are of a task's rows that its task.archived or task.erased marker
-// covers (see migrations). Propose is the way in for every event but the
-// markers, which only Archive, Unarchive and Erase write: it runs the checks
-// against the model,
-// appends the event (or a proposal.rejected) and applies it to the model. A
-// mutex makes proposals strictly one at a time, from the check to the
-// apply, so two can never both pass the order check against the same state
-// (proof 05). Reads of the log go through a separate pool of read-only
-// connections, so they never queue behind a write: in WAL mode a reader
-// sees every committed event and none in flight.
+// covers, and the only updates are of the data of rows an event.redacted
+// names (see migrations). Propose is the way in for every event but the
+// markers, which only Archive, Unarchive, Erase and Redact write: it runs
+// the checks against the model, appends the event (or a proposal.rejected)
+// and applies it to the model. A mutex makes proposals strictly one at a
+// time, from the check to the apply, so two can never both pass the order
+// check against the same state (proof 05). Reads of the log go through a
+// separate pool of read-only connections, so they never queue behind a
+// write: in WAL mode a reader sees every committed event and none in
+// flight.
 package store
 
 import (
@@ -85,6 +86,22 @@ AND NOT EXISTS (
 	SELECT 1 FROM events e
 	WHERE e.stream = OLD.stream AND e.type = 'task.erased'
 	  AND OLD.position <= json_extract(e.data, '$.through'))
+BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;`,
+	// 3: redacting (docs/design/log-growth.md section 5). An update is
+	// allowed only of a row's data, and only of a row an event.redacted
+	// later in the same stream names in its "positions". The redaction
+	// counts inside its own uncommitted transaction, as the markers do, and
+	// the redactions have an index of their own.
+	`CREATE INDEX events_redacted ON events (stream, position) WHERE type = 'event.redacted';
+DROP TRIGGER events_no_update;
+CREATE TRIGGER events_no_update BEFORE UPDATE ON events
+WHEN NEW.position IS NOT OLD.position OR NEW.at IS NOT OLD.at
+  OR NEW.stream IS NOT OLD.stream OR NEW.type IS NOT OLD.type
+  OR NEW.actor_kind IS NOT OLD.actor_kind OR NEW.actor_id IS NOT OLD.actor_id
+  OR NEW.correlation IS NOT OLD.correlation
+  OR NOT EXISTS (SELECT 1 FROM events r, json_each(r.data, '$.positions') p
+                 WHERE r.stream = OLD.stream AND r.type = 'event.redacted'
+                   AND r.position > OLD.position AND p.value = OLD.position)
 BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;`,
 }
 
@@ -287,9 +304,10 @@ func (s *Store) made(kind events.Type) (int, error) {
 }
 
 // byTheStore are the types the store writes itself, through Archive,
-// Unarchive and Erase: Propose refuses them from anyone, so no marker goes
-// into the log without its rows moving, or going, with it.
-var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived, events.TaskErased}
+// Unarchive, Erase and Redact: Propose refuses them from anyone, so no
+// marker goes into the log without its rows moving, going or being
+// rewritten with it.
+var byTheStore = []events.Type{events.TaskArchived, events.TaskUnarchived, events.TaskErased, events.EventRedacted}
 
 // propose is Propose, under Store.mu.
 func (s *Store) propose(p events.Proposal) (events.Event, *events.Rejection, error) {

@@ -325,8 +325,8 @@ func (insecureDriver) Open(name string) (driver.Conn, error) {
 }
 
 // atVersionOne takes the file at path back to schema version 1, before
-// erasing: migration 2's index dropped, so it runs again. Its delete
-// trigger stays, which migration 2 replaces anyway.
+// erasing: migration 2's and 3's indexes dropped, so they run again. Their
+// triggers stay, which they replace anyway.
 func atVersionOne(t *testing.T, path string) {
 	t.Helper()
 	db, err := sql.Open(store.Driver, path)
@@ -334,7 +334,7 @@ func atVersionOne(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`DROP INDEX events_erased; PRAGMA user_version = 1`); err != nil {
+	if _, err := db.Exec(`DROP INDEX events_erased; DROP INDEX events_redacted; PRAGMA user_version = 1`); err != nil {
 		t.Fatal(err)
 	}
 }

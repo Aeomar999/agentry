@@ -47,6 +47,11 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 	if catalogue.KindOf(p.Stream) == events.ForeignStream {
 		return refuse(events.ForeignReason(p.Stream))
 	}
+	if p.Type == events.EventRedacted {
+		if reason := aRedaction(p); reason != "" {
+			return refuse(reason)
+		}
+	}
 	if err := state.Broken(events.AgentsStream); err != nil {
 		return refuse("could not read the agents: " + err.Error())
 	}
@@ -103,8 +108,14 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 			return refuse(reason)
 		}
 		return nil
+	case errors.Is(err, current.ErrArchived) && p.Type == events.EventRedacted:
+		return refuse(ArchivedRedactionRefusal(p.Stream))
 	case errors.Is(err, current.ErrArchived):
 		return refuse(ArchivedRefusal(p.Stream))
+	case p.Type == events.EventRedacted && task == nil && err == nil:
+		return refuse("task " + p.Stream + " doesn't exist")
+	case p.Type == events.EventRedacted:
+		return nil // whole, done or broken: its secret goes all the same
 	case err != nil:
 		return refuse("could not read the task: " + err.Error())
 	}

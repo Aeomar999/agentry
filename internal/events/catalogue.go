@@ -253,6 +253,8 @@ var coreTypes = map[Type]Spec{
 	TaskUnarchived: {Fields: []string{"marker", "archive"}, Writers: []ActorKind{System}, Refolds: true}, // the task is folded again from its restored rows
 	TaskErased:     {Fields: []string{"why", "through", "count", "created", "archives"}, Writers: []ActorKind{Human}},
 
+	EventRedacted: {Fields: []string{"positions", "fields", "removed", "who", "why"}, Writers: []ActorKind{System}, Refolds: true}, // the stream is folded again from its rewritten rows
+
 	WorkerInvited:      {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},
 	ConnectionInvited:  {Fields: []string{"code", "expires"}, Writers: []ActorKind{Human}},
 	ConnectionMade:     {Fields: []string{"id", "code", "credential"}, Writers: []ActorKind{System}},
@@ -376,7 +378,8 @@ func (c *Catalogue) CheckShape(p Proposal) *Rejection {
 }
 
 // belongsIn says whether a type may be written to a stream. A rejection
-// goes in the stream of what it refused.
+// goes in the stream of what it refused, and a redaction in the stream
+// whose rows it rewrote.
 func (c *Catalogue) belongsIn(kind Type, stream string) bool {
 	if want, fixed := streamOf[kind]; fixed {
 		return stream == want
@@ -384,7 +387,7 @@ func (c *Catalogue) belongsIn(kind Type, stream string) bool {
 	if prefix, owned := c.prefixOf[kind]; owned {
 		return strings.HasPrefix(stream, prefix)
 	}
-	if kind == ProposalRejected {
+	if kind == ProposalRejected || kind == EventRedacted {
 		return true
 	}
 	return c.IsTaskStream(stream)
@@ -400,7 +403,7 @@ func (c *Catalogue) CheckWriter(p Proposal) *Rejection {
 }
 
 // Refolds says whether an event changes what came before it in its stream,
-// as task.unarchived does and event.redacted will: the stream's state is
+// as task.unarchived and event.redacted do: the stream's state is
 // then folded again from its earlier events and this one, not changed by
 // this one alone.
 func (c *Catalogue) Refolds(kind Type) bool { return c.specs[kind].Refolds }

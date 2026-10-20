@@ -67,8 +67,13 @@ func Replay(stream []events.Event) (t *Task, err error) {
 }
 
 // Apply changes the task in place by one accepted event of its stream. A
-// state loaded from a snapshot takes the events after it this way.
+// state loaded from a snapshot takes the events after it this way. A
+// redaction changes nothing, not even when the task was last active: what
+// it changed is in the rows before it, which the task is folded from again.
 func (t *Task) Apply(e events.Event) {
+	if e.Type == events.EventRedacted {
+		return
+	}
 	t.LastActiveAt = e.At
 	if turn := t.Turn(e.Correlation); turn != nil {
 		turn.LastEventAt = e.At

@@ -83,6 +83,27 @@ func (p Proposal) List(field string) []string {
 	return nil
 }
 
+// Numbers returns a data field as a list of whole numbers, or nil when it
+// isn't one. A list read back from the log decodes as []any of float64; a
+// proposal not yet written may carry an []int64, as positions.
+func (p Proposal) Numbers(field string) []int64 {
+	switch value := p.Data[field].(type) {
+	case []int64:
+		return value
+	case []any:
+		list := make([]int64, 0, len(value))
+		for _, item := range value {
+			number, ok := item.(float64)
+			if !ok || number != float64(int64(number)) {
+				return nil
+			}
+			list = append(list, int64(number))
+		}
+		return list
+	}
+	return nil
+}
+
 // Rejection says which check refused a proposal, and why.
 type Rejection struct {
 	Check  string `json:"check"` // shape | who | order, or features: a feature proposing a type it may not (features.Checked)
