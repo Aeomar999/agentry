@@ -19,6 +19,8 @@ export async function previewRedaction(task: string, text: string): Promise<numb
   return preview.rows;
 }
 
-export function redact(task: string, text: string, why: string): Promise<Redaction> {
-  return api("POST", `${taskPath(task)}/redact`, { text, why });
+// redact takes text out of the task's rows, refused unless as many rows
+// hold it as the preview counted, which you confirmed.
+export function redact(task: string, text: string, why: string, rows: number): Promise<Redaction> {
+  return api("POST", `${taskPath(task)}/redact`, { text, why, rows });
 }

@@ -20,9 +20,11 @@ import { dateTime } from "@/lib/time";
 // happened to the last try; or what the redaction did.
 type Stage = { step: "mark"; refusal: string } | { step: "confirm"; rows: number; note: string } | { step: "done"; redaction: Redaction };
 
-// useRedaction runs the preview and the redaction. A redaction refused
-// 409, as when the rows changed since the preview, previews again and asks
-// again with the new count, rather than failing.
+// useRedaction runs the preview and the redaction, which sends the count
+// you confirmed. The server refuses it 409 when the rows holding the text
+// aren't that many any more, as when one was written since the preview,
+// or none holds it now: that previews again and asks again with the new
+// count, or shows why it can't be redacted, rather than failing.
 function useRedaction(task: string, onRedacted: () => void) {
   const [stage, setStage] = useState<Stage>({ step: "mark", refusal: "" });
   const [busy, setBusy] = useState(false);
@@ -44,7 +46,7 @@ function useRedaction(task: string, onRedacted: () => void) {
   async function confirm(text: string, why: string, rows: number) {
     setBusy(true);
     try {
-      setStage({ step: "done", redaction: await redact(task, text, why) });
+      setStage({ step: "done", redaction: await redact(task, text, why, rows) });
       onRedacted();
     } catch (failure) {
       const reason = (failure as Error).message;

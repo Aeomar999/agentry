@@ -55,7 +55,7 @@ describe("RedactText", () => {
     expect(redact).not.toHaveBeenCalled();
 
     await act(async () => fireEvent.click(button("Redact 3 rows")));
-    expect(redact).toHaveBeenCalledWith("task-1", SECRET, "pasted a key");
+    expect(redact).toHaveBeenCalledWith("task-1", SECRET, "pasted a key", 3);
     expect(onRedacted).toHaveBeenCalled();
     expect(screen.getByText(`Redacted 3 rows of task-1 at ${dateTime(AT)}.`)).toBeTruthy();
     expect(screen.getByText(/^Backups of agentry.db/).textContent).toContain(`made before ${dateTime(AT)} still hold the text`);
@@ -71,27 +71,29 @@ describe("RedactText", () => {
     expect(redact).not.toHaveBeenCalled();
   });
 
-  test("a redaction refused 409 counts the rows again and asks again with the new count", async () => {
-    vi.mocked(previewRedaction).mockResolvedValueOnce(2).mockResolvedValueOnce(4);
+  test("a row written since the count is refused 409, counted again and asked again with the new count", async () => {
+    vi.mocked(previewRedaction).mockResolvedValueOnce(1).mockResolvedValueOnce(2);
     vi.mocked(redact)
-      .mockRejectedValueOnce(new ApiError("task-1 took an event since its rows were read: find its rows again", 409))
-      .mockResolvedValueOnce({ stream: "task-1", at: AT, rows: 4, warnings: [] });
+      .mockRejectedValueOnce(new ApiError("2 rows hold this text now, not 1: count them again", 409))
+      .mockResolvedValueOnce({ stream: "task-1", at: AT, rows: 2, warnings: [] });
     ask();
     await count();
-    await act(async () => fireEvent.click(button("Redact 2 rows")));
+    await act(async () => fireEvent.click(button("Redact 1 row")));
 
+    expect(redact).toHaveBeenLastCalledWith("task-1", SECRET, "", 1);
     expect(previewRedaction).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/^4 rows of task-1 hold this text\./)).toBeTruthy();
-    expect(screen.getByText(/took an event since its rows were read/).textContent).toContain("so the rows were counted again");
+    expect(screen.getByText(/^2 rows of task-1 hold this text\./)).toBeTruthy();
+    expect(screen.getByText(/2 rows hold this text now, not 1/).textContent).toContain("so the rows were counted again");
     expect(onRedacted).not.toHaveBeenCalled();
 
-    await act(async () => fireEvent.click(button("Redact 4 rows")));
-    expect(screen.getByText(`Redacted 4 rows of task-1 at ${dateTime(AT)}.`)).toBeTruthy();
+    await act(async () => fireEvent.click(button("Redact 2 rows")));
+    expect(redact).toHaveBeenLastCalledWith("task-1", SECRET, "", 2);
+    expect(screen.getByText(`Redacted 2 rows of task-1 at ${dateTime(AT)}.`)).toBeTruthy();
   });
 
-  test("a 409 whose new count is refused goes back to the text, with the reason", async () => {
+  test("a 409 because no row holds the text any more goes back to the text, with the reason", async () => {
     vi.mocked(previewRedaction).mockResolvedValueOnce(1).mockRejectedValueOnce(new ApiError("no row of task-1 holds the secret", 409));
-    vi.mocked(redact).mockRejectedValueOnce(new ApiError("task-1 took an event since its rows were read: find its rows again", 409));
+    vi.mocked(redact).mockRejectedValueOnce(new ApiError("no row of task-1 holds the secret", 409));
     ask();
     await count();
     await act(async () => fireEvent.click(button("Redact 1 row")));
