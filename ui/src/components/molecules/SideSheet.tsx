@@ -1,26 +1,29 @@
-import { ReactNode, RefObject, useEffect, useId, useRef } from "react";
+import { ReactNode, RefObject, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
 
 // A modal side sheet over the right of the page: 680px wide, the whole
 // screen under 640px, over a flat scrim. Everything else on the page is
-// inert while it is open, so focus and the screen reader stay in it; focus
-// goes back where it was when it closes. The body scrolls between the
-// title and the footer. canClose false turns Close and Esc off, as while
-// it saves.
+// inert while it is open, so focus and the screen reader stay in it. Focus goes to returnTo when it closes,
+// or back where it was when it opened. The body scrolls between the title
+// and the footer. canClose false turns Close and Esc off, as while it saves.
 interface SideSheetProps {
   title: string;
+  returnTo?: RefObject<HTMLElement | null>; // for an opener that is gone by then, as one in a closed dialog
   onClose: () => void;
   canClose?: boolean;
   footer: ReactNode;
   children: ReactNode;
 }
 
-export function SideSheet({ title, onClose, canClose = true, footer, children }: SideSheetProps) {
+export function SideSheet({ title, returnTo, onClose, canClose = true, footer, children }: SideSheetProps) {
   const titleId = useId();
   const sheet = useRef<HTMLDivElement>(null);
-  useInertBehind(sheet);
+  // Remembered as it first renders: by its effects, autoFocus inside it has run.
+  const [opener] = useState(() => document.activeElement);
+  useInertBehind(sheet); // first, so the page is no longer inert when focus returns to it
+  useFocusReturn(sheet, returnTo, opener);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => event.key === "Escape" && canClose && onClose();
@@ -50,18 +53,30 @@ export function SideSheet({ title, onClose, canClose = true, footer, children }:
   );
 }
 
-// useInertBehind makes every other part of the page inert while the sheet
-// is open, and puts focus back where it was once it closes.
+// useInertBehind makes every other part of the page inert while the sheet is open.
 function useInertBehind(sheet: RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
     const behind = [...document.body.children].filter(
       (element): element is HTMLElement => element instanceof HTMLElement && element !== sheet.current && !element.inert,
     );
     for (const element of behind) element.inert = true;
     return () => {
       for (const element of behind) element.inert = false;
-      opener?.focus();
     };
   }, [sheet]);
+}
+
+// useFocusReturn focuses returnTo, or else the opener, once the sheet
+// closes, unless focus has gone on somewhere else by then: into the sheet
+// that replaced this one, say.
+function useFocusReturn(sheet: RefObject<HTMLElement | null>, returnTo: RefObject<HTMLElement | null> | undefined, opener: Element | null) {
+  useEffect(() => {
+    const root = sheet.current;
+    return () => {
+      const at = document.activeElement;
+      if (at && at !== document.body && !root?.contains(at)) return;
+      const target = [returnTo?.current, opener].find((element) => element instanceof HTMLElement && element.isConnected);
+      if (target instanceof HTMLElement) target.focus();
+    };
+  }, [sheet, returnTo, opener]);
 }

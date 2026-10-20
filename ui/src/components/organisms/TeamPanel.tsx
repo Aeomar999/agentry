@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { RefObject, useEffect, useRef, useState } from "react";
 import { Plus, TriangleAlert } from "lucide-react";
 import type { Agent, Policy, ServerConfig, TeamTemplate } from "@/api/types";
 import { Button } from "@/components/atoms/Button";
@@ -33,20 +33,21 @@ import { AgentRow, fieldId, toggleId } from "./AgentRow";
 
 interface TeamPanelProps {
   template?: string; // the id of the template to start from a copy of; none starts blank
+  returnTo?: RefObject<HTMLElement | null>; // where focus goes when the panel closes
   onClose: () => void;
   onCreated: (team: string) => Promise<void>; // shows the new team on the page
 }
 
 const TITLE = "New team";
 
-export function TeamPanel({ template, onClose, onCreated }: TeamPanelProps) {
+export function TeamPanel({ template, returnTo, onClose, onCreated }: TeamPanelProps) {
   const roster = useResource<Agent[]>("/api/agents").data;
   const templates = useResource<TeamTemplate[]>("/api/teams/templates").data;
   const policy = useResource<Policy>("/api/policy").data;
   const engines = useResource<ServerConfig>("/api/config").data?.engines;
   if (!roster || !templates || !policy || !engines) {
     return (
-      <SideSheet title={TITLE} onClose={onClose} footer={<Footer text="Loading…" onClose={onClose} />}>
+      <SideSheet title={TITLE} returnTo={returnTo} onClose={onClose} footer={<Footer text="Loading…" onClose={onClose} />}>
         <p aria-live="polite" className="text-[13px] text-ink-muted">
           Loading engines and profiles…
         </p>
@@ -60,6 +61,7 @@ export function TeamPanel({ template, onClose, onCreated }: TeamPanelProps) {
       policy={policy}
       engines={engines}
       copied={templates.find((t) => t.id === template)}
+      returnTo={returnTo}
       onClose={onClose}
       onCreated={onCreated}
     />
@@ -72,6 +74,7 @@ interface TeamFormProps {
   policy: Policy;
   engines: string[];
   copied?: TeamTemplate; // the template the form starts from a copy of, or Blank
+  returnTo?: RefObject<HTMLElement | null>;
   onClose: () => void;
   onCreated: (team: string) => Promise<void>;
 }
@@ -79,7 +82,7 @@ interface TeamFormProps {
 // What Start from asks before it replaces agents you changed: the template's id, or "" for Blank.
 type Replacing = { to: string; changed: string[] };
 
-function TeamForm({ roster, templates, policy, engines, copied, onClose, onCreated }: TeamFormProps) {
+function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClose, onCreated }: TeamFormProps) {
   const notify = useToast();
   const [first] = useState(() => startOf(copied, roster));
   const [start, setStart] = useState(first); // how the agents started, to tell what you changed
@@ -210,6 +213,7 @@ function TeamForm({ roster, templates, policy, engines, copied, onClose, onCreat
   return (
     <SideSheet
       title={TITLE}
+      returnTo={returnTo}
       onClose={onClose}
       canClose={!saving}
       footer={<Footer text={footerText} saving={saving} onClose={onClose} onCreate={() => create()} />}

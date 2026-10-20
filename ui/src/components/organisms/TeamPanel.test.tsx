@@ -124,6 +124,7 @@ const field = (label: string) => within(panel()).getByLabelText(label) as HTMLIn
 const create = () => act(async () => fireEvent.click(within(panel()).getByRole("button", { name: "Create team" })));
 const summary = () => document.getElementById("team-summary")!;
 const sent = () => vi.mocked(api).mock.calls.map(([method, path, body]) => [method, path, body]);
+const addTeam = () => screen.getByRole("button", { name: "Add a team" });
 
 describe("New team: Blank", () => {
   test("Build a team in Add a team opens the panel with one coordinator", () => {
@@ -178,6 +179,44 @@ describe("New team: Blank", () => {
     fireEvent.click(within(panel()).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
     expect(container.inert).toBe(false);
+  });
+});
+
+describe("New team: focus and scroll", () => {
+  test("Close puts focus on Add a team, whose dialog opened the panel", () => {
+    openAt("/agents");
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Build a team" }));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Close" }));
+    expect(document.activeElement).toBe(addTeam());
+  });
+
+  test("Cancel puts focus on Add a team, from a link too", () => {
+    openAt("/agents?team=new");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(document.activeElement).toBe(addTeam());
+  });
+
+  test("creating the team puts focus on Add a team", async () => {
+    vi.mocked(api).mockResolvedValue({});
+    openAt("/agents");
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Change it first, Writing" }));
+    await create();
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(document.activeElement).toBe(addTeam());
+  });
+
+  test("focus stays in Team name when the panel finishes loading", () => {
+    delete reads["/api/config"];
+    openAt("/agents?team=new");
+    expect(within(panel()).getByText("Loading engines and profiles…")).toBeTruthy();
+    act(() => {
+      reads["/api/config"] = { engines: ["claude", "codex"] };
+      changed();
+    });
+    expect(document.activeElement).toBe(teamName());
   });
 });
 

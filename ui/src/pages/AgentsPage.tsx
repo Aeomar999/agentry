@@ -78,6 +78,7 @@ export function AgentsPage() {
   const reloadAll = () => Promise.all([reload(), policy.reload()]);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
+  const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
@@ -98,7 +99,7 @@ export function AgentsPage() {
         title="Agents"
         meta="Teams of agents, one for each kind of work. A task goes to its team's coordinator, which hands each step to one of the team's agents."
         actions={[
-          { label: "Add a team", icon: <Users />, onClick: () => setAdding(true) },
+          { label: "Add a team", icon: <Users />, onClick: () => setAdding(true), ref: addTeam },
           { label: "New agent", icon: <Plus />, to: "/agents/new", primary: true },
         ]}
       />
@@ -188,6 +189,7 @@ export function AgentsPage() {
       {building && (
         <TeamPanel
           template={params.get("template") ?? undefined}
+          returnTo={addTeam}
           onClose={() => showPanel({}, true)}
           onCreated={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes

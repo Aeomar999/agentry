@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, Ref } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/atoms/Button";
 
@@ -9,6 +9,7 @@ export interface HeaderAction {
   onClick?: () => void;
   primary?: boolean; // the one orange button on the screen
   disabled?: boolean;
+  ref?: Ref<HTMLButtonElement>; // to focus the button again later
 }
 
 interface PageHeaderProps {
@@ -36,6 +37,7 @@ export function PageHeader({ title, meta, badges, actions = [] }: PageHeaderProp
           {actions.map((action) => (
             <Button
               key={action.label}
+              ref={action.ref}
               variant={action.primary ? "primary" : "secondary"}
               icon={action.icon}
               disabled={action.disabled}
