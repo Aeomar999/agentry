@@ -51,7 +51,7 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("task")
 	task, err := s.task(id)
 	if err == nil && task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, id)
 		return
 	}
 	if errors.Is(err, current.ErrErased) {

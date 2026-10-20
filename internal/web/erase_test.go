@@ -583,8 +583,8 @@ func TestARefusedErasureWritesNothing(t *testing.T) {
 			t.Errorf("a second erasure of %s: %d %s, want 409", id, code, body)
 		}
 	}
-	if code, _ := call(t, f.server, "POST", "/api/tasks/task-9/erase", `{}`); code != http.StatusNotFound {
-		t.Errorf("erasing no such task: %d, want 404", code)
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-9/erase", `{}`); code != http.StatusNotFound || strings.TrimSpace(body) != "no such task task-9" {
+		t.Errorf("erasing no such task: %d %q, want 404 %q", code, body, "no such task task-9")
 	}
 	if code, _ := callAs(t, f.server, "desk-secret", "POST", "/api/tasks/task-1/erase"); code != http.StatusUnauthorized {
 		t.Errorf("the desk erasing: %d, want 401", code)

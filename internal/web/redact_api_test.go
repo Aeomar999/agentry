@@ -117,8 +117,9 @@ func TestRedactingALiveTaskLeavesNoTraceOnDisk(t *testing.T) {
 }
 
 // The same for an archived task, opened from the page first, whose rows
-// are in its blob, not the snapshot: it is archived again, its old blob is gone, and the cache of opened archives,
-// whose entry held the secret, drops it.
+// are in its blob, not the snapshot: it is archived again, its old blob
+// is gone, and the cache of opened archives, whose entry held the secret,
+// drops it.
 func TestRedactingAnArchivedTaskLeavesNoTraceOnDisk(t *testing.T) {
 	f := withSecret(t)
 	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Deployed.", "moved": true}})
@@ -237,8 +238,8 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 			t.Errorf("%s: %d %q, want 410 %q", erased, code, body, gone)
 		}
 		unknown := strings.ReplaceAll(path, "{task}", "task-9")
-		if code, body := call(t, f.server, "POST", unknown, `{"text":"`+secretHere+`"}`); code != http.StatusNotFound {
-			t.Errorf("%s: %d %q, want 404", unknown, code, body)
+		if code, body := call(t, f.server, "POST", unknown, `{"text":"`+secretHere+`"}`); code != http.StatusNotFound || strings.TrimSpace(body) != "no such task task-9" {
+			t.Errorf("%s: %d %q, want 404 %q", unknown, code, body, "no such task task-9")
 		}
 	}
 	if f.log.LastPosition() != last {
