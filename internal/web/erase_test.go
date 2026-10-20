@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,6 +48,7 @@ type eraseFixture struct {
 	state     *current.State
 	blobs     sharedfiles.Disk
 	snapshots *current.SnapshotWriter
+	web       *Server
 	server    *httptest.Server
 	stopped   []string // the sessions ended, and whether each task was erased already
 	own, both string   // the blobs of task-2's files
@@ -69,8 +71,9 @@ func newEraseFixture(t *testing.T) *eraseFixture {
 		}
 		f.stopped = append(f.stopped, task)
 	}
-	f.server = httptest.NewServer(NewServer(f.log, f.state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r",
-		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop}, http.NotFoundHandler(), nil).Handler())
+	f.web = NewServer(f.log, f.state, Config{UIToken: token, DeskToken: "desk-secret", DefaultRepo: "/r",
+		Blobs: f.blobs, Snapshots: f.snapshots, StopSession: stop}, http.NotFoundHandler(), nil)
+	f.server = httptest.NewServer(f.web.Handler())
 	t.Cleanup(f.server.Close)
 
 	f.own, f.both = f.put(t, "task-2's own notes, "+plantedHere), f.put(t, "notes both tasks share")
@@ -524,5 +527,71 @@ func TestClosingAnEpicSkipsAnErasedStory(t *testing.T) {
 	}
 	if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
 		t.Errorf("closing the epic: %d %s, want 200", code, body)
+	}
+}
+
+// A story an erasure took out of its epic before it was refused can be
+// filed again, out of any epic or back under the same one. The erasure
+// leaves it out on both sides; one from before the story wrote its
+// task.epic_left too, or a story archived when it was taken out and
+// unarchived since, leaves only the epic's task.story_removed, and filing
+// it lets go of the epic the story still names.
+func TestAStoryLeftByARefusedErasureFilesAgain(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		leave func(t *testing.T, f *eraseFixture)
+	}{
+		{"out on both sides", func(t *testing.T, f *eraseFixture) {
+			if refused, err := f.web.leaveEpic("task-2"); refused != "" || err != nil {
+				t.Fatalf("leaving the epic: %q, %v", refused, err)
+			}
+			f.filed(t, "", nil)
+		}},
+		{"out of the epic alone", func(t *testing.T, f *eraseFixture) {
+			f.propose(t, events.Proposal{Stream: "task-3", Actor: you, Type: events.StoryRemoved, Data: map[string]any{"story": "task-2"}})
+		}},
+	} {
+		for _, epic := range []string{"", "task-3"} {
+			t.Run(c.name+", then into "+cmp.Or(epic, "none"), func(t *testing.T) {
+				f := newEraseFixture(t)
+				c.leave(t, f)
+				if code, body := call(t, f.server, "PUT", "/api/tasks/task-2/epic", `{"epic":"`+epic+`"}`); code != http.StatusOK {
+					t.Fatalf("filing task-2 into %q: %d %s", epic, code, body)
+				}
+				f.filed(t, epic, map[string][]string{"": nil, "task-3": {"task-2"}}[epic])
+			})
+		}
+	}
+}
+
+// A story of an erased epic leaves it, though the epic can't take its
+// task.story_removed.
+func TestAStoryLeavesAnErasedEpic(t *testing.T) {
+	f := newEraseFixture(t)
+	f.erase(t, "task-3")
+	if code, body := call(t, f.server, "PUT", "/api/tasks/task-2/epic", `{"epic":""}`); code != http.StatusOK {
+		t.Fatalf("taking task-2 out: %d %s", code, body)
+	}
+	if story, err := f.state.Task("task-2"); err != nil || story.Epic != "" {
+		t.Errorf("task-2's epic: %v, want none", err)
+	}
+}
+
+// filed fails the test unless task-2 names epic, and task-3 lists stories.
+func (f *eraseFixture) filed(t *testing.T, epic string, stories []string) {
+	t.Helper()
+	story, err := f.state.Task("task-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if story.Epic != epic {
+		t.Errorf("task-2's epic: %q, want %q", story.Epic, epic)
+	}
+	task, err := f.state.Task("task-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(task.Stories, stories) {
+		t.Errorf("task-3's stories: %v, want %v", task.Stories, stories)
 	}
 }

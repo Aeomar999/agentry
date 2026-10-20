@@ -90,12 +90,14 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 // leaveEpic takes a story out of its epic before it is erased, with the
 // epic's task.story_removed, which names only its id: once erased, the
 // story can't be loaded for the rule itsStory, and the epic would wait on
-// it for ever. If the erasure then fails, the story is left out of its
-// epic, but whole: you may file it under one again. An archived epic is
-// done and is left as it is: unarchiving it for the removal would leave
-// its blob holding the story's words, which redactCopies takes out only
-// of an epic still archived. It returns why the removal was refused, or
-// the error that stopped it.
+// it for ever. A live story writes its task.epic_left too, as fileUnder
+// does, so if the erasure then fails it is out of any epic, and you may
+// file it under one again; an archived one still names its epic, which
+// fileUnder lets go of once it is unarchived. An archived epic is done
+// and is left as it is: unarchiving it for the removal would leave its
+// blob holding the story's words, which redactCopies takes out only of an
+// epic still archived. It returns why the removal was refused, or the
+// error that stopped it.
 func (s *Server) leaveEpic(id string) (string, error) {
 	summary, found := s.state.Summary(id)
 	if !found || summary.Epic == "" {
@@ -110,12 +112,18 @@ func (s *Server) leaveEpic(id string) (string, error) {
 	case epic == nil || !slices.Contains(epic.Stories, id):
 		return "", nil
 	}
-	removed := events.Proposal{Stream: epic.ID, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": id}}
-	_, rejection, err := s.store.Propose(removed)
-	if rejection != nil {
-		return rejection.Reason, nil
+	leaving := []events.Proposal{{Stream: epic.ID, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": id}}}
+	if story, err := s.task(id); err == nil && story != nil {
+		leaving = append(leaving, events.Proposal{Stream: id, Actor: httpapi.You, Type: events.EpicLeft, Data: map[string]any{"epic": epic.ID}})
 	}
-	return "", err
+	for _, p := range leaving {
+		if _, rejection, err := s.store.Propose(p); rejection != nil {
+			return rejection.Reason, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return "", nil
 }
 
 // sharedFilesOf is the blobs of the files task id shared, read before it
