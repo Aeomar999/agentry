@@ -18,7 +18,8 @@ import (
 // held the secret encoded again with it replaced, and every other byte,
 // the keys included, as it was. They decode to the data with the secret
 // replaced in every string value, and the fields and the bytes removed are
-// the ones the data held.
+// the ones the data held. Data with the secret drawn as a key is refused,
+// as it was.
 func TestRedactedDataChangesOnlyTheStringsHoldingTheSecret(t *testing.T) {
 	for _, secret := range []string{secret, `p"a\ss`, "<tok\n>", "wörd ✓"} {
 		for seed := range uint64(300) {
@@ -30,6 +31,12 @@ func TestRedactedDataChangesOnlyTheStringsHoldingTheSecret(t *testing.T) {
 			rw, err := redactedData(original, secret)
 			if err != nil {
 				t.Fatalf("%s: %v\n%s", name, err, original)
+			}
+			if g.inKey {
+				if rw.refused != "holds the secret in a key, which redacting doesn't rewrite" || rw.data != original || len(rw.fields) != 0 {
+					t.Errorf("%s: refused %q fields %v\n got %s\nwant it as it was", name, rw.refused, rw.fields, rw.data)
+				}
+				continue
 			}
 			if len(g.fields) == 0 {
 				if len(rw.fields) != 0 {
@@ -58,6 +65,7 @@ type randomData struct {
 	original, redacted strings.Builder
 	fields             []string
 	removed            int
+	inKey              bool // the secret is drawn as a key
 }
 
 // both writes text into the original and the redacted data alike.
@@ -75,7 +83,7 @@ func (g *randomData) space() {
 var keys = []string{"title", "a", "_k", "k1", "a b", "x.y", `q"k`, "ünï", "<k>", ""}
 
 // object writes an object at path with its keys in a random order, one
-// of them may be the secret, which stays as it was.
+// of them may be the secret, which refuses the data.
 func (g *randomData) object(path string, depth int) {
 	g.both("{")
 	keys := append(slices.Clone(keys), g.secret)
@@ -85,6 +93,7 @@ func (g *randomData) object(path string, depth int) {
 			g.both(",")
 		}
 		g.space()
+		g.inKey = g.inKey || keys[k] == g.secret
 		g.both(encoded(keys[k]))
 		g.space()
 		g.both(":")

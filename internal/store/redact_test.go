@@ -365,19 +365,50 @@ func TestARowNotWrittenAsTheLogWritesIsNotRedacted(t *testing.T) {
 	}
 }
 
-// A key that holds the secret stays as it was, while the value beside it
-// is redacted: no event type has a map whose keys a user writes.
-func TestAKeyHoldingTheSecretIsKept(t *testing.T) {
-	data := `{"` + secret + `X":"` + secret + `X"}`
-	rw, err := redactedData(data, secret)
-	if err != nil || rw.refused != "" {
-		t.Fatal(err, rw.refused)
+// A row with a key that holds the secret is refused, with its data as it
+// was and no fields, whether or not a value holds it too: redacting
+// doesn't rewrite keys, so it would leave the secret in the row and in the
+// redaction's paths.
+func TestAKeyHoldingTheSecretIsRefused(t *testing.T) {
+	for name, data := range map[string]string{
+		"and a value":  `{"a":{"` + secret + `X":"x ` + secret + `"}}`,
+		"only the key": `{"a":{"` + secret + `X":"x"}}`,
+	} {
+		rw, err := redactedData(data, secret)
+		if err != nil || rw.refused != "holds the secret in a key, which redacting doesn't rewrite" || !rw.holds() {
+			t.Errorf("%s: refused %q, %v, want refused", name, rw.refused, err)
+		}
+		if rw.data != data || len(rw.fields) != 0 {
+			t.Errorf("%s: data %s fields %v, want the data as it was and no fields", name, rw.data, rw.fields)
+		}
 	}
-	if want := `{"` + secret + `X":"` + Redacted + `X"}`; rw.data != want {
-		t.Errorf("got %s, want %s", rw.data, want)
-	}
-	if want := []string{`$."` + secret + `X"`}; !reflect.DeepEqual(rw.fields, want) {
-		t.Errorf("fields %v, want %v", rw.fields, want)
+}
+
+// Redact refuses a stream with a row whose key holds the secret, naming its
+// position, and writes nothing, also when no value holds it; Matches counts
+// the row.
+func TestRedactRefusesARowWithTheSecretInAKey(t *testing.T) {
+	for name, data := range map[string]string{
+		"and a value":  `{"coordinator":"tech-lead","repo":{"` + secret + `":"/src/` + secret + `"},"title":"Use it"}`,
+		"only the key": `{"coordinator":"tech-lead","repo":{"` + secret + `":"/src/app"},"title":"Use it"}`,
+	} {
+		path := filepath.Join(t.TempDir(), "agentry.db")
+		s, _ := openAt(t, path)
+		s.Close()
+		execOn(t, path, `INSERT INTO events (at, stream, actor_kind, actor_id, type, data) VALUES
+			('2026-10-19T09:00:00Z', 'task-1', 'human', 'you', 'task.created', '`+data+`')`)
+		s, _ = openAt(t, path)
+		if n, err := s.Matches("task-1", secret); n != 1 || err != nil {
+			t.Errorf("%s: Matches %d, %v, want 1", name, n, err)
+		}
+		before := rowsAt(t, path)
+		_, rejection, err := s.Redact("task-1", secret, you, "")
+		if err != nil || rejection == nil || rejection.Reason != "the row at 1 holds the secret in a key, which redacting doesn't rewrite" {
+			t.Errorf("%s: %v, %v, want refused", name, rejection, err)
+		}
+		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", name, before, after)
+		}
 	}
 }
 

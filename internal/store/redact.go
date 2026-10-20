@@ -46,8 +46,8 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // still hold the secret, and its caller writes a new one.
 //
 // It returns the redaction and, when it is refused, the rejection: no row
-// holds the secret, a row that does is a knowledge version or can't be
-// rewritten leaving the rest as it was, the reason given holds it, the
+// holds the secret, a row that does is a knowledge version, holds it in a
+// key or can't be rewritten leaving the rest as it was, the reason given holds it, the
 // rules refuse it, or the stream took an event since its rows were read.
 // A refusal writes nothing, as Archive's does. The error is for the
 // database failing. One after the commit comes with the redaction: the
@@ -157,6 +157,10 @@ type rewrittenRow struct {
 	refused  string   // why the row can't be rewritten, if it can't
 }
 
+// holds says whether the row held the secret: in a string it rewrote, or
+// where it refuses to rewrite it.
+func (rw rewrittenRow) holds() bool { return len(rw.fields) > 0 || rw.refused != "" }
+
 // rewritten is the rows that hold secret, rewritten, in order.
 func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 	var rewrites []rewrittenRow
@@ -165,7 +169,7 @@ func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 		if err != nil {
 			return nil, fmt.Errorf("the data at %d: %w", r.Position, err)
 		}
-		if len(rw.fields) > 0 {
+		if rw.holds() {
 			rw.position, rw.kind = r.Position, events.Type(r.Type)
 			rewrites = append(rewrites, rw)
 		}
@@ -173,18 +177,20 @@ func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 	return rewrites, nil
 }
 
-// redactedData is a row's data with secret replaced in every string, keys
-// left as they are, and where it was. Only the strings that held it are
+// redactedData is a row's data with secret replaced in every string value,
+// and where it was. Only the strings that held it are
 // written again, escaped as appendEvent's json.Marshal escapes them, so a
 // rewritten string looks like one the log wrote; every other byte is
 // copied as it was: the keys in their order, which a struct's fields set,
 // the numbers and the other strings. A string the log would have escaped
 // otherwise, which it never writes, would change by more than the secret,
 // so its row is refused, as is one whose secret would still show next to
-// [redacted]. No fields means the data doesn't hold the secret.
+// [redacted]. A row with the secret in a key is refused with its data as it
+// was and no fields, whose paths would hold the secret too. A row that
+// doesn't hold the secret comes back empty.
 func redactedData(data, secret string) (rewrittenRow, error) {
 	var found finding
-	escapedOtherwise := false
+	escapedOtherwise, inKey := false, false
 	rewritten, err := eachString(data, func(text, raw, path string) (string, bool) {
 		replaced, ok := found.in(text, path, secret)
 		if !ok {
@@ -192,9 +198,17 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 		}
 		escapedOtherwise = escapedOtherwise || encoded(text) != raw
 		return encoded(replaced), true
+	}, func(key string) {
+		inKey = inKey || strings.Contains(key, secret)
 	})
-	if err != nil || len(found.fields) == 0 {
+	if err != nil {
 		return rewrittenRow{}, err
+	}
+	if inKey {
+		return rewrittenRow{data: data, refused: "holds the secret in a key, which redacting doesn't rewrite"}, nil
+	}
+	if len(found.fields) == 0 {
+		return rewrittenRow{}, nil
 	}
 	rw := rewrittenRow{data: rewritten, fields: found.fields, removed: found.removed}
 	switch {
@@ -209,9 +223,11 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 // eachString is data with each string value, not a key, put through
 // rewrite: given its text, decoded, its raw bytes, quotes included, and
 // its JSON path, rewrite says what to write in its place, or false to keep
-// it. Every other byte is copied as it was. Keys are kept as they are: no
-// event type has a map whose keys a user writes, so no secret is in one.
-func eachString(data string, rewrite func(text, raw, path string) (string, bool)) (string, error) {
+// it. Every other byte is copied as it was. Keys are only shown to key,
+// decoded, and kept as they are: no event type has a map whose keys a user
+// writes, and a row whose key holds the secret is refused rather than left
+// half-redacted.
+func eachString(data string, rewrite func(text, raw, path string) (string, bool), key func(text string)) (string, error) {
 	decoder := json.NewDecoder(strings.NewReader(data))
 	decoder.UseNumber()
 	var rewritten strings.Builder
@@ -226,7 +242,9 @@ func eachString(data string, rewrite func(text, raw, path string) (string, bool)
 			return "", err
 		}
 		end := int(decoder.InputOffset())
-		if text, ok := token.(string); ok && !at.keyNext() {
+		if text, ok := token.(string); ok && at.keyNext() {
+			key(text)
+		} else if ok {
 			// Before a string are only spaces, a comma or a colon, none a quote.
 			start := read + strings.IndexByte(data[read:end], '"')
 			if replaced, ok := rewrite(text, data[start:end], at.path()); ok {
