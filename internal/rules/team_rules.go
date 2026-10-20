@@ -125,33 +125,50 @@ func membershipProblems(roster agents.Roster, edit agents.TeamEdit) []TeamProble
 
 // neededProblems: no removed agent is needed by an unfinished task. The
 // tasks the team's coordinator coordinates move to the one the edit names,
-// with any step handed to it, so they need it only for a turn it is taking.
+// with any step handed to it, so removing it waits only for a turn it is
+// taking, or a step handed to it on a task it doesn't coordinate.
 func neededProblems(state State, edit agents.TeamEdit) []TeamProblem {
 	lead, _ := state.Roster().Coordinator(edit.Team)
 	var problems []TeamProblem
 	for _, name := range edit.Removed {
 		var needing []string
+		onlyTurns := true
 		for _, id := range state.TaskIDs() {
 			task, err := state.Task(id)
 			if err != nil || task == nil || !task.Needs(name) {
 				continue
 			}
-			if name != lead.Name || neededBeyondMoving(task, name) {
-				needing = append(needing, id)
+			moves := name == lead.Name && !stepHandedTo(task, name)
+			if open := task.OpenTurn(); moves && (open == nil || open.Agent != name) {
+				continue
 			}
+			needing = append(needing, id)
+			onlyTurns = onlyTurns && moves
 		}
 		if len(needing) > 0 {
-			problems = append(problems, TeamProblem{Row: -1, Field: "removed", Agent: name,
-				Reason: name + " is still needed by " + strings.Join(needing, ", ") + ": finish those first, or keep " + name})
+			problems = append(problems, TeamProblem{Row: -1, Field: "removed", Agent: name, Reason: neededReason(name, needing, onlyTurns)})
 		}
 	}
 	return problems
 }
 
-// neededBeyondMoving says whether the task still needs the agent once it
-// moves from it to another coordinator: for the turn it is taking, or a
-// step handed to it on a task it doesn't coordinate.
-func neededBeyondMoving(task *tasks.Task, agent string) bool {
-	open := task.OpenTurn()
-	return open != nil && open.Agent == agent || task.Coordinator != agent && task.Handoff != nil && task.Handoff.To == agent
+// stepHandedTo says whether the task hands its next step to the agent while
+// another agent coordinates it: a step the task's move to a new coordinator
+// doesn't carry over.
+func stepHandedTo(task *tasks.Task, agent string) bool {
+	return task.Coordinator != agent && task.Handoff != nil && task.Handoff.To == agent
+}
+
+// neededReason is why the agent can't be removed yet: tasks to finish, or,
+// when only its turns on them need it, turns to wait for.
+func neededReason(agent string, tasks []string, onlyTurns bool) string {
+	by := strings.Join(tasks, ", ")
+	switch {
+	case !onlyTurns:
+		return agent + " is still needed by " + by + ": finish those first, or keep " + agent
+	case len(tasks) == 1:
+		return agent + " has a turn running on " + by + ": wait for it to end, or keep " + agent
+	default:
+		return agent + " has turns running on " + by + ": wait for them to end, or keep " + agent
+	}
 }

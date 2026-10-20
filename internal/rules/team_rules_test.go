@@ -126,13 +126,22 @@ func TestATeamEditReplacingItsCoordinatorRemovesTheOldOne(t *testing.T) {
 		return edit
 	}
 
-	want := "data-lead is still needed by task-1: finish those first, or keep data-lead"
+	want := "data-lead has a turn running on task-1: wait for it to end, or keep data-lead"
 	if _, rejection, err := s.Propose(replaced().Proposal(you)); err != nil || rejection == nil || rejection.Reason != want {
 		t.Errorf("replacing data-lead during its turn: refused with %v, %v, want %q", rejection, err, want)
 	}
-	turn(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "report": "r"}})
+	turn(events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Plot", "repo": "/src/app", "coordinator": "data-lead"}})
+	turn(events.Proposal{Stream: "task-2", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w2", "branch": "b2", "port": 7902}})
+	turn(events.Proposal{Stream: "task-2", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}})
+	want = "data-lead has turns running on task-1, task-2: wait for them to end, or keep data-lead"
+	if _, rejection, err := s.Propose(replaced().Proposal(you)); err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("replacing data-lead during two turns: refused with %v, %v, want %q", rejection, err, want)
+	}
+	for _, task := range []string{"task-1", "task-2"} {
+		turn(events.Proposal{Stream: task, Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "report": "r"}})
+	}
 	if _, rejection, err := s.Propose(replaced().Proposal(you)); rejection != nil || err != nil {
-		t.Errorf("replacing data-lead, which only coordinates task-1: %v %v", rejection, err)
+		t.Errorf("replacing data-lead, which only coordinates task-1 and task-2: %v %v", rejection, err)
 	}
 }
 
