@@ -142,7 +142,6 @@ func TestATemplateNameOrIDTakenIsRefused(t *testing.T) {
 		{"yours, padded", `{"name":"  My Planning "}`, "You have a template called My Planning already. Pick another name."},
 		{"a built-in one", `{"name":"software"}`, "Software is a built-in template. Pick another name."},
 		{"a built-in one, with an id", `{"name":"RESEARCH","id":"my-research"}`, "Research is a built-in template. Pick another name."},
-		{"the id made from the name", `{"name":"My-Planning!"}`, "You have a template called My Planning already. Pick another name."},
 		{"the id given", `{"name":"Others","id":"my-planning"}`, "You have a template called My Planning already. Pick another name."},
 	} {
 		if code, body := call(t, server, "POST", "/api/teams/Planning/template", refused.body); code != http.StatusConflict || strings.TrimSpace(body) != refused.want {
@@ -227,24 +226,53 @@ func TestATemplateCantTakeABuiltInTemplatesID(t *testing.T) {
 	}
 }
 
-func TestARefusedIDMadeFromTheTeamsNameSaysSo(t *testing.T) {
+// The page has no id field, so an id made from the name is always one a
+// template may have, whatever the name.
+func TestAnIDMadeFromTheNameIsAlwaysValid(t *testing.T) {
 	server, _ := newTestServer(t)
-	madeAgent(t, server, "reader", "Research!", true)
-	code, body := call(t, server, "POST", "/api/teams/Research%21/template", `{}`)
-	want := `the built-in research template has that id (made from the template's name "Research!"): give the template an id`
-	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
-		t.Errorf("a built-in id from the team's name: %d %s", code, body)
-	}
-	madeAgent(t, server, "counter", "2025 Team", true)
-	code, body = call(t, server, "POST", "/api/teams/2025%20Team/template", `{}`)
-	want = `a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: 2025-team (made from the template's name "2025 Team"): give the template an id`
-	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
-		t.Errorf("an id from a team name starting with a digit: %d %s", code, body)
+	madeAgent(t, server, "planner", "Planning", true)
+	for _, made := range []struct{ name, id string }{
+		{"Research!", "research-2"},
+		{"2025 Team", "team-2025-team"},
+		{"!!!", "team"},
+		{"Ünïcödé", "n-c-d"},
+		{"The Team That Reads Every Paper Twice", "the-team-that-reads-every-paper"},
+		{"A Team Whose Name Ends Up Cuts At A Dash", "a-team-whose-name-ends-up-cuts"},
+		{"0123456789012345678901234567890123", "team-01234567890123456789012345"},
+	} {
+		body, _ := json.Marshal(map[string]string{"name": made.name})
+		code, reply := call(t, server, "POST", "/api/teams/Planning/template", string(body))
+		if code != 200 || !strings.Contains(reply, `"id":"`+made.id+`"`) {
+			t.Errorf("%s: want id %s, got %d %s", made.name, made.id, code, reply)
+		}
 	}
 }
 
-// Giving an id won't fix a refusal of something else, so it gets no hint.
-func TestARefusalNotOfTheIDMadeFromTheTeamsNameHasNoHint(t *testing.T) {
+// An id made from the name that a template of yours has, as it is or once
+// cut, is numbered, still within an id's length.
+func TestAnIDMadeFromTheNameThatIsTakenIsNumbered(t *testing.T) {
+	server, _ := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	long := "The Team That Reads Every Paper Twice"
+	for _, made := range []struct{ name, id string }{
+		{"Planning", "planning"},
+		{"Planning!", "planning-2"},
+		{"Planning?", "planning-3"},
+		{long, "the-team-that-reads-every-paper"},
+		{long + " Again", "the-team-that-reads-every-pap-2"},
+		{"A Team Whose Name Ends Up Cu Ts", "a-team-whose-name-ends-up-cu-ts"},
+		{"A Team Whose Name Ends Up Cu Tsk", "a-team-whose-name-ends-up-cu-2"},
+	} {
+		body, _ := json.Marshal(map[string]string{"name": made.name})
+		code, reply := call(t, server, "POST", "/api/teams/Planning/template", string(body))
+		if code != 200 || !strings.Contains(reply, `"id":"`+made.id+`"`) {
+			t.Errorf("%s: want id %s, got %d %s", made.name, made.id, code, reply)
+		}
+	}
+}
+
+// A refusal of the team itself is the rules' own words: no id would fix it.
+func TestATeamTheRulesRefuseSavedWithoutAnIDSaysWhy(t *testing.T) {
 	server, _ := newTestServer(t)
 	long := "a-coordinator-with-a-long-name"
 	madeAgent(t, server, long, "Long Names", true)

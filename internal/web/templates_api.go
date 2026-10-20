@@ -4,13 +4,13 @@ import (
 	"cmp"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/rules"
 )
 
 // Saving a team as a template of your own, and removing one. The rules in
@@ -19,9 +19,10 @@ import (
 
 // saveTemplate saves a team's agents, as they are now, as your template
 // name (by default the team's): a team made from it is called that. Its id,
-// unless given, comes from the name. A name you or Agentry have a template
-// called already, in any case, or an id one of yours has, is refused with a
-// 409: saving never replaces a template.
+// unless given, comes from the name and is always one a template may have.
+// A name you or Agentry have a template called already, in any case, or an
+// id given that one of yours has, is refused with a 409: saving never
+// replaces a template.
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Name, ID, Description string }
 	if !httpapi.Decode(w, r, &request) {
@@ -44,15 +45,8 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	id := strings.TrimSpace(request.ID)
 	if id == "" {
-		id = templateIDFor(name)
-		if reason := rules.CheckTemplateID(id); reason != "" {
-			// The id is ours, not theirs: say where it came from, or the
-			// refusal names an id they never typed.
-			http.Error(w, reason+` (made from the template's name "`+name+`"): give the template an id`, http.StatusBadRequest)
-			return
-		}
-	}
-	if yours, taken := s.state.Templates().WithID(id); taken {
+		id = templateIDFor(name, s.templateIDTaken)
+	} else if yours, taken := s.state.Templates().WithID(id); taken {
 		http.Error(w, yoursCalled(yours.Team), http.StatusConflict)
 		return
 	}
@@ -149,10 +143,42 @@ func (s *Server) removeTemplate(w http.ResponseWriter, r *http.Request) {
 
 var notInAnID = regexp.MustCompile(`[^a-z0-9]+`)
 
-// templateIDFor is the id a template saved without one gets: the team's
-// name in lowercase, each run of anything but letters and digits made one
-// dash, with none at the ends, so "My Team!" is "my-team". The rules still
-// check it: a name starting with a digit, or one too long, is refused.
-func templateIDFor(team string) string {
-	return strings.Trim(notInAnID.ReplaceAllString(strings.ToLower(team), "-"), "-")
+// templateIDFor is the id a template saved without one gets: its name in
+// lowercase, each run of anything but letters and digits made one dash,
+// with none at the ends, so "My Team!" is "my-team". The page has no id
+// field, so the id always passes rules.CheckTemplateID and is free: "team-"
+// goes before a name starting with a digit, "team" stands for one with no
+// letters or digits, a long one is cut to fit, and one taken gets -2, -3...
+func templateIDFor(name string, taken func(id string) bool) string {
+	base := strings.Trim(notInAnID.ReplaceAllString(strings.ToLower(name), "-"), "-")
+	switch {
+	case base == "":
+		base = "team"
+	case base[0] < 'a':
+		base = "team-" + base
+	}
+	id := fitted(base, "")
+	for n := 2; taken(id); n++ {
+		id = fitted(base, "-"+strconv.Itoa(n))
+	}
+	return id
+}
+
+// longestTemplateID is the most characters rules.CheckTemplateID allows.
+const longestTemplateID = 31
+
+// fitted is base and then suffix, base cut so the two fit in an id, with no
+// dash left where it was cut.
+func fitted(base, suffix string) string {
+	if room := longestTemplateID - len(suffix); len(base) > room {
+		base = strings.TrimRight(base[:room], "-")
+	}
+	return base + suffix
+}
+
+// templateIDTaken says whether a built-in template or one of yours has id.
+func (s *Server) templateIDTaken(id string) bool {
+	_, builtIn := agents.TemplateWithID(id)
+	_, yours := s.state.Templates().WithID(id)
+	return builtIn || yours
 }
