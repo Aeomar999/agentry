@@ -1,9 +1,11 @@
 package web
 
 import (
+	"cmp"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -16,9 +18,12 @@ import (
 // to fix, so it is a 400 here rather than Propose's 409.
 
 // saveTemplate saves a team's agents, as they are now, as your template
-// id. Saving again under the same id replaces it.
+// name (by default the team's): a team made from it is called that. Its id,
+// unless given, comes from the name. A name you or Agentry have a template
+// called already, in any case, or an id one of yours has, is refused with a
+// 409: saving never replaces a template.
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
-	var request struct{ ID, Description string }
+	var request struct{ Name, ID, Description string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
@@ -32,25 +37,50 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
 		return
 	}
+	name := cmp.Or(strings.TrimSpace(request.Name), team)
+	if taken := s.templateCalled(name); taken != "" {
+		http.Error(w, taken, http.StatusConflict)
+		return
+	}
 	id := strings.TrimSpace(request.ID)
 	if id == "" {
-		id = templateIDFor(team)
-		// A built-in template's team is refused whatever its id, so the
-		// rules say so rather than this hint, which an id wouldn't fix.
-		_, builtInTeam := agents.TemplateNamed(team)
-		if reason := rules.CheckTemplateID(id); reason != "" && !builtInTeam {
+		id = templateIDFor(name)
+		if reason := rules.CheckTemplateID(id); reason != "" {
 			// The id is ours, not theirs: say where it came from, or the
 			// refusal names an id they never typed.
-			http.Error(w, reason+` (made from the team's name "`+team+`"): give the template an id`, http.StatusBadRequest)
+			http.Error(w, reason+` (made from the template's name "`+name+`"): give the template an id`, http.StatusBadRequest)
 			return
 		}
 	}
-	proposal, err := agents.SaveTemplate(roster, team, id, strings.TrimSpace(request.Description), httpapi.You)
+	if yours, taken := s.state.Templates().WithID(id); taken {
+		http.Error(w, yoursCalled(yours.Team), http.StatusConflict)
+		return
+	}
+	proposal, err := agents.SaveTemplate(roster, team, name, id, strings.TrimSpace(request.Description), httpapi.You)
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
 	}
 	s.proposeTemplate(w, proposal, id)
+}
+
+// templateCalled is why name can't be a new template's, in the words the
+// page shows under its name, or "" when it can: a template, yours or
+// built in, already has it in any case.
+func (s *Server) templateCalled(name string) string {
+	if builtIn, ok := agents.TemplateNamed(name); ok {
+		return builtIn.Team + " is a built-in template. Pick another name."
+	}
+	for _, yours := range s.state.Templates() {
+		if strings.EqualFold(yours.Team, name) {
+			return yoursCalled(yours.Team)
+		}
+	}
+	return ""
+}
+
+func yoursCalled(template string) string {
+	return "You have a template called " + template + " already. Pick another name."
 }
 
 // exportTemplate is your template id as a file to keep or to import into
@@ -70,11 +100,14 @@ func (s *Server) exportTemplate(w http.ResponseWriter, r *http.Request) {
 	// The rules held the id to letters, digits and dashes, so it is safe
 	// in the header as it is.
 	w.Header().Set("Content-Disposition", `attachment; filename="`+id+`.json"`)
+	// When it was saved is this Agentry's: importing it saves it anew.
+	saved.SavedAt = time.Time{}
 	httpapi.Reply(w, saved)
 }
 
 // importTemplate saves a template exported as a file, under the rules a
-// template you save from a team has. Importing an id you have replaces it.
+// template you save from a team has. Importing an id you have replaces it,
+// keeping its place; a name you have under another id is kept beside it.
 func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 	var template agents.UserTemplate
 	if !httpapi.Decode(w, r, &template) {
@@ -96,7 +129,7 @@ func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal
 		return
 	}
 	saved, _ := s.state.Templates().WithID(id)
-	httpapi.Reply(w, viewOf(saved.Template(), true))
+	httpapi.Reply(w, yourView(saved))
 }
 
 // removeTemplate removes your template id. The teams made from it stay, and

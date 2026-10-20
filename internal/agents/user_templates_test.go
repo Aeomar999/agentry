@@ -3,6 +3,7 @@ package agents
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -54,12 +55,12 @@ func TestASavedTeamIsAddedBackTheSame(t *testing.T) {
 	log = append(log, events.Event{Proposal: Agent{Name: "reader"}.Learned(you, "Skim the abstract first.")})
 	made := FromEvents(log)
 
-	saving, err := SaveTemplate(made, "Papers", "papers", "Reads papers.", you)
+	saving, err := SaveTemplate(made, "Papers", "Papers", "papers", "Reads papers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved, ok := UserTemplatesFromEvents([]events.Event{logged(t, saving)}).WithID("papers")
-	if !ok || saved.Team != "Papers" || saved.Description != "Reads papers." {
+	if !ok || saved.Team != "Papers" || saved.Description != "Reads papers." || saved.From != "Papers" {
 		t.Fatalf("the saved template: %+v", saved)
 	}
 
@@ -90,14 +91,59 @@ func equalAgents(a, b Agent) bool {
 }
 
 func TestSavingATeamThatIsntThere(t *testing.T) {
-	if _, err := SaveTemplate(FromEvents(seeded()), "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
+	if _, err := SaveTemplate(FromEvents(seeded()), "Papers", "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
 		t.Error("saved a team with no agents")
 	}
 }
 
 func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
-	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
+	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
 	if members, _ := TemplateAgents(saving.Data); err != nil || len(members) != len(defaults) {
 		t.Errorf("the %s team saved %d agents (%v)", DefaultTeam, len(members), err)
+	}
+}
+
+// A template is named apart from the team it was saved from: a team made
+// from it gets the name, and the template keeps where it came from and,
+// from the log, when it was saved.
+func TestATemplateKeepsItsNameItsTeamAndWhenItWasSaved(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	log := added(papers().Template(), seeded())
+	saving, err := SaveTemplate(FromEvents(log), "Papers", "Reading Room", "reading-room", "", you)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 12, 9, 30, 0, 0, time.UTC)
+	event := logged(t, saving)
+	event.At = at
+	saved, _ := UserTemplatesFromEvents([]events.Event{event}).WithID("reading-room")
+	if saved.Team != "Reading Room" || saved.From != "Papers" || !saved.SavedAt.Equal(at) {
+		t.Errorf("the saved template: %+v", saved)
+	}
+	lead, _ := FromEvents(added(saved.Template(), log)).Coordinator("Reading Room")
+	if lead.Name != "lead-2" {
+		t.Errorf("a team made from it is called Reading Room: %+v", lead)
+	}
+}
+
+// A template.saved from before templates were named has no "from": it
+// replays with none, its team as it was, and when the log says.
+func TestATemplateSavedWithoutFromReplays(t *testing.T) {
+	at := time.Date(2025, 3, 1, 8, 0, 0, 0, time.UTC)
+	old := events.Event{At: at, Proposal: events.Proposal{Stream: events.TemplatesStream, Type: events.TemplateSaved, Data: map[string]any{
+		"id": "papers", "team": "Papers", "description": "Reads papers.", "agents": []any{
+			map[string]any{"name": "lead", "prompt": "Hand out the reading.", "engine": "claude", "coordinates": true}},
+	}}}
+	saved, ok := UserTemplatesFromEvents([]events.Event{old}).WithID("papers")
+	if !ok || saved.Team != "Papers" || saved.From != "" || !saved.SavedAt.Equal(at) || len(saved.Agents) != 1 {
+		t.Errorf("an old template: %+v", saved)
+	}
+}
+
+// A template with no source team saves no "from", so an imported file
+// from before templates were named writes the event it always did.
+func TestATemplateWithNoSourceTeamSavesNoFrom(t *testing.T) {
+	if data := papers().Save(events.Actor{Kind: events.Human, ID: "you"}).Data; data["from"] != nil {
+		t.Errorf("saved %+v", data)
 	}
 }

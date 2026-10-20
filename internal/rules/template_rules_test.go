@@ -270,7 +270,7 @@ func TestASavedTeamIsAccepted(t *testing.T) {
 			t.Fatalf("adding the Readers team: %v, %v", rejection, err)
 		}
 	}
-	p, err := agents.SaveTemplate(state.Roster(), "Readers", "mine", "My readers.", you)
+	p, err := agents.SaveTemplate(state.Roster(), "Readers", "Readers", "mine", "My readers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}

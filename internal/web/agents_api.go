@@ -503,7 +503,7 @@ func (s *Server) teamTemplates(w http.ResponseWriter, _ *http.Request) {
 		list = append(list, viewOf(t, false))
 	}
 	for _, u := range s.state.Templates() {
-		list = append(list, viewOf(u.Template(), true))
+		list = append(list, yourView(u))
 	}
 	httpapi.Reply(w, list)
 }
@@ -515,7 +515,9 @@ type templateView struct {
 	Description string       `json:"description"`
 	Features    []string     `json:"features"` // what a team made from it turns on, so the page can find that team
 	Agents      []memberView `json:"agents"`
-	UserMade    bool         `json:"userMade"` // one you saved, not one Agentry ships
+	UserMade    bool         `json:"userMade"`          // one you saved, not one Agentry ships
+	SavedAt     string       `json:"savedAt,omitempty"` // yours: when you last saved it, RFC 3339
+	From        string       `json:"from,omitempty"`    // yours: the team you saved it from, if the log says
 }
 
 type memberView struct {
@@ -528,6 +530,13 @@ type memberView struct {
 	Profile     string `json:"profile"`
 	Color       string `json:"color"`
 	Column      string `json:"column"`
+}
+
+// yourView is a template you saved, with when and where from.
+func yourView(u agents.UserTemplate) templateView {
+	view := viewOf(u.Template(), true)
+	view.SavedAt, view.From = u.SavedAt.UTC().Format(time.RFC3339), u.From
+	return view
 }
 
 func viewOf(t agents.Template, userMade bool) templateView {

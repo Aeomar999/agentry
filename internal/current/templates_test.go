@@ -3,6 +3,7 @@ package current
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -26,11 +27,15 @@ func removed(id string) events.Proposal {
 }
 
 // Each step's log, loaded at every split and applied after, keeps the
-// templates the step says, in the order they were first saved.
+// templates the step says, in the order they were first saved, each with
+// when it was last saved.
 func TestUserTemplatesKeepTheirSaveOrder(t *testing.T) {
-	papers := agents.UserTemplate{ID: "papers", Team: "Papers", Description: "First", Agents: []agents.Agent{chief, courier}}
-	again := agents.UserTemplate{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}}
-	orders := agents.UserTemplate{ID: "orders", Team: "Papers", Agents: []agents.Agent{chief}}
+	at := func(step int) time.Time { return logOf(make([]events.Proposal, step+1)...)[step].At }
+	papers := agents.UserTemplate{ID: "papers", Team: "Papers", Description: "First", Agents: []agents.Agent{chief, courier}, SavedAt: at(0)}
+	again := agents.UserTemplate{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}, SavedAt: at(2)}
+	orders := agents.UserTemplate{ID: "orders", Team: "Papers", Agents: []agents.Agent{chief}, SavedAt: at(1)}
+	papersLast := papers
+	papersLast.SavedAt = at(4)
 	steps := []struct {
 		name string
 		p    events.Proposal
@@ -40,8 +45,8 @@ func TestUserTemplatesKeepTheirSaveOrder(t *testing.T) {
 		{"save another", saved("orders", "", chief), agents.UserTemplates{papers, orders}},
 		{"save the first again", saved("papers", "Again", chief, redrafts), agents.UserTemplates{again, orders}},
 		{"remove the first", removed("papers"), agents.UserTemplates{orders}},
-		{"save the first once more", saved("papers", "First", chief, courier), agents.UserTemplates{orders, papers}},
-		{"remove the other", removed("orders"), agents.UserTemplates{papers}},
+		{"save the first once more", saved("papers", "First", chief, courier), agents.UserTemplates{orders, papersLast}},
+		{"remove the other", removed("orders"), agents.UserTemplates{papersLast}},
 		{"remove the last", removed("papers"), agents.UserTemplates{}},
 	}
 	var proposals []events.Proposal
@@ -84,11 +89,14 @@ func TestTemplatesHandedOutShareNothing(t *testing.T) {
 	}
 }
 
-// Templates saved before a snapshot come back from it, and the events
-// after it, saving the first again and removing the other, apply on top:
-// the state equals a replay of the whole log.
+// Templates saved before a snapshot come back from it, with the team each
+// was saved from and when, and the events after it, saving the first again
+// and removing the other, apply on top: the state equals a replay of the
+// whole log.
 func TestTemplatesComeBackFromASnapshot(t *testing.T) {
-	path, log := seededLog(t, saved("papers", "First", chief, courier), saved("orders", "", chief))
+	orders := saved("orders", "", chief)
+	orders.Data["from"] = "Orders desk"
+	path, log := seededLog(t, saved("papers", "First", chief, courier), orders)
 	cut := log[len(log)-1].Position
 	snapshot := snapshotted(t, path, cut, nil)
 	s, err := store.Open(path, withIdeas, nil, nil)
@@ -114,7 +122,12 @@ func TestTemplatesComeBackFromASnapshot(t *testing.T) {
 	if err := Equal(again, restored); err != nil {
 		t.Error(err)
 	}
-	want := agents.UserTemplates{{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}}}
+	stream, err := again.Stream(events.TemplatesStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	savedAgain := stream[2].At
+	want := agents.UserTemplates{{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}, SavedAt: savedAgain}}
 	if got := restored.Templates(); !reflect.DeepEqual(got, want) {
 		t.Errorf("after the snapshot's tail:\n%+v\nwant %+v", got, want)
 	}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -12,10 +13,12 @@ import (
 // as they were when you saved it, kept until you remove it. Like a built-in
 // Template, adding it makes ordinary agents.
 type UserTemplate struct {
-	ID          string  `json:"id"`
-	Team        string  `json:"team"`
-	Description string  `json:"description"`
-	Agents      []Agent `json:"agents"`
+	ID          string    `json:"id"`
+	Team        string    `json:"team"` // what a team made from it is called: the template's name
+	Description string    `json:"description"`
+	Agents      []Agent   `json:"agents"`
+	From        string    `json:"from,omitempty"`   // the team it was saved from; a template saved before Agentry kept it has none
+	SavedAt     time.Time `json:"savedAt,omitzero"` // when it was last saved, as the log has it
 }
 
 // Template is the saved template as one AddTeam adds, with the prompts
@@ -26,11 +29,11 @@ func (u UserTemplate) Template() Template {
 }
 
 // SaveTemplate is the event that saves team's agents, as they are now, as
-// the template id. It keeps what makes each agent and drops what is this
+// the template id, whose teams are called name. It keeps what makes each agent and drops what is this
 // install's or this team's alone: its knowledge, the machines it runs on
 // (which another install, or this one later, may not have) and its team
 // and template, which adding the template sets again.
-func SaveTemplate(roster Roster, team, id, description string, by events.Actor) (events.Proposal, error) {
+func SaveTemplate(roster Roster, team, name, id, description string, by events.Actor) (events.Proposal, error) {
 	var members []Agent
 	for _, a := range roster {
 		if a.TeamName() == team {
@@ -42,15 +45,17 @@ func SaveTemplate(roster Roster, team, id, description string, by events.Actor) 
 	if len(members) == 0 {
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
-	return UserTemplate{ID: id, Team: team, Description: description, Agents: members}.Save(by), nil
+	return UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team}.Save(by), nil
 }
 
 // Save is the event that saves u, as SaveTemplate's does: the rules check
-// it as one, wherever u came from.
+// it as one, wherever u came from. When it was saved is the event's own.
 func (u UserTemplate) Save(by events.Actor) events.Proposal {
-	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateSaved, Data: map[string]any{
-		"id": u.ID, "team": u.Team, "description": u.Description, "agents": u.Agents,
-	}}
+	data := map[string]any{"id": u.ID, "team": u.Team, "description": u.Description, "agents": u.Agents}
+	if u.From != "" {
+		data["from"] = u.From
+	}
+	return events.Proposal{Stream: events.TemplatesStream, Actor: by, Type: events.TemplateSaved, Data: data}
 }
 
 // RemoveTemplate is the event that removes the template id. The teams made
@@ -85,7 +90,8 @@ func (t *UserTemplates) Apply(e events.Event) {
 	switch e.Type {
 	case events.TemplateSaved:
 		members, _ := TemplateAgents(e.Data) // the rules accepted them as agents
-		saved := UserTemplate{ID: id, Team: e.Text("team"), Description: e.Text("description"), Agents: members}
+		saved := UserTemplate{ID: id, Team: e.Text("team"), Description: e.Text("description"), Agents: members,
+			From: e.Text("from"), SavedAt: e.At}
 		if i := t.index(id); i >= 0 {
 			(*t)[i] = saved
 		} else {

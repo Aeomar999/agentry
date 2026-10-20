@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -26,6 +27,8 @@ type listedTemplate struct {
 	Team        string
 	Description string
 	UserMade    bool
+	SavedAt     string
+	From        string
 	Agents      []struct{ Name, Prompt string }
 }
 
@@ -82,16 +85,75 @@ func TestASavedTeamIsListedWithEveryAgent(t *testing.T) {
 	}
 }
 
-func TestSavingATemplateAgainUpdatesIt(t *testing.T) {
+// A template is named apart from its team: by default the team's name,
+// trimmed when given. The list says when you saved it and from which team.
+func TestATemplateIsSavedUnderItsName(t *testing.T) {
 	server, _ := newTestServer(t)
 	madeAgent(t, server, "planner", "Planning", true)
-	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning","description":"Ours."}`)
-	if code, body := call(t, server, "POST", "/api/teams/planning/template", `{"id":"my-planning","description":"Still ours."}`); code != 200 {
-		t.Fatalf("save again: %d %s", code, body)
+	before := time.Now().UTC().Truncate(time.Second)
+	for _, saving := range []struct{ name, body, id, team string }{
+		{"no name", `{}`, "planning", "Planning"},
+		{"a padded name", `{"name":"  Reading Room  "}`, "reading-room", "Reading Room"},
+	} {
+		code, body := call(t, server, "POST", "/api/teams/Planning/template", saving.body)
+		var reply listedTemplate
+		json.Unmarshal([]byte(body), &reply)
+		if code != 200 || reply.ID != saving.id || reply.Team != saving.team || reply.From != "Planning" || !reply.UserMade {
+			t.Errorf("%s: %d %s", saving.name, code, body)
+		}
 	}
+	// A blank name is the team's, which a template has by now.
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"name":"   ","id":"blank"}`); code != http.StatusConflict {
+		t.Errorf("a blank name: %d %s", code, body)
+	}
+
 	_, list := call(t, server, "GET", "/api/teams/templates", "")
-	if yours := userTemplates(t, list); len(yours) != 1 || yours[0].Description != "Still ours." {
-		t.Errorf("one template, updated: %+v", yours)
+	var all []listedTemplate
+	json.Unmarshal([]byte(list), &all)
+	for _, template := range all {
+		if !template.UserMade && (template.SavedAt != "" || template.From != "") {
+			t.Errorf("the built-in %s has a saved date or team: %+v", template.ID, template)
+		}
+	}
+	yours := userTemplates(t, list)
+	if len(yours) != 2 || yours[0].Team != "Planning" || yours[1].Team != "Reading Room" {
+		t.Fatalf("your templates: %+v", yours)
+	}
+	for _, template := range yours {
+		savedAt, err := time.Parse(time.RFC3339, template.SavedAt)
+		if err != nil || savedAt.Before(before) || savedAt.After(time.Now()) || template.From != "Planning" {
+			t.Errorf("%s: saved at %q (%v), from %q", template.ID, template.SavedAt, err, template.From)
+		}
+	}
+}
+
+// Saving never replaces a template: a name one of yours has, in any case,
+// a built-in template's team, or an id one of yours has is refused, in the
+// words the page shows under the name, and nothing is written.
+func TestATemplateNameOrIDTakenIsRefused(t *testing.T) {
+	server, s := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"name":"My Planning","description":"Ours."}`); code != 200 {
+		t.Fatalf("save: %d %s", code, body)
+	}
+	before, _ := s.Stream(events.TemplatesStream)
+	for _, refused := range []struct{ name, body, want string }{
+		{"yours, in another case", `{"name":"my PLANNING","id":"other"}`, "You have a template called My Planning already. Pick another name."},
+		{"yours, padded", `{"name":"  My Planning "}`, "You have a template called My Planning already. Pick another name."},
+		{"a built-in one", `{"name":"software"}`, "Software is a built-in template. Pick another name."},
+		{"a built-in one, with an id", `{"name":"RESEARCH","id":"my-research"}`, "Research is a built-in template. Pick another name."},
+		{"the id made from the name", `{"name":"My-Planning!"}`, "You have a template called My Planning already. Pick another name."},
+		{"the id given", `{"name":"Others","id":"my-planning"}`, "You have a template called My Planning already. Pick another name."},
+	} {
+		if code, body := call(t, server, "POST", "/api/teams/Planning/template", refused.body); code != http.StatusConflict || strings.TrimSpace(body) != refused.want {
+			t.Errorf("%s: %d %s", refused.name, code, body)
+		}
+	}
+	if after, _ := s.Stream(events.TemplatesStream); len(after) != len(before) {
+		t.Errorf("nothing should be written: %d template events, then %d", len(before), len(after))
+	}
+	if saved, _ := savedTemplates(t, s).WithID("my-planning"); saved.Description != "Ours." {
+		t.Errorf("the template stays as it was: %+v", saved)
 	}
 }
 
@@ -169,13 +231,13 @@ func TestARefusedIDMadeFromTheTeamsNameSaysSo(t *testing.T) {
 	server, _ := newTestServer(t)
 	madeAgent(t, server, "reader", "Research!", true)
 	code, body := call(t, server, "POST", "/api/teams/Research%21/template", `{}`)
-	want := `the built-in research template has that id (made from the team's name "Research!"): give the template an id`
+	want := `the built-in research template has that id (made from the template's name "Research!"): give the template an id`
 	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
 		t.Errorf("a built-in id from the team's name: %d %s", code, body)
 	}
 	madeAgent(t, server, "counter", "2025 Team", true)
 	code, body = call(t, server, "POST", "/api/teams/2025%20Team/template", `{}`)
-	want = `a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: 2025-team (made from the team's name "2025 Team"): give the template an id`
+	want = `a template's id is lowercase letters, digits and dashes, starting with a letter, at most 31 characters: 2025-team (made from the template's name "2025 Team"): give the template an id`
 	if code != http.StatusBadRequest || strings.TrimSpace(body) != want {
 		t.Errorf("an id from a team name starting with a digit: %d %s", code, body)
 	}
@@ -203,21 +265,35 @@ func TestARefusedIDYouGaveIsNamedAsItIs(t *testing.T) {
 }
 
 // A team is never added under a built-in template's team name, so a
-// template of that name is refused however it comes: saved with an id or
-// without one, or imported.
+// template of that name is refused however it comes: saved under the team's
+// own name, with an id or without one, as a name taken (409), or imported,
+// by the rules (400).
 func TestATemplateOfABuiltInTeamIsRefused(t *testing.T) {
 	server, _ := newTestServer(t)
-	for _, refused := range []struct{ name, path, body, want string }{
-		{"saved with an id", "/api/teams/Software/template", `{"id":"my-software"}`,
-			"Software is the name of the Software template's team: rename the team before saving it as a template"},
-		{"saved without one", "/api/teams/Software/template", `{}`,
-			"Software is the name of the Software template's team: rename the team before saving it as a template"},
-		{"imported", "/api/teams/templates/import", importOf("my-writing", "writing", ""),
+	for _, refused := range []struct {
+		name, path, body string
+		code             int
+		want             string
+	}{
+		{"saved with an id", "/api/teams/Software/template", `{"id":"my-software"}`, http.StatusConflict,
+			"Software is a built-in template. Pick another name."},
+		{"saved without one", "/api/teams/Software/template", `{}`, http.StatusConflict,
+			"Software is a built-in template. Pick another name."},
+		{"imported", "/api/teams/templates/import", importOf("my-writing", "writing", ""), http.StatusBadRequest,
 			"writing is the name of the Writing template's team: rename the team before saving it as a template"},
 	} {
-		if code, body := call(t, server, "POST", refused.path, refused.body); code != http.StatusBadRequest || strings.TrimSpace(body) != refused.want {
+		if code, body := call(t, server, "POST", refused.path, refused.body); code != refused.code || strings.TrimSpace(body) != refused.want {
 			t.Errorf("%s: %d %s", refused.name, code, body)
 		}
+	}
+}
+
+// The Software team saved under a name of its own is a template like any.
+func TestABuiltInTeamSavedUnderANameOfItsOwnIsSaved(t *testing.T) {
+	server, _ := newTestServer(t)
+	code, body := call(t, server, "POST", "/api/teams/Software/template", `{"name":"Our Software"}`)
+	if code != 200 || !strings.Contains(body, `"id":"our-software"`) || !strings.Contains(body, `"from":"Software"`) {
+		t.Errorf("save: %d %s", code, body)
 	}
 }
 
@@ -255,7 +331,7 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", members, httpapi.You)...) {
 		written.Propose(p)
 	}
-	saving, err := agents.SaveTemplate(state.Roster(), "Planning", "my-planning", "Ours.", httpapi.You)
+	saving, err := agents.SaveTemplate(state.Roster(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +372,12 @@ func TestAnExportedTemplateImportsAsItWas(t *testing.T) {
 		t.Fatalf("import: %d %s", code, body)
 	}
 	got, found := savedTemplates(t, s).WithID("my-planning")
-	if !found || !reflect.DeepEqual(got, want) {
+	// Imported, it is saved anew.
+	if !found || got.SavedAt.Before(want.SavedAt) {
+		t.Fatalf("imported at %v, saved at %v", got.SavedAt, want.SavedAt)
+	}
+	got.SavedAt, want.SavedAt = time.Time{}, time.Time{}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("imported:\n%+v\nwant:\n%+v", got, want)
 	}
 }
@@ -548,4 +629,35 @@ func savedTemplates(t *testing.T, s *store.Store) agents.UserTemplates {
 		t.Fatal(err)
 	}
 	return agents.UserTemplatesFromEvents(stream)
+}
+
+// A template saved before templates were named has no "from" in the log:
+// it is listed with when it was saved and no source team.
+func TestATemplateSavedWithoutFromIsListedWithout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	state := storetest.NewState(events.Core())
+	written, err := store.Open(path, events.Core(), state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, events.Core()) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range agents.SeedProposals(nil) {
+		written.Propose(p)
+	}
+	old := events.Proposal{Stream: events.TemplatesStream, Actor: httpapi.You, Type: events.TemplateSaved, Data: map[string]any{
+		"id": "papers", "team": "Papers", "description": "Reads papers.", "agents": []agents.Agent{
+			{Name: "lead", Engine: "claude", Prompt: "Lead.", Coordinates: true}}}}
+	if _, rejection, err := written.Propose(old); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	written.Close()
+
+	server, _ := newTestServerOn(t, path, tasks.Limits{})
+	_, list := call(t, server, "GET", "/api/teams/templates", "")
+	yours := userTemplates(t, list)
+	if len(yours) != 1 || yours[0].Team != "Papers" || yours[0].From != "" || strings.Contains(list, `"from"`) {
+		t.Fatalf("an old template: %+v", yours)
+	}
+	if _, err := time.Parse(time.RFC3339, yours[0].SavedAt); err != nil {
+		t.Errorf("saved at %q: %v", yours[0].SavedAt, err)
+	}
 }

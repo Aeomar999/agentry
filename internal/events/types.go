@@ -19,7 +19,7 @@ const (
 // The templates stream: the teams you saved to add again, beside the
 // built-in templates (agents.Templates).
 const (
-	TemplateSaved   Type = "template.saved"   // a team's agents, whole, kept by "id" with its "team" and "description"; saved again under an id, it replaces what that id had
+	TemplateSaved   Type = "template.saved"   // a team's agents, whole, kept by "id" with its "team" (the template's name), "description" and, since templates were named, the "from" team it was saved from; saved again under an id, it replaces what that id had
 	TemplateRemoved Type = "template.removed" // the template with "id" is gone; teams made from it stay
 )
 
