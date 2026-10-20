@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // The schema's tests write the redaction and run the updates themselves,
@@ -336,13 +339,14 @@ func TestASecretLeftNextToRedactedIsRefused(t *testing.T) {
 	}
 }
 
-// A row whose data isn't as appendEvent writes it, keys out of order or a
-// < not escaped, would be rewritten with more changed than the secret:
-// Redact refuses it, naming its position, and writes nothing.
+// A row whose string holding the secret isn't escaped as appendEvent
+// escapes, a < not escaped or a / escaped, would be rewritten with more
+// changed than the secret: Redact refuses it, naming its position, and
+// writes nothing.
 func TestARowNotWrittenAsTheLogWritesIsNotRedacted(t *testing.T) {
 	for name, data := range map[string]string{
-		"keys out of order": `{"title":"Use ` + secret + `","repo":"/src/app","coordinator":"tech-lead"}`,
-		"a < not escaped":   `{"coordinator":"tech-lead","repo":"/src/app","title":"<Use ` + secret + `>"}`,
+		"a < not escaped": `{"coordinator":"tech-lead","repo":"/src/app","title":"<Use ` + secret + `>"}`,
+		"a / escaped":     `{"title":"Use ` + secret + ` in \/src","repo":"/src/app","coordinator":"tech-lead"}`,
 	} {
 		path := filepath.Join(t.TempDir(), "agentry.db")
 		s, _ := openAt(t, path)
@@ -405,4 +409,103 @@ func (r *refolds) Loaded(int64)                {}
 func (r *refolds) Apply(events.Event)          {}
 func (r *refolds) Refold(stream string, before []events.Event, e events.Event) {
 	r.stream, r.before, r.e = stream, before, e
+}
+
+// Data written from a struct has its keys in the struct's order, not
+// sorted, as a task.archived marker's summary does: Redact rewrites the
+// string that holds the secret and leaves every other byte as it was. The
+// marker stays in the stream once it is unarchived, so this is how a
+// secret in an archived task's title goes.
+func TestAnArchivedMarkersSummaryIsRedacted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, _ := openAt(t, path)
+	fill(t, s)
+	summarise := func() any {
+		return tasks.Summary{ID: "task-1", Title: "Use " + secret + " <now>", Repo: "/src/app", Status: tasks.Done, Labels: []string{"keep"}, Rank: 1.5}
+	}
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	marker, rejection, err := s.Archive("task-1", summarise, blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	unarchive(t, s, "task-1", blobs)
+	was := rowAt(t, path, marker.Position)
+	if !strings.Contains(was.Data, `"summary":{"id":"task-1","title":"Use `+secret) {
+		t.Fatalf("the marker's summary should be in the struct's order: %s", was.Data)
+	}
+
+	redacted, rejection, err := s.Redact("task-1", secret, you, "")
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	want := was
+	want.Data = strings.Replace(was.Data, secret, Redacted, 1)
+	if now := rowAt(t, path, marker.Position); now != want || !json.Valid([]byte(now.Data)) {
+		t.Errorf("the marker:\n got %+v\nwant %+v", now, want)
+	}
+	if fields := redacted.Data["fields"]; !reflect.DeepEqual(fields, []any{[]any{"$.summary.title"}}) {
+		t.Errorf("the redaction's fields %v, want the summary's title", fields)
+	}
+}
+
+// A template.saved row holds its agents as structs, prompts and all: one
+// whose prompt holds the secret is redacted the same way.
+func TestASavedTemplatesPromptIsRedacted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, _ := openAt(t, path)
+	saved := agents.UserTemplate{ID: "mine", Team: "Web", Agents: []agents.Agent{
+		{Name: "planner", Prompt: "Plan."}, {Name: "engineer", Prompt: "Deploy with " + secret + " & <care>.", Engine: "claude"}}}
+	acceptAll(t, s, saved.Save(you))
+	was := rowsAt(t, path)[0]
+
+	redacted, rejection, err := s.Redact(events.TemplatesStream, secret, you, "")
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	want := was
+	want.Data = strings.Replace(was.Data, secret, Redacted, 1)
+	if now := rowsAt(t, path)[0]; now != want {
+		t.Errorf("the template:\n got %+v\nwant %+v", now, want)
+	}
+	if fields := redacted.Data["fields"]; !reflect.DeepEqual(fields, []any{[]any{"$.agents[1].prompt"}}) {
+		t.Errorf("the redaction's fields %v, want the engineer's prompt", fields)
+	}
+}
+
+// A secret with what JSON escapes in it is found in a struct's row, and
+// its escaped bytes are what go: a quote, a backslash, a < and a newline.
+func TestASecretJSONEscapesGoesFromAStructsRow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, _ := openAt(t, path)
+	const special = "pa\"ss\\w<rd\n"
+	saved := agents.UserTemplate{ID: "mine", Team: "Web", Agents: []agents.Agent{{Name: "engineer", Prompt: "Log in with " + special + " here."}}}
+	acceptAll(t, s, saved.Save(you))
+	was := rowsAt(t, path)[0]
+	escaped := strings.Trim(encoded(special), `"`)
+	if !strings.Contains(was.Data, `Log in with `+escaped+` here.`) {
+		t.Fatalf("the row should hold the secret escaped as %s: %s", escaped, was.Data)
+	}
+
+	redacted, rejection, err := s.Redact(events.TemplatesStream, special, you, "")
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if now, want := rowsAt(t, path)[0].Data, strings.Replace(was.Data, escaped, Redacted, 1); now != want {
+		t.Errorf("the template:\n got %s\nwant %s", now, want)
+	}
+	if removed := redacted.Number("removed"); removed != len(special) {
+		t.Errorf("the redaction removed %d bytes, want the secret's %d", removed, len(special))
+	}
+}
+
+// rowAt is the row at position in the file at path.
+func rowAt(t *testing.T, path string, position int64) row {
+	t.Helper()
+	for _, r := range rowsAt(t, path) {
+		if r.Position == position {
+			return r
+		}
+	}
+	t.Fatalf("no row at %d", position)
+	return row{}
 }

@@ -4,9 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"maps"
+	"io"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -15,8 +14,8 @@ import (
 
 // Redacting rewrites the rows of a stream that hold a secret, with every
 // copy of it replaced by [redacted] and the rest of each row as it was,
-// and appends an event.redacted that says who asked, why, and which rows
-// and fields changed, never the secret nor its hash
+// byte for byte, and appends an event.redacted that says who asked, why,
+// and which rows and fields changed, never the secret nor its hash
 // (docs/design/log-growth.md section 5, "Removing a secret"). The update
 // trigger lets exactly the rows it names change, and only their data.
 //
@@ -35,9 +34,10 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // event.redacted. First, with no lock held, it reads the stream's rows,
 // rejections included, and finds the ones whose text holds the secret: in
 // the strings of their data, decoded, so a secret with quotes, backslashes
-// or any other text JSON escapes is found as it was written, and encoded
-// again, so each row stays valid JSON with the same keys. Then, under the
-// lock, it checks the stream took nothing since and the rules allow the
+// or any other text JSON escapes is found as it was written. Only those
+// strings are encoded again, in place, so each row stays valid JSON with
+// every other byte as it was, whatever order its keys are in. Then, under
+// the lock, it checks the stream took nothing since and the rules allow the
 // redaction, and in one transaction appends it and updates the rows it
 // names, the old bytes zeroed by the connection's secure_delete (Open);
 // the model refolds the stream from the rewritten rows once that commits.
@@ -95,8 +95,7 @@ func (s *Store) find(stream, secret string, who events.Actor, why string) (pendi
 
 // rewrite is Redact's second half, under the lock: the checks, the
 // commit, the refold and the WAL emptied. The rules come before
-// rewritable, so an archived task is refused as archived, not for its
-// marker, whose summary is a struct, so its keys aren't sorted.
+// rewritable, so a row is refused for what it is before how it is written.
 func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -175,70 +174,159 @@ func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 }
 
 // redactedData is a row's data with secret replaced in every string, keys
-// left as they are, and where it was. Numbers are decoded as their text,
-// so they are written back as they were; the rest is encoded as appendEvent
-// encoded it. That leaves every other byte as it was only for data
-// appendEvent wrote, so data that doesn't encode back to itself is refused,
-// as is one whose secret would still show next to [redacted]. No fields
-// means the data doesn't hold the secret.
+// left as they are, and where it was. Only the strings that held it are
+// written again, escaped as appendEvent's json.Marshal escapes them, so a
+// rewritten string looks like one the log wrote; every other byte is
+// copied as it was: the keys in their order, which a struct's fields set,
+// the numbers and the other strings. A string the log would have escaped
+// otherwise, which it never writes, would change by more than the secret,
+// so its row is refused, as is one whose secret would still show next to
+// [redacted]. No fields means the data doesn't hold the secret.
 func redactedData(data, secret string) (rewrittenRow, error) {
-	decoder := json.NewDecoder(strings.NewReader(data))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return rewrittenRow{}, err
-	}
-	original, err := json.Marshal(value)
-	if err != nil {
-		return rewrittenRow{}, err
-	}
 	var found finding
-	value = found.in(value, "$", secret)
-	if len(found.fields) == 0 {
-		return rewrittenRow{}, nil
+	rewritten, err := eachString(data, func(text, raw, path string) (string, bool) {
+		return found.in(text, raw, path, secret)
+	})
+	if err != nil || len(found.fields) == 0 {
+		return rewrittenRow{}, err
 	}
-	encoded, err := json.Marshal(value)
-	rw := rewrittenRow{data: string(encoded), fields: found.fields, removed: found.removed}
+	rw := rewrittenRow{data: rewritten, fields: found.fields, removed: found.removed}
 	switch {
-	case string(original) != data:
-		rw.refused = "isn't written as the log writes data, so rewriting it would change more than the secret"
+	case found.escapedOtherwise:
+		rw.refused = "isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret"
 	case found.survives:
 		rw.refused = "would still show the secret next to " + Redacted
 	}
-	return rw, err
+	return rw, nil
 }
 
-// A finding is what redacting one row's data found.
-type finding struct {
-	fields   []string
-	removed  int
-	survives bool // the secret is still in a string once replaced
+// eachString is data with each string value, not a key, put through
+// rewrite: given its text, decoded, its raw bytes, quotes included, and
+// its JSON path, rewrite says what to write in its place, or false to keep
+// it. Every other byte is copied as it was.
+func eachString(data string, rewrite func(text, raw, path string) (string, bool)) (string, error) {
+	decoder := json.NewDecoder(strings.NewReader(data))
+	decoder.UseNumber()
+	var rewritten strings.Builder
+	var at cursor
+	copied, read := 0, 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		end := int(decoder.InputOffset())
+		if text, ok := token.(string); ok && !at.keyNext() {
+			// Before a string are only spaces, a comma or a colon, none a quote.
+			start := read + strings.IndexByte(data[read:end], '"')
+			if replaced, ok := rewrite(text, data[start:end], at.path()); ok {
+				rewritten.WriteString(data[copied:start])
+				rewritten.WriteString(replaced)
+				copied = end
+			}
+		}
+		at.step(token)
+		read = end
+	}
+	rewritten.WriteString(data[copied:])
+	return rewritten.String(), nil
 }
 
-// in is value at path with secret replaced in its strings, which it
-// notes. A map's keys are walked in order, so the paths come out the same
-// each time.
-func (f *finding) in(value any, path, secret string) any {
-	switch value := value.(type) {
-	case string:
-		if copies := strings.Count(value, secret); copies > 0 {
-			f.fields = append(f.fields, path)
-			f.removed += copies * len(secret)
-			replaced := strings.ReplaceAll(value, secret, Redacted)
-			f.survives = f.survives || strings.Contains(replaced, secret)
-			return replaced
-		}
-	case map[string]any:
-		// Keys are left as they are: no event type has keys a user writes.
-		for _, key := range slices.Sorted(maps.Keys(value)) {
-			value[key] = f.in(value[key], path+"."+pathKey(key), secret)
-		}
-	case []any:
-		for i := range value {
-			value[i] = f.in(value[i], path+"["+strconv.Itoa(i)+"]", secret)
+// A cursor is where a walk of JSON tokens is: the objects and arrays it is
+// in, the innermost last.
+type cursor []level
+
+// A level is an object or an array a cursor is in.
+type level struct {
+	object  bool
+	key     string // in an object, the key of the value read now
+	index   int    // in an array, the index of the value read now
+	keyNext bool   // in an object, the next string is a key
+}
+
+// keyNext says whether the next string is a key.
+func (c cursor) keyNext() bool { return len(c) > 0 && c[len(c)-1].keyNext }
+
+// path is the JSON path of the value read now.
+func (c cursor) path() string {
+	path := "$"
+	for _, l := range c {
+		if l.object {
+			path += "." + pathKey(l.key)
+		} else {
+			path += "[" + strconv.Itoa(l.index) + "]"
 		}
 	}
-	return value
+	return path
+}
+
+// step moves the cursor past token.
+func (c *cursor) step(token json.Token) {
+	switch token {
+	case json.Delim('{'):
+		*c = append(*c, level{object: true, keyNext: true})
+	case json.Delim('['):
+		*c = append(*c, level{})
+	case json.Delim('}'), json.Delim(']'):
+		*c = (*c)[:len(*c)-1]
+		c.pastValue()
+	default:
+		if key, ok := token.(string); ok && c.keyNext() {
+			top := &(*c)[len(*c)-1]
+			top.key, top.keyNext = key, false
+			return
+		}
+		c.pastValue()
+	}
+}
+
+// pastValue moves the cursor past a value: to an array's next index, or
+// an object's next key.
+func (c cursor) pastValue() {
+	if len(c) == 0 {
+		return
+	}
+	top := &c[len(c)-1]
+	if top.object {
+		top.keyNext = true
+	} else {
+		top.index++
+	}
+}
+
+// A finding is what redacting one row's data found. Its fields are in the
+// order the row holds them: for data appendEvent wrote, each object's keys
+// sorted.
+type finding struct {
+	fields           []string
+	removed          int
+	survives         bool // the secret is still in a string once replaced
+	escapedOtherwise bool // a string that held it isn't escaped as appendEvent escapes
+}
+
+// in is the string at path, whose text and raw bytes are given, with
+// secret replaced and encoded again, which it notes, or false when the
+// text doesn't hold the secret.
+func (f *finding) in(text, raw, path, secret string) (string, bool) {
+	copies := strings.Count(text, secret)
+	if copies == 0 {
+		return "", false
+	}
+	f.fields = append(f.fields, path)
+	f.removed += copies * len(secret)
+	replaced := strings.ReplaceAll(text, secret, Redacted)
+	f.survives = f.survives || strings.Contains(replaced, secret)
+	f.escapedOtherwise = f.escapedOtherwise || encoded(text) != raw
+	return encoded(replaced), true
+}
+
+// encoded is text as a JSON string, as appendEvent's json.Marshal writes it.
+func encoded(text string) string {
+	b, _ := json.Marshal(text) // a string always encodes
+	return string(b)
 }
 
 // plainKey is a key a JSON path can name as it is.
