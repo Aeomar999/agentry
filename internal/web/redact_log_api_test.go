@@ -259,7 +259,7 @@ func TestARedactionAcrossTheLogWithNoStreamRedactedAndOneFailedFails(t *testing.
 	}
 	last := s.LastPosition()
 	code, body := call(t, server, "POST", "/api/redact", `{"text":"`+secretHere+`","why":"Pasted."}`)
-	if code != http.StatusInternalServerError || !strings.HasPrefix(body, "task-1: task-1 is kept as it is; task-2: ") {
+	if want := "task-1: task-1 is kept as it is; task-2: task-2's archived rows can't be read: its blob is missing"; code != http.StatusInternalServerError || strings.TrimSpace(body) != want {
 		t.Errorf("redacting with task-1 refused and task-2 failing: %d %q, want 500 naming both", code, body)
 	}
 	if s.LastPosition() != last {
@@ -355,7 +355,8 @@ func TestARefusedRedactionAcrossTheLogWritesNothing(t *testing.T) {
 // A redaction across the log whose only stream that could hold the text
 // can't be read, here an archived task whose blob is lost, fails 500 on
 // both routes, as one stream's does, rather than being refused, and
-// writes nothing.
+// writes nothing. The answer names the task, not the blob's path on the
+// server.
 func TestARedactionAcrossTheLogThatCantReadTheOnlyStreamFails(t *testing.T) {
 	f := newEraseFixture(t)
 	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Old", "description": "It was " + secretHere + ".",
@@ -363,8 +364,8 @@ func TestARedactionAcrossTheLogThatCantReadTheOnlyStreamFails(t *testing.T) {
 	storetest.Archive(t, f.log, f.state, "task-4") // its blob in a folder the server doesn't read
 	last := f.log.LastPosition()
 	for _, path := range []string{"/api/redact/preview", "/api/redact"} {
-		if code, body := call(t, f.server, "POST", path, `{"text":"`+secretHere+`","why":"Pasted."}`); code != http.StatusInternalServerError || !strings.Contains(body, "task-4") {
-			t.Errorf("%s with task-4's blob lost: %d %q, want 500 naming task-4", path, code, body)
+		if code, body := call(t, f.server, "POST", path, `{"text":"`+secretHere+`","why":"Pasted."}`); code != http.StatusInternalServerError || strings.TrimSpace(body) != "task-4's archived rows can't be read: its blob is missing" {
+			t.Errorf("%s with task-4's blob lost: %d %q, want 500 naming task-4 and no path", path, code, body)
 		}
 	}
 	if f.log.LastPosition() != last {

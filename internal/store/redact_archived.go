@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log/slog"
 	"slices"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -124,7 +126,7 @@ func (s *Store) archivedRows(stream string, blobs Opener) (kept, live []row, una
 		return nil, nil, row{}, &events.Rejection{Check: "redact", Reason: stream + " isn't archived: it is redacted as it is"}, nil
 	}
 	if kept, err = keptBy(marker, blobs); err != nil {
-		return nil, nil, row{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
+		return nil, nil, row{}, nil, unreadable(stream, err)
 	}
 	through := s.applied.Load()
 	if live, err = rowsOf(s.reads, stream, through); err != nil {
@@ -132,6 +134,17 @@ func (s *Store) archivedRows(stream string, blobs Opener) (kept, live []row, una
 	}
 	unarchived, err = unarchivedRow(marker, through)
 	return kept, live, unarchived, nil, err
+}
+
+// unreadable is the error of an archived stream whose blob can't be read,
+// as a preview or a redaction answers it: it names the task, but not the
+// blob's path on the server, which goes to the server's log.
+func unreadable(stream string, err error) error {
+	slog.Warn("store: an archived task's rows can't be read", "task", stream, "err", err)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s's archived rows can't be read: its blob is missing", stream)
+	}
+	return fmt.Errorf("%s's archived rows can't be read: the server's log says why", stream)
 }
 
 // unarchivedRow is the task.unarchived row Unarchive writes for marker, at

@@ -265,3 +265,23 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
 	}
 }
+
+// An archived task whose blob is lost fails 500 on both its routes, the
+// answer naming the task, not the blob's path on the server, and the
+// preview not saying it redacts.
+func TestAnArchivedTaskWhoseBlobIsLostFails(t *testing.T) {
+	f := newEraseFixture(t)
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Old", "description": "It was " + secretHere + ".",
+		"repo": "/r", "coordinator": "tech-lead"}})
+	storetest.Archive(t, f.log, f.state, "task-4") // its blob in a folder the server doesn't read
+	last := f.log.LastPosition()
+	for _, path := range []string{"/api/tasks/task-4/redact/preview", "/api/tasks/task-4/redact"} {
+		if code, body := call(t, f.server, "POST", path, `{"text":"`+secretHere+`","why":"Pasted."}`); code != http.StatusInternalServerError ||
+			strings.TrimSpace(body) != "task-4's archived rows can't be read: its blob is missing" {
+			t.Errorf("%s with task-4's blob lost: %d %q, want 500 naming task-4 and no path", path, code, body)
+		}
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the failed redaction wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+}
