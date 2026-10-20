@@ -147,3 +147,16 @@ func TestATemplateWithNoSourceTeamSavesNoFrom(t *testing.T) {
 		t.Errorf("saved %+v", data)
 	}
 }
+
+// A save from a team never replaces a template: its event says it is new,
+// so the rules refuse a name or id of yours, and an import's does not.
+func TestASavedTeamIsANewTemplate(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	saving, err := SaveTemplate(FromEvents(seeded()), DefaultTeam, DefaultTeam, "mine", "", you)
+	if err != nil || saving.Data["new"] != true {
+		t.Errorf("saved %+v (%v), want new", saving.Data, err)
+	}
+	if imported := papers().Save(you); imported.Data["new"] != nil {
+		t.Errorf("imported %+v, want not new", imported.Data)
+	}
+}
