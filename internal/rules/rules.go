@@ -224,11 +224,13 @@ func byFeature(f features.Feature, rule features.Rule, p events.Proposal, state 
 
 // afterDone are what may happen to a finished task: labels, order and epics
 // sort finished work too, you can reopen it, and you can move it to the repo
-// its work is really in, where it gets its worktree.
+// its work is really in, where it gets its worktree. A finished epic lets go
+// of a story: you move one out of it or erase one, and one erased while the
+// epic was archived leaves it as it is reopened.
 var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.RepoChanged, events.WorktreeReady,
 	events.AgentRenamedInTask,          // a finished task reopened later goes to its coordinator by its new name
 	events.EpicJoined, events.EpicLeft, // finished work is filed under epics too
-	events.StoryRemoved,                        // a story erased while its epic was archived leaves it as it is unarchived
+	events.StoryRemoved,                        // a story moved out of a finished epic, or erased
 	events.FollowUpsSkipped,                    // an epic you closed: why no Visionaries session started after it
 	events.TaskArchived, events.TaskUnarchived} // its rows moved out of the live log, and back
 

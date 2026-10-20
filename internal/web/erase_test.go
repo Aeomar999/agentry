@@ -729,6 +729,19 @@ func (f *eraseFixture) reopenedWithoutStories(t *testing.T) {
 	}
 }
 
+// A story of an epic you closed, not archived, is erased: the done epic
+// lets go of it, and lists no story after.
+func TestErasingAStoryOfAClosedEpic(t *testing.T) {
+	f := newEraseFixture(t)
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+		t.Fatalf("closing the epic: %d %s", code, body)
+	}
+	f.erase(t, "task-2")
+	if epic, err := f.state.Task("task-3"); err != nil || !epic.IsDone || len(epic.Stories) != 0 {
+		t.Errorf("the epic should be done with no stories: %v, %v", epic, err)
+	}
+}
+
 // An epic that still lists an erased story, as when the erasure got past
 // the epic some other way, closes from the page: there is nothing of the
 // story left to park.
