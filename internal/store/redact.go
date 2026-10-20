@@ -94,8 +94,8 @@ func (s *Store) redact(stream, secret string, named rowsNamed, counted int, who 
 	return s.rewrite(found)
 }
 
-// AnyCount is the count of a redaction that rewrites however many rows
-// hold the secret: no redaction rewrites none.
+// AnyCount (0) asks for no check of how many rows hold the secret: as a
+// redaction always rewrites at least one row, 0 can't be a real count.
 const AnyCount = 0
 
 // rowsNamed is the rows a redaction may rewrite, by position: every row of

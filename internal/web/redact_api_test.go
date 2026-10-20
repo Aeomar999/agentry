@@ -326,3 +326,26 @@ func TestARedactionWithAStaleCountIsRefused(t *testing.T) {
 		t.Errorf("counted again: %d %s, want 200", code, answer)
 	}
 }
+
+// The same for an archived task, whose rows are counted through its blob:
+// a count that no longer holds is refused 409 with the rows there are,
+// and nothing is written, nor is its blob replaced.
+func TestARedactionOfAnArchivedTaskWithAStaleCountIsRefused(t *testing.T) {
+	f := withSecret(t)
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Deployed.", "moved": true}})
+	storetest.ArchiveIn(t, f.log, f.state, "task-4", f.blobs)
+	old := markerOf(t, f, "task-4")
+	rows := f.preview(t, "/api/tasks/task-4/redact", secretHere)
+	last := f.log.LastPosition()
+	body, _ := json.Marshal(map[string]any{"text": secretHere, "why": "Pasted by mistake.", "rows": rows + 1})
+	want := "2 rows hold this text now, not 3: count them again"
+	if code, answer := call(t, f.server, "POST", "/api/tasks/task-4/redact", string(body)); code != http.StatusConflict || strings.TrimSpace(answer) != want {
+		t.Errorf("redacting archived task-4 with %d rows counted: %d %q, want 409 %q", rows+1, code, answer, want)
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the refusal wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+	if !f.blobs.Has(old) {
+		t.Errorf("the refusal took task-4's archive blob %s", old)
+	}
+}
