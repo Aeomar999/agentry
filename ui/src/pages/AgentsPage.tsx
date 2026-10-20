@@ -238,6 +238,9 @@ export function AgentsPage() {
             // there, takes focus back first; else the heading does.
             landed.current = { team, always: false };
           }}
+          onRemoved={async () => {
+            await reloadAll();
+          }}
         />
       )}
     </>

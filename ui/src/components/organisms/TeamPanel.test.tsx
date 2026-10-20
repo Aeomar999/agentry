@@ -12,6 +12,13 @@ import { AgentsPage } from "@/pages/AgentsPage";
 
 vi.mock("@/api/client", async (actual) => ({ ...(await actual<typeof import("@/api/client")>()), api: vi.fn() }));
 
+// The toasts the page shows, as calls.
+const { notify } = vi.hoisted(() => ({ notify: vi.fn() }));
+vi.mock("@/components/organisms/Toasts", async (actual) => ({
+  ...(await actual<typeof import("@/components/organisms/Toasts")>()),
+  useToast: () => notify,
+}));
+
 // Monaco doesn't run in jsdom: the prompt is a plain box here, which
 // keeps the editor's options it was given.
 vi.mock("@/components/molecules/CodeViewer", () => ({
@@ -105,6 +112,7 @@ const POLICY = {
 
 beforeEach(() => {
   vi.mocked(api).mockReset();
+  notify.mockReset();
   Element.prototype.scrollIntoView = vi.fn();
   Object.assign(reads, {
     "/api/agents": ROSTER,
@@ -116,13 +124,17 @@ beforeEach(() => {
   for (const path in errors) delete errors[path];
 });
 
-// The router, as the app's, so the panel can hold Back; /tasks is a page before the Agents page.
+// The router, as the app's, so the panel can hold Back; /tasks is a page
+// before the Agents page; an agent's page and a task's stand for the pages
+// the panel links to.
 let router: ReturnType<typeof createMemoryRouter>;
 const openAt = (...history: string[]) => {
   router = createMemoryRouter(
     [
       { path: "/agents", element: <AgentsPage /> },
       { path: "/tasks", element: <p>Tasks</p> },
+      { path: "/agents/:name", element: <p>An agent&apos;s page</p> },
+      { path: "/tasks/:id", element: <p>A task&apos;s page</p> },
     ],
     { initialEntries: history, initialIndex: history.length - 1 },
   );
@@ -1251,5 +1263,263 @@ describe("Edit team: saving", () => {
     expect(summary().textContent).toContain("the log is unwritable");
     expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Handbook");
     expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+});
+
+// Remove team, in the footer on desktop and under This team on a phone:
+// both are drawn, and CSS shows one.
+const removeButton = (place: "footer" | "body" = "footer") => document.getElementById(`team-remove-${place}-button`) as HTMLButtonElement;
+const removeQuestion = (place: "footer" | "body" = "footer") =>
+  document.getElementById(`team-remove-${place}-question`)?.closest<HTMLElement>("[role=group]") ?? null;
+const STILL_NEEDED =
+  "the Docs team is still needed by task-182, task-190: finish those first (dragging a task to Done on the board finishes it as it is)";
+
+describe("Edit team: Remove team", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  test("Remove team asks in the footer, focus on Keep; Keep puts the footer back and focus on Remove team", () => {
+    openAt("/agents?team=Docs");
+    expect(removeButton().textContent).toBe("Remove team");
+    fireEvent.click(removeButton());
+
+    const question = removeQuestion()!;
+    expect(question.getAttribute("aria-labelledby")).toBe("team-remove-footer-question");
+    expect(question.textContent).toContain("Remove the Docs team and its 3 agents?");
+    expect(question.textContent).toContain("Their prompts and what they learned go too.");
+    expect(document.activeElement).toBe(within(question).getByRole("button", { name: "Keep" }));
+    expect(sent()).toEqual([]);
+
+    fireEvent.click(within(question).getByRole("button", { name: "Keep" }));
+    expect(removeQuestion()).toBeNull();
+    expect(document.activeElement).toBe(removeButton());
+  });
+
+  test("with unsaved changes the question says they go too; Esc is Keep", () => {
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    fireEvent.click(removeButton());
+
+    expect(removeQuestion()!.textContent).toContain("Their prompts, what they learned and your unsaved changes go too.");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(removeQuestion()).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("Remove removes the team, closes the panel going back over its entry, says so and shows the page without it", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", removed: ["proofer", "writer", "editor"] });
+    afterReload = { "/api/agents": ROSTER };
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    expect(sent()).toEqual([["DELETE", "/api/teams/Docs", undefined]]);
+    expect(notify).toHaveBeenCalledWith("success", "Removed the Docs team");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Docs" })).toBeNull();
+    expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("with unsaved changes, removing closes without asking about them again", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", removed: ["proofer", "writer", "editor"] });
+    afterReload = { "/api/agents": ROSTER };
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    typeInto("Team name", "Handbook");
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("while it removes, the question says so and nothing else can be pressed", async () => {
+    vi.mocked(api).mockReturnValueOnce(new Promise(() => {}));
+    openAt("/agents?team=Docs");
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    const question = removeQuestion()!;
+    expect(within(question).getByRole("button", { name: "Removing…" }).hasAttribute("disabled")).toBe(true);
+    expect(within(question).getByRole("button", { name: "Keep" }).hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  test("a refusal quotes the server, links its tasks and takes focus; Remove stays off until the roster changes", async () => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(STILL_NEEDED, 409));
+    openAt("/agents?team=Docs");
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    const question = removeQuestion()!;
+    const refusal = within(question).getByText(`It wasn't removed: “${STILL_NEEDED}”`).parentElement!;
+    expect(document.activeElement).toBe(refusal);
+    expect(refusal.textContent).toContain("Tasks: task-182, task-190");
+    expect(within(refusal).getByRole("link", { name: "task-182" }).getAttribute("href")).toBe("/tasks/task-182");
+    expect(within(refusal).getByRole("link", { name: "task-190" }).getAttribute("href")).toBe("/tasks/task-190");
+    const remove = within(question).getByRole("button", { name: "Remove" });
+    expect(remove.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+
+    act(() => {
+      reads["/api/agents"] = [...ROSTER, ...DOCS];
+      changed();
+    });
+    expect(remove.hasAttribute("disabled")).toBe(false);
+  });
+
+  test("your only team can't be removed, and says why beside the button", () => {
+    reads["/api/agents"] = DOCS;
+    openAt("/agents?team=Docs");
+
+    const remove = removeButton();
+    expect(remove.hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById(remove.getAttribute("aria-describedby")!)!.textContent).toBe(
+      "Can't remove your only team: tasks need its coordinator.",
+    );
+  });
+
+  test("on a phone, Remove team is under This team after + Add agent, and asks there; the footer keeps Cancel and Save changes", () => {
+    openAt("/agents?team=Docs");
+    const section = inSheet().getByRole("region", { name: "This team" });
+    expect(section.className).toContain("sm:hidden");
+    expect(section.contains(removeButton("body"))).toBe(true);
+    const addAgent = inSheet().getByRole("button", { name: "Add agent" });
+    expect(addAgent.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The footer's Remove team is gone under 640px.
+    expect(removeButton().closest(".max-sm\\:hidden")).toBeTruthy();
+
+    fireEvent.click(removeButton("body"));
+    expect(document.activeElement).toBe(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
+    // The footer's question is desktop's; on a phone the footer stays as it is.
+    expect(removeQuestion()!.closest(".max-sm\\:hidden")).toBeTruthy();
+    expect(saveButton().closest(".sm\\:hidden")).toBeTruthy();
+    fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
+    expect(document.activeElement).toBe(removeButton("body"));
+  });
+});
+
+describe("Edit team: history", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+  const editFromThePage = () => fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+
+  test("opened from the page, it has an entry of its own, which Close goes back over", async () => {
+    openAt("/tasks", "/agents");
+    editFromThePage();
+    expect(address()).toBe("/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Close" }));
+    expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("saving goes back over its entry too", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/tasks", "/agents");
+    editFromThePage();
+    fireEvent.click(docsRow("writer"));
+    typeInto("Description", "Drafts.");
+    await save();
+    expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("Back with no changes closes it", async () => {
+    openAt("/tasks", "/agents");
+    editFromThePage();
+    await back();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("Back with changes keeps it open and asks in the footer, focus on Keep editing", async () => {
+    openAt("/tasks", "/agents");
+    editFromThePage();
+    typeInto("Team name", "Handbook");
+    await back();
+
+    expect(address()).toBe("/agents?team=Docs");
+    const question = inSheet().getByRole("group", { name: "Discard your changes to Docs?" });
+    expect(question.textContent).toContain("The team renamed. They aren't saved.");
+    expect(document.activeElement).toBe(within(question).getByRole("button", { name: "Keep editing" }));
+    await act(async () => fireEvent.click(within(question).getByRole("button", { name: "Discard" })));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("opened from a link, closing takes the panel off the address instead", async () => {
+    openAt("/tasks", "/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Cancel" }));
+    expect(address()).toBe("/agents");
+    expect(router.state.historyAction).toBe("REPLACE");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+});
+
+describe("Edit team: links out of the panel", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+  const pageLink = () => inSheet().getByRole("link", { name: "Open writer's page" });
+
+  test("an open row says what its page has, and with no changes its link goes straight there", async () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    expect(pageLink().parentElement!.textContent).toBe("Knowledge, where it runs and a taller prompt editor: Open writer's page");
+    await act(async () => fireEvent.click(pageLink()));
+    expect(address()).toBe("/agents/writer");
+  });
+
+  test("with changes it asks first, in the footer; Keep editing stays, Discard and open goes", async () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Description", "Drafts.");
+    pageLink().focus();
+    await act(async () => fireEvent.click(pageLink()));
+
+    expect(address()).toBe("/agents?team=Docs");
+    const question = () => inSheet().getByRole("group", { name: "Open writer's page and discard your changes?" });
+    expect(question().textContent).toContain("Save first to keep them; the page shows what is saved.");
+    expect(document.activeElement).toBe(within(question()).getByRole("button", { name: "Keep editing" }));
+    fireEvent.click(within(question()).getByRole("button", { name: "Keep editing" }));
+    expect(document.activeElement).toBe(pageLink());
+    expect((inSheet().getByLabelText("Description") as HTMLInputElement).value).toBe("Drafts.");
+
+    await act(async () => fireEvent.click(pageLink()));
+    await act(async () => fireEvent.click(within(question()).getByRole("button", { name: "Discard and open" })));
+    expect(address()).toBe("/agents/writer");
+  });
+
+  test("a task a refusal names asks the same with changes", async () => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(STILL_NEEDED, 409));
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("link", { name: "task-182" })));
+
+    const question = inSheet().getByRole("group", { name: "Open task-182 and discard your changes?" });
+    await act(async () => fireEvent.click(within(question).getByRole("button", { name: "Discard and open" })));
+    expect(address()).toBe("/tasks/task-182");
+  });
+
+  test("a new agent has no page yet, in Edit or in a new team", () => {
+    openAt("/agents?team=Docs&add=agent");
+    expect(inSheet().getByText("Knowledge and where it runs: on its own page, once you save.")).toBeTruthy();
+    expect(inSheet().queryByRole("link", { name: /^Open .*'s page$/ })).toBeNull();
+  });
+
+  test("in New team every agent's page waits for the team", () => {
+    openAt("/agents?team=new");
+    expect(within(panel()).getByText("Knowledge and where it runs: on its own page, once the team is created.")).toBeTruthy();
   });
 });

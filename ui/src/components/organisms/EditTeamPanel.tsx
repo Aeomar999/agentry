@@ -20,6 +20,7 @@ import {
   newAgent,
   notFoundDetail,
   notFoundTitle,
+  openQuestion,
   type Problem,
   reloadQuestion,
   saveAgain,
@@ -31,6 +32,8 @@ import {
   whyNotSaved,
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
+import { teamsOf } from "@/lib/teams";
+import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
 import {
   DiscardQuestion,
   ErrorSummary,
@@ -54,6 +57,7 @@ interface EditTeamPanelProps {
   adding?: boolean; // + Add agent: the team opens with a new row added and open
   onClose: () => void;
   onSaved: (team: string) => Promise<void>; // shows the team saved on the page
+  onRemoved: () => Promise<void>; // shows the page without the team
 }
 
 const TITLE_ID = "team-panel-title";
@@ -70,7 +74,7 @@ type EditTeamFormProps = EditTeamPanelProps & TeamReads;
 type Refused = Extract<EditRefusal, { kind: "changed" | "cut short" | "failed" }>;
 
 function EditTeamForm(props: EditTeamFormProps) {
-  const { roster, templates, policy, engines, loadError, onRetry, reloadRoster, adding, onClose, onSaved } = props;
+  const { roster, templates, policy, engines, loadError, onRetry, reloadRoster, adding, onClose, onSaved, onRemoved } = props;
   const notify = useToast();
   const ready = roster && templates && policy && engines ? { roster, templates, policy, engines } : undefined;
   // The team to load once everything is in, and whether focus then goes to it.
@@ -113,6 +117,11 @@ function EditTeamForm(props: EditTeamFormProps) {
   const missing = policy ? missingProfiles(draft, policy) : [];
   const changed = loaded !== null && unsaved(loaded, draft);
   const guard = useCloseGuard(changed, saving, onClose);
+  const removal = useRemoveTeam(loaded?.team ?? props.team, roster, list.focus, async () => {
+    await onRemoved();
+    guard.leave();
+  });
+  const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
   const hasProblems = (key: string) => problems.some((p) => typeof p.field === "object" && p.field.row === key);
   const teamProblem = problems.find((p) => p.field === "team")?.message;
   const notFound = loaded !== null && loaded.agents.length === 0;
@@ -179,28 +188,50 @@ function EditTeamForm(props: EditTeamFormProps) {
   }
 
   const loading = !ready || !loaded || reloading;
+  // A link followed with changes asks about where it goes instead.
+  const opening = openQuestion(guard.opening);
+  // Remove team's question, in the footer or under This team.
+  const removeQuestion = (place: "footer" | "body") =>
+    loaded && <RemoveTeamQuestion place={place} removal={removal} team={loaded.team} agents={loaded.agents.length} changed={changed} />;
   const footer = guard.asking ? (
     <DiscardQuestion
-      question={discardEditQuestion(loaded?.team ?? props.team)}
-      detail={loaded ? discardEditDetail(loaded, draft) : ""}
+      question={opening?.question ?? discardEditQuestion(loaded?.team ?? props.team)}
+      detail={opening ? opening.detail : loaded ? discardEditDetail(loaded, draft) : ""}
+      discard={opening && "Discard and open"}
       onKeep={guard.keepEditing}
       onDiscard={guard.leave}
     />
   ) : notFound ? undefined : loadError ? (
     <Footer onCancel={guard.ask} />
   ) : (
-    <Footer
-      text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
-      saving={saving}
-      off={loading || !changed}
-      primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
-      onCancel={guard.ask}
-    />
+    // While Remove team asks, its question takes the footer's place; on a
+    // phone it asks under This team, and the footer stays.
+    <>
+      {removal.asking && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
+      <div className={removal.asking ? "sm:hidden" : undefined}>
+        <Footer
+          text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
+          saving={saving}
+          off={loading || !changed}
+          locked={removal.busy}
+          primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
+          onCancel={guard.ask}
+          start={!loading && <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving} />}
+        />
+      </div>
+    </>
   );
 
   const title = notFound ? notFoundTitle(props.team) : editTitle(loaded?.team ?? props.team);
   return (
-    <SideSheet title={title} titleId={TITLE_ID} focusTitle={!adding} onClose={guard.ask} canClose={!saving} footer={footer}>
+    <SideSheet
+      title={title}
+      titleId={TITLE_ID}
+      focusTitle={!adding}
+      onClose={removal.asking ? removal.keep : guard.ask}
+      canClose={!saving && !removal.busy}
+      footer={footer}
+    >
       {/* On a phone every input and select in the panel is 44px tall, for thumbs. */}
       <div className="flex flex-col gap-5 max-sm:[&_[data-field]]:h-11">
         <p aria-live="polite" className="sr-only">
@@ -284,6 +315,19 @@ function EditTeamForm(props: EditTeamFormProps) {
               saving={saving}
               onAdd={() => list.add(newAgent(draft, ready.engines), hasProblems)}
             />
+
+            {/* On a phone the footer is Cancel and Save changes alone: the team's own actions come last here. */}
+            <section aria-labelledby="team-this" className="flex flex-col items-stretch gap-2 border-t border-divider pt-4 sm:hidden">
+              <h3 id="team-this" className="text-[12px] font-medium text-ink-secondary">
+                This team
+              </h3>
+              {/* Save as a template goes first here (step 7). */}
+              {removal.asking ? (
+                removeQuestion("body")
+              ) : (
+                <RemoveTeamButton place="body" removal={removal} only={onlyTeam} off={saving} className="flex-col items-stretch" />
+              )}
+            </section>
           </>
         )}
       </div>
