@@ -17,8 +17,10 @@ import type { Place } from "./RemoveTeam";
 // useSaveTemplate is the form's state: where it was opened, if it is, what
 // is typed, the request while it runs, and the last refusal. team is the
 // team as last saved, and description its coordinator's, for the form's
-// defaults. Cancel and success put focus back on the button it came from.
-export function useSaveTemplate(team: string, description: string, focus: (id: string) => void) {
+// defaults; changed says the panel has unsaved changes, so save refuses as
+// the form says. Cancel and success put focus back on the button it came
+// from.
+export function useSaveTemplate(team: string, description: string, changed: boolean, focus: (id: string) => void) {
   const notify = useToast();
   const [asking, setAsking] = useState<Place | null>(null);
   const [form, setForm] = useState<TemplateForm>({ name: "", description: "" });
@@ -38,6 +40,7 @@ export function useSaveTemplate(team: string, description: string, focus: (id: s
   }
 
   async function save() {
+    if (changed) return;
     const empty = checkTemplateName(form.name);
     if (empty) return setRefused({ kind: "name", message: empty });
     setRefused(null);
@@ -92,11 +95,18 @@ export function SaveTemplateButton({ place, template, changed, off, className }:
   );
 }
 
+interface SaveTemplateFormProps {
+  place: Place;
+  template: TeamTemplateSave;
+  changed: boolean; // edits made with the form open: Cancel, then Save changes
+}
+
 // SaveTemplateForm is the form in place, focus on Template name where it
 // was opened. A name to change is said under Template name, any other
 // refusal above the buttons; either takes focus as it shows, and what was
-// typed stays.
-export function SaveTemplateForm({ place, template }: { place: Place; template: TeamTemplateSave }) {
+// typed stays. With unsaved changes Save template is off, saying why as the
+// button that opens the form does.
+export function SaveTemplateForm({ place, template, changed }: SaveTemplateFormProps) {
   const name = useRef<HTMLInputElement>(null);
   const failure = useRef<HTMLDivElement>(null);
   const here = template.asking === place;
@@ -150,11 +160,22 @@ export function SaveTemplateForm({ place, template }: { place: Place; template: 
           <p>{refused.detail}</p>
         </div>
       )}
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex items-center justify-end gap-3 max-sm:flex-wrap">
+        {changed && (
+          <span id={idOf(place, "save-why")} className="text-[12px] text-ink-muted max-sm:w-full">
+            Save your changes first.
+          </span>
+        )}
         <Button variant="ghost" disabled={busy} onClick={template.cancel} className="max-sm:h-11 max-sm:flex-1">
           Cancel
         </Button>
-        <Button type="submit" variant="primary" disabled={busy} className="max-sm:h-11 max-sm:flex-1">
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={busy || changed}
+          aria-describedby={changed ? idOf(place, "save-why") : undefined}
+          className="max-sm:h-11 max-sm:flex-1"
+        >
           {busy ? "Saving…" : "Save template"}
         </Button>
       </div>

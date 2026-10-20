@@ -1679,6 +1679,29 @@ describe("Edit team: Save as a template", () => {
     expect(templateButton()!.hasAttribute("aria-describedby")).toBe(false);
   });
 
+  // The form saves the team as last saved, so edits made with it open hold it as the button does.
+  test.each(["footer", "body"] as const)(
+    "with the form open in the %s, an edit turns Save template off, says why and sends nothing; undone, it is on again",
+    async (place) => {
+      openAt("/agents?team=Docs");
+      fireEvent.click(templateButton(place)!);
+      fireEvent.change(templateName(place), { target: { value: "Docs kit" } });
+      typeInto("Team name", "Handbook");
+
+      const button = inForm(place).getByRole("button", { name: "Save template" });
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(document.getElementById(button.getAttribute("aria-describedby")!)!.textContent).toBe("Save your changes first.");
+      await act(async () => fireEvent.submit(templateForm(place)!));
+      expect(sent()).toEqual([]);
+      expect(templateName(place).value).toBe("Docs kit");
+
+      typeInto("Team name", "Docs");
+      expect(button.hasAttribute("disabled")).toBe(false);
+      expect(button.hasAttribute("aria-describedby")).toBe(false);
+      expect(inForm(place).queryByText("Save your changes first.")).toBeNull();
+    },
+  );
+
   test("a team with a built-in template's team name has no Save as a template", () => {
     reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "writing" }))];
     openAt("/agents?team=writing");

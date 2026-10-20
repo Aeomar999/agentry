@@ -123,7 +123,7 @@ function EditTeamForm(props: EditTeamFormProps) {
     guard.leave();
   });
   const coordinator = loaded?.agents.find((row) => row.coordinates);
-  const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", list.focus);
+  const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", changed, list.focus);
   const guard = useCloseGuard(changed, saving || removal.busy || template.busy, onClose);
   const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
   const hasProblems = (key: string) => problems.some((p) => typeof p.field === "object" && p.field.row === key);
@@ -217,7 +217,7 @@ function EditTeamForm(props: EditTeamFormProps) {
         saving={saving}
       />
     );
-  const templateForm = (place: "footer" | "body") => <SaveTemplateForm place={place} template={template} />;
+  const templateForm = (place: "footer" | "body") => <SaveTemplateForm place={place} template={template} changed={changed} />;
   const footer = guard.asking ? (
     <DiscardQuestion
       question={opening?.question ?? discardEditQuestion(loaded?.team ?? props.team)}
