@@ -11,8 +11,10 @@ import {
   checkTeam,
   changedAgents,
   copyTemplate,
+  discardEditDetail,
   type DraftAgent,
   editCustomTeam,
+  editFooterLine,
   FIRST_TEMPLATE,
   footerLine,
   listed,
@@ -27,6 +29,7 @@ import {
   replacedNotice,
   replaceDetail,
   replaceQuestion,
+  rowChange,
   saveAgain,
   summaryTitle,
   type TeamDraft,
@@ -894,5 +897,34 @@ describe("whyNotSaved", () => {
       title: "Couldn't save the team",
       detail: "Couldn't reach Agentry. Check it's running, then try again.",
     });
+  });
+});
+
+describe("an edited team's sentences", () => {
+  const renamed = { ...loaded.agents[1], name: "author" };
+  const added = row("k9", { name: "critic" });
+
+  test("rowChange says a row is new, edited, or renamed from the name it had", () => {
+    expect(rowChange(loaded, loaded.agents[0])).toEqual({});
+    expect(rowChange(loaded, { ...loaded.agents[0], description: "Leads." })).toEqual({ mark: "edited", was: undefined });
+    expect(rowChange(loaded, renamed)).toEqual({ mark: "edited", was: "writer" });
+    expect(rowChange(loaded, added)).toEqual({ mark: "new" });
+  });
+
+  test("discardEditDetail counts each change once, in order, the first naming agents", () => {
+    expect(discardEditDetail(loaded, { team: "Writing", agents: [loaded.agents[0], renamed, added] })).toBe(
+      "The team renamed, 1 agent changed, 1 added and 1 removed. They aren't saved.",
+    );
+    expect(discardEditDetail(loaded, { team: "Docs", agents: [...loaded.agents, added, row("k8", { name: "indexer" })] })).toBe(
+      "2 agents added. They aren't saved.",
+    );
+    expect(discardEditDetail(loaded, { team: " Writing ", agents: loaded.agents })).toBe("The team renamed. They aren't saved.");
+  });
+
+  test("editFooterLine says why Save changes is off, or what it is doing", () => {
+    expect(editFooterLine(0, false, false)).toBe("No changes to save.");
+    expect(editFooterLine(0, false, true)).toBe("");
+    expect(editFooterLine(2, false, true)).toBe("2 things to fix, listed at the top.");
+    expect(editFooterLine(0, true, true)).toBe("Saving the team…");
   });
 });

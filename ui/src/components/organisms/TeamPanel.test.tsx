@@ -757,3 +757,414 @@ describe("New team: opened cold", () => {
     expect(alert.textContent).not.toContain("Failed to fetch");
   });
 });
+
+// The Docs team, as the Edit team panel opens it: editor coordinates writer and proofer.
+const DOCS = [
+  agent("editor", "Docs", { coordinates: true, description: "Leads the docs.", prompt: "You lead.", color: "violet", teamVersion: "v1" }),
+  agent("writer", "Docs", { description: "Writes.", prompt: "You write.", color: "blue", teamVersion: "v1" }),
+  agent("proofer", "Docs", { prompt: "You proof.", column: "review", teamVersion: "v1" }),
+];
+
+// What saving the Docs team sends for a row: its name then (was), and now.
+const sentRow = (was: string, given: Partial<Agent> = {}) => {
+  const { name, description, coordinates, prompt, engine, model, profile, color, column } = {
+    ...DOCS.find((a) => a.name === was)!,
+    ...given,
+  };
+  return { was, name, description, coordinates, prompt, engine, model, profile, color, column };
+};
+
+const sheet = () => screen.getByRole("dialog");
+const inSheet = () => within(sheet());
+const docsRow = (name: string) => inSheet().getByRole("button", { name: new RegExp(`^${name}(,|$)`) });
+const saveButton = () => inSheet().getByRole("button", { name: /^(Save changes|Saving…)$/ });
+const save = () => act(async () => fireEvent.click(saveButton()));
+// settle lets a refusal's reload of the roster land.
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+const typeInto = (label: string, value: string) => fireEvent.change(inSheet().getByLabelText(label), { target: { value } });
+
+describe("Edit team: opening", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  test("Edit team on a heading opens the team, its agents closed, focus on the title", () => {
+    openAt("/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+
+    expect(address()).toBe("/agents?team=Docs");
+    expect(sheet().getAttribute("aria-labelledby")).toBeTruthy();
+    expect(document.activeElement).toBe(inSheet().getByRole("heading", { name: "Edit the Docs team" }));
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Docs");
+    expect(["editor", "writer", "proofer"].map((name) => docsRow(name).getAttribute("aria-expanded"))).toEqual(["false", "false", "false"]);
+    expect(inSheet().queryByText("Start from")).toBeNull();
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(saveButton().getAttribute("aria-describedby")).toBe("team-footer-text");
+    expect(document.getElementById("team-footer-text")!.textContent).toBe("No changes to save.");
+  });
+
+  test("every heading has Edit team first, then + Add agent and Remove team, each named with its team", () => {
+    openAt("/agents");
+    const heading = screen.getByRole("heading", { name: "Docs" }).parentElement!;
+    expect(
+      within(heading)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Edit team, Docs", "Add agent to Docs", "Remove team, Docs"]);
+  });
+
+  test("+ Add agent opens the team with a new agent open and focus in its Name", () => {
+    openAt("/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Add agent to Docs" }));
+
+    expect(address()).toBe("/agents?team=Docs&add=agent");
+    expect(docsRow("New agent").getAttribute("aria-label")).toBe("New agent, new");
+    expect(docsRow("New agent").getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(inSheet().getByLabelText("Name"));
+    expect(inSheet().getByText("Knowledge and where it runs: on its own page, once you save.")).toBeTruthy();
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  test("an open row links to its agent's page by the name it has saved", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Name", "drafter");
+    expect(inSheet().getByRole("link", { name: "Open writer's page" }).getAttribute("href")).toBe("/agents/writer");
+    expect(inSheet().getByText(/^Renames writer: it keeps its prompt/)).toBeTruthy();
+  });
+
+  test("opened cold it says it is loading, with no fields and Save changes off, then shows the team", () => {
+    delete reads["/api/agents"];
+    openAt("/agents?team=Docs");
+
+    expect(inSheet().getByRole("heading", { name: "Edit the Docs team" })).toBeTruthy();
+    expect(inSheet().getByText("Loading the Docs team…")).toBeTruthy();
+    expect(inSheet().queryByLabelText("Team name")).toBeNull();
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById("team-footer-text")!.textContent).toBe("Loading…");
+
+    act(() => {
+      reads["/api/agents"] = [...ROSTER, ...DOCS];
+      changed();
+    });
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Docs");
+    expect(docsRow("writer")).toBeTruthy();
+  });
+
+  test("a failed load says so, with Try again and only Cancel", async () => {
+    delete reads["/api/agents"];
+    errors["/api/agents"] = "the log is unreadable";
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS] };
+    openAt("/agents?team=Docs");
+
+    const alert = inSheet().getByRole("alert");
+    expect(alert.textContent).toContain("Couldn't load the team");
+    expect(alert.textContent).toContain("the log is unreadable");
+    expect(inSheet().queryByRole("button", { name: "Save changes" })).toBeNull();
+    expect(inSheet().getByRole("button", { name: "Cancel" })).toBeTruthy();
+    await act(async () => fireEvent.click(within(alert).getByRole("button", { name: "Try again" })));
+    expect(docsRow("editor")).toBeTruthy();
+  });
+
+  test("no team by that name: the title says so and takes focus, with no fields, and goes back to the Agents page", () => {
+    openAt("/agents?team=Handbook");
+
+    const title = inSheet().getByRole("heading", { name: "Couldn't find the Handbook team" });
+    expect(document.activeElement).toBe(title);
+    expect(inSheet().getByText(/^It may have been renamed or removed since this link was made/)).toBeTruthy();
+    expect(inSheet().queryByLabelText("Team name")).toBeNull();
+    expect(inSheet().queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(inSheet().getByRole("button", { name: "Back to the Agents page" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("a team with two coordinators opens with no radio checked and the error under the legend", () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, coordinates: true } : a))];
+    openAt("/agents?team=Docs");
+
+    const radios = inSheet().getAllByRole("radio") as HTMLInputElement[];
+    expect(radios.some((radio) => radio.checked)).toBe(false);
+    expect(docsRow("editor").textContent).toContain("coordinator");
+    expect(docsRow("writer").textContent).toContain("coordinator");
+    expect(inSheet().getByText("editor and writer both coordinate. Pick the one that takes the team's tasks.")).toBeTruthy();
+    fireEvent.click(inSheet().getByRole("radio", { name: "Coordinator, writer" }));
+    expect(inSheet().queryByText(/both coordinate/)).toBeNull();
+  });
+});
+
+describe("Edit team: changing it", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  test("renaming the team says what follows, and Save changes sends the team in one PUT", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Handbook", version: "v2" });
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "Handbook" }))] };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", " Handbook ");
+
+    expect(inSheet().getByText("Renames Docs: its agents and their tasks move with it.")).toBeTruthy();
+    expect(document.getElementById("team-footer-text")!.textContent).toBe("");
+    await save();
+
+    expect(sent()).toEqual([
+      ["PUT", "/api/teams/Docs", { version: "v1", team: "Handbook", agents: [sentRow("editor"), sentRow("writer"), sentRow("proofer")] }],
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Handbook" }));
+  });
+
+  test("a renamed, changed, added and removed agent each say so until saved, and all go in the PUT", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Name", "drafter");
+    fireEvent.click(docsRow("editor"));
+    typeInto("Description", "Leads.");
+    fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
+    fireEvent.click(inSheet().getByRole("button", { name: "Add agent" }));
+    typeInto("Name", "critic");
+    fireEvent.change(inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!, { target: { value: "You critique." } });
+
+    expect(docsRow("drafter").getAttribute("aria-label")).toBe("drafter, edited, was writer");
+    expect(docsRow("editor").getAttribute("aria-label")).toBe("editor, edited");
+    expect(docsRow("critic").getAttribute("aria-label")).toBe("critic, new");
+    expect(inSheet().getByText("proofer will be removed when you save")).toBeTruthy();
+    expect(inSheet().getByText("3 agents · 4 changed")).toBeTruthy();
+    await save();
+
+    const critic = { name: "critic", description: "", coordinates: false, prompt: "You critique.", engine: "claude", model: "" };
+    expect(sent()).toEqual([
+      [
+        "PUT",
+        "/api/teams/Docs",
+        {
+          version: "v1",
+          team: "Docs",
+          agents: [
+            sentRow("editor", { description: "Leads." }),
+            sentRow("writer", { name: "drafter" }),
+            { was: "", ...critic, profile: "", color: "teal", column: "" },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  test("removing an agent leaves a stub with Undo, which takes focus; Undo puts it back", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
+
+    expect(document.activeElement).toBe(inSheet().getByRole("button", { name: "Undo, keep proofer" }));
+    fireEvent.click(inSheet().getByRole("button", { name: "Undo, keep proofer" }));
+    expect(document.activeElement).toBe(docsRow("proofer"));
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  test("the coordinator it has can't lose its prompt: only a new one goes without", async () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("editor"));
+    fireEvent.change(inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!, { target: { value: "" } });
+    await save();
+
+    expect(sent()).toEqual([]);
+    expect(within(summary()).getByRole("heading").textContent).toBe("Couldn't save the team: 1 thing to fix");
+    expect(inSheet().getByText("Write a prompt: only a new coordinator can do without one.")).toBeTruthy();
+  });
+
+  test("Cancel with changes asks to discard them, counting them; Keep editing stays, Discard closes", () => {
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Name", "drafter");
+    fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
+    fireEvent.click(inSheet().getByRole("button", { name: "Add agent" }));
+    fireEvent.click(inSheet().getByRole("button", { name: "Cancel" }));
+
+    const question = inSheet().getByRole("group", { name: "Discard your changes to Docs?" });
+    expect(question.textContent).toContain("The team renamed, 1 agent changed, 1 added and 1 removed. They aren't saved.");
+    expect(document.activeElement).toBe(within(question).getByRole("button", { name: "Keep editing" }));
+    fireEvent.click(within(question).getByRole("button", { name: "Keep editing" }));
+    expect(sheet()).toBeTruthy();
+    fireEvent.click(inSheet().getByRole("button", { name: "Cancel" }));
+    fireEvent.click(inSheet().getByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("with no changes Close closes at once", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("Edit team: saving", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  test("while it saves the panel is read-only and can't close", async () => {
+    let answer = () => {};
+    vi.mocked(api).mockReturnValueOnce(new Promise((resolve) => (answer = () => resolve({ team: "Handbook", version: "v2" }))));
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+
+    expect(saveButton().textContent).toBe("Saving…");
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).readOnly).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Remove writer" }).getAttribute("aria-disabled")).toBe("true");
+    expect(inSheet().getByText("Saving the team…")).toBeTruthy();
+    await act(async () => answer());
+  });
+
+  test("problems the server finds go on their rows, and the summary links to them", async () => {
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError("the Docs team can't be saved", 400, { problems: [{ row: 1, field: "name", error: "writer is a reserved name" }] }),
+    );
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+
+    expect(document.activeElement).toBe(summary());
+    expect(within(summary()).getByRole("heading").textContent).toBe("Couldn't save the team: 1 thing to fix");
+    expect(docsRow("writer").getAttribute("aria-expanded")).toBe("true");
+    expect(inSheet().getByText("writer is a reserved name.")).toBeTruthy();
+    fireEvent.click(within(summary()).getByRole("button", { name: "writer: writer is a reserved name" }));
+    expect(document.activeElement).toBe(inSheet().getByLabelText("Name"));
+  });
+
+  test("a removed agent tasks still need says so on its stub; its link goes to Undo, which clears it", async () => {
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError("the Docs team can't be saved", 409, {
+        problems: [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1: finish those first, or keep proofer" }],
+      }),
+    );
+    openAt("/agents?team=Docs");
+    fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
+    await save();
+
+    expect(within(summary()).getByRole("heading").textContent).toBe("Couldn't save the team: 1 thing to fix");
+    const stub = inSheet().getByText("proofer will be removed when you save").closest("li")!;
+    expect(stub.textContent).toContain("Still needed by task-1. Finish it first, or undo to keep proofer.");
+    expect(within(stub).getByRole("link", { name: "task-1" }).getAttribute("href")).toBe("/tasks/task-1");
+    fireEvent.click(within(summary()).getByRole("button", { name: "proofer: still needed by task-1" }));
+    expect(document.activeElement).toBe(within(stub).getByRole("button", { name: "Undo, keep proofer" }));
+    fireEvent.click(within(stub).getByRole("button", { name: "Undo, keep proofer" }));
+    expect(document.getElementById("team-summary")).toBeNull();
+  });
+
+  test("changed elsewhere: keep my changes saves them over it with the version given", async () => {
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError("changed elsewhere", 409, { error: "changed elsewhere", version: "v2" }))
+      .mockResolvedValueOnce({ team: "Handbook", version: "v3" });
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+
+    expect(document.activeElement).toBe(summary());
+    expect(summary().textContent).toContain("Couldn't save the team: it changed since you opened it");
+    expect(summary().textContent).toContain("The Docs team was changed somewhere else after you opened it.");
+    fireEvent.click(within(summary()).getByRole("button", { name: "Keep my changes here" }));
+    expect(document.getElementById("team-summary")).toBeNull();
+    await save();
+
+    expect(sent()[1]).toEqual(["PUT", "/api/teams/Docs", expect.objectContaining({ version: "v2", team: "Handbook" })]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("changed elsewhere: reloading asks first, then shows the team as it is now", async () => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError("changed elsewhere", 409, { error: "changed elsewhere", version: "v2" }));
+    afterReload = {
+      "/api/agents": [
+        ...ROSTER,
+        ...DOCS.map((a) => ({ ...a, teamVersion: "v2" })),
+        agent("indexer", "Docs", { prompt: "You index.", teamVersion: "v2" }),
+      ],
+    };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    fireEvent.click(within(summary()).getByRole("button", { name: "Reload the team" }));
+
+    const question = within(summary()).getByRole("group", { name: "Reload and lose your changes?" });
+    expect(document.activeElement).toBe(within(question).getByRole("button", { name: "Keep editing" }));
+    await act(async () => fireEvent.click(within(question).getByRole("button", { name: "Reload" })));
+    await settle();
+
+    expect(document.getElementById("team-summary")).toBeNull();
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Docs");
+    expect(document.activeElement).toBe(inSheet().getByLabelText("Team name"));
+    expect(docsRow("indexer")).toBeTruthy();
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  test("cut short: the team is saved as reloaded, and Save again saves it unchanged under its new names", async () => {
+    const error = "saved the Handbook team, but 1 task still needs moving: save again to finish (task-1: busy)";
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError(error, 409, { error, version: "v3" }))
+      .mockResolvedValueOnce({ team: "Handbook", version: "v4" });
+    afterReload = {
+      "/api/agents": [
+        ...ROSTER,
+        ...DOCS.map((a) => ({ ...a, team: "Handbook", teamVersion: "v3", name: a.name === "writer" ? "drafter" : a.name })),
+      ],
+    };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Name", "drafter");
+    await save();
+    await settle();
+
+    expect(summary().textContent).toContain("Saved the Handbook team, but some of its tasks haven't moved yet");
+    expect(summary().textContent).toContain(`Save again to finish moving them. Agentry said: "${error}"`);
+    expect(inSheet().getByRole("heading", { name: "Edit the Handbook team" })).toBeTruthy();
+    expect(docsRow("drafter").getAttribute("aria-label")).toBe("drafter");
+    await act(async () => fireEvent.click(within(summary()).getByRole("button", { name: "Save again" })));
+
+    expect(sent()[1]).toEqual([
+      "PUT",
+      "/api/teams/Handbook",
+      {
+        version: "v3",
+        team: "Handbook",
+        agents: [sentRow("editor"), { ...sentRow("writer", { name: "drafter" }), was: "drafter" }, sentRow("proofer")],
+      },
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("a profile policy.toml lacks is offered on the 409, and the retry carries the policy's hash", async () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, profile: "read-mostly" } : a))];
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError("policy.toml lacks read-mostly", 409, { missingProfiles: ["read-mostly"] }))
+      .mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/agents?team=Docs");
+    expect(inSheet().getByText("1 agent uses read-mostly, which policy.toml doesn't have. Save changes offers to add it.")).toBeTruthy();
+    fireEvent.click(docsRow("editor"));
+    typeInto("Description", "Leads.");
+    await save();
+
+    const offer = inSheet().getByRole("alert");
+    expect(offer.textContent).toContain("then saves your changes.");
+    await act(async () => fireEvent.click(within(offer).getByRole("button", { name: "Add the profile and save the team" })));
+    expect(sent()[1]).toEqual(["PUT", "/api/teams/Docs", expect.objectContaining({ addMissingProfiles: true, hash: "h1" })]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  test("any other refusal shows in the summary in the server's words, and everything typed stays", async () => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError("the log is unwritable", 500));
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+
+    expect(within(summary()).getByRole("heading").textContent).toBe("Couldn't save the team");
+    expect(summary().textContent).toContain("the log is unwritable");
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Handbook");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+});
