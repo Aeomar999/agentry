@@ -145,12 +145,20 @@ export function changedAgents(start: TeamDraft, now: TeamDraft): string[] {
 }
 
 // rowChange is how a row differs from the team as loaded, until saved: a
-// new agent, or an edited one, with the name it had when renamed.
-export function rowChange(loaded: TeamDraft, agent: DraftAgent): { mark?: "new" | "edited"; was?: string } {
+// new agent, or an edited one, with the name it had when renamed and
+// whether its prompt changed.
+export function rowChange(
+  loaded: TeamDraft,
+  agent: DraftAgent,
+): { mark?: "new" | "edited"; was?: string; promptChanged?: boolean } {
   const was = loaded.agents.find((row) => row.key === agent.key);
   if (!was) return { mark: "new" };
   if (sameAgent(was, agent)) return {};
-  return { mark: "edited", was: was.name !== agent.name.trim() ? was.name : undefined };
+  return {
+    mark: "edited",
+    was: was.name !== agent.name.trim() ? was.name : undefined,
+    promptChanged: was.prompt !== agent.prompt || undefined,
+  };
 }
 
 const sameAgent = (a: DraftAgent, b: DraftAgent) => (Object.keys(a) as (keyof DraftAgent)[]).every((field) => a[field] === b[field]);

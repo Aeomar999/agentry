@@ -40,11 +40,13 @@ interface AgentRowProps {
 }
 
 // How a row of a team being edited differs from the team as saved: new or
-// edited, with the name it had when renamed, and its agent's name there
-// (none for a new one), whose page has what the panel hasn't.
+// edited, with the name it had when renamed and whether its prompt changed,
+// and its agent's name there (none for a new one), whose page has what the
+// panel hasn't.
 export interface RowEdit {
   mark?: "new" | "edited";
   was?: string;
+  promptChanged?: boolean;
   saved?: string;
 }
 
@@ -152,7 +154,11 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
   const choose = (change: (value: string) => Partial<DraftAgent>) => (event: { target: { value: string } }) =>
     !saving && onChange(change(event.target.value));
   const lines = agent.prompt === "" ? 0 : agent.prompt.split("\n").length;
-  const defaultPrompt = agent.coordinates && agent.prompt.trim() === "";
+  const lineCount = lines === 1 ? "1 line" : lines > 1 ? `${lines} lines` : undefined;
+  // Agentry writes its coordinator prompt only for an agent it adds, so
+  // the coordinator a team has can't go without one.
+  const takesDefault = agent.coordinates && !edit?.saved;
+  const defaultPrompt = takesDefault && agent.prompt.trim() === "";
   const shipped = shippedProfiles(policy);
   const profileKnown = agent.profile === "" || policy.profiles.some((p) => p.name === agent.profile);
   const renamed = edit?.saved && agent.name.trim() !== edit.saved ? edit.saved : undefined;
@@ -192,12 +198,21 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
       <Field
         label="Prompt"
         labelId={`${id("prompt")}-label`}
-        aside={lines === 1 ? "1 line" : lines > 1 ? `${lines} lines` : undefined}
+        aside={lineCount && edit?.promptChanged ? `${lineCount} · changed` : lineCount}
         error={errorOf("prompt")}
         hint={
-          defaultPrompt
-            ? "Empty: it uses Agentry's coordinator prompt for a team of these agents."
-            : "Its standing instructions, at the start of every turn. Tab moves to the next field."
+          <>
+            {defaultPrompt
+              ? "Empty: it uses Agentry's coordinator prompt for a team of these agents."
+              : "Its standing instructions, at the start of every turn. Tab moves to the next field."}
+            {edit?.saved && (
+              <span className="block">
+                {renamed
+                  ? `Renaming doesn't change its prompt: it may still say "${renamed}".`
+                  : "Renaming an agent doesn't change its prompt."}
+              </span>
+            )}
+          </>
         }
       >
         <div
@@ -215,7 +230,7 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
             tabFocusMode
             alwaysConsumeMouseWheel={false}
             readOnly={saving}
-            placeholder={agent.coordinates ? "Empty: it uses Agentry's coordinator prompt for a team of these agents." : undefined}
+            placeholder={takesDefault ? "Empty: it uses Agentry's coordinator prompt for a team of these agents." : undefined}
             onChange={(prompt) => onChange({ prompt })}
           />
         </div>

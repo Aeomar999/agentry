@@ -907,6 +907,7 @@ describe("an edited team's sentences", () => {
     expect(rowChange(loaded, loaded.agents[0])).toEqual({});
     expect(rowChange(loaded, { ...loaded.agents[0], description: "Leads." })).toEqual({ mark: "edited", was: undefined });
     expect(rowChange(loaded, renamed)).toEqual({ mark: "edited", was: "writer" });
+    expect(rowChange(loaded, { ...loaded.agents[0], prompt: "Lead well." })).toEqual({ mark: "edited", promptChanged: true });
     expect(rowChange(loaded, added)).toEqual({ mark: "new" });
   });
 

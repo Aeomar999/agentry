@@ -955,6 +955,40 @@ describe("Edit team: changing it", () => {
     ]);
   });
 
+  test("in Edit the prompt says renaming doesn't change it, with the old name once renamed", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+
+    expect(inSheet().getByText("Renaming an agent doesn't change its prompt.")).toBeTruthy();
+    typeInto("Name", "drafter");
+    expect(inSheet().queryByText("Renaming an agent doesn't change its prompt.")).toBeNull();
+    expect(inSheet().getByText(`Renaming doesn't change its prompt: it may still say "writer".`)).toBeTruthy();
+  });
+
+  test("a new agent made coordinator in Edit still offers Agentry's coordinator prompt, with no renaming note", () => {
+    openAt("/agents?team=Docs&add=agent");
+    fireEvent.click(inSheet().getByRole("radio", { name: "Coordinator, New agent" }));
+
+    expect(inSheet().getByText("Empty: it uses Agentry's coordinator prompt for a team of these agents.")).toBeTruthy();
+    const prompt = inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!;
+    expect(JSON.parse(prompt.dataset.options!).placeholder).toBe("Empty: it uses Agentry's coordinator prompt for a team of these agents.");
+    expect(inSheet().queryByText(/^Renaming/)).toBeNull();
+  });
+
+  test("the prompt's line count says changed once it differs from the saved prompt", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    const prompt = inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!;
+
+    expect(inSheet().getByText("1 line")).toBeTruthy();
+    typeInto("Description", "Drafts.");
+    expect(inSheet().getByText("1 line")).toBeTruthy();
+    fireEvent.change(prompt, { target: { value: "You write.\nPlainly." } });
+    expect(inSheet().getByText("2 lines · changed")).toBeTruthy();
+    fireEvent.change(prompt, { target: { value: "You write." } });
+    expect(inSheet().getByText("1 line")).toBeTruthy();
+  });
+
   test("removing an agent leaves a stub with Undo, which takes focus; Undo puts it back", () => {
     openAt("/agents?team=Docs");
     fireEvent.click(inSheet().getByRole("button", { name: "Remove proofer" }));
@@ -968,7 +1002,12 @@ describe("Edit team: changing it", () => {
   test("the coordinator it has can't lose its prompt: only a new one goes without", async () => {
     openAt("/agents?team=Docs");
     fireEvent.click(docsRow("editor"));
-    fireEvent.change(inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!, { target: { value: "" } });
+    const prompt = inSheet().getByRole("group", { name: "Prompt" }).querySelector("textarea")!;
+    fireEvent.change(prompt, { target: { value: "" } });
+
+    // Neither the hint nor the empty box offers Agentry's coordinator prompt.
+    expect(inSheet().queryByText(/^Empty: it uses Agentry's coordinator prompt/)).toBeNull();
+    expect(JSON.parse(prompt.dataset.options!).placeholder).toBeUndefined();
     await save();
 
     expect(sent()).toEqual([]);
