@@ -375,7 +375,7 @@ func TestAKeyHoldingTheSecretIsRefused(t *testing.T) {
 		"only the key": `{"a":{"` + secret + `X":"x"}}`,
 	} {
 		rw, err := redactedData(data, secret)
-		if err != nil || rw.refused != "holds the secret in a key, which redacting doesn't rewrite" || !rw.holds() {
+		if err != nil || rw.refused != "holds the secret in a key, which redacting doesn't rewrite" || !rw.inKey || !rw.holds() {
 			t.Errorf("%s: refused %q, %v, want refused", name, rw.refused, err)
 		}
 		if rw.data != data || len(rw.fields) != 0 {

@@ -47,8 +47,9 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 //
 // It returns the redaction and, when it is refused, the rejection: no row
 // holds the secret, a row that does is a knowledge version, holds it in a
-// key or can't be rewritten leaving the rest as it was, the reason given holds it, the
-// rules refuse it, or the stream took an event since its rows were read.
+// key or can't be rewritten leaving the rest as it was, the reason given
+// holds it, the rules refuse it, or the stream took an event since its
+// rows were read.
 // A refusal writes nothing, as Archive's does. The error is for the
 // database failing. One after the commit comes with the redaction: the
 // rows are rewritten, but the old text may stay in the WAL until
@@ -155,6 +156,7 @@ type rewrittenRow struct {
 	fields   []string // the JSON paths of the strings that held the secret
 	removed  int      // the secret's bytes taken out
 	refused  string   // why the row can't be rewritten, if it can't
+	inKey    bool     // a key holds the secret, so the row has no fields
 }
 
 // holds says whether the row held the secret: in a string it rewrote, or
@@ -205,7 +207,7 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 		return rewrittenRow{}, err
 	}
 	if inKey {
-		return rewrittenRow{data: data, refused: "holds the secret in a key, which redacting doesn't rewrite"}, nil
+		return rewrittenRow{data: data, refused: "holds the secret in a key, which redacting doesn't rewrite", inKey: true}, nil
 	}
 	if len(found.fields) == 0 {
 		return rewrittenRow{}, nil
@@ -363,9 +365,11 @@ func pathKey(key string) string {
 }
 
 // redactable refuses a redaction the rows found can't make: none holds the
-// secret, or one is a knowledge version, which later versions patch: a
+// secret; one is a knowledge version, which later versions patch: a
 // patch's head and tail would be wrong against a redacted text, so those
-// are rewritten as full copies instead.
+// are rewritten as full copies instead; or one holds it in a key, which
+// is refused here, before the rules would refuse its redaction for
+// naming no fields.
 func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	if len(rewrites) == 0 {
 		return &events.Rejection{Check: "redact", Reason: "no row of " + stream + " holds the secret"}
@@ -373,6 +377,11 @@ func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	for _, rw := range rewrites {
 		if rw.kind == events.AgentLearned {
 			return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("the row at %d is a knowledge version, which is redacted by writing it again in full", rw.position)}
+		}
+	}
+	for _, rw := range rewrites {
+		if rw.inKey {
+			return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("the row at %d %s", rw.position, rw.refused)}
 		}
 	}
 	return nil

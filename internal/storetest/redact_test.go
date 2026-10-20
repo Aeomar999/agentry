@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -216,6 +217,42 @@ func TestAnArchivedOrErasedTaskIsNotRedacted(t *testing.T) {
 		}
 		if s.LastPosition() != last {
 			t.Errorf("a refused redaction of %s wrote to the log", stream)
+		}
+	}
+}
+
+// Test 5: with the rules on, as serve has them, a row with the secret in a
+// key is refused for that, not for its redaction naming no fields, whether
+// or not a value holds it too, and the log is as it was.
+func TestARowWithTheSecretInAKeyIsRefusedBeforeTheRules(t *testing.T) {
+	for name, extra := range map[string]any{
+		"only the key": map[string]any{pasted: "x"},
+		"and a value":  map[string]any{pasted: "x " + pasted},
+	} {
+		s, _ := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+		for _, p := range append(agents.SeedProposals(nil),
+			events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One", "repo": "/r", "coordinator": "tech-lead", "extra": extra}},
+		) {
+			mustPropose(t, s, p)
+		}
+		if count, err := s.Matches("task-1", pasted); count != 1 || err != nil {
+			t.Errorf("%s: Matches %d, %v, want 1", name, count, err)
+		}
+		before, err := s.Stream("task-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		last := s.LastPosition()
+		want := "the row at " + strconv.FormatInt(last, 10) + " holds the secret in a key, which redacting doesn't rewrite"
+		if _, rejection, err := s.Redact("task-1", pasted, you, ""); err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: %v, %v, want %q", name, rejection, err, want)
+		}
+		after, err := s.Stream("task-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.LastPosition() != last || !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", name, before, after)
 		}
 	}
 }
