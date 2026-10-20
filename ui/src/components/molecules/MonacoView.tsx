@@ -51,12 +51,19 @@ export default function MonacoView({
     const typing = instance.onDidChangeModelContent(() => changed.current?.(instance.getValue()));
     fit();
 
+    // Monaco 0.52 takes what Tab does from one switch for every editor (its
+    // tabFocusMode option isn't read), so this editor sets its own, again
+    // after each change of options, which puts the switch's back.
+    const tabMovesFocus = tabFocusMode ? instance.createContextKey("editorTabMovesFocus", true) : null;
+    const tabbing = instance.onDidChangeConfiguration(() => tabMovesFocus?.set(true));
+
     // Follow the page's theme when it changes.
     const themeWatch = new MutationObserver(() => monaco.editor.setTheme(defineTheme()));
     themeWatch.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     return () => {
       themeWatch.disconnect();
+      tabbing.dispose();
       typing.dispose();
       sizing.dispose();
       instance.getModel()?.dispose();
