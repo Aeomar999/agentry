@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/coordinator"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
@@ -441,5 +442,71 @@ func TestARefusedErasureWritesNothing(t *testing.T) {
 	}
 	if f.log.LastPosition() != last {
 		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+}
+
+// An erased story is taken out of its epic first, so the epic doesn't wait
+// on it for ever: task-3's other story task-4 is done, and task-2, live and
+// not done or archived once done, is erased. Its coordinator may finish,
+// is told to when it waits, has no story left to wake, and the card counts
+// the one story left. Closing it from the page answers 200.
+func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
+	for _, archived := range []bool{false, true} {
+		t.Run(map[bool]string{false: "live", true: "archived"}[archived], func(t *testing.T) {
+			f := newEraseFixture(t)
+			f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Other", "repo": "/r", "coordinator": "tech-lead"}})
+			if code, body := call(t, f.server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-3"}`); code != http.StatusOK {
+				t.Fatalf("task-4 into the epic: %d %s", code, body)
+			}
+			f.propose(t,
+				events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Other done.", "moved": true}},
+				events.Proposal{Stream: "task-3", Actor: loop, Type: events.StoryDone, Data: map[string]any{"story": "task-4", "summary": "Other done.", "coordinator": "tech-lead"}},
+			)
+			if archived {
+				f.done(t)
+				storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+			}
+			f.erase(t, "task-2")
+
+			epic, err := f.state.Task("task-3")
+			if err != nil || epic == nil {
+				t.Fatalf("the epic: %v", err)
+			}
+			if !slices.Equal(epic.Stories, []string{"task-4"}) || !slices.Equal(epic.StoriesDone, []string{"task-4"}) {
+				t.Errorf("the epic's stories %v, done %v, want task-4 alone in both", epic.Stories, epic.StoriesDone)
+			}
+			if got := textIn(t, f, "task-3", events.StoryRemoved, "story"); !slices.Equal(got, []string{"task-2"}) {
+				t.Errorf("the epic's task.story_removed: %q, want task-2's", got)
+			}
+			if last := epic.Trail[len(epic.Trail)-1]; strings.Contains(last.Text, plantedHere) {
+				t.Errorf("the epic's trail names the erased story's words: %q", last.Text)
+			}
+			for _, c := range []struct {
+				report string
+				want   coordinator.MoveKind
+				says   string
+			}{
+				{`{"action": "done", "summary": "Shipped."}`, coordinator.ApplyDecision, ""},
+				{`{"action": "wait"}`, coordinator.RaiseIssue, "every story of this epic is done"},
+			} {
+				decided := epic.Clone()
+				for _, e := range []events.Event{
+					{Proposal: events.Proposal{Stream: "task-3", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-3", "branch": "b", "port": 7901}}},
+					{Proposal: events.Proposal{Stream: "task-3", Actor: machine, Type: events.TurnStarted, Correlation: "turn-9", Data: map[string]any{"agent": "tech-lead", "hash": "h"}}},
+					{Proposal: events.Proposal{Stream: "task-3", Actor: machine, Type: events.TurnEnded, Correlation: "turn-9", Data: map[string]any{"agent": "tech-lead", "report": c.report}}},
+				} {
+					decided.Apply(e)
+				}
+				if move := coordinator.Next(decided, f.state.Roster()); move.Kind != c.want || !strings.Contains(move.Reason, c.says) {
+					t.Errorf("%s: got %s (%q), want %s with %q", c.report, move.Kind, move.Reason, c.want, c.says)
+				}
+			}
+			if summary, _ := f.state.Summary("task-3"); summary.Stories != 1 || summary.StoriesDone != 1 {
+				t.Errorf("the card counts %d of %d done, want 1 of 1", summary.StoriesDone, summary.Stories)
+			}
+			if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+				t.Errorf("closing the epic: %d %s, want 200", code, body)
+			}
+		})
 	}
 }

@@ -48,6 +48,13 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task", http.StatusNotFound)
 		return
 	}
+	if refused, err := s.leaveEpic(id); refused != "" {
+		http.Error(w, refused, http.StatusConflict)
+		return
+	} else if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
 	if task != nil && task.OpenTurn() != nil && s.config.StopSession != nil {
 		s.config.StopSession(id)
 	}
@@ -78,6 +85,37 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 	warnings = append(warnings, s.redactCopies(id, elsewhere.copies)...)
 	warnings = append(warnings, s.writeOverOldText()...)
 	httpapi.Reply(w, erased{ID: id, At: erasure.At, Warnings: warnings})
+}
+
+// leaveEpic takes a story out of its epic before it is erased, with the
+// epic's task.story_removed, which names only its id: once erased, the
+// story can't be loaded for the rule itsStory, and the epic would wait on
+// it for ever. If the erasure then fails, the story is left out of its
+// epic, but whole: you may file it under one again. An archived epic is
+// done and is left as it is: unarchiving it for the removal would leave
+// its blob holding the story's words, which redactCopies takes out only
+// of an epic still archived. It returns why the removal was refused, or
+// the error that stopped it.
+func (s *Server) leaveEpic(id string) (string, error) {
+	summary, found := s.state.Summary(id)
+	if !found || summary.Epic == "" {
+		return "", nil
+	}
+	epic, err := s.task(summary.Epic)
+	switch {
+	case errors.Is(err, current.ErrArchived), errors.Is(err, current.ErrErased):
+		return "", nil
+	case err != nil:
+		return "", err
+	case epic == nil || !slices.Contains(epic.Stories, id):
+		return "", nil
+	}
+	removed := events.Proposal{Stream: epic.ID, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": id}}
+	_, rejection, err := s.store.Propose(removed)
+	if rejection != nil {
+		return rejection.Reason, nil
+	}
+	return "", err
 }
 
 // sharedFilesOf is the blobs of the files task id shared, read before it
