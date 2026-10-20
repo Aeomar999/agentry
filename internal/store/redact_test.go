@@ -284,7 +284,8 @@ func TestASecretWithJSONsSpecialCharactersIsRedacted(t *testing.T) {
 // Redact refuses, and writes nothing, when no row holds the secret, the
 // reason given holds it, the secret is empty or part of [redacted], or the
 // stream took an event since its rows were read. Preview gives the same
-// rejection, but for the reason, which it isn't given.
+// rejection, but for the reason, which it isn't given. Only the first
+// is HoldsNone's, and only for its stream.
 func TestARefusedRedactionWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	s := openWithSecret(t, path, newCreated())
@@ -296,8 +297,12 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 		{"an empty secret", "task-1", "", "", "a secret to redact is some text, and not part of [redacted]"},
 		{"part of [redacted]", "task-1", "dact", "", "a secret to redact is some text, and not part of [redacted]"},
 	} {
-		if _, rejection, err := s.Redact(c.stream, c.secret, you, c.why); err != nil || rejection == nil || rejection.Reason != c.want {
+		_, rejection, err := s.Redact(c.stream, c.secret, you, c.why)
+		if err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
+		}
+		if HoldsNone(c.stream, rejection) != (c.name == "no row holds it") || HoldsNone("task-2", rejection) {
+			t.Errorf("%s: HoldsNone %v of %s, %v of task-2", c.name, HoldsNone(c.stream, rejection), c.stream, HoldsNone("task-2", rejection))
 		}
 		if c.why != "" {
 			continue

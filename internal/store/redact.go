@@ -476,7 +476,7 @@ func pathKey(key string) string {
 // fields.
 func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	if len(rewrites) == 0 {
-		return &events.Rejection{Check: "redact", Reason: "no row of " + stream + " holds the secret"}
+		return holdsNone(stream)
 	}
 	for _, rw := range rewrites {
 		if rw.kind == events.AgentLearned && stream != events.AgentsStream {
@@ -489,6 +489,20 @@ func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 		}
 	}
 	return nil
+}
+
+// holdsNone is why a redaction of stream is refused when no row of it
+// holds the secret.
+func holdsNone(stream string) *events.Rejection {
+	return &events.Rejection{Check: "redact", Reason: "no row of " + stream + " holds the secret"}
+}
+
+// HoldsNone says whether rejection is a redaction's, or its preview's,
+// refusal of stream because no row of it holds the secret: a redaction
+// across the whole log leaves such a stream out, rather than name it
+// refused.
+func HoldsNone(stream string, rejection *events.Rejection) bool {
+	return rejection != nil && *rejection == *holdsNone(stream)
 }
 
 // rewritable refuses a redaction of stream with a row redactedData can't
