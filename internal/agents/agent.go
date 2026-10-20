@@ -103,13 +103,6 @@ func TeamRenaming(team, to string, by events.Actor) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.TeamRenamed, Data: map[string]any{"team": team, "to": to}}
 }
 
-// CoordinatorMoving is the event that makes to, another agent of team, its
-// coordinator in place of the one it has, with the template the team was
-// made from, so the team keeps its features.
-func CoordinatorMoving(team, to string, by events.Actor) events.Proposal {
-	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.TeamCoordinatorMoved, Data: map[string]any{"team": team, "to": to}}
-}
-
 // Removal is the event that removes this agent.
 func (a Agent) Removal(by events.Actor) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.AgentRemoved, Data: map[string]any{"name": a.Name}}
@@ -185,16 +178,6 @@ func (r *Roster) Apply(e events.Event) {
 			if roster[i].TeamName() == e.Text("team") {
 				roster[i].Team = e.Text("to")
 			}
-		}
-	case events.TeamCoordinatorMoved:
-		template := roster.TemplateOf(e.Text("team"))
-		for i := range roster {
-			if roster[i].TeamName() == e.Text("team") {
-				roster[i].Coordinates = roster[i].Name == e.Text("to")
-			}
-		}
-		if i := roster.index(e.Text("to")); i >= 0 {
-			roster[i].Template = template
 		}
 	case events.TeamEdited:
 		edit, _ := TeamEditOf(e.Proposal) // the rules accepted it as one

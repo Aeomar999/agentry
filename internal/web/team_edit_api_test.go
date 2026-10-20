@@ -406,32 +406,6 @@ func teamEditsAfter(stream []events.Event, at int64) int {
 	return n
 }
 
-// A coordinator move whose tasks are refused partway says so, and asking
-// again moves them.
-func TestACoordinatorMoveRefusedPartwaySaysToAskAgain(t *testing.T) {
-	refuse := true
-	server, _ := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
-		if p.Type == events.CoordinatorMoved && p.Stream == "task-2" && refuse {
-			return &events.Rejection{Reason: "not now"}
-		}
-		return nil
-	})
-	addData(t, server)
-	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
-	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
-	code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`)
-	if want := "moved the Data team's coordinator to analyst, but 1 task still needs moving: ask again to finish (task-2: not now)\n"; code != http.StatusConflict || body != want {
-		t.Errorf("a task's move refused: %d %q, want 409 %q", code, body, want)
-	}
-	refuse = false
-	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != 200 {
-		t.Fatalf("asking again: %d %s", code, body)
-	}
-	if two := coordinatorOf(t, server, "task-2"); two != "analyst" {
-		t.Errorf("task-2 is %s's, want analyst's", two)
-	}
-}
-
 // Two agents swapping names leave the team's tasks with the agent they
 // had; saving the team again, with the names swapped already, moves none
 // of them back.

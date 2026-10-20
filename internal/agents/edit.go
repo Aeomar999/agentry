@@ -92,7 +92,7 @@ func (r Roster) TeamVersion(team string) string {
 // edited is the roster after edit, as the rules accepted it. Kept agents
 // stay where they were, with their knowledge, workers and template; new
 // ones go last. A coordinator other than the one before takes the template
-// the team was made from, as a team.coordinator_moved gives it.
+// the team was made from.
 func (r Roster) edited(edit TeamEdit) Roster {
 	lead, _ := r.Coordinator(edit.Team)
 	newcomers := edit.To

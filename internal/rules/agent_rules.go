@@ -27,8 +27,6 @@ var rosterRules = map[events.Type]rosterRule{
 	events.TaskCreated:     allOf(coordinatorExists),
 	events.TaskAssigned:    allOf(assigneeExists),
 	events.TaskTransferred: allOf(coordinatorExists), // the new coordinator, which must be one
-
-	events.TeamCoordinatorMoved: allOf(teamExists, anotherOfItsAgents),
 }
 
 func allOf(rules ...rosterRule) rosterRule {
@@ -80,27 +78,6 @@ func newTeamNameIsFree(roster agents.Roster, p events.Proposal) string {
 		return ""
 	}
 	return agents.CheckTeamName(to, roster)
-}
-
-// CoordinatorMoveRefusal is why the rule would refuse moving a team's
-// coordinator with p, or "", so a route can ask before it writes anything.
-func CoordinatorMoveRefusal(roster agents.Roster, p events.Proposal) string {
-	return rosterRules[events.TeamCoordinatorMoved](roster, p)
-}
-
-// anotherOfItsAgents: the agent a team's coordinator moves to is one of the
-// team's, and not its coordinator already.
-func anotherOfItsAgents(roster agents.Roster, p events.Proposal) string {
-	agent, exists := roster.Get(p.Text("to"))
-	switch {
-	case !exists:
-		return "no agent called " + p.Text("to")
-	case agent.TeamName() != p.Text("team"):
-		return p.Text("to") + " is in the " + agent.TeamName() + " team, not " + p.Text("team")
-	case agent.Coordinates:
-		return p.Text("to") + " coordinates the " + p.Text("team") + " team already"
-	}
-	return ""
 }
 
 func nameIsValid(_ agents.Roster, p events.Proposal) string {
