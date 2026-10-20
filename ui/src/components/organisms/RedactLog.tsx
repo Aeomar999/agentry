@@ -28,12 +28,6 @@ const countsOf = (preview: LogPreview) =>
 // redactCounted redacts the text in each stream the preview counted.
 const redactCounted = (text: string, why: string, counted: LogPreview) => redactLog(text, why, countsOf(counted));
 
-// otherWarnings is the warnings besides the streams left, which the
-// server also lists among them, as "<stream>: <reason>", and the page
-// names on their own.
-const otherWarnings = (redaction: LogRedaction) =>
-  redaction.warnings.filter((warning) => !redaction.failures.some((failed) => warning === `${failed.stream}: ${failed.reason}`));
-
 export function RedactLog({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState("");
   const [why, setWhy] = useState("");
@@ -130,7 +124,7 @@ function Redacted({
           </StreamList>
         </>
       )}
-      <Warnings warnings={otherWarnings(redaction)} />
+      <Warnings warnings={redaction.warnings} />
       <LeftBehind before={dateTime(at)} what="the text" worktrees="Each task's" />
       <div className="flex justify-end gap-2">
         {recount && (

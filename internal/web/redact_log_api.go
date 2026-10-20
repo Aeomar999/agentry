@@ -69,7 +69,7 @@ type streamFailed struct {
 
 // logRedacted is what a redaction across the log answers: the rows
 // rewritten, in each stream; the streams left holding the text, and why;
-// and what may be left on the disk for now, those streams among it.
+// and what may be left on the disk for now.
 type logRedacted struct {
 	Rows     int              `json:"rows"`
 	Streams  []streamRedacted `json:"streams"`
@@ -101,9 +101,9 @@ func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 // hold the text as it commits, and one it didn't count isn't redacted, as
 // you didn't see its rows; with no counts, each is redacted of however
 // many rows hold the text. A stream refused or failing is a failure, and
-// a warning, and the rest are redacted still; only when none is, it is
-// answered as answerRedaction answers one stream. The snapshot is written
-// once, at the end. Only the page may ask, as for redact.
+// the rest are redacted still; only when none is, it is answered as
+// answerRedaction answers one stream, naming each failure. The snapshot
+// is written once, at the end. Only the page may ask, as for redact.
 func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	asked, counts, ok := countedSecretOf(w, r)
 	if !ok {
@@ -141,21 +141,30 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case len(answer.Streams) == 0 && failed:
-		http.Error(w, strings.Join(answer.Warnings, "; "), http.StatusInternalServerError)
+		http.Error(w, answer.refusal(), http.StatusInternalServerError)
 		return
 	case len(answer.Streams) == 0:
-		http.Error(w, strings.Join(answer.Warnings, "; "), http.StatusConflict)
+		http.Error(w, answer.refusal(), http.StatusConflict)
 		return
 	}
 	answer.Warnings = append(answer.Warnings, s.writeOverOldText()...)
 	httpapi.Reply(w, answer)
 }
 
-// fail names stream as left holding the text, for reason, among the
-// failures and the warnings.
+// fail names stream among the failures, as left holding the text, for
+// reason.
 func (answer *logRedacted) fail(stream, reason string, recount bool) {
 	answer.Failures = append(answer.Failures, streamFailed{Stream: stream, Reason: reason, Recount: recount})
-	answer.Warnings = append(answer.Warnings, stream+": "+reason)
+}
+
+// refusal is why nothing was redacted: each stream that failed, named,
+// then the warnings.
+func (answer *logRedacted) refusal() string {
+	reasons := make([]string, 0, len(answer.Failures)+len(answer.Warnings))
+	for _, failed := range answer.Failures {
+		reasons = append(reasons, failed.Stream+": "+failed.Reason)
+	}
+	return strings.Join(append(reasons, answer.Warnings...), "; ")
 }
 
 // countedSecretOf is what a redaction across the log asks for, as

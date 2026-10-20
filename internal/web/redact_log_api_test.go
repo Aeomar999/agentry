@@ -198,7 +198,7 @@ func TestARedactionAcrossTheLogLeavesWhatDoesNotHoldTheSecret(t *testing.T) {
 }
 
 // A stream refused, in its preview or once it is asked to redact, is
-// named in the warnings, and the others are redacted still. When every
+// named among the failures, and the others are redacted still. When every
 // stream that holds the secret is refused, the redaction is refused 409
 // with their reasons, as one stream's is.
 func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
@@ -228,8 +228,12 @@ func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
 	if len(answer.Streams) != 1 || answer.Streams[0].Stream != "task-2" || answer.Rows != 1 {
 		t.Errorf("the redaction rewrote %+v, want only task-2's row", answer)
 	}
-	if want := []string{"task-1: task-1 is kept as it is", "task-3: task-3 is kept as it is"}; !slices.Equal(answer.Warnings, want) {
-		t.Errorf("the redaction warned %q, want %q", answer.Warnings, want)
+	failures := []streamFailed{{Stream: "task-1", Reason: "task-1 is kept as it is"}, {Stream: "task-3", Reason: "task-3 is kept as it is"}}
+	if !slices.Equal(answer.Failures, failures) {
+		t.Errorf("the redaction failed %+v, want %+v", answer.Failures, failures)
+	}
+	if len(answer.Warnings) != 0 {
+		t.Errorf("the redaction warned %q, want its failures named only among the failures", answer.Warnings)
 	}
 	if got := redactedStreams(t, s); !slices.Equal(got, []string{"task-2"}) {
 		t.Errorf("event.redacted in %q, want only task-2", got)
@@ -428,8 +432,8 @@ func TestARedactionAcrossTheLogHoldsEachStreamToItsCount(t *testing.T) {
 	if !slices.Equal(answer.Failures, failures) {
 		t.Errorf("the redaction failed %+v, want %+v", answer.Failures, failures)
 	}
-	if want := []string{"task-5: " + failures[0].Reason, "task-6: " + failures[1].Reason}; !slices.Equal(answer.Warnings, want) {
-		t.Errorf("the redaction warned %q, want %q", answer.Warnings, want)
+	if len(answer.Warnings) != 0 {
+		t.Errorf("the redaction warned %q, want its failures named only among the failures", answer.Warnings)
 	}
 
 	again := previewAcross(t, f.server, secretHere)

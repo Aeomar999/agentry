@@ -29,7 +29,7 @@ const STALE = "2 rows hold this text now, not 1: count them again";
 const LOST = "task-7's archived rows can't be read: its blob is missing";
 
 // The redaction with task-5's count stale and task-7 failing, as the
-// server answers it: each stream left among the warnings too.
+// server answers it: each stream left among the failures, and only there.
 const PARTLY: LogRedaction = {
   rows: 4,
   streams: [
@@ -41,7 +41,7 @@ const PARTLY: LogRedaction = {
     { stream: "task-5", reason: STALE, recount: true },
     { stream: "task-7", reason: LOST, recount: false },
   ],
-  warnings: [`task-5: ${STALE}`, `task-7: ${LOST}`, "the WAL couldn't be emptied"],
+  warnings: ["the WAL couldn't be emptied"],
 };
 
 beforeEach(() => {
@@ -84,11 +84,12 @@ describe("RedactLog", () => {
     expect(within(row("task-3")[0]).getByText("2 rows")).toBeTruthy();
     expect(within(row("agents")[0]).getByText("1 row")).toBeTruthy();
     expect(screen.getByText("These still hold the text:")).toBeTruthy();
+    // Each stream left is named once, in its row, beside the warnings.
     expect(within(row("task-5")[0]).getByText(STALE)).toBeTruthy();
     expect(within(row("task-7")[0]).getByText(LOST)).toBeTruthy();
-    // The warnings say only what the streams left don't.
+    expect(screen.getAllByText(new RegExp(STALE))).toHaveLength(1);
+    expect(screen.getAllByText(new RegExp(LOST))).toHaveLength(1);
     expect(screen.getByText("the WAL couldn't be emptied")).toBeTruthy();
-    expect(screen.queryByText(`task-5: ${STALE}`)).toBeNull();
     expect(screen.getByText(/^Each task's worktree/)).toBeTruthy();
   });
 
@@ -121,8 +122,22 @@ describe("RedactLog", () => {
 
     expect(redactLog).toHaveBeenCalledWith(SECRET, "pasted everywhere", { "task-3": 2 });
     expect(screen.getByText(/^3 rows hold this text\./)).toBeTruthy();
+    expect(screen.getAllByText(/3 rows hold this text now, not 2/)).toHaveLength(1);
+    expect(screen.getByText(/3 rows hold this text now, not 2/).textContent).toContain("task-3: 3 rows");
     expect(screen.getByText(/3 rows hold this text now, not 2/).textContent).toContain("so the rows were counted again");
     expect(button("Redact 3 rows")).toBeTruthy();
+  });
+
+  test("a redaction that failed with nothing redacted keeps the count and names the stream once", async () => {
+    vi.mocked(previewLogRedaction).mockResolvedValueOnce({ rows: 2, streams: [{ stream: "task-3", rows: 2, archived: false }] });
+    vi.mocked(redactLog).mockRejectedValueOnce(new ApiError("task-3: the disk is full", 500));
+    await count();
+    await act(async () => fireEvent.click(button("Redact 2 rows")));
+
+    expect(previewLogRedaction).toHaveBeenCalledOnce();
+    expect(screen.getAllByText(/the disk is full/)).toHaveLength(1);
+    expect(screen.getByText("It wasn't redacted: task-3: the disk is full")).toBeTruthy();
+    expect(button("Redact 2 rows")).toBeTruthy();
   });
 
   test("a preview refused shows the reason with the text kept", async () => {
