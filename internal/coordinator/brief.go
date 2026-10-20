@@ -31,7 +31,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 
 	var team strings.Builder
 	for _, agent := range roster.Assignees(coordinator.TeamName()) {
-		fmt.Fprintf(&team, "- %s: %s\n", agent.Name, agent.Description)
+		team.WriteString(about("- "+agent.Name, agent.Description) + "\n")
 	}
 	section(&b, "The agents you can hand work to", team.String())
 	if text := machinesText(task, machines, roster.Assignees(coordinator.TeamName())); text != "" {
@@ -173,11 +173,7 @@ func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, 
 		if team == coordinator.TeamName() || !ok {
 			continue
 		}
-		about := lead.Description
-		if template, found := agents.TemplateNamed(team); found && template.Description != "" {
-			about = template.Description
-		}
-		fmt.Fprintf(&list, "- %s, coordinated by %s: %s\n", team, lead.Name, about)
+		list.WriteString(about("- "+team+", coordinated by "+lead.Name, teamDescription(lead)) + "\n")
 	}
 	if list.Len() == 0 {
 		return
@@ -188,13 +184,55 @@ func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, 
 		ask = "give them a story of this epic, with \"team\" in the split"
 	}
 	text := list.String() + "\nYou are in the " + coordinator.TeamName() + " team. When this task needs something only " +
-		"another team does well (a document from Writing, research from Research, a design from Design, code from " +
-		"Software), " + ask + ". Ask for one thing at a time, and say exactly what you need and what done looks like."
+		"another team does well" + routingExamples(roster) + ", " + ask + ". Ask for one thing at a time, and say exactly " +
+		"what you need and what done looks like."
 	if !task.TeamChosen && task.Parent == "" {
 		text += "\n\nThe user didn't choose a team for this task. Before anyone works on it, decide whose work it is: if it " +
 			"is another team's, pass it to them with a \"transfer\" decision, saying why; if it is your team's, go on."
 	}
 	section(b, "Other teams", text)
+}
+
+// teamDescription is what the team led by lead is for: the description of
+// the built-in template lead was made from, else lead's own.
+func teamDescription(lead agents.Agent) string {
+	if template, found := agents.TemplateWithID(lead.Template); found && template.Description != "" {
+		return template.Description
+	}
+	return lead.Description
+}
+
+// about is line followed by what it is about, when there is anything to say.
+func about(line, description string) string {
+	if description == "" {
+		return line
+	}
+	return line + ": " + description
+}
+
+// routedWork is what each built-in template's team is asked for, in the
+// order the routing sentence gives them.
+var routedWork = []struct{ template, work string }{
+	{"writing", "a document"}, {"research", "research"}, {"design", "a design"}, {"software", "code"},
+}
+
+// routingExamples is " (a document from Writing, ...)" for the teams in
+// roster made from routedWork's templates, by their names now; "" when
+// there are none.
+func routingExamples(roster agents.Roster) string {
+	var examples []string
+	for _, routed := range routedWork {
+		for _, team := range roster.Teams() {
+			if roster.TemplateOf(team) == routed.template {
+				examples = append(examples, routed.work+" from "+team)
+				break
+			}
+		}
+	}
+	if len(examples) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(examples, ", ") + ")"
 }
 
 func header(b *strings.Builder, agent agents.Agent, task *tasks.Task) {

@@ -142,3 +142,116 @@ func TestARenamedTeamIsListedByItsNewName(t *testing.T) {
 		t.Errorf("the Docs team's editor takes it: coordinator %q", task.Coordinator)
 	}
 }
+
+// rosterWith is the default roster after these proposals, in order.
+func rosterWith(proposals ...events.Proposal) agents.Roster {
+	roster := defaultRoster()
+	for _, p := range proposals {
+		roster = roster.Next(events.Event{Proposal: p})
+	}
+	return roster
+}
+
+// withTemplates is the default roster with a team added from each of these
+// built-in templates.
+func withTemplates(ids ...string) agents.Roster {
+	roster := defaultRoster()
+	for _, id := range ids {
+		template, _ := agents.TemplateWithID(id)
+		for _, p := range agents.AddTeam(template, roster, you) {
+			roster = roster.Next(events.Event{Proposal: p})
+		}
+	}
+	return roster
+}
+
+// otherTeamsOf is the "Other teams" section of lead's brief.
+func otherTeamsOf(t *testing.T, roster agents.Roster, lead string) string {
+	t.Helper()
+	coordinator, ok := roster.Get(lead)
+	if !ok {
+		t.Fatalf("no %s in the roster", lead)
+	}
+	brief := coordinatorBrief(started().task(), coordinator, roster, family{}, nil, nil, nil, nil)
+	_, section, _ := strings.Cut(brief, "## Other teams\n\n")
+	section, _, _ = strings.Cut(section, "\n\n## ")
+	return section
+}
+
+// With today's teams the routing sentence reads as it always has.
+func TestTheRoutingSentenceOfTheDefaultTeamsIsUnchanged(t *testing.T) {
+	roster := withTemplates("writing", "research", "design", "visionaries", "networking")
+	want := "You are in the Software team. When this task needs something only another team does well (a document " +
+		"from Writing, research from Research, a design from Design, code from Software), ask them with a \"request\" " +
+		"decision: they get a task of their own, this one waits for it, and their summary comes back to you here, so " +
+		"you carry on. Ask for one thing at a time, and say exactly what you need and what done looks like."
+	if section := otherTeamsOf(t, roster, "tech-lead"); !strings.Contains(section, "\n\n"+want+"\n\n") {
+		t.Errorf("the routing sentence changed:\n%s", section)
+	}
+}
+
+// The routing sentence names only the teams there are, by their names now.
+func TestTheRoutingSentenceNamesTheTeamsThereAre(t *testing.T) {
+	data := rosterWith(agents.CustomTeam("Data", []agents.Agent{
+		{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true},
+	}, you)...)
+	if section := otherTeamsOf(t, data, "data-lead"); !strings.Contains(section, "only another team does well (code from Software), ask") {
+		t.Errorf("Software only, plus a custom team:\n%s", section)
+	}
+	docs := withTemplates("writing", "research", "design")
+	docs = docs.Next(events.Event{Proposal: agents.TeamRenaming("Writing", "Docs", you)})
+	if section := otherTeamsOf(t, docs, "tech-lead"); !strings.Contains(section, "(a document from Docs, research from Research, a design from Design, code from Software)") {
+		t.Errorf("a renamed Writing team:\n%s", section)
+	}
+	alone := rosterWith(agents.CustomTeam("Legal", []agents.Agent{
+		{Name: "counsel", Engine: "claude", Coordinates: true},
+	}, you)...)
+	alone = alone.Next(events.Event{Proposal: agents.TeamRenaming("Software", "Build", you)})
+	if section := otherTeamsOf(t, alone, "counsel"); !strings.Contains(section, "(code from Build)") {
+		t.Errorf("a renamed Software team:\n%s", section)
+	}
+}
+
+// A team's line comes from the template its coordinator was made from, not
+// its name, and ends without a colon when there is nothing to say.
+func TestOtherTeamsAreDescribedByTheirTemplateOrTheirCoordinator(t *testing.T) {
+	writing, _ := agents.TemplateWithID("writing")
+	renamed := withTemplates("writing")
+	renamed = renamed.Next(events.Event{Proposal: agents.TeamRenaming("Writing", "Docs", you)})
+	if section := otherTeamsOf(t, renamed, "tech-lead"); !strings.Contains(section, "- Docs, coordinated by editor: "+writing.Description+"\n") {
+		t.Errorf("a renamed Writing team keeps its template's description:\n%s", section)
+	}
+
+	custom := rosterWith(
+		append(agents.CustomTeam("Data", []agents.Agent{{Name: "data-lead", Description: "Leads the data work.", Engine: "claude", Coordinates: true}}, you),
+			agents.CustomTeam("Legal", []agents.Agent{{Name: "counsel", Engine: "claude", Coordinates: true}}, you)...)...)
+	section := otherTeamsOf(t, custom, "tech-lead")
+	if !strings.Contains(section, "- Data, coordinated by data-lead: Leads the data work.\n") {
+		t.Errorf("a custom team is described by its coordinator:\n%s", section)
+	}
+	if !strings.Contains(section, "- Legal, coordinated by counsel\n") {
+		t.Errorf("a team with no description has no colon:\n%s", section)
+	}
+
+	// A custom team named like a template isn't described as one.
+	named := rosterWith(agents.CustomTeam("Writing", []agents.Agent{
+		{Name: "scribe", Description: "Takes notes.", Engine: "claude", Coordinates: true},
+	}, you)...)
+	if section := otherTeamsOf(t, named, "tech-lead"); !strings.Contains(section, "- Writing, coordinated by scribe: Takes notes.\n") {
+		t.Errorf("a custom Writing team is described by its own coordinator:\n%s", section)
+	}
+}
+
+// An agent with no description is listed by its name alone.
+func TestAnAgentWithNoDescriptionIsListedByName(t *testing.T) {
+	roster := rosterWith(agents.CustomTeam("Legal", []agents.Agent{
+		{Name: "counsel", Engine: "claude", Coordinates: true},
+		{Name: "drafter", Engine: "claude"},
+		{Name: "checker", Description: "Checks the drafts.", Engine: "claude"},
+	}, you)...)
+	counsel, _ := roster.Get("counsel")
+	brief := coordinatorBrief(started().task(), counsel, roster, family{}, nil, nil, nil, nil)
+	if !strings.Contains(brief, "## The agents you can hand work to\n\n- drafter\n- checker: Checks the drafts.\n") {
+		t.Errorf("drafter should be listed by name alone:\n%s", brief)
+	}
+}

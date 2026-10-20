@@ -94,12 +94,16 @@ var Templates = []Template{
 }
 
 // Prompted is the template's agents with their prompts, its team and its ID:
-// what a team made from it gets.
+// what a team made from it gets. The coordinator of a template you saved
+// takes the template's description when it has none of its own.
 func (t Template) Prompted() []Agent {
 	agents := make([]Agent, len(t.Agents))
 	for i, agent := range t.Agents {
 		agent.Template = t.ID
 		if t.Given {
+			if agent.Coordinates && agent.Description == "" {
+				agent.Description = t.Description // so other coordinators know what the team is for
+			}
 			agents[i] = agent
 			continue
 		}

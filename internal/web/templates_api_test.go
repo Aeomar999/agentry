@@ -702,6 +702,29 @@ func TestYourTemplateNeedsItsProfilesInThePolicy(t *testing.T) {
 	}
 }
 
+// A team added from your template whose coordinator has no description
+// takes the template's, so other coordinators know what it is for; a
+// coordinator with one keeps it.
+func TestYourTemplatesDescriptionDescribesItsCoordinator(t *testing.T) {
+	server, s := newTestServer(t)
+	for _, c := range []struct{ id, team, lead, want string }{
+		{"quiet", "Quiet", "", "Keeps the minutes."},
+		{"loud", "Loud", "Shouts the news.", "Shouts the news."},
+	} {
+		body, _ := json.Marshal(map[string]any{"id": c.id, "team": c.team, "description": "Keeps the minutes.", "agents": []any{
+			map[string]any{"name": c.id + "-lead", "engine": "claude", "prompt": "Lead.", "coordinates": true, "profile": "developer", "description": c.lead}}})
+		if code, reply := call(t, server, "POST", "/api/teams/templates/import", string(body)); code != 200 {
+			t.Fatalf("%s: import: %d %s", c.id, code, reply)
+		}
+		if code, reply := call(t, server, "POST", "/api/teams", `{"template":"`+c.id+`"}`); code != 200 {
+			t.Fatalf("%s: add: %d %s", c.id, code, reply)
+		}
+		if lead, _ := rosterOf(t, s).Coordinator(c.team); lead.Description != c.want {
+			t.Errorf("%s: the lead's description is %q, want %q", c.id, lead.Description, c.want)
+		}
+	}
+}
+
 // A template saved under the template rules can still fail the rules of a
 // team you define, as the policy or the templates changed since: it is
 // refused before anything is proposed.

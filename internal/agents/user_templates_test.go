@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -32,6 +33,23 @@ func TestATeamIsAddedFromAUserTemplateWithItsPrompts(t *testing.T) {
 	}
 	if reader.Prompt != "Read the papers." || reader.Team != "Papers" || reader.Template != "papers" || reader.Column != Reviews {
 		t.Errorf("the reader: %+v", reader)
+	}
+}
+
+// The coordinator of a team added from your template is described by the
+// template when it has no description of its own, and keeps its own if it has.
+func TestAUserTemplatesDescriptionFillsAnEmptyCoordinators(t *testing.T) {
+	lead, _ := FromEvents(added(papers().Template(), seeded())).Coordinator("Papers")
+	if lead.Description != "Reads papers." {
+		t.Errorf("an empty description is filled: %q", lead.Description)
+	}
+	described := papers()
+	described.Agents = slices.Clone(described.Agents)
+	described.Agents[0].Description = "Hands out the reading."
+	lead, _ = FromEvents(added(described.Template(), seeded())).Coordinator("Papers")
+	reader, _ := FromEvents(added(described.Template(), seeded())).Get("reader")
+	if lead.Description != "Hands out the reading." || reader.Description != "" {
+		t.Errorf("its own description is kept, and only the coordinator's is filled: %q, %q", lead.Description, reader.Description)
 	}
 }
 
@@ -77,6 +95,9 @@ func TestASavedTeamIsAddedBackTheSame(t *testing.T) {
 		}
 		want := had
 		want.Workers, want.Knowledge, want.Template, want.untouched = []string{}, "", "papers", false
+		if want.Coordinates {
+			want.Description = "Reads papers." // it had none, so it takes the template's
+		}
 		got, _ := again.Get(had.Name)
 		if !equalAgents(got, want) {
 			t.Errorf("%s added back:\n got %+v\nwant %+v", had.Name, got, want)
