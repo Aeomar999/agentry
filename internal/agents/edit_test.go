@@ -70,6 +70,48 @@ func TestATeamEditMovesTheCoordinatorWithItsTemplate(t *testing.T) {
 	}
 }
 
+// A new agent made the coordinator in a team edit takes the template the
+// team was made from, through a rename of the team in the same edit.
+func TestATeamEditGivesANewCoordinatorTheTeamsTemplate(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "lead", Coordinates: true, Team: "Visionaries", Template: "visionaries"},
+		{Name: "thinker", Team: "Visionaries"},
+	}
+	edit := TeamEdit{Team: "Visionaries", To: "Dreamers", Removed: []string{"lead"}, Agents: []EditedAgent{
+		{Name: "new-lead", Coordinates: true, Prompt: "Lead."},
+		{Was: "thinker", Name: "thinker"},
+	}}
+	roster = roster.Next(events.Event{Proposal: edit.Proposal(you)})
+	if lead, ok := roster.Coordinator("Dreamers"); !ok || lead.Name != "new-lead" || lead.Template != "visionaries" {
+		t.Errorf("Dreamers' coordinator = %+v, %v, want new-lead made from visionaries", lead, ok)
+	}
+	if template := roster.TemplateOf("Dreamers"); template != "visionaries" {
+		t.Errorf("Dreamers is made from %q, want visionaries", template)
+	}
+}
+
+// An agent of the team with no template, made its coordinator, takes the
+// team's template.
+func TestATeamEditGivesAnAgentMadeCoordinatorTheTeamsTemplate(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "lead", Coordinates: true, Team: "Visionaries", Template: "visionaries"},
+		{Name: "thinker", Team: "Visionaries"},
+	}
+	edit := TeamEdit{Team: "Visionaries", To: "Visionaries", Agents: []EditedAgent{
+		{Was: "lead", Name: "lead"},
+		{Was: "thinker", Name: "thinker", Coordinates: true},
+	}}
+	roster = roster.Next(events.Event{Proposal: edit.Proposal(you)})
+	if lead, ok := roster.Coordinator("Visionaries"); !ok || lead.Name != "thinker" || lead.Template != "visionaries" {
+		t.Errorf("Visionaries' coordinator = %+v, %v, want thinker made from visionaries", lead, ok)
+	}
+	if template := roster.TemplateOf("Visionaries"); template != "visionaries" {
+		t.Errorf("Visionaries is made from %q, want visionaries", template)
+	}
+}
+
 // The default team's agents may name no team: an edit that keeps its name
 // leaves them, and its new agents, naming none.
 func TestAnEditOfTheDefaultTeamKeepsItNamingNone(t *testing.T) {
