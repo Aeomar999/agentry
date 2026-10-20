@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, CircleAlert, Trash2, TriangleAlert } from "lucide-react";
 import type { Policy } from "@/api/types";
 import { Badge } from "@/components/atoms/Badge";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/cn";
 // On a phone the header takes two lines: the name, its badges and remove,
 // then the coordinator radio and the description.
 // While the team saves the fields are read-only and the rest aria-disabled.
+// Editing a team, the row also says how it differs from the team as saved.
 
 interface AgentRowProps {
   agent: DraftAgent;
@@ -33,6 +35,17 @@ interface AgentRowProps {
   saving: boolean;
   onChange: (change: Partial<DraftAgent>) => void;
   onRemove: () => void;
+  edit?: RowEdit; // none in a new team
+  unpicked?: boolean; // two rows coordinate, so no radio is checked until you pick one
+}
+
+// How a row of a team being edited differs from the team as saved: new or
+// edited, with the name it had when renamed, and its agent's name there
+// (none for a new one), whose page has what the panel hasn't.
+export interface RowEdit {
+  mark?: "new" | "edited";
+  was?: string;
+  saved?: string;
 }
 
 // fieldId is the id of a row's control, for labels, errors and the summary's links.
@@ -46,9 +59,14 @@ const COLUMN_HINTS: Record<string, string> = {
 };
 
 export function AgentRow(props: AgentRowProps) {
-  const { agent, open, onToggle, problems, profileMissing, saving, onChange, onRemove } = props;
+  const { agent, open, onToggle, problems, profileMissing, saving, onChange, onRemove, edit, unpicked } = props;
   const name = shownName(agent);
-  const marks = [problems.length > 0 && problemCount(problems.length), profileMissing && "profile missing"].filter(Boolean);
+  const marks = [
+    edit?.mark,
+    edit?.was && `was ${edit.was}`,
+    problems.length > 0 && problemCount(problems.length),
+    profileMissing && "profile missing",
+  ].filter(Boolean);
   const column = agent.coordinates ? "" : columnOfAgent(agent);
   return (
     <li className="border-b border-divider last:border-b-0">
@@ -72,6 +90,8 @@ export function AgentRow(props: AgentRowProps) {
             aria-hidden
           />
           <span className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-ink-primary">{name}</span>
+          {edit?.was && <span className="shrink-0 text-[12px] text-ink-muted">was {edit.was}</span>}
+          {edit?.mark && <Badge>{edit.mark}</Badge>}
           {agent.coordinates && <Badge variant="brand">coordinator</Badge>}
           {column && <Badge>{COLUMN_TITLES[column]}</Badge>}
           {problems.length > 0 && (
@@ -93,7 +113,7 @@ export function AgentRow(props: AgentRowProps) {
         <span className="shrink-0 max-sm:row-start-2 max-sm:pl-5.5 max-sm:[&>label]:min-h-11 max-sm:[&>label]:items-center">
           <Radio
             name="coordinator"
-            checked={agent.coordinates}
+            checked={agent.coordinates && !unpicked}
             readOnly={saving}
             onChange={() => onChange({ coordinates: true })}
             label={
@@ -122,7 +142,7 @@ export function AgentRow(props: AgentRowProps) {
   );
 }
 
-function AgentFields({ agent, problems, profileMissing, engines, policy, saving, onChange }: AgentRowProps) {
+function AgentFields({ agent, problems, profileMissing, engines, policy, saving, onChange, edit }: AgentRowProps) {
   const id = (field: Parameters<typeof fieldId>[1]) => fieldId(agent.key, field);
   const errorOf = (field: AgentField) => problems.find((p) => typeof p.field === "object" && p.field.field === field)?.message;
   // What a control with a problem says about itself, beside the danger border.
@@ -135,11 +155,21 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
   const defaultPrompt = agent.coordinates && agent.prompt.trim() === "";
   const shipped = shippedProfiles(policy);
   const profileKnown = agent.profile === "" || policy.profiles.some((p) => p.name === agent.profile);
+  const renamed = edit?.saved && agent.name.trim() !== edit.saved ? edit.saved : undefined;
 
   return (
     <div className="flex flex-col gap-4 border-t border-divider bg-surface-0 px-4 py-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Name" htmlFor={id("name")} hint="Lowercase letters, digits and dashes." error={errorOf("name")}>
+        <Field
+          label="Name"
+          htmlFor={id("name")}
+          hint={
+            renamed
+              ? `Renames ${renamed}: it keeps its prompt, settings and what it knows, and its tasks go on with the new name.`
+              : "Lowercase letters, digits and dashes."
+          }
+          error={errorOf("name")}
+        >
           <Input
             id={id("name")}
             mono
@@ -263,7 +293,7 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
           error={errorOf("profile")}
           hint={
             profileMissing
-              ? `${agent.profile} (missing from policy.toml): every call it makes is denied until it's back. Create team offers to add it, or pick another.`
+              ? `${agent.profile} (missing from policy.toml): every call it makes is denied until it's back. ${edit ? "Save changes" : "Create team"} offers to add it, or pick another.`
               : "What it may do without asking you."
           }
         >
@@ -290,7 +320,23 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
         </Field>
       </div>
 
-      <p className="text-[12px] text-ink-muted">Knowledge and where it runs: on its own page, once the team is created.</p>
+      <PageLine saved={edit ? (edit.saved ?? "") : undefined} />
     </div>
+  );
+}
+
+// PageLine says where the rest of an agent is: its own page, once it has
+// one. saved is its name as saved when editing a team, "" for a new agent.
+function PageLine({ saved }: { saved?: string }) {
+  if (saved === undefined)
+    return <p className="text-[12px] text-ink-muted">Knowledge and where it runs: on its own page, once the team is created.</p>;
+  if (saved === "") return <p className="text-[12px] text-ink-muted">Knowledge and where it runs: on its own page, once you save.</p>;
+  return (
+    <p className="text-[12px] text-ink-muted">
+      Knowledge, where it runs and a taller prompt editor:{" "}
+      <Link to={`/agents/${encodeURIComponent(saved)}`} className="text-ink-primary underline hover:no-underline">
+        Open {saved}&apos;s page
+      </Link>
+    </p>
   );
 }

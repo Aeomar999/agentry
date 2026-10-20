@@ -12,23 +12,32 @@ import { cn } from "@/lib/cn";
 // and the footer; under 500px of height (a phone held sideways, 400% zoom,
 // the on-screen keyboard) nothing sticks and the whole sheet scrolls as one,
 // the footer last. canClose false turns Close and Esc off, as while it saves.
+// focusTitle puts focus on the title as it opens, so a screen reader says
+// which thing the sheet is about; titleId lets its owner focus it later.
 interface SideSheetProps {
   title: string;
   returnTo?: RefObject<HTMLElement | null>; // for an opener that is gone by then, as one in a closed dialog
   onClose: () => void;
   canClose?: boolean;
-  footer: ReactNode;
+  focusTitle?: boolean;
+  titleId?: string;
+  footer?: ReactNode; // none for a sheet with nothing to do but close
   children: ReactNode;
 }
 
-export function SideSheet({ title, returnTo, onClose, canClose = true, footer, children }: SideSheetProps) {
-  const titleId = useId();
+export function SideSheet({ title, returnTo, onClose, canClose = true, focusTitle, footer, children, ...props }: SideSheetProps) {
+  const ownId = useId();
+  const titleId = props.titleId ?? ownId;
   const sheet = useRef<HTMLDivElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   // Remembered as it first renders: by its effects, autoFocus inside it has run.
   const [opener] = useState(() => document.activeElement);
   useInertBehind(sheet); // first, so the page is no longer inert when focus returns to it
   useFocusReturn(sheet, returnTo, opener);
   useScrollLock();
+  useEffect(() => {
+    if (focusTitle) heading.current?.focus();
+  }, [focusTitle]);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => event.key === "Escape" && canClose && onClose();
@@ -48,7 +57,7 @@ export function SideSheet({ title, returnTo, onClose, canClose = true, footer, c
         )}
       >
         <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-divider pr-2 pl-5">
-          <h2 id={titleId} className="truncate text-[15px] font-semibold text-ink-primary">
+          <h2 ref={heading} id={titleId} tabIndex={-1} className="truncate text-[15px] font-semibold text-ink-primary outline-none">
             {title}
           </h2>
           <IconButton icon={<X />} label="Close" onClick={onClose} disabled={!canClose} />
@@ -56,7 +65,7 @@ export function SideSheet({ title, returnTo, onClose, canClose = true, footer, c
         <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 py-5 [@media(max-height:500px)]:flex-none [@media(max-height:500px)]:overflow-visible">
           {children}
         </div>
-        <div className="shrink-0 border-t border-divider px-5 py-3">{footer}</div>
+        {footer && <div className="shrink-0 border-t border-divider px-5 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,

@@ -136,14 +136,24 @@ export function newAgent(draft: TeamDraft, engines: string[]): DraftAgent {
 // changedAgents are the names of the rows that differ from how the team
 // started: changed, added or removed. Starting again replaces them.
 export function changedAgents(start: TeamDraft, now: TeamDraft): string[] {
-  const same = (a: DraftAgent, b: DraftAgent) => (Object.keys(a) as (keyof DraftAgent)[]).every((field) => a[field] === b[field]);
   const changed = now.agents.filter((agent) => {
     const was = start.agents.find((other) => other.key === agent.key);
-    return !was || !same(was, agent);
+    return !was || !sameAgent(was, agent);
   });
   const removed = start.agents.filter((agent) => !now.agents.some((other) => other.key === agent.key));
   return [...changed, ...removed].map(shownName);
 }
+
+// rowChange is how a row differs from the team as loaded, until saved: a
+// new agent, or an edited one, with the name it had when renamed.
+export function rowChange(loaded: TeamDraft, agent: DraftAgent): { mark?: "new" | "edited"; was?: string } {
+  const was = loaded.agents.find((row) => row.key === agent.key);
+  if (!was) return { mark: "new" };
+  if (sameAgent(was, agent)) return {};
+  return { mark: "edited", was: was.name !== agent.name.trim() ? was.name : undefined };
+}
+
+const sameAgent = (a: DraftAgent, b: DraftAgent) => (Object.keys(a) as (keyof DraftAgent)[]).every((field) => a[field] === b[field]);
 
 // unsaved says whether closing would lose something: the team's name or
 // an agent differs from how the team started. Typing a change back undoes it.
@@ -382,11 +392,12 @@ export function summaryTitle(problems: number, editing = false): string {
   return problems > 0 ? `${title}: ${thingCount(problems)} to fix` : title;
 }
 
-// missingLine says, under the agents, which profiles creating the team offers to add.
-export function missingLine(draft: TeamDraft, missing: string[]): string {
+// missingLine says, under the agents, which profiles saving the team
+// (action: Create team, or Save changes) offers to add.
+export function missingLine(draft: TeamDraft, missing: string[], action = "Create team"): string {
   const users = draft.agents.filter((agent) => missing.includes(agent.profile.trim())).length;
   const who = users === 1 ? "1 agent uses" : `${users} agents use`;
-  return `${who} ${listed(missing, "and")}, which policy.toml doesn't have. Create team offers to add ${missing.length === 1 ? "it" : "them"}.`;
+  return `${who} ${listed(missing, "and")}, which policy.toml doesn't have. ${action} offers to add ${missing.length === 1 ? "it" : "them"}.`;
 }
 
 // replaceQuestion asks before Start from replaces the agents you changed,
@@ -418,6 +429,47 @@ export const loadFailed = "Couldn't load what a new team needs";
 // What closing asks when it would lose the new team.
 export const discardQuestion = "Discard this new team?";
 export const discardDetail = "It hasn't been created yet.";
+
+// The Edit panel's sentences: its title, while the team loads, if it
+// didn't, and when there is no team by that name.
+export const editTitle = (team: string) => `Edit the ${team} team`;
+export const loadingTeam = (team: string) => `Loading the ${team} team…`;
+export const teamLoadFailed = "Couldn't load the team";
+export const notFoundTitle = (team: string) => `Couldn't find the ${team} team`;
+export const notFoundDetail =
+  "It may have been renamed or removed since this link was made. Its agents, if any are left, are on the Agents page.";
+
+// What the live region says when Edit's remove marks a row to go.
+export const removingNotice = (agent: string) => `${agent} will be removed when you save. Undo is next.`;
+
+// editFooterLine is the line beside Save changes: why it is off, or what it is doing.
+export function editFooterLine(problems: number, saving: boolean, changed: boolean): string {
+  if (saving) return "Saving the team…";
+  if (problems > 0) return `${thingCount(problems)} to fix, listed at the top.`;
+  return changed ? "" : "No changes to save.";
+}
+
+// What closing asks when it would lose your changes to a team: each agent
+// counts once, as edited, new or removed.
+export const discardEditQuestion = (team: string) => `Discard your changes to ${team}?`;
+
+export function discardEditDetail(loaded: TeamDraft, draft: TeamDraft): string {
+  const kept = (agent: DraftAgent) => loaded.agents.some((row) => row.key === agent.key);
+  const counts = [
+    [draft.agents.filter((agent) => kept(agent) && rowChange(loaded, agent).mark).length, "changed"],
+    [draft.agents.filter((agent) => !kept(agent)).length, "added"],
+    [loaded.agents.filter((row) => !draft.agents.some((agent) => agent.key === row.key)).length, "removed"],
+  ] as const;
+  // The first count names what it counts: "2 agents added", then "1 removed".
+  const agents = counts.filter(([n]) => n > 0).map(([n, what], i) => `${i === 0 ? agentCount(n) : n} ${what}`);
+  const changes = [...(draft.team.trim() !== loaded.team.trim() ? ["the team renamed"] : []), ...agents];
+  const said = listed(changes, "and");
+  return `${said.charAt(0).toUpperCase()}${said.slice(1)}. They aren't saved.`;
+}
+
+// What Save changes refused because the team changed elsewhere asks before
+// reloading it over your changes.
+export const reloadQuestion = "Reload and lose your changes?";
 
 const unreachable = "Couldn't reach Agentry. Check it's running, then try again.";
 

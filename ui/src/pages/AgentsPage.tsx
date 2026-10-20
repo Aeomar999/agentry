@@ -14,6 +14,7 @@ import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffe
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
+import { EditTeamPanel } from "@/components/organisms/EditTeamPanel";
 import { TeamPanel } from "@/components/organisms/TeamPanel";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
 import { api } from "@/api/client";
@@ -32,13 +33,14 @@ import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 // team as an org chart (its coordinator over its agents), or one dense list.
 // Add a team makes one from a template, every agent with a prompt written
 // for that work, which you can then change, or opens the New team panel
-// (?team=new) to build one: blank, or from a copy of a template. A team, or
-// one agent, can be removed once no unfinished task needs it.
+// (?team=new) to build one: blank, or from a copy of a template. Edit team
+// opens a team you have in the same panel (?team=<name>). A team, or one
+// agent, can be removed once no unfinished task needs it.
 
 type View = "teams" | "org" | "list";
 
-// The history state of the entry opening the New team panel from this page pushes.
-const OPENED_HERE = { panel: "new team" };
+// The history state of the entry opening the team panel from this page pushes.
+const OPENED_HERE = { panel: "team" };
 
 const COLUMNS: Column<Agent>[] = [
   { header: "Name", className: "w-40", render: (agent) => <AgentName name={agent.name} className="font-semibold text-ink-primary" /> },
@@ -83,18 +85,18 @@ export function AgentsPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
   const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
-  const created = useRef(""); // the team the New team panel created, whose heading takes focus as it goes
+  const landed = useRef(""); // the team the panel created or renamed, whose heading takes focus as it goes
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
   const cursor = useRowCursor(view === "list" ? ordered.length : 0, (index) => open(ordered[index]));
-  const building = params.get("team") === "new";
+  const panel = params.get("team"); // "new", or the name of the team to edit
   // Once the panel has gone, and with it the inert page, so the heading can take focus.
   useEffect(() => {
-    if (building || !created.current) return;
-    document.getElementById(teamId(created.current))?.querySelector("h2")?.focus();
-    created.current = "";
-  }, [building]);
+    if (panel !== null || !landed.current) return;
+    document.getElementById(teamId(landed.current))?.querySelector("h2")?.focus();
+    landed.current = "";
+  }, [panel]);
   // The panel's address keeps the view behind it.
   const showPanel = (panel: Record<string, string>, options?: NavigateOptions) =>
     setParams(view === "teams" ? panel : { view, ...panel }, options);
@@ -104,6 +106,8 @@ export function AgentsPage() {
     setAdding(false);
     showPanel(template ? { team: "new", template } : { team: "new" }, { state: OPENED_HERE });
   };
+  // editTeam opens the team in the panel, with a new agent added and open for + Add agent.
+  const editTeam = (team: string, addAgent = false) => showPanel(addAgent ? { team, add: "agent" } : { team }, { state: OPENED_HERE });
   // closePanel goes back over the panel's entry, so Back never reopens it.
   // Opened from a link there is no entry of ours: the address loses the panel instead.
   const closePanel = () => (location.state?.panel === OPENED_HERE.panel ? navigate(-1) : showPanel({}, { replace: true }));
@@ -154,6 +158,7 @@ export function AgentsPage() {
                 team={team}
                 count={agents.length}
                 description={templates.find((t) => t.team === team)?.description}
+                onEdit={(addAgent) => editTeam(team, addAgent)}
                 onRemove={canRemoveTeam ? () => setRemoving({ team, agents }) : undefined}
               />
               <div className="grid [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))] gap-3">
@@ -169,7 +174,12 @@ export function AgentsPage() {
         <div className="flex flex-col gap-10 overflow-x-auto p-6">
           {teams.map(({ team, agents }) => (
             <section key={team} className="flex flex-col gap-4">
-              <TeamHeading team={team} count={agents.length} onRemove={canRemoveTeam ? () => setRemoving({ team, agents }) : undefined} />
+              <TeamHeading
+                team={team}
+                count={agents.length}
+                onEdit={(addAgent) => editTeam(team, addAgent)}
+                onRemove={canRemoveTeam ? () => setRemoving({ team, agents }) : undefined}
+              />
               <OrgChart agents={agents} />
             </section>
           ))}
@@ -201,14 +211,27 @@ export function AgentsPage() {
           />
         </Dialog>
       )}
-      {building && (
+      {panel === "new" && (
         <TeamPanel
           template={params.get("template") ?? undefined}
           returnTo={addTeam}
           onClose={closePanel}
           onCreated={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
-            created.current = team;
+            landed.current = team;
+          }}
+        />
+      )}
+      {panel !== null && panel !== "new" && (
+        <EditTeamPanel
+          key={panel}
+          team={panel}
+          adding={params.get("add") === "agent"}
+          onClose={closePanel}
+          onSaved={async (team) => {
+            await reloadAll(); // so the team is on the page as the panel closes
+            // Renamed, its Edit team button is gone, so focus goes to its heading.
+            if (team !== panel) landed.current = team;
           }}
         />
       )}
@@ -225,13 +248,15 @@ interface TeamHeadingProps {
   team: string;
   count: number;
   description?: string;
+  onEdit: (addAgent: boolean) => void; // opens the team panel, with a new agent for + Add agent
   onRemove?: () => void; // none for the last team
 }
 
 const teamId = (team: string) => `team-${team}`;
 
 // TeamHeading's h2 can take focus (not by Tab), as when the New team panel has just created the team.
-function TeamHeading({ team, count, description, onRemove }: TeamHeadingProps) {
+// Its actions are quiet text buttons, each named with the team.
+function TeamHeading({ team, count, description, onEdit, onRemove }: TeamHeadingProps) {
   return (
     <div id={teamId(team)} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
       <h2 tabIndex={-1} className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%] outline-none">
@@ -241,17 +266,23 @@ function TeamHeading({ team, count, description, onRemove }: TeamHeadingProps) {
         {count} {count === 1 ? "agent" : "agents"}
       </span>
       {description && <span className="text-[12px] text-ink-muted">· {description}</span>}
-      <Link to={`/agents/new?team=${encodeURIComponent(team)}`} className="ml-auto text-[12px] text-ink-muted hover:text-ink-primary">
+      <button type="button" aria-label={`Edit team, ${team}`} onClick={() => onEdit(false)} className={cn("ml-auto", HEADING_ACTION)}>
+        Edit team
+      </button>
+      <button type="button" aria-label={`Add agent to ${team}`} onClick={() => onEdit(true)} className={HEADING_ACTION}>
         + Add agent
-      </Link>
+      </button>
       {onRemove && (
-        <button type="button" onClick={onRemove} className="cursor-pointer text-[12px] text-ink-muted hover:text-danger">
+        <button type="button" aria-label={`Remove team, ${team}`} onClick={onRemove} className={cn(HEADING_ACTION, "hover:text-danger")}>
           Remove team
         </button>
       )}
     </div>
   );
 }
+
+// 12px muted text with a 28px tall hit area.
+const HEADING_ACTION = "flex min-h-7 cursor-pointer items-center text-[12px] text-ink-muted hover:text-ink-primary";
 
 function AgentCard({ agent, onRemove }: { agent: Agent; onRemove: () => void }) {
   return (
