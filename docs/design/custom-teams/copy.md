@@ -301,6 +301,8 @@ Words the team uses that never show: *panel*, *row*, *accordion*, *draft*, *409*
 | Its card body | `Start blank or copy a template, then change any agent.` | | 2 lines | |
 | Its button | `Build a team` | | | |
 | Its second button | `Import a template` | | | Opens a picker for `.json` files. Busy `Importing…` |
+| Import failed | `Couldn't import the template` + the server's words | | | In the card |
+| Toast, imported | `Imported {team} to your templates` | | | `{team}`: the template's team name, as the file has it |
 | Group 2 heading | `Your templates` | | | Only when you have one |
 | Card line | `Saved {date} from the {team} team.` | | | `{date}` as `12 Oct`; `12 Oct 2025` outside this year |
 | Delete template | `Delete template` | `Delete template, {template}` | | |
