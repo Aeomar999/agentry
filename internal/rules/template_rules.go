@@ -73,7 +73,8 @@ func aSavedTemplate(_ agents.UserTemplates, p events.Proposal) string {
 }
 
 // CheckTemplateID is "" for an id a template you save may have, or why not.
-// The web checks an id it made from a team's name with it before saving.
+// Every template saved, from a team or a file, is checked with it; the
+// web's templateIDFor makes ids that pass it, as the page has no id field.
 func CheckTemplateID(id string) string {
 	switch {
 	case strings.TrimSpace(id) == "":
