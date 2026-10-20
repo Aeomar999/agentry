@@ -194,6 +194,17 @@ describe("New team: focus and scroll", () => {
     expect(document.activeElement).toBe(addTeam());
   });
 
+  test("the page is no longer inert when focus lands back on Add a team", () => {
+    const { container } = openAt("/agents");
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Build a team" }));
+    let inertAtFocus: boolean | undefined;
+    addTeam().addEventListener("focus", () => (inertAtFocus = container.inert));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Close" }));
+    expect(document.activeElement).toBe(addTeam());
+    expect(inertAtFocus).toBe(false);
+  });
+
   test("Cancel puts focus on Add a team, from a link too", () => {
     openAt("/agents?team=new");
     fireEvent.click(within(panel()).getByRole("button", { name: "Cancel" }));
