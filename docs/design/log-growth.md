@@ -1062,7 +1062,10 @@ through one store function that does the same merge, so none reads the
 live rows alone by mistake.
 
 The page marks the task as archived; Reopen stays where it is and does the
-next step first.
+next step first. As built, the page has no Reopen of its own: a board move
+off Done or a message to the coordinator (`tell_coordinator`, Claude in
+the Workspace) unarchives and reopens it, and with the default age an
+archived task is past the board's 7 days of Done.
 
 ### Reopening an archived task
 
@@ -1263,17 +1266,25 @@ never what was removed.
 4. Delete its archive blobs, and the blobs of its shared files that no
    other task's event names.
 5. Redact the copies in other streams: the epic's `task.story_done`, the
-   asker's `task.request_answered` (below).
+   asker's `task.request_answered` (below). As built, also the title and
+   summary in the epic's `task.story_added`, and only in the rows that
+   copy them (`Store.RedactRows`); the epic's `task.split` and the asker's
+   `task.requested` stay, as their own words.
 6. Write a new snapshot at once, and delete `state.snapshot.bad` if there
    is one.
 7. Offer to remove its worktree and branch; Agentry can't reach a remote
-   it was pushed to.
+   it was pushed to. Not built: the page only names the worktree and
+   branch as left for the user to remove.
 
 ### Removing a secret
 
 The user marks the text on the page: a command, a message, a report. The
 server finds the rows of the task (or the whole log, for a secret pasted
 widely) whose `data` contains it, and shows the user the count first.
+As built, the redaction sends that count back, and is refused (409) when
+the rows holding the text, checked under `Store.mu`, aren't that many any
+more, so a row written since is never rewritten unseen
+(`Store.RedactCounted`).
 
 1. Propose `event.redacted` on the same stream, with the positions, the
    fields and the length removed. Never the text, and never its hash: a
@@ -1309,7 +1320,11 @@ widely) whose `data` contains it, and shows the user the count first.
    text, and leaves the others as they were; no version is added, so the
    agent keeps as many versions as it had. A patch's `head` and `tail`
    would be wrong against a redacted base; full copies leave nothing to
-   mismatch, and versions before the secret are untouched.
+   mismatch, and versions before the secret are untouched. A turn running
+   as it commits wrote its knowledge file with the secret, and its end
+   would keep it again; the server holds the secret in memory for those
+   turns, whose ends redact it before keeping what they learned
+   (`hooks.Redactions`), until it restarts.
 5. **A secret in an archived task:** unarchive it, redact, archive it
    again (a new blob), then delete the old blob. The `event.redacted` names
    the deleted blob, so a reader that meets the old marker knows the blob
@@ -1326,8 +1341,9 @@ widely) whose `data` contains it, and shows the user the count first.
   reach. The page says so after an erasure, with the time, so the user
   knows which backups still hold it.
 - **Worktrees, branches and remotes:** the text may be in files an agent
-  wrote, or in commits. Agentry offers to remove the worktree and the
-  local branch; pushed commits are the user's to rewrite.
+  wrote, or in commits. As built, Agentry leaves the worktree and the
+  local branch for the user to remove, and names them on the page;
+  pushed commits are the user's to rewrite.
 - **The engine's own records**, such as a session's transcript, live
   outside Agentry; the page names them, and does not delete them.
 
