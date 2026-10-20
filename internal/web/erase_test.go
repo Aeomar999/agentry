@@ -471,7 +471,7 @@ func TestAnErasedTaskBlocksNoStory(t *testing.T) {
 // A route that acts on a task answers an erased one 410, with the day, as
 // the reads do: the board's move, the limits, the repo, the epic, the
 // shared files and the Workspace, and filing under an erased epic. A task
-// there never was is still 404.
+// there never was is still 404, naming it, as filing names two.
 func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 	f := newEraseFixture(t)
 	answer := f.erase(t, "task-2")
@@ -496,8 +496,8 @@ func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 			t.Errorf("%s %s %s: %d %q, want 410 %q", c.method, erased, erasedBody, code, body, want)
 		}
 		unknown, unknownBody := strings.ReplaceAll(c.path, "{task}", "task-9"), strings.ReplaceAll(c.body, "{task}", "task-9")
-		if code, body := call(t, f.server, c.method, unknown, unknownBody); code != http.StatusNotFound {
-			t.Errorf("%s %s %s: %d %q, want 404", c.method, unknown, unknownBody, code, body)
+		if code, body := call(t, f.server, c.method, unknown, unknownBody); code != http.StatusNotFound || strings.TrimSpace(body) != "no such task task-9" {
+			t.Errorf("%s %s %s: %d %q, want 404 naming task-9", c.method, unknown, unknownBody, code, body)
 		}
 	}
 }

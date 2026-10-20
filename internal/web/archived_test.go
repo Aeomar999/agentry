@@ -242,7 +242,7 @@ func TestMovingAnArchivedTaskIsRefused(t *testing.T) {
 			t.Errorf("%s %s on an archived task: %d %q, want 409 %q", write.method, write.path, code, body, refused)
 		}
 	}
-	if code, body := call(t, server, "POST", "/api/tasks/task-9/direct", `{"to":"todo"}`); code != http.StatusNotFound || body != "no such task\n" {
+	if code, body := call(t, server, "POST", "/api/tasks/task-9/direct", `{"to":"todo"}`); code != http.StatusNotFound || body != "no such task task-9\n" {
 		t.Errorf("moving a task that doesn't exist: %d %q, want 404", code, body)
 	}
 }
