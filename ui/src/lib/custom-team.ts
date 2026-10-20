@@ -18,6 +18,7 @@ export type DraftAgent = TemplateAgent & { key: string };
 export interface TeamDraft {
   team: string;
   agents: DraftAgent[];
+  copiedFrom?: string; // a copy's built-in template, whose features the team keeps
 }
 
 // The fields of a row a problem can be under.
@@ -85,7 +86,8 @@ export function blankTeam(roster: Agent[]): TeamDraft {
 // template's team name: with a number for a built-in one, whose own team
 // name is never free, and for one of yours when you have a team of its
 // name. Names you have already get a number, as the server's AddTeam
-// gives them.
+// gives them. It was copied from the built-in template, or from the one
+// yours is based on, if it is.
 export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft {
   const taken = roster.map((agent) => agent.name);
   const agents = template.agents.map((agent) => {
@@ -93,7 +95,8 @@ export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft
     taken.push(name);
     return { ...agent, key: nextKey(), name };
   });
-  return { team: freeTeamName(template.team, roster, template.userMade), agents };
+  const copiedFrom = template.userMade ? template.basedOn : template.id;
+  return { team: freeTeamName(template.team, roster, template.userMade), agents, copiedFrom };
 }
 
 // loadTeam is the team named, in any case, as a draft to edit: its agents,
@@ -555,10 +558,13 @@ const trimmed = (agent: DraftAgent) => ({
 const offering = <T extends object>(request: T, policyHash?: string) =>
   policyHash === undefined ? request : { ...request, addMissingProfiles: true, hash: policyHash };
 
-// addCustomTeam adds the team as drafted, trimmed. With policyHash, as for
-// addTeam, it also adds the shipped profiles policy.toml lacks.
+// addCustomTeam adds the team as drafted, trimmed, and the built-in
+// template it was copied from, if it was. With policyHash, as for addTeam,
+// it also adds the shipped profiles policy.toml lacks.
 export function addCustomTeam(draft: TeamDraft, policyHash?: string): Promise<unknown> {
-  return api("POST", "/api/teams", offering({ team: draft.team.trim(), agents: draft.agents.map(trimmed) }, policyHash));
+  const { copiedFrom } = draft;
+  const team = { team: draft.team.trim(), agents: draft.agents.map(trimmed), ...(copiedFrom && { copiedFrom }) };
+  return api("POST", "/api/teams", offering(team, policyHash));
 }
 
 // editCustomTeam saves the team as edited from loaded, in one request:

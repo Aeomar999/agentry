@@ -302,6 +302,7 @@ describe("New team: Copy a template", () => {
     expect(body).toEqual({
       team: "Writing 2",
       agents: WRITING.agents,
+      copiedFrom: "writing",
     });
   });
 
@@ -379,6 +380,29 @@ describe("New team: Copy a template", () => {
     expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
     expect(rowButton("visionary")).toBeTruthy();
   });
+  // The team keeps the features of the built-in template it was copied
+  // from, and follows Start from: yours sends its base, Blank sends none.
+  test("Create team sends the built-in template the agents were copied from", async () => {
+    vi.mocked(api).mockResolvedValue({});
+    reads["/api/teams/templates"] = [WRITING, IDEAS, { ...PAPERS, basedOn: "visionaries", features: ["ideas"] }, DESK];
+    const copiedFrom = async (template: string) => {
+      vi.mocked(api).mockClear();
+      openAt(`/agents?team=new&template=${template}`);
+      fireEvent.change(teamName(), { target: { value: "Docs" } });
+      await create();
+      return (sent()[0][2] as { copiedFrom?: string }).copiedFrom;
+    };
+    expect(await copiedFrom("papers")).toBe("visionaries");
+    expect(await copiedFrom("desk")).toBeUndefined();
+
+    vi.mocked(api).mockClear();
+    openAt("/agents?team=new&template=writing");
+    fireEvent.click(within(panel()).getByRole("radio", { name: "Blank" }));
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    await create();
+    expect(sent()[0][2]).not.toHaveProperty("copiedFrom");
+  });
+
   test("Blank after changing agents asks first, then says the team is blank", async () => {
     openAt("/agents?team=new&template=writing");
     fireEvent.click(rowButton("writer"));

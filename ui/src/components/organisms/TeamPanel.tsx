@@ -102,7 +102,7 @@ function TeamForm(props: TeamFormProps) {
     if (team.trim() === "") setTeam(first.team);
   }
 
-  const draft: TeamDraft = { team, agents: list.agents };
+  const draft: TeamDraft = { team, agents: list.agents, copiedFrom: start?.copiedFrom };
   const problems = tried && ready ? checkTeam(draft, ready.roster, ready) : [];
   const missing = policy ? missingProfiles(draft, policy) : [];
   const guard = useCloseGuard(unsaved(start ?? NOTHING_YET, draft), saving, onClose);

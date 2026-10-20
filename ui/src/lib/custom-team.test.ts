@@ -563,6 +563,21 @@ describe("addCustomTeam", () => {
     await addCustomTeam(team, "h1");
     expect(api).toHaveBeenCalledWith("POST", "/api/teams", { ...sent, addMissingProfiles: true, hash: "h1" });
   });
+
+  // A copy sends the built-in template its team keeps the features of: the
+  // one copied, or the one a template of yours is based on.
+  test("sends the built-in template a copy came from", async () => {
+    const posted = async (draft: TeamDraft) => {
+      vi.mocked(api).mockClear();
+      await addCustomTeam(draft);
+      return vi.mocked(api).mock.calls[0][2] as { copiedFrom?: string };
+    };
+    const yours: TeamTemplate = { ...template, id: "my-writing", team: "Papers", userMade: true };
+    expect((await posted(copyTemplate(template, []))).copiedFrom).toBe("writing");
+    expect((await posted(copyTemplate({ ...yours, basedOn: "writing" }, []))).copiedFrom).toBe("writing");
+    expect(await posted(copyTemplate(yours, []))).not.toHaveProperty("copiedFrom");
+    expect(await posted(blankTeam([]))).not.toHaveProperty("copiedFrom");
+  });
 });
 
 // The Docs team as GET /api/agents gives it, at version v1, beside Software.
