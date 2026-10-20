@@ -625,7 +625,8 @@ function asSentence(reason: string, names: string[]): string {
 // Why Save changes didn't save, and what the panel does about it:
 // - problems: show them, as checkTeam's, keeping everything typed.
 // - changed: the team changed elsewhere since it was loaded. Reload it
-//   before saving: saving over it would delete agents added there.
+//   before saving: saving over it would delete agents added there, so the
+//   server's words, which offer that, aren't shown.
 // - cut short: the team is saved, but some tasks haven't followed it yet.
 //   Reload the team (its rows have their new names now), then save it
 //   again unchanged (saveAgain) to finish them.
@@ -648,7 +649,7 @@ export function whyNotSaved(failure: unknown, loaded: LoadedTeam, draft: TeamDra
     return {
       kind: "changed",
       title: "Couldn't save the team: it changed since you opened it",
-      detail: `The ${loaded.team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.${quoted(body.message)}`,
+      detail: `The ${loaded.team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.`,
     };
   }
   if (typeof body?.version === "string") {

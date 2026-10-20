@@ -241,7 +241,7 @@ Words the team uses that never show: *panel*, *row*, *accordion*, *draft*, *409*
 | Where | Text | Notes |
 |---|---|---|
 | Summary title | `Couldn't save the team: it changed since you opened it` | In the summary place, focus on it |
-| Body | `The {team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.` | `[server]` words, when the server sends them, go after it, quoted |
+| Body | `The {team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.` | The server's words aren't shown: they offer to save over the team, which the panel never does |
 | Buttons | `Reload the team` · `Keep my changes here` | Focus on the title; `Keep my changes here` closes the box and leaves Save on, so the next save is refused again until you reload |
 | Reload asks first | `Reload and lose your changes?` · `Keep editing` · `Reload` | In place, focus on Keep editing |
 | Renamed or removed meanwhile | the not-found state above | When reloading finds no team by that name |
