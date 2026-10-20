@@ -65,6 +65,10 @@ type serveOptions struct {
 	archiveAfter time.Duration // how long a task is done before it is archived; 0 never archives
 }
 
+// defaultArchiveAfter is how long a task is done before it is archived
+// when -archive-after isn't given: 30 days.
+const defaultArchiveAfter = 30 * 24 * time.Hour
+
 func runServe(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	options, ok := parseServe(args, stderr)
 	if !ok {
@@ -95,7 +99,7 @@ func parseServe(args []string, stderr io.Writer) (serveOptions, bool) {
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
-	flags.DurationVar(&options.archiveAfter, "archive-after", 0, "archive tasks done for this long, such as 720h; 0 (the default) never archives. An archived task opens, but can't be reopened yet")
+	flags.DurationVar(&options.archiveAfter, "archive-after", defaultArchiveAfter, "archive tasks done for this long, 30 days by default; 0 never archives. An archived task still opens, and reopening it brings it back")
 	if flags.Parse(args) != nil {
 		return options, false
 	}
@@ -133,6 +137,20 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := os.MkdirAll(o.dataDir, 0o700); err != nil {
 		return err
 	}
+	// Listen before the data folder is touched, so a second serve on a busy
+	// port fails having changed nothing.
+	listener, err := net.Listen("tcp", o.address)
+	if err != nil {
+		return err
+	}
+	defer listener.Close() // on an early return; serveUntilDone closes it otherwise
+	// Then lock the folder, so a second serve on it, on another port, fails
+	// before it archives, seeds or snapshots under the first.
+	release, err := lockDataDir(o.dataDir)
+	if err != nil {
+		return err
+	}
+	defer release()
 	installed := installedFeatures()
 	catalogue, err := events.NewCatalogue(features.Registrations(installed...)...)
 	if err != nil {
@@ -164,6 +182,8 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		archiver := archive.New(log, state, blobs, snapshots, o.archiveAfter)
 		archiver.Start()
 		defer archiver.Close() // the task under way finishes before the last snapshot
+	} else {
+		slog.Info("agentry: archiving is off (-archive-after=0)")
 	}
 	reportSkipped(stdout, state.Unknown())
 	if err := seedAgents(log, state); err != nil {
@@ -181,11 +201,6 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return fmt.Errorf("push subscriptions: %w", err)
 	}
 
-	// Listen before anything starts, so a busy port fails at once.
-	listener, err := net.Listen("tcp", o.address)
-	if err != nil {
-		return err
-	}
 	var ca *tlsca.CA
 	if o.https {
 		if ca, err = tlsca.Open(tlsca.Dir(o.dataDir)); err != nil {
@@ -305,6 +320,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
 		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
+	startPush(ctx, log, push, o.publicURL, func() []features.Waiting { return server.Waiting("") })
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))
 	if err := client.Save(o.dataDir, client.Where{URL: serverURL, Page: publicURL, Listen: listener.Addr().String(), HTTPS: o.https,
 		CA: serverCA}); err != nil {

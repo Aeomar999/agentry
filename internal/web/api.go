@@ -549,6 +549,47 @@ func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.
 	return task, nil
 }
 
+// reopenable is the task a route that may reopen it acts on, or nil once
+// it has answered that there is none, or that it can't be had. An archived
+// task is done, so the route reopens it, and it is unarchived for that
+// first: its rows come back from its blob (Store.Unarchive), and the state
+// holds it whole again (docs/design/log-growth.md section 4, "Reopening an
+// archived task"). When the store refuses, its reason is the answer, with
+// 409, and when it fails, with 500; it has written nothing either way.
+func (s *Server) reopenable(w http.ResponseWriter, id string) *tasks.Task {
+	task, err := s.task(id)
+	if errors.Is(err, current.ErrArchived) {
+		return s.unarchive(w, id)
+	}
+	if err != nil || task == nil {
+		http.Error(w, "no such task", http.StatusNotFound)
+		return nil
+	}
+	return task
+}
+
+// unarchive makes an archived task whole again, and returns it as the
+// state now holds it, or nil once it has answered why it can't. A refusal
+// because another request unarchived it first isn't one: the task is
+// whole.
+func (s *Server) unarchive(w http.ResponseWriter, id string) *tasks.Task {
+	_, rejection, err := s.store.Unarchive(id, s.archives.blobs)
+	if err != nil {
+		httpapi.Failed(w, err)
+		return nil
+	}
+	task, err := s.task(id)
+	switch {
+	case err == nil && task != nil:
+		return task
+	case rejection != nil:
+		http.Error(w, rejection.Reason, http.StatusConflict)
+	default:
+		httpapi.Failed(w, fmt.Errorf("%s was unarchived, but can't be read: %v", id, err))
+	}
+	return nil
+}
+
 // archivedRead is an archived task read back from its history.
 type archivedRead struct {
 	task    *tasks.Task    // as it was before it was archived

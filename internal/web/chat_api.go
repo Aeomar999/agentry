@@ -6,33 +6,31 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
-	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // message is your chat with a task's coordinator. What you say is the answer
 // to its open question, or a direction for it; on a finished task it opens
-// the task again. Any turn in progress is stopped, so the coordinator reads
-// it at once: the agent's work stays in the worktree, and its plan carries
-// on when it is handed back.
+// the task again, unarchived first if it is archived. Any turn in progress
+// is stopped, so the coordinator reads it at once: the agent's work stays
+// in the worktree, and its plan carries on when it is handed back.
 func (s *Server) message(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Text string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	task, err := s.task(r.PathValue("task"))
-	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
-		return
-	}
-	s.say(w, task, request.Text, "")
+	s.say(w, r.PathValue("task"), request.Text, "")
 }
 
-// say is what you send the coordinator: typed in the chat, or asked of
-// Claude in the Workspace (via "claude"), which sends it for you.
-func (s *Server) say(w http.ResponseWriter, task *tasks.Task, text, via string) {
+// say is what you send the coordinator of task id: typed in the chat, or
+// asked of Claude in the Workspace (via "claude"), which sends it for you.
+func (s *Server) say(w http.ResponseWriter, id, text, via string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		http.Error(w, "say something", http.StatusBadRequest)
+		return
+	}
+	task := s.reopenable(w, id)
+	if task == nil {
 		return
 	}
 	if task.IsDone {

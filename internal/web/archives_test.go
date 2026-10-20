@@ -43,6 +43,7 @@ type archiveFixture struct {
 	log    *store.Store
 	state  *current.State
 	blobs  *countedBlobs
+	app    *Server
 	server *httptest.Server
 }
 
@@ -57,7 +58,7 @@ func newArchiveFixture(t *testing.T) *archiveFixture {
 	app.archives.blobs = blobs
 	server := httptest.NewServer(app.Handler())
 	t.Cleanup(server.Close)
-	f := &archiveFixture{log: s, state: state, blobs: blobs, server: server}
+	f := &archiveFixture{log: s, state: state, blobs: blobs, app: app, server: server}
 	call(t, server, "POST", "/api/tasks", `{"title":"One"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Two","kind":"story"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Ship it","stories":["task-2"]}`)
@@ -310,8 +311,8 @@ func TestAnArchivedTaskWithoutItsBlobFails(t *testing.T) {
 }
 
 // Reading an archived task doesn't make it take events: the routes that
-// act on a task still refuse it, reopening too, until it is unarchived
-// (step 9). Moving it answers 404, as it did before it could be read.
+// act on a task still refuse it. Only reopening it unarchives it
+// (unarchive_test.go).
 func TestAnArchivedTaskReadBackStillTakesNoEvents(t *testing.T) {
 	f := newArchiveFixture(t)
 	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
@@ -321,7 +322,6 @@ func TestAnArchivedTaskReadBackStillTakesNoEvents(t *testing.T) {
 	}
 	for _, request := range []struct{ method, path, body string }{
 		{"POST", "/api/tasks/task-2/answer", `{"answer":"Again"}`},
-		{"POST", "/api/tasks/task-2/direct", `{"to":"todo"}`},
 		{"PUT", "/api/tasks/task-2/labels", `{"labels":["ui"]}`},
 		{"PUT", "/api/tasks/task-2/rank", `{"rank":1}`},
 	} {

@@ -97,9 +97,10 @@ go build -o bin/agentry ./cmd/agentry
 - **Data:** `-data` moves `~/.agentry`.
 - **Budget:** `-budget` is the tokens a new task may use before it asks you; 0 for no limit.
 - **Turn limit:** `-max-turns` (default 24) is the turns a new task may have without your answer before it asks you; 0 for no limit.
+- **Archiving:** `-archive-after` (default `720h`, 30 days) moves a task done for that long out of the live log; it still opens, and reopening it brings it back. 0 never archives.
 - **Address:** `-addr` (default `0.0.0.0:7800`, every interface; `127.0.0.1:7800` for this computer only); on every interface it prints a link for each of this machine's network addresses as well. `-public-url` is the address people and machines reach, for links and install commands; with it, it prints only that one, and the install commands start on it.
 - **Push:** Notifications on this device, in the account menu, subscribes a browser to Agentry's pushes. It needs an https `-public-url`, such as a proxy that does TLS in front of Agentry; without one, the menu says why it is off. The keys and subscriptions are kept in `push.json` beside the log, never in it.
-- **HTTPS:** `-https` serves over https with Agentry's own CA; see [HTTPS and installing the app on other devices](#https-and-installing-the-app-on-other-devices). `agentry open` takes `-https`, `-budget` and `-max-turns` too, and passes them on to the server it starts; while one is running already, it says they take effect at the next start.
+- **HTTPS:** `-https` serves over https with Agentry's own CA; see [HTTPS and installing the app on other devices](#https-and-installing-the-app-on-other-devices). `agentry open` takes `-https`, `-budget`, `-max-turns` and `-archive-after` too, and passes them on to the server it starts; while one is running already, it says they take effect at the next start.
 
 ## First steps
 

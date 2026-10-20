@@ -3,14 +3,14 @@
 // Triggers make UPDATE and DELETE fail in the database itself, so
 // "append-only" does not depend on the code remembering; the one delete
 // allowed is of a task's rows that its task.archived marker covers (see
-// migrations). Propose is the way in for every event but the markers,
-// which only Archive and Unarchive write: it runs the checks against the model, appends
-// the event (or a proposal.rejected) and applies it to the model. A mutex
-// makes proposals strictly one at a time, from the check to the apply, so
-// two can never both pass the order check against the same state (proof
-// 05). Reads of the log go through a separate pool of read-only
-// connections, so they never queue behind a write: in WAL mode a reader sees
-// every committed event and none in flight.
+// migrations). Propose is the way in for every event but the markers, which
+// only Archive and Unarchive write: it runs the checks against the model,
+// appends the event (or a proposal.rejected) and applies it to the model. A
+// mutex makes proposals strictly one at a time, from the check to the
+// apply, so two can never both pass the order check against the same state
+// (proof 05). Reads of the log go through a separate pool of read-only
+// connections, so they never queue behind a write: in WAL mode a reader
+// sees every committed event and none in flight.
 package store
 
 import (

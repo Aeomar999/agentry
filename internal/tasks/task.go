@@ -91,6 +91,7 @@ type Task struct {
 	IsDone       bool
 	DoneAt       time.Time // when it was last done, zero while it isn't
 	DoneByYou    bool      // you moved it to Done on the board, rather than its coordinator finishing it
+	UnarchivedAt time.Time // when it was last unarchived, zero if never: the archiver counts its age from the later of this and DoneAt
 	LastActiveAt time.Time
 
 	TurnsBeforeReopen int // its number of turns when it was last reopened: only pushes in later ones count

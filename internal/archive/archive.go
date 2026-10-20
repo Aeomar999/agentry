@@ -139,7 +139,9 @@ func (a *Archiver) vacuumOnce() {
 
 // chosen is every task done for at least the age and not archived yet,
 // in the order they were made, but no epic with a story still in the
-// state: an epic goes in a round after its last story's.
+// state: an epic goes in a round after its last story's. A task unarchived
+// since it was done counts its age from then, so one unarchived and not
+// reopened waits the whole age again.
 func (a *Archiver) chosen() []string {
 	now := a.now()
 	var chosen []string
@@ -149,7 +151,7 @@ func (a *Archiver) chosen() []string {
 			continue
 		}
 		// A zero DoneAt says the task is done without saying when.
-		if !task.IsDone || task.DoneAt.IsZero() || now.Sub(task.DoneAt) < a.age {
+		if !task.IsDone || task.DoneAt.IsZero() || now.Sub(laterOf(task.DoneAt, task.UnarchivedAt)) < a.age {
 			continue
 		}
 		if task.Kind == tasks.Epic && a.anyInTheState(task.Stories) {
@@ -158,6 +160,14 @@ func (a *Archiver) chosen() []string {
 		chosen = append(chosen, id)
 	}
 	return chosen
+}
+
+// laterOf is the later of two times.
+func laterOf(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
 }
 
 // anyInTheState says whether any of the tasks is still in the state: not

@@ -1,11 +1,14 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // setEpic files a task under an epic as one of its stories, moves it to
@@ -36,6 +39,14 @@ func (s *Server) fileUnder(id, epic string) string {
 	}
 	if epic != "" {
 		target, err := s.task(epic)
+		if errors.Is(err, current.ErrArchived) {
+			// Only a done task is archived, and a done epic takes no
+			// stories, so it isn't unarchived for one: you reopen it.
+			if summary, _ := s.state.Summary(epic); summary.Kind != tasks.Epic {
+				return epic + " isn't an epic"
+			}
+			return epic + " is done; reopen it to add stories"
+		}
 		switch {
 		case err != nil || target == nil:
 			return "no task " + epic

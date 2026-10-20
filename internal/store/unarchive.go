@@ -30,7 +30,7 @@ func (s *Store) Unarchive(stream string, blobs Opener) (events.Event, *events.Re
 	}
 	marker, archived := MarkerOf(live)
 	if !archived {
-		return events.Event{}, &events.Rejection{Check: "archive", Reason: stream + " isn't archived"}, nil
+		return events.Event{}, &events.Rejection{Check: "unarchive", Reason: stream + " isn't archived"}, nil
 	}
 	rows, err := keptBy(marker, blobs)
 	if err != nil {
@@ -59,9 +59,10 @@ func (s *Store) Unarchive(stream string, blobs Opener) (events.Event, *events.Re
 	return event, nil, nil
 }
 
-// keptBy is the rows a marker's blob keeps for it, up to its "through".
-// Each must be of the marker's stream: rows of another would go back into
-// that stream.
+// keptBy is the rows a marker's blob keeps for it. Each must be of the
+// marker's stream: rows of another would go back into that stream. A row
+// past the marker's "through" is not left out here: it makes the count
+// wrong, which refuses the whole blob.
 func keptBy(marker events.Event, blobs Opener) ([]row, error) {
 	blob, err := blobs.Open(marker.Text("archive"))
 	if err != nil {
@@ -72,16 +73,12 @@ func keptBy(marker events.Event, blobs Opener) ([]row, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the blob: %w", err)
 	}
-	var kept []row
 	for _, r := range all {
 		if r.Stream != marker.Stream {
 			return nil, fmt.Errorf("the blob holds a row of %s at %d", r.Stream, r.Position)
 		}
-		if r.Position <= int64(marker.Number("through")) {
-			kept = append(kept, r)
-		}
 	}
-	return kept, nil
+	return all, nil
 }
 
 // stillMarked checks, under the lock, that the marker is still its
@@ -94,7 +91,7 @@ func (s *Store) stillMarked(marker events.Event) (*events.Rejection, error) {
 		return nil, err
 	}
 	if last != marker.Position {
-		return &events.Rejection{Check: "archive", Reason: marker.Stream + " took an event since its marker was read"}, nil
+		return &events.Rejection{Check: "unarchive", Reason: marker.Stream + " took an event since its marker was read"}, nil
 	}
 	return nil, nil
 }

@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -39,21 +40,21 @@ import (
 //
 // In progress, Review and Shipping stand until the coordinator next hands
 // the task on: the first event the move writes carries the column. A finished task
-// moved anywhere but Done is reopened first. A task waiting for your answer
-// takes the words as the answer.
+// moved anywhere but Done is reopened first, and an archived one is
+// unarchived before that. A task waiting for your answer takes the words as
+// the answer.
 func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To, Note string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	id := r.PathValue("task")
-	task, err := s.task(id)
-	if errors.Is(err, current.ErrArchived) {
+	if _, err := s.task(id); errors.Is(err, current.ErrArchived) && !slices.Contains(reopeningColumns, request.To) {
 		http.Error(w, rules.ArchivedRefusal(id), http.StatusConflict)
 		return
 	}
-	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+	task := s.reopenable(w, id)
+	if task == nil {
 		return
 	}
 	roster, err := s.roster()
@@ -142,6 +143,10 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		httpapi.Propose(w, s.store, moved(s.direction(task, text, note)))
 	}
 }
+
+// reopeningColumns are the columns a done task moved to is reopened in:
+// every one but Done.
+var reopeningColumns = []string{"backlog", "todo", "in-progress", "review", "shipping"}
 
 // parkStories parks the stories of an epic you closed that aren't done, in
 // the Backlog: their turns in progress stop, and their coordinators only

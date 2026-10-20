@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -309,5 +310,44 @@ func TestAStoryAfterAnArchivedTaskStarts(t *testing.T) {
 	}
 	if !loop.blocked(&tasks.Task{After: []string{"task-1", "task-2"}}) {
 		t.Error("a story after a task that isn't done isn't blocked")
+	}
+}
+
+// A task.request_answered never goes to an archived asker, so none is
+// unarchived for one: only a done task is archived, a done task waits on
+// no other (moved to Done, it stops waiting; the coordinator finishes it
+// only from a turn, and a waiting task gets none), and the rules refuse
+// the answer to a done task anyway. A request finished after its asker
+// was archived writes nothing.
+func TestARequestFinishedAfterItsAskerWasArchivedAnswersNothing(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Asker", "repo": "/r", "coordinator": "tech-lead"}})
+	propose(t, s, events.Proposal{Stream: "task-2", Actor: coordinator, Type: events.TaskCreated, Data: map[string]any{"title": "Asked", "repo": "/r", "coordinator": "tech-lead", "parent": "task-1"}})
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: coordinator, Type: events.TaskRequested, Data: map[string]any{"child": "task-2", "team": "Software", "request": "Asked", "coordinator": "tech-lead"}})
+	if asker, _ := state.Task("task-1"); asker.WaitingOn != "task-2" {
+		t.Fatalf("task-1 waits on %q, want task-2", asker.WaitingOn)
+	}
+	propose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}})
+	if asker, _ := state.Task("task-1"); asker.WaitingOn != "" {
+		t.Fatalf("task-1, moved to Done, still waits on %q", asker.WaitingOn)
+	}
+	answered := events.Proposal{Stream: "task-1", Actor: agentry, Type: events.RequestAnswered, Data: map[string]any{"child": "task-2", "summary": "Done.", "coordinator": "tech-lead"}}
+	if _, rejection, err := s.Propose(answered); rejection == nil || err != nil {
+		t.Fatalf("an answer to the done task-1: %v, %v; want refused", rejection, err)
+	}
+	storetest.Archive(t, s, state, "task-1")
+
+	propose(t, s, events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Done.", "moved": true}})
+	child, _ := state.Task("task-2")
+	last := s.LastPosition()
+	(&Loop{store: s, state: state}).answer(child)
+	if s.LastPosition() != last {
+		t.Errorf("answering the archived task-1 wrote up to %d from %d", s.LastPosition(), last)
+	}
+	if _, err := state.Task("task-1"); !errors.Is(err, current.ErrArchived) {
+		t.Errorf("task-1: %v, want still archived", err)
 	}
 }
