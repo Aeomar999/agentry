@@ -11,7 +11,7 @@ import { ColorSwatches } from "@/components/molecules/ColorSwatches";
 import { errorId, Field } from "@/components/molecules/Field";
 import { MODELS } from "@/components/organisms/AgentForm";
 import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
-import { type AgentField, type DraftAgent, type Problem, problemCount, shownName } from "@/lib/custom-team";
+import { type AgentField, type DraftAgent, noAgentDescription, type Problem, problemCount, shownName } from "@/lib/custom-team";
 import { shippedProfiles } from "@/lib/profiles";
 import { cn } from "@/lib/cn";
 
@@ -70,6 +70,8 @@ export function AgentRow(props: AgentRowProps) {
     profileMissing && "profile missing",
   ].filter(Boolean);
   const column = agent.coordinates ? "" : columnOfAgent(agent);
+  // What this team does says it for the coordinator.
+  const undescribed = !agent.coordinates && agent.description.trim() === "";
   return (
     <li className="border-b border-divider last:border-b-0">
       <div className="flex min-h-11 items-center gap-2 px-2 max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-0">
@@ -108,8 +110,10 @@ export function AgentRow(props: AgentRowProps) {
               profile missing
             </span>
           )}
-          {!open && agent.description && (
-            <span className="min-w-0 shrink-[999] truncate text-[12px] text-ink-muted max-sm:hidden">{agent.description}</span>
+          {!open && (agent.description || undescribed) && (
+            <span className="min-w-0 shrink-[999] truncate text-[12px] text-ink-muted max-sm:hidden">
+              {agent.description || "No description"}
+            </span>
           )}
         </button>
         <span className="shrink-0 max-sm:row-start-2 max-sm:pl-5.5 max-sm:[&>label]:min-h-11 max-sm:[&>label]:items-center">
@@ -133,9 +137,9 @@ export function AgentRow(props: AgentRowProps) {
           onClick={() => !saving && onRemove()}
           className="size-7 hover:text-danger max-sm:col-start-3 max-sm:row-start-1 max-sm:size-11"
         />
-        {!open && agent.description && (
+        {!open && (agent.description || undescribed) && (
           <span aria-hidden className="min-w-0 truncate text-[12px] text-ink-muted max-sm:col-span-2 max-sm:row-start-2 sm:hidden">
-            {agent.description}
+            {agent.description || "No description"}
           </span>
         )}
       </div>
@@ -185,7 +189,19 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
             {...invalid("name")}
           />
         </Field>
-        <Field label="Description" htmlFor={id("description")} hint="One line. The coordinator reads it to choose who works next.">
+        <Field
+          label="Description"
+          htmlFor={id("description")}
+          hint={
+            agent.coordinates ? (
+              "What this team does. Other coordinators read it to choose what to send the team."
+            ) : agent.description.trim() === "" ? (
+              <span className="text-[12px]">{noAgentDescription}</span>
+            ) : (
+              "One line. The coordinator reads it to choose who works next."
+            )
+          }
+        >
           <Input
             id={id("description")}
             value={agent.description}

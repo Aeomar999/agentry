@@ -3,18 +3,24 @@ import { Link } from "react-router-dom";
 import { Plus, TriangleAlert } from "lucide-react";
 import type { Agent, Policy, ServerConfig, TeamTemplate } from "@/api/types";
 import { Button } from "@/components/atoms/Button";
+import { Input } from "@/components/atoms/Input";
 import { Banner } from "@/components/molecules/Banner";
-import { errorId, FieldError } from "@/components/molecules/Field";
+import { errorId, Field, FieldError } from "@/components/molecules/Field";
 import {
   agentCount,
   backNotice,
+  builtInDescription,
   changedAgents,
   type DraftAgent,
   missingLine,
+  noCoordinator,
+  noTeamDescription,
   type NeededBy,
+  onlyCoordinator,
   type Problem,
   removedNotice,
   removingNotice,
+  routingLine,
   rowChange,
   shownName,
   type TeamDraft,
@@ -140,6 +146,61 @@ export type TeamRows = ReturnType<typeof useTeamRows>;
 
 export const undoId = (row: string) => `${row}-undo`;
 
+interface TeamDescriptionProps {
+  list: TeamRows;
+  team: string; // as typed
+  saving: boolean;
+  builtIn?: Pick<TeamTemplate, "team" | "description">; // the built-in template the team was made from, whose description the server uses instead
+}
+
+// TeamDescription is What this team does: the coordinator's description,
+// one value that its row's Description field changes too, and the line
+// other coordinators read about the team. Empty, it warns without stopping
+// a save.
+export function TeamDescription({ list, team, saving, builtIn }: TeamDescriptionProps) {
+  const coordinators = list.agents.filter((agent) => agent.coordinates);
+  const coordinator = coordinators.length === 1 ? coordinators[0] : undefined;
+  const description = coordinator?.description ?? "";
+  const read = builtIn?.description || description;
+  const warns = coordinator !== undefined && read.trim() === "";
+  return (
+    <div className="flex flex-col gap-2">
+      <Field
+        label="What this team does"
+        htmlFor="team-description"
+        hint={
+          !coordinator
+            ? noCoordinator
+            : builtIn
+              ? builtInDescription(builtIn.team)
+              : "One line. Other coordinators read it to choose what to send this team."
+        }
+      >
+        <Input
+          id="team-description"
+          value={description}
+          disabled={!coordinator}
+          readOnly={saving}
+          onChange={(e) => coordinator && list.change(coordinator.key, { description: e.target.value })}
+          aria-describedby={warns ? "team-description-warning" : undefined}
+        />
+      </Field>
+      {warns && (
+        <p id="team-description-warning" className="flex items-start gap-1.5 text-[12px] text-warning-ink">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>{noTeamDescription}</span>
+        </p>
+      )}
+      <div className="flex flex-col gap-0.5 text-[12px]">
+        <span className="text-ink-muted">Other coordinators read:</span>
+        <span id="team-routing-line" className="font-mono break-words text-ink-secondary">
+          {routingLine(team, coordinator?.name ?? "", read)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface TeamAgentsProps {
   list: TeamRows;
   loaded?: TeamDraft; // the team as saved, when editing one
@@ -230,7 +291,7 @@ export function TeamAgents({ list, loaded, problems, missing, engines, policy, s
         >
           Add agent
         </Button>
-        {count === 1 && list.agents[0].coordinates && <span className="text-[12px] text-ink-muted">Add the agents it hands work to.</span>}
+        {count === 1 && list.agents[0].coordinates && <span className="text-[12px] text-ink-muted">{onlyCoordinator}</span>}
       </span>
     </fieldset>
   );

@@ -42,6 +42,7 @@ import {
   Footer,
   LoadFailure,
   TeamAgents,
+  TeamDescription,
   type TeamReads,
   useTeamReads,
   useTeamRows,
@@ -208,6 +209,8 @@ function TeamForm(props: TeamFormProps) {
             {...(teamProblem && { "aria-invalid": true, "aria-describedby": errorId("team-name"), className: "border-danger" })}
           />
         </Field>
+
+        {ready && <TeamDescription list={list} team={team} saving={saving} />}
 
         <StartFrom
           copy={copy}

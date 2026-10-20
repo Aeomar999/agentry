@@ -33,7 +33,7 @@ import {
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { teamsOf } from "@/lib/teams";
-import { isBuiltInTeam } from "@/lib/templates";
+import { builtInTemplateOf, isBuiltInTeam } from "@/lib/templates";
 import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
 import { SaveTemplateButton, SaveTemplateForm, useSaveTemplate } from "./SaveAsTemplate";
 import {
@@ -42,6 +42,7 @@ import {
   Footer,
   LoadFailure,
   TeamAgents,
+  TeamDescription,
   type TeamReads,
   undoId,
   useTeamReads,
@@ -131,6 +132,8 @@ function EditTeamForm(props: EditTeamFormProps) {
   const notFound = loaded !== null && loaded.agents.length === 0;
   // A team under a built-in template's name can't be saved as a template.
   const savesAsTemplate = ready !== undefined && loaded !== null && !isBuiltInTeam(ready.templates, loaded.team);
+  // Other coordinators read a built-in template's description, when the team was made from one, over its coordinator's.
+  const builtIn = ready && coordinator && builtInTemplateOf(ready.roster, ready.templates, coordinator.name);
 
   // reload reads the roster again, then loads the team named from it.
   async function reload(name: string, refocus: boolean) {
@@ -343,6 +346,8 @@ function EditTeamForm(props: EditTeamFormProps) {
                 {...(teamProblem && { "aria-invalid": true, "aria-describedby": errorId("team-name"), className: "border-danger" })}
               />
             </Field>
+
+            <TeamDescription list={list} team={team} saving={saving} builtIn={builtIn} />
 
             <TeamAgents
               list={list}

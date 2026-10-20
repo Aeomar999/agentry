@@ -410,6 +410,22 @@ export function missingLine(draft: TeamDraft, missing: string[], action = "Creat
   return `${who} ${listed(missing, "and")}, which policy.toml doesn't have. ${action} offers to add ${missing.length === 1 ? "it" : "them"}.`;
 }
 
+// routingLine is the line other coordinators read about the team, as the
+// server writes it in their brief's Other teams (coordinator/brief.go): no
+// colon when there is no description. Placeholders stand in for a name or
+// coordinator not typed yet.
+export function routingLine(team: string, coordinator: string, description: string): string {
+  const line = `- ${team.trim() || "(team name)"}, coordinated by ${coordinator.trim() || "(coordinator)"}`;
+  return description.trim() === "" ? line : `${line}: ${description.trim()}`;
+}
+
+// The hints that warn, without stopping a save, that work won't find its way.
+export const noTeamDescription = "Other coordinators won't know what to send this team.";
+export const noAgentDescription = "Without a description, the coordinator won't know what to hand it.";
+export const onlyCoordinator = "Its coordinator hands work out rather than doing it: add the agents it hands work to.";
+export const noCoordinator = "Make one agent the coordinator first: this is its description.";
+export const builtInDescription = (template: string) => `Other coordinators read the ${template} template's description instead.`;
+
 // replaceQuestion asks before Start from replaces the agents you changed,
 // with a template's (to) or a blank team (none).
 export function replaceQuestion(changed: string[], to?: Pick<TeamTemplate, "team">): string {

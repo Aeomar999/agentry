@@ -463,6 +463,93 @@ describe("New team: agents", () => {
   });
 });
 
+describe("New team: what the team does", () => {
+  const teamDescription = () => field("What this team does");
+  const routing = () => document.getElementById("team-routing-line")!.textContent;
+  const warning = "Other coordinators won't know what to send this team.";
+
+  test("it is the coordinator's description, both ways, and the line other coordinators read follows it", () => {
+    openAt("/agents?team=new");
+    expect(teamDescription().value).toBe("");
+    expect(within(panel()).getByText(warning)).toBeTruthy();
+    expect(routing()).toBe("- (team name), coordinated by coordinator");
+
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    fireEvent.change(teamDescription(), { target: { value: "Writes the docs." } });
+    expect(field("Description").value).toBe("Writes the docs.");
+    expect(within(panel()).queryByText(warning)).toBeNull();
+    expect(routing()).toBe("- Docs, coordinated by coordinator: Writes the docs.");
+
+    fireEvent.change(field("Description"), { target: { value: "Writes and edits the docs." } });
+    expect(teamDescription().value).toBe("Writes and edits the docs.");
+    fireEvent.change(field("Name"), { target: { value: "editor" } });
+    expect(routing()).toBe("- Docs, coordinated by editor: Writes and edits the docs.");
+
+    fireEvent.change(teamDescription(), { target: { value: "  " } });
+    expect(within(panel()).getByText(warning)).toBeTruthy();
+    expect(routing()).toBe("- Docs, coordinated by editor");
+  });
+
+  test("a copied template's coordinator brings its description", async () => {
+    openAt("/agents?team=new&template=writing");
+    expect(teamDescription().value).toBe("The editor.");
+    expect(routing()).toBe("- Writing 2, coordinated by editor: The editor.");
+  });
+
+  test("with no coordinator it is off and says to make one", () => {
+    openAt("/agents?team=new");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Remove coordinator" }));
+    expect(teamDescription().disabled).toBe(true);
+    expect(within(panel()).getByText("Make one agent the coordinator first: this is its description.")).toBeTruthy();
+    expect(within(panel()).queryByText(warning)).toBeNull();
+  });
+
+  test("an agent with no description gets a quiet hint on its row; the coordinator's row doesn't", () => {
+    openAt("/agents?team=new");
+    const hint = "Without a description, the coordinator won't know what to hand it.";
+    expect(within(panel()).queryByText(hint)).toBeNull();
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    expect(within(panel()).getByText(hint)).toBeTruthy();
+    fireEvent.change(field("Description"), { target: { value: "Writes." } });
+    expect(within(panel()).queryByText(hint)).toBeNull();
+  });
+
+  test("a team of only its coordinator is told to add the agents it hands work to, once", () => {
+    openAt("/agents?team=new");
+    const hint = "Its coordinator hands work out rather than doing it: add the agents it hands work to.";
+    expect(within(panel()).getAllByText(hint)).toHaveLength(1);
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    expect(within(panel()).queryByText(hint)).toBeNull();
+  });
+
+  test("Create team still creates the team with every hint showing", async () => {
+    vi.mocked(api).mockResolvedValue({});
+    openAt("/agents?team=new");
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    fireEvent.change(field("Name"), { target: { value: "writer" } });
+    fireEvent.change(within(panel()).getByRole("group", { name: "Prompt" }).querySelector("textarea")!, {
+      target: { value: "You write." },
+    });
+    fireEvent.click(within(panel()).getByRole("button", { name: "Remove writer" }));
+    expect(within(panel()).getByText(warning)).toBeTruthy();
+    expect(within(panel()).getByText("Its coordinator hands work out rather than doing it: add the agents it hands work to.")).toBeTruthy();
+    fireEvent.click(within(panel()).getByRole("button", { name: "Undo, keep writer" }));
+    expect(within(panel()).getByText("Without a description, the coordinator won't know what to hand it.")).toBeTruthy();
+    await create();
+
+    expect(sent()).toHaveLength(1);
+    expect(sent()[0][0]).toBe("POST");
+    expect(sent()[0][2]).toMatchObject({
+      team: "Docs",
+      agents: [
+        { name: "coordinator", description: "" },
+        { name: "writer", description: "" },
+      ],
+    });
+  });
+});
+
 describe("New team: problems", () => {
   test("an empty team name is in the summary, which takes focus, and under the field", async () => {
     openAt("/agents?team=new");
@@ -2081,5 +2168,54 @@ describe("Edit team: links out of the panel", () => {
   test("in New team every agent's page waits for the team", () => {
     openAt("/agents?team=new");
     expect(within(panel()).getByText("Knowledge and where it runs: on its own page, once the team is created.")).toBeTruthy();
+  });
+});
+
+describe("Edit team: what the team does", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+  const routing = () => document.getElementById("team-routing-line")!.textContent;
+  const warning = "Other coordinators won't know what to send this team.";
+
+  test("it shows the coordinator's description and the line other coordinators read, following the team's name", () => {
+    openAt("/agents?team=Docs");
+    expect((inSheet().getByLabelText("What this team does") as HTMLInputElement).value).toBe("Leads the docs.");
+    expect(routing()).toBe("- Docs, coordinated by editor: Leads the docs.");
+    typeInto("Team name", "Handbook");
+    expect(routing()).toBe("- Handbook, coordinated by editor: Leads the docs.");
+  });
+
+  test("an agent with no description says so on its closed row", () => {
+    openAt("/agents?team=Docs");
+    expect(within(docsRow("proofer").closest("li")!).getAllByText("No description").length).toBeGreaterThan(0);
+    expect(within(docsRow("editor").closest("li")!).queryByText("No description")).toBeNull();
+  });
+
+  test("emptied, it warns, and Save changes still saves the coordinator with no description", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/agents?team=Docs");
+    typeInto("What this team does", "");
+    expect(inSheet().getByText(warning)).toBeTruthy();
+    expect(routing()).toBe("- Docs, coordinated by editor");
+    fireEvent.click(docsRow("editor"));
+    expect((inSheet().getAllByLabelText("Description")[0] as HTMLInputElement).value).toBe("");
+    await save();
+
+    expect(sent()).toEqual([
+      [
+        "PUT",
+        "/api/teams/Docs",
+        { version: "v1", team: "Docs", agents: [sentRow("editor", { description: "" }), sentRow("writer"), sentRow("proofer")] },
+      ],
+    ]);
+  });
+
+  test("a team made from a built-in template is read by the template's description", () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.coordinates ? { ...a, description: "", template: "writing" } : a))];
+    openAt("/agents?team=Docs");
+    expect(routing()).toBe("- Docs, coordinated by editor: Writes docs.");
+    expect(inSheet().getByText("Other coordinators read the Writing template's description instead.")).toBeTruthy();
+    expect(inSheet().queryByText(warning)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { api, ApiError, send } from "@/api/client";
-import type { TeamTemplate } from "@/api/types";
+import type { Agent, TeamTemplate } from "@/api/types";
 import { sameName, whyNotCreated } from "./custom-team";
 
 // Your templates (docs/design/custom-teams.md, decision 5): a team saved as
@@ -24,6 +24,14 @@ export const checkTemplateName = (name: string) => (name.trim() === "" ? "Give t
 // any case: no template of yours may have it, so such a team isn't saved as one.
 export const isBuiltInTeam = (templates: TeamTemplate[], team: string) =>
   templates.some((template) => !template.userMade && sameName(template.team, team));
+
+// builtInTemplateOf is the built-in template, with a description, the
+// agent named was made from: the server describes the agent's team by that
+// description rather than the agent's own (coordinator/brief.go teamDescription).
+export function builtInTemplateOf(roster: Agent[], templates: TeamTemplate[], agent: string): TeamTemplate | undefined {
+  const made = roster.find((a) => a.name === agent)?.template;
+  return templates.find((template) => !template.userMade && template.id === made && template.description !== "");
+}
 
 // saveAsTemplate saves the team, as it was last saved, as your template.
 export function saveAsTemplate(team: string, form: TemplateForm): Promise<TeamTemplate> {

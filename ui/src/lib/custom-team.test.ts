@@ -32,6 +32,7 @@ import {
   replaceDetail,
   tasksNeeding,
   replaceQuestion,
+  routingLine,
   rowChange,
   saveAgain,
   summaryTitle,
@@ -988,5 +989,19 @@ describe("an edited team's sentences", () => {
       "task-190",
     ]);
     expect(tasksNeeding("the Docs team is the only one, and every task needs a coordinator: add another team first")).toEqual([]);
+  });
+});
+
+describe("routingLine", () => {
+  test("is the line other coordinators read, as the server writes it", () => {
+    expect(routingLine(" Docs ", "editor", " Writes the docs. ")).toBe("- Docs, coordinated by editor: Writes the docs.");
+  });
+
+  test("with no description it has no colon and nothing after it", () => {
+    expect(routingLine("Docs", "editor", "  ")).toBe("- Docs, coordinated by editor");
+  });
+
+  test("a name or coordinator not typed yet has a placeholder", () => {
+    expect(routingLine(" ", "", "Writes.")).toBe("- (team name), coordinated by (coordinator): Writes.");
   });
 });

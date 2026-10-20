@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { api, ApiError, send } from "@/api/client";
-import type { TeamTemplate } from "@/api/types";
+import type { Agent, TeamTemplate } from "@/api/types";
 import {
+  builtInTemplateOf,
   checkTemplateName,
   deleteTemplate,
   importTemplate,
@@ -178,5 +179,21 @@ describe("savedLine", () => {
 
   test("is none without a date", () => {
     expect(savedLine(template("software"), now)).toBeUndefined();
+  });
+});
+
+describe("builtInTemplateOf", () => {
+  const made = (name: string, from: string) => ({ name, template: from }) as Agent;
+  const software = { ...template("software"), description: "Builds software." };
+  const papers = { ...template("papers", { savedAt: "2026-10-01T09:00:00Z" }), description: "Reads papers." };
+
+  test("is the built-in template, with a description, the agent was made from", () => {
+    const roster = [made("tech-lead", "software"), made("reader", "papers"), made("editor", ""), made("visionary", "visionaries")];
+    const templates = [software, papers, template("visionaries")];
+    expect(builtInTemplateOf(roster, templates, "tech-lead")).toBe(software);
+    expect(builtInTemplateOf(roster, templates, "reader")).toBeUndefined(); // yours: its description fills the coordinator's instead
+    expect(builtInTemplateOf(roster, templates, "editor")).toBeUndefined();
+    expect(builtInTemplateOf(roster, templates, "visionary")).toBeUndefined(); // no description to read
+    expect(builtInTemplateOf(roster, templates, "nobody")).toBeUndefined();
   });
 });
