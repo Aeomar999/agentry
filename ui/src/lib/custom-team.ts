@@ -180,9 +180,9 @@ function freeTeamName(team: string, roster: Agent[]): string {
 // name, the agents as a whole, then each row's fields. A profile policy.toml
 // lacks but Agentry ships isn't one: the server offers to add it (the 409
 // that missingProfilesOf reads), and missingProfiles lists them beforehand.
-// Editing a team (editing), its own name, in any case, and its agents'
-// names, whichever rows have them now, are free.
-export function checkTeam(draft: TeamDraft, roster: Agent[], rules: TeamRules, editing?: Pick<TeamDraft, "team">): Problem[] {
+// Editing a team (editing, as loaded), its own name, in any case, and its
+// agents' names, whichever rows have them now, are free.
+export function checkTeam(draft: TeamDraft, roster: Agent[], rules: TeamRules, editing?: TeamDraft): Problem[] {
   if (editing) roster = roster.filter((agent) => teamOf(agent) !== editing.team);
   const problems: Problem[] = [];
   const teamProblem = editing && sameName(draft.team, editing.team) ? undefined : checkTeamName(draft.team, roster, rules.templates);
@@ -191,7 +191,8 @@ export function checkTeam(draft: TeamDraft, roster: Agent[], rules: TeamRules, e
   if (agentsProblem) problems.push({ field: "agents", ...agentsProblem });
   draft.agents.forEach((agent, i) => {
     for (const [field, check] of AGENT_CHECKS) {
-      const problem = check(agent, { earlier: draft.agents.slice(0, i), roster, rules });
+      const kept = editing?.agents.some((row) => row.key === agent.key) ?? false;
+      const problem = check(agent, { earlier: draft.agents.slice(0, i), kept, roster, rules });
       if (problem) problems.push({ field: { row: agent.key, field }, ...problem });
     }
   });
@@ -235,6 +236,7 @@ function checkCoordinator(agents: DraftAgent[]): Words | undefined {
 
 interface RowContext {
   earlier: DraftAgent[]; // the rows above this one
+  kept: boolean; // the row is an agent the team has, being edited
   roster: Agent[];
   rules: TeamRules;
 }
@@ -286,8 +288,13 @@ function checkName(agent: DraftAgent, { earlier, roster }: RowContext): Words | 
 
 // checkPrompt asks every agent but the coordinator for a prompt; the server
 // would write one from the description, which says too little to work by.
-function checkPrompt(agent: DraftAgent): Words | undefined {
-  if (agent.coordinates || agent.prompt.trim() !== "") return;
+// It writes the default coordinator prompt only for a new agent, so a
+// coordinator the team has keeps needing one.
+function checkPrompt(agent: DraftAgent, { kept }: RowContext): Words | undefined {
+  if (agent.prompt.trim() !== "" || (agent.coordinates && !kept)) return;
+  if (agent.coordinates) {
+    return { message: "Write a prompt: only a new coordinator can do without one.", summary: `${shownName(agent)}: write a prompt` };
+  }
   return {
     message: "Write a prompt: only the coordinator can do without one.",
     summary: `${shownName(agent)}: write a prompt`,
@@ -488,29 +495,30 @@ const SHOWN_FIELDS: Record<string, AgentField> = {
 // How the rules word a removed agent that unfinished tasks need.
 const STILL_NEEDED = /^.+ is still needed by (.+): finish those first, or keep .+$/;
 
-// problemsOfEdit puts the server's problems with an edit where the panel
-// shows them: a row's under its field, by the row's key; the team name's
-// under Team name; the rest, a removed agent's too, under the Agents
+// problemsOfEdit puts the server's problems with an edit of loaded where
+// the panel shows them: a row's under its field, by the row's key; the team
+// name's under Team name; the rest, a removed agent's too, under the Agents
 // legend, so none is dropped. A row's field the panel has no place for
 // goes there too, naming the row.
-export function problemsOfEdit(problems: ServerProblem[], draft: TeamDraft): Problem[] {
+export function problemsOfEdit(problems: ServerProblem[], draft: TeamDraft, loaded: TeamDraft): Problem[] {
+  const names = [...draft.agents, ...loaded.agents].map((agent) => agent.name.trim());
   return problems.map((problem) => {
-    const said = sentence(problem.error);
+    const said = asSentence(problem.error, problem.agent ? [...names, problem.agent] : names);
     const agent = problem.row === undefined ? undefined : draft.agents[problem.row];
     const field = agent && SHOWN_FIELDS[problem.field];
     if (agent && field) return { field: { row: agent.key, field }, message: said, summary: `${shownName(agent)}: ${problem.error}` };
     if (agent) return { field: "agents", message: `${shownName(agent)}: ${said}`, summary: `${shownName(agent)}: ${problem.error}` };
     if (problem.field === "team") return { field: "team", message: said, summary: `Team name: ${problem.error}` };
-    if (problem.field === "removed" && problem.agent) return neededProblem(problem.agent, problem.error);
+    if (problem.field === "removed" && problem.agent) return removedProblem(problem.agent, problem.error, said);
     return { field: "agents", message: said, summary: `Agents: ${problem.error}` };
   });
 }
 
-// neededProblem is a removed agent that unfinished tasks need, in the
-// stub's words when the server named the tasks, else in its own.
-function neededProblem(agent: string, error: string): Problem {
+// removedProblem is a problem with removing an agent: when unfinished tasks
+// need it, in the stub's words, naming them; else in the server's (said).
+function removedProblem(agent: string, error: string, said: string): Problem {
   const tasks = STILL_NEEDED.exec(error)?.[1].split(", ") ?? [];
-  if (tasks.length === 0) return { field: "agents", message: sentence(error), summary: `${agent}: ${error}`, removed: { agent, tasks } };
+  if (tasks.length === 0) return { field: "agents", message: said, summary: `${agent}: ${error}` };
   const by = listed(tasks, "and");
   return {
     field: "agents",
@@ -520,8 +528,14 @@ function neededProblem(agent: string, error: string): Problem {
   };
 }
 
-// sentence is the server's reason as a sentence: a capital and a full stop.
-const sentence = (reason: string) => reason.charAt(0).toUpperCase() + reason.slice(1) + (/[.!?]$/.test(reason) ? "" : ".");
+// asSentence makes the server's reason a sentence: a capital and a full
+// stop. A reason starting with one of the agent names stays as it is,
+// since agent names are lowercase.
+function asSentence(reason: string, names: string[]): string {
+  const first = /^[a-z0-9-]+/.exec(reason)?.[0];
+  const start = first && names.includes(first) ? reason : reason.charAt(0).toUpperCase() + reason.slice(1);
+  return start + (/[.!?]$/.test(reason) ? "" : ".");
+}
 
 // Why Save changes didn't save, and what the panel does about it:
 // - problems: show them, as checkTeam's, keeping everything typed.
@@ -544,7 +558,7 @@ export function whyNotSaved(failure: unknown, loaded: LoadedTeam, draft: TeamDra
   const profiles = missingProfilesOf(failure);
   if (profiles) return { kind: "missing profiles", profiles };
   const body = failure instanceof ApiError ? failure.body : undefined;
-  if (Array.isArray(body?.problems)) return { kind: "problems", problems: problemsOfEdit(body.problems as ServerProblem[], draft) };
+  if (Array.isArray(body?.problems)) return { kind: "problems", problems: problemsOfEdit(body.problems as ServerProblem[], draft, loaded) };
   if (typeof body?.version === "string" && body.error === "changed elsewhere") {
     return {
       kind: "changed",

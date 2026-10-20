@@ -659,7 +659,9 @@ describe("problemsOfEdit", () => {
   const draft = loaded;
 
   test("a row's problem goes under its field, by the row's key", () => {
-    expect(problemsOfEdit([{ row: 1, field: "name", error: "an agent called writer already exists, in the Docs team" }], draft)).toEqual([
+    expect(
+      problemsOfEdit([{ row: 1, field: "name", error: "an agent called writer already exists, in the Docs team" }], draft, loaded),
+    ).toEqual([
       {
         field: { row: "k2", field: "name" },
         message: "An agent called writer already exists, in the Docs team.",
@@ -669,7 +671,7 @@ describe("problemsOfEdit", () => {
   });
 
   test("the name a row had goes under its name", () => {
-    expect(problemsOfEdit([{ row: 2, field: "was", error: "ghost isn't an agent of the Docs team" }], draft)[0].field).toEqual({
+    expect(problemsOfEdit([{ row: 2, field: "was", error: "ghost isn't an agent of the Docs team" }], draft, loaded)[0].field).toEqual({
       row: "k3",
       field: "name",
     });
@@ -683,6 +685,7 @@ describe("problemsOfEdit", () => {
         { field: "agents", error: "the edit neither keeps nor removes proofer" },
       ],
       draft,
+      loaded,
     );
     expect(problems.map((p) => [p.field, p.message, p.summary])).toEqual([
       ["team", "A team called Software already exists.", "Team name: a team called Software already exists"],
@@ -695,6 +698,7 @@ describe("problemsOfEdit", () => {
     const [one] = problemsOfEdit(
       [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1: finish those first, or keep proofer" }],
       draft,
+      loaded,
     );
     expect(one).toEqual({
       field: "agents",
@@ -705,6 +709,7 @@ describe("problemsOfEdit", () => {
     const [two] = problemsOfEdit(
       [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1, task-2: finish those first, or keep proofer" }],
       draft,
+      loaded,
     );
     expect([two.message, two.summary, two.removed]).toEqual([
       "proofer is still needed by task-1 and task-2. Finish them first, or undo to keep proofer.",
@@ -713,17 +718,50 @@ describe("problemsOfEdit", () => {
     ]);
   });
 
-  test("a removed agent's other problem keeps the server's words", () => {
-    expect(problemsOfEdit([{ field: "removed", agent: "ghost", error: "ghost isn't an agent of the Docs team to remove" }], draft)).toEqual(
+  test("a removed agent's other problem keeps the server's words, and no stub of a removed agent tasks need", () => {
+    const problems = problemsOfEdit(
       [
-        {
-          field: "agents",
-          message: "Ghost isn't an agent of the Docs team to remove.",
-          summary: "ghost: ghost isn't an agent of the Docs team to remove",
-          removed: { agent: "ghost", tasks: [] },
-        },
+        { field: "removed", agent: "ghost", error: "ghost isn't an agent of the Docs team to remove" },
+        { field: "removed", agent: "writer", error: "writer can't be both kept and removed" },
       ],
+      draft,
+      loaded,
     );
+    expect(problems).toEqual([
+      {
+        field: "agents",
+        message: "ghost isn't an agent of the Docs team to remove.",
+        summary: "ghost: ghost isn't an agent of the Docs team to remove",
+      },
+      { field: "agents", message: "writer can't be both kept and removed.", summary: "writer: writer can't be both kept and removed" },
+    ]);
+  });
+
+  test("a reason starting with an agent's name keeps it lowercase, the name it had or the one it has", () => {
+    const renamed: TeamDraft = { ...loaded, agents: [loaded.agents[0], { ...loaded.agents[1], name: "author" }, loaded.agents[2]] };
+    const problems = problemsOfEdit(
+      [
+        { row: 1, field: "profile", error: "author's profile x isn't in policy.toml" },
+        { field: "agents", error: "writer's tasks can't move" },
+        { field: "agents", error: "editors can't be two" },
+      ],
+      renamed,
+      loaded,
+    );
+    expect(problems.map((p) => p.message)).toEqual([
+      "author's profile x isn't in policy.toml.",
+      "writer's tasks can't move.",
+      "Editors can't be two.",
+    ]);
+  });
+
+  test("the request's rows are the draft's: with a middle row removed, the last is row 1", () => {
+    const removed: TeamDraft = { ...loaded, agents: [loaded.agents[0], loaded.agents[2]] };
+    expect(problemsOfEdit([{ row: 1, field: "name", error: "use another name" }], removed, loaded)[0]).toEqual({
+      field: { row: "k3", field: "name" },
+      message: "Use another name.",
+      summary: "proofer: use another name",
+    });
   });
 
   test("a field the panel has no place for goes under the Agents legend, never dropped", () => {
@@ -734,6 +772,7 @@ describe("problemsOfEdit", () => {
         { row: 7, field: "name", error: "a row the draft hasn't" },
       ],
       draft,
+      loaded,
     );
     expect(problems.map((p) => [p.field, p.message, p.summary])).toEqual([
       ["agents", "editor: The description is too long.", "editor: the description is too long"],
@@ -750,11 +789,24 @@ describe("checkTeam editing a team", () => {
     team: name,
     agents: names.map((n, i) => row(`k${i}`, { name: n, coordinates: i === 0 })),
   });
-  const problemsOf = (draft: TeamDraft, editing?: { team: string }) => checkTeam(draft, roster, rules, editing).map((p) => p.summary);
+  const problemsOf = (draft: TeamDraft, editing?: TeamDraft) => checkTeam(draft, roster, rules, editing).map((p) => p.summary);
+  const docs = team("Docs", "editor", "writer");
 
   test("its own name and its agents' names are free, in any case and whichever rows have them", () => {
-    expect(problemsOf(team("Docs", "editor", "writer"), { team: "Docs" })).toEqual([]);
-    expect(problemsOf(team("DOCS", "writer", "editor"), { team: "Docs" })).toEqual([]);
+    expect(problemsOf(team("Docs", "editor", "writer"), docs)).toEqual([]);
+    expect(problemsOf(team("DOCS", "writer", "editor"), docs)).toEqual([]);
+  });
+
+  test("only a new coordinator may have no prompt: the server writes the default for a new agent alone", () => {
+    const cleared = { ...docs, agents: [{ ...docs.agents[0], prompt: " " }, docs.agents[1]] };
+    expect(checkTeam(cleared, roster, rules, docs).map((p) => [p.field, p.message])).toEqual([
+      [{ row: "k0", field: "prompt" }, "Write a prompt: only a new coordinator can do without one."],
+    ]);
+    const handedOn = {
+      ...docs,
+      agents: [{ ...docs.agents[0], coordinates: false }, docs.agents[1], row("k9", { coordinates: true, prompt: "" })],
+    };
+    expect(problemsOf(handedOn, docs)).toEqual([]);
   });
 
   test("a new team with the same names clashes, as before", () => {
@@ -766,21 +818,19 @@ describe("checkTeam editing a team", () => {
   });
 
   test("another team's name and agents, a built-in's name and a name twice in the team still clash", () => {
-    expect(problemsOf(team("Software", "lead", "writer"), { team: "Docs" })).toEqual([
+    expect(problemsOf(team("Software", "lead", "writer"), docs)).toEqual([
       "Team name: you have a team called Software already",
       "lead: you have an agent called lead already, in Software",
     ]);
-    expect(problemsOf(team("Writing 2", "writer", "writer"), { team: "Docs" })).toEqual([
+    expect(problemsOf(team("Writing 2", "writer", "writer"), docs)).toEqual([
       "writer (second one): another agent in this team is called writer",
     ]);
-    expect(problemsOf(team("writing", "editor"), { team: "Docs" })).toEqual(["Team name: you have a team called Writing already"]);
+    expect(problemsOf(team("writing", "editor"), docs)).toEqual(["Team name: you have a team called Writing already"]);
   });
 
   test("a team named as a built-in one keeps its name", () => {
-    expect(problemsOf(team("Writing", "scribe", "writer-2"), { team: "Writing" })).toEqual([]);
-    expect(problemsOf(team("Writing", "editor", "writer"), { team: "Docs" })).toEqual([
-      "Team name: you have a team called Writing already",
-    ]);
+    expect(problemsOf(team("Writing", "scribe", "writer-2"), { team: "Writing", agents: [] })).toEqual([]);
+    expect(problemsOf(team("Writing", "editor", "writer"), docs)).toEqual(["Team name: you have a team called Writing already"]);
   });
 });
 
