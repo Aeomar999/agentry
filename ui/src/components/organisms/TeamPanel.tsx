@@ -35,6 +35,7 @@ import {
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { missingProfilesOf } from "@/lib/teams";
+import { templateGroups } from "@/lib/templates";
 import {
   DiscardQuestion,
   ErrorSummary,
@@ -304,13 +305,7 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
               onChange={(e) => !saving && onChoose(e.target.value)}
               className="w-56 max-sm:w-full"
             >
-              <optgroup label="Built in">
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.team}
-                  </option>
-                ))}
-              </optgroup>
+              <TemplateOptions templates={templates} />
             </Select>
           )}
         </div>
@@ -336,5 +331,23 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
         </div>
       )}
     </div>
+  );
+}
+
+// TemplateOptions are the templates in their groups: Your templates, newest
+// first, only when you have one, then Built in.
+function TemplateOptions({ templates }: { templates: TeamTemplate[] }) {
+  const { yours, builtIn } = templateGroups(templates);
+  const options = (group: TeamTemplate[]) =>
+    group.map((template) => (
+      <option key={template.id} value={template.id}>
+        {template.team}
+      </option>
+    ));
+  return (
+    <>
+      {yours.length > 0 && <optgroup label="Your templates">{options(yours)}</optgroup>}
+      <optgroup label="Built in">{options(builtIn)}</optgroup>
+    </>
   );
 }

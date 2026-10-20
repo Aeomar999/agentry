@@ -305,6 +305,61 @@ describe("New team: Copy a template", () => {
     });
   });
 
+  // Your templates, saved this October from the team given: Papers before Desk.
+  const yours = (id: string, team: string, day: number, agents: TemplateAgent[]): TeamTemplate => ({
+    id,
+    team,
+    description: `The ${team} team.`,
+    features: [],
+    userMade: true,
+    savedAt: new Date(new Date().getFullYear(), 9, day, 9).toISOString(),
+    from: team,
+    agents,
+  });
+  const PAPERS = yours("papers", "Papers", 12, [member("lead", { coordinates: true }), member("reader", { profile: "developer" })]);
+  const DESK = yours("desk", "Desk", 3, [member("clerk", { coordinates: true })]);
+  const groups = () =>
+    Array.from(within(panel()).getByLabelText("Template").querySelectorAll("optgroup")).map((group) => [
+      group.label,
+      Array.from(group.querySelectorAll("option")).map((option) => option.textContent),
+    ]);
+
+  test("the template select lists only Built in when you have no template", () => {
+    openAt("/agents?team=new&template=writing");
+    expect(groups()).toEqual([["Built in", ["Writing", "Visionaries"]]]);
+  });
+
+  test("the template select lists Your templates, newest first, then Built in", () => {
+    reads["/api/teams/templates"] = [WRITING, DESK, IDEAS, PAPERS];
+    openAt("/agents?team=new&template=writing");
+    expect(groups()).toEqual([
+      ["Your templates", ["Papers", "Desk"]],
+      ["Built in", ["Writing", "Visionaries"]],
+    ]);
+  });
+
+  test("picking a template of yours fills the rows as a built-in one does", async () => {
+    reads["/api/teams/templates"] = [WRITING, IDEAS, PAPERS];
+    openAt("/agents?team=new&template=writing");
+    fireEvent.change(within(panel()).getByLabelText("Template"), { target: { value: "papers" } });
+
+    expect(teamName().value).toBe("Papers");
+    expect(rowButton("lead")).toBeTruthy();
+    expect(rowButton("reader")).toBeTruthy();
+    expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
+  });
+
+  test("Change it first on a template of yours opens the panel copying it", () => {
+    reads["/api/teams/templates"] = [WRITING, IDEAS, PAPERS];
+    openAt("/agents");
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Change it first, Papers" }));
+
+    expect(address()).toBe("/agents?team=new&template=papers");
+    expect((within(panel()).getByLabelText("Template") as HTMLSelectElement).value).toBe("papers");
+    expect(rowButton("reader")).toBeTruthy();
+  });
+
   test("picking another template after changing agents asks first, in place", async () => {
     openAt("/agents?team=new&template=writing");
     fireEvent.click(rowButton("writer"));
