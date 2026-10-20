@@ -470,7 +470,9 @@ func TestAnErasedTaskBlocksNoStory(t *testing.T) {
 
 // A route that acts on a task answers an erased one 410, with the day, as
 // the reads do: the board's move, the limits, the repo, the epic, the
-// shared files and the Workspace, and filing under an erased epic. A task
+// shared files and the Workspace, filing under an erased epic, and the
+// writes the rules would otherwise refuse 409: removing a shared file, the
+// labels, the rank, an answer and an action approved or denied. A task
 // there never was is still 404, naming it, as filing names two.
 func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 	f := newEraseFixture(t)
@@ -490,6 +492,12 @@ func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 		{"GET", "/api/tasks/{task}/files", ""},
 		{"GET", "/api/tasks/{task}/file?path=README.md", ""},
 		{"GET", "/api/tasks/{task}/commits", ""},
+		{"DELETE", "/api/tasks/{task}/shared?name=mine.md", ""},
+		{"PUT", "/api/tasks/{task}/labels", `{"labels":["x"]}`},
+		{"PUT", "/api/tasks/{task}/rank", `{"rank":1}`},
+		{"POST", "/api/tasks/{task}/answer", `{"answer":"yes"}`},
+		{"POST", "/api/tasks/{task}/actions/a-1/approve", ""},
+		{"POST", "/api/tasks/{task}/actions/a-1/deny", ""},
 	} {
 		erased, erasedBody := strings.ReplaceAll(c.path, "{task}", "task-2"), strings.ReplaceAll(c.body, "{task}", "task-2")
 		if code, body := call(t, f.server, c.method, erased, erasedBody); code != http.StatusGone || strings.TrimSpace(body) != want {

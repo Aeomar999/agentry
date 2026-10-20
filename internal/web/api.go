@@ -309,6 +309,10 @@ func (s *Server) rank(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
+	if s.isNone(r.PathValue("task")) {
+		s.noTask(w, r.PathValue("task"))
+		return
+	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskRanked, Data: map[string]any{"rank": request.Rank}})
 }
 
@@ -316,6 +320,10 @@ func (s *Server) rank(w http.ResponseWriter, r *http.Request) {
 func (s *Server) label(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Labels []string }
 	if !httpapi.Decode(w, r, &request) {
+		return
+	}
+	if s.isNone(r.PathValue("task")) {
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.TaskLabeled,
@@ -397,6 +405,10 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
+	if s.isNone(r.PathValue("task")) {
+		s.noTask(w, r.PathValue("task"))
+		return
+	}
 	answer := strings.TrimSpace(request.Answer)
 	task, err := s.task(r.PathValue("task"))
 	closes := err == nil && task != nil && task.Closing != "" && strings.EqualFold(answer, coordinator.CloseEpic)
@@ -446,6 +458,10 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request, kind events.Type
 	}
 	if request.Reason == "" {
 		request.Reason = "no reason given"
+	}
+	if s.isNone(r.PathValue("task")) {
+		s.noTask(w, r.PathValue("task"))
+		return
 	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: kind,
 		Correlation: r.PathValue("action"), Data: map[string]any{"reason": request.Reason}})

@@ -82,6 +82,10 @@ func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) removeShared(w http.ResponseWriter, r *http.Request) {
+	if s.isNone(r.PathValue("task")) {
+		s.noTask(w, r.PathValue("task"))
+		return
+	}
 	httpapi.Propose(w, s.store, events.Proposal{Stream: r.PathValue("task"), Actor: httpapi.You, Type: events.FileRemoved,
 		Data: map[string]any{"name": r.URL.Query().Get("name"), "by": "you"}})
 }
