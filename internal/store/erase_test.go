@@ -216,8 +216,8 @@ func TestAnUnreadableBlobDoesNotStopTheErasure(t *testing.T) {
 	}
 }
 
-// A blob that can't be read for another reason, such as leave to read it
-// taken away, may be read later, so the erasure stops before it writes
+// A blob that can't be read for another reason, such as no permission to
+// read it, may be read later, so the erasure stops before it writes
 // anything: the task is archived as it was, and its blob kept. Root reads
 // a file of mode 0000 anyway, so the test is skipped there.
 func TestABlobThatCantBeReadForAnotherReasonStopsTheErasure(t *testing.T) {

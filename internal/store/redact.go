@@ -145,7 +145,7 @@ func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) 
 // holding the secret only in a number, has no fields in the redaction,
 // and the rules would refuse that for naming none instead of saying why.
 func (s *Store) refusal(found pending) *events.Rejection {
-	if rejection := rewritable(found.rows); rejection != nil {
+	if rejection := s.rewritable(found.redaction.Stream, found.rows); rejection != nil {
 		return rejection
 	}
 	return s.validate(found.redaction)
@@ -218,6 +218,7 @@ type rewrittenRow struct {
 	removed  int      // the secret's bytes taken out
 	refused  string   // why the row can't be rewritten, if it can't
 	inKey    bool     // a key holds the secret, so the row has no fields
+	inNumber bool     // the secret is left outside the strings, as in a number
 }
 
 // holds says whether the row held the secret: in a string it rewrote, or
@@ -282,7 +283,7 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 	case found.survives:
 		rw.refused = "would still show the secret next to " + Redacted
 	case leftOver:
-		rw.refused = "holds the secret outside its text, as in a number, which redacting can't rewrite: erase the task, or redact a longer piece of the text"
+		rw.refused, rw.inNumber = "holds the secret outside its text, as in a number, which redacting can't rewrite", true
 	}
 	return rw, nil
 }
@@ -451,13 +452,23 @@ func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	return nil
 }
 
-// rewritable refuses a redaction with a row redactedData can't rewrite
-// leaving the rest as it was.
-func rewritable(rewrites []rewrittenRow) *events.Rejection {
+// rewritable refuses a redaction of stream with a row redactedData can't
+// rewrite leaving the rest as it was. A secret left in a number gets what
+// the user can do instead, which depends on the stream: only a task can
+// be erased.
+func (s *Store) rewritable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	for _, rw := range rewrites {
-		if rw.refused != "" {
-			return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("the row at %d %s", rw.position, rw.refused)}
+		if rw.refused == "" {
+			continue
 		}
+		reason := fmt.Sprintf("the row at %d %s", rw.position, rw.refused)
+		switch {
+		case rw.inNumber && s.catalogue.IsTaskStream(stream):
+			reason += ": erase the task, or redact a longer piece of the text"
+		case rw.inNumber:
+			reason += ": redact a longer piece of the text"
+		}
+		return &events.Rejection{Check: "redact", Reason: reason}
 	}
 	return nil
 }

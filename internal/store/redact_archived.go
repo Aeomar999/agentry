@@ -67,7 +67,7 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 	if err := removeRedacted(kept, live, blobs); err != nil {
 		return events.Event{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
-	if _, rejection, err := checkArchived(stream, append(append(kept, live...), unarchived), secret, who, why); rejection != nil || err != nil {
+	if _, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, who, why); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	if _, rejection, err := s.Unarchive(stream, blobs); rejection != nil || err != nil {
@@ -137,12 +137,12 @@ func unarchivedRow(marker events.Event, through int64) (row, error) {
 
 // checkArchived is what Redact would find in an archived stream's rows,
 // or what it would refuse in them, before anything is written.
-func checkArchived(stream string, rows []row, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
+func (s *Store) checkArchived(stream string, rows []row, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
 	found, rejection, err := findIn(stream, rows, secret, who, why)
 	if rejection != nil || err != nil {
 		return pending{}, rejection, err
 	}
-	return found, rewritable(found.rows), nil
+	return found, s.rewritable(stream, found.rows), nil
 }
 
 // PreviewArchived is Preview for RedactArchived: the number of an archived
@@ -157,7 +157,7 @@ func (s *Store) PreviewArchived(stream, secret string, blobs Opener) (int, *even
 	if rejection != nil || err != nil {
 		return 0, rejection, err
 	}
-	found, rejection, err := checkArchived(stream, append(append(kept, live...), unarchived), secret, redactor, "")
+	found, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, redactor, "")
 	if rejection != nil || err != nil {
 		return 0, rejection, err
 	}

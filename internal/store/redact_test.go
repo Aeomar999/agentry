@@ -545,6 +545,38 @@ func TestASecretLeftInANumberIsRefused(t *testing.T) {
 	}
 }
 
+// A secret left in a number is refused with what the user can do instead,
+// which depends on the stream: a task can be erased, while the agents and
+// settings streams can only have a longer piece of the text redacted.
+func TestASecretLeftInANumberGetsTheRemedyItsStreamAllows(t *testing.T) {
+	learned := agents.Agent{Name: "engineer"}.Learned(you, "The PIN is "+pin+".")
+	learned.Data["pin"] = 90210417
+	created := newTask("task-1")
+	created.Data["extra"] = 90210417
+	for _, c := range []struct {
+		name, stream string
+		row          events.Proposal
+		want         string
+	}{
+		{"a task", "task-1", created, "erase the task, or redact a longer piece of the text"},
+		{"the agents", events.AgentsStream, learned, "redact a longer piece of the text"},
+		{"the settings", events.SettingsStream, events.Proposal{Stream: events.SettingsStream, Actor: you, Type: events.SettingsChanged,
+			Data: map[string]any{"maxRunningTasks": 90210417}}, "redact a longer piece of the text"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, _ := openAt(t, filepath.Join(t.TempDir(), "agentry.db"))
+			if c.stream == events.AgentsStream {
+				acceptAll(t, s, agentCreated("engineer"))
+			}
+			acceptAll(t, s, c.row)
+			want := "which redacting can't rewrite: " + c.want
+			if _, rejection, err := s.Redact(c.stream, pin, you, ""); err != nil || rejection == nil || !strings.HasSuffix(rejection.Reason, want) {
+				t.Errorf("%v, %v, want a reason ending %q", rejection, err, want)
+			}
+		})
+	}
+}
+
 // Propose refuses event.redacted from anyone: only Redact writes it, with
 // its rows.
 func TestOnlyRedactWritesARedaction(t *testing.T) {
