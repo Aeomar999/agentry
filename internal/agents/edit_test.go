@@ -2,6 +2,7 @@ package agents
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -105,5 +106,50 @@ func TestATeamsVersionFollowsWhatThePanelEdits(t *testing.T) {
 	renamed := roster.Next(events.Event{Proposal: TeamRenaming("Data", "Numbers", you)})
 	if changed.TeamVersion("Data") == version || renamed.TeamVersion("Numbers") == version {
 		t.Error("a changed prompt, or a team rename, kept Data's version")
+	}
+}
+
+// EditTeam trims each row, takes a row named as an agent of the team for
+// that agent unless another row was it, removes the agents no row was, and
+// gives a new agent with no prompt a default one, but not a kept agent.
+func TestEditTeamReadsThePanelsRows(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true},
+		{Name: "a", Team: "Data", Coordinates: true},
+		{Name: "b", Team: "Data"},
+		{Name: "c", Team: "Data"},
+	}
+	edit := EditTeam(roster, "Data", " Numbers ", []EditedAgent{
+		{Name: " a ", Coordinates: true},
+		{Was: "b", Name: "c", Prompt: " Count. "},
+		{Name: "b", Description: "Plot."},
+	})
+	got := []EditedAgent{{Was: "a", Name: "a", Coordinates: true}, {Was: "b", Name: "c", Prompt: "Count."}, {Name: "b", Description: "Plot.", Prompt: edit.Agents[2].Prompt}}
+	if edit.Team != "Data" || edit.To != "Numbers" || !slices.Equal(edit.Agents, got) || !slices.Equal(edit.Removed, []string{"c"}) {
+		t.Errorf("the edit is %+v, want a kept, b renamed c, a new b, and c removed", edit)
+	}
+	if !strings.Contains(edit.Agents[2].Prompt, "Your job: Plot.") || edit.Agents[0].Prompt != "" {
+		t.Errorf("prompts %q and %q, want a default for the new b only", edit.Agents[2].Prompt, edit.Agents[0].Prompt)
+	}
+}
+
+// Renames follow an agent through renames to the name it has now, two
+// agents swapping names in one edit too, and forget a removed agent.
+func TestRenamesFollowAnAgentToItsNameNow(t *testing.T) {
+	stream := []events.Event{
+		{Proposal: Agent{Name: "a"}.Renaming(you, "b")},
+		{Proposal: TeamEdit{Team: "Data", To: "Data", Agents: []EditedAgent{{Was: "b", Name: "c"}, {Was: "x", Name: "y"}}}.Proposal(you)},
+		{Proposal: TeamEdit{Team: "Data", To: "Data", Agents: []EditedAgent{{Was: "c", Name: "y"}, {Was: "y", Name: "c"}}}.Proposal(you)},
+		{Proposal: Agent{Name: "z"}.Renaming(you, "w")},
+		{Proposal: Agent{Name: "w"}.Removal(you)},
+	}
+	renames := RenamesIn(stream)
+	for old, now := range map[string]string{"a": "y", "b": "y", "x": "c", "c": "y", "y": "c"} {
+		if renames[old] != now {
+			t.Errorf("%s is %q now, want %s", old, renames[old], now)
+		}
+	}
+	if _, ok := renames["z"]; ok {
+		t.Error("z, renamed w and removed, is still followed")
 	}
 }

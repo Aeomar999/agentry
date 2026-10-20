@@ -222,16 +222,21 @@ func turnOf(t *tasks.Task, s tasks.Step) string {
 // is a policy.
 type agentView struct {
 	agents.Agent
-	Effective *effectiveView `json:"effective,omitempty"`
+	Effective   *effectiveView `json:"effective,omitempty"`
+	TeamVersion string         `json:"teamVersion"` // its team's, which PUT /api/teams/{team} checks
 }
 
 func agentsOf(roster agents.Roster, p *policy.Policy) []agentView {
 	list := []agentView{}
+	versions := map[string]string{}
+	for _, team := range roster.Teams() {
+		versions[team] = roster.TeamVersion(team)
+	}
 	for _, a := range roster {
 		if a.Workers == nil {
 			a.Workers = []string{} // the page reads a list, never null
 		}
-		view := agentView{Agent: a}
+		view := agentView{Agent: a, TeamVersion: versions[a.TeamName()]}
 		if p != nil {
 			effective := effectiveOf(p, a.Profile)
 			view.Effective = &effective

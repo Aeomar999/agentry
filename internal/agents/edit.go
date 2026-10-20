@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -129,4 +130,94 @@ func (a Agent) editedTo(e EditedAgent, team string) Agent {
 	a.Profile, a.Coordinates, a.Color, a.Column = e.Profile, e.Coordinates, e.Color, e.Column
 	a.Team, a.untouched = team, untouched
 	return a
+}
+
+// EditTeam is the edit that leaves team, as the roster names it, called to
+// and made of rows, in the team panel's order. Each row's text is trimmed;
+// a row named as one of the team's agents, and no other row was it, is that
+// agent; the team's agents no row was are removed; and a new agent with no
+// prompt gets a default one, as an agent of a custom team does.
+func EditTeam(roster Roster, team, to string, rows []EditedAgent) TeamEdit {
+	plain := make([]Agent, len(rows))
+	for i, row := range rows {
+		plain[i] = Agent{Name: row.Name, Description: row.Description, Prompt: row.Prompt, Engine: row.Engine, Model: row.Model,
+			Profile: row.Profile, Coordinates: row.Coordinates, Color: row.Color, Column: row.Column}
+	}
+	to, plain = trimmed(to, plain)
+	edit := TeamEdit{Team: team, To: to}
+	for i, agent := range plain {
+		row := agent.Edited()
+		row.Was = strings.TrimSpace(rows[i].Was)
+		if was, ok := roster.Get(row.Name); row.Was == "" && ok && was.TeamName() == team &&
+			!slices.ContainsFunc(rows, func(r EditedAgent) bool { return strings.TrimSpace(r.Was) == row.Name }) {
+			row.Was = row.Name
+		}
+		if row.Was == "" && row.Prompt == "" {
+			row.Prompt = defaultPrompt(Agent{Name: row.Name, Description: row.Description, Coordinates: row.Coordinates, Column: row.Column, Team: to})
+		}
+		edit.Agents = append(edit.Agents, row)
+	}
+	for _, a := range roster {
+		if a.TeamName() == team && !slices.ContainsFunc(edit.Agents, func(e EditedAgent) bool { return e.Was == a.Name }) {
+			edit.Removed = append(edit.Removed, a.Name)
+		}
+	}
+	return edit
+}
+
+// Renames are the names agents had, each to the name the agent has now, as
+// a fold of the agents stream: what a task still naming an agent by a name
+// it had should name instead. A removed agent's names go with it.
+type Renames map[string]string
+
+// RenamesIn folds the agents stream into its renames.
+func RenamesIn(stream []events.Event) Renames {
+	renames := Renames{}
+	for _, e := range stream {
+		renames.Apply(e)
+	}
+	return renames
+}
+
+// Apply follows one accepted event of the agents stream. The renames of a
+// team edit happen at once, so two agents can swap names.
+func (r Renames) Apply(e events.Event) {
+	switch e.Type {
+	case events.AgentRenamed:
+		r.move(map[string]string{e.Text("name"): e.Text("to")})
+	case events.TeamEdited:
+		edit, _ := TeamEditOf(e.Proposal) // the rules accepted it as one
+		moves := map[string]string{}
+		for _, a := range edit.Agents {
+			if a.Was != "" && a.Was != a.Name {
+				moves[a.Was] = a.Name
+			}
+		}
+		r.move(moves)
+		for _, name := range edit.Removed {
+			r.forget(name)
+		}
+	case events.AgentRemoved:
+		r.forget(e.Text("name"))
+	}
+}
+
+func (r Renames) move(moves map[string]string) {
+	for old, now := range r {
+		if to, ok := moves[now]; ok {
+			r[old] = to
+		}
+	}
+	for was, to := range moves {
+		r[was] = to
+	}
+}
+
+func (r Renames) forget(name string) {
+	for old, now := range r {
+		if now == name {
+			delete(r, old)
+		}
+	}
+	delete(r, name)
 }

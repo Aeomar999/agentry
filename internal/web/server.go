@@ -121,6 +121,7 @@ func (s *Server) Handler() http.Handler {
 	api("DELETE /api/teams/{team}", s.removeTeam)
 	api("POST /api/teams/{team}/rename", s.renameTeam)
 	api("POST /api/teams/{team}/coordinator", s.moveCoordinator)
+	api("PUT /api/teams/{team}", s.editTeam)
 	api("POST /api/teams/{team}/template", s.saveTemplate)
 	api("DELETE /api/teams/templates/{id}", s.removeTemplate)
 	api("GET /api/teams/templates/{id}/export", s.exportTemplate)
