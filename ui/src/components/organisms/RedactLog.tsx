@@ -10,11 +10,13 @@ import { MarkText } from "@/components/molecules/MarkText";
 import { Warnings } from "@/components/molecules/Warnings";
 import { useCountedRedaction } from "@/lib/counted-redaction";
 import { rowsOf } from "@/lib/rows";
+import { streamName } from "@/lib/streams";
 import { dateTime } from "@/lib/time";
 
 // RedactLog takes a secret pasted widely out of the whole log
 // (docs/design/log-growth.md section 5, "Removing a secret"): every task,
-// archived ones too, what the agents learned, and the other streams. As
+// archived ones too, the agents and what they learned, and the other
+// streams, such as the policy, the workers and the ideas. As
 // for one task (RedactText), you see the rows first, here in each stream,
 // and only the rows you saw are redacted: a stream that took one since,
 // or that you didn't see, is left and named, for you to count again.
@@ -39,7 +41,7 @@ export function RedactLog({ onClose }: { onClose: () => void }) {
         {stage.step === "mark" && (
           <MarkText
             idPrefix="redact-log"
-            hint="Paste it. It is matched exactly, spaces and all, in every task, archived ones too, and in what the agents learned."
+            hint="Paste it. It is matched exactly, spaces and all, in every task, archived ones too, in the agents and what they learned, and in Agentry's other records, such as the policy, the workers and the ideas."
             text={text}
             why={why}
             refusal={stage.refusal}
@@ -105,7 +107,7 @@ function Redacted({
       </p>
       <StreamList>
         {redaction.streams.map((done) => (
-          <StreamRow key={done.stream} stream={done.stream}>
+          <StreamRow key={done.stream} stream={done.stream} archived={done.archived}>
             {rowsOf(done.rows)}
           </StreamRow>
         ))}
@@ -144,13 +146,13 @@ function StreamList({ children }: { children: ReactNode }) {
   return <ul className="flex flex-col divide-y divide-divider border border-divider">{children}</ul>;
 }
 
-// StreamRow is one stream of the log, marked when it is an archived task's,
-// with what is said of it.
+// StreamRow is one stream of the log, by its name on the page, marked when
+// it is an archived task's, with what is said of it.
 function StreamRow({ stream, archived, children }: { stream: string; archived?: boolean; children: ReactNode }) {
   return (
     <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2">
       <span className="flex items-center gap-2 font-mono text-[12px] text-ink-primary">
-        {stream}
+        {streamName(stream)}
         {archived && <Badge>archived</Badge>}
       </span>
       <span className="ml-auto text-[12px]">{children}</span>

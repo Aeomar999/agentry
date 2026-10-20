@@ -3,11 +3,11 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,10 +103,10 @@ func matches(t *testing.T, answer logRedacted, preview logPreview) {
 	t.Helper()
 	var listed, rewrote []string
 	for _, p := range preview.Streams {
-		listed = append(listed, p.Stream+": "+strconv.Itoa(p.Rows))
+		listed = append(listed, fmt.Sprintf("%s: %d, archived %t", p.Stream, p.Rows, p.Archived))
 	}
 	for _, r := range answer.Streams {
-		rewrote = append(rewrote, r.Stream+": "+strconv.Itoa(r.Rows))
+		rewrote = append(rewrote, fmt.Sprintf("%s: %d, archived %t", r.Stream, r.Rows, r.Archived))
 		if time.Since(r.At) > time.Minute {
 			t.Errorf("%s was redacted at %s", r.Stream, r.At)
 		}

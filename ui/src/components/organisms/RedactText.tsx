@@ -9,6 +9,7 @@ import { MarkText } from "@/components/molecules/MarkText";
 import { Warnings } from "@/components/molecules/Warnings";
 import { useCountedRedaction } from "@/lib/counted-redaction";
 import { rowsOf } from "@/lib/rows";
+import { AGENTS } from "@/lib/streams";
 import { dateTime } from "@/lib/time";
 
 // RedactText takes a secret out of a task, live or archived, or out of
@@ -28,7 +29,7 @@ interface Target {
 type Where = { task: string } | { agents: true };
 
 function targetOf(where: Where): Target {
-  if ("agents" in where) return { name: "the agents and what they learned", preview: previewAgentsRedaction, redact: redactAgents };
+  if ("agents" in where) return { name: AGENTS, preview: previewAgentsRedaction, redact: redactAgents };
   const { task } = where;
   return {
     name: task,

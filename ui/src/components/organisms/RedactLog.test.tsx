@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ApiError } from "@/api/client";
 import { previewLogRedaction, redactLog } from "@/api/privacy";
 import type { LogPreview, LogRedaction } from "@/api/types";
+import { AGENTS } from "@/lib/streams";
 import { dateTime } from "@/lib/time";
 import { RedactLog } from "./RedactLog";
 
@@ -33,9 +34,9 @@ const LOST = "task-7's archived rows can't be read: its blob is missing";
 const PARTLY: LogRedaction = {
   rows: 4,
   streams: [
-    { stream: "task-3", at: AT, rows: 2 },
-    { stream: "task-6", at: AT, rows: 1 },
-    { stream: "agents", at: AT, rows: 1 },
+    { stream: "task-3", at: AT, rows: 2, archived: false },
+    { stream: "task-6", at: AT, rows: 1, archived: true },
+    { stream: "agents", at: AT, rows: 1, archived: false },
   ],
   failures: [
     { stream: "task-5", reason: STALE, recount: true },
@@ -70,6 +71,9 @@ describe("RedactLog", () => {
     expect(within(row("task-6")[0]).getByText("archived")).toBeTruthy();
     expect(within(row("task-5")[0]).queryByText("archived")).toBeNull();
     expect(within(row("task-7")[0]).getByText(`can't be redacted: ${LOST}`)).toBeTruthy();
+    // The agents' stream is named by what it holds, not as "agents".
+    expect(within(row(AGENTS)[0]).getByText("1 row")).toBeTruthy();
+    expect(screen.queryByText("agents")).toBeNull();
     expect(redactLog).not.toHaveBeenCalled();
   });
 
@@ -82,7 +86,10 @@ describe("RedactLog", () => {
     expect(redactLog).toHaveBeenCalledWith(SECRET, "pasted everywhere", COUNTS);
     expect(screen.getByText(`Redacted 4 rows at ${dateTime(AT)}.`)).toBeTruthy();
     expect(within(row("task-3")[0]).getByText("2 rows")).toBeTruthy();
-    expect(within(row("agents")[0]).getByText("1 row")).toBeTruthy();
+    expect(within(row(AGENTS)[0]).getByText("1 row")).toBeTruthy();
+    // An archived task is marked in what was done, as in the preview.
+    expect(within(row("task-6")[0]).getByText("archived")).toBeTruthy();
+    expect(within(row("task-3")[0]).queryByText("archived")).toBeNull();
     expect(screen.getByText("These still hold the text:")).toBeTruthy();
     // Each stream left is named once, in its row, beside the warnings.
     expect(within(row("task-5")[0]).getByText(STALE)).toBeTruthy();
@@ -98,7 +105,7 @@ describe("RedactLog", () => {
     vi.mocked(previewLogRedaction).mockResolvedValueOnce(PREVIEW).mockResolvedValueOnce(again);
     vi.mocked(redactLog)
       .mockResolvedValueOnce(PARTLY)
-      .mockResolvedValueOnce({ rows: 2, streams: [{ stream: "task-5", at: AT, rows: 2 }], failures: [], warnings: [] });
+      .mockResolvedValueOnce({ rows: 2, streams: [{ stream: "task-5", at: AT, rows: 2, archived: false }], failures: [], warnings: [] });
     await count();
     await act(async () => fireEvent.click(button("Redact 5 rows")));
     await act(async () => fireEvent.click(button("Count again")));

@@ -495,10 +495,11 @@ export interface StreamFailed {
 }
 
 // LogRedaction is what a redaction across the log did: the rows rewritten
-// in each stream, the streams left, and what may be left for now.
+// in each stream, marked when it is an archived task's, the streams left,
+// and what may be left for now.
 export interface LogRedaction {
   rows: number;
-  streams: { stream: string; at: string; rows: number }[];
+  streams: { stream: string; at: string; rows: number; archived: boolean }[];
   failures: StreamFailed[];
   warnings: string[];
 }

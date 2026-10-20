@@ -51,11 +51,13 @@ type logPreview struct {
 	Streams []streamPreview `json:"streams"`
 }
 
-// streamRedacted is a stream a redaction across the log rewrote.
+// streamRedacted is a stream a redaction across the log rewrote, and
+// whether it is an archived task's, as the preview listed it.
 type streamRedacted struct {
-	Stream string    `json:"stream"`
-	At     time.Time `json:"at"`
-	Rows   int       `json:"rows"`
+	Stream   string    `json:"stream"`
+	At       time.Time `json:"at"`
+	Rows     int       `json:"rows"`
+	Archived bool      `json:"archived"`
 }
 
 // streamFailed is a stream a redaction across the log left holding the
@@ -124,7 +126,7 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case done.redaction.Position != 0:
 			answer.Rows += done.rows()
-			answer.Streams = append(answer.Streams, streamRedacted{Stream: listed.Stream, At: done.redaction.At, Rows: done.rows()})
+			answer.Streams = append(answer.Streams, streamRedacted{Stream: listed.Stream, At: done.redaction.At, Rows: done.rows(), Archived: listed.Archived})
 			if done.err != nil {
 				answer.Warnings = append(answer.Warnings, listed.Stream+": "+done.err.Error())
 			}
