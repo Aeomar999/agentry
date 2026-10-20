@@ -188,7 +188,8 @@ ignored, and written again on every pass. So equal writes nothing, and
 neither does different but not later. A polled pipeline's `at` is the
 latest of its `updated_at` and its jobs' `started_at` and `finished_at`,
 so a job that finishes inside a running pipeline is a later change
-(the poll asks for a running pipeline's jobs on every pass, section 3).
+(the poll asks for a pending or running pipeline's jobs on every pass,
+section 3).
 The slice is built from the log, so a poll after a restart, or a poll and
 a webhook seeing the same change, writes it once; two writes that race
 both carry the host's same `at`, and the second changes nothing.
@@ -548,8 +549,9 @@ event is missed or read twice.
   and the jobs of each pipeline that is new to the slice, whose status
   differs from the slice's, or that is `pending` or `running` on the host
   (`GET /projects/{id}/pipelines/{pipeline_id}/jobs`, the latest try of
-  each). Asking for a running pipeline's jobs on every pass is what lets a
-  job that finishes inside it show as a later `at` (section 1); a finished
+  each). Asking for a pending or running pipeline's jobs on every pass
+  is what lets a job that finishes inside it show as a later `at`
+  (section 1); a finished
   pipeline whose status hasn't changed isn't asked again. That is two
   calls per request per pass, and one more per such pipeline: 20 open
   requests, each with one running pipeline, make 60 calls every two
