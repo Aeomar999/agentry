@@ -635,46 +635,97 @@ func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
 	}
 }
 
-// A story erased while its epic was archived, which leaveEpic leaves
-// listed, is taken out of the epic as it is unarchived to be reopened,
-// before its task.reopened, by either route that reopens it: no open
-// story is left to keep it from finishing.
-func TestAReopenedEpicDropsAStoryErasedWhileArchived(t *testing.T) {
-	for _, c := range []struct{ name, path, body string }{
-		{"moved", "/api/tasks/task-3/direct", `{"to":"todo"}`},
-		{"told", "/api/tasks/task-3/message", `{"text":"One more thing."}`},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			f := newEraseFixture(t)
-			if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
-				t.Fatalf("closing the epic: %d %s", code, body)
-			}
+// A done epic that still lists an erased story takes it out as it is
+// reopened, before its task.reopened, by either route that reopens it: no
+// open story is left to keep it from finishing. It lists one erased while
+// the epic was archived, as leaveEpic leaves an archived epic as it is,
+// and a live one lists one when a clean-up failed part way, as here, where
+// the store erased the story past the route.
+func TestAReopenedEpicDropsItsErasedStories(t *testing.T) {
+	erasings := []struct {
+		name  string
+		erase func(t *testing.T, f *eraseFixture)
+	}{
+		{"while archived", func(t *testing.T, f *eraseFixture) {
 			storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs)
 			f.erase(t, "task-2")
-			if code, body := call(t, f.server, "POST", c.path, c.body); code != http.StatusOK {
-				t.Fatalf("reopening the epic: %d %s", code, body)
+		}},
+		{"while live", func(t *testing.T, f *eraseFixture) {
+			if _, rejection, err := f.log.Erase("task-2", you, "Gone.", f.blobs); rejection != nil || err != nil {
+				t.Fatalf("erasing task-2 in the store: %v, %v", rejection, err)
 			}
+		}},
+	}
+	routes := []struct{ name, path, body string }{
+		{"moved to To do", "/api/tasks/task-3/direct", `{"to":"todo"}`},
+		{"moved to In progress", "/api/tasks/task-3/direct", `{"to":"in-progress"}`},
+		{"told", "/api/tasks/task-3/message", `{"text":"One more thing."}`},
+	}
+	for _, erasing := range erasings {
+		for _, c := range routes {
+			t.Run(erasing.name+", "+c.name, func(t *testing.T) {
+				f := newEraseFixture(t)
+				if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+					t.Fatalf("closing the epic: %d %s", code, body)
+				}
+				erasing.erase(t, f)
+				if code, body := call(t, f.server, "POST", c.path, c.body); code != http.StatusOK {
+					t.Fatalf("reopening the epic: %d %s", code, body)
+				}
+				f.reopenedWithoutStories(t)
+			})
+		}
+	}
+}
 
-			epic, err := f.state.Task("task-3")
-			if err != nil || epic == nil || epic.IsDone {
-				t.Fatalf("the epic should be open again: %v, %v", epic, err)
-			}
-			if len(epic.Stories) != 0 {
-				t.Errorf("the epic's stories %v, want none", epic.Stories)
-			}
-			live, err := f.log.Log("task-3")
-			if err != nil {
-				t.Fatal(err)
-			}
-			removed := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.StoryRemoved && e.Text("story") == "task-2" })
-			reopened := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.TaskReopened })
-			if removed < 0 || removed > reopened {
-				t.Errorf("task.story_removed at %d, task.reopened at %d: want the removal first", removed, reopened)
-			}
-			if summary, _ := f.state.Summary("task-3"); summary.Stories != 0 {
-				t.Errorf("the card counts %d stories, want none", summary.Stories)
-			}
-		})
+// Two reopens that both read the done epic before either took its erased
+// story out, as a double drag does, both get past taking it out: to the
+// second, the story already gone counts as taken out.
+func TestTwoReopensTakeAnErasedStoryOutOnce(t *testing.T) {
+	f := newEraseFixture(t)
+	if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+		t.Fatalf("closing the epic: %d %s", code, body)
+	}
+	if _, rejection, err := f.log.Erase("task-2", you, "Gone.", f.blobs); rejection != nil || err != nil {
+		t.Fatalf("erasing task-2 in the store: %v, %v", rejection, err)
+	}
+	read, err := f.state.Task("task-3") // what both requests read
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 2 {
+		w := httptest.NewRecorder()
+		if !f.web.dropErasedStories(w, read) {
+			t.Fatalf("reopen %d: %d %s", i+1, w.Code, w.Body)
+		}
+	}
+	if got := textIn(t, f, "task-3", events.StoryRemoved, "story"); !slices.Equal(got, []string{"task-2"}) {
+		t.Errorf("the epic's task.story_removed: %q, want task-2's once", got)
+	}
+}
+
+// reopenedWithoutStories fails the test unless task-3 is open again with
+// no stories, and took task-2 out before it was reopened.
+func (f *eraseFixture) reopenedWithoutStories(t *testing.T) {
+	t.Helper()
+	epic, err := f.state.Task("task-3")
+	if err != nil || epic == nil || epic.IsDone {
+		t.Fatalf("the epic should be open again: %v, %v", epic, err)
+	}
+	if len(epic.Stories) != 0 {
+		t.Errorf("the epic's stories %v, want none", epic.Stories)
+	}
+	live, err := f.log.Log("task-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.StoryRemoved && e.Text("story") == "task-2" })
+	reopened := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.TaskReopened })
+	if removed < 0 || removed > reopened {
+		t.Errorf("task.story_removed at %d, task.reopened at %d: want the removal first", removed, reopened)
+	}
+	if summary, _ := f.state.Summary("task-3"); summary.Stories != 0 {
+		t.Errorf("the card counts %d stories, want none", summary.Stories)
 	}
 }
 

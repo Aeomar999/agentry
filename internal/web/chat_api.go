@@ -34,6 +34,9 @@ func (s *Server) say(w http.ResponseWriter, id, text, via string) {
 		return
 	}
 	if task.IsDone {
+		if !s.dropErasedStories(w, task) {
+			return
+		}
 		reopen := s.reopen(task, text, "")
 		if via != "" {
 			reopen.Data["via"] = via

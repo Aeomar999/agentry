@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -81,7 +82,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 
 	switch request.To {
 	case "backlog", "todo":
-		if task.IsDone && !httpapi.ProposeOrRefuse(w, s.store, s.reopen(task, "Reopen this task and park it.", note)) {
+		if task.IsDone && !(s.dropErasedStories(w, task) && httpapi.ProposeOrRefuse(w, s.store, s.reopen(task, "Reopen this task and park it.", note))) {
 			return
 		}
 		httpapi.Propose(w, s.store, park(request.To))
@@ -135,6 +136,9 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case task.IsDone:
+		if !s.dropErasedStories(w, task) {
+			return
+		}
 		if text == "" {
 			text = "It needs more work."
 		}
@@ -225,6 +229,38 @@ func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {
 		text += " " + note
 	}
 	return events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskReopened, Data: map[string]any{"text": text}}
+}
+
+// dropErasedStories takes the erased stories a done epic still lists out of
+// it before it is reopened, with the task.story_removed the erase route's
+// leaveEpic writes: an erased story listed would keep the epic from
+// finishing. It still lists one erased while it was archived, as leaveEpic
+// leaves an archived epic as it is, or after a clean-up failed part way. A
+// story already gone from the epic, as another reopen took it out first,
+// counts as taken out. It is false once it has answered that it failed.
+func (s *Server) dropErasedStories(w http.ResponseWriter, epic *tasks.Task) bool {
+	for _, story := range epic.Stories {
+		if _, erased := s.state.Erased(story); !erased {
+			continue
+		}
+		removal := events.Proposal{Stream: epic.ID, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": story}}
+		_, rejection, err := s.store.Propose(removal)
+		switch {
+		case err != nil:
+			httpapi.Failed(w, err)
+			return false
+		case rejection != nil && s.lists(epic.ID, story):
+			httpapi.Failed(w, fmt.Errorf("erased %s can't be taken out of %s: %s", story, epic.ID, rejection.Reason))
+			return false
+		}
+	}
+	return true
+}
+
+// lists is whether epic, as the state holds it now, lists story.
+func (s *Server) lists(epic, story string) bool {
+	task, err := s.task(epic)
+	return err == nil && task != nil && slices.Contains(task.Stories, story)
 }
 
 // teammates are the agents of the task's team whose work counts as column.
