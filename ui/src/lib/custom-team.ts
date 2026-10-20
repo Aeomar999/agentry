@@ -347,6 +347,12 @@ export function replaceDetail(changed: string[], to?: Pick<TeamTemplate, "team" 
   return `${to.team}'s ${to.agents.length} agents replace ${from ? `${from.team}'s` : "yours"}; your changes to ${listed(changed, "and")} go.`;
 }
 
+// What the panel's live region says when a row goes, comes back, or every
+// row is replaced by a template's.
+export const removedNotice = (agent: DraftAgent) => `${shownName(agent)} removed. Undo is next.`;
+export const backNotice = (agent: DraftAgent) => `${shownName(agent)} is back.`;
+export const replacedNotice = (to: Pick<TeamTemplate, "team" | "agents">) => `Replaced with ${to.team}'s ${to.agents.length} agents.`;
+
 // whyNotCreated is a refusal in words: the server's own, or ours when
 // Agentry couldn't be reached at all.
 export function whyNotCreated(failure: unknown): string {

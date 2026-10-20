@@ -125,6 +125,8 @@ const create = () => act(async () => fireEvent.click(within(panel()).getByRole("
 const summary = () => document.getElementById("team-summary")!;
 const sent = () => vi.mocked(api).mock.calls.map(([method, path, body]) => [method, path, body]);
 const addTeam = () => screen.getByRole("button", { name: "Add a team" });
+// said checks the panel's live region says text.
+const said = (text: string) => expect(within(panel()).getByText(text).getAttribute("aria-live")).toBe("polite");
 
 describe("New team: Blank", () => {
   test("Build a team in Add a team opens the panel with one coordinator", () => {
@@ -275,6 +277,7 @@ describe("New team: Copy a template", () => {
 
     fireEvent.change(within(panel()).getByLabelText("Template"), { target: { value: "visionaries" } });
     fireEvent.click(within(panel()).getByRole("button", { name: "Replace" }));
+    said("Replaced with Visionaries's 2 agents.");
     expect(teamName().value).toBe("Visionaries 2");
     expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
     expect(rowButton("visionary")).toBeTruthy();
@@ -293,8 +296,10 @@ describe("New team: agents", () => {
     fireEvent.click(within(panel()).getByRole("button", { name: "Remove coordinator" }));
     const undo = within(panel()).getByRole("button", { name: "Undo, keep coordinator" });
     expect(within(panel()).getByText("coordinator removed")).toBeTruthy();
+    said("coordinator removed. Undo is next.");
     expect(document.activeElement).toBe(undo);
     fireEvent.click(undo);
+    said("coordinator is back.");
     expect(document.activeElement).toBe(rowButton("coordinator"));
     expect((within(panel()).getByRole("radio", { name: "Coordinator, coordinator" }) as HTMLInputElement).checked).toBe(true);
   });

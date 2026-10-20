@@ -12,6 +12,7 @@ import { useToast } from "@/components/organisms/Toasts";
 import {
   addCustomTeam,
   agentCount,
+  backNotice,
   blankTeam,
   changedAgents,
   checkTeam,
@@ -22,6 +23,8 @@ import {
   missingProfiles,
   newAgent,
   type Problem,
+  removedNotice,
+  replacedNotice,
   replaceDetail,
   replaceQuestion,
   shownName,
@@ -104,6 +107,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   const [offer, setOffer] = useState<string[] | null>(null); // the profiles a 409 asked for
   const [saving, setSaving] = useState(false);
   const [focusOn, setFocusOn] = useState<{ id: string } | null>(null);
+  const [notice, setNotice] = useState(""); // what the live region last said
 
   const draft: TeamDraft = { team, agents: rows.filter((agent) => !removed.includes(agent.key)) };
   const problems = tried ? checkTeam(draft, roster, { templates, policy, engines }) : [];
@@ -137,10 +141,8 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   function replaceWith(to: string) {
-    const next = startOf(
-      templates.find((t) => t.id === to),
-      roster,
-    );
+    const template = templates.find((t) => t.id === to);
+    const next = startOf(template, roster);
     // A name you typed stays; the one the last start suggested follows the new one.
     if (team.trim() === "" || team === start.team) setTeam(next.team);
     setStart(next);
@@ -149,6 +151,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
     setRemoved([]);
     setOpen(next.agents.slice(0, 1).map((agent) => agent.key));
     setReplacing(null);
+    setNotice(template ? replacedNotice(template) : "");
   }
 
   function addAgent() {
@@ -158,16 +161,18 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
     focus(fieldId(agent.key, "name"));
   }
 
-  function remove(key: string) {
-    setRemoved((removed) => [...removed, key]);
-    focus(`${key}-undo`);
+  function remove(agent: DraftAgent) {
+    setRemoved((removed) => [...removed, agent.key]);
+    setNotice(removedNotice(agent));
+    focus(`${agent.key}-undo`);
   }
 
   // undo puts a removed row back, no longer the coordinator if another row has become one.
-  function undo(key: string) {
-    setRemoved((removed) => removed.filter((k) => k !== key));
-    if (draft.agents.some((agent) => agent.coordinates)) change(key, { coordinates: false });
-    focus(toggleId(key));
+  function undo(agent: DraftAgent) {
+    setRemoved((removed) => removed.filter((k) => k !== agent.key));
+    if (draft.agents.some((other) => other.coordinates)) change(agent.key, { coordinates: false });
+    setNotice(backNotice(agent));
+    focus(toggleId(agent.key));
   }
 
   // follow opens the row a summary link names and focuses the field.
@@ -219,6 +224,9 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
       footer={<Footer text={footerLine(draft, problems.length, saving)} saving={saving} onClose={onClose} onCreate={() => create()} />}
     >
       <div className="flex flex-col gap-5">
+        <p aria-live="polite" className="sr-only">
+          {notice}
+        </p>
         {(problems.length > 0 || failure) && <ErrorSummary problems={problems} failure={failure} onFollow={follow} />}
         {offer && (
           <div id="team-offer" tabIndex={-1} className="outline-none">
@@ -266,7 +274,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
           <ul className="rounded-md border border-divider bg-surface-1">
             {rows.map((agent) =>
               removed.includes(agent.key) ? (
-                <RemovedStub key={agent.key} agent={agent} saving={saving} onUndo={() => undo(agent.key)} />
+                <RemovedStub key={agent.key} agent={agent} saving={saving} onUndo={() => undo(agent)} />
               ) : (
                 <AgentRow
                   key={agent.key}
@@ -279,7 +287,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
                   policy={policy}
                   saving={saving}
                   onChange={(c) => change(agent.key, c)}
-                  onRemove={() => remove(agent.key)}
+                  onRemove={() => remove(agent)}
                 />
               ),
             )}

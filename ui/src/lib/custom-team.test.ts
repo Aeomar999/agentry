@@ -4,6 +4,7 @@ import type { Agent, Policy, PolicyProfile, TeamTemplate } from "@/api/types";
 import {
   addCustomTeam,
   agentCount,
+  backNotice,
   blankTeam,
   checkTeam,
   changedAgents,
@@ -15,6 +16,8 @@ import {
   missingProfiles,
   newAgent,
   problemCount,
+  removedNotice,
+  replacedNotice,
   replaceDetail,
   replaceQuestion,
   summaryTitle,
@@ -420,6 +423,13 @@ describe("the panel's sentences", () => {
     );
     expect(replaceDetail(["a1"], research)).toBe("Research's 3 agents replace yours; your changes to a1 go.");
     expect(replaceDetail(["a1"])).toBe("A blank team has one agent, its coordinator.");
+  });
+
+  test("the live region's notices name the agent, as yet unnamed too", () => {
+    expect(removedNotice(row("a1"))).toBe("a1 removed. Undo is next.");
+    expect(removedNotice(row("a1", { name: " " }))).toBe("New agent removed. Undo is next.");
+    expect(backNotice(row("a1"))).toBe("a1 is back.");
+    expect(replacedNotice(research)).toBe("Replaced with Research's 3 agents.");
   });
 });
 
