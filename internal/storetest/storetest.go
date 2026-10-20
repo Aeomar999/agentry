@@ -45,7 +45,7 @@ func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.St
 func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
 	state := NewState(catalogue)
-	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, installed()...) })
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, Installed()...) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,22 +56,22 @@ func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*sto
 // makes it: it keeps the streams of ideas and schedules whenever the
 // catalogue registers them.
 func NewState(catalogue *events.Catalogue) *current.State {
-	return current.New(catalogue, features.StreamsOf(installed()...)...)
+	return current.New(catalogue, features.StreamsOf(Installed()...)...)
 }
 
 // WithFeatures is the catalogue serve opens the log with: the core's event
 // types, and those of ideas and schedules.
 func WithFeatures() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(features.Registrations(installed()...)...)
+	catalogue, err := events.NewCatalogue(features.Registrations(Installed()...)...)
 	if err != nil {
 		panic(err)
 	}
 	return catalogue
 }
 
-// installed are the features serve installs (cmd/agentry's
+// Installed are the features serve installs (cmd/agentry's
 // installedFeatures), which a test log is opened with.
-func installed() []features.Feature {
+func Installed() []features.Feature {
 	return []features.Feature{ideas.Feature(), schedules.Feature()}
 }
 
@@ -98,7 +98,7 @@ func CheckSnapshots(t testing.TB, path string, catalogue *events.Catalogue, last
 		cuts = append(cuts, last)
 		slices.Sort(cuts)
 	}
-	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), features.StreamsOf(installed()...)...); err != nil {
+	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), features.StreamsOf(Installed()...)...); err != nil {
 		t.Errorf("a snapshot differs from a replay of the log: %v", err)
 	}
 }

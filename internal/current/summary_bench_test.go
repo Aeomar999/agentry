@@ -8,7 +8,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
@@ -43,7 +42,7 @@ func benchSummaries(t *testing.T, roster agents.Roster, archivable []*tasks.Task
 // summariesOnly is a state of the tasks archived: each one's stream is its
 // marker alone.
 func summariesOnly(roster agents.Roster, archivable []*tasks.Task) *current.State {
-	state := current.New(storetest.WithFeatures(), ideas.Streams())
+	state := storetest.NewState(storetest.WithFeatures())
 	for i, task := range archivable {
 		created := events.Event{Position: int64(2*i + 1), Proposal: events.Proposal{Stream: task.ID}}
 		marker := events.Event{Position: int64(2*i + 2), Proposal: taskstest.Marker([]events.Event{created}, tasks.SummaryOf(task, roster))}

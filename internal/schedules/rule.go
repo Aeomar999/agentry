@@ -27,9 +27,8 @@ var dayNames = map[string]time.Weekday{
 // the gap, and one it repeats at its first occurrence, so the rule makes
 // one slot for each day it runs. That slot falls on the day itself, unless
 // a gap ends at midnight: then it runs at the next day's 00:00. A rule Next
-// can't compute (an
-// unknown every, day or zone, a bad at, a week with no days) returns the
-// zero time: such a schedule never fires.
+// can't compute (an unknown every, day or zone, a bad at, a week with no
+// days) returns the zero time: such a schedule never fires.
 func (r Rule) Next(after time.Time) time.Time {
 	runs, ok := r.runsOn()
 	if !ok || r.Zone == "" {

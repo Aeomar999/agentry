@@ -19,7 +19,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -140,7 +139,7 @@ func checkMix(t *testing.T, copied, round, synthetic storetest.Mix) {
 // the heap it holds once the store is closed and its events dropped.
 func benchStartup(t *testing.T, path string) (time.Duration, *current.State, uint64) {
 	open := func() *current.State {
-		state := current.New(storetest.WithFeatures(), ideas.Streams())
+		state := storetest.NewState(storetest.WithFeatures())
 		s, err := store.Open(path, storetest.WithFeatures(), state, nil)
 		if err != nil {
 			t.Fatal(err)
