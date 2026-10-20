@@ -129,4 +129,14 @@ describe("SettingsPage", () => {
     );
     expect(newTask).toHaveBeenCalledTimes(1);
   });
+
+  test("opens redacting a text everywhere from its link, and closes it", () => {
+    manifest = { features: [IDEAS_ON], unknown: null };
+    render(<SettingsPage />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: "Redact a text everywhere" }));
+    expect(screen.getByRole("dialog", { name: "Redact a text everywhere" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });

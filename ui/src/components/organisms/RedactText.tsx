@@ -165,4 +165,4 @@ export function RedactText({ marked, onClose, onRedacted, ...where }: RedactText
   );
 }
 
-const rowsOf = (rows: number) => (rows === 1 ? "1 row" : `${rows} rows`);
+export const rowsOf = (rows: number) => (rows === 1 ? "1 row" : `${rows} rows`);
