@@ -721,6 +721,42 @@ func TestTwoReopensTakeAnErasedStoryOutOnce(t *testing.T) {
 	}
 }
 
+// A removal refused while the epic still lists the erased story fails the
+// reopen, 500 with the reason, and the epic isn't reopened: it would wait
+// on a story that is gone.
+func TestAReopenRefusedTheErasedStorysRemovalFails(t *testing.T) {
+	refused := &events.Rejection{Check: "test", Reason: "refused for the test"}
+	server, log := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type == events.StoryRemoved {
+			return refused
+		}
+		return nil
+	})
+	for _, c := range []struct{ path, body string }{
+		{"/api/tasks", `{"title":"Story"}`},
+		{"/api/tasks", `{"title":"Epic","stories":["task-1"]}`},
+		{"/api/tasks/task-2/direct", `{"to":"done"}`},
+	} {
+		if code, body := call(t, server, "POST", c.path, c.body); code != http.StatusOK {
+			t.Fatalf("%s %s: %d %s", c.path, c.body, code, body)
+		}
+	}
+	if _, rejection, err := log.Erase("task-1", you, "Gone.", sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
+		t.Fatalf("erasing task-1 in the store: %v, %v", rejection, err)
+	}
+	want := "erased task-1 can't be taken out of task-2: refused for the test"
+	if code, body := call(t, server, "POST", "/api/tasks/task-2/direct", `{"to":"todo"}`); code != http.StatusInternalServerError || strings.TrimSpace(body) != want {
+		t.Errorf("reopening the epic: %d %q, want 500 %q", code, body, want)
+	}
+	live, err := log.Log("task-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(live, func(e events.Event) bool { return e.Type == events.TaskReopened }) {
+		t.Error("the epic was reopened")
+	}
+}
+
 // reopenedWithoutStories fails the test unless task-3 is open again with
 // no stories, and took task-2 out before it was reopened.
 func (f *eraseFixture) reopenedWithoutStories(t *testing.T) {
