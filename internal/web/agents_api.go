@@ -205,7 +205,8 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	}
 	edit := agents.EditTeam(roster, team, cmp.Or(strings.TrimSpace(request.Team), team), request.Agents)
 	edit.Version = request.Version
-	if !s.mayEditTeam(w, edit, request.AddMissingProfiles, request.Hash) {
+	missing, ok := s.mayEditTeam(w, edit)
+	if !ok {
 		return
 	}
 	stream, err := s.store.Stream(events.AgentsStream)
@@ -219,6 +220,9 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	if busy, involved := s.teamAtWork(roster, after, edit, renames); len(busy) > 0 {
 		http.Error(w, "the "+team+" team can't be saved while "+strings.Join(busy, ", ")+" has "+strings.Join(involved, " or ")+
 			" at work, as its tasks would move: try again once that turn ends", http.StatusConflict)
+		return
+	}
+	if !s.hasProfiles(w, edit.To, missing, request.AddMissingProfiles, request.Hash) {
 		return
 	}
 	// An edit that changes nothing, as saving again to finish the tasks'
@@ -249,9 +253,10 @@ type teamProblem struct {
 
 // mayEditTeam says whether the edit passes every check, listing every
 // problem when it doesn't: 409 when the only ones are agents removed that a
-// task still needs, else 400. A missing profile Agentry ships is offered,
-// or added when asked, as for a new team. When it says no, it has replied.
-func (s *Server) mayEditTeam(w http.ResponseWriter, edit agents.TeamEdit, addMissing bool, hash string) bool {
+// task still needs, else 400. When it says no, it has replied. Otherwise it
+// gives the profiles policy.toml lacks that Agentry ships, to offer, or add
+// when asked, as for a new team.
+func (s *Server) mayEditTeam(w http.ResponseWriter, edit agents.TeamEdit) ([]string, bool) {
 	var problems []teamProblem
 	conflict := true
 	for _, problem := range rules.TeamEditProblems(s.state, edit.Proposal(httpapi.You)) {
@@ -280,9 +285,9 @@ func (s *Server) mayEditTeam(w http.ResponseWriter, edit agents.TeamEdit, addMis
 		}
 		replyWith(w, status, map[string]any{"problems": problems,
 			"error": "the " + edit.To + " team can't be saved: " + strings.Join(reasons, "; ")})
-		return false
+		return nil, false
 	}
-	return s.hasProfiles(w, edit.To, missing, addMissing, hash)
+	return missing, true
 }
 
 // rowOf is a problem's row as the page reads it: none for the team's.

@@ -378,3 +378,26 @@ func TestACoordinatorMoveRefusedPartwaySaysToAskAgain(t *testing.T) {
 		t.Errorf("task-2 is %s's, want analyst's", two)
 	}
 }
+
+// A save refused for an agent at work changes nothing, not even the
+// policy it asked to add a profile to.
+func TestATeamSaveRefusedAtWorkAddsNoProfile(t *testing.T) {
+	server := servePolicy(t, withoutReadMostly(t))
+	version := addData(t, server.Server)
+	call(t, server.Server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}},
+	} {
+		if _, rejection, err := server.log.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	code, body := call(t, server.Server, "PUT", "/api/teams/Data", `{"version":"`+version+`","addMissingProfiles":true,"agents":[`+
+		`{"was":"data-lead","name":"lead","engine":"claude","coordinates":true,"prompt":"Lead."}`+
+		`,{"was":"analyst","name":"analyst","engine":"claude","prompt":"Analyse.","profile":"read-mostly"},`+charterRow+`]}`)
+	if code != http.StatusConflict || !strings.Contains(body, "while task-1 has data-lead at work") || len(server.policyEvents(t)) != 0 {
+		t.Errorf("renaming data-lead during its turn: %d %s, with %d policy changes, want 409 and none", code, body, len(server.policyEvents(t)))
+	}
+}
