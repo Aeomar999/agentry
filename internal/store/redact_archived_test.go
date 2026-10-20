@@ -351,3 +351,86 @@ func TestARaceToArchiveAgainKeepsTheBlobTheWinnersMarkerNames(t *testing.T) {
 		t.Error("the old blob is still there")
 	}
 }
+
+// An erased task is refused as erased, not as a task that isn't archived,
+// which would send the user to Redact, which refuses it too.
+func TestAnErasedTaskIsRefusedAsErased(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, blobs, _ := archivedWithRow(t, path, acceptEvery, events.TaskRenamed, holdingSecret)
+	if _, rejection, err := s.Erase("task-1", you, "", blobs); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	before := rowsAt(t, path)
+	_, rejection, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	if want := "task-1 is erased: there is nothing left to redact"; err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("redacting an erased task: %v, %v, want %q", rejection, err, want)
+	}
+	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+		t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
+	}
+}
+
+// refusingRemove is blobs that won't delete a blob refuse says to keep.
+type refusingRemove struct {
+	sharedfiles.Disk
+	refuse func(hash string) bool
+}
+
+func (r refusingRemove) Remove(hash string) error {
+	if r.refuse(hash) {
+		return errors.New("the disk is read-only")
+	}
+	return r.Disk.Remove(hash)
+}
+
+// When the blob a refused archive put won't delete, the error names it,
+// and the rest is as when it deletes: the task redacted, its old blob
+// deleted, and the task left unarchived.
+func TestABlobArchivingAgainPutThatWontDeleteIsNamed(t *testing.T) {
+	redactions := false
+	s, disk, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), refusingArchives(&redactions, 1), events.TaskRenamed, holdingSecret)
+	blobs := refusingRemove{disk, func(hash string) bool { return hash != old.Text("archive") }}
+	redaction, _, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	left := blobsIn(t, disk)
+	if len(left) != 1 || left[0] == old.Text("archive") {
+		t.Fatalf("the blobs on disk are %v, want only the one archiving again put", left)
+	}
+	if want := "removing the blob " + left[0] + " archiving task-1 again put: the disk is read-only"; err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("redacting: %v, want it to say %q", err, want)
+	}
+	if redaction.Type != events.EventRedacted {
+		t.Errorf("redacting: %+v, want the redaction", redaction)
+	}
+	live, err := s.Log("task-1")
+	if _, archived := MarkerOf(live); archived || err != nil {
+		t.Errorf("task-1 is archived: %v", err)
+	}
+	if count, err := s.Matches("task-1", secret); count != 0 || err != nil {
+		t.Errorf("task-1's rows holding the secret: %d, %v, want none", count, err)
+	}
+}
+
+// An old blob that won't delete once the redaction commits still holds
+// the secret, which no row does any more: the next RedactArchived of the
+// task deletes it, though it finds nothing to redact, and keeps the blob
+// the task's marker names.
+func TestAnOldBlobThatWontDeleteGoesNextTime(t *testing.T) {
+	s, disk, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), acceptEvery, events.TaskRenamed, holdingSecret)
+	stuck := refusingRemove{disk, func(hash string) bool { return hash == old.Text("archive") }}
+	_, rejection, err := s.RedactArchived("task-1", secret, you, "", summary, stuck)
+	if want := "removing the blob " + old.Text("archive") + ": the disk is read-only"; rejection != nil || err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("redacting: %v, %v, want it to say %q", rejection, err, want)
+	}
+	marker := stillArchived(t, s, "task-1")
+	if !disk.Has(old.Text("archive")) {
+		t.Fatal("the old blob is gone")
+	}
+
+	_, rejection, err = s.RedactArchived("task-1", secret, you, "", summary, disk)
+	if want := "no row of task-1 holds the secret"; err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("redacting again: %v, %v, want %q", rejection, err, want)
+	}
+	if got, want := blobsIn(t, disk), []string{marker.Text("archive")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the blobs on disk are %v, want the marker's %v alone", got, want)
+	}
+}

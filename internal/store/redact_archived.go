@@ -25,11 +25,12 @@ type ArchiveBlobs interface {
 
 // RedactArchived rewrites an archived task's rows that hold secret, for
 // who. First, with no lock held, it reads the rows from its marker's blob
-// and the live log, and finds the secret in them as Redact does, so what
-// Redact would refuse for the rows themselves (no row holds it, a row is a
-// knowledge version, holds it in a key or can't be rewritten leaving the
-// rest as it was, or the reason holds it) is refused before anything is
-// written. Then it unarchives the task (Unarchive), redacts it, with the
+// and the live log, and deletes the blobs an earlier redaction among them
+// named but couldn't delete (removeRedacted). Then it finds the secret in
+// the rows as Redact does, so what Redact would refuse for the rows
+// themselves (no row holds it, a row is a knowledge version, holds it in a
+// key or can't be rewritten leaving the rest as it was, or the reason
+// holds it) is refused before anything is written. Then it unarchives the task (Unarchive), redacts it, with the
 // blobs every task.archived among its rows names in "archives", and
 // archives it again (Archive), summarise reading the state the redaction
 // refolded; each takes the lock for itself, as when called alone, so other
@@ -52,11 +53,18 @@ type ArchiveBlobs interface {
 // refused or fails, that blob is removed unless a marker names it: no
 // later run would, and after a refused redaction it holds the secret.
 // When it was refused because another writer archived the task between
-// the steps, a committed redaction is done and comes back with no error;
-// a refused one's error says another writer archived the task instead of
-// that it is left unarchived.
+// the steps, a committed redaction is done and comes back with no error,
+// unless an old blob won't delete; a refused one's error says another
+// writer archived the task instead of that it is left unarchived.
 func (s *Store) RedactArchived(stream, secret string, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
-	if rejection, err := s.checkArchived(stream, secret, who, why, blobs); rejection != nil || err != nil {
+	kept, live, rejection, err := s.archivedRows(stream, blobs)
+	if rejection != nil || err != nil {
+		return events.Event{}, rejection, err
+	}
+	if err := removeRedacted(kept, live, blobs); err != nil {
+		return events.Event{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
+	}
+	if rejection, err := checkArchived(stream, append(kept, live...), secret, who, why); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	if _, rejection, err := s.Unarchive(stream, blobs); rejection != nil || err != nil {
@@ -74,7 +82,7 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 	failed := errors.Join(err, again)
 	for _, hash := range archives {
 		if err := blobs.Remove(hash); err != nil {
-			failed = errors.Join(failed, err)
+			failed = errors.Join(failed, fmt.Errorf("removing the blob %s: %w", hash, err))
 		}
 	}
 	if failed != nil {
@@ -83,31 +91,69 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 	return redaction, nil, nil
 }
 
-// checkArchived refuses, before anything is written, what Redact would
-// refuse in an archived stream's rows, read from its marker's blob and the
-// live log, or a stream that isn't archived, which Redact redacts as it is.
-func (s *Store) checkArchived(stream, secret string, who events.Actor, why string, blobs Opener) (*events.Rejection, error) {
-	live, err := s.Log(stream)
+// archivedRows is an archived stream's rows, kept in its marker's blob and
+// live, or why it can't be redacted: it is erased, so nothing is left, or
+// it isn't archived, and Redact redacts it as it is.
+func (s *Store) archivedRows(stream string, blobs Opener) (kept, live []row, rejection *events.Rejection, err error) {
+	logged, err := s.Log(stream)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	marker, archived := MarkerOf(live)
+	if slices.ContainsFunc(logged, func(e events.Event) bool { return e.Type == events.TaskErased }) {
+		return nil, nil, &events.Rejection{Check: "redact", Reason: stream + " is erased: there is nothing left to redact"}, nil
+	}
+	marker, archived := MarkerOf(logged)
 	if !archived {
-		return &events.Rejection{Check: "redact", Reason: stream + " isn't archived: it is redacted as it is"}, nil
+		return nil, nil, &events.Rejection{Check: "redact", Reason: stream + " isn't archived: it is redacted as it is"}, nil
 	}
-	kept, err := keptBy(marker, blobs)
-	if err != nil {
-		return nil, fmt.Errorf("redacting %s: %w", stream, err)
+	if kept, err = keptBy(marker, blobs); err != nil {
+		return nil, nil, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
-	rest, err := rowsOf(s.reads, stream, s.applied.Load())
-	if err != nil {
-		return nil, err
-	}
-	found, rejection, err := findIn(stream, append(kept, rest...), secret, who, why)
+	live, err = rowsOf(s.reads, stream, s.applied.Load())
+	return kept, live, nil, err
+}
+
+// checkArchived refuses, before anything is written, what Redact would
+// refuse in an archived stream's rows.
+func checkArchived(stream string, rows []row, secret string, who events.Actor, why string) (*events.Rejection, error) {
+	found, rejection, err := findIn(stream, rows, secret, who, why)
 	if rejection != nil || err != nil {
 		return rejection, err
 	}
 	return rewritable(found.rows), nil
+}
+
+// removeRedacted deletes the blobs an event.redacted among an archived
+// stream's rows names in "archives", unless a live marker names it: the
+// redaction deleted them once it committed, and one that wouldn't delete
+// then still holds the secret, which no later run would find in the rows.
+// A blob already gone is no error.
+func removeRedacted(kept, live []row, blobs Remover) error {
+	named, err := archivesIn(live)
+	if err != nil {
+		return err
+	}
+	var failed error
+	for _, r := range append(slices.Clip(kept), live...) {
+		if r.Type != string(events.EventRedacted) {
+			continue
+		}
+		var redaction struct {
+			Archives []string `json:"archives"`
+		}
+		if err := json.Unmarshal([]byte(r.Data), &redaction); err != nil {
+			return fmt.Errorf("the redaction at %d: %w", r.Position, err)
+		}
+		for _, hash := range redaction.Archives {
+			if slices.Contains(named, hash) {
+				continue
+			}
+			if err := blobs.Remove(hash); err != nil {
+				failed = errors.Join(failed, fmt.Errorf("removing the blob %s an earlier redaction deleted: %w", hash, err))
+			}
+		}
+	}
+	return failed
 }
 
 // redactUnarchived is Redact of a stream just unarchived, its redaction
@@ -225,5 +271,8 @@ func (s *Store) dropUnnamed(stream, hash string, blobs Remover) error {
 	if slices.Contains(named, hash) {
 		return nil
 	}
-	return blobs.Remove(hash)
+	if err := blobs.Remove(hash); err != nil {
+		return fmt.Errorf("removing the blob %s archiving %s again put: %w", hash, stream, err)
+	}
+	return nil
 }
