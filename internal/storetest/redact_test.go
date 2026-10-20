@@ -25,6 +25,10 @@ import (
 // pasted is the secret pasted into task-1, and nowhere else.
 const pasted = "pasted-c41e77ab"
 
+// short is a second secret in task-1, shorter than [redacted]: its cell
+// grows and moves, which leaves the old one in a freeblock on its page.
+const short = "Qz7#k"
+
 // kept is task-2's text, which no redaction touches.
 const kept = "kept-90b2"
 
@@ -39,8 +43,8 @@ func redact(t testing.TB, s *store.Store, stream, secret string) events.Event {
 
 // withPasted seeds the roster and gives task-1 the secret in a command, a
 // direction long enough to need overflow pages, a report and a rejection
-// quoting it; task-2's rows sit among them on the same pages, and its last
-// row is the log's.
+// quoting it, and the short secret in a direction of its own; task-2's
+// rows sit among them on the same pages, and its last row is the log's.
 func withPasted(t testing.TB, s *store.Store) {
 	t.Helper()
 	engineer := events.Actor{Kind: events.Agent, ID: "engineer"}
@@ -53,6 +57,7 @@ func withPasted(t testing.TB, s *store.Store) {
 		events.Proposal{Stream: "task-1", Actor: engineer, Type: events.ActionRequested, Correlation: "toolu_1", Data: map[string]any{"tool": "Bash", "command": "curl -H 'Authorization: Bearer " + pasted + "' https://example.test"}},
 		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDirected, Data: map[string]any{"text": strings.Repeat("Use the token "+pasted+". ", 400)}},
 		events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Two, renamed " + kept}},
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskDirected, Data: map[string]any{"text": "The PIN is " + short + "."}},
 		events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "engineer", "report": "Deployed with " + pasted + "."}},
 	) {
 		mustPropose(t, s, p)
@@ -68,7 +73,8 @@ func withPasted(t testing.TB, s *store.Store) {
 // direction, the report or the rejection. task-2's rows share their
 // pages, so the old rows' bytes stay on them unless secure_delete zeroes
 // them; and task-2's text is still found, so the search reads the live
-// rows.
+// rows. The short secret's cell grows rather than shrinks in place, and
+// its old bytes go too.
 func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 	dir := t.TempDir()
 	s, state := Open(t, filepath.Join(dir, "agentry.db"))
@@ -76,21 +82,29 @@ func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 	if count, err := s.Matches("task-1", pasted); count != 4 || err != nil {
 		t.Fatalf("the rows holding the secret: %d, %v, want the command, direction, report and rejection", count, err)
 	}
+	if count, err := s.Matches("task-1", short); count != 1 || err != nil {
+		t.Fatalf("the rows holding the short secret: %d, %v, want its direction", count, err)
+	}
 	// Into the file itself, so the rewrite changes pages already there: in
 	// the WAL alone, the checkpoint would copy only the rewritten pages.
 	if err := s.GiveBackSpace(); err != nil {
 		t.Fatal(err)
 	}
-	if holding := filesHolding(t, dir, pasted); !slices.Contains(holding, "agentry.db") {
-		t.Fatalf("before redacting, %q is in %v: want the log", pasted, holding)
+	for _, secret := range []string{pasted, short} {
+		if holding := filesHolding(t, dir, secret); !slices.Contains(holding, "agentry.db") {
+			t.Fatalf("before redacting, %q is in %v: want the log", secret, holding)
+		}
 	}
 
 	redact(t, s, "task-1", pasted)
+	redact(t, s, "task-1", short)
 	if err := current.WriteSnapshot(filepath.Join(dir, "state.snapshot"), state, s, "build-1"); err != nil {
 		t.Fatal(err)
 	}
-	if holding := filesHolding(t, dir, pasted); len(holding) != 0 {
-		t.Errorf("after redacting, %q is still in %v", pasted, holding)
+	for _, secret := range []string{pasted, short} {
+		if holding := filesHolding(t, dir, secret); len(holding) != 0 {
+			t.Errorf("after redacting, %q is still in %v", secret, holding)
+		}
 	}
 	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)

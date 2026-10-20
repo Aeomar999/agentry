@@ -316,6 +316,51 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 	}
 }
 
+// A secret that overlaps an end of [redacted] would still show next to it,
+// as "]a" in "x ]aa y" becomes "x [redacted]a y": Redact refuses it, and
+// the log and the state are as they were.
+func TestASecretLeftNextToRedactedIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, model := openAt(t, path)
+	acceptAll(t, s, newTask("task-1"), events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "x ]aa y"}})
+	before, applied := rowsAt(t, path), model.applied
+	_, rejection, err := s.Redact("task-1", "]a", you, "")
+	if err != nil || rejection == nil || rejection.Reason != "the row at 2 would still show the secret next to [redacted]" {
+		t.Errorf("redacting ]a: %v, %v, want refused", rejection, err)
+	}
+	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+		t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
+	}
+	if model.applied != applied || s.LastPosition() != 2 {
+		t.Errorf("a refused redaction reached the state: %d events given, want %d, at %d", model.applied, applied, s.LastPosition())
+	}
+}
+
+// A row whose data isn't as appendEvent writes it, keys out of order or a
+// < not escaped, would be rewritten with more changed than the secret:
+// Redact refuses it, naming its position, and writes nothing.
+func TestARowNotWrittenAsTheLogWritesIsNotRedacted(t *testing.T) {
+	for name, data := range map[string]string{
+		"keys out of order": `{"title":"Use ` + secret + `","repo":"/src/app","coordinator":"tech-lead"}`,
+		"a < not escaped":   `{"coordinator":"tech-lead","repo":"/src/app","title":"<Use ` + secret + `>"}`,
+	} {
+		path := filepath.Join(t.TempDir(), "agentry.db")
+		s, _ := openAt(t, path)
+		s.Close()
+		execOn(t, path, `INSERT INTO events (at, stream, actor_kind, actor_id, type, data) VALUES
+			('2026-10-19T09:00:00Z', 'task-1', 'human', 'you', 'task.created', '`+data+`')`)
+		s, _ = openAt(t, path)
+		before := rowsAt(t, path)
+		_, rejection, err := s.Redact("task-1", secret, you, "")
+		if err != nil || rejection == nil || !strings.HasPrefix(rejection.Reason, "the row at 1 isn't written as the log writes data") {
+			t.Errorf("%s: %v, %v, want refused", name, rejection, err)
+		}
+		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", name, before, after)
+		}
+	}
+}
+
 // Propose refuses event.redacted from anyone: only Redact writes it, with
 // its rows.
 func TestOnlyRedactWritesARedaction(t *testing.T) {

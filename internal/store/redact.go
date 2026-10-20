@@ -46,12 +46,13 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // still hold the secret, and its caller writes a new one.
 //
 // It returns the redaction and, when it is refused, the rejection: no row
-// holds the secret, a row that does is a knowledge version, the reason
-// given holds it, the rules refuse it, or the stream took an event since
-// its rows were read. A refusal writes nothing, as Archive's does. The
-// error is for the database failing. One after the commit comes with the
-// redaction: the rows are rewritten, but the old text may stay in the WAL
-// until GiveBackSpace runs again.
+// holds the secret, a row that does is a knowledge version or can't be
+// rewritten leaving the rest as it was, the reason given holds it, the
+// rules refuse it, or the stream took an event since its rows were read.
+// A refusal writes nothing, as Archive's does. The error is for the
+// database failing. One after the commit comes with the redaction: the
+// rows are rewritten, but the old text may stay in the WAL until
+// GiveBackSpace runs again.
 func (s *Store) Redact(stream, secret string, who events.Actor, why string) (events.Event, *events.Rejection, error) {
 	found, rejection, err := s.find(stream, secret, who, why)
 	if rejection != nil || err != nil {
@@ -66,7 +67,7 @@ func (s *Store) Redact(stream, secret string, who events.Actor, why string) (eve
 type pending struct {
 	redaction events.Proposal
 	through   int64
-	rows      []rewrite
+	rows      []rewrittenRow
 }
 
 // find is Redact's first half, with no lock held: the stream's rows that
@@ -93,7 +94,9 @@ func (s *Store) find(stream, secret string, who events.Actor, why string) (pendi
 }
 
 // rewrite is Redact's second half, under the lock: the checks, the
-// commit, the refold and the WAL emptied.
+// commit, the refold and the WAL emptied. The rules come before
+// rewritable, so an archived task is refused as archived, not for its
+// marker, whose summary is a struct, so its keys aren't sorted.
 func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -102,6 +105,9 @@ func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) 
 		return events.Event{}, rejection, err
 	}
 	if rejection := s.validate(found.redaction); rejection != nil {
+		return events.Event{}, rejection, nil
+	}
+	if rejection := rewritable(found.rows); rejection != nil {
 		return events.Event{}, rejection, nil
 	}
 	event, before, err := s.commitRedact(found.redaction, found.rows)
@@ -142,25 +148,27 @@ func aSecret(secret string) string {
 	return ""
 }
 
-// A rewrite is a row with its secret redacted.
-type rewrite struct {
+// A rewrittenRow is a row with its secret redacted.
+type rewrittenRow struct {
 	position int64
 	kind     events.Type
 	data     string   // the row's data, rewritten
 	fields   []string // the JSON paths of the strings that held the secret
 	removed  int      // the secret's bytes taken out
+	refused  string   // why the row can't be rewritten, if it can't
 }
 
 // rewritten is the rows that hold secret, rewritten, in order.
-func rewritten(rows []row, secret string) ([]rewrite, error) {
-	var rewrites []rewrite
+func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
+	var rewrites []rewrittenRow
 	for _, r := range rows {
-		data, fields, removed, err := redactedData(r.Data, secret)
+		rw, err := redactedData(r.Data, secret)
 		if err != nil {
 			return nil, fmt.Errorf("the data at %d: %w", r.Position, err)
 		}
-		if len(fields) > 0 {
-			rewrites = append(rewrites, rewrite{position: r.Position, kind: events.Type(r.Type), data: data, fields: fields, removed: removed})
+		if len(rw.fields) > 0 {
+			rw.position, rw.kind = r.Position, events.Type(r.Type)
+			rewrites = append(rewrites, rw)
 		}
 	}
 	return rewrites, nil
@@ -169,47 +177,65 @@ func rewritten(rows []row, secret string) ([]rewrite, error) {
 // redactedData is a row's data with secret replaced in every string, keys
 // left as they are, and where it was. Numbers are decoded as their text,
 // so they are written back as they were; the rest is encoded as appendEvent
-// encoded it. No fields means the data doesn't hold the secret.
-func redactedData(data, secret string) (string, []string, int, error) {
+// encoded it. That leaves every other byte as it was only for data
+// appendEvent wrote, so data that doesn't encode back to itself is refused,
+// as is one whose secret would still show next to [redacted]. No fields
+// means the data doesn't hold the secret.
+func redactedData(data, secret string) (rewrittenRow, error) {
 	decoder := json.NewDecoder(strings.NewReader(data))
 	decoder.UseNumber()
 	var value any
 	if err := decoder.Decode(&value); err != nil {
-		return "", nil, 0, err
+		return rewrittenRow{}, err
 	}
-	var found redaction
+	original, err := json.Marshal(value)
+	if err != nil {
+		return rewrittenRow{}, err
+	}
+	var found finding
 	value = found.in(value, "$", secret)
 	if len(found.fields) == 0 {
-		return "", nil, 0, nil
+		return rewrittenRow{}, nil
 	}
 	encoded, err := json.Marshal(value)
-	return string(encoded), found.fields, found.removed, err
+	rw := rewrittenRow{data: string(encoded), fields: found.fields, removed: found.removed}
+	switch {
+	case string(original) != data:
+		rw.refused = "isn't written as the log writes data, so rewriting it would change more than the secret"
+	case found.survives:
+		rw.refused = "would still show the secret next to " + Redacted
+	}
+	return rw, err
 }
 
-// A redaction is what redacting one row's data found.
-type redaction struct {
-	fields  []string
-	removed int
+// A finding is what redacting one row's data found.
+type finding struct {
+	fields   []string
+	removed  int
+	survives bool // the secret is still in a string once replaced
 }
 
 // in is value at path with secret replaced in its strings, which it
 // notes. A map's keys are walked in order, so the paths come out the same
 // each time.
-func (r *redaction) in(value any, path, secret string) any {
+func (f *finding) in(value any, path, secret string) any {
 	switch value := value.(type) {
 	case string:
 		if copies := strings.Count(value, secret); copies > 0 {
-			r.fields = append(r.fields, path)
-			r.removed += copies * len(secret)
-			return strings.ReplaceAll(value, secret, Redacted)
+			f.fields = append(f.fields, path)
+			f.removed += copies * len(secret)
+			replaced := strings.ReplaceAll(value, secret, Redacted)
+			f.survives = f.survives || strings.Contains(replaced, secret)
+			return replaced
 		}
 	case map[string]any:
+		// Keys are left as they are: no event type has keys a user writes.
 		for _, key := range slices.Sorted(maps.Keys(value)) {
-			value[key] = r.in(value[key], path+"."+pathKey(key), secret)
+			value[key] = f.in(value[key], path+"."+pathKey(key), secret)
 		}
 	case []any:
 		for i := range value {
-			value[i] = r.in(value[i], path+"["+strconv.Itoa(i)+"]", secret)
+			value[i] = f.in(value[i], path+"["+strconv.Itoa(i)+"]", secret)
 		}
 	}
 	return value
@@ -230,7 +256,7 @@ func pathKey(key string) string {
 // secret, or one is a knowledge version, which later versions patch: a
 // patch's head and tail would be wrong against a redacted text, so those
 // are rewritten as full copies instead.
-func redactable(stream string, rewrites []rewrite) *events.Rejection {
+func redactable(stream string, rewrites []rewrittenRow) *events.Rejection {
 	if len(rewrites) == 0 {
 		return &events.Rejection{Check: "redact", Reason: "no row of " + stream + " holds the secret"}
 	}
@@ -242,8 +268,19 @@ func redactable(stream string, rewrites []rewrite) *events.Rejection {
 	return nil
 }
 
+// rewritable refuses a redaction with a row redactedData can't rewrite
+// leaving the rest as it was.
+func rewritable(rewrites []rewrittenRow) *events.Rejection {
+	for _, rw := range rewrites {
+		if rw.refused != "" {
+			return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("the row at %d %s", rw.position, rw.refused)}
+		}
+	}
+	return nil
+}
+
 // redactionOf is the event.redacted for the rows rewritten.
-func redactionOf(stream string, who events.Actor, why string, rewrites []rewrite) events.Proposal {
+func redactionOf(stream string, who events.Actor, why string, rewrites []rewrittenRow) events.Proposal {
 	positions, fields, removed := []int64{}, [][]string{}, 0
 	for _, rw := range rewrites {
 		positions = append(positions, rw.position)
@@ -260,7 +297,7 @@ func redactionOf(stream string, who events.Actor, why string, rewrites []rewrite
 // accepted events before it, read after the rewrite, for the model's
 // refold. Unless each update changes exactly its row, the transaction is
 // undone, redaction and all.
-func (s *Store) commitRedact(redaction events.Proposal, rewrites []rewrite) (events.Event, []events.Event, error) {
+func (s *Store) commitRedact(redaction events.Proposal, rewrites []rewrittenRow) (events.Event, []events.Event, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return events.Event{}, nil, err
@@ -284,7 +321,7 @@ func (s *Store) commitRedact(redaction events.Proposal, rewrites []rewrite) (eve
 
 // rewriteRow updates one row's data, and fails unless exactly that row
 // changed.
-func rewriteRow(tx *sql.Tx, stream string, rw rewrite) error {
+func rewriteRow(tx *sql.Tx, stream string, rw rewrittenRow) error {
 	result, err := tx.Exec(`UPDATE events SET data = ? WHERE stream = ? AND position = ?`, rw.data, stream, rw.position)
 	if err != nil {
 		return err
