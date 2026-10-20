@@ -382,6 +382,67 @@ func TestACoordinatorMoveRefusedPartwaySaysToAskAgain(t *testing.T) {
 	}
 }
 
+// Two agents swapping names leave the team's tasks with the agent they
+// had; saving the team again, with the names swapped already, moves none
+// of them back.
+func TestSavingASwapAgainLeavesItsTasks(t *testing.T) {
+	server, s := newTestServer(t)
+	version := addData(t, server)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "",
+		`{"was":"data-lead","name":"analyst","engine":"claude","coordinates":true,"prompt":"Lead."}`+
+			`,{"was":"analyst","name":"data-lead","engine":"claude","prompt":"Analyse."}`+","+charterRow))
+	if code != 200 {
+		t.Fatalf("swapping data-lead's and analyst's names: %d %s", code, body)
+	}
+	if lead := coordinatorOf(t, server, "task-1"); lead != "analyst" {
+		t.Errorf("task-1 is %s's, want analyst's, as data-lead is called now", lead)
+	}
+	before, _ := s.Stream("task-1")
+	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(teamVersion(t, server, "Data"), "",
+		`{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Lead."},{"name":"data-lead","engine":"claude","prompt":"Analyse."}`+","+charterRow)); code != 200 {
+		t.Fatalf("saving again: %d %s", code, body)
+	}
+	if after, _ := s.Stream("task-1"); len(after) != len(before) || coordinatorOf(t, server, "task-1") != "analyst" {
+		t.Errorf("saving again wrote %d events to task-1, now %s's, want none and analyst's", len(after)-len(before), coordinatorOf(t, server, "task-1"))
+	}
+}
+
+// A task still coordinated by an agent that no longer coordinates the team
+// would move to the coordinator: the team can't be saved while that agent
+// is at work on it, even if the edit keeps the coordinator.
+func TestATeamCantBeSavedWhileATaskToMoveIsAtWork(t *testing.T) {
+	server, s := newTestServer(t)
+	addData(t, server)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	roster := agents.FromEvents(mustStream(t, s))
+	unfollowed := agents.EditTeam(roster, "Data", "Data", []agents.EditedAgent{
+		{Was: "data-lead", Name: "data-lead", Engine: "claude", Prompt: "Lead."},
+		{Was: "analyst", Name: "analyst", Engine: "claude", Prompt: "Analyse.", Coordinates: true},
+		{Was: "charter", Name: "charter", Engine: "claude", Prompt: "Chart."},
+	})
+	unfollowed.Version = roster.TeamVersion("Data")
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		unfollowed.Proposal(httpapi.You),
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(teamVersion(t, server, "Data"), "",
+		`{"name":"data-lead","engine":"claude","prompt":"Lead."},{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}`+
+			`,{"name":"charter","engine":"claude","prompt":"Chart well."}`))
+	if code != http.StatusConflict || !strings.Contains(body, "while task-1 has data-lead at work") {
+		t.Errorf("saving during data-lead's turn on task-1: %d %s, want 409", code, body)
+	}
+	if lead := coordinatorOf(t, server, "task-1"); lead != "data-lead" {
+		t.Errorf("task-1 is %s's, want data-lead's still", lead)
+	}
+}
+
 // A rename refused partway counts, among the tasks still to move, those
 // whose coordinator would move after it.
 func TestARenameRefusedPartwayCountsTheMovesToCome(t *testing.T) {
