@@ -1974,6 +1974,53 @@ func TestATeamsCoordinatorMovesWithItsOpenTasks(t *testing.T) {
 	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"charter"}`); code != http.StatusConflict || !strings.Contains(body, "while task-1 has analyst or charter at work") {
 		t.Errorf("moving it during analyst's turn: %d %s, want 409", code, body)
 	}
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"tech-lead"}`); code != http.StatusConflict || !strings.Contains(body, "tech-lead is in the Software team, not Data") {
+		t.Errorf("moving it to another team's agent during analyst's turn: %d %s, want the rule's 409", code, body)
+	}
+}
+
+// A move cut short leaves open tasks with an agent that no longer
+// coordinates; asking for the move again hands them over, once that agent
+// is not at work, and when nothing is left it is refused as done already.
+func TestMovingATeamsCoordinatorAgainFinishesTheMove(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		agents.CoordinatorMoving("Data", "analyst", httpapi.You),
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != http.StatusConflict || !strings.Contains(body, "while task-1 has data-lead or analyst at work") {
+		t.Errorf("moving it again during data-lead's turn: %d %s, want 409", code, body)
+	}
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1",
+		Data: map[string]any{"agent": "data-lead", "report": "r"}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != 200 {
+		t.Fatalf("moving Data's coordinator again: %d %s", code, body)
+	}
+	for _, id := range []string{"task-1", "task-2"} {
+		_, body := call(t, server, "GET", "/api/tasks/"+id, "")
+		var detail taskDetail
+		json.Unmarshal([]byte(body), &detail)
+		if detail.Coordinator != "analyst" {
+			t.Errorf("%s is %s's, want analyst's", id, detail.Coordinator)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != http.StatusConflict || !strings.Contains(body, "analyst coordinates the Data team already") {
+		t.Errorf("moving it once more: %d %s, want 409", code, body)
+	}
 }
 
 // An agent sent with no team joins the default team, as agents from before

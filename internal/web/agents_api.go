@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
@@ -106,8 +107,10 @@ func (s *Server) renameTeam(w http.ResponseWriter, r *http.Request) {
 
 // moveCoordinator makes another agent of a team, named in any case, its
 // coordinator, and hands it the team's open tasks; finished ones keep the
-// coordinator they had. It waits while either agent is at work on a task,
-// as a turn under way goes on as the agent it started as.
+// coordinator they had. Asked again, it hands over the open tasks a move cut
+// short left with another agent of the team. It waits while an agent whose
+// tasks move, or the new coordinator, is at work on a task, as a turn under
+// way goes on as the agent it started as.
 func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Agent string }
 	if !httpapi.Decode(w, r, &request) {
@@ -123,35 +126,60 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
 		return
 	}
-	if _, ok := roster.Get(to); !ok {
+	agent, ok := roster.Get(to)
+	if !ok {
 		http.Error(w, "no agent called "+to, http.StatusNotFound)
 		return
 	}
-	var leads []string // an old log can have left a team two
-	for _, agent := range roster {
-		if agent.Coordinates && agent.TeamName() == team {
-			leads = append(leads, agent.Name)
+	var involved []string // an old log can have left a team two coordinators
+	for _, other := range roster {
+		if other.Coordinates && other.TeamName() == team && other.Name != to {
+			involved = append(involved, other.Name)
 		}
 	}
-	involved := append(slices.Clone(leads), to)
+	moving := s.coordinatedByTeam(roster, team, to)
+	for _, task := range moving {
+		if !slices.Contains(involved, task.Coordinator) {
+			involved = append(involved, task.Coordinator)
+		}
+	}
+	involved = append(involved, to)
+	move := agents.CoordinatorMoving(team, to, httpapi.You)
+	already := agent.Coordinates && agent.TeamName() == team
+	if !already || len(moving) == 0 {
+		if reason := rules.CoordinatorMoveRefusal(roster, move); reason != "" {
+			http.Error(w, reason, http.StatusConflict)
+			return
+		}
+	}
 	if busy := s.atWork(involved...); len(busy) > 0 {
 		http.Error(w, "the "+team+" team's coordinator can't move while "+strings.Join(busy, ", ")+" has "+strings.Join(involved, " or ")+" at work: try again once that turn ends",
 			http.StatusConflict)
 		return
 	}
-	if !httpapi.ProposeOrRefuse(w, s.store, agents.CoordinatorMoving(team, to, httpapi.You)) {
+	if !already && !httpapi.ProposeOrRefuse(w, s.store, move) {
 		return
 	}
-	for _, task := range s.state.Tasks() {
-		if task.IsDone || !slices.Contains(leads, task.Coordinator) {
-			continue
-		}
+	for _, task := range moving {
 		if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.CoordinatorMoved,
 			Data: map[string]any{"from": task.Coordinator, "to": to}}) {
 			return
 		}
 	}
 	httpapi.Reply(w, map[string]string{"team": team, "coordinator": to})
+}
+
+// coordinatedByTeam lists the unfinished tasks an agent of the team other
+// than to coordinates: all of them before a move, and after one cut short,
+// those it didn't reach.
+func (s *Server) coordinatedByTeam(roster agents.Roster, team, to string) []*tasks.Task {
+	var moving []*tasks.Task
+	for _, task := range s.state.Tasks() {
+		if lead, ok := roster.Get(task.Coordinator); ok && !task.IsDone && lead.TeamName() == team && lead.Name != to {
+			moving = append(moving, task)
+		}
+	}
+	return moving
 }
 
 // removeTeam removes a team and all its agents, its coordinator last, once

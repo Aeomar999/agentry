@@ -82,6 +82,12 @@ func newTeamNameIsFree(roster agents.Roster, p events.Proposal) string {
 	return agents.CheckTeamName(to, roster)
 }
 
+// CoordinatorMoveRefusal is why the rule would refuse moving a team's
+// coordinator with p, or "", so a route can ask before it writes anything.
+func CoordinatorMoveRefusal(roster agents.Roster, p events.Proposal) string {
+	return rosterRules[events.TeamCoordinatorMoved](roster, p)
+}
+
 // anotherOfItsAgents: the agent a team's coordinator moves to is one of the
 // team's, and not its coordinator already.
 func anotherOfItsAgents(roster agents.Roster, p events.Proposal) string {
