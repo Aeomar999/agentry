@@ -51,7 +51,8 @@ const nextKey = () => `agent-${++rows}`;
 const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 // blankTeam is a team of one coordinator with no prompt, so the server's
-// default coordinator prompt is used. Blank suggests no team name.
+// default coordinator prompt is used, in a colour no roster agent has (the
+// first colour when every one is taken). Blank suggests no team name.
 export function blankTeam(roster: Agent[]): TeamDraft {
   const coordinator: DraftAgent = {
     key: nextKey(),
@@ -65,7 +66,7 @@ export function blankTeam(roster: Agent[]): TeamDraft {
     engine: "claude",
     model: "",
     profile: "",
-    color: "",
+    color: freeColor(roster.map((agent) => agent.color)) ?? AGENT_COLORS[0],
     column: "",
   };
   return { team: "", agents: [coordinator] };
@@ -89,7 +90,6 @@ export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft
 // Building, the first engine and the default profile. The first row of an
 // empty team coordinates it, since there is nobody else to pick.
 export function newAgent(draft: TeamDraft, engines: string[]): DraftAgent {
-  const used = draft.agents.map((agent) => agent.color);
   return {
     key: nextKey(),
     name: "",
@@ -99,7 +99,7 @@ export function newAgent(draft: TeamDraft, engines: string[]): DraftAgent {
     engine: engines[0] ?? "claude",
     model: "",
     profile: "",
-    color: AGENT_COLORS.find((color) => !used.includes(color)) ?? "",
+    color: freeColor(draft.agents.map((agent) => agent.color)) ?? "",
     column: "",
   };
 }
@@ -126,6 +126,9 @@ export const FIRST_TEMPLATE = "*";
 // templateToCopy is the template a copy starts from, or none for Blank or an id that names none.
 export const templateToCopy = (templates: TeamTemplate[], id: string) =>
   id === FIRST_TEMPLATE ? templates[0] : templates.find((template) => template.id === id);
+
+// freeColor is the first agent colour not in used, or none when all are.
+const freeColor = (used: string[]) => AGENT_COLORS.find((color) => !used.includes(color));
 
 // freeName is name, or name-2, name-3… when it is taken, cut to fit MAX_NAME.
 function freeName(name: string, taken: string[]): string {

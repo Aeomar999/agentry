@@ -181,7 +181,7 @@ describe("New team: Blank", () => {
               engine: "claude",
               model: "",
               profile: "",
-              color: "",
+              color: "blue",
               column: "",
             },
           ],

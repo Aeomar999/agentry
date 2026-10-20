@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { api } from "@/api/client";
 import type { Agent, Policy, PolicyProfile, TeamTemplate } from "@/api/types";
+import { AGENT_COLORS } from "@/live/agent-colors";
 import {
   addCustomTeam,
   agentCount,
@@ -147,6 +148,20 @@ describe("blankTeam", () => {
 
   test("gives each row its own key", () => {
     expect(blankTeam([]).agents[0].key).not.toBe(blankTeam([]).agents[0].key);
+  });
+
+  test("gives the coordinator the first colour on an empty roster", () => {
+    expect(blankTeam([]).agents[0].color).toBe(AGENT_COLORS[0]);
+  });
+
+  test("gives the coordinator a colour no roster agent has", () => {
+    const colored = AGENT_COLORS.slice(0, 2).map((color, i) => ({ ...agent(`a${i}`), color }));
+    expect(blankTeam([...colored, agent("plain")]).agents[0].color).toBe(AGENT_COLORS[2]);
+  });
+
+  test("falls back to the first colour when every colour is taken", () => {
+    const colored = AGENT_COLORS.map((color, i) => ({ ...agent(`a${i}`), color }));
+    expect(blankTeam(colored).agents[0].color).toBe(AGENT_COLORS[0]);
   });
 });
 
