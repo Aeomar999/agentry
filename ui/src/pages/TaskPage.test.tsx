@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { TaskDetail } from "@/api/types";
 import { task } from "@/api/tasks.fixtures";
 import { eraseTask } from "@/api/privacy";
@@ -80,6 +80,8 @@ function page(shown: TaskDetail | { error: string; status: number }, tab = "coor
       <Routes>
         <Route path="/tasks/:taskId" element={<TaskPage />} />
       </Routes>
+      {/* Another task, opened from inside the app, as the command palette does. */}
+      <Link to="/tasks/task-2">Open task-2</Link>
     </MemoryRouter>,
   );
 }
@@ -179,6 +181,30 @@ describe("TaskPage erasing the task", () => {
     );
     expect(screen.getByText(/worktree, its local branch and any commits pushed from it/)).toBeTruthy();
     expect(screen.getByText(/session transcripts, live outside Agentry/)).toBeTruthy();
+  });
+
+  test("erased from the Details tab while archived, shows the task erased", async () => {
+    vi.mocked(eraseTask).mockResolvedValue({ id: "task-1", at: ERASED_AT, warnings: [] });
+    page(detail({ archived: true, archivedAt: ARCHIVED_AT }), "details");
+    fireEvent.click(button("Erase this task…")!);
+    expect(screen.getByRole("dialog", { name: "Erase task-1 for good?" })).toBeTruthy();
+    await act(async () => fireEvent.click(button("Erase for good")!));
+
+    expect(eraseTask).toHaveBeenCalledWith("task-1", "");
+    expect(screen.getByRole("heading", { name: `task-1 was erased at ${dateTime(ERASED_AT)}` })).toBeTruthy();
+  });
+
+  test("the next task opened after an erasure shows its own page, not the erasure", async () => {
+    vi.mocked(eraseTask).mockResolvedValue({ id: "task-1", at: ERASED_AT, warnings: [] });
+    page(detail(), "details");
+    replies.set("/api/tasks/task-2", { ...detail(), ...task("task-2", "done"), status: "done" });
+    fireEvent.click(button("Erase this task…")!);
+    await act(async () => fireEvent.click(button("Erase for good")!));
+    expect(screen.getByRole("heading", { name: `task-1 was erased at ${dateTime(ERASED_AT)}` })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("link", { name: "Open task-2" }));
+    expect(screen.queryByText(/was erased/)).toBeNull();
+    expect(screen.getAllByText("Title of task-2").length).toBeGreaterThan(0);
   });
 
   test("shows a refusal in the server's words, and the task as it was", async () => {

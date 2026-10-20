@@ -7,8 +7,8 @@ export function Warnings({ warnings }: { warnings: string[] }) {
   return (
     <Banner tone="warning" title="Some of it may be left for now">
       <ul className="flex list-disc flex-col gap-1 pl-4">
-        {warnings.map((warning) => (
-          <li key={warning}>{warning}</li>
+        {warnings.map((warning, i) => (
+          <li key={i}>{warning}</li>
         ))}
       </ul>
     </Banner>

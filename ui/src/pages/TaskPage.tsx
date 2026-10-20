@@ -168,8 +168,9 @@ export function TaskPage() {
   const [erasure, setErasure] = useState<Erasure | null>(null);
 
   // An erased task is gone for good: erased here, the page keeps what the
-  // erasure said; read again, the server says when (410).
-  if (erasure) return <ErasedTask id={taskId} erasure={erasure} />;
+  // erasure said; read again, the server says when (410). The route keeps
+  // this page when only the id changes, so the erasure holds for its own task.
+  if (erasure?.id === taskId) return <ErasedTask id={taskId} erasure={erasure} />;
   if (status === 410) return <ErasedTask id={taskId} said={error} />;
   if (error && !task) {
     return (
