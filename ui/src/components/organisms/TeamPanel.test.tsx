@@ -608,6 +608,17 @@ describe("New team: history and unsaved changes", () => {
     expect(address()).toBe("/agents?team=new");
   });
 
+  test("two Cancels before the first lands go back once", async () => {
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    await act(async () => {
+      fireEvent.click(cancel());
+      fireEvent.click(cancel());
+    });
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
   test("opened from a link, closing takes the panel off the address instead", async () => {
     openAt("/tasks", "/agents?view=org&team=new&template=writing");
     fireEvent.click(cancel());

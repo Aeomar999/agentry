@@ -47,7 +47,9 @@ export function useCloseGuard(changed: boolean, busy: boolean, onClose: () => vo
     if (back instanceof HTMLElement) back.focus();
   }, [asking]);
 
+  // leave runs once: a second Cancel before the first lands would go back twice.
   function leave() {
+    if (leaving.current) return;
     leaving.current = true;
     if (blocker.state === "blocked") blocker.proceed();
     else onClose();
