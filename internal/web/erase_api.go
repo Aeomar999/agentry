@@ -104,26 +104,36 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 // keptByStories is why epic id can't be erased yet, or "": a story still
 // names it, and would point at a task that is gone, its moves and its
 // report to the epic refused. A story erased, or moved out, names it no
-// more. An archived epic, which is done, may go with its stories archived
-// too: they are done, and have reported to it.
+// more; an archived one is moved out only once it is reopened, so the
+// refusal says so. An archived epic, which is done, may go with its
+// stories archived too: they are done, and have reported to it.
 func (s *Server) keptByStories(id string) string {
 	_, err := s.task(id)
 	epicArchived := errors.Is(err, current.ErrArchived)
-	var stories []string
+	var stories, archived []string
 	for _, other := range s.state.TaskIDs() {
 		story, found := s.state.Summary(other)
 		if !found || story.Epic != id {
 			continue
 		}
-		if _, err := s.task(other); epicArchived && errors.Is(err, current.ErrArchived) {
+		_, err := s.task(other)
+		storyArchived := errors.Is(err, current.ErrArchived)
+		if epicArchived && storyArchived {
 			continue
 		}
 		stories = append(stories, other)
+		if storyArchived {
+			archived = append(archived, other)
+		}
 	}
 	if len(stories) == 0 {
 		return ""
 	}
-	return id + " has stories (" + strings.Join(stories, ", ") + "); erase or move them out of the epic first"
+	refusal := id + " has stories (" + strings.Join(stories, ", ") + "); erase or move them out of the epic first"
+	if len(archived) != 0 {
+		refusal += ", and reopen an archived one (" + strings.Join(archived, ", ") + ") to move it out"
+	}
+	return refusal
 }
 
 // leaveEpic takes a story out of its epic before it is erased, with the

@@ -821,8 +821,8 @@ func TestAStoryLeavesAnErasedEpic(t *testing.T) {
 
 // An epic isn't erased while a story still names it, as the story would
 // then point at a task that is gone: you erase the stories, or move them
-// out, first. An archived epic is erased while its stories are archived
-// too. A refusal writes nothing.
+// out, first, reopening an archived one to move it. An archived epic is
+// erased while its stories are archived too. A refusal writes nothing.
 func TestAnEpicWithStoriesIsntErased(t *testing.T) {
 	refused := "task-3 has stories (task-2); erase or move them out of the epic first"
 	for _, c := range []struct {
@@ -834,7 +834,7 @@ func TestAnEpicWithStoriesIsntErased(t *testing.T) {
 		{"an archived story", func(t *testing.T, f *eraseFixture) {
 			f.done(t)
 			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
-		}, refused},
+		}, refused + ", and reopen an archived one (task-2) to move it out"},
 		{"an archived epic's live story", func(t *testing.T, f *eraseFixture) {
 			storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs)
 		}, refused},
@@ -849,6 +849,23 @@ func TestAnEpicWithStoriesIsntErased(t *testing.T) {
 			}
 		}, ""},
 		{"an erased story", func(t *testing.T, f *eraseFixture) { f.erase(t, "task-2") }, ""},
+		{"an archived story erased", func(t *testing.T, f *eraseFixture) {
+			f.done(t)
+			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+			f.erase(t, "task-2")
+		}, ""},
+		{"an archived story reopened and moved out", func(t *testing.T, f *eraseFixture) {
+			f.done(t)
+			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+			for _, c := range []struct{ method, path, body string }{
+				{"POST", "/api/tasks/task-2/direct", `{"to":"todo"}`},
+				{"PUT", "/api/tasks/task-2/epic", `{"epic":""}`},
+			} {
+				if code, body := call(t, f.server, c.method, c.path, c.body); code != http.StatusOK {
+					t.Fatalf("%s %s: %d %s", c.method, c.path, code, body)
+				}
+			}
+		}, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := newEraseFixture(t)
