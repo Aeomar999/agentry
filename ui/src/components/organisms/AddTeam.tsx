@@ -55,8 +55,13 @@ export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onT
   const notify = useToast();
   const [busy, setBusy] = useState<Busy | null>(null);
   const running = busy !== null;
+  // A successful add closes the dialog while its request still counts as
+  // running, so the end is told on the way out too.
   useEffect(() => {
     onBusyChange?.(running);
+    return () => {
+      if (running) onBusyChange?.(false);
+    };
   }, [running, onBusyChange]);
   const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
   const deletion = useDeleteTemplate(onTemplatesChanged, setBusy);

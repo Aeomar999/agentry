@@ -336,3 +336,34 @@ describe("AddTeam: importing a template", () => {
     expect(screen.getByRole("button", { name: "Import a template" })).toHaveProperty("disabled", false);
   });
 });
+
+describe("AddTeam: telling the dialog a request runs", () => {
+  // An add that goes through closes the dialog, as onAdded does here, while its request still runs.
+  test("an add that goes through says it ended as the list goes", async () => {
+    let answer = (_: unknown) => {};
+    vi.mocked(api).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const onBusyChange = vi.fn();
+    function Dialog() {
+      const [open, setOpen] = useState(true);
+      if (!open) return null;
+      return (
+        <AddTeam
+          templates={TEMPLATES}
+          existing={[]}
+          policyHash="h1"
+          onBuild={onBuild}
+          onAdded={() => setOpen(false)}
+          onTemplatesChanged={async () => {}}
+          onBusyChange={onBusyChange}
+        />
+      );
+    }
+    render(<Dialog />);
+    await click(screen.getByRole("button", { name: "Add this team, Software" }));
+    expect(onBusyChange).toHaveBeenLastCalledWith(true);
+
+    await act(async () => answer({}));
+    expect(screen.queryByRole("button", { name: "Build a team" })).toBeNull();
+    expect(onBusyChange).toHaveBeenLastCalledWith(false);
+  });
+});

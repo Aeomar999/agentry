@@ -23,9 +23,14 @@ vi.mock("@/live/use-resource", () => ({
   useResource: (path: string) => ({ data: READ[path], error: "", position: 1, reload: async () => {} }),
 }));
 
-// Each request is held until the test lets it go, with a failure, so the dialog stays to be tried again.
+// Each request is held until the test lets it go, with a failure, so the dialog stays to be tried again, or with success.
 let fail = (_: Error) => {};
-const held = () => new Promise<never>((_, reject) => (fail = reject));
+let succeed = () => {};
+const held = () =>
+  new Promise<never>((resolve, reject) => {
+    fail = reject;
+    succeed = () => resolve(undefined as never);
+  });
 
 const dialog = () => screen.queryByRole("dialog", { name: "Add a team" });
 const scrim = () => dialog()!.parentElement!;
@@ -79,4 +84,20 @@ describe("AgentsPage: Add a team", () => {
       expect(dialog()).toBeNull();
     });
   }
+
+  // The new list says nothing runs as it opens, so this holds even if the closing one never said its add ended; AddTeam.test.tsx checks that.
+  test("once an add succeeds and closes it, Esc and a click outside close it when it opens again", async () => {
+    await click(screen.getByRole("button", { name: "Add a team" }));
+    vi.mocked(api).mockReturnValueOnce(held());
+    await click(within(papers()).getByRole("button", { name: "Add this team, Papers" }));
+    await act(async () => succeed());
+    expect(dialog()).toBeNull();
+
+    await click(screen.getByRole("button", { name: "Add a team" }));
+    await escape();
+    expect(dialog()).toBeNull();
+    await click(screen.getByRole("button", { name: "Add a team" }));
+    await outside();
+    expect(dialog()).toBeNull();
+  });
 });
