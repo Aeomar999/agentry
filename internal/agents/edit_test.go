@@ -175,6 +175,23 @@ func TestEditTeamReadsThePanelsRows(t *testing.T) {
 	}
 }
 
+// A team.edited in a log edited by hand, keeping as its coordinator an
+// agent the team didn't have, replays without it rather than panicking.
+func TestAHandEditedTeamEditReplays(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "lead", Coordinates: true, Team: "Data"},
+	}
+	edit := TeamEdit{Team: "Data", To: "Data", Agents: []EditedAgent{
+		{Was: "lead", Name: "lead"},
+		{Was: "stranger", Name: "stranger", Coordinates: true},
+	}}
+	roster = roster.Next(events.Event{Proposal: edit.Proposal(you)})
+	if _, ok := roster.Get("stranger"); ok || len(roster) != 2 {
+		t.Errorf("the roster is %+v, want tech-lead and lead", roster)
+	}
+}
+
 // Renames follow an agent through renames to the name it has now, two
 // agents swapping names in one edit too, and forget a removed agent.
 func TestRenamesFollowAnAgentToItsNameNow(t *testing.T) {

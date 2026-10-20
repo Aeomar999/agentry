@@ -113,8 +113,8 @@ func (r Roster) edited(edit TeamEdit) Roster {
 		}
 	}
 	for _, e := range edit.Agents {
-		if e.Coordinates && e.Was != lead.Name {
-			after[after.index(e.Name)].Template = lead.Template
+		if i := after.index(e.Name); e.Coordinates && e.Was != lead.Name && i >= 0 { // a log edited by hand may keep an agent the team didn't have
+			after[i].Template = lead.Template
 		}
 	}
 	return after
