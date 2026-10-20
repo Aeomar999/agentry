@@ -257,6 +257,8 @@ Words the team uses that never show: *panel*, *row*, *accordion*, *draft*, *409*
 | Save failed, network | `Couldn't reach Agentry. Check it's running, then try again.` | Ours, for a failed fetch only |
 | Removed agent still needed: summary link | `{agent}: still needed by {task}` | then the server's message, quoted |
 | Removed agent still needed: on the stub | `Still needed by {task}. Finish it first, or undo to keep {agent}.` | `{task}` links to the task. Two tasks: `by task-182 and task-190. Finish them first…` |
+| Removed coordinator only its turn needs: summary link | `{agent}: a turn running on {task}` | When a new coordinator takes its tasks; then the server's message, quoted. Two: `turns running on task-182 and task-190` |
+| Removed coordinator only its turn needs: on the stub | `A turn running on {task}. Wait for it to end, or undo to keep {agent}.` | `{task}` links to the task. Two: `Turns running on task-182 and task-190. Wait for them to end…` |
 | Toast, saved | `Saved the {team} team` | |
 | Toast, saved with later edits | `Saved the {team} team` · `Your later changes aren't saved yet.` | The panel stays open with them |
 | Toast, created | `Added the {team} team` · `Pick it on New task; its coordinator takes the task.` | Today |

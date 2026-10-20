@@ -109,6 +109,7 @@ On a copy, the client knows the template's profiles and the policy's, so the row
 - Two coordinators can't be made in the panel (one radio group), but today's agent form can leave a team with two. Edit team opens such a team with no radio checked, both rows badged, and the error under the legend at once: `{a} and {b} both coordinate. Pick the one that takes the team's tasks.`
 - A server error that isn't about a field (network, a 5xx): the same summary, `Couldn't save the team` (or `Couldn't create the team`) with the server's words, or `Couldn't reach Agentry. Check it's running, then try again.` for a failed fetch. Nothing typed is lost; Save stays on to try again.
 - A removed agent still needed by a task: the server's 409 shows in the summary, quoted, and on the agent's removed stub: `Still needed by {task}. Finish it first, or undo to keep {agent}.`, with the task linked and Undo.
+- The old coordinator, removed in the save that names a new one, while it is taking a turn: its tasks move to the new coordinator, so only the turn holds it up. The stub says `A turn running on {task}. Wait for it to end, or undo to keep {agent}.`
 - The team changed somewhere else since the panel opened (decision 3): `Couldn't save the team: it changed since you opened it`, with `Reload the team` and `Keep my changes here` ([opening from a link](custom-teams/states-url.svg) E).
 
 ## Is a team added from a built-in template a custom team?
