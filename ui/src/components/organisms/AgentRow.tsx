@@ -11,7 +11,15 @@ import { ColorSwatches } from "@/components/molecules/ColorSwatches";
 import { errorId, Field } from "@/components/molecules/Field";
 import { MODELS } from "@/components/organisms/AgentForm";
 import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
-import { type AgentField, type DraftAgent, noAgentDescription, type Problem, problemCount, shownName } from "@/lib/custom-team";
+import {
+  type AgentField,
+  builtInDescription,
+  type DraftAgent,
+  noAgentDescription,
+  type Problem,
+  problemCount,
+  shownName,
+} from "@/lib/custom-team";
 import { shippedProfiles } from "@/lib/profiles";
 import { cn } from "@/lib/cn";
 
@@ -37,6 +45,7 @@ interface AgentRowProps {
   onRemove: () => void;
   edit?: RowEdit; // none in a new team
   unpicked?: boolean; // two rows coordinate, so no radio is checked until you pick one
+  builtIn?: string; // the built-in template the team was made from, whose description other coordinators read
 }
 
 // How a row of a team being edited differs from the team as saved: new or
@@ -148,7 +157,7 @@ export function AgentRow(props: AgentRowProps) {
   );
 }
 
-function AgentFields({ agent, problems, profileMissing, engines, policy, saving, onChange, edit }: AgentRowProps) {
+function AgentFields({ agent, problems, profileMissing, engines, policy, saving, onChange, edit, builtIn }: AgentRowProps) {
   const id = (field: Parameters<typeof fieldId>[1]) => fieldId(agent.key, field);
   const errorOf = (field: AgentField) => problems.find((p) => typeof p.field === "object" && p.field.field === field)?.message;
   // What a control with a problem says about itself, beside the danger border.
@@ -194,7 +203,11 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
           htmlFor={id("description")}
           hint={
             agent.coordinates ? (
-              "What this team does. Other coordinators read it to choose what to send the team."
+              builtIn ? (
+                `What this team does. ${builtInDescription(builtIn)}`
+              ) : (
+                "What this team does. Other coordinators read it to choose what to send the team."
+              )
             ) : agent.description.trim() === "" ? (
               <span className="text-[12px]">{noAgentDescription}</span>
             ) : (

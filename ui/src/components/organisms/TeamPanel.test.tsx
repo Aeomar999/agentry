@@ -2192,6 +2192,12 @@ describe("Edit team: what the team does", () => {
     expect(within(docsRow("editor").closest("li")!).queryByText("No description")).toBeNull();
   });
 
+  test("a coordinator with no description doesn't say so on its closed row", () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.coordinates ? { ...a, description: "" } : a))];
+    openAt("/agents?team=Docs");
+    expect(within(docsRow("editor").closest("li")!).queryByText("No description")).toBeNull();
+  });
+
   test("emptied, it warns, and Save changes still saves the coordinator with no description", async () => {
     vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
     openAt("/agents?team=Docs");
@@ -2211,11 +2217,31 @@ describe("Edit team: what the team does", () => {
     ]);
   });
 
-  test("a team made from a built-in template is read by the template's description", () => {
+  test("a team made from a built-in template is read by the template's description, even with a new coordinator", () => {
     reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.coordinates ? { ...a, description: "", template: "writing" } : a))];
     openAt("/agents?team=Docs");
     expect(routing()).toBe("- Docs, coordinated by editor: Writes docs.");
     expect(inSheet().getByText("Other coordinators read the Writing template's description instead.")).toBeTruthy();
     expect(inSheet().queryByText(warning)).toBeNull();
+
+    // A new coordinator takes the old one's template link when saved (internal/agents/edit.go).
+    fireEvent.click(inSheet().getByRole("button", { name: "Add agent" }));
+    typeInto("Name", "lead");
+    fireEvent.click(inSheet().getByRole("radio", { name: "Coordinator, lead" }));
+    expect(routing()).toBe("- Docs, coordinated by lead: Writes docs.");
+  });
+
+  test("on a team made from a built-in template, the coordinator's Description says the template's is read", () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.coordinates ? { ...a, template: "writing" } : a))];
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("editor"));
+    expect(inSheet().getByText("What this team does. Other coordinators read the Writing template's description instead.")).toBeTruthy();
+    expect(inSheet().queryByText(/choose what to send the team/)).toBeNull();
+  });
+
+  test("on a team with no template, the coordinator's Description says other coordinators read it", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("editor"));
+    expect(inSheet().getByText("What this team does. Other coordinators read it to choose what to send the team.")).toBeTruthy();
   });
 });

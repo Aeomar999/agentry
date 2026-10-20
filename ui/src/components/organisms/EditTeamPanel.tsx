@@ -357,6 +357,7 @@ function EditTeamForm(props: EditTeamFormProps) {
               engines={ready.engines}
               policy={ready.policy}
               saving={saving}
+              builtIn={builtIn?.team}
               onAdd={() => list.add(newAgent(draft, ready.engines), hasProblems)}
             />
 

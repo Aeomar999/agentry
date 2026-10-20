@@ -209,13 +209,14 @@ interface TeamAgentsProps {
   engines: string[];
   policy: Policy;
   saving: boolean;
+  builtIn?: string; // the built-in template the team was made from
   onAdd: () => void;
 }
 
 // TeamAgents is the panel's agents: one radio group across the rows, each
 // row open in place or as a stub with Undo, then Add agent. Editing a team,
 // each row says how it differs from the team as saved.
-export function TeamAgents({ list, loaded, problems, missing, engines, policy, saving, onAdd }: TeamAgentsProps) {
+export function TeamAgents({ list, loaded, problems, missing, engines, policy, saving, builtIn, onAdd }: TeamAgentsProps) {
   const draft = { team: "", agents: list.agents };
   const count = list.agents.length;
   const changed = loaded ? changedAgents(loaded, draft).length : 0;
@@ -275,6 +276,7 @@ export function TeamAgents({ list, loaded, problems, missing, engines, policy, s
               onRemove={() => list.remove(agent, loaded ? removingNotice(savedName(agent) ?? shownName(agent)) : removedNotice(agent))}
               edit={loaded && { ...rowChange(loaded, agent), saved: savedName(agent) }}
               unpicked={coordinators > 1}
+              builtIn={builtIn}
             />
           );
         })}
