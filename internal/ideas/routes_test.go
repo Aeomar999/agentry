@@ -392,13 +392,28 @@ func TestAnIdeaNamesTheEpicItsSessionWasAbout(t *testing.T) {
 }
 
 // Every open idea says why Agentry wouldn't accept it for you, under your
-// rule, even with accepting turned off; "" when it would.
+// rule, even with accepting turned off; "" when it would. The Visionaries
+// are the built-in team or a team from your template based on it.
 func TestAnOpenIdeaSaysWhyItWasntAutoAccepted(t *testing.T) {
+	visionaries, _ := agents.TemplateNamed("Visionaries")
+	dreams := agents.UserTemplate{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}
+	for _, agent := range visionaries.Prompted() {
+		agent.Team, agent.Template = "", "" // adding the template sets them
+		dreams.Agents = append(dreams.Agents, agent)
+	}
+	for name, team := range map[string][]events.Proposal{
+		"the Visionaries":                         agents.AddTeam(visionaries, nil, you),
+		"a team from your template based on them": append([]events.Proposal{dreams.Save(you)}, agents.AddTeam(dreams.Template(), nil, you)...),
+	} {
+		t.Run(name, func(t *testing.T) { openIdeasSayWhy(t, team) })
+	}
+}
+
+func openIdeasSayWhy(t *testing.T, team []events.Proposal) {
 	server, s := newTestServer(t)
 	repo := gitRepo(t)
 	call(t, server, "POST", "/api/tasks", `{"title":"Think up features","repo":"`+repo+`"}`)
-	visionaries, _ := agents.TemplateNamed("Visionaries")
-	for _, p := range agents.AddTeam(visionaries, nil, you) {
+	for _, p := range team {
 		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}

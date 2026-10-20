@@ -27,8 +27,9 @@ func Suggests(coordinator agents.Agent, bases agents.Bases) bool {
 // Visionaries are the teams of the roster whose coordinators suggest ideas
 // (Suggests), in roster order, whatever they are called: a team made from
 // the Visionaries template or one of yours based on it, "Visionaries 2"
-// too, and not one you made yourself and called Visionaries. A follow-up session goes to the first;
-// the viewpoints of all of them weigh in on an idea.
+// too, and not one you made yourself and called Visionaries. A follow-up
+// session goes to the first; the viewpoints of all of them weigh in on an
+// idea.
 func Visionaries(roster agents.Roster, bases agents.Bases) []string {
 	var teams []string
 	for _, team := range roster.Teams() {

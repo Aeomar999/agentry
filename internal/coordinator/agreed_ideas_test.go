@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
@@ -87,8 +88,39 @@ func leftOpen(t *testing.T, byTitle map[string]*ideas.Idea) {
 	}
 }
 
+// The Visionaries are the built-in team or a team from your template based
+// on it, which Agentry's accept and the rule it passes both resolve.
 func TestAnIdeaEveryVisionaryAgreedOnIsAcceptedAndStarted(t *testing.T) {
-	s, state, repo := withTeams(t, true)
+	for name, teams := range map[string]func(*testing.T) (*store.Store, *current.State, string){
+		"the Visionaries":                         func(t *testing.T) (*store.Store, *current.State, string) { return withTeams(t, true) },
+		"a team from your template based on them": withDreams,
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, state, repo := teams(t)
+			agreedIsAcceptedAndStarted(t, s, state, repo)
+		})
+	}
+}
+
+// withDreams is withTeams with its Visionaries made from Dreams, a template
+// of yours based on the Visionaries holding Writing's agents.
+func withDreams(t *testing.T) (*store.Store, *current.State, string) {
+	t.Helper()
+	s, state, repo := withTeams(t, false)
+	writing, _ := agents.TemplateNamed("Writing")
+	dreams := agents.UserTemplate{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}
+	for _, agent := range writing.Prompted() {
+		agent.Team, agent.Template = "", "" // adding the template sets them
+		dreams.Agents = append(dreams.Agents, agent)
+	}
+	mustPropose(t, s, dreams.Save(you))
+	for _, p := range agents.AddTeam(dreams.Template(), state.Roster(), you) {
+		mustPropose(t, s, p)
+	}
+	return s, state, repo
+}
+
+func agreedIsAcceptedAndStarted(t *testing.T, s *store.Store, state *current.State, repo string) {
 	runLoop(t, s, state)
 	byTitle := agreedDone(t, s, state, repo, map[string]any{settings.AutoAcceptIdeas: true, settings.AutoStartIdeas: true})
 
