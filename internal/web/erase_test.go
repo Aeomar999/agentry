@@ -635,9 +635,6 @@ func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
 	}
 }
 
-// An epic that still lists an erased story, as when the erasure got past
-// the epic some other way, closes from the page: there is nothing of the
-// story left to park.
 // A story erased while its epic was archived, which leaveEpic leaves
 // listed, is taken out of the epic as it is unarchived to be reopened,
 // before its task.reopened, by either route that reopens it: no open
@@ -681,6 +678,9 @@ func TestAReopenedEpicDropsAStoryErasedWhileArchived(t *testing.T) {
 	}
 }
 
+// An epic that still lists an erased story, as when the erasure got past
+// the epic some other way, closes from the page: there is nothing of the
+// story left to park.
 func TestClosingAnEpicSkipsAnErasedStory(t *testing.T) {
 	f := newEraseFixture(t)
 	if _, rejection, err := f.log.Erase("task-2", you, "Gone.", f.blobs); rejection != nil || err != nil {
