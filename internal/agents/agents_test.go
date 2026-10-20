@@ -448,6 +448,40 @@ func TestATeamIsNamedInAnyCase(t *testing.T) {
 	}
 }
 
+// A team's coordinator moves to another of its agents, which takes the
+// template the team was made from, so its features stay on; other teams
+// keep theirs.
+func TestATeamsCoordinatorMovesWithItsTemplate(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "lead", Coordinates: true, Team: "Visionaries", Template: "visionaries"},
+		{Name: "thinker", Team: "Visionaries", Knowledge: "Know."},
+		{Name: "dreamer", Team: "Visionaries", Template: "visionaries"},
+	}
+	roster = roster.Next(events.Event{Proposal: CoordinatorMoving("Visionaries", "thinker", you)})
+	if lead, ok := roster.Coordinator("Visionaries"); !ok || lead.Name != "thinker" || lead.Knowledge != "Know." {
+		t.Errorf("Visionaries' coordinator = %+v, %v, want thinker with its knowledge", lead, ok)
+	}
+	if was, _ := roster.Get("lead"); was.Coordinates || was.Team != "Visionaries" {
+		t.Errorf("lead = %+v, want an agent of Visionaries that doesn't coordinate", was)
+	}
+	if template := roster.TemplateOf("Visionaries"); template != "visionaries" {
+		t.Errorf("Visionaries is made from %q, want visionaries", template)
+	}
+	if lead, _ := roster.Coordinator(DefaultTeam); lead.Name != "tech-lead" {
+		t.Errorf("Software's coordinator = %s, want tech-lead", lead.Name)
+	}
+
+	// An old log can leave a team two coordinators: the move leaves it one.
+	twice := Roster{{Name: "a", Coordinates: true, Team: "Data"}, {Name: "b", Coordinates: true, Team: "Data"}, {Name: "c", Team: "Data"}}
+	twice = twice.Next(events.Event{Proposal: CoordinatorMoving("Data", "c", you)})
+	for _, a := range twice {
+		if a.Coordinates != (a.Name == "c") {
+			t.Errorf("%s coordinates: %v, want only c", a.Name, a.Coordinates)
+		}
+	}
+}
+
 func TestATeamRenamedMovesEveryAgent(t *testing.T) {
 	roster := Roster{
 		{Name: "tech-lead", Coordinates: true, Template: "software"},

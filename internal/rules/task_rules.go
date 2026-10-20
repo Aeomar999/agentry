@@ -29,6 +29,7 @@ var taskRules = map[events.Type]rule{
 	events.TaskReopened:       all(isDone),
 	events.RepoChanged:        all(byTheCoordinatorOrYou, notUndoingYourMove, anotherRepo),
 	events.AgentRenamedInTask: all(),
+	events.CoordinatorMoved:   all(fromItsCoordinator),
 
 	events.TaskTransferred: all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
 	events.TaskRequested:   all(byTheCoordinator, notUndoingYourMove, noOpenTurn, noQuestionOpen, notWaitingOnAnother),
@@ -95,6 +96,14 @@ func all(rules ...rule) rule {
 func byTheCoordinator(t *tasks.Task, p events.Proposal) string {
 	if p.Actor.ID != t.Coordinator {
 		return p.Actor.ID + " is not this task's coordinator (" + t.Coordinator + ")"
+	}
+	return ""
+}
+
+// fromItsCoordinator: the coordinator a task moves from is the one it has.
+func fromItsCoordinator(t *tasks.Task, p events.Proposal) string {
+	if p.Text("from") != t.Coordinator {
+		return "this task's coordinator is " + t.Coordinator + ", not " + p.Text("from")
 	}
 	return ""
 }

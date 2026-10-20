@@ -204,6 +204,17 @@ func (t *Task) Apply(e events.Event) {
 			t.Handoff.To = to
 		}
 
+	case events.CoordinatorMoved:
+		// Only noted in the trail, as what is in hand goes on: a step for
+		// the coordinator before is the new one's to take.
+		was := t.Coordinator
+		t.Coordinator = e.Text("to")
+		if t.Handoff != nil && t.Handoff.To == was {
+			t.Handoff.To = t.Coordinator
+		}
+		t.Trail = append(t.Trail, Step{At: e.At, From: You, To: t.Coordinator,
+			Text: "I made you your team's coordinator in place of " + was + ", so this task is yours from now on."})
+
 	case events.TaskTransferred:
 		// Theirs from now on; the coordinator before passes it with why.
 		was := t.Coordinator

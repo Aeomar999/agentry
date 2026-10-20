@@ -11,6 +11,8 @@ const (
 	AgentLearned Type = "agent.learned" // an agent's knowledge, changed by the agent as it works, or by you: all of it ("knowledge"), or a patch on the version before ("head", "tail", "middle", "sha256"; agents.Patch)
 	AgentRenamed Type = "agent.renamed" // an agent goes by a new name, keeping everything else
 	TeamRenamed  Type = "team.renamed"  // every agent of a team moves to the team's new name, its coordinator too
+
+	TeamCoordinatorMoved Type = "team.coordinator_moved" // another of the team's agents, "to", coordinates it, with the template the team was made from
 )
 
 // The templates stream: the teams you saved to add again, beside the
@@ -40,6 +42,7 @@ const (
 	AgentRenamedInTask Type = "task.agent_renamed" // an agent the task names was renamed: its coordinator, or who it is handed to
 
 	TaskTransferred  Type = "task.transferred"       // the task is another team's work: their coordinator takes it
+	CoordinatorMoved Type = "task.coordinator_moved" // its team's coordinator is another of its agents now: the task goes on with it, "to", in place of "from"
 	TaskRequested    Type = "task.requested"         // the task asked another team for something, a task of theirs it waits for
 	RequestAnswered  Type = "task.request_answered"  // the other team's task it waited for is done: its summary comes back
 	TaskSplit        Type = "task.split"             // the coordinator split the task into stories: it is an epic now, or one with more stories

@@ -587,6 +587,58 @@ func TestATeamIsRenamedToAFreeName(t *testing.T) {
 	}
 }
 
+// A team's coordinator moves only to another agent of the same team, one
+// that doesn't coordinate it already; the team is spelled as the roster has it.
+func TestATeamsCoordinatorMovesToAnotherOfItsAgents(t *testing.T) {
+	s := openSeeded(t)
+	for _, a := range []agents.Agent{
+		{Name: "data-lead", Engine: "claude", Prompt: "Lead.", Coordinates: true, Team: "Data"},
+		{Name: "analyst", Engine: "claude", Prompt: "Analyse.", Team: "Data"},
+		{Name: "charter", Engine: "claude", Prompt: "Chart.", Team: "Data"},
+		{Name: "editor", Engine: "claude", Prompt: "Edit.", Coordinates: true, Team: "Words"},
+	} {
+		if _, rejection, err := s.Propose(a.Proposal(you, false)); rejection != nil || err != nil {
+			t.Fatalf("adding %s: %v %v", a.Name, rejection, err)
+		}
+	}
+	cases := []struct {
+		name, team, to, reason string
+	}{
+		{"an unknown team", "Ops", "analyst", "there is no team called Ops"},
+		{"a team spelled otherwise than the roster has it", "data", "analyst", "there is no team called data"},
+		{"an unknown agent", "Data", "nobody", "no agent called nobody"},
+		{"an agent of another team", "Data", "editor", "editor is in the Words team, not Data"},
+		{"its coordinator", "Data", "data-lead", "data-lead coordinates the Data team already"},
+		{"another of its agents", "Data", "analyst", ""},
+		{"back again", "Data", "data-lead", ""},
+	}
+	for _, c := range cases {
+		_, rejection, err := s.Propose(agents.CoordinatorMoving(c.team, c.to, you))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reason := cmp.Or(rejection, &events.Rejection{}).Reason; reason != c.reason {
+			t.Errorf("%s: refused with %q, want %q", c.name, reason, c.reason)
+		}
+	}
+}
+
+// A task's coordinator moves from the one it has, and the task goes on with
+// the new one: a step handed to the one before is the new one's.
+func TestATasksCoordinatorMoves(t *testing.T) {
+	task := run(t, []step{
+		created,
+		{you, events.CoordinatorMoved, "", map[string]any{"from": "engineer", "to": "reviewer"}, false},
+		{you, events.CoordinatorMoved, "", map[string]any{"from": "tech-lead", "to": "lead"}, true},
+	})
+	if task.Coordinator != "lead" || task.Handoff == nil || task.Handoff.To != "lead" {
+		t.Errorf("coordinator %s, handoff %+v, want both lead", task.Coordinator, task.Handoff)
+	}
+	if last := task.Trail[len(task.Trail)-1]; last.To != "lead" || !strings.Contains(last.Text, "in place of tech-lead") {
+		t.Errorf("the trail ends with %+v, want lead told it coordinates in place of tech-lead", last)
+	}
+}
+
 // The coordinator (or you) may give the task a better title, once it has
 // read it; the first title is kept.
 func TestTheTaskCanBeRenamed(t *testing.T) {
