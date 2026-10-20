@@ -138,6 +138,40 @@ func TestASaveThatIsntNewReplacesTheTemplateWithItsID(t *testing.T) {
 	}
 }
 
+// Two imports sent at once both pass the web's check, so the rules refuse
+// a name, in any case, that another of yours has; the template with the id
+// is replaced, under its own name or a new one.
+func TestAnImportTakesNoNameOfAnotherOfYours(t *testing.T) {
+	for _, second := range []struct {
+		name string
+		p    events.Proposal
+		want string
+	}{
+		{"the same name, another id", savingTemplate("papers-2", "Readers", research()), "you have a template called Readers already"},
+		{"the name in another case", savingTemplate("papers-2", "READERS", research()), "you have a template called Readers already"},
+		{"the same id, another's name", savingTemplate("papers", "Writers", research()), "you have a template called Writers already"},
+		{"the same id and name", savingTemplate("papers", "Readers", research()), ""},
+		{"the same id, a new name", savingTemplate("papers", "Reading Room", research()), ""},
+	} {
+		t.Run(second.name, func(t *testing.T) {
+			s := openSeeded(t)
+			for _, first := range []events.Proposal{newTemplate("papers", "Readers"), newTemplate("writing-room", "Writers")} {
+				if _, rejection, err := s.Propose(first); rejection != nil || err != nil {
+					t.Fatalf("the first saves: %v %v", rejection, err)
+				}
+			}
+			_, rejection, err := s.Propose(second.p)
+			reason := ""
+			if rejection != nil {
+				reason = rejection.Reason
+			}
+			if err != nil || reason != second.want {
+				t.Errorf("the import: %q %v, want %q", reason, err, second.want)
+			}
+		})
+	}
+}
+
 func TestATemplateIDIsLowercaseLettersDigitsAndDashes(t *testing.T) {
 	for _, id := range []string{" research", "My Team", "Papers", "a/b", "papers-" + strings.Repeat("a", 25)} {
 		t.Run(id, func(t *testing.T) {

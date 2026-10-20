@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -322,9 +323,8 @@ func TestARefusedIDYouGaveIsNamedAsItIs(t *testing.T) {
 }
 
 // A team is never added under a built-in template's team name, so a
-// template of that name is refused however it comes: saved under the team's
-// own name, with an id or without one, as a name taken (409), or imported,
-// by the rules (400).
+// template of that name is refused however it comes, saved under the team's
+// own name, with an id or without one, or imported, as a name taken (409).
 func TestATemplateOfABuiltInTeamIsRefused(t *testing.T) {
 	server, _ := newTestServer(t)
 	for _, refused := range []struct {
@@ -336,8 +336,8 @@ func TestATemplateOfABuiltInTeamIsRefused(t *testing.T) {
 			"Software is a built-in template. Pick another name."},
 		{"saved without one", "/api/teams/Software/template", `{}`, http.StatusConflict,
 			"Software is a built-in template. Pick another name."},
-		{"imported", "/api/teams/templates/import", importOf("my-writing", "writing", ""), http.StatusBadRequest,
-			"writing is the name of the Writing template's team: rename the team before saving it as a template"},
+		{"imported", "/api/teams/templates/import", importOf("my-writing", "writing", ""), http.StatusConflict,
+			"Writing is a built-in template. Pick another name."},
 	} {
 		if code, body := call(t, server, "POST", refused.path, refused.body); code != refused.code || strings.TrimSpace(body) != refused.want {
 			t.Errorf("%s: %d %s", refused.name, code, body)
@@ -450,6 +450,67 @@ func TestImportingATemplateYouHaveReplacesIt(t *testing.T) {
 	}
 	if saved := savedTemplates(t, s); len(saved) != 1 || saved[0].Description != "Imported." {
 		t.Errorf("one template, replaced: %+v", saved)
+	}
+}
+
+// An import is refused a name, in any case, that another of yours has, in
+// the words a save gets, and nothing is written. Under the id of one of
+// yours it replaces that one, so the name it has is free.
+func TestAnImportTakesNoNameOfAnotherOfYours(t *testing.T) {
+	server, s := newTestServer(t)
+	for _, first := range []string{importOf("readers", "Readers", ""), importOf("writers", "Writers", "")} {
+		if code, body := call(t, server, "POST", "/api/teams/templates/import", first); code != 200 {
+			t.Fatalf("import: %d %s", code, body)
+		}
+	}
+	before, _ := s.Stream(events.TemplatesStream)
+	for _, refused := range []struct{ name, body string }{
+		{"the same name, another id", importOf("readers-2", "Readers", "")},
+		{"the name in another case", importOf("readers-2", "READERS", "")},
+		{"the same id, another's name", importOf("writers", "readers", "")},
+	} {
+		if code, body := call(t, server, "POST", "/api/teams/templates/import", refused.body); code != http.StatusConflict ||
+			strings.TrimSpace(body) != "You have a template called Readers already. Pick another name." {
+			t.Errorf("%s: %d %s", refused.name, code, body)
+		}
+	}
+	if after, _ := s.Stream(events.TemplatesStream); len(after) != len(before) {
+		t.Errorf("nothing should be written: %d template events, then %d", len(before), len(after))
+	}
+	for _, replacing := range []string{importOf("readers", "READERS", ""), importOf("readers", "Reading Room", "")} {
+		if code, body := call(t, server, "POST", "/api/teams/templates/import", replacing); code != 200 {
+			t.Errorf("replacing readers: %d %s", code, body)
+		}
+	}
+	if saved := savedTemplates(t, s); len(saved) != 2 || saved[0].ID != "readers" || saved[0].Team != "Reading Room" {
+		t.Errorf("readers replaced in its place: %+v", saved)
+	}
+}
+
+// Imports of one name sent at once can all pass the check; the rules then
+// refuse all but the first, which the page hears as the same 409.
+func TestImportsOfOneNameAtOnceKeepTheFirst(t *testing.T) {
+	server, s := newTestServer(t)
+	const imports = 20
+	codes, bodies := make([]int, imports), make([]string, imports)
+	var wg sync.WaitGroup
+	for i := range imports {
+		wg.Go(func() {
+			codes[i], bodies[i] = call(t, server, "POST", "/api/teams/templates/import", importOf(fmt.Sprintf("readers-%d", i), "Readers", ""))
+		})
+	}
+	wg.Wait()
+	imported := 0
+	for i, code := range codes {
+		switch {
+		case code == 200:
+			imported++
+		case code != http.StatusConflict || strings.TrimSpace(bodies[i]) != "You have a template called Readers already. Pick another name.":
+			t.Errorf("import %d: %d %s", i, code, bodies[i])
+		}
+	}
+	if stream, _ := s.Stream(events.TemplatesStream); imported != 1 || len(stream) != 1 {
+		t.Errorf("%d imports answered as imported and %d written, want one", imported, len(stream))
 	}
 }
 

@@ -72,7 +72,7 @@ func (s *Server) templateTaken(name, id string) string {
 // a template, yours or built in, already has it in any case.
 func (s *Server) templateCalled(name string) string {
 	if builtIn, ok := agents.TemplateNamed(name); ok {
-		return builtIn.Team + " is a built-in template. Pick another name."
+		return builtInCalled(builtIn.Team)
 	}
 	for _, yours := range s.state.Templates() {
 		if strings.EqualFold(yours.Team, name) {
@@ -80,6 +80,10 @@ func (s *Server) templateCalled(name string) string {
 		}
 	}
 	return ""
+}
+
+func builtInCalled(template string) string {
+	return template + " is a built-in template. Pick another name."
 }
 
 func yoursCalled(template string) string {
@@ -110,14 +114,36 @@ func (s *Server) exportTemplate(w http.ResponseWriter, r *http.Request) {
 
 // importTemplate saves a template exported as a file, under the rules a
 // template you save from a team has. Importing an id you have replaces it,
-// keeping its place; a name you have under another id is kept beside it.
+// keeping its place. A name a built-in template or another of yours has, in
+// any case, is refused with the 409 a save gives, in its words; the rules
+// refuse it too, for an import that came in at the same time.
 func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 	var template agents.UserTemplate
 	if !httpapi.Decode(w, r, &template) {
 		return
 	}
 	template.Team, template.Description = strings.TrimSpace(template.Team), strings.TrimSpace(template.Description)
-	s.proposeTemplate(w, template.Save(httpapi.You), template.ID, nil)
+	taken := func() string { return s.importTaken(template.Team, template.ID) }
+	if why := taken(); why != "" {
+		http.Error(w, why, http.StatusConflict)
+		return
+	}
+	s.proposeTemplate(w, template.Save(httpapi.You), template.ID, taken)
+}
+
+// importTaken is why an import can't be called name, or "" when it can: as
+// templateCalled, except that the template of yours with its id is the one
+// it replaces, so its own name is free.
+func (s *Server) importTaken(name, id string) string {
+	if builtIn, ok := agents.TemplateNamed(name); ok {
+		return builtInCalled(builtIn.Team)
+	}
+	for _, yours := range s.state.Templates() {
+		if yours.ID != id && strings.EqualFold(yours.Team, name) {
+			return yoursCalled(yours.Team)
+		}
+	}
+	return ""
 }
 
 // proposeTemplate writes a template.saved and replies with the template

@@ -44,6 +44,8 @@ func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
 		if reason := notYoursYet(saved, p.Text("team"), p.Text("id")); reason != "" {
 			return reason
 		}
+	} else if reason := noOtherCalled(saved, p.Text("team"), p.Text("id")); reason != "" {
+		return reason
 	}
 	members, err := agents.TemplateAgents(p.Data)
 	if err != nil {
@@ -88,6 +90,20 @@ func notYoursYet(saved agents.UserTemplates, team, id string) string {
 			return "you have a template called " + yours.Team + " already"
 		case yours.ID == id:
 			return "your template " + yours.Team + " has the id " + id
+		}
+	}
+	return ""
+}
+
+// noOtherCalled refuses an import a name, in any case, that one of yours
+// has under another id: the web checks before importing too, and this keeps
+// two imports at once from both passing it. The template with its id is
+// the one it replaces, so its name is free. Only Propose runs it, so older
+// logs holding two templates of one name still replay.
+func noOtherCalled(saved agents.UserTemplates, team, id string) string {
+	for _, yours := range saved {
+		if yours.ID != id && strings.EqualFold(yours.Team, team) {
+			return "you have a template called " + yours.Team + " already"
 		}
 	}
 	return ""
