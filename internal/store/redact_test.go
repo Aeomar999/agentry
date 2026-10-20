@@ -307,7 +307,7 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 		}
 	}
 
-	found, rejection, err := s.find("task-1", secret, you, "")
+	found, rejection, err := s.find("task-1", secret, nil, you, "")
 	if rejection != nil || err != nil {
 		t.Fatal(rejection, err)
 	}

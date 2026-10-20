@@ -100,16 +100,37 @@ func (s *Server) sharedFilesOf(id string) ([]string, error) {
 // elsewhere is what the other tasks hold of an erased one.
 type elsewhere struct {
 	files  map[string]bool     // the blobs of shared files their events name
-	copies map[string][]string // its words, by the stream of each task that keeps a copy
+	copies map[string][]copied // its words, by the stream of each task that keeps a copy
+}
+
+// copied is words of an erased task that another task keeps, and the
+// rows of it that keep them: only those are redacted, as the same words,
+// such as a short title, may be the other task's own in its other rows.
+type copied struct {
+	text string
+	rows []int64
+}
+
+// keep adds text, kept by the row at position, to copies.
+func keep(copies []copied, text string, position int64) []copied {
+	i := slices.IndexFunc(copies, func(c copied) bool { return c.text == text })
+	if i < 0 {
+		return append(copies, copied{text: text, rows: []int64{position}})
+	}
+	if !slices.Contains(copies[i].rows, position) {
+		copies[i].rows = append(copies[i].rows, position)
+	}
+	return copies
 }
 
 // elsewhereOf reads every other task's whole record, an archived task's
 // from its blob, for what it holds of task id: the shared files it names,
-// which may be id's too, and the copies of id's words (copiesOf). Every
+// which may be id's too, and the copies of id's words (copiesOf), with
+// the rows that keep them. Every
 // task is read, not just its epic and asker as they are now, as a story
 // taken out of its epic leaves the copies behind.
 func (s *Server) elsewhereOf(id string) (elsewhere, error) {
-	found := elsewhere{files: map[string]bool{}, copies: map[string][]string{}}
+	found := elsewhere{files: map[string]bool{}, copies: map[string][]copied{}}
 	for _, other := range s.state.TaskIDs() {
 		if other == id {
 			continue
@@ -122,9 +143,9 @@ func (s *Server) elsewhereOf(id string) (elsewhere, error) {
 			for _, hash := range tasks.FileHashes(e) {
 				found.files[hash] = true
 			}
-			for _, copied := range copiesOf(id, e) {
-				if copied != "" && !slices.Contains(found.copies[other], copied) {
-					found.copies[other] = append(found.copies[other], copied)
+			for _, text := range copiesOf(id, e) {
+				if text != "" {
+					found.copies[other] = keep(found.copies[other], text, e.Position)
 				}
 			}
 		}
@@ -163,20 +184,20 @@ func (s *Server) removeSharedFiles(shared []string, named map[string]bool) []str
 	return warnings
 }
 
-// redactCopies redacts each copy of an erased task's words in the task
-// that keeps it, an archived one through its blob, and says which can't
-// be: the erasure stands all the same.
-func (s *Server) redactCopies(id string, copies map[string][]string) []string {
+// redactCopies redacts each copy of an erased task's words in the rows of
+// the task that keep it, an archived one through its blob, and says which
+// can't be: the erasure stands all the same.
+func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 	var warnings []string
 	why := "The copy of erased " + id + "."
 	for _, stream := range slices.Sorted(maps.Keys(copies)) {
-		for _, copied := range copies[stream] {
+		for _, kept := range copies[stream] {
 			var rejection *events.Rejection
 			var err error
 			if _, archived := s.task(stream); errors.Is(archived, current.ErrArchived) {
-				_, rejection, err = s.store.RedactArchived(stream, copied, httpapi.You, why, s.summarise(stream), s.config.Blobs)
+				_, rejection, err = s.store.RedactArchivedRows(stream, kept.text, kept.rows, httpapi.You, why, s.summarise(stream), s.config.Blobs)
 			} else {
-				_, rejection, err = s.store.Redact(stream, copied, httpapi.You, why)
+				_, rejection, err = s.store.RedactRows(stream, kept.text, kept.rows, httpapi.You, why)
 			}
 			switch {
 			case rejection != nil:

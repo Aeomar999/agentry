@@ -220,6 +220,78 @@ func markerOf(t *testing.T, f *eraseFixture, id string) string {
 	return marker.Text("archive")
 }
 
+// Only the rows that copy an erased task's words are redacted: its epic's
+// task.story_added and task.story_done for it, and its asker's
+// task.request_answered. The same words in the epic's and the asker's own
+// rows, here their titles, are theirs and kept, live and archived.
+func TestErasingKeepsTheSameWordsOutsideTheCopies(t *testing.T) {
+	for _, archived := range []bool{false, true} {
+		t.Run(map[bool]string{false: "live", true: "archived"}[archived], func(t *testing.T) {
+			f := newEraseFixture(t)
+			f.done(t)
+			// task-4, asked by task-1 and the one story of the epic task-5,
+			// shares the epic's title, and is done with the asker's title.
+			f.propose(t,
+				events.Proposal{Stream: "task-4", Actor: lead, Type: events.TaskCreated, Data: map[string]any{"title": "Tests", "repo": "/r",
+					"coordinator": "tech-lead", "parent": "task-1"}},
+				events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskRequested, Data: map[string]any{"child": "task-4", "team": "Software",
+					"request": "Write them", "coordinator": "tech-lead"}},
+			)
+			if code, body := call(t, f.server, "POST", "/api/tasks", `{"title":"Tests","stories":["task-4"]}`); code != http.StatusOK {
+				t.Fatalf("creating the epic: %d %s", code, body)
+			}
+			f.propose(t,
+				events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Asker", "moved": true}},
+				events.Proposal{Stream: "task-5", Actor: loop, Type: events.StoryDone, Data: map[string]any{"story": "task-4", "summary": "Asker", "coordinator": "tech-lead"}},
+				events.Proposal{Stream: "task-1", Actor: loop, Type: events.RequestAnswered, Data: map[string]any{"child": "task-4", "summary": "Asker", "coordinator": "tech-lead"}},
+			)
+			if archived {
+				storetest.ArchiveIn(t, f.log, f.state, "task-5", f.blobs)
+				storetest.ArchiveIn(t, f.log, f.state, "task-1", f.blobs)
+			}
+			if answer := f.erase(t, "task-4"); len(answer.Warnings) != 0 {
+				t.Errorf("the erasure warned: %q", answer.Warnings)
+			}
+			for _, c := range []struct {
+				stream string
+				kind   events.Type
+				field  string
+				want   string
+			}{
+				{"task-5", events.TaskCreated, "title", "Tests"},
+				{"task-5", events.StoryAdded, "title", store.Redacted},
+				{"task-5", events.StoryDone, "summary", store.Redacted},
+				{"task-1", events.TaskCreated, "title", "Asker"},
+				{"task-1", events.RequestAnswered, "summary", store.Redacted},
+			} {
+				if got := textIn(t, f, c.stream, c.kind, c.field); !slices.Contains(got, c.want) {
+					t.Errorf("%s's %s %s: %q, want %q among them", c.stream, c.kind, c.field, got, c.want)
+				}
+			}
+			if got := textIn(t, f, "task-1", events.RequestAnswered, "summary"); slices.Contains(got, "Asker") {
+				t.Errorf("task-1's task.request_answered for task-4 still holds its summary: %q", got)
+			}
+		})
+	}
+}
+
+// textIn is field of each event of kind in stream's whole record, an
+// archived task's read through its blob.
+func textIn(t *testing.T, f *eraseFixture, stream string, kind events.Type, field string) []string {
+	t.Helper()
+	history, err := f.log.History(stream, store.FromBlobs(f.blobs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var texts []string
+	for _, e := range history {
+		if e.Type == kind {
+			texts = append(texts, e.Text(field))
+		}
+	}
+	return texts
+}
+
 // A turn that runs is stopped while the task is still there, so the runner
 // can find the machine it runs on; a task with no turn running isn't.
 func TestErasingStopsTheTurnThatRunsFirst(t *testing.T) {

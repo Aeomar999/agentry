@@ -60,11 +60,48 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // rows are rewritten, but the old text may stay in the WAL until
 // GiveBackSpace runs again.
 func (s *Store) Redact(stream, secret string, who events.Actor, why string) (events.Event, *events.Rejection, error) {
-	found, rejection, err := s.find(stream, secret, who, why)
+	return s.redact(stream, secret, nil, who, why)
+}
+
+// RedactRows is Redact of only the rows of stream at positions, such as
+// the rows of an epic that copy an erased story's words: a short text
+// such as a title may be in its other rows too, written there by the epic
+// itself. Every check Redact makes is made of those rows; one that doesn't
+// hold the secret is left as it is, and when none does, it is refused as
+// Redact is when no row does.
+func (s *Store) RedactRows(stream, secret string, positions []int64, who events.Actor, why string) (events.Event, *events.Rejection, error) {
+	return s.redact(stream, secret, onlyAt(positions), who, why)
+}
+
+// redact is Redact of the rows named.
+func (s *Store) redact(stream, secret string, named rowsNamed, who events.Actor, why string) (events.Event, *events.Rejection, error) {
+	found, rejection, err := s.find(stream, secret, named, who, why)
 	if rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	return s.rewrite(found)
+}
+
+// rowsNamed is the rows a redaction may rewrite, by position: every row of
+// its stream when nil.
+type rowsNamed map[int64]bool
+
+// onlyAt names the rows at positions, and only those: none when there are
+// none.
+func onlyAt(positions []int64) rowsNamed {
+	named := rowsNamed{}
+	for _, position := range positions {
+		named[position] = true
+	}
+	return named
+}
+
+// of is the rows found that are named.
+func (named rowsNamed) of(found []rewrittenRow) []rewrittenRow {
+	if named == nil {
+		return found
+	}
+	return slices.DeleteFunc(found, func(rw rewrittenRow) bool { return !named[rw.position] })
 }
 
 // pending is what Redact found to rewrite, with no lock held: the
@@ -76,10 +113,11 @@ type pending struct {
 	rows      []rewrittenRow
 }
 
-// find is Redact's first half, with no lock held: the stream's rows that
-// hold secret, rewritten, and the redaction that names them. An erased or
-// archived stream is refused for that first, whatever its live rows hold.
-func (s *Store) find(stream, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
+// find is Redact's first half, with no lock held: the stream's rows named
+// that hold secret, rewritten, and the redaction that names them. An
+// erased or archived stream is refused for that first, whatever its live
+// rows hold.
+func (s *Store) find(stream, secret string, named rowsNamed, who events.Actor, why string) (pending, *events.Rejection, error) {
 	logged, err := s.Log(stream)
 	if err != nil {
 		return pending{}, nil, err
@@ -91,12 +129,12 @@ func (s *Store) find(stream, secret string, who events.Actor, why string) (pendi
 	if err != nil {
 		return pending{}, nil, err
 	}
-	return findIn(stream, rows, secret, who, why)
+	return findIn(stream, rows, secret, named, who, why)
 }
 
-// findIn is the rows, of stream, that hold secret, rewritten, and the
-// redaction that names them, or why it is refused.
-func findIn(stream string, rows []row, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
+// findIn is the rows named, of stream, that hold secret, rewritten, and
+// the redaction that names them, or why it is refused.
+func findIn(stream string, rows []row, secret string, named rowsNamed, who events.Actor, why string) (pending, *events.Rejection, error) {
 	if reason := aSecret(secret); reason != "" {
 		return pending{}, &events.Rejection{Check: "redact", Reason: reason}, nil
 	}
@@ -107,6 +145,7 @@ func findIn(stream string, rows []row, secret string, who events.Actor, why stri
 	if err != nil {
 		return pending{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
+	found = named.of(found)
 	if rejection := redactable(stream, found); rejection != nil {
 		return pending{}, rejection, nil
 	}
@@ -159,7 +198,7 @@ func (s *Store) refusal(found pending) *events.Rejection {
 // that holds the secret is refused when the redaction is asked for. The
 // error is for the database failing.
 func (s *Store) Preview(stream, secret string) (int, *events.Rejection, error) {
-	found, rejection, err := s.find(stream, secret, redactor, "")
+	found, rejection, err := s.find(stream, secret, nil, redactor, "")
 	if rejection != nil || err != nil {
 		return 0, rejection, err
 	}
