@@ -19,10 +19,11 @@ import (
 // (docs/design/log-growth.md section 5, "Removing a secret"). The update
 // trigger lets exactly the rows it names change, and only their data.
 //
-// What the store can't do is left to its caller: a secret in an archived
-// task, which is unarchived, redacted and archived again; one in a
-// knowledge file, whose versions are rewritten as full copies; the copies
-// in other streams; and writing a new snapshot.
+// A secret in an archived task is redacted by RedactArchived, which
+// unarchives it, redacts it and archives it again. What the store can't do
+// is left to its caller: a secret in a knowledge file, whose versions are
+// rewritten as full copies; the copies in other streams; and writing a new
+// snapshot.
 
 // Redacted is what a secret becomes.
 const Redacted = "[redacted]"
@@ -74,15 +75,21 @@ type pending struct {
 // find is Redact's first half, with no lock held: the stream's rows that
 // hold secret, rewritten, and the redaction that names them.
 func (s *Store) find(stream, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
+	rows, err := rowsOf(s.reads, stream, s.applied.Load())
+	if err != nil {
+		return pending{}, nil, err
+	}
+	return findIn(stream, rows, secret, who, why)
+}
+
+// findIn is the rows, of stream, that hold secret, rewritten, and the
+// redaction that names them, or why it is refused.
+func findIn(stream string, rows []row, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
 	if reason := aSecret(secret); reason != "" {
 		return pending{}, &events.Rejection{Check: "redact", Reason: reason}, nil
 	}
 	if strings.Contains(why, secret) {
 		return pending{}, &events.Rejection{Check: "redact", Reason: "the reason holds the secret, which the log would then keep"}, nil
-	}
-	rows, err := rowsOf(s.reads, stream, s.applied.Load())
-	if err != nil {
-		return pending{}, nil, err
 	}
 	found, err := rewritten(rows, secret)
 	if err != nil {
