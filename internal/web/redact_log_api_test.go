@@ -234,6 +234,38 @@ func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
 	}
 }
 
+// When no stream that holds the secret is redacted and one of them
+// failed, rather than was refused, the redaction fails 500 with every
+// stream's reason, as one stream's error does, and writes nothing: here
+// task-1 is refused once it is asked to redact, and the archived task-2's
+// blob is lost.
+func TestARedactionAcrossTheLogWithNoStreamRedactedAndOneFailedFails(t *testing.T) {
+	server, s, state := newTestStateChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type == events.EventRedacted && p.Stream == "task-1" && p.Data["why"] != "" {
+			return &events.Rejection{Check: "order", Reason: "task-1 is kept as it is"}
+		}
+		return nil
+	})
+	for _, id := range []string{"task-1", "task-2"} {
+		if _, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Use " + secretHere,
+			"repo": "/r", "coordinator": "tech-lead"}}); rejection != nil || err != nil {
+			t.Fatalf("creating %s: %v, %v", id, rejection, err)
+		}
+	}
+	storetest.Archive(t, s, state, "task-2") // its blob in a folder the server doesn't read
+	if preview := previewAcross(t, server, secretHere); preview.Rows != 1 || len(preview.Streams) != 2 || preview.Streams[1].Error == "" {
+		t.Fatalf("the preview: %+v, want task-1's row and task-2 failing", preview)
+	}
+	last := s.LastPosition()
+	code, body := call(t, server, "POST", "/api/redact", `{"text":"`+secretHere+`","why":"Pasted."}`)
+	if code != http.StatusInternalServerError || !strings.HasPrefix(body, "task-1: task-1 is kept as it is; task-2: ") {
+		t.Errorf("redacting with task-1 refused and task-2 failing: %d %q, want 500 naming both", code, body)
+	}
+	if s.LastPosition() != last {
+		t.Errorf("the failed redaction wrote up to %d from %d", s.LastPosition(), last)
+	}
+}
+
 // A turn running as a secret in the agents' knowledge is redacted across
 // the log doesn't write it back, as for the agents' own route
 // (TestATurnRunningAsTheAgentsAreRedactedDoesNotWriteTheSecretBack): the

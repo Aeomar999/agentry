@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
+	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
@@ -365,6 +366,14 @@ func TestAFollowUpRefusedPartwaySaysToSaveAgain(t *testing.T) {
 // the rules, so a test can refuse one proposal.
 func newTestServerChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store) {
 	t.Helper()
+	server, s, _ := newTestStateChecking(t, check)
+	return server, s
+}
+
+// newTestStateChecking is newTestServerChecking and the state its log
+// keeps, for a test that archives a task in it.
+func newTestStateChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store, *current.State) {
+	t.Helper()
 	catalogue := events.Core()
 	state := storetest.NewState(catalogue)
 	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection {
@@ -383,7 +392,7 @@ func newTestServerChecking(t *testing.T, check func(events.Proposal) *events.Rej
 	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, http.NotFoundHandler(), nil).Handler())
 	t.Cleanup(server.Close)
-	return server, s
+	return server, s, state
 }
 
 func mustStream(t *testing.T, s *store.Store) []events.Event {
