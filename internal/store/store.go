@@ -147,11 +147,16 @@ const readConnections = 4
 //
 // auto_vacuum is set first, so a new file gives back the pages archiving
 // frees. An existing file switches mode only with a full VACUUM, which
-// Open does not run: the archiver runs it once, after its first round,
-// when the done tasks are gone and the copy is cheapest (log-growth.md
-// section 4, "VACUUM").
+// Open runs only for a file that archived before secure_delete
+// (clearFreedCells): otherwise the archiver runs it once, after its first
+// round, when the done tasks are gone and the copy is cheapest
+// (log-growth.md section 4, "VACUUM").
+//
+// secure_delete is on for every write, so a deleted row's bytes are
+// zeroed, not left in a freed cell on a page still in use, where no
+// vacuum but a full one would reach them.
 func Open(path string, catalogue *events.Catalogue, model Model, check OrderCheck) (*Store, error) {
-	db, err := sql.Open(Driver, path+"?_pragma=auto_vacuum(INCREMENTAL)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open(Driver, path+"?_pragma=auto_vacuum(INCREMENTAL)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=secure_delete(ON)")
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +164,10 @@ func Open(path string, catalogue *events.Catalogue, model Model, check OrderChec
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("creating the schema: %w", err)
+	}
+	if err := clearFreedCells(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("clearing what archiving left: %w", err)
 	}
 	if err := migrate(db); err != nil {
 		db.Close()

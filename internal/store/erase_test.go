@@ -110,8 +110,8 @@ func TestEraseLeavesTheMarkerAlone(t *testing.T) {
 		t.Errorf("task-2 should keep its row and the store be at the marker, %d: at %d", erased.Position, s.LastPosition())
 	}
 	var secureDelete int
-	if err := s.db.QueryRow(`PRAGMA secure_delete`).Scan(&secureDelete); err != nil || secureDelete != 0 {
-		t.Errorf("secure_delete after Erase: %d, %v, want off again", secureDelete, err)
+	if err := s.db.QueryRow(`PRAGMA secure_delete`).Scan(&secureDelete); err != nil || secureDelete != 1 {
+		t.Errorf("secure_delete after Erase: %d, %v, want on, as Open set it", secureDelete, err)
 	}
 }
 

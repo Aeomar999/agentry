@@ -57,12 +57,8 @@ func (s *Store) VacuumOnce() (bool, error) {
 	if mode == incremental {
 		return false, nil
 	}
-	var archived bool
-	if err := s.db.QueryRow(`SELECT EXISTS (SELECT 1 FROM events WHERE type = ?)`, events.TaskArchived).Scan(&archived); err != nil {
+	if archived, err := anyArchived(s.db); err != nil || !archived {
 		return false, err
-	}
-	if !archived {
-		return false, nil
 	}
 	// The connection set auto_vacuum to INCREMENTAL as it opened; VACUUM
 	// is what makes that the file's mode.
@@ -70,6 +66,43 @@ func (s *Store) VacuumOnce() (bool, error) {
 		return false, fmt.Errorf("vacuuming the log: %w", err)
 	}
 	return true, nil
+}
+
+// zeroedFrom is the first schema version whose builds delete with
+// secure_delete on.
+const zeroedFrom = 2
+
+// clearFreedCells runs one full VACUUM on a file below zeroedFrom that
+// has archived a task, before it is migrated. Its builds deleted the
+// archived rows with secure_delete off, which left their bytes in freed
+// cells on pages still in use: an erasure, zeroing only its own rows, and
+// incremental_vacuum, freeing only whole pages, never reach them. VACUUM
+// copies only the live rows. It runs before the migration, which can't
+// hold it in its transaction, so a VACUUM that fails leaves the version
+// as it was, and the next Open tries again. Being full, it also switches
+// the file to incremental mode, so VacuumOnce has nothing left to do.
+func clearFreedCells(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	if version >= zeroedFrom {
+		return nil
+	}
+	if archived, err := anyArchived(db); err != nil || !archived {
+		return err
+	}
+	if _, err := db.Exec(`VACUUM`); err != nil {
+		return fmt.Errorf("vacuuming the log: %w", err)
+	}
+	return nil
+}
+
+// anyArchived says whether the log holds a task.archived marker.
+func anyArchived(db *sql.DB) (bool, error) {
+	var archived bool
+	err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM events WHERE type = ?)`, events.TaskArchived).Scan(&archived)
+	return archived, err
 }
 
 // incrementalVacuum runs PRAGMA incremental_vacuum to the end. SQLite

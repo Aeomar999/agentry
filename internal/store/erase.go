@@ -25,25 +25,26 @@ type Remover interface {
 }
 
 // Erase deletes a task's rows for who, appends its marker, and deletes the
-// blobs that held its rows while it was archived. First, with no lock
-// held, it reads the stream's rows, rejections included, for the marker:
-// the last row's position and the task's task.created, and the blobs its
+// blobs that held its rows while it was archived. First, with no lock held,
+// it reads the stream's rows, rejections included, for the marker: the last
+// row's position and the task's task.created, and the blobs its
 // task.archived markers name, read from its History, as a task archived
-// again keeps its earlier markers in its latest blob. Then, under the lock, it checks the stream
-// took nothing since and the rules allow the marker, and in one
-// transaction, with secure_delete on so the freed space is zeroed, appends
-// it and deletes the rows it covers; the model takes the marker
-// once that commits. Last, still under the lock, it gives the free pages
-// back and empties the WAL (giveBackSpace), which still held the rows, and
-// deletes the blobs.
+// again keeps its earlier markers in its latest blob. Then, under the lock,
+// it checks the stream took nothing since and the rules allow the marker,
+// and in one transaction appends it and deletes the rows it covers, their
+// bytes zeroed by the connection's secure_delete (Open); the model takes the
+// marker once that commits. Last, still under the lock, it gives the free
+// pages back and empties the WAL (giveBackSpace), which still held the rows,
+// and deletes the blobs.
 //
 // It returns the marker and, when it is refused, the rejection: by the
 // rules, or because the stream took an event since its rows were read. A
 // refusal writes nothing, as Archive's does. The error is for the database
-// or the blobs failing: a blob that can't be read stops it before it
-// writes anything, as its earlier blobs can't then be found. One after the commit comes with the marker: the
-// task is erased, but some of its text may stay in the WAL, the free pages
-// or a blob until GiveBackSpace runs again or the blob is removed.
+// or the blobs failing: a blob that can't be read stops it before it writes
+// anything, as its earlier blobs can't then be found. One after the commit
+// comes with the marker: the task is erased, but some of its text may stay
+// in the WAL, the free pages or a blob until GiveBackSpace runs again or the
+// blob is removed.
 func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover) (events.Event, *events.Rejection, error) {
 	live, err := s.Log(stream)
 	if err != nil {
@@ -63,12 +64,6 @@ func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover
 	if rejection := s.validate(marker); rejection != nil {
 		return events.Event{}, rejection, nil
 	}
-	// The store writes on one connection, so this holds for the commit and
-	// for giving the pages back, and goes off again however Erase ends.
-	if _, err := s.db.Exec(`PRAGMA secure_delete = ON`); err != nil {
-		return events.Event{}, nil, err
-	}
-	defer s.db.Exec(`PRAGMA secure_delete = OFF`)
 	event, err := s.commitErase(marker)
 	if err != nil {
 		return events.Event{}, nil, err
