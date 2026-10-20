@@ -591,6 +591,23 @@ describe("New team: history and unsaved changes", () => {
     expect(address()).toBe("/tasks");
   });
 
+  test("Back pressed while it saves is let go: a refusal then shows, with no question", async () => {
+    let refuse = () => {};
+    vi.mocked(api).mockReturnValueOnce(
+      new Promise((_, reject) => (refuse = () => reject(new ApiError("agent names must be unique", 400)))),
+    );
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    await create();
+    await back();
+    await act(async () => refuse());
+
+    expect(summary().textContent).toContain("agent names must be unique");
+    expect(within(panel()).queryByText(/Discard this new team/)).toBeNull();
+    expect(address()).toBe("/agents?team=new");
+  });
+
   test("opened from a link, closing takes the panel off the address instead", async () => {
     openAt("/tasks", "/agents?view=org&team=new&template=writing");
     fireEvent.click(cancel());
