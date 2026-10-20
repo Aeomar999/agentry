@@ -183,13 +183,13 @@ func TestARedactionAcrossTheLogLeavesWhatDoesNotHoldTheSecret(t *testing.T) {
 // stream that holds the secret is refused, the redaction is refused 409
 // with their reasons, as one stream's is.
 func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
-	// The rules let task-2's redaction be previewed and refuse it once it
+	// The rules let task-1's redaction be previewed and refuse it once it
 	// is asked for, with a reason, and refuse task-3's both times.
 	server, s := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
 		if p.Type != events.EventRedacted {
 			return nil
 		}
-		if p.Stream == "task-3" || p.Stream == "task-2" && p.Data["why"] != "" {
+		if p.Stream == "task-3" || p.Stream == "task-1" && p.Data["why"] != "" {
 			return &events.Rejection{Check: "order", Reason: p.Stream + " is kept as it is"}
 		}
 		return nil
@@ -206,31 +206,57 @@ func TestAStreamRefusedLeavesTheOthersRedacted(t *testing.T) {
 		t.Fatalf("the preview: %+v, want 2 rows in %+v", preview, want)
 	}
 	answer := redactAcross(t, server, secretHere)
-	if len(answer.Streams) != 1 || answer.Streams[0].Stream != "task-1" || answer.Rows != 1 {
-		t.Errorf("the redaction rewrote %+v, want only task-1's row", answer)
+	if len(answer.Streams) != 1 || answer.Streams[0].Stream != "task-2" || answer.Rows != 1 {
+		t.Errorf("the redaction rewrote %+v, want only task-2's row", answer)
 	}
-	if want := []string{"task-2: task-2 is kept as it is", "task-3: task-3 is kept as it is"}; !slices.Equal(answer.Warnings, want) {
+	if want := []string{"task-1: task-1 is kept as it is", "task-3: task-3 is kept as it is"}; !slices.Equal(answer.Warnings, want) {
 		t.Errorf("the redaction warned %q, want %q", answer.Warnings, want)
 	}
-	if got := redactedStreams(t, s); !slices.Equal(got, []string{"task-1"}) {
-		t.Errorf("event.redacted in %q, want only task-1", got)
+	if got := redactedStreams(t, s); !slices.Equal(got, []string{"task-2"}) {
+		t.Errorf("event.redacted in %q, want only task-2", got)
 	}
 
-	for _, id := range []string{"task-2", "task-3"} {
+	for _, id := range []string{"task-1", "task-3"} {
 		if _, rejection, err := s.Propose(events.Proposal{Stream: id, Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use " + plantedHere}}); rejection != nil || err != nil {
 			t.Fatalf("renaming %s: %v, %v", id, rejection, err)
 		}
 	}
 	last := s.LastPosition()
 	if preview := previewAcross(t, server, plantedHere); preview.Rows != 1 {
-		t.Fatalf("the preview of a text task-2 and task-3 hold: %+v", preview)
+		t.Fatalf("the preview of a text task-1 and task-3 hold: %+v", preview)
 	}
 	code, body := call(t, server, "POST", "/api/redact", `{"text":"`+plantedHere+`","why":"Pasted."}`)
-	if want := "task-2: task-2 is kept as it is; task-3: task-3 is kept as it is"; code != http.StatusConflict || strings.TrimSpace(body) != want {
+	if want := "task-1: task-1 is kept as it is; task-3: task-3 is kept as it is"; code != http.StatusConflict || strings.TrimSpace(body) != want {
 		t.Errorf("redacting a text only refused streams hold: %d %q, want 409 %q", code, body, want)
 	}
 	if s.LastPosition() != last {
 		t.Errorf("the refused redaction wrote up to %d from %d", s.LastPosition(), last)
+	}
+}
+
+// A turn running as a secret in the agents' knowledge is redacted across
+// the log doesn't write it back, as for the agents' own route
+// (TestATurnRunningAsTheAgentsAreRedactedDoesNotWriteTheSecretBack): the
+// answer says the turn's end redacts it again, and it does.
+func TestATurnRunningAsTheLogIsRedactedDoesNotWriteTheSecretBack(t *testing.T) {
+	f := newEraseFixture(t)
+	written := "# Notes\n\nThe key is " + secretHere + "."
+	f.teach(t, written)
+	f.startTurn(t)
+	answer := redactAcross(t, f.server, secretHere)
+	if !slices.Equal(answer.Warnings, []string{stillRunning}) {
+		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
+	}
+	f.endTurn(t, written+"\n\nDeploy on Fridays.\n")
+	engineer, _ := f.state.Roster().Get("engineer")
+	if want := "# Notes\n\nThe key is [redacted].\n\nDeploy on Fridays."; engineer.Knowledge != want {
+		t.Errorf("the engineer's knowledge after the turn: %q, want %q", engineer.Knowledge, want)
+	}
+	if err := f.snapshots.WriteNow(); err != nil {
+		t.Fatal(err)
+	}
+	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
+		t.Errorf("after the turn these files still hold the secret: %v", holding)
 	}
 }
 

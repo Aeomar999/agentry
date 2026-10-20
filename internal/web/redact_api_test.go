@@ -179,26 +179,18 @@ func TestATurnRunningAsTheAgentsAreRedactedDoesNotWriteTheSecretBack(t *testing.
 	f := newEraseFixture(t)
 	written := "# Notes\n\nThe key is " + secretHere + "."
 	f.teach(t, written)
-	f.propose(t,
-		events.Proposal{Stream: "task-1", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": t.TempDir(), "branch": "b", "port": 7901}},
-		events.Proposal{Stream: "task-1", Actor: machine, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "engineer", "hash": "h"}},
-	)
+	f.startTurn(t)
 	rows := f.preview(t, "/api/agents/redact", secretHere)
 	answer := f.redactAt(t, "/api/agents/redact", secretHere)
 	if !slices.Equal(answer.Warnings, []string{stillRunning}) {
 		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
 	}
 
-	learned := written + "\n\nDeploy on Fridays.\n"
-	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: "turn-1", Agent: "engineer", Engine: "claude", Event: "Stop",
-		Payload: json.RawMessage(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
+	f.endTurn(t, written+"\n\nDeploy on Fridays.\n")
 
 	engineer, _ := f.state.Roster().Get("engineer")
 	if want := "# Notes\n\nThe key is [redacted].\n\nDeploy on Fridays."; engineer.Knowledge != want {
 		t.Errorf("the engineer's knowledge after the turn: %q, want %q", engineer.Knowledge, want)
-	}
-	if task, _ := f.state.Task("task-1"); task.OpenTurn() != nil {
-		t.Errorf("turn-1 should have ended: %+v", task.OpenTurn())
 	}
 	if err := f.snapshots.WriteNow(); err != nil {
 		t.Fatal(err)
@@ -206,6 +198,27 @@ func TestATurnRunningAsTheAgentsAreRedactedDoesNotWriteTheSecretBack(t *testing.
 	f.redactedFromDisk(t, answer, events.AgentsStream, rows, stillRunning)
 	if f.hooks.Redactions().Holds(secretHere) {
 		t.Error("the secret is still held after the only turn running as it was redacted ended")
+	}
+}
+
+// startTurn starts the engineer's turn-1 in task-1, whose knowledge file
+// is written as it starts.
+func (f *eraseFixture) startTurn(t *testing.T) {
+	t.Helper()
+	f.propose(t,
+		events.Proposal{Stream: "task-1", Actor: machine, Type: events.WorktreeReady, Data: map[string]any{"path": t.TempDir(), "branch": "b", "port": 7901}},
+		events.Proposal{Stream: "task-1", Actor: machine, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "engineer", "hash": "h"}},
+	)
+}
+
+// endTurn ends turn-1 as its hook's call does, its knowledge file holding
+// learned, and fails the test unless it ended.
+func (f *eraseFixture) endTurn(t *testing.T, learned string) {
+	t.Helper()
+	f.hooks.Handle(context.Background(), hookcall.Call{Task: "task-1", Turn: "turn-1", Agent: "engineer", Engine: "claude", Event: "Stop",
+		Payload: json.RawMessage(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), Ending: &hookcall.Ending{Tokens: 1, Knowledge: &learned}})
+	if task, _ := f.state.Task("task-1"); task.OpenTurn() != nil {
+		t.Errorf("turn-1 should have ended: %+v", task.OpenTurn())
 	}
 }
 
