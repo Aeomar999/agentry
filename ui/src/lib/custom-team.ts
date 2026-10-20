@@ -2,13 +2,14 @@ import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { shippedProfiles } from "./profiles";
-import { teamOf } from "./teams";
+import { missingProfilesOf, teamOf, teamsOf } from "./teams";
 
 // A team you build yourself on the Agents page (docs/design/custom-teams.md):
-// the form's draft, how it starts (Blank or a copy of a template), every
-// problem with it at once, and saving it in one request (POST /api/teams).
-// The server checks the same rules (agents.CheckCustomTeam, addCustomTeam)
-// but stops at the first problem; the words are the copy deck's.
+// the form's draft, how it starts (Blank, a copy of a template, or a team
+// you have, to edit), every problem with it at once, and saving it in one
+// request (POST /api/teams, or PUT /api/teams/{team} for an edit). The
+// server checks the same rules (agents.CheckCustomTeam, addCustomTeam) but
+// stops at the first problem for a new team; the words are the copy deck's.
 
 // A row of the form: an agent of the team, as typed. key stays the same
 // while the row's name changes, so problems and focus can find the row.
@@ -30,6 +31,14 @@ export interface Problem {
   field: ProblemField;
   message: string; // under the field
   summary: string; // the summary's link, "{where}: {what}"
+  removed?: { agent: string; tasks: string[] }; // a removed agent unfinished tasks still need, for its stub
+}
+
+// A team you have, as the edit panel loaded it: the draft it starts from,
+// whose rows keep the names they had then, and the team's version, which
+// saving checks so a change made elsewhere meanwhile isn't lost.
+export interface LoadedTeam extends TeamDraft {
+  version: string;
 }
 
 // What the checks know besides the roster: the built-in templates (whose
@@ -84,6 +93,26 @@ export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft
     return { ...agent, key: nextKey(), name };
   });
   return { team: freeTeamName(template.team, roster), agents };
+}
+
+// loadTeam is the team named, in any case, as a draft to edit: its agents,
+// the coordinator first, each in a row of its own. A team you don't have
+// has no agents.
+export function loadTeam(roster: Agent[], team: string): LoadedTeam {
+  const found = teamsOf(roster).find((group) => sameName(group.team, team));
+  const agents = (found?.agents ?? []).map((agent): DraftAgent => ({
+    key: nextKey(),
+    name: agent.name,
+    description: agent.description,
+    coordinates: agent.coordinates,
+    prompt: agent.prompt,
+    engine: agent.engine,
+    model: agent.model,
+    profile: agent.profile,
+    color: agent.color,
+    column: agent.column,
+  }));
+  return { team: found?.team ?? team, agents, version: found?.agents[0]?.teamVersion ?? "" };
 }
 
 // newAgent is the row + Add agent adds: no name yet, a colour no row has,
@@ -151,9 +180,12 @@ function freeTeamName(team: string, roster: Agent[]): string {
 // name, the agents as a whole, then each row's fields. A profile policy.toml
 // lacks but Agentry ships isn't one: the server offers to add it (the 409
 // that missingProfilesOf reads), and missingProfiles lists them beforehand.
-export function checkTeam(draft: TeamDraft, roster: Agent[], rules: TeamRules): Problem[] {
+// Editing a team (editing), its own name, in any case, and its agents'
+// names, whichever rows have them now, are free.
+export function checkTeam(draft: TeamDraft, roster: Agent[], rules: TeamRules, editing?: Pick<TeamDraft, "team">): Problem[] {
+  if (editing) roster = roster.filter((agent) => teamOf(agent) !== editing.team);
   const problems: Problem[] = [];
-  const teamProblem = checkTeamName(draft.team, roster, rules.templates);
+  const teamProblem = editing && sameName(draft.team, editing.team) ? undefined : checkTeamName(draft.team, roster, rules.templates);
   if (teamProblem) problems.push({ field: "team", ...teamProblem });
   const agentsProblem = checkCoordinator(draft.agents);
   if (agentsProblem) problems.push({ field: "agents", ...agentsProblem });
@@ -336,9 +368,12 @@ export function footerLine(draft: TeamDraft, problems: number, saving: boolean):
   return `Creates the team and its ${agentCount(draft.agents.length)}.`;
 }
 
-// summaryTitle heads the summary of why Create team didn't create the team.
-export const summaryTitle = (problems: number) =>
-  problems > 0 ? `Couldn't create the team: ${thingCount(problems)} to fix` : "Couldn't create the team";
+// summaryTitle heads the summary of why Create team didn't create the
+// team, or Save changes didn't save it (editing).
+export function summaryTitle(problems: number, editing = false): string {
+  const title = editing ? "Couldn't save the team" : "Couldn't create the team";
+  return problems > 0 ? `${title}: ${thingCount(problems)} to fix` : title;
+}
 
 // missingLine says, under the agents, which profiles creating the team offers to add.
 export function missingLine(draft: TeamDraft, missing: string[]): string {
@@ -394,20 +429,144 @@ const NETWORK_FAILURES = [/^Failed to fetch/, /^NetworkError when attempting to 
 // only its error's message, so an unreachable server is known by its words.
 export const whyNotLoaded = (error: string): string => (NETWORK_FAILURES.some((words) => words.test(error)) ? unreachable : error);
 
+// trimmed is a row as the server takes it: without its key, trimmed.
+const trimmed = (agent: DraftAgent) => ({
+  name: agent.name.trim(),
+  description: agent.description.trim(),
+  coordinates: agent.coordinates,
+  prompt: agent.prompt.trim(),
+  engine: agent.engine.trim(),
+  model: agent.model.trim(),
+  profile: agent.profile.trim(),
+  color: agent.color.trim(),
+  column: agent.column.trim(),
+});
+
+// offering asks, with policyHash, as addTeam does, for the shipped
+// profiles policy.toml lacks too.
+const offering = <T extends object>(request: T, policyHash?: string) =>
+  policyHash === undefined ? request : { ...request, addMissingProfiles: true, hash: policyHash };
+
 // addCustomTeam adds the team as drafted, trimmed. With policyHash, as for
 // addTeam, it also adds the shipped profiles policy.toml lacks.
 export function addCustomTeam(draft: TeamDraft, policyHash?: string): Promise<unknown> {
-  const agents = draft.agents.map((agent) => ({
-    name: agent.name.trim(),
-    description: agent.description.trim(),
-    coordinates: agent.coordinates,
-    prompt: agent.prompt.trim(),
-    engine: agent.engine.trim(),
-    model: agent.model.trim(),
-    profile: agent.profile.trim(),
-    color: agent.color.trim(),
-    column: agent.column.trim(),
-  }));
-  const team = { team: draft.team.trim(), agents };
-  return api("POST", "/api/teams", policyHash === undefined ? team : { ...team, addMissingProfiles: true, hash: policyHash });
+  return api("POST", "/api/teams", offering({ team: draft.team.trim(), agents: draft.agents.map(trimmed) }, policyHash));
 }
+
+// editCustomTeam saves the team as edited from loaded, in one request:
+// each row with the name it had when loaded ("" for a new one), and the
+// rows removed left out, which removes their agents. The reply is the
+// team's name and version after.
+export function editCustomTeam(loaded: LoadedTeam, draft: TeamDraft, policyHash?: string): Promise<{ team: string; version: string }> {
+  const agents = draft.agents.map((agent) => ({ was: loaded.agents.find((row) => row.key === agent.key)?.name ?? "", ...trimmed(agent) }));
+  const edit = { version: loaded.version, team: draft.team.trim(), agents };
+  return api("PUT", `/api/teams/${encodeURIComponent(loaded.team)}`, offering(edit, policyHash));
+}
+
+// A problem with an edit, as PUT /api/teams/{team} lists it: an agent's,
+// with its row in the request, or the team's, with the agent removed that
+// a task still needs.
+interface ServerProblem {
+  row?: number;
+  field: string;
+  agent?: string;
+  error: string;
+}
+
+// The server's row fields the panel shows a problem under; was is the
+// row's name too, the one it had.
+const SHOWN_FIELDS: Record<string, AgentField> = {
+  name: "name",
+  was: "name",
+  prompt: "prompt",
+  color: "color",
+  column: "column",
+  engine: "engine",
+  profile: "profile",
+};
+
+// How the rules word a removed agent that unfinished tasks need.
+const STILL_NEEDED = /^.+ is still needed by (.+): finish those first, or keep .+$/;
+
+// problemsOfEdit puts the server's problems with an edit where the panel
+// shows them: a row's under its field, by the row's key; the team name's
+// under Team name; the rest, a removed agent's too, under the Agents
+// legend, so none is dropped. A row's field the panel has no place for
+// goes there too, naming the row.
+export function problemsOfEdit(problems: ServerProblem[], draft: TeamDraft): Problem[] {
+  return problems.map((problem) => {
+    const said = sentence(problem.error);
+    const agent = problem.row === undefined ? undefined : draft.agents[problem.row];
+    const field = agent && SHOWN_FIELDS[problem.field];
+    if (agent && field) return { field: { row: agent.key, field }, message: said, summary: `${shownName(agent)}: ${problem.error}` };
+    if (agent) return { field: "agents", message: `${shownName(agent)}: ${said}`, summary: `${shownName(agent)}: ${problem.error}` };
+    if (problem.field === "team") return { field: "team", message: said, summary: `Team name: ${problem.error}` };
+    if (problem.field === "removed" && problem.agent) return neededProblem(problem.agent, problem.error);
+    return { field: "agents", message: said, summary: `Agents: ${problem.error}` };
+  });
+}
+
+// neededProblem is a removed agent that unfinished tasks need, in the
+// stub's words when the server named the tasks, else in its own.
+function neededProblem(agent: string, error: string): Problem {
+  const tasks = STILL_NEEDED.exec(error)?.[1].split(", ") ?? [];
+  if (tasks.length === 0) return { field: "agents", message: sentence(error), summary: `${agent}: ${error}`, removed: { agent, tasks } };
+  const by = listed(tasks, "and");
+  return {
+    field: "agents",
+    message: `${agent} is still needed by ${by}. Finish ${tasks.length === 1 ? "it" : "them"} first, or undo to keep ${agent}.`,
+    summary: `${agent}: still needed by ${by}`,
+    removed: { agent, tasks },
+  };
+}
+
+// sentence is the server's reason as a sentence: a capital and a full stop.
+const sentence = (reason: string) => reason.charAt(0).toUpperCase() + reason.slice(1) + (/[.!?]$/.test(reason) ? "" : ".");
+
+// Why Save changes didn't save, and what the panel does about it:
+// - problems: show them, as checkTeam's, keeping everything typed.
+// - changed: the team changed elsewhere since it was loaded. Reload it, or
+//   save over it by saving with version as the loaded team's.
+// - cut short: the team is saved, but some tasks haven't followed it yet.
+//   Reload the team (its rows have their new names now), then save it
+//   again unchanged (saveAgain) to finish them.
+// - missing profiles: the offer to add them, as Create team's.
+// - failed: anything else, in the server's words or ours.
+export type EditRefusal =
+  | { kind: "problems"; problems: Problem[] }
+  | { kind: "changed"; version: string; title: string; detail: string }
+  | { kind: "cut short"; version: string; title: string; detail: string }
+  | { kind: "missing profiles"; profiles: string[] }
+  | { kind: "failed"; title: string; detail: string };
+
+// whyNotSaved reads a refused editCustomTeam of draft, loaded as loaded.
+export function whyNotSaved(failure: unknown, loaded: LoadedTeam, draft: TeamDraft): EditRefusal {
+  const profiles = missingProfilesOf(failure);
+  if (profiles) return { kind: "missing profiles", profiles };
+  const body = failure instanceof ApiError ? failure.body : undefined;
+  if (Array.isArray(body?.problems)) return { kind: "problems", problems: problemsOfEdit(body.problems as ServerProblem[], draft) };
+  if (typeof body?.version === "string" && body.error === "changed elsewhere") {
+    return {
+      kind: "changed",
+      version: body.version,
+      title: "Couldn't save the team: it changed since you opened it",
+      detail: `The ${loaded.team} team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now.${quoted(body.message)}`,
+    };
+  }
+  if (typeof body?.version === "string") {
+    return {
+      kind: "cut short",
+      version: body.version,
+      title: `Saved the ${draft.team.trim()} team, but some of its tasks haven't moved yet`,
+      detail: `Save again to finish moving them.${quoted((failure as Error).message)}`,
+    };
+  }
+  return { kind: "failed", title: summaryTitle(0, true), detail: whyNotCreated(failure) };
+}
+
+// quoted is the server's own words after ours, when it sent some.
+const quoted = (words: unknown) => (typeof words === "string" && words !== "" ? ` Agentry said: "${words}"` : "");
+
+// saveAgain finishes moving the tasks a save cut short: the team saved
+// unchanged, reloaded first so its rows have the names they have now.
+export const saveAgain = (reloaded: LoadedTeam) => editCustomTeam(reloaded, reloaded);

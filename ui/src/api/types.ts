@@ -139,6 +139,7 @@ export interface Agent {
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
   effective?: EffectiveProfile; // the profile in force; none while the policy isn't loaded
+  teamVersion?: string; // its team's as read, which saving the team checks; none on an agent not yet made
 }
 
 export type Decision = "allow" | "ask" | "deny";
