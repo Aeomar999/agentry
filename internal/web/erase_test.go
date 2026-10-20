@@ -650,7 +650,7 @@ func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
 }
 
 // A done epic that still lists an erased story takes it out as it is
-// reopened, before its task.reopened, by either route that reopens it: no
+// reopened, before its task.reopened, by each route that reopens it: no
 // open story is left to keep it from finishing. It lists one erased while
 // the epic was archived, as leaveEpic leaves an archived epic as it is,
 // and a live one lists one when a clean-up failed part way, as here, where
@@ -671,8 +671,11 @@ func TestAReopenedEpicDropsItsErasedStories(t *testing.T) {
 		}},
 	}
 	routes := []struct{ name, path, body string }{
+		// The board parks it in To do, out of the coordinator's hands.
 		{"moved to To do", "/api/tasks/task-3/direct", `{"to":"todo"}`},
+		// The board sends it back to its coordinator.
 		{"moved to In progress", "/api/tasks/task-3/direct", `{"to":"in-progress"}`},
+		// Your chat with its coordinator reopens it to answer you.
 		{"told", "/api/tasks/task-3/message", `{"text":"One more thing."}`},
 	}
 	for _, erasing := range erasings {
