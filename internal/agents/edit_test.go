@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -210,5 +211,21 @@ func TestRenamesFollowAnAgentToItsNameNow(t *testing.T) {
 	}
 	if _, ok := renames["z"]; ok {
 		t.Error("z, renamed w and removed, is still followed")
+	}
+}
+
+// Removals keep each agent a team edit removed with its team, by the name
+// the team has now, until an agent has the name again.
+func TestRemovalsKeepAnAgentsTeamByItsNameNow(t *testing.T) {
+	stream := []events.Event{
+		{Proposal: TeamEdit{Team: "Data", To: "Numbers", Agents: []EditedAgent{{Was: "b", Name: "b"}}, Removed: []string{"a", "c", "d"}}.Proposal(you)},
+		{Proposal: TeamRenaming("Numbers", "Figures", you)},
+		{Proposal: Agent{Name: "c", Team: "Other"}.Proposal(you, false)},
+		{Proposal: Agent{Name: "x"}.Renaming(you, "d")},
+		{Proposal: TeamEdit{Team: "Other", To: "Other", Agents: []EditedAgent{{Name: "e"}}, Removed: []string{"c"}}.Proposal(you)},
+	}
+	removals := RemovalsIn(stream)
+	if want := (Removals{"a": "Figures", "c": "Other"}); !maps.Equal(removals, want) {
+		t.Errorf("removals = %v, want %v", removals, want)
 	}
 }

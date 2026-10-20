@@ -137,7 +137,13 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 			involved = append(involved, other.Name)
 		}
 	}
-	moving := s.coordinatedByTeam(roster, team, to)
+	stream, err := s.store.Stream(events.AgentsStream)
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	removals := agents.RemovalsIn(stream)
+	moving := s.coordinatedByTeam(roster, removals, team, to)
 	for _, task := range moving {
 		if !slices.Contains(involved, task.Coordinator) {
 			involved = append(involved, task.Coordinator)
@@ -160,7 +166,7 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 	if !already && !httpapi.ProposeOrRefuse(w, s.store, move) {
 		return
 	}
-	if left, why, status := s.followUp(s.coordinatorMoves(s.state.Roster(), team)); left != nil {
+	if left, why, status := s.followUp(s.coordinatorMoves(s.state.Roster(), removals, team)); left != nil {
 		http.Error(w, cutShort("moved the "+team+" team's coordinator to "+to, left, "ask again", why), status)
 		return
 	}
@@ -175,7 +181,8 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 // out are removed. Every problem is listed at once, and the team is saved
 // whole or not at all. Then its unfinished tasks follow: those naming an
 // agent by a name it had take its new one, and those another agent of the
-// team coordinates move to its coordinator. Saving again with the version
+// team coordinates, or did until the team removed it, move to its
+// coordinator. Saving again with the version
 // the reply gives, a refusal's too, finishes those a refusal cut short.
 func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	w := &jsonErrors{ResponseWriter: writer}
@@ -216,9 +223,10 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := edit.Proposal(httpapi.You)
-	after, renames := roster.Next(events.Event{Proposal: p}), agents.RenamesIn(stream)
+	after, renames, removals := roster.Next(events.Event{Proposal: p}), agents.RenamesIn(stream), agents.RemovalsIn(stream)
 	renames.Apply(events.Event{Proposal: p})
-	if busy, involved := s.teamAtWork(roster, after, edit, renames); len(busy) > 0 {
+	removals.Apply(events.Event{Proposal: p})
+	if busy, involved := s.teamAtWork(roster, after, edit, renames, removals); len(busy) > 0 {
 		http.Error(w, "the "+team+" team can't be saved while "+strings.Join(busy, ", ")+" has "+strings.Join(involved, " or ")+
 			" at work, as its tasks would move: try again once that turn ends", http.StatusConflict)
 		return
@@ -237,9 +245,9 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	}
 	left, why, status := s.followUp(s.renamedInTasks(roster, edit.To, renames))
 	if left == nil {
-		left, why, status = s.followUp(s.coordinatorMoves(roster, edit.To))
+		left, why, status = s.followUp(s.coordinatorMoves(roster, removals, edit.To))
 	} else {
-		left = append(left, s.coordinatorMoves(roster, edit.To)...) // the moves still to come count too
+		left = append(left, s.coordinatorMoves(roster, removals, edit.To)...) // the moves still to come count too
 	}
 	version := s.state.Roster().TeamVersion(edit.To)
 	if left != nil {
@@ -309,7 +317,7 @@ func rowOf(row int) *int {
 // renames, or whose tasks it would move, or the agents that coordinate the
 // team before and after it, when that changes, with those agents: a turn
 // under way goes on as the agent it started as.
-func (s *Server) teamAtWork(before, after agents.Roster, edit agents.TeamEdit, renames agents.Renames) (busy, involved []string) {
+func (s *Server) teamAtWork(before, after agents.Roster, edit agents.TeamEdit, renames agents.Renames, removals agents.Removals) (busy, involved []string) {
 	for _, p := range s.renamedInTasks(after, edit.To, renames) {
 		involved = append(involved, p.Text("name"))
 	}
@@ -325,7 +333,7 @@ func (s *Server) teamAtWork(before, after agents.Roster, edit agents.TeamEdit, r
 			was = e.Was
 		}
 	}
-	for _, task := range s.coordinatedByTeam(before, edit.Team, was) {
+	for _, task := range s.coordinatedByTeam(before, removals, edit.Team, was) {
 		involved = append(involved, task.Coordinator)
 	}
 	if had, _ := before.Coordinator(edit.Team); had.Name != was {
@@ -359,14 +367,15 @@ func (s *Server) renamedInTasks(roster agents.Roster, team string, renames agent
 }
 
 // coordinatorMoves are the task.coordinator_moved that hand the team's
-// coordinator the unfinished tasks another agent of the team coordinates.
-func (s *Server) coordinatorMoves(roster agents.Roster, team string) []events.Proposal {
+// coordinator the unfinished tasks another agent of the team coordinates,
+// or one it removed.
+func (s *Server) coordinatorMoves(roster agents.Roster, removals agents.Removals, team string) []events.Proposal {
 	lead, ok := roster.Coordinator(team)
 	if !ok {
 		return nil
 	}
 	var moves []events.Proposal
-	for _, task := range s.coordinatedByTeam(roster, team, lead.Name) {
+	for _, task := range s.coordinatedByTeam(roster, removals, team, lead.Name) {
 		moves = append(moves, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.CoordinatorMoved,
 			Data: map[string]any{"from": task.Coordinator, "to": lead.Name}})
 	}
@@ -405,12 +414,13 @@ func cutShort(saved string, left []events.Proposal, again, why string) string {
 }
 
 // coordinatedByTeam lists the unfinished tasks an agent of the team other
-// than to coordinates: all of them before a move, and after one cut short,
-// those it didn't reach.
-func (s *Server) coordinatedByTeam(roster agents.Roster, team, to string) []*tasks.Task {
+// than to coordinates, or one the team removed: all of them before a move,
+// and after one cut short, those it didn't reach.
+func (s *Server) coordinatedByTeam(roster agents.Roster, removals agents.Removals, team, to string) []*tasks.Task {
 	var moving []*tasks.Task
 	for _, task := range s.state.Tasks() {
-		if lead, ok := roster.Get(task.Coordinator); ok && !task.IsDone && lead.TeamName() == team && lead.Name != to {
+		lead, ok := roster.Get(task.Coordinator)
+		if !task.IsDone && task.Coordinator != to && (ok && lead.TeamName() == team || !ok && removals[task.Coordinator] == team) {
 			moving = append(moving, task)
 		}
 	}

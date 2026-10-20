@@ -233,6 +233,56 @@ func TestATeamsTasksFollowAnEdit(t *testing.T) {
 	}
 }
 
+// A save that removes the coordinator and makes a new agent the team's
+// coordinator moves the open tasks the old one coordinated to the new one;
+// a done one keeps the coordinator it had.
+func TestATeamsTasksFollowANewCoordinatorInPlaceOfARemovedOne(t *testing.T) {
+	server, s := newTestServer(t)
+	version := addData(t, server)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-2", Actor: httpapi.You, Type: events.TaskDone,
+		Data: map[string]any{"summary": "Charted.", "moved": true}}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+
+	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "",
+		`{"name":"chief","engine":"claude","coordinates":true,"prompt":"Lead."}`+","+analystRow+","+charterRow))
+	if code != 200 {
+		t.Fatalf("replacing data-lead with chief: %d %s", code, body)
+	}
+	if open, done := coordinatorOf(t, server, "task-1"), coordinatorOf(t, server, "task-2"); open != "chief" || done != "data-lead" {
+		t.Errorf("task-1 is %s's and task-2 %s's, want chief and data-lead", open, done)
+	}
+}
+
+// A save that removes the coordinator, cut short before every task moved,
+// finishes when saved again: the tasks the removed agent coordinated still
+// move to the team's coordinator.
+func TestSavingAgainMovesTheTasksOfARemovedCoordinator(t *testing.T) {
+	refuse := true
+	server, _ := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type == events.CoordinatorMoved && p.Stream == "task-2" && refuse {
+			return &events.Rejection{Reason: "not now"}
+		}
+		return nil
+	})
+	version := addData(t, server)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	rows := `{"name":"chief","engine":"claude","coordinates":true,"prompt":"Lead."}` + "," + analystRow + "," + charterRow
+	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "", rows)); code != http.StatusConflict {
+		t.Fatalf("a follow-up refused: %d %s, want 409", code, body)
+	}
+	refuse = false
+	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(teamVersion(t, server, "Data"), "", rows)); code != 200 {
+		t.Fatalf("saving again: %d %s", code, body)
+	}
+	if one, two := coordinatorOf(t, server, "task-1"), coordinatorOf(t, server, "task-2"); one != "chief" || two != "chief" {
+		t.Errorf("task-1 is %s's and task-2 %s's, want chief's", one, two)
+	}
+}
+
 // An edit whose follow-ups were cut short leaves tasks naming an agent by
 // the name it had, or with an agent that no longer coordinates: saving the
 // team again, as it is, finishes them, once no agent they name is at work.

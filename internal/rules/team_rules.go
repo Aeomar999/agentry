@@ -6,6 +6,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // TeamProblem is one reason a team edit is refused: about a field of one of
@@ -57,7 +58,7 @@ func TeamEditProblems(state State, p events.Proposal) []TeamProblem {
 	}
 	problems = append(problems, rowProblems(roster, edit)...)
 	problems = append(problems, membershipProblems(roster, edit)...)
-	return append(problems, neededProblems(state, edit.Removed)...)
+	return append(problems, neededProblems(state, edit)...)
 }
 
 // asAnEditedAgent is what each agent of a team edit must be, by the field
@@ -122,13 +123,21 @@ func membershipProblems(roster agents.Roster, edit agents.TeamEdit) []TeamProble
 	return problems
 }
 
-// neededProblems: no removed agent is needed by an unfinished task.
-func neededProblems(state State, removed []string) []TeamProblem {
+// neededProblems: no removed agent is needed by an unfinished task. The
+// tasks a coordinator the edit replaces coordinates move to the new one,
+// with any step handed to it, so they need it only for a turn it is taking.
+func neededProblems(state State, edit agents.TeamEdit) []TeamProblem {
+	lead, _ := state.Roster().Coordinator(edit.Team)
+	replaced := slices.ContainsFunc(edit.Agents, func(e agents.EditedAgent) bool { return e.Coordinates && e.Was != lead.Name })
 	var problems []TeamProblem
-	for _, name := range removed {
+	for _, name := range edit.Removed {
 		var needing []string
 		for _, id := range state.TaskIDs() {
-			if task, err := state.Task(id); err == nil && task != nil && task.Needs(name) {
+			task, err := state.Task(id)
+			if err != nil || task == nil || !task.Needs(name) {
+				continue
+			}
+			if name != lead.Name || !replaced || neededBeyondMoving(task, name) {
 				needing = append(needing, id)
 			}
 		}
@@ -138,4 +147,12 @@ func neededProblems(state State, removed []string) []TeamProblem {
 		}
 	}
 	return problems
+}
+
+// neededBeyondMoving says whether the task still needs the agent once it
+// moves from it to another coordinator: for the turn it is taking, or a
+// step handed to it on a task it doesn't coordinate.
+func neededBeyondMoving(task *tasks.Task, agent string) bool {
+	open := task.OpenTurn()
+	return open != nil && open.Agent == agent || task.Coordinator != agent && task.Handoff != nil && task.Handoff.To == agent
 }

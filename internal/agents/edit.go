@@ -224,3 +224,47 @@ func (r Renames) forget(name string) {
 	}
 	delete(r, name)
 }
+
+// Removals are the agents team edits removed, each to its team, by the
+// name the team has now, as a fold of the agents stream: the unfinished
+// tasks one of them coordinated go on with that team's coordinator. A name
+// an agent has again is no longer one.
+type Removals map[string]string
+
+// RemovalsIn folds the agents stream into its removals.
+func RemovalsIn(stream []events.Event) Removals {
+	removals := Removals{}
+	for _, e := range stream {
+		removals.Apply(e)
+	}
+	return removals
+}
+
+// Apply follows one accepted event of the agents stream.
+func (r Removals) Apply(e events.Event) {
+	switch e.Type {
+	case events.AgentCreated:
+		delete(r, e.Text("name"))
+	case events.AgentRenamed:
+		delete(r, e.Text("to"))
+	case events.TeamRenamed:
+		r.renameTeam(e.Text("team"), e.Text("to"))
+	case events.TeamEdited:
+		edit, _ := TeamEditOf(e.Proposal) // the rules accepted it as one
+		for _, a := range edit.Agents {
+			delete(r, a.Name)
+		}
+		r.renameTeam(edit.Team, edit.To)
+		for _, name := range edit.Removed {
+			r[name] = edit.To
+		}
+	}
+}
+
+func (r Removals) renameTeam(team, to string) {
+	for name, was := range r {
+		if was == team {
+			r[name] = to
+		}
+	}
+}

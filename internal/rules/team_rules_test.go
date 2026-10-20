@@ -104,6 +104,38 @@ func TestATeamEditAccountsForEveryAgent(t *testing.T) {
 	}
 }
 
+// An edit that removes the team's coordinator and names a new one moves
+// the tasks the old one only coordinates, so they don't keep it; a turn it
+// is taking does, until it ends.
+func TestATeamEditReplacingItsCoordinatorRemovesTheOldOne(t *testing.T) {
+	s, state := openSeededState(t)
+	dataTeam(t, s)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	turn := func(p events.Proposal) {
+		t.Helper()
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("%s: %v %v", p.Type, rejection, err)
+		}
+	}
+	turn(events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}})
+	turn(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}})
+	replaced := func() agents.TeamEdit {
+		edit := dataAsItIs(state)
+		edit.Agents[0] = agents.EditedAgent{Name: "chief", Engine: "claude", Prompt: "Lead.", Coordinates: true}
+		edit.Removed = []string{"data-lead"}
+		return edit
+	}
+
+	want := "data-lead is still needed by task-1: finish those first, or keep data-lead"
+	if _, rejection, err := s.Propose(replaced().Proposal(you)); err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("replacing data-lead during its turn: refused with %v, %v, want %q", rejection, err, want)
+	}
+	turn(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "report": "r"}})
+	if _, rejection, err := s.Propose(replaced().Proposal(you)); rejection != nil || err != nil {
+		t.Errorf("replacing data-lead, which only coordinates task-1: %v %v", rejection, err)
+	}
+}
+
 // An edit the rules accept is written whole: swapped names, a removed agent
 // no task needs, a new one, and the coordinator and the team's name moved.
 func TestATeamEditIsWrittenWhole(t *testing.T) {
