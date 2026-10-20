@@ -198,25 +198,27 @@ func TestASnapshotFromBeforeARedactionGoesOnToTheRedactedLog(t *testing.T) {
 	}
 }
 
-// Test 4: Redact asks the rules, so an archived task and an erased one
-// are refused, each saying why, and the log is as it was.
+// Test 4: an archived task and an erased one are refused for that, each
+// saying why, before what their live rows hold: whether a marker holds
+// the secret or no row does. The log is as it was.
 func TestAnArchivedOrErasedTaskIsNotRedacted(t *testing.T) {
 	s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	twoTasks(t, s)
 	blobs := sharedfiles.Disk{Dir: t.TempDir()}
 	ArchiveIn(t, s, state, "task-1", blobs)
 	erase(t, s, "task-2", blobs)
-	for stream, want := range map[string]string{
-		"task-1": rules.ArchivedRedactionRefusal("task-1"), // its marker's summary holds the title
-		"task-2": rules.ErasedRefusal("task-2"),            // its marker holds the reason
+	for _, c := range []struct{ stream, secret, want string }{
+		{"task-1", "One, renamed", store.ArchivedRedactionRefusal("task-1")}, // its marker's summary holds the title
+		{"task-1", "not-there", store.ArchivedRedactionRefusal("task-1")},
+		{"task-2", "forgotten", "task-2 is erased: there is nothing left to redact"}, // its marker holds the reason
+		{"task-2", "not-there", "task-2 is erased: there is nothing left to redact"},
 	} {
-		secret := map[string]string{"task-1": "One, renamed", "task-2": "forgotten"}[stream]
 		last := s.LastPosition()
-		if _, rejection, err := s.Redact(stream, secret, you, ""); err != nil || rejection == nil || rejection.Reason != want {
-			t.Errorf("redacting %s: %v, %v, want %q", stream, rejection, err, want)
+		if _, rejection, err := s.Redact(c.stream, c.secret, you, ""); err != nil || rejection == nil || rejection.Reason != c.want {
+			t.Errorf("redacting %q in %s: %v, %v, want %q", c.secret, c.stream, rejection, err, c.want)
 		}
 		if s.LastPosition() != last {
-			t.Errorf("a refused redaction of %s wrote to the log", stream)
+			t.Errorf("a refused redaction of %s wrote to the log", c.stream)
 		}
 	}
 }

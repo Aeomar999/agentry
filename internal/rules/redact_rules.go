@@ -94,10 +94,3 @@ func eachNamesFields(fields any, rows int) bool {
 	}
 	return true
 }
-
-// ArchivedRedactionRefusal is why an archived task can't be redacted as it
-// is: its rows are in the archive's blob, not the live log, so
-// Store.RedactArchived redacts it instead.
-func ArchivedRedactionRefusal(stream string) string {
-	return stream + " is archived: unarchive it, redact it, then archive it again"
-}

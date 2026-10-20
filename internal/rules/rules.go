@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
@@ -109,7 +110,7 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 		}
 		return nil
 	case errors.Is(err, current.ErrArchived) && p.Type == events.EventRedacted:
-		return refuse(ArchivedRedactionRefusal(p.Stream))
+		return refuse(store.ArchivedRedactionRefusal(p.Stream))
 	case errors.Is(err, current.ErrArchived):
 		return refuse(ArchivedRefusal(p.Stream))
 	case p.Type == events.EventRedacted && task == nil && err == nil:

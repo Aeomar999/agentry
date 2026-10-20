@@ -5,6 +5,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 var redactor = events.Actor{Kind: events.System, ID: "redactor"}
@@ -82,8 +83,8 @@ func TestARedactionNamesTheRowsAndFieldsItChanged(t *testing.T) {
 	}
 
 	_, archived := openArchived(t)
-	if rejection := Check(events.Proposal{Stream: "task-1", Actor: redactor, Type: events.EventRedacted, Data: redactedData(nil)}, archived, withIdeas); rejection == nil || rejection.Reason != ArchivedRedactionRefusal("task-1") {
-		t.Errorf("redacting an archived task: %v, want %q", rejection, ArchivedRedactionRefusal("task-1"))
+	if rejection := Check(events.Proposal{Stream: "task-1", Actor: redactor, Type: events.EventRedacted, Data: redactedData(nil)}, archived, withIdeas); rejection == nil || rejection.Reason != store.ArchivedRedactionRefusal("task-1") {
+		t.Errorf("redacting an archived task: %v, want %q", rejection, store.ArchivedRedactionRefusal("task-1"))
 	}
 	if _, rejection, err := s.Erase("task-1", you, "Asked to be forgotten.", sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
 		t.Fatal(rejection, err)

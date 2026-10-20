@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -48,8 +49,9 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // (giveBackSpace), which still held the old rows. It writes no snapshot: the
 // one on disk may still hold the secret, and its caller writes a new one.
 //
-// It returns the redaction and, when it is refused, the rejection: no row
-// holds the secret, a row that does is a knowledge version outside the
+// It returns the redaction and, when it is refused, the rejection: the
+// stream is erased or archived, which comes before what its rows hold, no
+// row holds the secret, a row that does is a knowledge version outside the
 // agents stream, holds it in a key or can't be rewritten leaving the rest as
 // it was, the reason given holds it, the rules refuse it, or the stream took
 // an event since its rows were read.
@@ -75,8 +77,16 @@ type pending struct {
 }
 
 // find is Redact's first half, with no lock held: the stream's rows that
-// hold secret, rewritten, and the redaction that names them.
+// hold secret, rewritten, and the redaction that names them. An erased or
+// archived stream is refused for that first, whatever its live rows hold.
 func (s *Store) find(stream, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
+	logged, err := s.Log(stream)
+	if err != nil {
+		return pending{}, nil, err
+	}
+	if rejection := asItIs(stream, logged); rejection != nil {
+		return pending{}, rejection, nil
+	}
 	rows, err := rowsOf(s.reads, stream, s.applied.Load())
 	if err != nil {
 		return pending{}, nil, err
@@ -146,6 +156,35 @@ func (s *Store) Matches(stream, secret string) (int, error) {
 	}
 	rewrites, err := rewrittenIn(stream, rows, secret)
 	return len(rewrites), err
+}
+
+// asItIs refuses to redact a stream as it is: one erased, of which nothing
+// is left, or one archived, whose rows are in a blob.
+func asItIs(stream string, logged []events.Event) *events.Rejection {
+	if erased(logged) {
+		return erasedRedaction(stream)
+	}
+	if _, archived := MarkerOf(logged); archived {
+		return &events.Rejection{Check: "redact", Reason: ArchivedRedactionRefusal(stream)}
+	}
+	return nil
+}
+
+// erased says whether a stream's live rows hold its task.erased.
+func erased(logged []events.Event) bool {
+	return slices.ContainsFunc(logged, func(e events.Event) bool { return e.Type == events.TaskErased })
+}
+
+// erasedRedaction is why an erased stream is never redacted.
+func erasedRedaction(stream string) *events.Rejection {
+	return &events.Rejection{Check: "redact", Reason: stream + " is erased: there is nothing left to redact"}
+}
+
+// ArchivedRedactionRefusal is why an archived task can't be redacted as it
+// is: its rows are in the archive's blob, not the live log, so
+// RedactArchived redacts it instead.
+func ArchivedRedactionRefusal(stream string) string {
+	return stream + " is archived: unarchive it, redact it, then archive it again"
 }
 
 // aSecret says what is wrong with a secret to redact: one that is empty,

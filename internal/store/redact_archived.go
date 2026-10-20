@@ -101,8 +101,8 @@ func (s *Store) archivedRows(stream string, blobs Opener) (kept, live []row, rej
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if slices.ContainsFunc(logged, func(e events.Event) bool { return e.Type == events.TaskErased }) {
-		return nil, nil, &events.Rejection{Check: "redact", Reason: stream + " is erased: there is nothing left to redact"}, nil
+	if erased(logged) {
+		return nil, nil, erasedRedaction(stream), nil
 	}
 	marker, archived := MarkerOf(logged)
 	if !archived {

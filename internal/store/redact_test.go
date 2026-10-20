@@ -409,6 +409,57 @@ func TestRedactRefusesARowWithTheSecretInAKey(t *testing.T) {
 	}
 }
 
+// An archived task and an erased one are refused for that before anything
+// their live rows hold: a row after the marker, which only a crash or a
+// store with no rules leaves, holding the secret in a key or a value, or
+// no row holding it. Nothing is written.
+func TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows(t *testing.T) {
+	inAKey := events.Proposal{Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use it", "extra": map[string]any{secret: "x"}}}
+	inAValue := events.Proposal{Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use " + secret}}
+	for _, c := range []struct {
+		name   string
+		end    func(s *Store, blobs sharedfiles.Disk) (*events.Rejection, error)
+		leaves *events.Proposal
+		want   string
+	}{
+		{"archived, a key holds it", archiving, &inAKey, "task-1 is archived: unarchive it, redact it, then archive it again"},
+		{"archived, a value holds it", archiving, &inAValue, "task-1 is archived: unarchive it, redact it, then archive it again"},
+		{"archived, no row holds it", archiving, nil, "task-1 is archived: unarchive it, redact it, then archive it again"},
+		{"erased, a key holds it", erasing, &inAKey, "task-1 is erased: there is nothing left to redact"},
+		{"erased, a value holds it", erasing, &inAValue, "task-1 is erased: there is nothing left to redact"},
+		{"erased, no row holds it", erasing, nil, "task-1 is erased: there is nothing left to redact"},
+	} {
+		path := filepath.Join(t.TempDir(), "agentry.db")
+		s, _ := openAt(t, path)
+		acceptAll(t, s, newTask("task-1"))
+		if rejection, err := c.end(s, sharedfiles.Disk{Dir: t.TempDir()}); rejection != nil || err != nil {
+			t.Fatal(c.name, rejection, err)
+		}
+		if c.leaves != nil {
+			left := *c.leaves
+			left.Stream = "task-1"
+			acceptAll(t, s, left)
+		}
+		before := rowsAt(t, path)
+		if _, rejection, err := s.Redact("task-1", secret, you, ""); err != nil || rejection == nil || rejection.Reason != c.want {
+			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
+		}
+		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", c.name, before, after)
+		}
+	}
+}
+
+func archiving(s *Store, blobs sharedfiles.Disk) (*events.Rejection, error) {
+	_, rejection, err := s.Archive("task-1", summary, blobs)
+	return rejection, err
+}
+
+func erasing(s *Store, blobs sharedfiles.Disk) (*events.Rejection, error) {
+	_, rejection, err := s.Erase("task-1", you, "", blobs)
+	return rejection, err
+}
+
 // A string holding the secret that json.Marshal would write otherwise, a
 // < not escaped, a / or an A escaped, or a raw U+2028, is refused.
 func TestAStringEscapedOtherwiseIsRefused(t *testing.T) {
