@@ -42,8 +42,7 @@ func (s *Store) Unarchive(stream string, blobs Opener) (events.Event, *events.Re
 	if rejection, err := s.stillMarked(marker); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
-	unarchived := events.Proposal{Stream: stream, Actor: archiver, Type: events.TaskUnarchived, Data: map[string]any{
-		"marker": marker.Position, "archive": marker.Text("archive")}}
+	unarchived := unarchivedBy(marker)
 	if rejection := s.validate(unarchived); rejection != nil {
 		return events.Event{}, rejection, nil
 	}
@@ -57,6 +56,13 @@ func (s *Store) Unarchive(stream string, blobs Opener) (events.Event, *events.Re
 	s.applied.Store(event.Position)
 	s.changes.notify()
 	return event, nil, nil
+}
+
+// unarchivedBy is the task.unarchived that unarchives the stream marker
+// archived.
+func unarchivedBy(marker events.Event) events.Proposal {
+	return events.Proposal{Stream: marker.Stream, Actor: archiver, Type: events.TaskUnarchived, Data: map[string]any{
+		"marker": marker.Position, "archive": marker.Text("archive")}}
 }
 
 // keptBy is the rows a marker's blob keeps for it. Each must be of the

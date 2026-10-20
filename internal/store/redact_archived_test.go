@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -476,4 +477,42 @@ func TestPreviewArchivedCountsTheRowsInTheBlob(t *testing.T) {
 	if positions := redaction.Numbers("positions"); count != 1 || len(positions) != count {
 		t.Errorf("PreviewArchived counted %d rows, RedactArchived rewrote %v; want the one row", count, positions)
 	}
+}
+
+// The task.unarchived that RedactArchived adds, and then redacts, holds
+// the marker's position and blob, so PreviewArchived counts it and both
+// refuse it before the unarchiving: a secret in the position is left in a
+// number, and nothing is written.
+func TestPreviewArchivedSeesTheRowTheUnarchivingAdds(t *testing.T) {
+	t.Run("a secret in the marker's position", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "agentry.db")
+		s, blobs, marker := archivedWithRow(t, path, acceptEvery, events.TaskRenamed, `{"title":"Use code 93"}`)
+		inPosition := strconv.FormatInt(marker.Position, 10)
+		before := rowsAt(t, path)
+		want := "the row at 5 would still hold the secret outside the strings redacting rewrites, as in a number"
+		if count, rejection, err := s.PreviewArchived("task-1", inPosition, blobs); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("PreviewArchived: %d, %v, %v, want %q", count, rejection, err, want)
+		}
+		if _, rejection, err := s.RedactArchived("task-1", inPosition, you, "", summary, blobs); err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("RedactArchived: %v, %v, want %q", rejection, err, want)
+		}
+		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+			t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
+		}
+	})
+	t.Run("a secret in the marker's blob", func(t *testing.T) {
+		s, blobs, marker := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), acceptEvery, events.TaskRenamed, `{"title":"Plain"}`)
+		inBlob := marker.Text("archive")[:12]
+		count, rejection, err := s.PreviewArchived("task-1", inBlob, blobs)
+		if rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		redaction, rejection, err := s.RedactArchived("task-1", inBlob, you, "", summary, blobs)
+		if rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+		if positions := redaction.Numbers("positions"); count != 2 || len(positions) != count {
+			t.Errorf("PreviewArchived counted %d rows, RedactArchived rewrote %v; want the marker and the task.unarchived", count, positions)
+		}
+	})
 }
