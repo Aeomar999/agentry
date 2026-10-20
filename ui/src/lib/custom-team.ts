@@ -309,7 +309,7 @@ function checkPrompt(agent: DraftAgent, { kept }: RowContext): Words | undefined
   if (agent.prompt.trim() !== "" || (agent.coordinates && !kept)) return;
   if (agent.coordinates) {
     return {
-      message: "Write a prompt: Agentry's coordinator prompt is only for a new coordinator.",
+      message: "Write a prompt: Agentry's coordinator prompt is only for a new agent.",
       summary: `${shownName(agent)}: write a prompt`,
     };
   }

@@ -194,7 +194,7 @@ Words the team uses that never show: *panel*, *row*, *accordion*, *draft*, *409*
 | Same name twice in the team | `Another agent in this team is called {agent}. Pick another name.` | `{agent} (second one): another agent in this team is called {agent}` | Only the later row is marked. *Changed* "(the second)" to "(second one)" |
 | Name another team's agent has | `You have an agent called {agent} already, in the {team} team. Pick another name.` | `{agent}: you have an agent called {agent} already, in {team}` | Names are shared by all your agents |
 | Prompt empty (not the coordinator) | `Write a prompt: only the coordinator can do without one.` | `{agent}: write a prompt` | |
-| Prompt empty (the coordinator a team has, edit) | `Write a prompt: Agentry's coordinator prompt is only for a new coordinator.` | `{agent}: write a prompt` | Agentry writes its coordinator prompt only when it adds the agent |
+| Prompt empty (the coordinator a team has, edit) | `Write a prompt: Agentry's coordinator prompt is only for a new agent.` | `{agent}: write a prompt` | Agentry writes its coordinator prompt only when it adds the agent |
 | Unknown profile | `policy.toml has no profile called {profile}. Pick one it has.` | `{agent}: policy.toml has no profile called {profile}` | |
 
 | Where | Text | Accessible name / aria | Plural | Notes |

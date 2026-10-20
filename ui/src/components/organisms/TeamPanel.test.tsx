@@ -1041,7 +1041,7 @@ describe("Edit team: changing it", () => {
 
     expect(sent()).toEqual([]);
     expect(within(summary()).getByRole("heading").textContent).toBe("Couldn't save the team: 1 thing to fix");
-    expect(inSheet().getByText("Write a prompt: Agentry's coordinator prompt is only for a new coordinator.")).toBeTruthy();
+    expect(inSheet().getByText("Write a prompt: Agentry's coordinator prompt is only for a new agent.")).toBeTruthy();
   });
 
   test("Cancel with changes asks to discard them, counting them; Keep editing stays, Discard closes", () => {
