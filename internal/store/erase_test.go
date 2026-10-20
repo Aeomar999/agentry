@@ -2,8 +2,11 @@ package store
 
 import (
 	"database/sql"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -210,6 +213,40 @@ func TestAnUnreadableBlobDoesNotStopTheErasure(t *testing.T) {
 		if blobs.Has(hash) {
 			t.Errorf("%s: the unreadable blob is still there", name)
 		}
+	}
+}
+
+// A blob that can't be read for another reason, such as leave to read it
+// taken away, may be read later, so the erasure stops before it writes
+// anything: the task is archived as it was, and its blob kept. Root reads
+// a file of mode 0000 anyway, so the test is skipped there.
+func TestABlobThatCantBeReadForAnotherReasonStopsTheErasure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file of mode 0000")
+	}
+	s := archivable(t)
+	blobs := sharedfiles.Disk{Dir: t.TempDir()}
+	marker, rejection, err := s.Archive("task-1", summary, blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	hash := marker.Text("archive")
+	if err := os.Chmod(filepath.Join(blobs.Dir, hash[:2], hash), 0); err != nil {
+		t.Fatal(err)
+	}
+	before, err := s.Log("task-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	erased, rejection, err := s.Erase("task-1", you, "", blobs)
+	if !errors.Is(err, fs.ErrPermission) || rejection != nil || erased.Position != 0 {
+		t.Fatalf("%+v, %v, %v, want stopped by the permission error", erased, rejection, err)
+	}
+	if after, err := s.Log("task-1"); err != nil || !reflect.DeepEqual(after, before) {
+		t.Errorf("a stopped erasure changed task-1: %v, %v, want %v", after, err, before)
+	}
+	if !blobs.Has(hash) {
+		t.Error("the blob is gone")
 	}
 }
 

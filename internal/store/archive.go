@@ -213,17 +213,35 @@ func ReadArchive(blob io.Reader) ([]events.Event, error) {
 		e := events.Event{Position: r.Position, Proposal: events.Proposal{Stream: r.Stream, Type: events.Type(r.Type), Correlation: r.Correlation,
 			Actor: events.Actor{Kind: events.ActorKind(r.ActorKind), ID: r.ActorID}}}
 		if err := decode(&e, r.At, r.Data); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errNotAnArchive, err)
 		}
 		found = append(found, e)
 	}
 	return found, nil
 }
 
+// errNotAnArchive is a blob that was read but won't decode: it isn't
+// gzipped rows as encodeArchive writes them.
+var errNotAnArchive = errors.New("the blob isn't an archive")
+
 // decodeArchive is the rows in an archive blob, as encodeArchive wrote
-// them.
+// them. The blob is read whole first, so an error reading it is told apart
+// from one decoding it (errNotAnArchive).
 func decodeArchive(blob io.Reader) ([]row, error) {
-	unzipped, err := gzip.NewReader(blob)
+	archive, err := io.ReadAll(blob)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := rowsIn(archive)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errNotAnArchive, err)
+	}
+	return rows, nil
+}
+
+// rowsIn is the rows in an archive's bytes.
+func rowsIn(archive []byte) ([]row, error) {
+	unzipped, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return nil, err
 	}

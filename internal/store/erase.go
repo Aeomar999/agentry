@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
 )
@@ -41,7 +42,8 @@ type Remover interface {
 // blob would leave the task with no way to be erased: the live marker still
 // names that blob, which is deleted with the rest, but the blobs its rows
 // name, from earlier archives, can't be found, and the error after the
-// commit names it.
+// commit names it. Any other error reading a blob, which may pass, stops
+// it before anything is written, so a later try still finds those blobs.
 //
 // It returns the marker and, when it is refused, the rejection: by the
 // rules, or because the stream took an event since its rows were read. A
@@ -58,10 +60,11 @@ func (s *Store) Erase(stream string, who events.Actor, why string, blobs Remover
 	var unread error
 	history, err := s.History(stream, func(marker events.Event) ([]events.Event, error) {
 		kept, err := FromBlobs(blobs)(marker)
-		if err != nil { // the live marker still names it, and the erasure goes on
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, errNotAnArchive) { // the live marker still names it, and the erasure goes on
 			unread = fmt.Errorf("the blob %s can't be read, so the blobs its rows name can't be found: %w", marker.Text("archive"), err)
+			return nil, nil
 		}
-		return kept, nil
+		return kept, err
 	})
 	if err != nil {
 		return events.Event{}, nil, fmt.Errorf("erasing %s: %w", stream, err)
