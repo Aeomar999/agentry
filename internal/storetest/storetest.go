@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/schedules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -24,9 +25,10 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 	return OpenWith(t, path, events.Core())
 }
 
-// OpenWith is Open with another catalogue, such as one with ideas registered.
-// The state keeps the ideas' streams, and the rules run the ideas' own, as
-// serve does; under a catalogue without them, idea streams are foreign.
+// OpenWith is Open with another catalogue, such as WithFeatures. The state
+// keeps the streams of every feature serve installs, and the rules run the
+// features' own, as serve does; under a catalogue without them, their
+// streams are foreign.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
 	s, state := openUnchecked(t, path, catalogue)
@@ -43,7 +45,7 @@ func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.St
 func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
 	state := NewState(catalogue)
-	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, installed()...) })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,19 +53,26 @@ func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*sto
 }
 
 // NewState is an empty state for a log opened with catalogue, as serve
-// makes it: it keeps the ideas' streams whenever the catalogue registers them.
+// makes it: it keeps the streams of ideas and schedules whenever the
+// catalogue registers them.
 func NewState(catalogue *events.Catalogue) *current.State {
-	return current.New(catalogue, ideas.Streams())
+	return current.New(catalogue, features.StreamsOf(installed()...)...)
 }
 
-// WithIdeas is the catalogue serve opens the log with: the core's event
-// types and ideas'.
-func WithIdeas() *events.Catalogue {
-	catalogue, err := events.NewCatalogue(features.Registration(ideas.Feature()))
+// WithFeatures is the catalogue serve opens the log with: the core's event
+// types, and those of ideas and schedules.
+func WithFeatures() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(features.Registrations(installed()...)...)
 	if err != nil {
 		panic(err)
 	}
 	return catalogue
+}
+
+// installed are the features serve installs (cmd/agentry's
+// installedFeatures), which a test log is opened with.
+func installed() []features.Feature {
+	return []features.Feature{ideas.Feature(), schedules.Feature()}
 }
 
 // snapshotCuts is how many positions CheckSnapshots takes in a longer log:
@@ -89,7 +98,7 @@ func CheckSnapshots(t testing.TB, path string, catalogue *events.Catalogue, last
 		cuts = append(cuts, last)
 		slices.Sort(cuts)
 	}
-	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), ideas.Streams()); err != nil {
+	if err := current.EqualThroughSnapshots(path, catalogue, t.TempDir(), slices.Compact(cuts), features.StreamsOf(installed()...)...); err != nil {
 		t.Errorf("a snapshot differs from a replay of the log: %v", err)
 	}
 }

@@ -140,8 +140,8 @@ func checkMix(t *testing.T, copied, round, synthetic storetest.Mix) {
 // the heap it holds once the store is closed and its events dropped.
 func benchStartup(t *testing.T, path string) (time.Duration, *current.State, uint64) {
 	open := func() *current.State {
-		state := current.New(storetest.WithIdeas(), ideas.Streams())
-		s, err := store.Open(path, storetest.WithIdeas(), state, nil)
+		state := current.New(storetest.WithFeatures(), ideas.Streams())
+		s, err := store.Open(path, storetest.WithFeatures(), state, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

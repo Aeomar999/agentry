@@ -37,7 +37,7 @@ func withTeams(t *testing.T, visionaries bool) (*store.Store, *current.State, st
 	t.Helper()
 	fakeClaudeOnPath(t)
 	repo := gitRepo(t)
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithFeatures())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

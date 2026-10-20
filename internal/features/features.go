@@ -90,6 +90,18 @@ func Registrations(list ...Feature) []events.Registration {
 	return registrations
 }
 
+// StreamsOf are the Streams of list's features that have any, in its order,
+// for the state to keep.
+func StreamsOf(list ...Feature) []*Streams {
+	var owned []*Streams
+	for _, f := range list {
+		if f.Streams != nil {
+			owned = append(owned, f.Streams)
+		}
+	}
+	return owned
+}
+
 // Reader is the read side of the state, for features and for the rules:
 // current.State implements it, and rules.State is this type. A feature
 // never holds the store. Broken is why a stream could not be built, or nil.

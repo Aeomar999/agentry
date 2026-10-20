@@ -19,8 +19,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -212,8 +212,8 @@ func TestAnUnhashedBuildNeverUsesASnapshot(t *testing.T) {
 	snapshot := filepath.Join(filepath.Dir(logPath), snapshotFile)
 	startedAs := func(build string) (resumed int64) {
 		t.Helper()
-		state := current.Restore(snapshot, build, storetest.WithIdeas(), ideas.Streams())
-		log, err := store.Open(logPath, storetest.WithIdeas(), state, nil)
+		state := current.Restore(snapshot, build, storetest.WithFeatures(), features.StreamsOf(installedFeatures()...)...)
+		log, err := store.Open(logPath, storetest.WithFeatures(), state, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -417,9 +417,11 @@ func isArchived(t *testing.T, dataDir, id string) bool {
 // openLog opens the log in dataDir as serve does, replayed from the start.
 func openLog(t *testing.T, dataDir string) (*store.Store, *current.State) {
 	t.Helper()
-	catalogue := storetest.WithIdeas()
+	catalogue := storetest.WithFeatures()
 	state := storetest.NewState(catalogue)
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection {
+		return rules.Check(p, state, catalogue, installedFeatures()...)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

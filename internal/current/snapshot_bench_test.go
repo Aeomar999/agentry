@@ -41,7 +41,7 @@ const benchBuild = "bench"
 // of 3.
 func benchSnapshots(t *testing.T, path string, state *current.State, archivable []*tasks.Task, tail int64) {
 	dir := t.TempDir()
-	log, err := store.Open(path, storetest.WithIdeas(), nil, nil)
+	log, err := store.Open(path, storetest.WithFeatures(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,8 +88,8 @@ func writeSnapshot(t *testing.T, path string, state *current.State, log *store.S
 // it, as serve does, and fails unless Open went on from position.
 func resumed(t *testing.T, logPath, path string, position int64) {
 	t.Helper()
-	state := current.Restore(path, benchBuild, storetest.WithIdeas(), ideas.Streams())
-	s, err := store.Open(logPath, storetest.WithIdeas(), state, nil)
+	state := current.Restore(path, benchBuild, storetest.WithFeatures(), ideas.Streams())
+	s, err := store.Open(logPath, storetest.WithFeatures(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +122,8 @@ func stateAt(t *testing.T, path string, cut int64) *current.State {
 			t.Fatal(err)
 		}
 	}
-	state := current.New(storetest.WithIdeas(), ideas.Streams())
-	s, err := store.Open(copied, storetest.WithIdeas(), state, nil)
+	state := current.New(storetest.WithFeatures(), ideas.Streams())
+	s, err := store.Open(copied, storetest.WithFeatures(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,8 +135,8 @@ func stateAt(t *testing.T, path string, cut int64) *current.State {
 // breaks it shows without AGENTRY_BENCH_DB.
 func TestTheSnapshotBenchRunsOnASmallLog(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "small.log")
-	state := current.New(storetest.WithIdeas(), ideas.Streams())
-	s, err := store.Open(path, storetest.WithIdeas(), state, nil)
+	state := current.New(storetest.WithFeatures(), ideas.Streams())
+	s, err := store.Open(path, storetest.WithFeatures(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -37,7 +37,7 @@ func TestKnowledgeAsPatchesOnARealLog(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	catalogue := storetest.WithIdeas()
+	catalogue := storetest.WithFeatures()
 	s, err := store.Open(path, catalogue, current.New(catalogue), nil)
 	if err != nil {
 		t.Fatal(err)

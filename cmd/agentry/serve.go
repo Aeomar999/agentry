@@ -39,6 +39,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
+	"gitlab.com/dev.chempa/agentry/internal/schedules"
 	"gitlab.com/dev.chempa/agentry/internal/settingsfile"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -166,7 +167,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 	if err := current.RemoveLeftovers(snapshot); err != nil {
 		slog.Warn("agentry: unfinished snapshot writes can't be removed", "err", err)
 	}
-	state := current.Restore(snapshot, build, catalogue, ideas.Streams())
+	state := current.Restore(snapshot, build, catalogue, features.StreamsOf(installed...)...)
 	log, err := store.Open(filepath.Join(o.dataDir, "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, installed...) })
 	if err != nil {
 		return err
@@ -534,5 +535,6 @@ func proposerOf(logs map[string]features.Proposer, f features.Feature) features.
 func installedFeatures() []features.Feature {
 	return []features.Feature{
 		ideas.Feature(),
+		schedules.Feature(),
 	}
 }

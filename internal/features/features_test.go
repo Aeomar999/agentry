@@ -46,6 +46,14 @@ func TestAPanickingManifestCostsOnlyItsOwnLine(t *testing.T) {
 }
 
 // A Route that names no Auth is the page's only, never unguarded.
+func TestStreamsOfSkipsAFeatureWithNone(t *testing.T) {
+	a, b := &Streams{Prefix: "a-"}, &Streams{Prefix: "b-"}
+	got := StreamsOf(Feature{Name: "a", Streams: a}, Feature{Name: "none"}, Feature{Name: "b", Streams: b})
+	if len(got) != 2 || got[0] != a || got[1] != b {
+		t.Errorf("StreamsOf = %v, want a's and b's", got)
+	}
+}
+
 func TestTheZeroAuthIsUI(t *testing.T) {
 	var route Route
 	if route.Auth.DeskToo() || route.Auth.Verify() != nil || UI.DeskToo() || UI.Verify() != nil {

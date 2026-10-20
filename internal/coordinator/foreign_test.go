@@ -23,7 +23,7 @@ import (
 func ideasLog(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "agentry.db")
-	s, err := store.Open(path, storetest.WithIdeas(), nil, nil)
+	s, err := store.Open(path, storetest.WithFeatures(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func ideasLog(t *testing.T) string {
 // nothing more into them.
 func TestABuildWithoutIdeasSkipsTheirStreams(t *testing.T) {
 	path := ideasLog(t)
-	with, withState := storetest.OpenWith(t, path, storetest.WithIdeas())
+	with, withState := storetest.OpenWith(t, path, storetest.WithFeatures())
 	wantTasks := idsOf(withState.Tasks())
 	withLog, err := with.After(0, 1000)
 	if err != nil {

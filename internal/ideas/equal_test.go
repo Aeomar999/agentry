@@ -54,7 +54,7 @@ func TestTheRepeatedIdeasLogEqualsAReplay(t *testing.T) {
 		t.Fatalf("the state lists %d ideas, want %d", len(order), len(byID))
 	}
 
-	_, restarted := storetest.OpenWith(t, path, storetest.WithIdeas())
+	_, restarted := storetest.OpenWith(t, path, storetest.WithFeatures())
 	if got, want := ideas.All(restarted), ideas.All(state); len(got) != len(want) || got[len(got)-1].ID != want[len(want)-1].ID {
 		t.Errorf("after a restart the ideas are %d, ending %s; before, %d", len(got), got[len(got)-1].ID, len(want))
 	}

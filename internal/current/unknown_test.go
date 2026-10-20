@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
+	"gitlab.com/dev.chempa/agentry/internal/schedules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
@@ -53,6 +55,66 @@ func TestIdeasStreamsAreSkippedAndCountedWithoutIdeas(t *testing.T) {
 		}
 		if len(with.Unknown()) != 0 {
 			t.Errorf("with ideas, unknown %+v, want none", with.Unknown())
+		}
+	}
+}
+
+// withSchedules is the catalogue of a build with ideas and schedules.
+var withSchedules = func() *events.Catalogue {
+	catalogue, err := events.NewCatalogue(features.Registrations(ideas.Feature(), schedules.Feature())...)
+	if err != nil {
+		panic(err)
+	}
+	return catalogue
+}()
+
+// withSchedulesLog is withIdeasLog with two schedules and a task one of
+// them made, as a build with schedules wrote it.
+func withSchedulesLog() []events.Event {
+	var proposals []events.Proposal
+	for _, e := range withIdeasLog() {
+		proposals = append(proposals, e.Proposal)
+	}
+	return logOf(append(proposals,
+		proposal("schedule-1", you, schedules.ScheduleCreated, map[string]any{"title": "Nightly", "repo": "/r", "team": "tech", "every": "day", "at": "02:00", "zone": "Europe/London"}),
+		proposal("task-3", you, events.TaskCreated, map[string]any{"title": "Nightly", "repo": "/r", "coordinator": "tech-lead"}),
+		proposal("schedule-1", system, schedules.ScheduleFired, map[string]any{"task": "task-3", "slot": "2026-10-19T02:00:00+01:00"}),
+		proposal("schedule-2", you, schedules.ScheduleCreated, map[string]any{"title": "Weekly", "repo": "/r", "team": "tech", "every": "week", "days": []any{"mon"}, "at": "09:00", "zone": "Asia/Kolkata"}),
+		proposal("schedule-2", you, schedules.SchedulePaused, nil),
+		proposal("task-3", you, events.TaskLabeled, map[string]any{"labels": []any{"chore"}}),
+		proposal("schedule-1", system, schedules.ScheduleSkipped, map[string]any{"slot": "2026-10-20T02:00:00+01:00", "reason": schedules.Open, "task": "task-3"}),
+	)...)
+}
+
+// A build without schedules skips their streams and counts them, beside
+// the ideas': the tasks and rosters are what a build with schedules makes
+// of the same log.
+func TestSchedulesStreamsAreSkippedAndCountedWithoutSchedules(t *testing.T) {
+	log := withSchedulesLog()
+	want := []Unknown{{Prefix: ideas.Prefix, Streams: 2, Events: 3, Last: 24},
+		{Prefix: schedules.Prefix, Streams: 2, Events: 5, Last: 32}}
+	with := loadInto(New(withSchedules, ideas.Streams(), schedules.Streams()), log)
+	if len(with.Unknown()) != 0 || len(schedules.All(with)) != 2 {
+		t.Fatalf("with schedules: unknown %+v and %d schedules, want none and 2", with.Unknown(), len(schedules.All(with)))
+	}
+	for name, s := range map[string]*State{"loaded": loadedWith(events.Core(), log), "applied": appliedWith(events.Core(), log)} {
+		if got := s.Unknown(); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: unknown %+v, want %+v", name, got, want)
+		}
+		if !reflect.DeepEqual(s.Tasks(), with.Tasks()) || !slices.Equal(s.TaskIDs(), with.TaskIDs()) {
+			t.Errorf("%s: tasks %v, with schedules %v", name, idsOf(s.Tasks()), idsOf(with.Tasks()))
+		}
+		if !reflect.DeepEqual(s.Roster(), with.Roster()) || s.Settings() != with.Settings() {
+			t.Errorf("%s: the rosters differ from a build with schedules", name)
+		}
+		if len(schedules.All(s)) != 0 {
+			t.Errorf("%s: %d schedules, want none", name, len(schedules.All(s)))
+		}
+		if task, err := s.Task("schedule-1"); task != nil || err != nil {
+			t.Errorf("%s: schedule-1 reads as a task: %+v, %v", name, task, err)
+		}
+		if got := s.StreamPosition("schedule-1"); got != 32 {
+			t.Errorf("%s: schedule-1's last position %d, want 32", name, got)
 		}
 	}
 }

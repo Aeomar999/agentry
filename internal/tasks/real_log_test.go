@@ -32,7 +32,7 @@ func TestARealLogReplays(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	catalogue := storetest.WithIdeas()
+	catalogue := storetest.WithFeatures()
 	state := current.New(catalogue, ideas.Streams()) // only for the task order: every stream is replayed below
 	s, err := store.Open(path, catalogue, state, nil)
 	if err != nil {

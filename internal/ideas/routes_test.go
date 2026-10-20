@@ -56,7 +56,7 @@ func newServer(t *testing.T, limits tasks.Limits) (*httptest.Server, *store.Stor
 // newServerLogging is newServer with the ideas' log made by logOf.
 func newServerLogging(t *testing.T, limits tasks.Limits, logOf func(*store.Store) features.Proposer) (*httptest.Server, *store.Store, *current.State) {
 	t.Helper()
-	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithIdeas())
+	s, state := storetest.OpenWith(t, filepath.Join(t.TempDir(), "agentry.db"), storetest.WithFeatures())
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}

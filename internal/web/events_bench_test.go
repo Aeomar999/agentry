@@ -30,7 +30,7 @@ func TestTaskEventsBench(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	copyFile(t, source, path)
-	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
+	s, state := storetest.OpenWith(t, path, storetest.WithFeatures())
 	server := NewServer(s, state, Config{UIToken: token, Blobs: sharedfiles.Disk{Dir: t.TempDir()}}, http.NotFoundHandler(), nil).Handler()
 
 	ids := []string{"task-8"}

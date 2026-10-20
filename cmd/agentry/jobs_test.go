@@ -12,7 +12,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
-	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
@@ -42,8 +41,8 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	defer slog.SetDefault(previous)
 
-	state := current.Restore(filepath.Join(dataDir, snapshotFile), "test", storetest.WithIdeas(), ideas.Streams())
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithIdeas(), state, nil)
+	state := current.Restore(filepath.Join(dataDir, snapshotFile), "test", storetest.WithFeatures(), features.StreamsOf(installedFeatures()...)...)
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithFeatures(), state, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +111,7 @@ func TestASecretReachesTheJobAndNeitherLog(t *testing.T) {
 // No agent may touch the settings file, whatever the policy says.
 func TestTheSettingsFileIsProtected(t *testing.T) {
 	dataDir := t.TempDir()
-	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithIdeas(), current.New(storetest.WithIdeas(), ideas.Streams()), nil)
+	log, err := store.Open(filepath.Join(dataDir, "agentry.db"), storetest.WithFeatures(), storetest.NewState(storetest.WithFeatures()), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

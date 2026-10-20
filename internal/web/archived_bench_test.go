@@ -54,7 +54,7 @@ func TestArchivedTaskOpensBench(t *testing.T) {
 	}
 	raw.Close()
 
-	s, state := storetest.OpenWith(t, path, storetest.WithIdeas())
+	s, state := storetest.OpenWith(t, path, storetest.WithFeatures())
 	blobs := sharedfiles.Disk{Dir: t.TempDir()}
 	app := NewServer(s, state, Config{UIToken: token, Blobs: blobs}, http.NotFoundHandler(), nil)
 	storetest.ArchiveIn(t, s, state, id, blobs)
