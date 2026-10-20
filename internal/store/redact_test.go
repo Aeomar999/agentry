@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -472,6 +473,34 @@ func TestAStringEscapedOtherwiseIsRefused(t *testing.T) {
 		rw, err := redactedData(`{"title":`+raw+`}`, secret)
 		if err != nil || !strings.HasPrefix(rw.refused, "isn't written as the log writes data") {
 			t.Errorf("%s: refused %q, %v", name, rw.refused, err)
+		}
+	}
+}
+
+// pin is a secret of digits alone, which a row may also hold as a number.
+const pin = "90210417"
+
+// A row that would still hold the secret once its strings are rewritten,
+// in a number beside a string holding it or in a number alone, is refused,
+// and nothing is written: the secret would stay in the log while the
+// redaction said it had gone.
+func TestASecretLeftInANumberIsRefused(t *testing.T) {
+	for name, data := range map[string]map[string]any{
+		"beside a string": {"title": "PIN " + pin, "extra": 90210417},
+		"alone":           {"title": "PIN", "extra": 90210417},
+	} {
+		path := filepath.Join(t.TempDir(), "agentry.db")
+		s, _ := openAt(t, path)
+		created := newTask("task-1")
+		maps.Copy(created.Data, data)
+		acceptAll(t, s, created)
+		before := rowsAt(t, path)
+		_, rejection, err := s.Redact("task-1", pin, you, "")
+		if want := "the row at 1 would still hold the secret outside the strings redacting rewrites, as in a number"; err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: %v, %v, want %q", name, rejection, err, want)
+		}
+		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", name, before, after)
 		}
 	}
 }

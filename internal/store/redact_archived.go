@@ -29,8 +29,8 @@ type ArchiveBlobs interface {
 // named but couldn't delete (removeRedacted). Then it finds the secret in
 // the rows as Redact does, so what Redact would refuse for the rows
 // themselves (no row holds it, a row is a knowledge version, holds it in a
-// key or can't be rewritten leaving the rest as it was, or the reason
-// holds it) is refused before anything is written. Then it unarchives the
+// key, can't be rewritten leaving the rest as it was or would still hold
+// it once rewritten, or the reason holds it) is refused before anything is written. Then it unarchives the
 // task (Unarchive), redacts it, with the blobs every task.archived among
 // its rows names in "archives", and archives it again (Archive), summarise
 // reading the state the redaction refolded; each takes the lock for

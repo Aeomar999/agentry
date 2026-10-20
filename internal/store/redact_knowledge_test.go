@@ -157,3 +157,23 @@ func TestAKnowledgeVersionWithTheSecretInAKeyIsRefused(t *testing.T) {
 		t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
 	}
 }
+
+// A knowledge version that would still hold the secret once its text is
+// redacted, in a number beside it, is refused like any other row, and
+// nothing is written.
+func TestAKnowledgeVersionLeavingTheSecretInANumberIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, _ := openAt(t, path)
+	acceptAll(t, s, agentCreated("engineer"))
+	learned := agents.Agent{Name: "engineer"}.Learned(you, "The PIN is "+pin+".")
+	learned.Data["pin"] = 90210417
+	acceptAll(t, s, learned)
+	before := rowsAt(t, path)
+	_, rejection, err := s.Redact(events.AgentsStream, pin, you, "")
+	if want := "the row at 2 would still hold the secret outside the strings redacting rewrites, as in a number"; err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("%v, %v, want %q", rejection, err, want)
+	}
+	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
+		t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
+	}
+}

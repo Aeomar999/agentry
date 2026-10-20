@@ -52,10 +52,10 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // It returns the redaction and, when it is refused, the rejection: the
 // stream is erased or archived, which comes before what its rows hold, no
 // row holds the secret, a row that does is a knowledge version outside the
-// agents stream, holds it in a key or can't be rewritten leaving the rest as
-// it was, the reason given holds it, the rules refuse it, or the stream took
-// an event since its rows were read.
-// A refusal writes nothing, as Archive's does. The error is for the
+// agents stream, holds it in a key, can't be rewritten leaving the rest as
+// it was or would still hold it once rewritten, the reason given holds it,
+// the rules refuse it, or the stream took an event since its rows were
+// read. A refusal writes nothing, as Archive's does. The error is for the
 // database failing. One after the commit comes with the redaction: the
 // rows are rewritten, but the old text may stay in the WAL until
 // GiveBackSpace runs again.
@@ -235,9 +235,10 @@ func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 // the numbers and the other strings. A string the log would have escaped
 // otherwise, which it never writes, would change by more than the secret,
 // so its row is refused, as is one whose secret would still show next to
-// [redacted]. A row with the secret in a key is refused with its data as it
-// was and no fields, whose paths would hold the secret too. A row that
-// doesn't hold the secret comes back empty.
+// [redacted], or whose bytes would still hold it anywhere else, such as in
+// a number, which no string holds. A row with the secret in a key is
+// refused with its data as it was and no fields, whose paths would hold
+// the secret too. A row that doesn't hold the secret comes back empty.
 func redactedData(data, secret string) (rewrittenRow, error) {
 	var found finding
 	escapedOtherwise, inKey := false, false
@@ -257,7 +258,8 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 	if inKey {
 		return rewrittenRow{data: data, refused: "holds the secret in a key, which redacting doesn't rewrite", inKey: true}, nil
 	}
-	if len(found.fields) == 0 {
+	leftOver := strings.Contains(rewritten, secret)
+	if len(found.fields) == 0 && !leftOver {
 		return rewrittenRow{}, nil
 	}
 	rw := rewrittenRow{data: rewritten, fields: found.fields, removed: found.removed}
@@ -266,6 +268,8 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 		rw.refused = "isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret"
 	case found.survives:
 		rw.refused = "would still show the secret next to " + Redacted
+	case leftOver:
+		rw.refused = "would still hold the secret outside the strings redacting rewrites, as in a number"
 	}
 	return rw, nil
 }

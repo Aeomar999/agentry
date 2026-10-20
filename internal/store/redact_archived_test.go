@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"io/fs"
@@ -57,21 +58,24 @@ func TestARefusedArchivedRedactionWritesNothing(t *testing.T) {
 		kind         events.Type
 		data, why    string
 		want         string
+		secret       string // the package's secret when empty
 	}{
-		{"no row holds it", "task-1", events.TaskRenamed, `{"title":"Plain"}`, "", "no row of task-1 holds the secret"},
-		{"the reason holds it", "task-1", events.TaskRenamed, holdingSecret, "Remove " + secret + ".", "the reason holds the secret, which the log would then keep"},
+		{"no row holds it", "task-1", events.TaskRenamed, `{"title":"Plain"}`, "", "no row of task-1 holds the secret", ""},
+		{"the reason holds it", "task-1", events.TaskRenamed, holdingSecret, "Remove " + secret + ".", "the reason holds the secret, which the log would then keep", ""},
 		{"a knowledge version", "task-1", events.AgentLearned, `{"name":"engineer","knowledge":"Use ` + secret + `."}`, "",
-			"the row at 2 is a knowledge version, which is redacted by writing it again in full"},
+			"the row at 2 is a knowledge version, which is redacted by writing it again in full", ""},
 		{"a key", "task-1", events.TaskRenamed, `{"title":"x","extra":{"` + secret + `":"x"}}`, "",
-			"the row at 2 holds the secret in a key, which redacting doesn't rewrite"},
+			"the row at 2 holds the secret in a key, which redacting doesn't rewrite", ""},
 		{"escaped otherwise", "task-1", events.TaskRenamed, `{"title":"<Use ` + secret + `>"}`, "",
-			"the row at 2 isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret"},
-		{"not archived", "task-2", events.TaskRenamed, holdingSecret, "", "task-2 isn't archived: it is redacted as it is"},
+			"the row at 2 isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret", ""},
+		{"not archived", "task-2", events.TaskRenamed, holdingSecret, "", "task-2 isn't archived: it is redacted as it is", ""},
+		{"left in a number", "task-1", events.TaskRenamed, `{"title":"PIN ` + pin + `","extra":` + pin + `}`, "",
+			"the row at 2 would still hold the secret outside the strings redacting rewrites, as in a number", pin},
 	} {
 		path := filepath.Join(t.TempDir(), "agentry.db")
 		s, blobs, marker := archivedWithRow(t, path, acceptEvery, c.kind, c.data)
 		before := rowsAt(t, path)
-		if _, rejection, err := s.RedactArchived(c.stream, secret, you, c.why, summary, blobs); err != nil || rejection == nil || rejection.Reason != c.want {
+		if _, rejection, err := s.RedactArchived(c.stream, cmp.Or(c.secret, secret), you, c.why, summary, blobs); err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
 		}
 		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
