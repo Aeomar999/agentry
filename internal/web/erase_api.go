@@ -239,8 +239,9 @@ func (s *Server) removeSharedFiles(shared []string, named map[string]bool) []str
 }
 
 // redactCopies redacts each copy of an erased task's words in the rows of
-// the task that keep it, an archived one through its blob, and says which
-// can't be: the erasure stands all the same.
+// the task that keep it, an archived one through its blob, which it then
+// drops from the cache of opened archives, and says which can't be: the
+// erasure stands all the same.
 func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 	var warnings []string
 	why := "The copy of erased " + id + "."
@@ -250,6 +251,7 @@ func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 			var err error
 			if _, archived := s.task(stream); errors.Is(archived, current.ErrArchived) {
 				_, rejection, err = s.store.RedactArchivedRows(stream, kept.text, kept.rows, httpapi.You, why, s.summarise(stream), s.config.Blobs)
+				s.archives.forget(stream) // its old marker's entry still holds the words
 			} else {
 				_, rejection, err = s.store.RedactRows(stream, kept.text, kept.rows, httpapi.You, why)
 			}

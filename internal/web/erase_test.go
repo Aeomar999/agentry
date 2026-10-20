@@ -260,6 +260,26 @@ func TestErasingForgetsAnOpenedArchivedTask(t *testing.T) {
 	}
 }
 
+// An archived asker opened from the page before the task it asked is
+// erased has its copy redacted through its blob, and the cache keeps none
+// of the words it held before: its page, read again, holds no copy.
+func TestErasingForgetsTheOpenedArchivesItRedacts(t *testing.T) {
+	f := newEraseFixture(t)
+	f.done(t)
+	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+	storetest.ArchiveIn(t, f.log, f.state, "task-1", f.blobs)
+	if code, body := call(t, f.server, "GET", "/api/tasks/task-1/events", ""); code != http.StatusOK || !strings.Contains(body, plantedHere) {
+		t.Fatalf("opening task-1 before the erasure: %d %s", code, body)
+	}
+	f.erase(t, "task-2")
+	if got := f.opened(); slices.Contains(got, "task-1") {
+		t.Errorf("opened archives after the erasure %q, want no task-1", got)
+	}
+	if code, body := call(t, f.server, "GET", "/api/tasks/task-1/events", ""); code != http.StatusOK || strings.Contains(body, plantedHere) {
+		t.Errorf("task-1's events after the erasure: %d %s", code, body)
+	}
+}
+
 // opened is the streams the cache of opened archives keeps, oldest first.
 func (f *eraseFixture) opened() []string {
 	f.web.archives.mu.Lock()
