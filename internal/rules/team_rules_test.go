@@ -219,3 +219,47 @@ func TestATeamEditOfAVersionNoLongerTheTeamsIsRefused(t *testing.T) {
 		t.Errorf("charter's prompt is %q, want the first edit's", charter.Prompt)
 	}
 }
+
+// A team is linked to a built-in template or to one of yours, saved or
+// removed: the teams of a removed one keep its base. A link of a team the
+// roster hasn't, or to no template it knows, is refused.
+func TestATeamIsLinkedToATemplateItKnows(t *testing.T) {
+	s := openSeeded(t)
+	dataTeam(t, s)
+	for _, p := range []events.Proposal{
+		savingTemplate("papers", "Readers", research()),
+		savingTemplate("old-papers", "Old Readers", research()),
+		{Stream: events.TemplatesStream, Actor: you, Type: events.TemplateRemoved, Data: map[string]any{"id": "old-papers"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("%s: %v %v", p.Type, rejection, err)
+		}
+	}
+	cases := []struct {
+		name, team, template, want string
+	}{
+		{"built in", "Data", "research", ""},
+		{"yours", "Data", "papers", ""},
+		{"yours, removed", agents.DefaultTeam, "old-papers", ""},
+		{"no such team", "Dreamers", "research", "there is no team called Dreamers"},
+		{"a team in another case", "data", "research", "there is no team called data"},
+		{"no such template", "Data", "dreamers", "there is no template with the id dreamers"},
+		{"no template", "Data", "", "a team is linked to a template, and this link names none"},
+	}
+	for _, c := range cases {
+		_, rejection, err := s.Propose(agents.TeamLinked(c.team, c.template, you))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reason := reasonOf(rejection); reason != c.want {
+			t.Errorf("%s: refused with %q, want %q", c.name, reason, c.want)
+		}
+	}
+}
+
+func reasonOf(rejection *events.Rejection) string {
+	if rejection == nil {
+		return ""
+	}
+	return rejection.Reason
+}

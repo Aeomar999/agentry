@@ -886,6 +886,7 @@ func TestABrokenRosterRefusesWhatItWouldCheck(t *testing.T) {
 		{events.AgentsStream, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data}, "could not read the agents: applying it panicked"},
 		{events.WorkersStream, joined, "could not read the workers: applying it panicked"},
 		{events.ConnectionsStream, connected, "could not read the connections: applying it panicked"},
+		{events.TemplatesStream, agents.TeamLinked(agents.DefaultTeam, "software", you), "could not read the templates: applying it panicked"},
 	}
 	for _, c := range cases {
 		state := current.New(withIdeas, ideas.Streams())

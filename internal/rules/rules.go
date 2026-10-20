@@ -67,6 +67,14 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 			return refuse(reason)
 		}
 	}
+	if p.Type == events.TeamLinked { // the one roster rule that reads the templates too
+		if err := state.Broken(events.TemplatesStream); err != nil {
+			return refuse("could not read the templates: " + err.Error())
+		}
+		if reason := teamLinked(roster, state.Templates(), state.RemovedTemplates(), p); reason != "" {
+			return refuse(reason)
+		}
+	}
 	if rule := workerRules[p.Type]; rule != nil {
 		if err := state.Broken(events.WorkersStream); err != nil {
 			return refuse("could not read the workers: " + err.Error())

@@ -31,6 +31,26 @@ func teamEdited(state State, p events.Proposal) string {
 	return ""
 }
 
+// teamLinked refuses a link of a team the roster hasn't, or to a template
+// that is neither a built-in one nor one of yours. A template you removed
+// is still one: its teams keep the built-in template it was based on.
+func teamLinked(roster agents.Roster, saved agents.UserTemplates, removed agents.RemovedTemplates, p events.Proposal) string {
+	if reason := teamExists(roster, p); reason != "" {
+		return reason
+	}
+	id := p.Text("template")
+	_, builtIn := agents.TemplateWithID(id)
+	_, yours := saved.WithID(id)
+	_, gone := removed[id]
+	switch {
+	case id == "":
+		return "a team is linked to a template, and this link names none"
+	case !builtIn && !yours && !gone:
+		return "there is no template with the id " + id
+	}
+	return ""
+}
+
 // TeamEditProblems is every reason the rules would refuse the team edit p,
 // in the edit's order, so a route can list them all before it writes. The
 // team after the edit has exactly one coordinator, a name a new team could
