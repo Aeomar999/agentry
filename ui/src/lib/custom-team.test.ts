@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, PolicyProfile, TeamTemplate } from "@/api/types";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import {
@@ -12,17 +12,22 @@ import {
   changedAgents,
   copyTemplate,
   type DraftAgent,
+  editCustomTeam,
   FIRST_TEMPLATE,
   footerLine,
   listed,
+  type LoadedTeam,
+  loadTeam,
   missingLine,
   missingProfiles,
   newAgent,
   problemCount,
+  problemsOfEdit,
   removedNotice,
   replacedNotice,
   replaceDetail,
   replaceQuestion,
+  saveAgain,
   summaryTitle,
   type TeamDraft,
   type TeamRules,
@@ -30,10 +35,22 @@ import {
   thingCount,
   unsaved,
   whyNotLoaded,
+  whyNotSaved,
 } from "./custom-team";
 
 // The client reads the address when it loads, and there is none here.
-vi.mock("@/api/client", () => ({ api: vi.fn(), ApiError: class {} }));
+vi.mock("@/api/client", () => ({
+  api: vi.fn(),
+  ApiError: class extends Error {
+    status: number;
+    body?: Record<string, unknown>;
+    constructor(message: string, status: number, body?: Record<string, unknown>) {
+      super(message);
+      this.status = status;
+      this.body = body;
+    }
+  },
+}));
 vi.mock("@/live/use-resource", () => ({ useResource: vi.fn() }));
 
 // agent is a roster agent with only what the team checks read set.
@@ -443,6 +460,11 @@ describe("the panel's sentences", () => {
     expect(footerLine(draft(row("a1")), 0, false)).toBe("Creates the team and its 2 agents.");
   });
 
+  test("summaryTitle says, editing, the team wasn't saved", () => {
+    expect(summaryTitle(2, true)).toBe("Couldn't save the team: 2 things to fix");
+    expect(summaryTitle(0, true)).toBe("Couldn't save the team");
+  });
+
   test("summaryTitle counts the things to fix, if any", () => {
     expect(summaryTitle(1)).toBe("Couldn't create the team: 1 thing to fix");
     expect(summaryTitle(0)).toBe("Couldn't create the team");
@@ -518,5 +540,309 @@ describe("addCustomTeam", () => {
   test("with the policy's hash, asks for the missing profiles too", async () => {
     await addCustomTeam(team, "h1");
     expect(api).toHaveBeenCalledWith("POST", "/api/teams", { ...sent, addMissingProfiles: true, hash: "h1" });
+  });
+});
+
+// The Docs team as GET /api/agents gives it, at version v1, beside Software.
+const docs = [
+  agent("lead", "", true),
+  { ...agent("writer", "Docs"), prompt: "You write.", profile: "read-mostly", color: "teal", column: "review" as const, teamVersion: "v1" },
+  { ...agent("editor", "Docs", true), description: "Leads.", model: "opus", teamVersion: "v1" },
+];
+
+describe("loadTeam", () => {
+  test("is the team named in any case, its coordinator first, each agent's fields in a row of its own, at the team's version", () => {
+    const loaded = loadTeam(docs, "docs");
+    expect(loaded.team).toBe("Docs");
+    expect(loaded.version).toBe("v1");
+    expect(loaded.agents.map(({ key: _, ...fields }) => fields)).toEqual([
+      {
+        name: "editor",
+        description: "Leads.",
+        coordinates: true,
+        prompt: "",
+        engine: "claude",
+        model: "opus",
+        profile: "",
+        color: "",
+        column: "",
+      },
+      {
+        name: "writer",
+        description: "",
+        coordinates: false,
+        prompt: "You write.",
+        engine: "claude",
+        model: "",
+        profile: "read-mostly",
+        color: "teal",
+        column: "review",
+      },
+    ]);
+    expect(new Set(loaded.agents.map((agent) => agent.key)).size).toBe(2);
+  });
+
+  test("a team you don't have has no agents and no version", () => {
+    expect(loadTeam(docs, "Research")).toEqual({ team: "Research", agents: [], version: "" });
+  });
+
+  test("starts a draft with nothing unsaved", () => {
+    const loaded = loadTeam(docs, "Docs");
+    expect(unsaved(loaded, { team: loaded.team, agents: [...loaded.agents] })).toBe(false);
+  });
+});
+
+// The Docs team loaded to edit: editor coordinates writer and proofer.
+const loaded: LoadedTeam = {
+  team: "Docs",
+  version: "v1",
+  agents: [row("k1", { name: "editor", coordinates: true }), row("k2", { name: "writer" }), row("k3", { name: "proofer" })],
+};
+
+const sentAgent = (was: string, name: string, coordinates = false) => ({
+  was,
+  name,
+  description: "",
+  coordinates,
+  prompt: "Do the work.",
+  engine: "claude",
+  model: "",
+  profile: "",
+  color: "",
+  column: "",
+});
+
+describe("editCustomTeam", () => {
+  beforeEach(() => vi.mocked(api).mockReset());
+
+  // Renamed Writing; writer renamed author and coordinating; proofer removed; reviewer added.
+  const edited: TeamDraft = {
+    team: " Writing ",
+    agents: [
+      { ...loaded.agents[0], coordinates: false },
+      { ...loaded.agents[1], name: " author ", coordinates: true },
+      row("k9", { name: "reviewer" }),
+    ],
+  };
+  const sent = {
+    version: "v1",
+    team: "Writing",
+    agents: [sentAgent("editor", "editor"), sentAgent("writer", "author", true), sentAgent("", "reviewer")],
+  };
+
+  test("puts the team under its loaded name: renamed, each row with the name it had, a new one with none, a removed one left out", async () => {
+    await editCustomTeam(loaded, edited);
+    expect(api).toHaveBeenCalledWith("PUT", "/api/teams/Docs", sent);
+  });
+
+  test("with the policy's hash, asks for the missing profiles too", async () => {
+    await editCustomTeam(loaded, edited, "h1");
+    expect(api).toHaveBeenCalledWith("PUT", "/api/teams/Docs", { ...sent, addMissingProfiles: true, hash: "h1" });
+  });
+
+  test("escapes the team's name in the address", async () => {
+    await editCustomTeam({ ...loaded, team: "R&D 2" }, edited);
+    expect(api).toHaveBeenCalledWith("PUT", "/api/teams/R%26D%202", sent);
+  });
+
+  test("saveAgain saves the reloaded team unchanged", async () => {
+    await saveAgain(loaded);
+    expect(api).toHaveBeenCalledWith("PUT", "/api/teams/Docs", {
+      version: "v1",
+      team: "Docs",
+      agents: [sentAgent("editor", "editor", true), sentAgent("writer", "writer"), sentAgent("proofer", "proofer")],
+    });
+  });
+});
+
+describe("problemsOfEdit", () => {
+  const draft = loaded;
+
+  test("a row's problem goes under its field, by the row's key", () => {
+    expect(problemsOfEdit([{ row: 1, field: "name", error: "an agent called writer already exists, in the Docs team" }], draft)).toEqual([
+      {
+        field: { row: "k2", field: "name" },
+        message: "An agent called writer already exists, in the Docs team.",
+        summary: "writer: an agent called writer already exists, in the Docs team",
+      },
+    ]);
+  });
+
+  test("the name a row had goes under its name", () => {
+    expect(problemsOfEdit([{ row: 2, field: "was", error: "ghost isn't an agent of the Docs team" }], draft)[0].field).toEqual({
+      row: "k3",
+      field: "name",
+    });
+  });
+
+  test("the team's name goes under Team name; its coordinators and agents under the Agents legend", () => {
+    const problems = problemsOfEdit(
+      [
+        { field: "team", error: "a team called Software already exists" },
+        { field: "coordinates", error: "the Docs team has two coordinators" },
+        { field: "agents", error: "the edit neither keeps nor removes proofer" },
+      ],
+      draft,
+    );
+    expect(problems.map((p) => [p.field, p.message, p.summary])).toEqual([
+      ["team", "A team called Software already exists.", "Team name: a team called Software already exists"],
+      ["agents", "The Docs team has two coordinators.", "Agents: the Docs team has two coordinators"],
+      ["agents", "The edit neither keeps nor removes proofer.", "Agents: the edit neither keeps nor removes proofer"],
+    ]);
+  });
+
+  test("a removed agent tasks still need goes under the Agents legend, naming it and the tasks", () => {
+    const [one] = problemsOfEdit(
+      [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1: finish those first, or keep proofer" }],
+      draft,
+    );
+    expect(one).toEqual({
+      field: "agents",
+      message: "proofer is still needed by task-1. Finish it first, or undo to keep proofer.",
+      summary: "proofer: still needed by task-1",
+      removed: { agent: "proofer", tasks: ["task-1"] },
+    });
+    const [two] = problemsOfEdit(
+      [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1, task-2: finish those first, or keep proofer" }],
+      draft,
+    );
+    expect([two.message, two.summary, two.removed]).toEqual([
+      "proofer is still needed by task-1 and task-2. Finish them first, or undo to keep proofer.",
+      "proofer: still needed by task-1 and task-2",
+      { agent: "proofer", tasks: ["task-1", "task-2"] },
+    ]);
+  });
+
+  test("a removed agent's other problem keeps the server's words", () => {
+    expect(problemsOfEdit([{ field: "removed", agent: "ghost", error: "ghost isn't an agent of the Docs team to remove" }], draft)).toEqual(
+      [
+        {
+          field: "agents",
+          message: "Ghost isn't an agent of the Docs team to remove.",
+          summary: "ghost: ghost isn't an agent of the Docs team to remove",
+          removed: { agent: "ghost", tasks: [] },
+        },
+      ],
+    );
+  });
+
+  test("a field the panel has no place for goes under the Agents legend, never dropped", () => {
+    const problems = problemsOfEdit(
+      [
+        { row: 0, field: "description", error: "the description is too long" },
+        { field: "version", error: "something new" },
+        { row: 7, field: "name", error: "a row the draft hasn't" },
+      ],
+      draft,
+    );
+    expect(problems.map((p) => [p.field, p.message, p.summary])).toEqual([
+      ["agents", "editor: The description is too long.", "editor: the description is too long"],
+      ["agents", "Something new.", "Agents: something new"],
+      ["agents", "A row the draft hasn't.", "Agents: a row the draft hasn't"],
+    ]);
+  });
+});
+
+describe("checkTeam editing a team", () => {
+  // The Docs team as loaded, with Software's lead beside it.
+  const roster = [agent("lead", "", true), agent("editor", "Docs", true), agent("writer", "Docs"), agent("scribe", "Writing", true)];
+  const team = (name: string, ...names: string[]): TeamDraft => ({
+    team: name,
+    agents: names.map((n, i) => row(`k${i}`, { name: n, coordinates: i === 0 })),
+  });
+  const problemsOf = (draft: TeamDraft, editing?: { team: string }) => checkTeam(draft, roster, rules, editing).map((p) => p.summary);
+
+  test("its own name and its agents' names are free, in any case and whichever rows have them", () => {
+    expect(problemsOf(team("Docs", "editor", "writer"), { team: "Docs" })).toEqual([]);
+    expect(problemsOf(team("DOCS", "writer", "editor"), { team: "Docs" })).toEqual([]);
+  });
+
+  test("a new team with the same names clashes, as before", () => {
+    expect(problemsOf(team("Docs", "editor", "writer"))).toEqual([
+      "Team name: you have a team called Docs already",
+      "editor: you have an agent called editor already, in Docs",
+      "writer: you have an agent called writer already, in Docs",
+    ]);
+  });
+
+  test("another team's name and agents, a built-in's name and a name twice in the team still clash", () => {
+    expect(problemsOf(team("Software", "lead", "writer"), { team: "Docs" })).toEqual([
+      "Team name: you have a team called Software already",
+      "lead: you have an agent called lead already, in Software",
+    ]);
+    expect(problemsOf(team("Writing 2", "writer", "writer"), { team: "Docs" })).toEqual([
+      "writer (second one): another agent in this team is called writer",
+    ]);
+    expect(problemsOf(team("writing", "editor"), { team: "Docs" })).toEqual(["Team name: you have a team called Writing already"]);
+  });
+
+  test("a team named as a built-in one keeps its name", () => {
+    expect(problemsOf(team("Writing", "scribe", "writer-2"), { team: "Writing" })).toEqual([]);
+    expect(problemsOf(team("Writing", "editor", "writer"), { team: "Docs" })).toEqual([
+      "Team name: you have a team called Writing already",
+    ]);
+  });
+});
+
+describe("whyNotSaved", () => {
+  const draft: TeamDraft = { ...loaded, team: "Writing" };
+  const refused = (status: number, body?: Record<string, unknown>, message = String(body?.error ?? "")) =>
+    whyNotSaved(new ApiError(message, status, body), loaded, draft);
+
+  test("problems, put where the panel shows them", () => {
+    expect(
+      refused(400, { error: "the Writing team can't be saved: …", problems: [{ row: 1, field: "prompt", error: "give it a prompt" }] }),
+    ).toEqual({
+      kind: "problems",
+      problems: [{ field: { row: "k2", field: "prompt" }, message: "Give it a prompt.", summary: "writer: give it a prompt" }],
+    });
+  });
+
+  test("a removed agent a task needs is problems too, though a 409", () => {
+    const why = refused(409, {
+      error: "…",
+      problems: [{ field: "removed", agent: "proofer", error: "proofer is still needed by task-1: finish those first, or keep proofer" }],
+    });
+    expect(why.kind).toBe("problems");
+  });
+
+  test("changed elsewhere: reload, or save over it with the version given", () => {
+    const message = "the Docs team changed since you opened it: reload it, or save your changes over it with this version";
+    expect(refused(409, { error: "changed elsewhere", version: "v2", message })).toEqual({
+      kind: "changed",
+      version: "v2",
+      title: "Couldn't save the team: it changed since you opened it",
+      detail: `The Docs team was changed somewhere else after you opened it. Copy anything you want to keep, then reload to see the team as it is now. Agentry said: "${message}"`,
+    });
+  });
+
+  test("cut short: saved, and saving again with the version given finishes the tasks", () => {
+    const error = "saved the Writing team, but 1 task still needs moving: save again to finish (task-1: no)";
+    expect(refused(409, { error, version: "v3" })).toEqual({
+      kind: "cut short",
+      version: "v3",
+      title: "Saved the Writing team, but some of its tasks haven't moved yet",
+      detail: `Save again to finish moving them. Agentry said: "${error}"`,
+    });
+  });
+
+  test("missing profiles: the offer Create team makes", () => {
+    expect(refused(409, { error: "needs profiles", missingProfiles: ["research-only"] })).toEqual({
+      kind: "missing profiles",
+      profiles: ["research-only"],
+    });
+  });
+
+  test("anything else in the server's words, or ours when Agentry couldn't be reached", () => {
+    expect(refused(500, undefined, "the log is unwritable")).toEqual({
+      kind: "failed",
+      title: "Couldn't save the team",
+      detail: "the log is unwritable",
+    });
+    expect(whyNotSaved(new TypeError("Failed to fetch"), loaded, draft)).toEqual({
+      kind: "failed",
+      title: "Couldn't save the team",
+      detail: "Couldn't reach Agentry. Check it's running, then try again.",
+    });
   });
 });
