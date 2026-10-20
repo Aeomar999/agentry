@@ -76,7 +76,7 @@ var taskRules = map[events.Type]rule{
 	events.TaskAnswered: all(questionOpen),
 	events.TaskDone:     all(byTheCoordinatorOrYou, notUndoingYourMove, noOpenTurnUnlessMoved, closedByYouIfAnEpic),
 
-	events.TaskArchived:   all(doneToArchive, aMarker),
+	events.TaskArchived:   all(doneToArchive, noTurnRunning, aMarker),
 	events.TaskUnarchived: all(anArchivedTask), // Check lets it onto an archived task; a task here is whole
 }
 

@@ -339,6 +339,29 @@ func TestARoundReplaysFromTheBlobAndTheLiveRows(t *testing.T) {
 	}
 }
 
+// A done task whose wrap-up turn is still open isn't chosen, as the rules
+// would refuse it; the first round after the turn ends archives it.
+func TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds(t *testing.T) {
+	f := newFixture(t)
+	f.task(t, "task-1", tasks.Story)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	f.propose(t, events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w/task-1", "branch": "b", "port": 7901}})
+	f.propose(t, events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+	f.clock = f.done(t, "task-1").Add(age) // stops turn-1, and turn-2 wraps up
+	f.propose(t, events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2", Data: map[string]any{"agent": "tech-lead", "hash": "h"}})
+
+	if chosen := f.archiver.chosen(); len(chosen) != 0 {
+		t.Errorf("chosen %v while task-1's turn runs, want none", chosen)
+	}
+	if archived := f.archiver.round(); archived != 0 || f.isArchived("task-1") {
+		t.Fatalf("archived %d while task-1's turn runs, want none", archived)
+	}
+	f.propose(t, events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-2", Data: map[string]any{"agent": "tech-lead", "report": "Wrapped up."}})
+	if archived := f.archiver.round(); archived != 1 || !f.isArchived("task-1") {
+		t.Errorf("the round after the turn ended: archived %d, task-1 %v; want task-1", archived, f.isArchived("task-1"))
+	}
+}
+
 // A task the store refuses is left for the next round, and the round goes
 // on with the others; the next round archives it.
 func TestARefusedTaskWaitsForTheNextRound(t *testing.T) {

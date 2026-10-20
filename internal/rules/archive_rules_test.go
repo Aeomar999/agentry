@@ -182,3 +182,35 @@ func TestOnlyTheStoreWritesTheMarkers(t *testing.T) {
 		}
 	}
 }
+
+// A done task whose turn is still open, as the wrap-up turn after you move
+// it to Done (which stops the turn in hand), isn't archived until the turn
+// ends: by the rules, and so by the store, which checks the marker under
+// its lock.
+func TestATaskWithATurnRunningWaitsForItToEnd(t *testing.T) {
+	s, state := openSeededState(t)
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: created.data},
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: worktree.data},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: turnStarted("turn-1", "tech-lead").data},
+		{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Moved.", "moved": true}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2", Data: turnStarted("turn-2", "tech-lead").data},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	const waits = "the task has a turn running, so it waits until the turn ends"
+	if rejection := Check(events.Proposal{Stream: "task-1", Actor: archiver, Type: events.TaskArchived, Data: archivedData(nil)}, state, withIdeas); rejection == nil || rejection.Reason != waits {
+		t.Errorf("the rules on archiving a task with a turn running: %v", rejection)
+	}
+	task, _ := state.Task("task-1")
+	summary := tasks.SummaryOf(task, state.Roster())
+	if _, rejection, err := s.Archive("task-1", func() any { return summary }, sharedfiles.Disk{Dir: t.TempDir()}); err != nil || rejection == nil || rejection.Reason != waits {
+		t.Errorf("the store archiving a task with a turn running: %v, %v", rejection, err)
+	}
+	if _, rejection, err := s.Propose(events.Proposal{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-2", Data: turnEnded("turn-2", "tech-lead", "Wrapped up.").data}); rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	archive(t, s, state, "task-1")
+}

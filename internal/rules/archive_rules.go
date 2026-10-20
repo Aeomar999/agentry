@@ -21,6 +21,17 @@ func doneToArchive(t *tasks.Task, _ events.Proposal) string {
 	return ""
 }
 
+// noTurnRunning: a task whose turn is still open waits for the turn to end.
+// Its end would land on an archived task, refused, and a redaction can't
+// hold a turn the state no longer shows, so what the turn learned would
+// bring a redacted secret back.
+func noTurnRunning(t *tasks.Task, _ events.Proposal) string {
+	if t.OpenTurn() != nil {
+		return "the task has a turn running, so it waits until the turn ends"
+	}
+	return ""
+}
+
 // aMarker says where the task's rows went: the blob, and the positions it
 // covers, from the task's task.created at "created" to "through"; and what
 // the task keeps, a summary the state can read, or its stream would break
