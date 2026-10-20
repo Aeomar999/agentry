@@ -468,6 +468,37 @@ func TestAnErasedTaskBlocksNoStory(t *testing.T) {
 	}
 }
 
+// A route that acts on a task answers an erased one 410, with the day, as
+// the reads do: the board's move, the limits, the repo, the shared files
+// and the Workspace. A task there never was is still 404.
+func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
+	f := newEraseFixture(t)
+	answer := f.erase(t, "task-2")
+	want := "task-2 was erased on " + answer.At.Format("2 January 2006")
+	repo, _ := json.Marshal(map[string]string{"repo": gitRepo(t)})
+	for _, c := range []struct{ method, path, body string }{
+		{"POST", "/api/tasks/{task}/direct", `{"to":"todo"}`},
+		{"PUT", "/api/tasks/{task}/budget", `{"budget":5}`},
+		{"PUT", "/api/tasks/{task}/turns", `{"maxTurns":5}`},
+		{"PUT", "/api/tasks/{task}/repo", string(repo)},
+		{"GET", "/api/tasks/{task}/shared", ""},
+		{"GET", "/api/tasks/{task}/shared/file?name=mine.md", ""},
+		{"POST", "/api/tasks/{task}/shared?name=new.md", "notes"},
+		{"GET", "/api/tasks/{task}/files", ""},
+		{"GET", "/api/tasks/{task}/file?path=README.md", ""},
+		{"GET", "/api/tasks/{task}/commits", ""},
+	} {
+		erased := strings.ReplaceAll(c.path, "{task}", "task-2")
+		if code, body := call(t, f.server, c.method, erased, c.body); code != http.StatusGone || strings.TrimSpace(body) != want {
+			t.Errorf("%s %s: %d %q, want 410 %q", c.method, erased, code, body, want)
+		}
+		unknown := strings.ReplaceAll(c.path, "{task}", "task-9")
+		if code, body := call(t, f.server, c.method, unknown, c.body); code != http.StatusNotFound {
+			t.Errorf("%s %s: %d %q, want 404", c.method, unknown, code, body)
+		}
+	}
+}
+
 // A turn that runs is stopped while the task is still there, so the runner
 // can find the machine it runs on; so is one whose turn has ended, as its
 // session may still be there, idle, until the loop stops it. An archived

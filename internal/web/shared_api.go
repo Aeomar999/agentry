@@ -27,7 +27,7 @@ type sharedFile struct {
 func (s *Server) listShared(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	list := []sharedFile{}
@@ -41,7 +41,7 @@ func (s *Server) listShared(w http.ResponseWriter, r *http.Request) {
 func (s *Server) uploadShared(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	name, err := sharedfiles.CleanName(r.URL.Query().Get("name"))
@@ -61,7 +61,7 @@ func (s *Server) uploadShared(w http.ResponseWriter, r *http.Request) {
 func (s *Server) downloadShared(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	f, ok := task.Files[r.URL.Query().Get("name")]

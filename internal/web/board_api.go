@@ -70,7 +70,7 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case err != nil || task == nil:
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, id)
 		return
 	}
 	note := strings.TrimSpace(request.Note)

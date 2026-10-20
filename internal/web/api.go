@@ -71,7 +71,7 @@ func (s *Server) changeRepo(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	moved := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.RepoChanged, Data: map[string]any{"repo": repo}}
@@ -226,7 +226,7 @@ func (s *Server) setBudget(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	budget := httpapi.LimitOf(request.Budget, 0)
@@ -257,7 +257,7 @@ func (s *Server) setMaxTurns(w http.ResponseWriter, r *http.Request) {
 	}
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return
 	}
 	maxTurns := httpapi.LimitOf(request.MaxTurns, 0)
@@ -543,11 +543,8 @@ func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.
 		}
 		return archived.task, archived
 	}
-	if errors.Is(err, current.ErrErased) && s.gone(w, id) {
-		return nil, nil
-	}
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, id)
 		return nil, nil
 	}
 	return task, nil
@@ -566,11 +563,8 @@ func (s *Server) reopenable(w http.ResponseWriter, id string) *tasks.Task {
 	if errors.Is(err, current.ErrArchived) {
 		return s.unarchive(w, id)
 	}
-	if errors.Is(err, current.ErrErased) && s.gone(w, id) {
-		return nil
-	}
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, id)
 		return nil
 	}
 	return task

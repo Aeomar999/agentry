@@ -333,13 +333,13 @@ func (s *Server) writeOverOldText() []string {
 	return warnings
 }
 
-// gone answers that an erased task is gone for good, and when it went,
-// rather than that there was never such a task. It is false for a task
-// that isn't erased.
-func (s *Server) gone(w http.ResponseWriter, id string) bool {
-	erasure, erased := s.state.Erased(id)
-	if erased {
+// noTask answers that there is no task id to act on: that an erased one
+// is gone for good, and when it went, 410, rather than that there was
+// never such a task, 404.
+func (s *Server) noTask(w http.ResponseWriter, id string) {
+	if erasure, erased := s.state.Erased(id); erased {
 		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
+		return
 	}
-	return erased
+	http.Error(w, "no such task", http.StatusNotFound)
 }

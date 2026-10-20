@@ -18,7 +18,7 @@ import (
 func (s *Server) workspaceOf(w http.ResponseWriter, r *http.Request) (workspace.Workspace, machines.Machine, bool) {
 	task, err := s.task(r.PathValue("task"))
 	if err != nil || task == nil {
-		http.Error(w, "no such task", http.StatusNotFound)
+		s.noTask(w, r.PathValue("task"))
 		return workspace.Workspace{}, nil, false
 	}
 	if task.Worktree == nil {
