@@ -1766,8 +1766,11 @@ describe("Edit team: Save as a template", () => {
     fireEvent.click(removeButton("body"));
     if (removing) await act(async () => fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Remove" })));
 
-    expect(templateButton("body")!.hasAttribute("disabled")).toBe(true);
-    expect(templateButton("body")!.hasAttribute("aria-describedby")).toBe(false);
+    // The footer's copy is hidden by CSS then, but off all the same.
+    for (const place of ["footer", "body"] as const) {
+      expect(templateButton(place)!.hasAttribute("disabled")).toBe(true);
+      expect(templateButton(place)!.hasAttribute("aria-describedby")).toBe(false);
+    }
   });
 
   // Save again saves the team with nothing unsaved, so only the save running holds it.
