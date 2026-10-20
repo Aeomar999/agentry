@@ -13,6 +13,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
@@ -51,6 +52,10 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(id)
 	if err == nil && task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, current.ErrErased) {
+		http.Error(w, rules.ErasedRefusal(id), http.StatusConflict)
 		return
 	}
 	if refused := s.keptByStories(id); refused != "" {

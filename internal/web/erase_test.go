@@ -550,13 +550,24 @@ func TestAnErasedTaskReadsAsGone(t *testing.T) {
 }
 
 // A refused erasure, as a second one, writes nothing and answers 409; a
-// task never made is 404; and the desk can't erase.
+// task never made is 404; and the desk can't erase. A second erasure of an
+// epic a story still names, as one erased from before the route refused
+// that did, says it is erased.
 func TestARefusedErasureWritesNothing(t *testing.T) {
 	f := newEraseFixture(t)
 	f.erase(t, "task-2")
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Still filed", "repo": "/r", "coordinator": "tech-lead"}})
+	if code, body := call(t, f.server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-3"}`); code != http.StatusOK {
+		t.Fatalf("task-4 into the epic: %d %s", code, body)
+	}
+	if _, rejection, err := f.log.Erase("task-3", you, "Gone.", f.blobs); rejection != nil || err != nil {
+		t.Fatalf("erasing task-3 in the store: %v, %v", rejection, err)
+	}
 	last := f.log.LastPosition()
-	if code, body := call(t, f.server, "POST", "/api/tasks/task-2/erase", `{"why":"Again."}`); code != http.StatusConflict || !strings.Contains(body, "task-2 is erased") {
-		t.Errorf("a second erasure: %d %s, want 409", code, body)
+	for _, id := range []string{"task-2", "task-3"} {
+		if code, body := call(t, f.server, "POST", "/api/tasks/"+id+"/erase", `{"why":"Again."}`); code != http.StatusConflict || !strings.Contains(body, id+" is erased") {
+			t.Errorf("a second erasure of %s: %d %s, want 409", id, code, body)
+		}
 	}
 	if code, _ := call(t, f.server, "POST", "/api/tasks/task-9/erase", `{}`); code != http.StatusNotFound {
 		t.Errorf("erasing no such task: %d, want 404", code)
