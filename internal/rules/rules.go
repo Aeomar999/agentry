@@ -62,6 +62,11 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 			return refuse(reason)
 		}
 	}
+	if p.Type == events.TeamEdited { // the one roster rule that reads the tasks too
+		if reason := teamEdited(state, p); reason != "" {
+			return refuse(reason)
+		}
+	}
 	if rule := workerRules[p.Type]; rule != nil {
 		if err := state.Broken(events.WorkersStream); err != nil {
 			return refuse("could not read the workers: " + err.Error())

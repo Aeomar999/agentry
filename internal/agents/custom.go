@@ -23,7 +23,7 @@ func CheckCustomTeam(team string, members []Agent, current Roster) string {
 	if len(members) == 0 {
 		return "the " + team + " team needs agents"
 	}
-	if problem := checkCoordinators(team, members); problem != "" {
+	if problem := CheckCoordinators(team, members); problem != "" {
 		return problem
 	}
 	seen := map[string]bool{}
@@ -52,7 +52,9 @@ func CheckTeamName(team string, current Roster) string {
 	return ""
 }
 
-func checkCoordinators(team string, members []Agent) string {
+// CheckCoordinators is why the members of team don't have exactly one
+// coordinator, or "" when they do.
+func CheckCoordinators(team string, members []Agent) string {
 	var coordinators []string
 	for _, agent := range members {
 		if agent.Coordinates {

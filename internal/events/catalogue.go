@@ -191,6 +191,7 @@ var coreTypes = map[Type]Spec{
 	TeamRenamed:  {Fields: []string{"team", "to"}, Writers: []ActorKind{Human}},
 
 	TeamCoordinatorMoved: {Fields: []string{"team", "to"}, Writers: []ActorKind{Human}},
+	TeamEdited:           {Fields: []string{"team", "to", "agents", "removed"}, Writers: []ActorKind{Human}},
 
 	TemplateSaved:   {Fields: []string{"id", "team", "agents"}, Writers: []ActorKind{Human}}, // "description" may be missing; each agent's definition, never its knowledge or workers
 	TemplateRemoved: {Fields: []string{"id"}, Writers: []ActorKind{Human}},
@@ -278,7 +279,7 @@ var coreTypes = map[Type]Spec{
 // streamOf is the stream a type must be in; types not listed go in a task's stream.
 var streamOf = map[Type]string{
 	AgentCreated: AgentsStream, AgentChanged: AgentsStream, AgentRemoved: AgentsStream, AgentLearned: AgentsStream, AgentRenamed: AgentsStream,
-	TeamRenamed: AgentsStream, TeamCoordinatorMoved: AgentsStream,
+	TeamRenamed: AgentsStream, TeamCoordinatorMoved: AgentsStream, TeamEdited: AgentsStream,
 	PolicyLoaded: PolicyStream, PolicyRefused: PolicyStream,
 	WorkerInvited: WorkersStream, WorkerJoined: WorkersStream, WorkerConnected: WorkersStream,
 	WorkerDisconnected: WorkersStream, WorkerRemoved: WorkersStream,

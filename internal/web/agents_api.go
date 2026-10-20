@@ -236,15 +236,8 @@ func (s *Server) removeTeam(w http.ResponseWriter, r *http.Request) {
 func (s *Server) needing(names ...string) ([]string, error) {
 	var busy []string
 	for _, task := range s.state.Tasks() {
-		if task.IsDone {
-			continue
-		}
-		open := task.OpenTurn()
-		for _, name := range names {
-			if task.Coordinator == name || open != nil && open.Agent == name || task.Handoff != nil && task.Handoff.To == name {
-				busy = append(busy, task.ID)
-				break
-			}
+		if slices.ContainsFunc(names, task.Needs) {
+			busy = append(busy, task.ID)
 		}
 	}
 	return busy, nil

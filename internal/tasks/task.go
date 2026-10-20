@@ -290,6 +290,13 @@ func (t *Task) OpenTurn() *Turn {
 	return t.Turns[len(t.Turns)-1]
 }
 
+// Needs says whether the task, unfinished, needs the agent: to coordinate
+// it, to finish the turn it is taking, or to take the step handed to it.
+func (t *Task) Needs(agent string) bool {
+	open := t.OpenTurn()
+	return !t.IsDone && (t.Coordinator == agent || open != nil && open.Agent == agent || t.Handoff != nil && t.Handoff.To == agent)
+}
+
 func (t *Task) LastTurn() *Turn {
 	if len(t.Turns) == 0 {
 		return nil

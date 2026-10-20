@@ -196,6 +196,9 @@ func (r *Roster) Apply(e events.Event) {
 		if i := roster.index(e.Text("to")); i >= 0 {
 			roster[i].Template = template
 		}
+	case events.TeamEdited:
+		edit, _ := TeamEditOf(e.Proposal) // the rules accepted it as one
+		roster = roster.edited(edit)
 	case events.AgentLearned:
 		if i := roster.index(e.Text("name")); i >= 0 {
 			roster[i].learn(e)
