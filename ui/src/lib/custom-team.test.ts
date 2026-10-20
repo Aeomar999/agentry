@@ -803,7 +803,7 @@ describe("checkTeam editing a team", () => {
   test("only a new coordinator may have no prompt: the server writes the default for a new agent alone", () => {
     const cleared = { ...docs, agents: [{ ...docs.agents[0], prompt: " " }, docs.agents[1]] };
     expect(checkTeam(cleared, roster, rules, docs).map((p) => [p.field, p.message])).toEqual([
-      [{ row: "k0", field: "prompt" }, "Write a prompt: only a new coordinator can do without one."],
+      [{ row: "k0", field: "prompt" }, "Write a prompt: Agentry's coordinator prompt is only for a new coordinator."],
     ]);
     const handedOn = {
       ...docs,

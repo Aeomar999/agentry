@@ -303,7 +303,7 @@ function checkName(agent: DraftAgent, { earlier, roster }: RowContext): Words | 
 function checkPrompt(agent: DraftAgent, { kept }: RowContext): Words | undefined {
   if (agent.prompt.trim() !== "" || (agent.coordinates && !kept)) return;
   if (agent.coordinates) {
-    return { message: "Write a prompt: only a new coordinator can do without one.", summary: `${shownName(agent)}: write a prompt` };
+    return { message: "Write a prompt: Agentry's coordinator prompt is only for a new coordinator.", summary: `${shownName(agent)}: write a prompt` };
   }
   return {
     message: "Write a prompt: only the coordinator can do without one.",
