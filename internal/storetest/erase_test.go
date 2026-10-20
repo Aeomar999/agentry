@@ -3,6 +3,7 @@ package storetest
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -335,4 +337,90 @@ func atVersionOne(t *testing.T, path string) {
 	if _, err := db.Exec(`DROP INDEX events_erased; PRAGMA user_version = 1`); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Test 9: the full VACUUM before the migration runs once. A folder made at
+// schema version 2, with a task archived, reopens without one, so a large
+// log doesn't copy itself on every start; taken back to version 1, it
+// gets exactly one, and the reopen after it none.
+func TestReopeningAVersionTwoLogRunsNoVacuum(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agentry.db")
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	s, state := openUnchecked(t, path, events.Core())
+	archivedAndKept(t, s, "kept-3f07")
+	ArchiveIn(t, s, state, "task-1", blobs)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if vacuums := vacuumsOpening(t, path); vacuums != 0 {
+		t.Errorf("reopening a version-2 log sent %d VACUUMs, want none", vacuums)
+	}
+	atVersionOne(t, path)
+	if vacuums := vacuumsOpening(t, path); vacuums != 1 {
+		t.Errorf("opening a version-1 log with an archived task sent %d VACUUMs, want 1", vacuums)
+	}
+	if vacuums := vacuumsOpening(t, path); vacuums != 0 {
+		t.Errorf("reopening it after its VACUUM sent %d more, want none", vacuums)
+	}
+}
+
+// vacuumsOpening opens and closes the store at path, and says how many full
+// VACUUMs it sent: PRAGMA incremental_vacuum isn't one.
+func vacuumsOpening(t *testing.T, path string) int64 {
+	t.Helper()
+	var vacuums atomic.Int64
+	name := fmt.Sprintf("sqlite-vacuums-%d", drivers.Add(1))
+	sql.Register(name, vacuumCountingDriver{&vacuums})
+	previous := store.Driver
+	store.Driver = name
+	defer func() { store.Driver = previous }()
+	s, _ := openUnchecked(t, path, events.Core())
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return vacuums.Load()
+}
+
+type vacuumCountingDriver struct{ vacuums *atomic.Int64 }
+
+func (d vacuumCountingDriver) Open(name string) (driver.Conn, error) {
+	c, err := (&sqlite.Driver{}).Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return vacuumCountingConn{c.(sqliteConn), d.vacuums}, nil
+}
+
+type vacuumCountingConn struct {
+	sqliteConn
+	vacuums *atomic.Int64
+}
+
+func (c vacuumCountingConn) count(query string) {
+	if words := strings.Fields(query); len(words) > 0 && strings.EqualFold(words[0], "VACUUM") {
+		c.vacuums.Add(1)
+	}
+}
+
+func (c vacuumCountingConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
+	c.count(query)
+	return c.sqliteConn.PrepareContext(ctx, query)
+}
+
+func (c vacuumCountingConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	result, err := c.sqliteConn.ExecContext(ctx, query, args)
+	if err != driver.ErrSkip { // skipped, database/sql prepares it instead
+		c.count(query)
+	}
+	return result, err
+}
+
+func (c vacuumCountingConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	rows, err := c.sqliteConn.QueryContext(ctx, query, args)
+	if err != driver.ErrSkip {
+		c.count(query)
+	}
+	return rows, err
 }
