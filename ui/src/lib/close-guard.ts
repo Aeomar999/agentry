@@ -7,8 +7,9 @@ import { useBlocker } from "react-router-dom";
 // asking turns on, and the panel asks in its footer. Browser Back with
 // changes is held, so the panel's history entry stays, and asks the same.
 // Following a link with changes is held too; opening then says where the
-// link goes, so the panel can ask about that instead. Reload and closing the tab get the browser's own prompt. While busy (a
-// save) nothing asks and Back stays put; the save's answer decides.
+// link goes, so the panel can ask about that instead. Reload and closing
+// the tab get the browser's own prompt. While busy (a save) nothing asks
+// and Back stays put; the save's answer decides.
 export interface CloseGuard {
   asking: boolean;
   opening: string; // the path of the link that was held while asking, "" for closing
