@@ -1957,6 +1957,22 @@ describe("Edit team: history", () => {
     expect(address()).toBe("/agents");
   });
 
+  test("opened from a link, Back with changes asks first, and nothing goes until it is answered", async () => {
+    openAt("/tasks", "/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await back();
+
+    expect(address()).toBe("/agents?team=Docs");
+    const question = () => inSheet().getByRole("group", { name: "Discard your changes to Docs?" });
+    await act(async () => fireEvent.click(within(question()).getByRole("button", { name: "Keep editing" })));
+    expect((inSheet().getByLabelText("Team name") as HTMLInputElement).value).toBe("Handbook");
+    await back();
+    expect(address()).toBe("/agents?team=Docs");
+    await act(async () => fireEvent.click(within(question()).getByRole("button", { name: "Discard" })));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/tasks");
+  });
+
   test("opened from a link, closing takes the panel off the address instead", async () => {
     openAt("/tasks", "/agents?team=Docs");
     fireEvent.click(inSheet().getByRole("button", { name: "Cancel" }));
