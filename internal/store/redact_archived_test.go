@@ -329,13 +329,14 @@ func (r *racingPut) Put(blob io.Reader) (string, int64, error) {
 
 // When another writer archives the same rows while RedactArchived archives
 // the task again, both put the same blob, which that writer's marker
-// names: it is kept, and the error says another writer archived the task.
+// names: it is kept, the old blob is deleted, and the redaction comes back
+// with no error, since the task is redacted and archived.
 func TestARaceToArchiveAgainKeepsTheBlobTheWinnersMarkerNames(t *testing.T) {
 	s, disk, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), acceptEvery, events.TaskRenamed, holdingSecret)
 	blobs := &racingPut{Disk: disk, s: s, stream: "task-1"}
-	redaction, _, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
-	if redaction.Type != events.EventRedacted || err == nil || !strings.Contains(err.Error(), "task-1 was archived again by another writer") {
-		t.Fatalf("redacting: %+v, %v, want redacted and archived by another writer", redaction, err)
+	redaction, rejection, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	if redaction.Type != events.EventRedacted || rejection != nil || err != nil {
+		t.Fatalf("redacting: %+v, %v, %v, want redacted with no error", redaction, rejection, err)
 	}
 	if blobs.theirs.Position == 0 {
 		t.Fatal("the other writer didn't archive task-1")
@@ -345,5 +346,8 @@ func TestARaceToArchiveAgainKeepsTheBlobTheWinnersMarkerNames(t *testing.T) {
 	}
 	if got, want := blobsIn(t, disk), []string{blobs.theirs.Text("archive")}; !reflect.DeepEqual(got, want) || got[0] == old.Text("archive") {
 		t.Errorf("the blobs on disk are %v, want the other writer's %v alone", got, want)
+	}
+	if disk.Has(old.Text("archive")) {
+		t.Error("the old blob is still there")
 	}
 }

@@ -52,8 +52,9 @@ type ArchiveBlobs interface {
 // refused or fails, that blob is removed unless a marker names it: no
 // later run would, and after a refused redaction it holds the secret.
 // When it was refused because another writer archived the task between
-// the steps, the error says so instead of that the task is left
-// unarchived.
+// the steps, a committed redaction is done and comes back with no error;
+// a refused one's error says another writer archived the task instead of
+// that it is left unarchived.
 func (s *Store) RedactArchived(stream, secret string, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
 	if rejection, err := s.checkArchived(stream, secret, who, why, blobs); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
@@ -65,7 +66,12 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 	if redaction.Position == 0 { // nothing committed: the old blobs still hold what the rows do
 		return events.Event{}, rejection, errors.Join(err, s.archiveAgain(stream, summarise, blobs))
 	}
-	failed := errors.Join(err, s.archiveAgain(stream, summarise, blobs))
+	again := s.archiveAgain(stream, summarise, blobs)
+	var byAnother *archivedByAnother
+	if errors.As(again, &byAnother) { // the goal: redacted and archived
+		again = byAnother.dropped
+	}
+	failed := errors.Join(err, again)
 	for _, hash := range archives {
 		if err := blobs.Remove(hash); err != nil {
 			failed = errors.Join(failed, err)
@@ -146,7 +152,8 @@ func archivesIn(rows []row) ([]string, error) {
 // archiveAgain archives a stream RedactArchived unarchived. When it can't,
 // it removes the blob its Archive put, if any, unless a marker names it
 // (dropUnnamed), and says the stream is left unarchived or, if its latest
-// marker is a task.archived, that another writer archived it again.
+// marker is a task.archived, that another writer archived it again
+// (archivedByAnother).
 func (s *Store) archiveAgain(stream string, summarise func() any, blobs ArchiveBlobs) error {
 	puts := &recordingPuts{Blobs: blobs}
 	_, rejection, err := s.Archive(stream, summarise, puts)
@@ -159,9 +166,25 @@ func (s *Store) archiveAgain(stream string, summarise func() any, blobs ArchiveB
 	dropped := s.dropUnnamed(stream, puts.put, blobs)
 	live, read := s.Log(stream)
 	if _, archived := MarkerOf(live); archived && read == nil {
-		return errors.Join(fmt.Errorf("%s was archived again by another writer: %w", stream, err), dropped)
+		return &archivedByAnother{stream: stream, refused: err, dropped: dropped}
 	}
 	return errors.Join(fmt.Errorf("%s is left unarchived: %w", stream, err), read, dropped)
+}
+
+// archivedByAnother is archiveAgain refused because another writer
+// archived the stream again: refused is why, and dropped is removing the
+// blob it put failing, if it did.
+type archivedByAnother struct {
+	stream           string
+	refused, dropped error
+}
+
+func (a *archivedByAnother) Error() string {
+	return errors.Join(fmt.Errorf("%s was archived again by another writer: %w", a.stream, a.refused), a.dropped).Error()
+}
+
+func (a *archivedByAnother) Unwrap() []error {
+	return []error{a.refused, a.dropped}
 }
 
 // recordingPuts is blobs that keep the hash of the last blob put.
