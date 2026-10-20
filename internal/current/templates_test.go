@@ -200,3 +200,27 @@ func TestEqualSeesWrongRemovedTemplates(t *testing.T) {
 		t.Errorf("Equal with a wrong base: %v", err)
 	}
 }
+
+// A snapshot thrown away takes its removed templates with it, even when
+// the log has no templates stream to build them again.
+func TestAThrownAwaySnapshotLeavesNoRemovedTemplates(t *testing.T) {
+	created := func(id string) events.Proposal {
+		return proposal(id, you, events.TaskCreated, map[string]any{"title": "One", "repo": "/r", "coordinator": "tech-lead"})
+	}
+	logPath, _ := seededLog(t, created("task-1"), created("task-2"))
+	shorterPath, _ := seededLog(t, created("task-1"))
+	path := snapshotted(t, logPath, 2, func(s *State) { s.removed = agents.RemovedTemplates{"ghost": ""} })
+	state, _ := opened(t, shorterPath, path, "build-1")
+	if got := state.RemovedTemplates(); got != nil {
+		t.Errorf("after a whole replay: %v", got)
+	}
+}
+
+// Changing what RemovedTemplates gave changes nothing the state holds.
+func TestRemovedTemplatesHandedOutShareNothing(t *testing.T) {
+	s := loaded(logOf(saved("papers", "First", chief), removed("papers")))
+	s.RemovedTemplates()["papers"] = "changed"
+	if got := s.RemovedTemplates(); got["papers"] != "" {
+		t.Errorf("changing what was handed out changed the state: %v", got)
+	}
+}
