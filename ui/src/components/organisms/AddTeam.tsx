@@ -52,6 +52,7 @@ const addId = (template: TeamTemplate) => `template-add-${template.id}`;
 export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onTemplatesChanged }: AddTeamProps) {
   const notify = useToast();
   const [busy, setBusy] = useState<Busy | null>(null);
+  const running = busy !== null;
   const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
   const deletion = useDeleteTemplate(onTemplatesChanged, setBusy);
   const { yours, builtIn } = templateGroups(templates);
@@ -91,6 +92,7 @@ export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onT
         <DeleteQuestion
           template={template}
           deleting={busy?.doing === "delete"}
+          off={running}
           failure={deletion.failure}
           onKeep={deletion.keep}
           onDelete={() => deletion.remove(template, nextFocus(yours, at))}
@@ -102,7 +104,7 @@ export function AddTeam({ templates, existing, policyHash, onBuild, onAdded, onT
             team={needs.team}
             profiles={needs.profiles}
             adding={busy?.doing === "add" && busy.id === needs.id}
-            disabled={busy !== null}
+            disabled={running}
             onAdd={() => add(template, true)}
           />
         </div>
@@ -279,15 +281,17 @@ const QUIET_ACTION =
 interface DeleteQuestionProps {
   template: TeamTemplate;
   deleting: boolean;
+  off: boolean; // a request runs: this delete, or an add or import
   failure: TemplateFailure | null;
   onKeep: () => void;
   onDelete: () => void;
 }
 
 // DeleteQuestion asks in the card, in a group named by the question, focus
-// on Keep; Esc is Keep, not the dialog's close. A failure says so in the
-// card, with the server's words, and takes focus.
-function DeleteQuestion({ template, deleting, failure, onKeep, onDelete }: DeleteQuestionProps) {
+// on Keep; Esc is Keep, not the dialog's close. While any request runs,
+// both buttons and Esc are off. A failure says so in the card, with the
+// server's words, and takes focus.
+function DeleteQuestion({ template, deleting, off, failure, onKeep, onDelete }: DeleteQuestionProps) {
   const keep = useRef<HTMLButtonElement>(null);
   const failed = useRef<HTMLDivElement>(null);
   useEffect(() => keep.current?.focus(), []);
@@ -298,7 +302,7 @@ function DeleteQuestion({ template, deleting, failure, onKeep, onDelete }: Delet
   const escape = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
     event.stopPropagation();
-    if (!deleting) onKeep();
+    if (!off) onKeep();
   };
   return (
     <div role="group" aria-labelledby={question} onKeyDown={escape} className="mt-auto flex flex-col gap-2 pt-1">
@@ -315,10 +319,10 @@ function DeleteQuestion({ template, deleting, failure, onKeep, onDelete }: Delet
         </div>
       )}
       <span className="flex gap-2">
-        <Button ref={keep} size="sm" disabled={deleting} onClick={onKeep}>
+        <Button ref={keep} size="sm" disabled={off} onClick={onKeep}>
           Keep
         </Button>
-        <Button size="sm" variant="danger" disabled={deleting} onClick={onDelete}>
+        <Button size="sm" variant="danger" disabled={off} onClick={onDelete}>
           {deleting ? "Deleting…" : "Delete"}
         </Button>
       </span>

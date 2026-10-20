@@ -250,6 +250,39 @@ describe("AddTeam: deleting a template of yours", () => {
     await act(async () => answer({}));
   });
 
+  // An add that goes through closes the dialog, so the one here fails, to end it with the dialog still open.
+  test("asked, and an add starts on another card, Delete and Keep are off until it ends", async () => {
+    let fail = (_: Error) => {};
+    vi.mocked(api).mockRejectedValueOnce(refused).mockReturnValueOnce(new Promise((_, reject) => (fail = reject)));
+    list([...TEMPLATES, PAPERS]);
+    await click(within(card("Software")).getByRole("button", { name: "Add this team, Software" })); // refused: the offer stays live
+    await ask("Papers");
+    await click(within(card("Software")).getByRole("button", { name: "Add the profile and the team" }));
+
+    const question = within(card("Papers")).getByRole("group", { name: "Delete the Papers template?" });
+    for (const name of ["Keep", "Delete"]) expect(within(question).getByRole("button", { name })).toHaveProperty("disabled", true);
+    await act(async () => fireEvent.keyDown(within(question).getByRole("button", { name: "Keep" }), { key: "Escape" }));
+    expect(within(card("Papers")).getByRole("group", { name: "Delete the Papers template?" })).toBe(question); // Esc is off too
+
+    await act(async () => fail(new ApiError("the policy changed", 409)));
+    for (const name of ["Keep", "Delete"]) expect(within(question).getByRole("button", { name })).toHaveProperty("disabled", false);
+  });
+
+  test("asked, and an import starts, Delete and Keep are off until it ends", async () => {
+    let answer = (_: Response) => {};
+    vi.mocked(send).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    list([...TEMPLATES, PAPERS]);
+    await ask("Papers");
+    const file = new File(['{"id":"desk"}'], "desk.json", { type: "application/json" });
+    await act(async () => fireEvent.change(screen.getByTestId("template-file"), { target: { files: [file] } }));
+
+    const question = within(card("Papers")).getByRole("group", { name: "Delete the Papers template?" });
+    for (const name of ["Keep", "Delete"]) expect(within(question).getByRole("button", { name })).toHaveProperty("disabled", true);
+
+    await act(async () => answer(new Response(JSON.stringify(DESK))));
+    for (const name of ["Keep", "Delete"]) expect(within(question).getByRole("button", { name })).toHaveProperty("disabled", false);
+  });
+
   test("a failure says so in the card, with the server's words, and the question stays", async () => {
     vi.mocked(api).mockRejectedValueOnce(new ApiError("there is no saved template papers", 404));
     list([...TEMPLATES, PAPERS]);
