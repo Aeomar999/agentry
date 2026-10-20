@@ -1544,6 +1544,287 @@ describe("Edit team: Remove team", () => {
   });
 });
 
+const templateButton = (place: "footer" | "body" = "footer") =>
+  document.getElementById(`team-template-${place}-button`) as HTMLButtonElement | null;
+const templateForm = (place: "footer" | "body" = "footer") =>
+  document.getElementById(`team-template-${place}-name`)?.closest<HTMLElement>("form") ?? null;
+const inForm = (place: "footer" | "body" = "footer") => within(templateForm(place)!);
+const errorOf = (place: "footer" | "body") => `team-template-${place}-name-error`;
+const templateName = (place: "footer" | "body" = "footer") => inForm(place).getByLabelText("Template name") as HTMLInputElement;
+// saveTemplate presses Save template, focus on it first as a real press puts it.
+const saveTemplate = (place: "footer" | "body" = "footer") => {
+  const button = inForm(place).getByRole("button", { name: /^(Save template|Saving…)$/ });
+  button.focus();
+  return act(async () => fireEvent.click(button));
+};
+
+describe("Edit team: Save as a template", () => {
+  beforeEach(() => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS];
+  });
+
+  test("the footer becomes a form, named, with the team's name and its coordinator's description, focus on Template name", () => {
+    openAt("/agents?team=Docs");
+    expect(templateButton()!.textContent).toBe("Save as a template");
+    fireEvent.click(templateButton()!);
+
+    const form = templateForm()!;
+    expect(form.getAttribute("aria-label")).toBe("Save as a template");
+    expect(templateName().value).toBe("Docs");
+    expect((inForm().getByLabelText("What it's for") as HTMLInputElement).value).toBe("Leads the docs.");
+    const hint = "Keeps each agent's prompt and settings and which one coordinates; not knowledge or where they run.";
+    expect(document.getElementById(templateName().getAttribute("aria-describedby")!)!.textContent).toBe(hint);
+    expect(document.activeElement).toBe(templateName());
+    // On desktop the form takes the footer's place.
+    expect(form.closest(".max-sm\\:hidden")).toBeTruthy();
+    expect(saveButton().closest(".sm\\:hidden")).toBeTruthy();
+    expect(sent()).toEqual([]);
+  });
+
+  test("Cancel closes the form, focus back on Save as a template", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+
+    expect(templateForm()).toBeNull();
+    expect(document.activeElement).toBe(templateButton());
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("Esc is Cancel, and leaves the panel open", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(templateForm()).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(document.activeElement).toBe(templateButton());
+  });
+
+  test("saved, the form closes, says so and focus goes back to Save as a template", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ ...WRITING, id: "docs-kit", team: "Docs kit", userMade: true });
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.change(templateName(), { target: { value: " Docs kit " } });
+    fireEvent.change(inForm().getByLabelText("What it's for"), { target: { value: "Writes and keeps the docs." } });
+    await saveTemplate();
+
+    expect(sent()).toEqual([["POST", "/api/teams/Docs/template", { name: "Docs kit", description: "Writes and keeps the docs." }]]);
+    expect(notify).toHaveBeenCalledWith("success", "Saved Docs kit to your templates", "Add it again from Add a team.");
+    expect(templateForm()).toBeNull();
+    expect(document.activeElement).toBe(templateButton());
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("an empty name is said under the field, which takes focus, before asking the server", async () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.change(templateName(), { target: { value: "  " } });
+    fireEvent.change(inForm().getByLabelText("What it's for"), { target: { value: "Ours." } });
+    await saveTemplate();
+
+    expect(sent()).toEqual([]);
+    expect(document.getElementById(errorOf("footer"))!.textContent).toBe("Give the template a name.");
+    expect(templateName().getAttribute("aria-invalid")).toBe("true");
+    expect(templateName().getAttribute("aria-describedby")).toContain(errorOf("footer"));
+    expect(document.activeElement).toBe(templateName());
+    expect((inForm().getByLabelText("What it's for") as HTMLInputElement).value).toBe("Ours.");
+  });
+
+  test.each([
+    ["one of yours", "You have a template called Docs already. Pick another name."],
+    ["a built-in one", "Writing is a built-in template. Pick another name."],
+  ])("a name %s has is said under the field in the server's words, which takes focus; what was typed stays", async (_, words) => {
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(words, 409));
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.change(templateName(), { target: { value: "writing" } });
+    await saveTemplate();
+
+    expect(document.getElementById(errorOf("footer"))!.textContent).toBe(words);
+    expect(document.activeElement).toBe(templateName());
+    expect(templateName().value).toBe("writing");
+    expect(inForm().queryByText("Couldn't save the template")).toBeNull();
+  });
+
+  test("any other refusal is said above the buttons in the server's words, and takes focus; what was typed stays", async () => {
+    const words = "agent writer: a template's agent names are at most 28 characters";
+    vi.mocked(api).mockRejectedValueOnce(new ApiError(words, 400));
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    fireEvent.change(templateName(), { target: { value: "Docs kit" } });
+    await saveTemplate();
+
+    const failure = inForm().getByText("Couldn't save the template").parentElement!;
+    expect(failure.textContent).toContain(words);
+    expect(document.activeElement).toBe(failure);
+    expect(
+      failure.compareDocumentPosition(inForm().getByRole("button", { name: "Save template" })) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(templateName().value).toBe("Docs kit");
+    expect(templateName().hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  test("with unsaved changes it is off and says why beside it, as on a phone", () => {
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+
+    for (const place of ["footer", "body"] as const) {
+      const button = templateButton(place)!;
+      expect(button.hasAttribute("disabled")).toBe(true);
+      expect(document.getElementById(button.getAttribute("aria-describedby")!)!.textContent).toBe("Save your changes first.");
+    }
+    typeInto("Team name", "Docs");
+    expect(templateButton()!.hasAttribute("disabled")).toBe(false);
+    expect(templateButton()!.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  test("a team with a built-in template's team name has no Save as a template", () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "writing" }))];
+    openAt("/agents?team=writing");
+
+    expect(saveButton()).toBeTruthy();
+    expect(templateButton("footer")).toBeNull();
+    expect(templateButton("body")).toBeNull();
+  });
+
+  test("while it saves, the form says so and nothing else closes or saves", async () => {
+    vi.mocked(api).mockReturnValueOnce(new Promise(() => {}));
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+    await saveTemplate();
+
+    expect(inForm().getByRole("button", { name: "Saving…" }).hasAttribute("disabled")).toBe(true);
+    expect(inForm().getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);
+    expect(templateName().readOnly).toBe(true);
+    expect((inForm().getByLabelText("What it's for") as HTMLInputElement).readOnly).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
+    expect(inSheet().getByRole("button", { name: "Save changes" }).hasAttribute("disabled")).toBe(true);
+    expect(removeButton("footer").hasAttribute("disabled")).toBe(true);
+    expect(removeButton("body").hasAttribute("disabled")).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(templateForm()).toBeTruthy();
+  });
+
+  test("Back while it saves stays put; the form then closes as saved", async () => {
+    let saved = () => {};
+    vi.mocked(api).mockReturnValueOnce(new Promise((resolve) => (saved = () => resolve({ ...WRITING, team: "Docs", userMade: true }))));
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    fireEvent.click(templateButton()!);
+    await saveTemplate();
+    await back();
+
+    expect(address()).toBe("/agents?team=Docs");
+    expect(inForm().getByRole("button", { name: "Saving…" })).toBeTruthy();
+    await act(async () => saved());
+    expect(templateForm()).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  test("with the form open, the footer's Cancel and Save changes and Remove team are off; Cancel turns them on again", () => {
+    openAt("/agents?team=Docs");
+    fireEvent.click(templateButton()!);
+
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
+    expect(removeButton("body").hasAttribute("disabled")).toBe(true);
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(false);
+    expect(removeButton("body").hasAttribute("disabled")).toBe(false);
+  });
+
+  test.each([
+    ["asks", false],
+    ["removes", true],
+  ])("while Remove team %s, Save as a template is off", async (_, removing) => {
+    vi.mocked(api).mockReturnValueOnce(new Promise(() => {}));
+    openAt("/agents?team=Docs");
+    fireEvent.click(removeButton("body"));
+    if (removing) await act(async () => fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Remove" })));
+
+    expect(templateButton("body")!.hasAttribute("disabled")).toBe(true);
+    expect(templateButton("body")!.hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  // Save again saves the team with nothing unsaved, so only the save running holds it.
+  test("while Save changes runs, Save as a template is off", async () => {
+    const error = "saved the Handbook team, but 1 task still needs moving: save again to finish (task-1: busy)";
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError(error, 409, { error, version: "v3" }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "Handbook", teamVersion: "v3" }))] };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    await settle();
+    expect(templateButton("body")!.hasAttribute("disabled")).toBe(false);
+    await act(async () => fireEvent.click(within(summary()).getByRole("button", { name: "Save again" })));
+
+    for (const place of ["footer", "body"] as const) {
+      expect(templateButton(place)!.hasAttribute("disabled")).toBe(true);
+      expect(templateButton(place)!.hasAttribute("aria-describedby")).toBe(false);
+    }
+  });
+
+  test.each([
+    ["is open", false],
+    ["saves", true],
+  ])("while the form %s, a cut-short save's Save again is off", async (_, saving) => {
+    const error = "saved the Handbook team, but 1 task still needs moving: save again to finish (task-1: busy)";
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError(error, 409, { error, version: "v3" }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "Handbook", teamVersion: "v3" }))] };
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    await settle();
+    const again = within(summary()).getByRole("button", { name: "Save again" });
+    fireEvent.click(templateButton()!);
+    if (saving) await saveTemplate();
+
+    expect(again.hasAttribute("disabled")).toBe(true);
+    if (saving) return;
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+    expect(again.hasAttribute("disabled")).toBe(false);
+  });
+
+  test("while the form is open, the profile offer's add-and-save is off", async () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, profile: "read-mostly" } : a))];
+    vi.mocked(api).mockRejectedValueOnce(new ApiError("policy.toml lacks read-mostly", 409, { missingProfiles: ["read-mostly"] }));
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    const add = within(inSheet().getByRole("alert")).getByRole("button", { name: "Add the profile and save the team" });
+    typeInto("Team name", "Docs");
+    fireEvent.click(templateButton()!);
+
+    expect(add.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(inForm().getByRole("button", { name: "Cancel" }));
+    expect(add.hasAttribute("disabled")).toBe(false);
+  });
+
+  test("on a phone, Save as a template is first under This team, and its form opens there; the footer stays, off", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ ...WRITING, team: "Docs", userMade: true });
+    openAt("/agents?team=Docs");
+    const section = inSheet().getByRole("region", { name: "This team" });
+    expect(section.contains(templateButton("body"))).toBe(true);
+    expect(templateButton("body")!.compareDocumentPosition(removeButton("body")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(templateButton("footer")!.closest(".max-sm\\:hidden")).toBeTruthy();
+
+    fireEvent.click(templateButton("body")!);
+    expect(section.contains(templateForm("body"))).toBe(true);
+    expect(document.activeElement).toBe(templateName("body"));
+    expect(templateForm("footer")!.closest(".max-sm\\:hidden")).toBeTruthy();
+    expect(document.getElementById("team-cancel")!.hasAttribute("disabled")).toBe(true);
+
+    await saveTemplate("body");
+    expect(templateForm("body")).toBeNull();
+    expect(document.activeElement).toBe(templateButton("body"));
+  });
+});
+
 describe("Edit team: history", () => {
   beforeEach(() => {
     reads["/api/agents"] = [...ROSTER, ...DOCS];
