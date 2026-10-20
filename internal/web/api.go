@@ -579,9 +579,12 @@ func (s *Server) reopenable(w http.ResponseWriter, id string) *tasks.Task {
 // unarchive makes an archived task whole again, and returns it as the
 // state now holds it, or nil once it has answered why it can't. A refusal
 // because another request unarchived it first isn't one: the task is
-// whole.
+// whole. An epic lets go of its stories erased while it was archived.
 func (s *Server) unarchive(w http.ResponseWriter, id string) *tasks.Task {
 	_, rejection, err := s.store.Unarchive(id, s.archives.blobs)
+	if err == nil {
+		err = s.dropErasedStories(id)
+	}
 	if err != nil {
 		httpapi.Failed(w, err)
 		return nil
@@ -594,6 +597,29 @@ func (s *Server) unarchive(w http.ResponseWriter, id string) *tasks.Task {
 		http.Error(w, rejection.Reason, http.StatusConflict)
 	default:
 		httpapi.Failed(w, fmt.Errorf("%s was unarchived, but can't be read: %v", id, err))
+	}
+	return nil
+}
+
+// dropErasedStories takes the stories erased while epic id was archived
+// out of it, with the task.story_removed the erase route's leaveEpic
+// writes for a live epic: it leaves an archived one as it is, and an
+// erased story listed would keep the epic from finishing once reopened.
+func (s *Server) dropErasedStories(id string) error {
+	epic, err := s.task(id)
+	if err != nil || epic == nil {
+		return nil // unarchive answers that it can't be read
+	}
+	for _, story := range epic.Stories {
+		if _, erased := s.state.Erased(story); !erased {
+			continue
+		}
+		removal := events.Proposal{Stream: id, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": story}}
+		if _, rejection, err := s.store.Propose(removal); err != nil {
+			return err
+		} else if rejection != nil {
+			return fmt.Errorf("erased %s can't be taken out of %s: %s", story, id, rejection.Reason)
+		}
 	}
 	return nil
 }

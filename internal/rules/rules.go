@@ -228,6 +228,7 @@ func byFeature(f features.Feature, rule features.Rule, p events.Proposal, state 
 var afterDone = []events.Type{events.TaskLabeled, events.TaskRanked, events.TaskReopened, events.RepoChanged, events.WorktreeReady,
 	events.AgentRenamedInTask,          // a finished task reopened later goes to its coordinator by its new name
 	events.EpicJoined, events.EpicLeft, // finished work is filed under epics too
+	events.StoryRemoved,                        // a story erased while its epic was archived leaves it as it is unarchived
 	events.FollowUpsSkipped,                    // an epic you closed: why no Visionaries session started after it
 	events.TaskArchived, events.TaskUnarchived} // its rows moved out of the live log, and back
 

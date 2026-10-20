@@ -607,6 +607,49 @@ func TestErasingAStoryTakesItOutOfItsEpic(t *testing.T) {
 // An epic that still lists an erased story, as when the erasure got past
 // the epic some other way, closes from the page: there is nothing of the
 // story left to park.
+// A story erased while its epic was archived, which leaveEpic leaves
+// listed, is taken out of the epic as it is unarchived to be reopened,
+// before its task.reopened, by either route that reopens it: no open
+// story is left to keep it from finishing.
+func TestAReopenedEpicDropsAStoryErasedWhileArchived(t *testing.T) {
+	for _, c := range []struct{ name, path, body string }{
+		{"moved", "/api/tasks/task-3/direct", `{"to":"todo"}`},
+		{"told", "/api/tasks/task-3/message", `{"text":"One more thing."}`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newEraseFixture(t)
+			if code, body := call(t, f.server, "POST", "/api/tasks/task-3/direct", `{"to":"done"}`); code != http.StatusOK {
+				t.Fatalf("closing the epic: %d %s", code, body)
+			}
+			storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs)
+			f.erase(t, "task-2")
+			if code, body := call(t, f.server, "POST", c.path, c.body); code != http.StatusOK {
+				t.Fatalf("reopening the epic: %d %s", code, body)
+			}
+
+			epic, err := f.state.Task("task-3")
+			if err != nil || epic == nil || epic.IsDone {
+				t.Fatalf("the epic should be open again: %v, %v", epic, err)
+			}
+			if len(epic.Stories) != 0 {
+				t.Errorf("the epic's stories %v, want none", epic.Stories)
+			}
+			live, err := f.log.Log("task-3")
+			if err != nil {
+				t.Fatal(err)
+			}
+			removed := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.StoryRemoved && e.Text("story") == "task-2" })
+			reopened := slices.IndexFunc(live, func(e events.Event) bool { return e.Type == events.TaskReopened })
+			if removed < 0 || removed > reopened {
+				t.Errorf("task.story_removed at %d, task.reopened at %d: want the removal first", removed, reopened)
+			}
+			if summary, _ := f.state.Summary("task-3"); summary.Stories != 0 {
+				t.Errorf("the card counts %d stories, want none", summary.Stories)
+			}
+		})
+	}
+}
+
 func TestClosingAnEpicSkipsAnErasedStory(t *testing.T) {
 	f := newEraseFixture(t)
 	if _, rejection, err := f.log.Erase("task-2", you, "Gone.", f.blobs); rejection != nil || err != nil {
