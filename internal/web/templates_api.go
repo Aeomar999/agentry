@@ -23,7 +23,10 @@ import (
 // A name you or Agentry have a template called already, in any case, or an
 // id given that one of yours has, is refused with a 409: saving never
 // replaces a template. The rules refuse it too, for a save that came in at
-// the same time; that refusal is the same 409.
+// the same time; that refusal is the same 409. Once saved, the team is
+// linked to the template, so it keeps the features of the built-in one the
+// template is based on; a link refused leaves the template saved, and the
+// reply says why the team isn't linked (notLinked).
 func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Name, ID, Description string }
 	if !httpapi.Decode(w, r, &request) {
@@ -52,7 +55,56 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	s.proposeTemplate(w, proposal, id, func() string { return s.templateTaken(name, id) })
+	saved, ok := s.proposeTemplate(w, proposal, id, func() string { return s.templateTaken(name, id) })
+	if !ok {
+		return
+	}
+	httpapi.Reply(w, savedView{templateView: yourView(saved), NotLinked: s.link(team, id)})
+}
+
+// savedView is a template you saved from a team, and why that team isn't
+// linked to it, if it isn't.
+type savedView struct {
+	templateView
+	NotLinked string `json:"notLinked,omitempty"`
+}
+
+// link links team to the template id, and is why it couldn't, or "".
+func (s *Server) link(team, id string) string {
+	switch _, rejection, err := s.store.Propose(agents.TeamLinked(team, id, httpapi.You)); {
+	case err != nil:
+		return "the log failed: " + err.Error()
+	case rejection != nil:
+		return rejection.Reason
+	}
+	return ""
+}
+
+// linkTeam links a team, named in any case, to a template ({template}): a
+// built-in one, one of yours, or one you removed, as the id the team was
+// saved under. It is how a team saved as a template, but refused the link
+// then, gets it.
+func (s *Server) linkTeam(w http.ResponseWriter, r *http.Request) {
+	var request struct{ Template string }
+	if !httpapi.Decode(w, r, &request) {
+		return
+	}
+	roster, err := s.roster()
+	if err != nil {
+		httpapi.Failed(w, err)
+		return
+	}
+	team := roster.TeamNamed(r.PathValue("team"))
+	if team == "" {
+		http.Error(w, "there is no team called "+r.PathValue("team"), http.StatusNotFound)
+		return
+	}
+	template := strings.TrimSpace(request.Template)
+	if why := s.link(team, template); why != "" {
+		http.Error(w, why, http.StatusBadRequest)
+		return
+	}
+	httpapi.Reply(w, map[string]string{"team": team, "template": template})
 }
 
 // templateTaken is why a new template can't be called name or have id (""
@@ -132,7 +184,9 @@ func (s *Server) importTemplate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, why, http.StatusConflict)
 		return
 	}
-	s.proposeTemplate(w, template.Save(httpapi.You), template.ID, taken)
+	if saved, ok := s.proposeTemplate(w, template.Save(httpapi.You), template.ID, taken); ok {
+		httpapi.Reply(w, yourView(saved))
+	}
 }
 
 // importTaken is why an import can't be called name, or "" when it can: as
@@ -150,23 +204,23 @@ func (s *Server) importTaken(name, id string) string {
 	return ""
 }
 
-// proposeTemplate writes a template.saved and replies with the template
-// saved, or with the rules' refusal as a 400. taken, if given, words a
+// proposeTemplate writes a template.saved and is the template saved, or
+// replies with the rules' refusal as a 400. taken, if given, words a
 // refusal as a 409 when a template has its name or id by then.
-func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal, id string, taken func() string) {
+func (s *Server) proposeTemplate(w http.ResponseWriter, proposal events.Proposal, id string, taken func() string) (agents.UserTemplate, bool) {
 	switch _, rejection, err := s.store.Propose(proposal); {
 	case err != nil:
 		httpapi.Failed(w, err)
-		return
+		return agents.UserTemplate{}, false
 	case rejection != nil && taken != nil && taken() != "":
 		http.Error(w, taken(), http.StatusConflict)
-		return
+		return agents.UserTemplate{}, false
 	case rejection != nil:
 		http.Error(w, rejection.Reason, http.StatusBadRequest)
-		return
+		return agents.UserTemplate{}, false
 	}
 	saved, _ := s.state.Templates().WithID(id)
-	httpapi.Reply(w, yourView(saved))
+	return saved, true
 }
 
 // removeTemplate removes your template id. The teams made from it stay, and

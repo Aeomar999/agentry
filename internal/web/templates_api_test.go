@@ -16,6 +16,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/policy"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -662,6 +663,95 @@ func TestAnImportThatIsntATemplateIsABadRequest(t *testing.T) {
 	for _, body := range []string{`{"id":"ours","agents":"lead"}`, `{"id":7}`, `{"id":"ours","basedOn":7}`, `[]`, `not json`} {
 		if code, reply := call(t, server, "POST", "/api/teams/templates/import", body); code != http.StatusBadRequest || !strings.HasPrefix(reply, "bad request: ") {
 			t.Errorf("%s: %d %s", body, code, reply)
+		}
+	}
+}
+
+// Saving a team as a template links the team to it: its agents are made
+// from it from now on, so a team copied from the Visionaries and saved
+// still suggests ideas, through the base the template keeps.
+func TestASavedTeamIsLinkedToItsTemplate(t *testing.T) {
+	server, s, state := newTestStateChecking(t, func(events.Proposal) *events.Rejection { return nil })
+	planningTeam(t, server, s)
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning"}`); code != 200 || strings.Contains(body, "notLinked") {
+		t.Fatalf("save Planning: %d %s", code, body)
+	}
+	for _, agent := range teamIn(t, s, "Planning") {
+		if agent.Template != "my-planning" {
+			t.Errorf("%s is made from %q", agent.Name, agent.Template)
+		}
+	}
+
+	dreamers := `{"team":"Dreamers","copiedFrom":"visionaries","agents":[{"name":"dream-lead","engine":"claude","coordinates":true}]}`
+	if code, body := call(t, server, "POST", "/api/teams", dreamers); code != 200 {
+		t.Fatalf("add Dreamers: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Dreamers/template", `{"name":"Dreams"}`); code != 200 {
+		t.Fatalf("save Dreams: %d %s", code, body)
+	}
+	if saved, _ := savedTemplates(t, s).WithID("dreams"); saved.BasedOn != "visionaries" {
+		t.Errorf("Dreams: %+v", saved)
+	}
+	lead, _ := state.Roster().Coordinator("Dreamers")
+	if lead.Template != "dreams" || !ideas.Suggests(lead, agents.BasesIn(state)) {
+		t.Errorf("after the save, the Dreamers' coordinator %+v doesn't suggest ideas", lead)
+	}
+}
+
+// A link refused after the template is saved leaves it saved: the reply is
+// the template, saying why the team isn't linked to it.
+func TestATemplateSavedButNotLinkedSaysWhy(t *testing.T) {
+	server, s := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type == events.TeamLinked {
+			return &events.Rejection{Reason: "the team changed"}
+		}
+		return nil
+	})
+	planningTeam(t, server, s)
+	code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"id":"my-planning"}`)
+	var reply struct{ ID, NotLinked string }
+	if json.Unmarshal([]byte(body), &reply); code != 200 || reply.ID != "my-planning" || reply.NotLinked != "the team changed" {
+		t.Errorf("save: %d %s", code, body)
+	}
+	if _, saved := savedTemplates(t, s).WithID("my-planning"); !saved {
+		t.Error("the template isn't saved")
+	}
+	if lead, _ := teamIn(t, s, "Planning").Coordinator("Planning"); lead.Template != "" {
+		t.Errorf("the planner is made from %q", lead.Template)
+	}
+}
+
+// A team is linked to a template on its own: a built-in one, one of yours
+// or one you removed, as long as there is one with the id.
+func TestATeamIsLinkedToATemplate(t *testing.T) {
+	server, s := newTestServer(t)
+	planningTeam(t, server, s)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"id":"gone"}`)
+	call(t, server, "DELETE", "/api/teams/templates/gone", "")
+	for _, link := range []struct {
+		name, team, body string
+		code             int
+		want             string
+	}{
+		{"a built-in template", "planning", `{"template":"research"}`, 200, `{"team":"Planning","template":"research"}`},
+		{"a removed template", "Planning", `{"template":"gone"}`, 200, `{"team":"Planning","template":"gone"}`},
+		{"no such team", "Nowhere", `{"template":"research"}`, http.StatusNotFound, "there is no team called Nowhere"},
+		{"no such template", "Planning", `{"template":"nothing"}`, http.StatusBadRequest, "there is no template with the id nothing"},
+		{"no template", "Planning", `{}`, http.StatusBadRequest, "a team is linked to a template, and this link names none"},
+	} {
+		code, body := call(t, server, "POST", "/api/teams/"+link.team+"/link", link.body)
+		if code != link.code || strings.TrimSpace(body) != link.want {
+			t.Errorf("%s: %d %s", link.name, code, body)
+		}
+		if code != 200 {
+			continue
+		}
+		var linked struct{ Template string }
+		json.Unmarshal([]byte(link.body), &linked)
+		for _, agent := range teamIn(t, s, "Planning") {
+			if agent.Template != linked.Template {
+				t.Errorf("%s: %s is made from %q", link.name, agent.Name, agent.Template)
+			}
 		}
 	}
 }
