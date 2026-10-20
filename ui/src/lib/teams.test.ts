@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-import type { Agent } from "@/api/types";
-import { roleOf, teamMadeFrom, teamOf } from "./teams";
+import type { Agent, TeamTemplate } from "@/api/types";
+import { useResource } from "@/live/use-resource";
+import { roleOf, teamMadeFrom, teamOf, templatesWith, useTeamWith } from "./teams";
 
 // The client reads the address when it loads, and there is none here.
 vi.mock("@/api/client", () => ({ api: vi.fn(), ApiError: class {} }));
@@ -32,22 +33,22 @@ describe("teamMadeFrom", () => {
       agent("visionary-lead", "Visionaries 2", "visionaries", true),
       agent("user-advocate", "Visionaries 2", "visionaries"),
     ];
-    expect(teamMadeFrom(agents, "visionaries")).toBe("Visionaries 2");
+    expect(teamMadeFrom(agents, ["visionaries"])).toBe("Visionaries 2");
   });
 
   test("skips a team you made and named as the template", () => {
     const agents = [agent("my-lead", "Visionaries", "", true), agent("my-thinker", "Visionaries", "")];
-    expect(teamMadeFrom(agents, "visionaries")).toBeUndefined();
+    expect(teamMadeFrom(agents, ["visionaries"])).toBeUndefined();
   });
 
   test("finds it beside a hand-made team of the same name", () => {
     const agents = [agent("my-lead", "Visionaries", "", true), agent("visionary-lead", "Visionaries 2", "visionaries", true)];
-    expect(teamMadeFrom(agents, "visionaries")).toBe("Visionaries 2");
+    expect(teamMadeFrom(agents, ["visionaries"])).toBe("Visionaries 2");
   });
 
   test("goes by the coordinator, not an agent the template made that moved team", () => {
     const agents = [agent("lead", "", "software", true), agent("user-advocate", "", "visionaries")];
-    expect(teamMadeFrom(agents, "visionaries")).toBeUndefined();
+    expect(teamMadeFrom(agents, ["visionaries"])).toBeUndefined();
   });
 
   test("takes the first of two teams made from the template", () => {
@@ -55,16 +56,16 @@ describe("teamMadeFrom", () => {
       agent("visionary-lead", "Visionaries", "visionaries", true),
       agent("visionary-lead-2", "Visionaries 2", "visionaries", true),
     ];
-    expect(teamMadeFrom(agents, "visionaries")).toBe("Visionaries");
+    expect(teamMadeFrom(agents, ["visionaries"])).toBe("Visionaries");
   });
 
   test("finds none with no agents, or no template", () => {
-    expect(teamMadeFrom([], "visionaries")).toBeUndefined();
-    expect(teamMadeFrom([agent("my-lead", "Mine", "", true)], "")).toBeUndefined();
+    expect(teamMadeFrom([], ["visionaries"])).toBeUndefined();
+    expect(teamMadeFrom([agent("my-lead", "Mine", "", true)], [])).toBeUndefined();
   });
 
   test("names the default team Software", () => {
-    expect(teamMadeFrom([agent("lead", "", "software", true)], "software")).toBe("Software");
+    expect(teamMadeFrom([agent("lead", "", "software", true)], ["software"])).toBe("Software");
   });
 });
 
@@ -89,5 +90,39 @@ describe("teamOf", () => {
   test("shows no team as Software", () => {
     expect(teamOf(member("engineer"))).toBe("Software");
     expect(teamOf(member("product-lead", { team: "Design" }))).toBe("Design");
+  });
+});
+
+// template is a listed template with only what the feature lookup reads set.
+function template(id: string, features: string[], userMade = false, basedOn?: string): TeamTemplate {
+  return { id, team: id, description: "", features, agents: [], userMade, basedOn };
+}
+
+describe("finding the team with a feature", () => {
+  const templates = [
+    template("software", []),
+    template("visionaries", ["ideas"]),
+    template("dreams", ["ideas"], true, "visionaries"),
+    template("ours", [], true),
+  ];
+
+  test("counts your template based on one that brings it", () => {
+    expect(templatesWith(templates, "ideas")).toEqual(["visionaries", "dreams"]);
+    expect(teamMadeFrom([agent("dream-lead", "Dreamers", "dreams", true)], templatesWith(templates, "ideas"))).toBe("Dreamers");
+    expect(teamMadeFrom([agent("our-lead", "Ours", "ours", true)], templatesWith(templates, "ideas"))).toBeUndefined();
+  });
+
+  // The built-in template comes last here, so only skipping yours finds it.
+  test("useTeamWith finds the team from your template, and offers the built-in one to add", () => {
+    const read = (data: unknown) => ({ data, error: "", status: 0, position: 0, reload: async () => {} });
+    vi.mocked(useResource).mockImplementation(((path: string) =>
+      read(
+        path === "/api/agents"
+          ? [agent("our-lead", "Ours", "ours", true), agent("dream-lead", "Dreamers", "dreams", true)]
+          : templates.toReversed(),
+      )) as typeof useResource);
+    const found = useTeamWith("ideas");
+    expect(found.team).toBe("Dreamers");
+    expect(found.template?.id).toBe("visionaries");
   });
 });

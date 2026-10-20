@@ -358,6 +358,7 @@ export interface TeamTemplate {
   userMade: boolean; // one you saved, not one Agentry ships
   savedAt?: string; // yours: when you last saved it, RFC 3339
   from?: string; // yours: the team you saved it from; one saved by an older Agentry has none
+  basedOn?: string; // yours: the built-in template it is based on, whose features it lists and its teams keep
 }
 
 // An agent of a template, with what a team made from it gets, prompt included.

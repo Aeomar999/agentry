@@ -10,7 +10,7 @@ import { api } from "@/api/client";
 import type { Agent, CreatedEvent, ServerConfig, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { FilterChip } from "@/components/molecules/FilterChip";
-import { IDEAS, addTeam, missingProfilesOf, teamsOf, useTeamWith } from "@/lib/teams";
+import { IDEAS, addTeam, missingProfilesOf, teamMadeFrom, teamsOf, useTeamWith } from "@/lib/teams";
 import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
@@ -47,9 +47,9 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
   const [kind, setKind] = useState<"" | "story" | "epic">(epic ? "story" : start === "epic" ? "epic" : "");
   const chosen = teams.find((t) => t.team === team); // none: the coordinators decide
   const lead = chosen?.agents.find((a) => a.coordinates);
-  // The Visionaries are the team made from the template that turns Ideas on, whatever you called it.
+  // The Visionaries are a team made from a template that turns Ideas on, whatever you called it.
   const visionaries = useTeamWith(IDEAS);
-  const asksVisionaries = lead !== undefined && lead.template !== "" && lead.template === visionaries.template?.id;
+  const asksVisionaries = lead !== undefined && teamMadeFrom([lead], visionaries.templates) !== undefined;
   // A visionaries session is one plain task, never split; your kind comes back if you pick another team.
   const sentKind = asksVisionaries ? "story" : kind;
   // Asked for the Visionaries team by the template's name, and you don't have it yet.

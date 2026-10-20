@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { api, ApiError } from "@/api/client";
 import type { Agent, TeamTemplate } from "@/api/types";
@@ -50,5 +50,40 @@ describe("NewTaskForm: asked for the Visionaries, whose profile policy.toml lack
     expect(offer.textContent).toContain("The Visionaries team needs the read-mostly profile");
     expect(screen.queryByRole("button", { name: "Add the Visionaries team" })).toBeNull();
     expect(screen.getByRole("button", { name: "Add the profile and the team" })).toBeTruthy();
+  });
+});
+
+// A team from your template based on Visionaries is the Visionaries team;
+// one from your template with no base isn't.
+describe("NewTaskForm: a team from a template of yours", () => {
+  const lead = (name: string, team: string, template: string) =>
+    ({ name, team, coordinates: true, template, column: "" }) as unknown as Agent;
+  const yours = (id: string, team: string, basedOn?: string): TeamTemplate => ({
+    ...TEMPLATES[0],
+    id,
+    team,
+    userMade: true,
+    basedOn,
+    features: basedOn ? ["ideas"] : [],
+  });
+  const agents = RESOURCES["/api/agents"];
+  const templates = RESOURCES["/api/teams/templates"];
+  afterEach(() => {
+    agents.data = AGENTS;
+    templates.data = TEMPLATES;
+  });
+
+  test("asks the Visionaries when the template is based on theirs", () => {
+    agents.data = [...AGENTS, lead("dream-lead", "Dreamers", "dreams")];
+    templates.data = [...TEMPLATES, yours("dreams", "Dreams", "visionaries")];
+    render(<NewTaskForm team="Dreamers" onCreated={() => {}} onCancel={() => {}} />);
+    expect(screen.getByRole("textbox", { name: "Theme or question" })).toBeTruthy();
+  });
+
+  test("is a plain task when the template has no base", () => {
+    agents.data = [...AGENTS, lead("our-lead", "Ours", "ours")];
+    templates.data = [...TEMPLATES, yours("ours", "Ours")];
+    render(<NewTaskForm team="Ours" onCreated={() => {}} onCancel={() => {}} />);
+    expect(screen.getByRole("textbox", { name: "The task" })).toBeTruthy();
   });
 });
