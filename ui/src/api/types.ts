@@ -453,3 +453,21 @@ export interface UnknownEvents {
   events: number;
   last: number; // the log position of the last of them
 }
+
+// POST /api/tasks/{task}/erase: when the task was erased, and what of it
+// may be left on the disk for now, as the steps after the erasure can fail.
+export interface Erasure {
+  id: string;
+  at: string;
+  warnings: string[];
+}
+
+// POST /api/tasks/{task}/redact: how many rows the text was taken out of,
+// and when, with what of it may be left for now, such as an agent's turn
+// still running that can write it back.
+export interface Redaction {
+  stream: string;
+  at: string;
+  rows: number;
+  warnings: string[];
+}

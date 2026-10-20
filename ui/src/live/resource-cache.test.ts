@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ApiError } from "@/api/client";
 import { ResourceCache } from "./resource-cache";
 
 // A fake server: each read waits until the test answers it, at the log
@@ -7,7 +8,7 @@ function fakeServer() {
   const pending: {
     path: string;
     answer: (position: number | undefined, data?: unknown) => Promise<void>;
-    fail: (message: string) => Promise<void>;
+    fail: (message: string, status?: number) => Promise<void>; // a status: the server refused it
   }[] = [];
   const reads: string[] = [];
   const fetch = (path: string) =>
@@ -19,8 +20,8 @@ function fakeServer() {
           resolve({ data, position });
           await settle();
         },
-        fail: async (message) => {
-          reject(new Error(message));
+        fail: async (message, status) => {
+          reject(status ? new ApiError(message, status) : new Error(message));
           await settle();
         },
       });
@@ -111,7 +112,7 @@ describe("the page's reads (test 9)", () => {
     cache.watch("/api/tasks", () => told.push("page"));
     await server.answer(40);
     expect(told).toEqual(["shell", "page"]);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", status: 0, position: 40 });
   });
 });
 
@@ -198,12 +199,31 @@ describe("the cache", () => {
     await server.answer(40);
     cache.moved(41);
     await server.pending.splice(0)[0].fail("database is locked");
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked", position: 40 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "database is locked", status: 0, position: 40 });
     expect(server.readsOf("/api/tasks")).toBe(2); // not retried in a loop
 
     cache.moved(42);
     await server.answer(42);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "", position: 42 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@42", error: "", status: 0, position: 42 });
+  });
+
+  test("a read the server refused keeps its answer, such as 410 for a task erased, until a read succeeds", async () => {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    cache.watch("/api/tasks/task-1", ignore);
+    await server.answer(40);
+    cache.moved(41);
+    await server.pending.splice(0)[0].fail("task-1 was erased on 20 October 2026", 410);
+    expect(cache.snapshot("/api/tasks/task-1")).toEqual({
+      data: "/api/tasks/task-1@40",
+      error: "task-1 was erased on 20 October 2026",
+      status: 410,
+      position: 40,
+    });
+
+    cache.moved(42);
+    await server.answer(42);
+    expect(cache.snapshot("/api/tasks/task-1").status).toBe(0);
   });
 
   test("each path has its own data: a new path shows nothing until it is read", async () => {
@@ -259,10 +279,10 @@ describe("a server on a shorter log", () => {
     const { server, cache } = await shownAt100();
     cache.moved(40);
     expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks", "/api/agents"]);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", position: 100 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", status: 0, position: 100 });
 
     await server.answer(40);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", status: 0, position: 40 });
     expect(cache.snapshot("/api/agents").data).toBe("/api/agents@40");
   });
 
@@ -286,12 +306,12 @@ describe("a server on a shorter log", () => {
     expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks", "/api/agents"]); // the reload's read, and agents again
 
     await server.pending.splice(0, 1)[0].answer(101, "from the old log");
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", position: 100 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", status: 0, position: 100 });
     expect(shown).toBe(false);
     expect(server.pending.map((read) => read.path)).toEqual(["/api/agents", "/api/tasks"]);
 
     await server.answer(40);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", status: 0, position: 40 });
     expect(shown).toBe(true);
     expect(server.readsOf("/api/tasks")).toBe(3);
   });
@@ -304,7 +324,7 @@ describe("a server on a shorter log", () => {
     expect(cache.snapshot("/api/tasks").error).toBe("");
     await server.answer(40);
     await server.answer(40);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", status: 0, position: 40 });
   });
 
   test("after the reset the new log is followed as usual, with no reset again", async () => {
@@ -320,7 +340,7 @@ describe("a server on a shorter log", () => {
     await server.answer(41);
     await settle();
     expect(server.reads).toHaveLength(6);
-    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@41", error: "", position: 41 });
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@41", error: "", status: 0, position: 41 });
   });
 
   test("a reply older than the poll's position is no reset: it was read before the event", async () => {

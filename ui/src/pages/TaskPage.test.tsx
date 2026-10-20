@@ -1,15 +1,26 @@
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { TaskDetail } from "@/api/types";
 import { task } from "@/api/tasks.fixtures";
+import { eraseTask } from "@/api/privacy";
+import { dateTime } from "@/lib/time";
 import { TaskPage } from "./TaskPage";
 
-// Each path answers with what replies holds, or is still loading.
+// Each path answers with what replies holds, or is still loading, or
+// what the server refused in refusals.
 const replies = new Map<string, unknown>();
+const refusals = new Map<string, { error: string; status: number }>();
 vi.mock("@/live/use-resource", () => ({
-  useResource: (path: string) => ({ data: replies.get(path), error: undefined, position: 0, reload: async () => {} }),
+  useResource: (path: string) => ({
+    data: replies.get(path),
+    error: refusals.get(path)?.error ?? "",
+    status: refusals.get(path)?.status ?? 0,
+    position: 0,
+    reload: async () => {},
+  }),
 }));
+vi.mock("@/api/privacy", () => ({ eraseTask: vi.fn(), previewRedaction: vi.fn(), redact: vi.fn() }));
 // The page's imports reach the shell's install button, which reads
 // matchMedia as it loads; jsdom has none.
 vi.mock("@/lib/install", () => ({
@@ -57,9 +68,11 @@ function detail(more: Partial<TaskDetail> = {}): TaskDetail {
   };
 }
 
-function page(shown: TaskDetail, tab = "coordinator") {
+function page(shown: TaskDetail | { error: string; status: number }, tab = "coordinator") {
   replies.clear();
-  replies.set("/api/tasks/task-1", shown);
+  refusals.clear();
+  if ("error" in shown) refusals.set("/api/tasks/task-1", shown);
+  else replies.set("/api/tasks/task-1", shown);
   replies.set("/api/agents", []);
   replies.set("/api/tasks", []);
   render(
@@ -129,5 +142,92 @@ describe("TaskPage for a live task", () => {
     page(detail({ status: "working", budget: 5000, tokensUsed: 1200, maxTurns: 8 }));
     expect(button("Change the budget")).toBeTruthy();
     expect(button("Change the max turns")).toBeTruthy();
+  });
+});
+
+const ERASED_AT = "2026-10-20T09:30:00Z";
+
+describe("TaskPage erasing the task", () => {
+  test("asks first, saying nothing undoes it and what goes, and erases nothing until you say so", () => {
+    page(detail(), "details");
+    fireEvent.click(button("Erase this task…")!);
+    const question = screen.getByRole("dialog", { name: "Erase task-1 for good?" });
+    expect(question.textContent).toContain("Nothing undoes this.");
+    expect(question.textContent).toContain("the turn is stopped first");
+    expect(question.textContent).toContain("its archive");
+    expect(question.textContent).toContain("the shared files no other task names");
+    expect(question.textContent).toContain("in its epic and in the task that asked for it");
+    expect(eraseTask).not.toHaveBeenCalled();
+
+    fireEvent.click(button("Keep")!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(eraseTask).not.toHaveBeenCalled();
+  });
+
+  test("once erased, shows the task erased with the time, what may be left, and the note on backups", async () => {
+    vi.mocked(eraseTask).mockResolvedValue({ id: "task-1", at: ERASED_AT, warnings: ["the shared file abc can't be deleted yet: busy"] });
+    page(detail(), "details");
+    fireEvent.click(button("Erase this task…")!);
+    fireEvent.change(screen.getByLabelText("Why, for the log (optional)"), { target: { value: "asked to" } });
+    await act(async () => fireEvent.click(button("Erase for good")!));
+
+    expect(eraseTask).toHaveBeenCalledWith("task-1", "asked to");
+    expect(screen.getByRole("heading", { name: `task-1 was erased at ${dateTime(ERASED_AT)}` })).toBeTruthy();
+    expect(screen.getByText("the shared file abc can't be deleted yet: busy")).toBeTruthy();
+    expect(screen.getByText(/^Backups of agentry.db and the data folder made before/).textContent).toContain(
+      `before ${dateTime(ERASED_AT)} still hold it`,
+    );
+    expect(screen.getByText(/worktree, its local branch and any commits pushed from it/)).toBeTruthy();
+    expect(screen.getByText(/session transcripts, live outside Agentry/)).toBeTruthy();
+  });
+
+  test("shows a refusal in the server's words, and the task as it was", async () => {
+    vi.mocked(eraseTask).mockRejectedValue(new Error("task-1 has stories (task-2); erase or move them out of the epic first"));
+    page(detail(), "details");
+    fireEvent.click(button("Erase this task…")!);
+    await act(async () => fireEvent.click(button("Erase for good")!));
+    expect(screen.getByText("It wasn't erased: task-1 has stories (task-2); erase or move them out of the epic first")).toBeTruthy();
+    expect(screen.queryByText(/was erased/)).toBeNull();
+  });
+
+  test("read again, an erased task shows the server's 410 words, not that there is no such task", () => {
+    page({ error: "task-1 was erased on 20 October 2026", status: 410 });
+    expect(screen.getByRole("heading", { name: "task-1 was erased on 20 October 2026" })).toBeTruthy();
+    expect(screen.queryByText("No task task-1")).toBeNull();
+    expect(screen.getByText(/made before then still hold it/)).toBeTruthy();
+  });
+
+  test("a task missing for another reason is still no such task", () => {
+    page({ error: "no such task task-1", status: 404 });
+    expect(screen.getByText("No task task-1")).toBeTruthy();
+    expect(screen.queryByText(/was erased/)).toBeNull();
+  });
+});
+
+describe("TaskPage redacting a text", () => {
+  test.each([
+    ["a live task", detail()],
+    ["an archived task", detail({ archived: true, archivedAt: ARCHIVED_AT })],
+  ])("asks about the text marked on the page, in %s", async (_, shown) => {
+    page(shown);
+    const marked = document.createElement("p");
+    marked.textContent = "sk-live-0123456789";
+    document.body.append(marked);
+    await act(async () => {
+      document.getSelection()!.selectAllChildren(marked);
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+    document.getSelection()!.removeAllRanges(); // as the click on the button clears it
+    marked.remove();
+
+    fireEvent.click(button("Redact a text")!);
+    expect(screen.getByRole("dialog", { name: "Redact a text in task-1" })).toBeTruthy();
+    expect((screen.getByLabelText("The text to take out") as HTMLTextAreaElement).value).toBe("sk-live-0123456789");
+  });
+
+  test("starts from an empty text when nothing is marked", () => {
+    page(detail());
+    fireEvent.click(button("Redact a text")!);
+    expect((screen.getByLabelText("The text to take out") as HTMLTextAreaElement).value).toBe("");
   });
 });

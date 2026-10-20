@@ -1,6 +1,6 @@
 import { FocusEventHandler, ReactNode, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { CircleCheck, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
+import { CircleCheck, EyeOff, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
 import { useToast } from "@/components/organisms/Toasts";
@@ -34,9 +34,12 @@ import { terminalURL } from "@/api/client";
 import { StoryTable } from "@/components/organisms/StoryTable";
 import { EpicPicker } from "@/components/organisms/EpicPicker";
 import { SharedFiles } from "@/components/organisms/SharedFiles";
+import { EraseTask } from "@/components/organisms/EraseTask";
+import { ErasedTask } from "@/components/organisms/ErasedTask";
+import { RedactText } from "@/components/organisms/RedactText";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 import { waitingLine } from "@/lib/epics";
-import type { Action, Agent, LogEvent, TaskDetail, Turn } from "@/api/types";
+import type { Action, Agent, Erasure, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { teamOf, teamsOf } from "@/lib/teams";
 import { SHOWS, Show, activityOf, rowFor } from "@/lib/activity";
 import { LOCAL, machineName } from "@/lib/machines";
@@ -44,6 +47,7 @@ import { tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { keepFocusInView } from "@/lib/focus-in-view";
+import { useMarkedText } from "@/lib/marked-text";
 import { useResource } from "@/live/use-resource";
 import { useEvents } from "@/live/use-events";
 import { LoadEarlier } from "@/components/molecules/LoadEarlier";
@@ -150,7 +154,7 @@ export function TaskPage() {
   const { taskId = "" } = useParams();
   useBreadcrumb({ label: "Tasks", to: "/tasks" }, { label: taskId });
   const [params, setParams] = useSearchParams();
-  const { data: task, error, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
+  const { data: task, error, status, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
   const links = useTaskLinks(taskId, useTaskCommits(taskId));
@@ -158,7 +162,15 @@ export function TaskPage() {
   // where the detail was read, and the rest of the page never waits on them.
   const showsLog = ["activity", "events"].includes(params.get("tab") ?? "");
   const log = useEvents(task && showsLog ? { task: taskId, newestBefore: position + 1 } : null);
+  // The text to redact, from what was marked on the page, while you are asked.
+  const [redacting, setRedacting] = useState<string | null>(null);
+  const markedText = useMarkedText();
+  const [erasure, setErasure] = useState<Erasure | null>(null);
 
+  // An erased task is gone for good: erased here, the page keeps what the
+  // erasure said; read again, the server says when (410).
+  if (erasure) return <ErasedTask id={taskId} erasure={erasure} />;
+  if (status === 410) return <ErasedTask id={taskId} said={error} />;
   if (error && !task) {
     return (
       <EmptyState icon={<FileQuestion />} title={`No task ${taskId}`}>
@@ -238,6 +250,7 @@ export function TaskPage() {
         actions={[
           ...(w ? [{ label: "Workspace", icon: <FolderGit2 />, onClick: () => window.open(`/tasks/${task.id}/workspace`, "_blank") }] : []),
           ...(working ? [{ label: "Terminal", icon: <SquareTerminal />, onClick: watch }] : []),
+          { label: "Redact a text", icon: <EyeOff />, onClick: () => setRedacting(markedText()) },
         ]}
         meta={
           <>
@@ -536,12 +549,16 @@ export function TaskPage() {
                       empty={<p className="px-4 py-3 text-[12px] text-ink-muted">No turns yet.</p>}
                     />
                   </Panel>
+                  <div className="lg:col-span-2">
+                    <EraseTask task={task.id} onErased={setErasure} />
+                  </div>
                 </div>
               </Scroll>
             )}
           </div>
         </div>
       </div>
+      {redacting !== null && <RedactText task={task.id} marked={redacting} onClose={() => setRedacting(null)} onRedacted={reload} />}
     </div>
   );
 }

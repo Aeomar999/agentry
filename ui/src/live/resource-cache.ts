@@ -6,6 +6,7 @@
 // opens a new one for the next read. A server that restarts on a shorter
 // log has the whole cache read again (LogPositions).
 
+import { ApiError } from "@/api/client";
 import { LogPositions } from "./log-positions";
 
 export interface Read {
@@ -18,10 +19,11 @@ export type Fetch = (path: string) => Promise<Read>;
 export interface Snapshot {
   data: unknown;
   error: string;
+  status: number; // the server's answer to the read that failed, such as 410 for a task erased; 0 when none did
   position: number; // of the log, that the data is as fresh as; -1 before the first read
 }
 
-export const nothing: Snapshot = { data: undefined, error: "", position: -1 };
+export const nothing: Snapshot = { data: undefined, error: "", status: 0, position: -1 };
 
 interface Entry {
   snapshot: Snapshot;
@@ -107,13 +109,13 @@ export class ResourceCache {
         // A reply with no position is as fresh as the position it was asked
         // at, so it isn't read again until the log moves, instead of in a loop.
         entry.position = read.position ?? asked;
-        this.show(entry, { data: read.data, error: "", position: entry.position });
+        this.show(entry, { data: read.data, error: "", status: 0, position: entry.position });
       }
     } catch (failure) {
       if (!this.log.stale(sent)) {
         // Tried as of the position it was asked at: the next move tries again.
         entry.position = Math.max(entry.position, asked);
-        this.show(entry, { ...entry.snapshot, error: (failure as Error).message });
+        this.show(entry, { ...entry.snapshot, error: (failure as Error).message, status: statusOf(failure) });
       }
     }
     entry.reading = false;
@@ -139,4 +141,10 @@ export class ResourceCache {
       this.entries.delete(path);
     }
   }
+}
+
+// statusOf is the server's answer to a read it refused, or 0 for a read
+// that never got one, such as a dropped connection.
+function statusOf(failure: unknown): number {
+  return failure instanceof ApiError ? failure.status : 0;
 }
