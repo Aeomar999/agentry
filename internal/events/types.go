@@ -13,6 +13,7 @@ const (
 	TeamRenamed  Type = "team.renamed"  // every agent of a team moves to the team's new name, its coordinator too
 
 	TeamEdited Type = "team.edited" // the whole team as the team panel saved it, at the "version" it loaded: its name "to", its "agents" (each with the name it "was"), the ones "removed"
+	TeamLinked Type = "team.linked" // every agent of the "team" is made from the "template": a built-in one's id, or one of yours, saved or removed
 )
 
 // The templates stream: the teams you saved to add again, beside the

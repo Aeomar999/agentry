@@ -53,6 +53,14 @@ func (t TeamEdit) Proposal(by events.Actor) events.Proposal {
 	}}
 }
 
+// TeamLinked is the event that links every agent of team, as the roster
+// names it, to template: the team is made from it from now on.
+func TeamLinked(team, template string, by events.Actor) events.Proposal {
+	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.TeamLinked, Data: map[string]any{
+		"team": team, "template": template,
+	}}
+}
+
 // TeamEditOf reads a team.edited, whether a proposal not yet written holds
 // its agents or the log gave them back as JSON.
 func TeamEditOf(p events.Proposal) (TeamEdit, error) {
@@ -91,8 +99,8 @@ func (r Roster) TeamVersion(team string) string {
 
 // edited is the roster after edit, as the rules accepted it. Kept agents
 // stay where they were, with their knowledge, workers and template; new
-// ones go last. A coordinator other than the one before takes the template
-// the team was made from.
+// ones go last. New agents, and a coordinator other than the one before,
+// take the template the team was made from.
 func (r Roster) edited(edit TeamEdit) Roster {
 	lead, _ := r.Coordinator(edit.Team)
 	newcomers := edit.To
@@ -112,7 +120,7 @@ func (r Roster) edited(edit TeamEdit) Roster {
 	}
 	for _, e := range edit.Agents {
 		if e.Was == "" {
-			after = append(after, Agent{}.editedTo(e, newcomers))
+			after = append(after, Agent{Template: lead.Template}.editedTo(e, newcomers))
 		}
 	}
 	for _, e := range edit.Agents {

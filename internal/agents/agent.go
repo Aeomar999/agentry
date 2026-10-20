@@ -182,6 +182,12 @@ func (r *Roster) Apply(e events.Event) {
 	case events.TeamEdited:
 		edit, _ := TeamEditOf(e.Proposal) // the rules accepted it as one
 		roster = roster.edited(edit)
+	case events.TeamLinked:
+		for i := range roster {
+			if roster[i].TeamName() == e.Text("team") {
+				roster[i].Template = e.Text("template")
+			}
+		}
 	case events.AgentLearned:
 		if i := roster.index(e.Text("name")); i >= 0 {
 			roster[i].learn(e)

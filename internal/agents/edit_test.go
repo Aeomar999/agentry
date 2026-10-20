@@ -113,6 +113,55 @@ func TestATeamEditGivesAnAgentMadeCoordinatorTheTeamsTemplate(t *testing.T) {
 	}
 }
 
+// A link makes every agent of the team, and of no other, made from the
+// template, the default team's agents that name none too.
+func TestALinkMakesEveryAgentOfTheTeamFromTheTemplate(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "chief", Coordinates: true, Team: "Papers"},
+		{Name: "engineer", Template: "software"},
+		{Name: "courier", Team: "Papers", Template: "old-papers"},
+		{Name: "data-lead", Coordinates: true, Team: "Data", Template: "research"},
+	}
+	cases := []struct {
+		team, template string
+		want           map[string]string
+	}{
+		{"Papers", "papers", map[string]string{"tech-lead": "software", "chief": "papers", "engineer": "software", "courier": "papers", "data-lead": "research"}},
+		{DefaultTeam, "my-software", map[string]string{"tech-lead": "my-software", "chief": "", "engineer": "my-software", "courier": "old-papers", "data-lead": "research"}},
+	}
+	for _, c := range cases {
+		linked := roster.Next(events.Event{Proposal: TeamLinked(c.team, c.template, you)})
+		got := map[string]string{}
+		for _, a := range linked {
+			got[a.Name] = a.Template
+		}
+		if !maps.Equal(got, c.want) {
+			t.Errorf("linking %s to %s: templates %v, want %v", c.team, c.template, got, c.want)
+		}
+	}
+}
+
+// A team edit after a link gives the agents it adds the team's link, so
+// the whole team stays linked, through a rename of the team.
+func TestATeamEditAfterALinkLinksItsNewAgents(t *testing.T) {
+	roster := Roster{
+		{Name: "tech-lead", Coordinates: true, Template: "software"},
+		{Name: "chief", Coordinates: true, Team: "Papers", Engine: "claude", Prompt: "Lead."},
+	}
+	roster = roster.Next(events.Event{Proposal: TeamLinked("Papers", "papers", you)})
+	edit := TeamEdit{Team: "Papers", To: "Letters", Agents: []EditedAgent{
+		{Was: "chief", Name: "chief", Coordinates: true, Engine: "claude", Prompt: "Lead."},
+		{Name: "courier", Engine: "claude", Prompt: "Take them."},
+	}}
+	roster = roster.Next(events.Event{Proposal: edit.Proposal(you)})
+	for _, name := range []string{"chief", "courier"} {
+		if a, _ := roster.Get(name); a.Team != "Letters" || a.Template != "papers" {
+			t.Errorf("%s = %+v, want an agent of Letters made from papers", name, a)
+		}
+	}
+}
+
 // The default team's agents may name no team: an edit that keeps its name
 // leaves them, and its new agents, naming none.
 func TestAnEditOfTheDefaultTeamKeepsItNamingNone(t *testing.T) {
