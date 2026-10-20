@@ -886,11 +886,10 @@ describe("whyNotSaved", () => {
     });
   });
 
-  test("cut short: saved, and saving again with the version given finishes the tasks", () => {
+  test("cut short: saved, and the panel reloads the team, then saves it again to finish the tasks", () => {
     const error = "saved the Writing team, but 1 task still needs moving: save again to finish (task-1: no)";
     expect(refused(409, { error, version: "v3" })).toEqual({
       kind: "cut short",
-      version: "v3",
       title: "Saved the Writing team, but some of its tasks haven't moved yet",
       detail: `Save again to finish moving them. Agentry said: "${error}"`,
     });

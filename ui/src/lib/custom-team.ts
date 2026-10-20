@@ -635,7 +635,7 @@ function asSentence(reason: string, names: string[]): string {
 export type EditRefusal =
   | { kind: "problems"; problems: Problem[] }
   | { kind: "changed"; title: string; detail: string }
-  | { kind: "cut short"; version: string; title: string; detail: string }
+  | { kind: "cut short"; title: string; detail: string }
   | { kind: "missing profiles"; profiles: string[] }
   | { kind: "failed"; title: string; detail: string };
 
@@ -655,7 +655,6 @@ export function whyNotSaved(failure: unknown, loaded: LoadedTeam, draft: TeamDra
   if (typeof body?.version === "string") {
     return {
       kind: "cut short",
-      version: body.version,
       title: `Saved the ${draft.team.trim()} team, but some of its tasks haven't moved yet`,
       detail: `Save again to finish moving them.${quoted((failure as Error).message)}`,
     };
