@@ -1442,6 +1442,49 @@ describe("Edit team: Remove team", () => {
     fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
     expect(document.activeElement).toBe(removeButton("body"));
   });
+
+  test("on a phone, while Remove team asks, Cancel and Save changes are off; Keep turns them on again", () => {
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    const cancel = inSheet().getByRole("button", { name: "Cancel" });
+    fireEvent.click(removeButton("body"));
+    expect(cancel.hasAttribute("disabled")).toBe(true);
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
+    expect(cancel.hasAttribute("disabled")).toBe(false);
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+  });
+
+  test("on a phone, a save started under the question, as the profile offer's, turns its Remove off", async () => {
+    reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, profile: "read-mostly" } : a))];
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError("policy.toml lacks read-mostly", 409, { missingProfiles: ["read-mostly"] }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+    fireEvent.click(removeButton("body"));
+    const offer = inSheet().getByRole("alert");
+    await act(async () => fireEvent.click(within(offer).getByRole("button", { name: "Add the profile and save the team" })));
+
+    expect(within(removeQuestion("body")!).getByRole("button", { name: "Remove" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  test("Back with changes while Remove team asks asks only about the changes; Keep editing asks about removing again", async () => {
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    typeInto("Team name", "Handbook");
+    fireEvent.click(removeButton("body"));
+    await back();
+
+    expect(removeQuestion("body")).toBeNull();
+    expect(removeQuestion("footer")).toBeNull();
+    const question = inSheet().getByRole("group", { name: "Discard your changes to Docs?" });
+    fireEvent.click(within(question).getByRole("button", { name: "Keep editing" }));
+    expect(inSheet().queryByRole("group", { name: "Discard your changes to Docs?" })).toBeNull();
+    expect(document.activeElement).toBe(within(removeQuestion("body")!).getByRole("button", { name: "Keep" }));
+  });
 });
 
 describe("Edit team: history", () => {

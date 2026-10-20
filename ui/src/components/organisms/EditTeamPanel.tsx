@@ -190,9 +190,21 @@ function EditTeamForm(props: EditTeamFormProps) {
   const loading = !ready || !loaded || reloading;
   // A link followed with changes asks about where it goes instead.
   const opening = openQuestion(guard.opening);
-  // Remove team's question, in the footer or under This team.
+  // Remove team's question, in the footer or under This team. One question
+  // at a time: Back or a link held while it asks puts the close question in
+  // its place until that is answered.
+  const removeAsks = removal.asking !== null && !guard.asking;
   const removeQuestion = (place: "footer" | "body") =>
-    loaded && <RemoveTeamQuestion place={place} removal={removal} team={loaded.team} agents={loaded.agents.length} changed={changed} />;
+    loaded && (
+      <RemoveTeamQuestion
+        place={place}
+        removal={removal}
+        team={loaded.team}
+        agents={loaded.agents.length}
+        changed={changed}
+        saving={saving}
+      />
+    );
   const footer = guard.asking ? (
     <DiscardQuestion
       question={opening?.question ?? discardEditQuestion(loaded?.team ?? props.team)}
@@ -205,15 +217,15 @@ function EditTeamForm(props: EditTeamFormProps) {
     <Footer onCancel={guard.ask} />
   ) : (
     // While Remove team asks, its question takes the footer's place; on a
-    // phone it asks under This team, and the footer stays.
+    // phone it asks under This team, and the footer stays, off.
     <>
-      {removal.asking && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
-      <div className={removal.asking ? "sm:hidden" : undefined}>
+      {removeAsks && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
+      <div className={removeAsks ? "sm:hidden" : undefined}>
         <Footer
           text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
           saving={saving}
           off={loading || !changed}
-          locked={removal.busy}
+          locked={removeAsks || removal.busy}
           primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
           onCancel={guard.ask}
           start={!loading && <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving} />}
@@ -228,7 +240,7 @@ function EditTeamForm(props: EditTeamFormProps) {
       title={title}
       titleId={TITLE_ID}
       focusTitle={!adding}
-      onClose={removal.asking ? removal.keep : guard.ask}
+      onClose={removeAsks ? removal.keep : guard.ask}
       canClose={!saving && !removal.busy}
       footer={footer}
     >
@@ -322,7 +334,7 @@ function EditTeamForm(props: EditTeamFormProps) {
                 This team
               </h3>
               {/* Save as a template goes first here (step 7). */}
-              {removal.asking ? (
+              {removeAsks ? (
                 removeQuestion("body")
               ) : (
                 <RemoveTeamButton place="body" removal={removal} only={onlyTeam} off={saving} className="flex-col items-stretch" />

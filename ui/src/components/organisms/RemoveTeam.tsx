@@ -98,12 +98,13 @@ interface RemoveTeamQuestionProps {
   team: string; // as saved
   agents: number;
   changed: boolean; // your unsaved changes go with the team
+  saving: boolean; // Remove is off while the team saves
 }
 
 // RemoveTeamQuestion is the question in place: a group named by it, focus
 // on Keep where it was asked. A refusal says the server's words, quoted,
 // and links the tasks it names; it takes focus as it shows.
-export function RemoveTeamQuestion({ place, removal, team, agents, changed }: RemoveTeamQuestionProps) {
+export function RemoveTeamQuestion({ place, removal, team, agents, changed, saving }: RemoveTeamQuestionProps) {
   const keep = useRef<HTMLButtonElement>(null);
   const refusal = useRef<HTMLDivElement>(null);
   const here = removal.asking === place;
@@ -137,7 +138,12 @@ export function RemoveTeamQuestion({ place, removal, team, agents, changed }: Re
       <Button ref={keep} disabled={removal.busy} onClick={removal.keep} className="max-sm:h-11 max-sm:flex-1">
         Keep
       </Button>
-      <Button variant="danger" disabled={removal.busy || removal.off} onClick={removal.remove} className="max-sm:h-11 max-sm:flex-1">
+      <Button
+        variant="danger"
+        disabled={removal.busy || removal.off || saving}
+        onClick={removal.remove}
+        className="max-sm:h-11 max-sm:flex-1"
+      >
         {removal.busy ? "Removing…" : "Remove"}
       </Button>
     </div>
