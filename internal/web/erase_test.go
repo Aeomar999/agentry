@@ -275,6 +275,63 @@ func TestErasingKeepsTheSameWordsOutsideTheCopies(t *testing.T) {
 	}
 }
 
+// A story whose title starts its summary leaves no part of the summary
+// behind, whether only the story_added of an epic it joined once done
+// holds the summary or the epic and the asker heard it finish.
+func TestErasingATitleInsideItsSummaryLeavesNoneOfIt(t *testing.T) {
+	const title, summary = "Add tests", "Add tests for X"
+	for _, archived := range []bool{false, true} {
+		for _, heard := range []bool{false, true} {
+			name := map[bool]string{false: "live", true: "archived"}[archived] + map[bool]string{false: ", joined once done", true: ", heard done"}[heard]
+			t.Run(name, func(t *testing.T) {
+				f := newEraseFixture(t)
+				f.done(t)
+				f.propose(t,
+					events.Proposal{Stream: "task-4", Actor: lead, Type: events.TaskCreated, Data: map[string]any{"title": title, "repo": "/r",
+						"coordinator": "tech-lead", "parent": "task-1"}},
+					events.Proposal{Stream: "task-1", Actor: lead, Type: events.TaskRequested, Data: map[string]any{"child": "task-4", "team": "Software",
+						"request": "Write them", "coordinator": "tech-lead"}},
+				)
+				done := events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": summary, "moved": true}}
+				if !heard {
+					f.propose(t, done)
+				}
+				if code, body := call(t, f.server, "POST", "/api/tasks", `{"title":"Tests","stories":["task-4"]}`); code != http.StatusOK {
+					t.Fatalf("creating the epic: %d %s", code, body)
+				}
+				if heard {
+					f.propose(t, done,
+						events.Proposal{Stream: "task-5", Actor: loop, Type: events.StoryDone, Data: map[string]any{"story": "task-4", "summary": summary, "coordinator": "tech-lead"}},
+						events.Proposal{Stream: "task-1", Actor: loop, Type: events.RequestAnswered, Data: map[string]any{"child": "task-4", "summary": summary, "coordinator": "tech-lead"}},
+					)
+				}
+				if archived {
+					storetest.ArchiveIn(t, f.log, f.state, "task-5", f.blobs)
+					storetest.ArchiveIn(t, f.log, f.state, "task-1", f.blobs)
+				}
+				if answer := f.erase(t, "task-4"); len(answer.Warnings) != 0 {
+					t.Errorf("the erasure warned: %q", answer.Warnings)
+				}
+				if got := textIn(t, f, "task-5", events.TaskCreated, "title"); !slices.Equal(got, []string{"Tests"}) {
+					t.Errorf("the epic's own title: %q, want it kept", got)
+				}
+				for _, stream := range []string{"task-5", "task-1"} {
+					history, err := f.log.History(stream, store.FromBlobs(f.blobs))
+					if err != nil {
+						t.Fatal(err)
+					}
+					for _, e := range history {
+						data, _ := json.Marshal(e.Data)
+						if strings.Contains(string(data), " for X") || strings.Contains(string(data), title) {
+							t.Errorf("%s's %s still holds some of task-4's words: %s", stream, e.Type, data)
+						}
+					}
+				}
+			})
+		}
+	}
+}
+
 // textIn is field of each event of kind in stream's whole record, an
 // archived task's read through its blob.
 func textIn(t *testing.T, f *eraseFixture, stream string, kind events.Type, field string) []string {

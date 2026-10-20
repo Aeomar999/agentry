@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -191,7 +192,7 @@ func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 	var warnings []string
 	why := "The copy of erased " + id + "."
 	for _, stream := range slices.Sorted(maps.Keys(copies)) {
-		for _, kept := range copies[stream] {
+		for _, kept := range longestFirst(copies[stream]) {
 			var rejection *events.Rejection
 			var err error
 			if _, archived := s.task(stream); errors.Is(archived, current.ErrArchived) {
@@ -208,6 +209,15 @@ func (s *Server) redactCopies(id string, copies map[string][]copied) []string {
 		}
 	}
 	return warnings
+}
+
+// longestFirst orders copies longest first, the same lengths by their
+// text: a copy that holds another, such as a summary that starts with the
+// title, is redacted whole before the shorter one could leave part of it.
+func longestFirst(copies []copied) []copied {
+	return slices.SortedFunc(slices.Values(copies), func(a, b copied) int {
+		return cmp.Or(cmp.Compare(len(b.text), len(a.text)), strings.Compare(a.text, b.text))
+	})
 }
 
 // summarise is the summary an archived task unarchived to redact it is
