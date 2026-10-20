@@ -11,6 +11,7 @@ import {
   changedAgents,
   copyTemplate,
   type DraftAgent,
+  FIRST_TEMPLATE,
   footerLine,
   listed,
   missingLine,
@@ -24,7 +25,9 @@ import {
   summaryTitle,
   type TeamDraft,
   type TeamRules,
+  templateToCopy,
   thingCount,
+  unsaved,
 } from "./custom-team";
 
 // The client reads the address when it loads, and there is none here.
@@ -356,6 +359,30 @@ describe("changedAgents", () => {
     expect(changedAgents(start, now)).toEqual(["a2", "New agent"]);
     expect(changedAgents(start, { ...start, agents: [a1, a2] })).toEqual(["chief"]);
     expect(changedAgents(start, { ...start, team: "Other" })).toEqual([]);
+  });
+});
+
+describe("unsaved", () => {
+  test("is a renamed team or a changed, added or removed agent; a change typed back is none", () => {
+    const start = draft(row("a1"));
+    const [chief, a1] = start.agents;
+    expect(unsaved(start, start)).toBe(false);
+    expect(unsaved(start, { ...start, team: ` ${start.team} ` })).toBe(false);
+    expect(unsaved(start, { ...start, team: "Other" })).toBe(true);
+    expect(unsaved(start, { ...start, agents: [chief] })).toBe(true);
+    expect(unsaved(start, { ...start, agents: [chief, { ...a1, description: "Other." }] })).toBe(true);
+    expect(unsaved(start, { ...start, agents: [chief, { ...a1 }] })).toBe(false);
+  });
+});
+
+describe("templateToCopy", () => {
+  const templates = [{ id: "writing" }, { id: "research" }] as TeamTemplate[];
+
+  test("is the template the id names, the first for one picked before they came, or none", () => {
+    expect(templateToCopy(templates, "research")).toBe(templates[1]);
+    expect(templateToCopy(templates, FIRST_TEMPLATE)).toBe(templates[0]);
+    expect(templateToCopy(templates, "")).toBeUndefined();
+    expect(templateToCopy(templates, "gone")).toBeUndefined();
   });
 });
 

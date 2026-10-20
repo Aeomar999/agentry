@@ -4,6 +4,7 @@ import type { Agent, Policy, ServerConfig, TeamTemplate } from "@/api/types";
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
 import { Select } from "@/components/atoms/Select";
+import { Banner } from "@/components/molecules/Banner";
 import { errorId, Field, FieldError } from "@/components/molecules/Field";
 import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
@@ -18,8 +19,14 @@ import {
   changedAgents,
   checkTeam,
   copyTemplate,
+  discardDetail,
+  discardQuestion,
   type DraftAgent,
+  FIRST_TEMPLATE,
   footerLine,
+  loadFailed,
+  loadingAgents,
+  loadingTemplates,
   missingLine,
   missingProfiles,
   newAgent,
@@ -31,8 +38,11 @@ import {
   shownName,
   summaryTitle,
   type TeamDraft,
+  templateToCopy,
+  unsaved,
   whyNotCreated,
 } from "@/lib/custom-team";
+import { useCloseGuard } from "@/lib/close-guard";
 import { missingProfilesOf } from "@/lib/teams";
 import { useResource } from "@/live/use-resource";
 import { AgentRow, fieldId, toggleId } from "./AgentRow";
@@ -51,57 +61,53 @@ interface TeamPanelProps {
 
 const TITLE = "New team";
 
-export function TeamPanel({ template, returnTo, onClose, onCreated }: TeamPanelProps) {
-  const roster = useResource<Agent[]>("/api/agents").data;
-  const templates = useResource<TeamTemplate[]>("/api/teams/templates").data;
-  const policy = useResource<Policy>("/api/policy").data;
-  const engines = useResource<ServerConfig>("/api/config").data?.engines;
-  if (!roster || !templates || !policy || !engines) {
-    return (
-      <SideSheet title={TITLE} returnTo={returnTo} onClose={onClose} footer={<Footer text="Loading…" onClose={onClose} />}>
-        <p aria-live="polite" className="text-[13px] text-ink-muted">
-          Loading engines and profiles…
-        </p>
-      </SideSheet>
-    );
-  }
+// TeamPanel reads what a new team needs; the form works while it loads.
+export function TeamPanel(props: TeamPanelProps) {
+  const roster = useResource<Agent[]>("/api/agents");
+  const templates = useResource<TeamTemplate[]>("/api/teams/templates");
+  const policy = useResource<Policy>("/api/policy");
+  const config = useResource<ServerConfig>("/api/config");
+  // A read that failed with nothing from before to show: Try again reads it again.
+  const failed = [roster, templates, policy, config].filter((read) => read.data === undefined && read.error !== "");
   return (
     <TeamForm
-      roster={roster}
-      templates={templates}
-      policy={policy}
-      engines={engines}
-      copied={templates.find((t) => t.id === template)}
-      returnTo={returnTo}
-      onClose={onClose}
-      onCreated={onCreated}
+      {...props}
+      roster={roster.data}
+      templates={templates.data}
+      policy={policy.data}
+      engines={config.data?.engines}
+      loadError={failed[0]?.error ?? ""}
+      onRetry={() => failed.forEach((read) => read.reload())}
     />
   );
 }
 
-interface TeamFormProps {
-  roster: Agent[];
-  templates: TeamTemplate[];
-  policy: Policy;
-  engines: string[];
-  copied?: TeamTemplate; // the template the form starts from a copy of, or Blank
-  returnTo?: RefObject<HTMLElement | null>;
-  onClose: () => void;
-  onCreated: (team: string) => Promise<void>;
+interface TeamFormProps extends TeamPanelProps {
+  // What a new team needs, each undefined until it has loaded.
+  roster?: Agent[];
+  templates?: TeamTemplate[];
+  policy?: Policy;
+  engines?: string[];
+  loadError: string; // why one of them didn't load
+  onRetry: () => void;
 }
 
 // What Start from asks before it replaces agents you changed: the template's id, or "" for Blank.
 type Replacing = { to: string; changed: string[] };
 
-function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClose, onCreated }: TeamFormProps) {
+// How a team starts before its agents can: no name and no agents.
+const NOTHING_YET: TeamDraft = { team: "", agents: [] };
+
+function TeamForm(props: TeamFormProps) {
+  const { roster, templates, policy, engines, template, loadError, onRetry, returnTo, onClose, onCreated } = props;
   const notify = useToast();
-  const [first] = useState(() => startOf(copied, roster));
-  const [start, setStart] = useState(first); // how the agents started, to tell what you changed
-  const [copy, setCopy] = useState(copied?.id ?? "");
-  const [team, setTeam] = useState(first.team);
-  const [rows, setRows] = useState(first.agents);
+  const ready = roster && templates && policy && engines ? { roster, templates, policy, engines } : undefined;
+  const [start, setStart] = useState<TeamDraft | null>(null); // how the agents started, to tell what you changed
+  const [copy, setCopy] = useState(template ?? "");
+  const [team, setTeam] = useState("");
+  const [rows, setRows] = useState<DraftAgent[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
-  const [open, setOpen] = useState<string[]>(first.agents.slice(0, 1).map((agent) => agent.key));
+  const [open, setOpen] = useState<string[]>([]);
   const [replacing, setReplacing] = useState<Replacing | null>(null);
   const [tried, setTried] = useState(false); // Create team was pressed, so problems show
   const [failure, setFailure] = useState(""); // why the server refused, in words
@@ -110,9 +116,21 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   const [focusOn, setFocusOn] = useState<{ id: string } | null>(null);
   const [notice, setNotice] = useState(""); // what the live region last said
 
+  // The agents start once everything they need is in. A name typed meanwhile stays.
+  if (ready && !start) {
+    const copied = templateToCopy(ready.templates, copy);
+    const first = startOf(copied, ready.roster);
+    setStart(first);
+    setCopy(copied?.id ?? "");
+    setRows(first.agents);
+    setOpen(first.agents.slice(0, 1).map((agent) => agent.key));
+    if (team.trim() === "") setTeam(first.team);
+  }
+
   const draft: TeamDraft = { team, agents: rows.filter((agent) => !removed.includes(agent.key)) };
-  const problems = tried ? checkTeam(draft, roster, { templates, policy, engines }) : [];
-  const missing = missingProfiles(draft, policy);
+  const problems = tried && ready ? checkTeam(draft, ready.roster, ready) : [];
+  const missing = policy ? missingProfiles(draft, policy) : [];
+  const guard = useCloseGuard(unsaved(start ?? NOTHING_YET, draft), saving, onClose);
   const rowProblems = (key: string) => problems.filter((p) => typeof p.field === "object" && p.field.row === key);
   const problemAt = (field: "team" | "agents") => problems.find((p) => p.field === field)?.message;
 
@@ -142,16 +160,18 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   function startFrom(to: string) {
+    if (!start) return setCopy(to); // the agents start from it once they can
     const changed = changedAgents(start, draft);
     if (changed.length > 0) setReplacing({ to, changed });
     else replaceWith(to);
   }
 
   function replaceWith(to: string) {
-    const template = templates.find((t) => t.id === to);
-    const next = startOf(template, roster);
+    if (!ready) return;
+    const template = templateToCopy(ready.templates, to);
+    const next = startOf(template, ready.roster);
     // A name you typed stays; the one the last start suggested follows the new one.
-    if (team.trim() === "" || team === start.team) setTeam(next.team);
+    if (team.trim() === "" || team === start?.team) setTeam(next.team);
     setStart(next);
     setCopy(to);
     setRows(next.agents);
@@ -162,7 +182,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   function addAgent() {
-    const agent = newAgent(draft, engines);
+    const agent = newAgent(draft, engines ?? []);
     setRows((rows) => [...rows, agent]);
     setOpen((open) => [...open.filter((k) => rowProblems(k).length > 0), agent.key]);
     focus(fieldId(agent.key, "name"));
@@ -192,9 +212,10 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   async function create(policyHash?: string) {
+    if (!ready) return;
     setTried(true);
     setFailure("");
-    const found = checkTeam(draft, roster, { templates, policy, engines });
+    const found = checkTeam(draft, ready.roster, ready);
     if (found.length > 0) {
       setOffer(null);
       // A row with a problem opens, so its errors show under its fields.
@@ -206,6 +227,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
       await addCustomTeam(draft, policyHash);
       notify("success", `Added the ${draft.team.trim()} team`, "Pick it on New task; its coordinator takes the task.");
       await onCreated(draft.team.trim());
+      guard.leave();
     } catch (refusal) {
       const profiles = missingProfilesOf(refusal);
       if (profiles && policyHash === undefined) {
@@ -221,21 +243,29 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }
 
   const count = draft.agents.length;
+  const footer = guard.asking ? (
+    <DiscardQuestion onKeep={guard.keepEditing} onDiscard={guard.leave} />
+  ) : loadError ? (
+    <Footer onCancel={guard.ask} />
+  ) : (
+    <Footer
+      text={ready ? footerLine(draft, problems.length, saving) : "Loading…"}
+      saving={saving}
+      loading={!ready}
+      onCancel={guard.ask}
+      onCreate={() => create()}
+    />
+  );
 
   return (
-    <SideSheet
-      title={TITLE}
-      returnTo={returnTo}
-      onClose={onClose}
-      canClose={!saving}
-      footer={<Footer text={footerLine(draft, problems.length, saving)} saving={saving} onClose={onClose} onCreate={() => create()} />}
-    >
+    <SideSheet title={TITLE} returnTo={returnTo} onClose={guard.ask} canClose={!saving} footer={footer}>
       <div className="flex flex-col gap-5">
         <p aria-live="polite" className="sr-only">
           {notice}
         </p>
+        {loadError && <LoadFailure error={loadError} onRetry={onRetry} />}
         {(problems.length > 0 || failure) && <ErrorSummary problems={problems} failure={failure} onFollow={follow} />}
-        {offer && (
+        {offer && policy && (
           <div id="team-offer" tabIndex={-1} className="outline-none">
             <MissingProfilesOffer team={draft.team.trim()} profiles={offer} creates adding={saving} onAdd={() => create(policy.hash)} />
           </div>
@@ -262,60 +292,68 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
           onReplace={() => replacing && replaceWith(replacing.to)}
         />
 
-        <fieldset aria-describedby={problemAt("agents") ? errorId("team-agents") : undefined} className="flex min-w-0 flex-col gap-2">
-          <legend
-            id="team-agents"
-            tabIndex={-1}
-            className="mb-2 flex w-full items-baseline justify-between text-[12px] font-medium text-ink-secondary outline-none"
-          >
-            Agents · one coordinates
-            <span className="font-normal text-ink-muted">{agentCount(count)}</span>
-          </legend>
-          {problemAt("agents") && <FieldError id={errorId("team-agents")}>{problemAt("agents")}</FieldError>}
-          {missing.length > 0 && (
-            <p className="flex items-start gap-1.5 text-[12px] text-warning-ink">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              <span>{missingLine(draft, missing)}</span>
+        {!ready ? (
+          !loadError && (
+            <p aria-live="polite" className="text-[13px] text-ink-muted">
+              {loadingAgents}
             </p>
-          )}
-          <ul className="rounded-md border border-divider bg-surface-1">
-            {rows.map((agent) =>
-              removed.includes(agent.key) ? (
-                <RemovedStub key={agent.key} agent={agent} saving={saving} onUndo={() => undo(agent)} />
-              ) : (
-                <AgentRow
-                  key={agent.key}
-                  agent={agent}
-                  open={open.includes(agent.key)}
-                  onToggle={() => toggle(agent.key)}
-                  problems={rowProblems(agent.key)}
-                  profileMissing={missing.includes(agent.profile.trim())}
-                  engines={engines}
-                  policy={policy}
-                  saving={saving}
-                  onChange={(c) => change(agent.key, c)}
-                  onRemove={() => remove(agent)}
-                />
-              ),
-            )}
-          </ul>
-          {count === 0 && <p className="text-[12px] text-ink-muted">No agents yet. Add one: it coordinates the team.</p>}
-          <span className="flex items-center gap-3">
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<Plus />}
-              aria-label="Add agent"
-              aria-disabled={saving || undefined}
-              onClick={() => !saving && addAgent()}
+          )
+        ) : (
+          <fieldset aria-describedby={problemAt("agents") ? errorId("team-agents") : undefined} className="flex min-w-0 flex-col gap-2">
+            <legend
+              id="team-agents"
+              tabIndex={-1}
+              className="mb-2 flex w-full items-baseline justify-between text-[12px] font-medium text-ink-secondary outline-none"
             >
-              Add agent
-            </Button>
-            {count === 1 && draft.agents[0].coordinates && (
-              <span className="text-[12px] text-ink-muted">Add the agents it hands work to.</span>
+              Agents · one coordinates
+              <span className="font-normal text-ink-muted">{agentCount(count)}</span>
+            </legend>
+            {problemAt("agents") && <FieldError id={errorId("team-agents")}>{problemAt("agents")}</FieldError>}
+            {missing.length > 0 && (
+              <p className="flex items-start gap-1.5 text-[12px] text-warning-ink">
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>{missingLine(draft, missing)}</span>
+              </p>
             )}
-          </span>
-        </fieldset>
+            <ul className="rounded-md border border-divider bg-surface-1">
+              {rows.map((agent) =>
+                removed.includes(agent.key) ? (
+                  <RemovedStub key={agent.key} agent={agent} saving={saving} onUndo={() => undo(agent)} />
+                ) : (
+                  <AgentRow
+                    key={agent.key}
+                    agent={agent}
+                    open={open.includes(agent.key)}
+                    onToggle={() => toggle(agent.key)}
+                    problems={rowProblems(agent.key)}
+                    profileMissing={missing.includes(agent.profile.trim())}
+                    engines={ready.engines}
+                    policy={ready.policy}
+                    saving={saving}
+                    onChange={(c) => change(agent.key, c)}
+                    onRemove={() => remove(agent)}
+                  />
+                ),
+              )}
+            </ul>
+            {count === 0 && <p className="text-[12px] text-ink-muted">No agents yet. Add one: it coordinates the team.</p>}
+            <span className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Plus />}
+                aria-label="Add agent"
+                aria-disabled={saving || undefined}
+                onClick={() => !saving && addAgent()}
+              >
+                Add agent
+              </Button>
+              {count === 1 && draft.agents[0].coordinates && (
+                <span className="text-[12px] text-ink-muted">Add the agents it hands work to.</span>
+              )}
+            </span>
+          </fieldset>
+        )}
       </div>
     </SideSheet>
   );
@@ -366,7 +404,7 @@ function ErrorSummary({ problems, failure, onFollow }: ErrorSummaryProps) {
 
 interface StartFromProps {
   copy: string; // the template copied, or "" for Blank
-  templates: TeamTemplate[];
+  templates?: TeamTemplate[]; // none while they load
   saving: boolean;
   onChoose: (to: string) => void;
   replacing: Replacing | null;
@@ -387,10 +425,10 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
   const choose = (segment: string) => {
     if (saving) return;
     if (segment === "blank" && copying) onChoose("");
-    if (segment === "copy" && !copying && templates.length > 0) onChoose(templates[0].id);
+    if (segment === "copy" && !copying) onChoose(templates ? (templates[0]?.id ?? "") : FIRST_TEMPLATE);
   };
-  const to = replacing ? templates.find((t) => t.id === replacing.to) : undefined;
-  const from = templates.find((t) => t.id === copy);
+  const to = replacing && templates ? templateToCopy(templates, replacing.to) : undefined;
+  const from = templates && templateToCopy(templates, copy);
   return (
     <div className="flex flex-col gap-2">
       <Field
@@ -412,7 +450,12 @@ function StartFrom({ copy, templates, saving, onChoose, replacing, onKeep, onRep
               { id: "copy", label: "Copy a template" },
             ]}
           />
-          {copying && (
+          {copying && !templates && (
+            <Select aria-label="Template" disabled className="w-56 max-sm:w-full">
+              <option>{loadingTemplates}</option>
+            </Select>
+          )}
+          {copying && templates && (
             <Select
               aria-label="Template"
               value={chosen}
@@ -476,29 +519,82 @@ function RemovedStub({ agent, saving, onUndo }: { agent: DraftAgent; saving: boo
 }
 
 interface FooterProps {
-  text: string;
+  text?: string; // beside the buttons: what Create team does, or why it can't yet
   saving?: boolean;
-  onClose: () => void;
-  onCreate?: () => void; // none while what a new team needs loads
+  loading?: boolean; // Create team is off until what it checks against is in
+  onCancel: () => void;
+  onCreate?: () => void; // none when the load failed: there is nothing to create
 }
 
-function Footer({ text, saving = false, onClose, onCreate }: FooterProps) {
+// Footer is Cancel and Create team. On a phone it is the two buttons alone,
+// side by side; the line beside them is still read out.
+function Footer({ text = "", saving = false, loading = false, onCancel, onCreate }: FooterProps) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
-      <p aria-live="polite" id="team-footer-text" className="mr-auto text-[12px] text-ink-muted">
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2 max-sm:flex-nowrap">
+      <p aria-live="polite" id="team-footer-text" className="mr-auto text-[12px] text-ink-muted max-sm:sr-only">
         {text}
       </p>
-      <Button variant="ghost" disabled={saving} onClick={onClose}>
+      <Button id="team-cancel" variant="ghost" disabled={saving} onClick={onCancel} className={PHONE_BUTTON}>
         Cancel
       </Button>
-      <Button
-        variant="primary"
-        disabled={saving || !onCreate}
-        aria-describedby={onCreate ? undefined : "team-footer-text"}
-        onClick={onCreate}
-      >
-        {saving ? "Creating…" : "Create team"}
+      {onCreate && (
+        <Button
+          variant="primary"
+          disabled={saving || loading}
+          aria-describedby={loading ? "team-footer-text" : undefined}
+          onClick={onCreate}
+          className={PHONE_BUTTON}
+        >
+          {saving ? "Creating…" : "Create team"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// On a phone the footer's two buttons share its one 44px row.
+const PHONE_BUTTON = "max-sm:h-11 max-sm:flex-1";
+
+// DiscardQuestion takes the footer's place when closing would lose the new
+// team: a group named by the question, starting on the safe answer.
+function DiscardQuestion({ onKeep, onDiscard }: { onKeep: () => void; onDiscard: () => void }) {
+  const keep = useRef<HTMLButtonElement>(null);
+  useEffect(() => keep.current?.focus(), []);
+  return (
+    <div
+      role="group"
+      aria-labelledby="team-discard"
+      aria-describedby="team-discard-detail"
+      className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2"
+    >
+      <div className="mr-auto min-w-0 max-sm:basis-full">
+        <p id="team-discard" className="text-[13px] font-medium text-ink-primary">
+          {discardQuestion}
+        </p>
+        <p id="team-discard-detail" className="text-[12px] text-ink-secondary">
+          {discardDetail}
+        </p>
+      </div>
+      <Button ref={keep} onClick={onKeep} className={PHONE_BUTTON}>
+        Keep editing
+      </Button>
+      <Button variant="danger" onClick={onDiscard} className={PHONE_BUTTON}>
+        Discard
       </Button>
     </div>
+  );
+}
+
+// LoadFailure says what didn't load, in the server's words, and tries again. Try again takes focus.
+function LoadFailure({ error, onRetry }: { error: string; onRetry: () => void }) {
+  const retry = useRef<HTMLButtonElement>(null);
+  useEffect(() => retry.current?.focus(), []);
+  return (
+    <Banner title={loadFailed}>
+      <p>{error}</p>
+      <Button ref={retry} size="sm" onClick={onRetry} className="mt-2">
+        Try again
+      </Button>
+    </Banner>
   );
 }

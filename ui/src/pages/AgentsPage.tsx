@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, NavigateOptions, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { LayoutGrid, List, Network, Plus, Trash2, Users } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { Badge } from "@/components/atoms/Badge";
@@ -37,6 +37,9 @@ import { COLUMN_TITLES, columnOfAgent } from "@/lib/columns";
 
 type View = "teams" | "org" | "list";
 
+// The history state of the entry opening the New team panel from this page pushes.
+const OPENED_HERE = { panel: "new team" };
+
 const COLUMNS: Column<Agent>[] = [
   { header: "Name", className: "w-40", render: (agent) => <AgentName name={agent.name} className="font-semibold text-ink-primary" /> },
   { header: "Team", className: "w-28", render: (agent) => <span className="text-ink-secondary">{teamOf(agent)}</span> },
@@ -66,6 +69,7 @@ const COLUMNS: Column<Agent>[] = [
 export function AgentsPage() {
   useBreadcrumb({ label: "Agents" });
   const navigate = useNavigate();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const asked = params.get("view") as View | null;
   const view: View = asked === "org" || asked === "list" ? asked : "teams";
@@ -92,13 +96,17 @@ export function AgentsPage() {
     created.current = "";
   }, [building]);
   // The panel's address keeps the view behind it.
-  const showPanel = (panel: Record<string, string>, replace = false) =>
-    setParams(view === "teams" ? panel : { view, ...panel }, { replace });
-  // buildTeam opens the New team panel, starting from a copy of the template when one is given.
+  const showPanel = (panel: Record<string, string>, options?: NavigateOptions) =>
+    setParams(view === "teams" ? panel : { view, ...panel }, options);
+  // buildTeam opens the New team panel, starting from a copy of the template
+  // when one is given, in a history entry of its own, marked as ours.
   const buildTeam = (template?: string) => {
     setAdding(false);
-    showPanel(template ? { team: "new", template } : { team: "new" });
+    showPanel(template ? { team: "new", template } : { team: "new" }, { state: OPENED_HERE });
   };
+  // closePanel goes back over the panel's entry, so Back never reopens it.
+  // Opened from a link there is no entry of ours: the address loses the panel instead.
+  const closePanel = () => (location.state?.panel === OPENED_HERE.panel ? navigate(-1) : showPanel({}, { replace: true }));
 
   return (
     <>
@@ -197,11 +205,10 @@ export function AgentsPage() {
         <TeamPanel
           template={params.get("template") ?? undefined}
           returnTo={addTeam}
-          onClose={() => showPanel({}, true)}
+          onClose={closePanel}
           onCreated={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
             created.current = team;
-            notify(team);
           }}
         />
       )}

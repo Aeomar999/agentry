@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
 import { AgentsPage } from "@/pages/AgentsPage";
@@ -21,6 +21,7 @@ vi.mock("@/components/molecules/CodeViewer", () => ({
 }));
 
 const reads: Record<string, unknown> = {};
+const errors: Record<string, string> = {}; // why a read failed
 let afterReload: Record<string, unknown> = {}; // what a reload of a path reads next
 const watchers = new Set<() => void>();
 const changed = () => watchers.forEach((watcher) => watcher());
@@ -32,10 +33,13 @@ vi.mock("@/live/use-resource", () => ({
       () => reads[path],
     );
     const reload = async () => {
-      if (path in afterReload) reads[path] = afterReload[path];
+      if (path in afterReload) {
+        reads[path] = afterReload[path];
+        delete errors[path];
+      }
       changed();
     };
-    return { data, error: "", position: 1, reload };
+    return { data, error: errors[path] ?? "", position: 1, reload };
   },
 }));
 
@@ -109,14 +113,23 @@ beforeEach(() => {
     "/api/config": { engines: ["claude", "codex"] },
   });
   afterReload = {};
+  for (const path in errors) delete errors[path];
 });
 
-const openAt = (address: string) =>
-  render(
-    <MemoryRouter initialEntries={[address]}>
-      <AgentsPage />
-    </MemoryRouter>,
+// The router, as the app's, so the panel can hold Back; /tasks is a page before the Agents page.
+let router: ReturnType<typeof createMemoryRouter>;
+const openAt = (...history: string[]) => {
+  router = createMemoryRouter(
+    [
+      { path: "/agents", element: <AgentsPage /> },
+      { path: "/tasks", element: <p>Tasks</p> },
+    ],
+    { initialEntries: history, initialIndex: history.length - 1 },
   );
+  return render(<RouterProvider router={router} />);
+};
+const address = () => router.state.location.pathname + router.state.location.search;
+const back = () => act(async () => router.navigate(-1));
 
 const panel = () => screen.getByRole("dialog", { name: "New team" });
 const teamName = () => within(panel()).getByLabelText("Team name") as HTMLInputElement;
@@ -528,5 +541,157 @@ describe("New team: saving", () => {
     expect(within(section).getByText("editor")).toBeTruthy();
     expect(within(section).getByText("writer")).toBeTruthy();
     expect(screen.getByText("2 teams · 4 agents")).toBeTruthy();
+  });
+});
+
+describe("New team: history and unsaved changes", () => {
+  const buildFromThePage = () => {
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Build a team" }));
+  };
+  const question = () => within(panel()).queryByRole("group", { name: "Discard this new team?" });
+  const closeButton = () => within(panel()).getByRole("button", { name: "Close" });
+  const cancel = () => within(panel()).getByRole("button", { name: "Cancel" });
+
+  test("opened from the page, it has an entry of its own, which Close goes back over", async () => {
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    expect(address()).toBe("/agents?team=new");
+    fireEvent.click(closeButton());
+    expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("Back with no changes closes it", async () => {
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    await back();
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("Back with changes keeps it open and asks in the footer; Discard then closes", async () => {
+    openAt("/tasks", "/agents");
+    buildFromThePage();
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    await back();
+    expect(address()).toBe("/agents?team=new");
+    expect(question()!.textContent).toContain("It hasn't been created yet.");
+    expect(document.activeElement).toBe(within(question()!).getByRole("button", { name: "Keep editing" }));
+    fireEvent.click(within(question()!).getByRole("button", { name: "Keep editing" }));
+    expect(question()).toBeNull();
+    expect(teamName().value).toBe("Docs");
+
+    await back();
+    await act(async () => fireEvent.click(within(question()!).getByRole("button", { name: "Discard" })));
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("opened from a link, closing takes the panel off the address instead", async () => {
+    openAt("/tasks", "/agents?view=org&team=new&template=writing");
+    fireEvent.click(cancel());
+    expect(address()).toBe("/agents?view=org");
+    expect(router.state.historyAction).toBe("REPLACE");
+    await back();
+    expect(address()).toBe("/tasks");
+  });
+
+  test("Esc, Close and Cancel with changes ask first; Esc again or Keep editing puts focus back", () => {
+    openAt("/agents?team=new");
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    teamName().focus();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.activeElement).toBe(within(question()!).getByRole("button", { name: "Keep editing" }));
+    expect(within(panel()).queryByRole("button", { name: "Create team" })).toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(question()).toBeNull();
+    expect(document.activeElement).toBe(teamName());
+
+    closeButton().focus();
+    fireEvent.click(closeButton());
+    fireEvent.click(within(question()!).getByRole("button", { name: "Keep editing" }));
+    expect(document.activeElement).toBe(closeButton());
+
+    cancel().focus();
+    fireEvent.click(cancel());
+    fireEvent.click(within(question()!).getByRole("button", { name: "Keep editing" }));
+    expect(document.activeElement).toBe(cancel());
+
+    fireEvent.click(cancel());
+    fireEvent.click(within(question()!).getByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+    expect(address()).toBe("/agents");
+  });
+
+  test("a change typed back is no change: Close closes at once", () => {
+    openAt("/agents?team=new&template=writing");
+    fireEvent.click(rowButton("writer"));
+    fireEvent.change(field("Description"), { target: { value: "Drafts." } });
+    fireEvent.change(field("Description"), { target: { value: "The writer." } });
+    fireEvent.click(closeButton());
+    expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
+  });
+
+  test("reloading or closing the tab asks the browser's question only with changes", () => {
+    openAt("/agents?team=new");
+    const leave = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(leave()).toBe(false);
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    expect(leave()).toBe(true);
+  });
+});
+
+describe("New team: opened cold", () => {
+  test("Team name and Start from work while it loads; Create team waits", () => {
+    delete reads["/api/teams/templates"];
+    delete reads["/api/config"];
+    openAt("/agents?team=new");
+    fireEvent.change(teamName(), { target: { value: "Docs" } });
+    fireEvent.click(within(panel()).getByRole("radio", { name: "Copy a template" }));
+
+    const template = within(panel()).getByLabelText("Template") as HTMLSelectElement;
+    expect(template.disabled).toBe(true);
+    expect(template.textContent).toBe("Loading templates…");
+    expect(within(panel()).getByText("Loading engines and profiles…").getAttribute("aria-live")).toBe("polite");
+    const createTeam = within(panel()).getByRole("button", { name: "Create team" });
+    expect(createTeam.hasAttribute("disabled")).toBe(true);
+    expect(document.getElementById(createTeam.getAttribute("aria-describedby")!)!.textContent).toBe("Loading…");
+
+    act(() => {
+      reads["/api/teams/templates"] = [WRITING, IDEAS];
+      reads["/api/config"] = { engines: ["claude", "codex"] };
+      changed();
+    });
+    expect((within(panel()).getByLabelText("Template") as HTMLSelectElement).value).toBe("writing");
+    expect(rowButton("writer")).toBeTruthy();
+    expect(teamName().value).toBe("Docs");
+    expect(within(panel()).getByRole("button", { name: "Create team" }).hasAttribute("disabled")).toBe(false);
+  });
+
+  test("a failed load says so in the server's words, with Try again, and only Cancel", async () => {
+    delete reads["/api/config"];
+    errors["/api/config"] = "the config is unreadable";
+    openAt("/agents?team=new");
+
+    const alert = within(panel()).getByRole("alert");
+    expect(alert.textContent).toContain("Couldn't load what a new team needs");
+    expect(alert.textContent).toContain("the config is unreadable");
+    expect(document.activeElement).toBe(within(alert).getByRole("button", { name: "Try again" }));
+    expect(within(panel()).queryByRole("button", { name: "Create team" })).toBeNull();
+    expect(within(panel()).getByRole("button", { name: "Cancel" })).toBeTruthy();
+
+    afterReload = { "/api/config": { engines: ["claude"] } };
+    await act(async () => fireEvent.click(within(alert).getByRole("button", { name: "Try again" })));
+    expect(within(panel()).queryByRole("alert")).toBeNull();
+    expect(rowButton("coordinator")).toBeTruthy();
   });
 });

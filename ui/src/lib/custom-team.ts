@@ -116,6 +116,17 @@ export function changedAgents(start: TeamDraft, now: TeamDraft): string[] {
   return [...changed, ...removed].map(shownName);
 }
 
+// unsaved says whether closing would lose something: the team's name or
+// an agent differs from how the team started. Typing a change back undoes it.
+export const unsaved = (start: TeamDraft, now: TeamDraft) => now.team.trim() !== start.team.trim() || changedAgents(start, now).length > 0;
+
+// Copy a template picked before the templates came: the first of them, once they do.
+export const FIRST_TEMPLATE = "*";
+
+// templateToCopy is the template a copy starts from, or none for Blank or an id that names none.
+export const templateToCopy = (templates: TeamTemplate[], id: string) =>
+  id === FIRST_TEMPLATE ? templates[0] : templates.find((template) => template.id === id);
+
 // freeName is name, or name-2, name-3… when it is taken, cut to fit MAX_NAME.
 function freeName(name: string, taken: string[]): string {
   let free = name.slice(0, MAX_NAME);
@@ -353,6 +364,15 @@ export const removedNotice = (agent: DraftAgent) => `${shownName(agent)} removed
 export const backNotice = (agent: DraftAgent) => `${shownName(agent)} is back.`;
 export const replacedNotice = (to: Pick<TeamTemplate, "team" | "agents">) => `Replaced with ${to.team}'s ${to.agents.length} agents.`;
 export const blankNotice = "Replaced with a blank team: one agent, its coordinator.";
+
+// While what a new team needs loads, and if it didn't.
+export const loadingAgents = "Loading engines and profiles…";
+export const loadingTemplates = "Loading templates…";
+export const loadFailed = "Couldn't load what a new team needs";
+
+// What closing asks when it would lose the new team.
+export const discardQuestion = "Discard this new team?";
+export const discardDetail = "It hasn't been created yet.";
 
 // whyNotCreated is a refusal in words: the server's own, or ours when
 // Agentry couldn't be reached at all.
