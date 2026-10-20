@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Bot, Pencil } from "lucide-react";
+import { Bot, EyeOff, Pencil } from "lucide-react";
 import { useBreadcrumb } from "@/lib/breadcrumb";
 import { PageHeader } from "@/components/molecules/PageHeader";
 import { Panel } from "@/components/molecules/Panel";
@@ -9,16 +10,23 @@ import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { EmptyState } from "@/components/molecules/EmptyState";
 import { Mono } from "@/components/molecules/Mono";
 import { KnowledgeEditor } from "@/components/organisms/KnowledgeEditor";
+import { RedactText } from "@/components/organisms/RedactText";
 import { AgentName } from "@/components/molecules/AgentName";
 import { runsOn } from "@/lib/machines";
 import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { profileInForce } from "@/lib/profiles";
+import { useMarkedText } from "@/lib/marked-text";
 
 export function AgentPage() {
   const { name = "" } = useParams();
   useBreadcrumb({ label: "Agents", to: "/agents" }, { label: name });
-  const { data } = useResource<Agent[]>("/api/agents");
+  const { data, reload } = useResource<Agent[]>("/api/agents");
+  // The text to redact from what the agents learned, from what was marked
+  // on the page, while you are asked. What they learned is one stream, so
+  // a redaction here takes the text out of every agent's knowledge.
+  const [redacting, setRedacting] = useState<string | null>(null);
+  const markedText = useMarkedText();
   if (!data) return null;
   const agent = data.find((a) => a.name === name);
   if (!agent) return <EmptyState icon={<Bot />} title={`No agent named ${name}`} />;
@@ -29,7 +37,10 @@ export function AgentPage() {
         title={<AgentName name={agent.name} />}
         badges={<RoleBadge agent={agent} />}
         meta={agent.description}
-        actions={[{ label: "Edit", icon: <Pencil />, to: `/agents/${encodeURIComponent(agent.name)}/edit` }]}
+        actions={[
+          { label: "Redact a text", icon: <EyeOff />, onClick: () => setRedacting(markedText()) },
+          { label: "Edit", icon: <Pencil />, to: `/agents/${encodeURIComponent(agent.name)}/edit` },
+        ]}
       />
       <div className="flex flex-col gap-6 p-6 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1">
@@ -54,6 +65,7 @@ export function AgentPage() {
           </Panel>
         </aside>
       </div>
+      {redacting !== null && <RedactText agents marked={redacting} onClose={() => setRedacting(null)} onRedacted={reload} />}
     </>
   );
 }
