@@ -283,3 +283,23 @@ func TestARefusedRedactionAcrossTheLogWritesNothing(t *testing.T) {
 		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
 	}
 }
+
+// A redaction across the log whose only stream that could hold the text
+// can't be read, here an archived task whose blob is lost, fails 500 on
+// both routes, as one stream's does, rather than being refused, and
+// writes nothing.
+func TestARedactionAcrossTheLogThatCantReadTheOnlyStreamFails(t *testing.T) {
+	f := newEraseFixture(t)
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Old", "description": "It was " + secretHere + ".",
+		"repo": "/r", "coordinator": "tech-lead"}})
+	storetest.Archive(t, f.log, f.state, "task-4") // its blob in a folder the server doesn't read
+	last := f.log.LastPosition()
+	for _, path := range []string{"/api/redact/preview", "/api/redact"} {
+		if code, body := call(t, f.server, "POST", path, `{"text":"`+secretHere+`","why":"Pasted."}`); code != http.StatusInternalServerError || !strings.Contains(body, "task-4") {
+			t.Errorf("%s with task-4's blob lost: %d %q, want 500 naming task-4", path, code, body)
+		}
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the failed redaction wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+}

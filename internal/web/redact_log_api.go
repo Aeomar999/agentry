@@ -68,7 +68,8 @@ type logRedacted struct {
 // previewLogRedaction is previewRedaction across the whole log: each
 // stream that holds the text you marked, and how many of its rows, or
 // why it can't be redacted. It writes nothing. No row anywhere holding it
-// is answered 409.
+// is answered as answerPreview answers one stream: 500 when a stream
+// failed, 409 otherwise.
 func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 	text, _, ok := secretOf(w, r)
 	if !ok {
@@ -76,7 +77,7 @@ func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 	}
 	preview := s.previewLog(text)
 	if preview.Rows == 0 {
-		http.Error(w, preview.noneHeld(), http.StatusConflict)
+		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
 	}
 	httpapi.Reply(w, preview)
@@ -94,7 +95,7 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	}
 	preview := s.previewLog(text)
 	if preview.Rows == 0 {
-		http.Error(w, preview.noneHeld(), http.StatusConflict)
+		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
 	}
 	answer := logRedacted{Streams: []streamRedacted{}, Warnings: []string{}}
@@ -168,6 +169,21 @@ func (p logPreview) noneHeld() string {
 		return "no row of the log holds the secret"
 	}
 	return strings.Join(reasons, "; ")
+}
+
+// noneHeldStatus is how a preview with no row is refused: 500 when a
+// stream's preview failed, rather than was refused, 409 otherwise.
+func (p logPreview) noneHeldStatus() int {
+	if p.failed() {
+		return http.StatusInternalServerError
+	}
+	return http.StatusConflict
+}
+
+// failed is whether a listed stream's preview failed, rather than was
+// refused.
+func (p logPreview) failed() bool {
+	return slices.ContainsFunc(p.Streams, func(listed streamPreview) bool { return listed.err != nil })
 }
 
 // streamsLogged is every stream a redaction across the log reads, in the
