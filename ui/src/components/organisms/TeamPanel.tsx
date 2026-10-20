@@ -265,7 +265,7 @@ function TeamForm(props: TeamFormProps) {
   return (
     <SideSheet title={TITLE} returnTo={returnTo} onClose={guard.ask} canClose={!saving} footer={footer}>
       {/* On a phone every input and select in the panel is 44px tall, for thumbs. */}
-      <div className="flex flex-col gap-5 max-sm:[&_div:has(>input,>select)]:h-11">
+      <div className="flex flex-col gap-5 max-sm:[&_[data-field]]:h-11">
         <p aria-live="polite" className="sr-only">
           {notice}
         </p>
