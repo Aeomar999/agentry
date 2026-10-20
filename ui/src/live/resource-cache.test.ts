@@ -219,7 +219,7 @@ describe("the cache", () => {
   });
 });
 
-describe("a reply below the log's position", () => {
+describe("a reply that doesn't say its position", () => {
   // Each starts with the page live at 40 and one path shown, so the cache
   // asks for it as of 40.
   async function shownAt40() {
@@ -229,14 +229,6 @@ describe("a reply below the log's position", () => {
     cache.watch("/api/tasks", ignore);
     return { server, cache };
   }
-
-  test("a reply at position 0 is read once, not in a loop", async () => {
-    const { server, cache } = await shownAt40();
-    await server.answer(0);
-    await settle();
-    expect(server.readsOf("/api/tasks")).toBe(1);
-    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@0");
-  });
 
   test("a reply with no position is read once, not in a loop, and again when the log moves", async () => {
     const { server, cache } = await shownAt40();
@@ -248,20 +240,96 @@ describe("a reply below the log's position", () => {
     cache.moved(41);
     expect(server.readsOf("/api/tasks")).toBe(2);
   });
+});
 
-  test("a server whose log went backwards is read once, and again once the log moves past where it was", async () => {
-    const { server, cache } = await shownAt40();
-    await server.answer(10); // restarted on a restored, shorter log
-    await settle();
-    expect(server.readsOf("/api/tasks")).toBe(1);
+// The server restarted on a shorter log: a restored or different database,
+// or a test server. Each starts with two paths shown, read at 100.
+describe("a server on a shorter log", () => {
+  async function shownAt100() {
+    const server = fakeServer();
+    const cache = new ResourceCache(server.fetch);
+    cache.watch("/api/tasks", ignore);
+    cache.watch("/api/agents", ignore);
+    cache.moved(100);
+    await server.answer(100);
+    return { server, cache };
+  }
 
-    cache.moved(40); // the poll still reports the old position
+  test("the poll's position going 100 -> 40 reads every path again, showing the old data until then", async () => {
+    const { server, cache } = await shownAt100();
+    cache.moved(40);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks", "/api/agents"]);
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", position: 100 });
+
+    await server.answer(40);
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(cache.snapshot("/api/agents").data).toBe("/api/agents@40");
+  });
+
+  test("a reply read at 40, after the cache has seen 100, reads every path again", async () => {
+    const { server, cache } = await shownAt100();
+    void cache.reload("/api/tasks");
+    await server.answer(40);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@100"); // the reply that told is thrown away too
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/agents", "/api/tasks"]);
+
+    await server.answer(40);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@40");
+    expect(cache.snapshot("/api/agents").data).toBe("/api/agents@40");
+  });
+
+  test("a read in flight across the reset is thrown away and read again, and a reload waits for that read", async () => {
+    const { server, cache } = await shownAt100();
+    let shown = false;
+    void cache.reload("/api/tasks").then(() => (shown = true));
+    cache.moved(40);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks", "/api/agents"]); // the reload's read, and agents again
+
+    await server.pending.splice(0, 1)[0].answer(101, "from the old log");
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@100", error: "", position: 100 });
+    expect(shown).toBe(false);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/agents", "/api/tasks"]);
+
+    await server.answer(40);
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+    expect(shown).toBe(true);
+    expect(server.readsOf("/api/tasks")).toBe(3);
+  });
+
+  test("a read in flight across the reset that fails shows no error, and is read again", async () => {
+    const { server, cache } = await shownAt100();
+    cache.moved(101);
+    cache.moved(40);
+    await server.pending.splice(0, 1)[0].fail("connection refused"); // the old server going down
+    expect(cache.snapshot("/api/tasks").error).toBe("");
+    await server.answer(40);
+    await server.answer(40);
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@40", error: "", position: 40 });
+  });
+
+  test("after the reset the new log is followed as usual, with no reset again", async () => {
+    const { server, cache } = await shownAt100();
+    cache.moved(40);
+    await server.answer(40);
+
+    cache.moved(40);
     await settle();
-    expect(server.readsOf("/api/tasks")).toBe(1);
+    expect(server.reads).toHaveLength(4);
 
     cache.moved(41);
-    expect(server.readsOf("/api/tasks")).toBe(2);
     await server.answer(41);
-    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@41");
+    await settle();
+    expect(server.reads).toHaveLength(6);
+    expect(cache.snapshot("/api/tasks")).toEqual({ data: "/api/tasks@41", error: "", position: 41 });
+  });
+
+  test("a reply older than the poll's position is no reset: it was read before the event", async () => {
+    const { server, cache } = await shownAt100();
+    cache.moved(101);
+    cache.moved(102);
+    await server.answer(101);
+    expect(cache.snapshot("/api/tasks").data).toBe("/api/tasks@101");
+    await server.answer(102);
+    expect(server.reads).toHaveLength(6); // read once more for 102, not all over
   });
 });

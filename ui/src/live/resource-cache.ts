@@ -3,7 +3,10 @@
 // read again only when the log has moved past it, and once per move however
 // many events arrive while it is being read. A read is never aborted: the
 // server would finish it anyway, and a browser that drops the connection
-// opens a new one for the next read.
+// opens a new one for the next read. A server that restarts on a shorter
+// log has the whole cache read again (LogPositions).
+
+import { LogPositions } from "./log-positions";
 
 export interface Read {
   data: unknown;
@@ -32,6 +35,7 @@ interface Entry {
 export class ResourceCache {
   private entries = new Map<string, Entry>();
   private live = 0;
+  private log = new LogPositions((position) => this.reset(position));
 
   constructor(private fetch: Fetch) {}
 
@@ -57,6 +61,7 @@ export class ResourceCache {
 
   // moved is the log's newest position, from the long poll.
   moved(position: number) {
+    if (!this.log.moved(position)) return;
     this.live = position;
     this.entries.forEach((entry, path) => this.readIfOld(path, entry));
   }
@@ -74,6 +79,18 @@ export class ResourceCache {
     return shown;
   }
 
+  // reset reads every path shown again, as of the shorter log's position.
+  // Each keeps showing its old data until its new read is back, so the page
+  // doesn't flash empty. Paths nobody shows are already forgotten, or will
+  // be when their read in flight returns.
+  private reset(position: number) {
+    this.live = position;
+    this.entries.forEach((entry, path) => {
+      entry.position = -1;
+      this.readIfOld(path, entry);
+    });
+  }
+
   private readIfOld(path: string, entry: Entry) {
     if (!entry.reading && entry.watchers.size > 0 && entry.position < this.live) this.read(path, entry);
   }
@@ -83,21 +100,27 @@ export class ResourceCache {
     entry.reloadAsked = false;
     const reloads = entry.reloaded.splice(0);
     const asked = this.live;
+    const sent = this.log.sent();
     try {
       const read = await this.fetch(path);
-      // Never below the position it was asked at: the server read it later
-      // than that, so a reply with no position, or one from a server whose
-      // log went backwards (restored from a backup), isn't read again until
-      // the log moves, instead of in a loop.
-      entry.position = Math.max(read.position ?? asked, asked);
-      this.show(entry, { data: read.data, error: "", position: entry.position });
+      if (this.log.replied(sent, read.position)) {
+        // A reply with no position is as fresh as the position it was asked
+        // at, so it isn't read again until the log moves, instead of in a loop.
+        entry.position = read.position ?? asked;
+        this.show(entry, { data: read.data, error: "", position: entry.position });
+      }
     } catch (failure) {
-      // Tried as of the position it was asked at: the next move tries again.
-      entry.position = Math.max(entry.position, asked);
-      this.show(entry, { ...entry.snapshot, error: (failure as Error).message });
+      if (!this.log.stale(sent)) {
+        // Tried as of the position it was asked at: the next move tries again.
+        entry.position = Math.max(entry.position, asked);
+        this.show(entry, { ...entry.snapshot, error: (failure as Error).message });
+      }
     }
     entry.reading = false;
-    reloads.forEach((shown) => shown());
+    // A read sent before a reset is thrown away, and read again below: the
+    // reloads waiting for it wait for that read instead.
+    if (this.log.stale(sent)) entry.reloaded.unshift(...reloads);
+    else reloads.forEach((shown) => shown());
     if (entry.reloadAsked && entry.watchers.size > 0) this.read(path, entry);
     else this.readIfOld(path, entry);
     this.forgetIfUnwatched(path, entry);

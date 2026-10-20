@@ -29,7 +29,9 @@ function fakeServer(positions: number[]) {
     for (const read of pending.splice(0)) await read.answer(position);
   };
   const add = (...more: number[]) => log.push(...more.map(eventAt));
-  return { fetch, reads, pending, answer, add };
+  // restart puts the server on another log: a restored or different database.
+  const restart = (...on: number[]) => log.splice(0, log.length, ...on.map(eventAt));
+  return { fetch, reads, pending, answer, add, restart };
 }
 
 function eventAt(position: number): LogEvent {
@@ -322,5 +324,87 @@ describe("a task's events of some types, all of them (the chat)", () => {
     await server.answer(15);
     expect(server.reads.slice(3)).toEqual(["/api/tasks/task-8/events?type=task.labeled&after=13"]);
     expect(positions(pages, chat)).toEqual([1, 3, 5, 7, 9, 11, 13, 15]);
+  });
+});
+
+// The server restarted on a shorter log: the events held may not be in it.
+describe("a server on a shorter log", () => {
+  const newest: EventsWanted = { task: "task-8", newestBefore: 101 };
+
+  async function newestAt100() {
+    const server = fakeServer([90, 95, 98, 99, 100]);
+    const pages = new EventPages(server.fetch);
+    pages.watch(newest, ignore);
+    pages.moved(100);
+    await server.answer(100);
+    return { server, pages };
+  }
+
+  test("the poll's position going 100 -> 40 reads the newest page again, as of 40, showing the old events until then", async () => {
+    const { server, pages } = await newestAt100();
+    server.restart(10, 20, 30, 35, 40);
+    pages.moved(40);
+    expect(server.reads.slice(1)).toEqual(["/api/tasks/task-8/events?before=41"]);
+    expect(positions(pages, newest)).toEqual([98, 99, 100]);
+
+    await server.answer(40);
+    expect(positions(pages, newest)).toEqual([30, 35, 40]);
+    expect(pages.snapshot(newest)).toMatchObject({ loading: false, earlier: true, error: "" });
+    pages.loadEarlier(newest);
+    await server.answer(40);
+    expect(positions(pages, newest)).toEqual([10, 20, 30, 35, 40]);
+  });
+
+  test("a reply read at 40, after the list has seen 100, reads the whole list again, showing the old one until it is all read", async () => {
+    const server = fakeServer([1, 2, 3, 50, 60, 100]);
+    const pages = new EventPages(server.fetch);
+    const all: EventsWanted = { task: "task-8" };
+    pages.watch(all, ignore);
+    pages.moved(100);
+    await server.answer(100);
+    await server.answer(100);
+    expect(positions(pages, all)).toEqual([1, 2, 3, 50, 60, 100]);
+
+    pages.moved(101); // the old server's last event, before it went down
+    server.restart(1, 2, 3, 4, 5, 40);
+    await server.answer(40);
+    expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?after=100", "/api/tasks/task-8/events?after=0"]);
+    await server.answer(40);
+    expect(positions(pages, all)).toEqual([1, 2, 3, 50, 60, 100]); // a page of the new log isn't the whole of it
+    await server.answer(40);
+    expect(server.reads.slice(4)).toEqual(["/api/tasks/task-8/events?after=3"]);
+    expect(positions(pages, all)).toEqual([1, 2, 3, 4, 5, 40]);
+    expect(pages.snapshot(all)).toMatchObject({ loading: false, error: "" });
+  });
+
+  test("a read in flight across the reset is thrown away, and the first page read after it", async () => {
+    const { server, pages } = await newestAt100();
+    pages.moved(101);
+    pages.moved(40);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?after=100"]);
+    server.restart(10, 20, 30, 35, 40);
+    await server.answer(101); // as if from the old log: it is thrown away whatever it holds
+    expect(positions(pages, newest)).toEqual([98, 99, 100]);
+    expect(server.pending.map((read) => read.path)).toEqual(["/api/tasks/task-8/events?before=41"]);
+    await server.answer(40);
+    expect(positions(pages, newest)).toEqual([30, 35, 40]);
+  });
+
+  test("after the reset the new log is followed as usual, with no reset again", async () => {
+    const { server, pages } = await newestAt100();
+    server.restart(10, 20, 30, 35, 40);
+    pages.moved(40);
+    await server.answer(40);
+
+    pages.moved(40);
+    await settle();
+    expect(server.reads).toHaveLength(2);
+
+    server.add(41);
+    pages.moved(41);
+    await server.answer(41);
+    await settle();
+    expect(server.reads.slice(2)).toEqual(["/api/tasks/task-8/events?after=40"]);
+    expect(positions(pages, newest)).toEqual([30, 35, 40, 41]);
   });
 });

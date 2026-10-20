@@ -1,4 +1,5 @@
 import type { LogEvent } from "@/api/types";
+import { LogPositions } from "./log-positions";
 import type { Fetch } from "./resource-cache";
 
 // A task's events, read a page at a time from /api/tasks/{task}/events, for
@@ -7,7 +8,8 @@ import type { Fetch } from "./resource-cache";
 // a list at a time however many views show it, read again only when the log
 // has moved past what it holds, and never aborted. A list moves by pages, so
 // it can't be one path of the cache: each read asks for the page after (or
-// before) the events it holds.
+// before) the events it holds. A server that restarts on a shorter log has
+// every list read again from its first page.
 
 // What a view shows of a task's events: those of some types (every type
 // when none are given), either all of them from the start, or the newest
@@ -47,6 +49,7 @@ interface List {
   earlierAsked: boolean;
   reading: boolean;
   failed: Due | null; // the last read, if it failed: retry reads it again
+  fresh: LogEvent[] | null; // after a reset, the events read so far: shown in place of the old ones once they are all read
   watchers: Set<() => void>;
 }
 
@@ -59,6 +62,7 @@ export function keyOf(wanted: EventsWanted): string {
 export class EventPages {
   private lists = new Map<string, List>();
   private live = 0;
+  private log = new LogPositions((position) => this.reset(position));
 
   constructor(private fetch: Fetch) {}
 
@@ -77,6 +81,7 @@ export class EventPages {
         earlierAsked: false,
         reading: false,
         failed: null,
+        fresh: null,
         watchers: new Set(),
       };
       this.lists.set(key, list);
@@ -95,6 +100,7 @@ export class EventPages {
 
   // moved is the log's newest position, from the long poll.
   moved(position: number) {
+    if (!this.log.moved(position)) return;
     this.live = position;
     this.lists.forEach((list, key) => this.readIfDue(key, list));
   }
@@ -124,12 +130,29 @@ export class EventPages {
     this.read(keyOf(wanted), list, due);
   }
 
+  // reset reads every list again from its first page, as of the shorter
+  // log's position: the events it holds may not be in the new log. It keeps
+  // showing them until the new ones are read, so the view doesn't flash
+  // empty. A newest page starts at the new position, not the old bound.
+  private reset(position: number) {
+    this.live = position;
+    this.lists.forEach((list, key) => {
+      if (list.wanted.newestBefore !== undefined) list.wanted = { ...list.wanted, newestBefore: position + 1 };
+      list.position = -1;
+      list.started = false;
+      list.ahead = false;
+      list.failed = null;
+      list.fresh = [];
+      this.readIfDue(key, list);
+    });
+  }
+
   // due is the page a list needs read now, and from which side, or null.
   private due(list: List): Due | null {
     const { task, types, newestBefore } = list.wanted;
     const path = `/api/tasks/${encodeURIComponent(task)}/events${typesQuery(types)}`;
     const page = (bound: string) => `${path}${path.includes("?") ? "&" : "?"}${bound}`;
-    const held = list.shown.events;
+    const held = this.held(list);
     if (!list.started) {
       if (list.position >= this.live) return null; // its first read failed: tried again when the log moves
       return { side: "first", path: page(newestBefore === undefined ? "after=0" : `before=${newestBefore}`) };
@@ -154,26 +177,35 @@ export class EventPages {
     list.reading = true;
     list.failed = null;
     const asked = this.live;
+    const sent = this.log.sent();
     try {
       const read = await this.fetch(path);
-      const page = read.data as Page;
-      // Never below where it was asked, as in the resource cache.
-      const readAt = Math.max(read.position ?? asked, asked);
-      if (side === "first") this.first(list, page, readAt);
-      else if (side === "after") this.append(list, page, readAt);
-      else this.prepend(list, page);
-    } catch (failure) {
-      list.failed = due;
-      if (side === "before") list.earlierAsked = false;
-      else {
-        list.position = Math.max(list.position, asked); // tried again when the log moves
-        list.ahead = false;
+      // Thrown away when it was sent before a reset: the list is read again
+      // from its first page.
+      if (this.log.replied(sent, read.position)) {
+        const page = read.data as Page;
+        // As fresh as where it was asked when it doesn't say, as in the resource cache.
+        const readAt = read.position ?? asked;
+        if (side === "first") this.first(list, page, readAt);
+        else if (side === "after") this.append(list, page, readAt);
+        else this.prepend(list, page);
       }
-      this.show(list, { loadingEarlier: list.earlierAsked, error: (failure as Error).message });
+    } catch (failure) {
+      if (!this.log.stale(sent)) this.showFailure(list, due, asked, failure as Error);
     }
     list.reading = false;
     this.readIfDue(key, list);
     this.forgetIfUnwatched(key, list);
+  }
+
+  private showFailure(list: List, due: Due, asked: number, failure: Error) {
+    list.failed = due;
+    if (due.side === "before") list.earlierAsked = false;
+    else {
+      list.position = Math.max(list.position, asked); // tried again when the log moves
+      list.ahead = false;
+    }
+    this.show(list, { loadingEarlier: list.earlierAsked, error: failure.message });
   }
 
   private first(list: List, page: Page, readAt: number) {
@@ -184,18 +216,29 @@ export class EventPages {
       return;
     }
     list.position = newestBefore - 1;
+    list.fresh = null;
     this.show(list, { events: page.events, loading: false, earlier: page.more, error: "" });
   }
 
   // append adds a page read forwards. Once none lie ahead of it, every event
   // up to where the server read is held.
   private append(list: List, page: Page, readAt: number) {
-    const held = list.shown.events;
+    const held = this.held(list);
     const newest = held.length ? held[held.length - 1].position : 0;
     list.ahead = page.more;
     if (!page.more) list.position = Math.max(list.position, readAt);
     const events = [...held, ...page.events.filter((e) => e.position > newest)];
+    if (list.fresh && page.more) {
+      list.fresh = events;
+      return;
+    }
+    list.fresh = null;
     this.show(list, { events, loading: list.shown.loading && page.more, error: "" });
+  }
+
+  // held is the events a list has read: after a reset, those read since.
+  private held(list: List): LogEvent[] {
+    return list.fresh ?? list.shown.events;
   }
 
   private prepend(list: List, page: Page) {
