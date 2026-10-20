@@ -160,7 +160,8 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 	if !already && !httpapi.ProposeOrRefuse(w, s.store, move) {
 		return
 	}
-	if !s.followUp(w, s.coordinatorMoves(s.state.Roster(), team), "moved the "+team+" team's coordinator to "+to, "ask again") {
+	if left, why, status := s.followUp(s.coordinatorMoves(s.state.Roster(), team)); left != nil {
+		http.Error(w, cutShort("moved the "+team+" team's coordinator to "+to, left, "ask again", why), status)
 		return
 	}
 	httpapi.Reply(w, map[string]string{"team": team, "coordinator": to})
@@ -175,7 +176,7 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 // whole or not at all. Then its unfinished tasks follow: those naming an
 // agent by a name it had take its new one, and those another agent of the
 // team coordinates move to its coordinator. Saving again with the version
-// the reply gives finishes those a refusal cut short.
+// the reply gives, a refusal's too, finishes those a refusal cut short.
 func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 	w := &jsonErrors{ResponseWriter: writer}
 	var request struct {
@@ -234,12 +235,18 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 		httpapi.Failed(w, err)
 		return
 	}
-	saved := "saved the " + edit.To + " team"
-	if !s.followUp(w, s.renamedInTasks(roster, edit.To, renames), saved, "save again") ||
-		!s.followUp(w, s.coordinatorMoves(roster, edit.To), saved, "save again") {
+	left, why, status := s.followUp(s.renamedInTasks(roster, edit.To, renames))
+	if left == nil {
+		left, why, status = s.followUp(s.coordinatorMoves(roster, edit.To))
+	} else {
+		left = append(left, s.coordinatorMoves(roster, edit.To)...) // the moves still to come count too
+	}
+	version := s.state.Roster().TeamVersion(edit.To)
+	if left != nil {
+		replyWith(w, status, map[string]string{"error": cutShort("saved the "+edit.To+" team", left, "save again", why), "version": version})
 		return
 	}
-	httpapi.Reply(w, map[string]string{"team": edit.To, "version": s.state.Roster().TeamVersion(edit.To)})
+	httpapi.Reply(w, map[string]string{"team": edit.To, "version": version})
 }
 
 // teamProblem is one of a team edit's problems as the page reads it: an
@@ -367,34 +374,34 @@ func (s *Server) coordinatorMoves(roster agents.Roster, team string) []events.Pr
 }
 
 // followUp proposes the task events that let tasks go on after a change to
-// their team, saved already. When one is refused, it replies with what was
-// saved, how many tasks still need moving, and what finishes them.
-func (s *Server) followUp(w http.ResponseWriter, proposals []events.Proposal, saved, again string) bool {
+// their team, saved already. When one is refused, it gives those it didn't
+// reach, with why and the status that says so.
+func (s *Server) followUp(proposals []events.Proposal) (left []events.Proposal, why string, status int) {
 	for i, p := range proposals {
-		_, rejection, err := s.store.Propose(p)
-		if err == nil && rejection == nil {
-			continue
+		switch _, rejection, err := s.store.Propose(p); {
+		case err != nil:
+			return proposals[i:], p.Stream + ": " + err.Error(), http.StatusInternalServerError
+		case rejection != nil:
+			return proposals[i:], p.Stream + ": " + rejection.Reason, http.StatusConflict
 		}
-		var left []string
-		for _, q := range proposals[i:] {
-			if !slices.Contains(left, q.Stream) {
-				left = append(left, q.Stream)
-			}
-		}
-		tasks := strconv.Itoa(len(left)) + " tasks still need"
-		if len(left) == 1 {
-			tasks = "1 task still needs"
-		}
-		why, status := "", http.StatusConflict
-		if err != nil {
-			why, status = err.Error(), http.StatusInternalServerError
-		} else {
-			why = rejection.Reason
-		}
-		http.Error(w, saved+", but "+tasks+" moving: "+again+" to finish ("+p.Stream+": "+why+")", status)
-		return false
 	}
-	return true
+	return nil, "", 0
+}
+
+// cutShort says what was saved, how many tasks the follow-ups left still
+// need moving, and what finishes them, after one was refused for why.
+func cutShort(saved string, left []events.Proposal, again, why string) string {
+	var streams []string
+	for _, p := range left {
+		if !slices.Contains(streams, p.Stream) {
+			streams = append(streams, p.Stream)
+		}
+	}
+	tasks := strconv.Itoa(len(streams)) + " tasks still need"
+	if len(streams) == 1 {
+		tasks = "1 task still needs"
+	}
+	return saved + ", but " + tasks + " moving: " + again + " to finish (" + why + ")"
 }
 
 // coordinatedByTeam lists the unfinished tasks an agent of the team other

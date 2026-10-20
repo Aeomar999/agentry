@@ -280,8 +280,9 @@ func TestSavingATeamAgainFinishesItsTasksFollowUps(t *testing.T) {
 	}
 }
 
-// A follow-up refused partway says the team is saved and how many tasks
-// still need moving; saving again moves them.
+// A follow-up refused partway says the team is saved, how many tasks still
+// need moving, and the version to save again with; saving again with it
+// moves them.
 func TestAFollowUpRefusedPartwaySaysToSaveAgain(t *testing.T) {
 	refuse := true
 	server, _ := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
@@ -293,15 +294,17 @@ func TestAFollowUpRefusedPartwaySaysToSaveAgain(t *testing.T) {
 	version := addData(t, server)
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
-	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "",
-		`{"name":"data-lead","engine":"claude","prompt":"Lead."},{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}`+","+charterRow))
-	if want := `{"error":"saved the Data team, but 1 task still needs moving: save again to finish (task-2: not now)"}` + "\n"; code != http.StatusConflict || body != want {
-		t.Errorf("a follow-up refused: %d %s, want 409 %s", code, body, want)
+	rows := `{"name":"data-lead","engine":"claude","prompt":"Lead."},{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}` + "," + charterRow
+	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "", rows))
+	var refusal map[string]string
+	json.Unmarshal([]byte(body), &refusal)
+	if want := "saved the Data team, but 1 task still needs moving: save again to finish (task-2: not now)"; code != http.StatusConflict ||
+		refusal["error"] != want || refusal["version"] != teamVersion(t, server, "Data") {
+		t.Errorf("a follow-up refused: %d %s, want 409 %q with the team's version now", code, body, want)
 	}
 	refuse = false
-	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(teamVersion(t, server, "Data"), "",
-		`{"name":"data-lead","engine":"claude","prompt":"Lead."},{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}`+","+charterRow)); code != 200 {
-		t.Fatalf("saving again: %d %s", code, body)
+	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(refusal["version"], "", rows)); code != 200 {
+		t.Fatalf("saving again with the refusal's version: %d %s", code, body)
 	}
 	if one, two := coordinatorOf(t, server, "task-1"), coordinatorOf(t, server, "task-2"); one != "analyst" || two != "analyst" {
 		t.Errorf("task-1 is %s's and task-2 %s's, want analyst's", one, two)
@@ -376,6 +379,37 @@ func TestACoordinatorMoveRefusedPartwaySaysToAskAgain(t *testing.T) {
 	}
 	if two := coordinatorOf(t, server, "task-2"); two != "analyst" {
 		t.Errorf("task-2 is %s's, want analyst's", two)
+	}
+}
+
+// A rename refused partway counts, among the tasks still to move, those
+// whose coordinator would move after it.
+func TestARenameRefusedPartwayCountsTheMovesToCome(t *testing.T) {
+	refuse := true
+	server, _ := newTestServerChecking(t, func(p events.Proposal) *events.Rejection {
+		if p.Type == events.AgentRenamedInTask && p.Stream == "task-2" && refuse {
+			return &events.Rejection{Reason: "not now"}
+		}
+		return nil
+	})
+	version := addData(t, server)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
+	rows := `{"was":"data-lead","name":"lead","engine":"claude","prompt":"Lead."}` +
+		`,{"was":"analyst","name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}` + "," + charterRow
+	code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(version, "", rows))
+	var refusal map[string]string
+	json.Unmarshal([]byte(body), &refusal)
+	if want := "saved the Data team, but 2 tasks still need moving: save again to finish (task-2: not now)"; code != http.StatusConflict || refusal["error"] != want {
+		t.Errorf("task-2's rename refused: %d %s, want 409 %q", code, body, want)
+	}
+	refuse = false
+	again := `{"name":"lead","engine":"claude","prompt":"Lead."},{"name":"analyst","engine":"claude","coordinates":true,"prompt":"Analyse."}` + "," + charterRow
+	if code, body := call(t, server, "PUT", "/api/teams/Data", dataEdit(refusal["version"], "", again)); code != 200 {
+		t.Fatalf("saving again: %d %s", code, body)
+	}
+	if one, two := coordinatorOf(t, server, "task-1"), coordinatorOf(t, server, "task-2"); one != "analyst" || two != "analyst" {
+		t.Errorf("task-1 is %s's and task-2 %s's, want analyst's", one, two)
 	}
 }
 
