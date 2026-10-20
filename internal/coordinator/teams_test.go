@@ -266,3 +266,35 @@ func TestTheRoutingSentenceFollowsYourTemplatesBase(t *testing.T) {
 		t.Errorf("a team linked to your Writing-based template: %q", got)
 	}
 }
+
+// A team linked to a template you removed is still routed to by its base.
+func TestTheRoutingSentenceFollowsARemovedTemplatesBase(t *testing.T) {
+	roster := rosterWith(append(agents.CustomTeam("Docs", "", []agents.Agent{
+		{Name: "docs-lead", Engine: "claude", Coordinates: true},
+	}, you), agents.TeamLinked("Docs", "handbook", you))...)
+	bases := agents.Bases{Removed: agents.RemovedTemplates{"handbook": "writing"}}
+	if got := routingExamples(roster, bases); got != " (a document from Docs, code from Software)" {
+		t.Errorf("a team linked to your removed Writing-based template: %q", got)
+	}
+}
+
+// The brief finds your templates' bases in the state it is given.
+func TestTheBriefRoutesByYourTemplatesBaseInTheState(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	docs := []agents.Agent{{Name: "docs-lead", Prompt: "You lead the docs.", Engine: "claude", Coordinates: true}}
+	for _, p := range agents.CustomTeam("Docs", "", docs, you) {
+		propose(t, s, p)
+	}
+	handbook := agents.UserTemplate{ID: "handbook", Team: "Handbook", Agents: docs, From: "Docs", BasedOn: "writing"}
+	propose(t, s, handbook.Save(you))
+	propose(t, s, agents.TeamLinked("Docs", "handbook", you))
+
+	lead, _ := state.Roster().Get("tech-lead")
+	brief := coordinatorBrief(started().task(), lead, state.Roster(), family{}, nil, nil, state, nil)
+	if !strings.Contains(brief, "(a document from Docs, code from Software)") {
+		t.Errorf("Docs is linked to your Writing-based template:\n%s", brief)
+	}
+}
