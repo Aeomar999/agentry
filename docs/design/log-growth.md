@@ -1044,7 +1044,8 @@ off. It counts from the `task.done` event, or from the task's last
 not when (`internal/tasks/apply.go`, the `task.done` case), so it gains
 `DoneAt`, cleared on reopening. Nothing in the copy is even 3 days done
 yet (section 1), so with the default the first task is archived a month
-after it is done, and the Done column keeps a month of whole tasks.
+after it is done. The board shows Done for 7 days
+(`ui/src/lib/epics.ts`, `DONE_DAYS`), so an archived task is already off it.
 
 ### Opening an archived task's history
 
