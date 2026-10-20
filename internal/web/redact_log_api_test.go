@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -77,6 +78,23 @@ func redactAcross(t *testing.T, server *httptest.Server, text string) logRedacte
 		t.Fatal(err)
 	}
 	return got
+}
+
+// redactCounted asks the route at server to redact text across the log
+// of the rows counted in each stream, and is its answer.
+func redactCounted(t *testing.T, server *httptest.Server, text string, counts map[string]int) (int, string) {
+	t.Helper()
+	body, _ := json.Marshal(map[string]any{"text": text, "why": "Pasted everywhere.", "counts": counts})
+	return call(t, server, "POST", "/api/redact", string(body))
+}
+
+// countsOf is the rows the preview counted in each stream it listed.
+func countsOf(preview logPreview) map[string]int {
+	counts := map[string]int{}
+	for _, listed := range preview.Streams {
+		counts[listed.Stream] = listed.Rows
+	}
+	return counts
 }
 
 // matches fails the test unless the redaction rewrote the streams the
@@ -370,5 +388,89 @@ func TestARedactionAcrossTheLogThatCantReadTheOnlyStreamFails(t *testing.T) {
 	}
 	if f.log.LastPosition() != last {
 		t.Errorf("the failed redaction wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+}
+
+// A redaction across the log holds each stream to the rows the page
+// counted in it: a stream that took a row holding the text since is
+// refused alone, its rows left holding it, and one the page didn't count
+// is left too, as you didn't see its rows; each is named, to be counted
+// again, and the rest are redacted. Counted again, they are redacted, and
+// a stream counted that no longer holds the text is named.
+func TestARedactionAcrossTheLogHoldsEachStreamToItsCount(t *testing.T) {
+	f := withSecret(t)
+	f.propose(t,
+		events.Proposal{Stream: "task-5", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Rotate " + secretHere, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-6", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Revoke " + secretHere, "repo": "/r", "coordinator": "tech-lead"}},
+	)
+	first := countsOf(previewAcross(t, f.server, secretHere))
+	if want := map[string]int{"task-4": 2, "task-5": 1, "task-6": 1}; !maps.Equal(first, want) {
+		t.Fatalf("the preview counted %v, want %v", first, want)
+	}
+	delete(first, "task-6")
+	f.propose(t, events.Proposal{Stream: "task-5", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Rotate " + secretHere + " now"}})
+
+	code, body := redactCounted(t, f.server, secretHere, first)
+	if code != http.StatusOK {
+		t.Fatalf("redacting with task-5's count stale: %d %s", code, body)
+	}
+	var answer logRedacted
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatal(err)
+	}
+	if len(answer.Streams) != 1 || answer.Streams[0].Stream != "task-4" || answer.Rows != 2 {
+		t.Errorf("the redaction rewrote %+v, want only task-4's 2 rows", answer.Streams)
+	}
+	failures := []streamFailed{
+		{Stream: "task-5", Reason: "2 rows hold this text now, not 1: count them again", Recount: true},
+		{Stream: "task-6", Reason: "1 row holds this text, which the preview you confirmed didn't count: count them again", Recount: true},
+	}
+	if !slices.Equal(answer.Failures, failures) {
+		t.Errorf("the redaction failed %+v, want %+v", answer.Failures, failures)
+	}
+	if want := []string{"task-5: " + failures[0].Reason, "task-6: " + failures[1].Reason}; !slices.Equal(answer.Warnings, want) {
+		t.Errorf("the redaction warned %q, want %q", answer.Warnings, want)
+	}
+
+	again := previewAcross(t, f.server, secretHere)
+	if want := map[string]int{"task-5": 2, "task-6": 1}; !maps.Equal(countsOf(again), want) {
+		t.Fatalf("counted again: %v, want task-5 and task-6 still holding the text, %v", countsOf(again), want)
+	}
+	counts := countsOf(again)
+	counts["task-4"] = 2 // as the first preview counted it
+	code, body = redactCounted(t, f.server, secretHere, counts)
+	if code != http.StatusOK {
+		t.Fatalf("redacting counted again: %d %s", code, body)
+	}
+	answer = logRedacted{}
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatal(err)
+	}
+	matches(t, answer, again)
+	if want := []streamFailed{{Stream: "task-4", Reason: "no row holds this text now, not 2: count them again", Recount: true}}; !slices.Equal(answer.Failures, want) {
+		t.Errorf("counted again, the redaction failed %+v, want %+v", answer.Failures, want)
+	}
+	if holding := storetest.HoldingAny(t, f.dir, secretHere); len(holding) != 0 {
+		t.Errorf("after the redaction these files still hold the secret: %v", holding)
+	}
+}
+
+// A count below one is refused 400, as a redaction rewrites at least one
+// row, and a redaction whose every counted stream is refused is refused
+// 409 with their reasons, as one with no counts is; neither writes.
+func TestARedactionAcrossTheLogWithNoCountThatHoldsIsRefused(t *testing.T) {
+	f := withSecret(t)
+	last := f.log.LastPosition()
+	for _, rows := range []int{0, -1} {
+		if code, body := redactCounted(t, f.server, secretHere, map[string]int{"task-4": rows}); code != http.StatusBadRequest {
+			t.Errorf("redacting with task-4 counted %d: %d %s, want 400", rows, code, body)
+		}
+	}
+	want := "task-4: 2 rows hold this text now, not 1: count them again"
+	if code, body := redactCounted(t, f.server, secretHere, map[string]int{"task-4": 1}); code != http.StatusConflict || strings.TrimSpace(body) != want {
+		t.Errorf("redacting with task-4 miscounted: %d %q, want 409 %q", code, body, want)
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
 	}
 }

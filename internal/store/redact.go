@@ -137,11 +137,22 @@ func (found pending) recounted() *events.Rejection {
 	if found.counted == AnyCount || held == found.counted {
 		return nil
 	}
-	return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("%s this text now, not %d: count them again", rowsHolding(held), found.counted)}
+	return &events.Rejection{Check: CountCheck, Reason: fmt.Sprintf("%s this text now, not %d: count them again", RowsHolding(held), found.counted)}
 }
 
-// rowsHolding is how many rows hold a text, in words.
-func rowsHolding(rows int) string {
+// CountCheck is the check of a redaction refused as its rows aren't the
+// number the user counted.
+const CountCheck = "count"
+
+// Miscounted says whether rejection is a redaction's refusal because the
+// rows that hold the secret aren't the number the user counted, which
+// counting them again and confirming that count would redact.
+func Miscounted(rejection *events.Rejection) bool {
+	return rejection != nil && rejection.Check == CountCheck
+}
+
+// RowsHolding is how many rows hold a text, in words.
+func RowsHolding(rows int) string {
 	if rows == 1 {
 		return "1 row holds"
 	}

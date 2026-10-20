@@ -2,8 +2,10 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,12 +58,22 @@ type streamRedacted struct {
 	Rows   int       `json:"rows"`
 }
 
+// streamFailed is a stream a redaction across the log left holding the
+// text: why, and whether counting its rows again and confirming that
+// count would redact it.
+type streamFailed struct {
+	Stream  string `json:"stream"`
+	Reason  string `json:"reason"`
+	Recount bool   `json:"recount"`
+}
+
 // logRedacted is what a redaction across the log answers: the rows
-// rewritten, in each stream, and what was refused or may be left on the
-// disk for now.
+// rewritten, in each stream; the streams left holding the text, and why;
+// and what may be left on the disk for now, those streams among it.
 type logRedacted struct {
 	Rows     int              `json:"rows"`
 	Streams  []streamRedacted `json:"streams"`
+	Failures []streamFailed   `json:"failures"`
 	Warnings []string         `json:"warnings"`
 }
 
@@ -84,27 +96,30 @@ func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // redactLog redacts the text you marked from each stream its preview
-// lists, as redactIn redacts one. A stream refused or failing is a
-// warning, and the rest are redacted still; only when none is, it is
-// answered as answerRedaction answers one stream. The snapshot is
-// written once, at the end. Only the page may ask, as for redact.
+// lists, as redactIn redacts one. When the page sends the rows its preview
+// counted in each stream, a stream is refused unless that many of its rows
+// hold the text as it commits, and one it didn't count isn't redacted, as
+// you didn't see its rows; with no counts, each is redacted of however
+// many rows hold the text. A stream refused or failing is a failure, and
+// a warning, and the rest are redacted still; only when none is, it is
+// answered as answerRedaction answers one stream. The snapshot is written
+// once, at the end. Only the page may ask, as for redact.
 func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
-	asked, ok := secretOf(w, r)
+	asked, counts, ok := countedSecretOf(w, r)
 	if !ok {
 		return
 	}
-	asked.rows = store.AnyCount // its rows are counted per stream, which this route doesn't take yet
 	preview := s.previewLog(asked.text)
 	if preview.Rows == 0 {
 		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
 	}
-	answer := logRedacted{Streams: []streamRedacted{}, Warnings: []string{}}
+	answer := logRedacted{Streams: []streamRedacted{}, Failures: []streamFailed{}, Warnings: []string{}}
 	failed := false // a stream failed, rather than was refused
 	for _, listed := range preview.Streams {
 		done := streamRedaction{rejection: listed.rejection, err: listed.err}
 		if listed.Error == "" {
-			done = s.redactIn(listed.Stream, asked, listed.Archived)
+			done = s.redactCountedIn(listed, asked, counts)
 		}
 		switch {
 		case done.redaction.Position != 0:
@@ -114,12 +129,15 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 				answer.Warnings = append(answer.Warnings, listed.Stream+": "+done.err.Error())
 			}
 		case done.rejection != nil:
-			answer.Warnings = append(answer.Warnings, listed.Stream+": "+done.rejection.Reason)
+			answer.fail(listed.Stream, done.rejection.Reason, store.Miscounted(done.rejection))
 		default:
 			failed = true
-			answer.Warnings = append(answer.Warnings, listed.Stream+": "+done.err.Error())
+			answer.fail(listed.Stream, done.err.Error(), false)
 		}
 		answer.Warnings = append(answer.Warnings, done.warnings...)
+	}
+	for _, stream := range countedGone(counts, preview) {
+		answer.fail(stream, fmt.Sprintf("no row holds this text now, not %d: count them again", counts[stream]), true)
 	}
 	switch {
 	case len(answer.Streams) == 0 && failed:
@@ -131,6 +149,67 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	}
 	answer.Warnings = append(answer.Warnings, s.writeOverOldText()...)
 	httpapi.Reply(w, answer)
+}
+
+// fail names stream as left holding the text, for reason, among the
+// failures and the warnings.
+func (answer *logRedacted) fail(stream, reason string, recount bool) {
+	answer.Failures = append(answer.Failures, streamFailed{Stream: stream, Reason: reason, Recount: recount})
+	answer.Warnings = append(answer.Warnings, stream+": "+reason)
+}
+
+// countedSecretOf is what a redaction across the log asks for, as
+// secretOf, and the rows its preview counted in each stream, nil when the
+// page sent none; or false once it has answered 400 for a body it can't
+// read, a blank text or a count below one, as a redaction rewrites at
+// least one row.
+func countedSecretOf(w http.ResponseWriter, r *http.Request) (redactionAsked, map[string]int, bool) {
+	var request struct {
+		Text, Why string
+		Counts    map[string]int
+	}
+	if !httpapi.Decode(w, r, &request) {
+		return redactionAsked{}, nil, false
+	}
+	asked, ok := askedOf(w, request.Text, request.Why)
+	if !ok {
+		return redactionAsked{}, nil, false
+	}
+	for stream, rows := range request.Counts {
+		if rows < 1 {
+			http.Error(w, "counts are how many rows of each stream the preview counted: 1 or more, not "+strconv.Itoa(rows)+" for "+stream, http.StatusBadRequest)
+			return redactionAsked{}, nil, false
+		}
+	}
+	return asked, request.Counts, true
+}
+
+// redactCountedIn is redactIn of a stream the preview listed, refused
+// unless as many of its rows hold the text as counts holds for it. With
+// no counts at all, it redacts however many rows hold it; with counts but
+// none for this stream, it is refused, as you didn't see its rows.
+func (s *Server) redactCountedIn(listed streamPreview, asked redactionAsked, counts map[string]int) streamRedaction {
+	if counts != nil {
+		rows, counted := counts[listed.Stream]
+		if !counted {
+			return streamRedaction{rejection: &events.Rejection{Check: store.CountCheck, Reason: store.RowsHolding(listed.Rows) + " this text, which the preview you confirmed didn't count: count them again"}}
+		}
+		asked.rows = rows
+	}
+	return s.redactIn(listed.Stream, asked, listed.Archived)
+}
+
+// countedGone is each stream counts holds that the preview no longer
+// lists, as no row of it holds the text now, by name.
+func countedGone(counts map[string]int, preview logPreview) []string {
+	var gone []string
+	for stream := range counts {
+		if !slices.ContainsFunc(preview.Streams, func(listed streamPreview) bool { return listed.Stream == stream }) {
+			gone = append(gone, stream)
+		}
+	}
+	slices.Sort(gone)
+	return gone
 }
 
 // previewLog previews the redaction of text from every stream in the log

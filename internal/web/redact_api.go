@@ -169,11 +169,10 @@ func secretOf(w http.ResponseWriter, r *http.Request) (redactionAsked, bool) {
 	if !httpapi.Decode(w, r, &request) {
 		return redactionAsked{}, false
 	}
-	if strings.TrimSpace(request.Text) == "" {
-		http.Error(w, "mark the text to redact", http.StatusBadRequest)
+	asked, ok := askedOf(w, request.Text, request.Why)
+	if !ok {
 		return redactionAsked{}, false
 	}
-	asked := redactionAsked{text: request.Text, why: strings.TrimSpace(request.Why), rows: store.AnyCount}
 	if request.Rows != nil {
 		if *request.Rows < 1 {
 			http.Error(w, "rows is how many rows the preview counted: 1 or more", http.StatusBadRequest)
@@ -182,6 +181,16 @@ func secretOf(w http.ResponseWriter, r *http.Request) (redactionAsked, bool) {
 		asked.rows = *request.Rows
 	}
 	return asked, true
+}
+
+// askedOf is a redaction of text, for why, of however many rows hold it,
+// or false once it has answered 400 for a blank text.
+func askedOf(w http.ResponseWriter, text, why string) (redactionAsked, bool) {
+	if strings.TrimSpace(text) == "" {
+		http.Error(w, "mark the text to redact", http.StatusBadRequest)
+		return redactionAsked{}, false
+	}
+	return redactionAsked{text: text, why: strings.TrimSpace(why), rows: store.AnyCount}, true
 }
 
 // redactable is whether task id is archived, or false once it has answered
