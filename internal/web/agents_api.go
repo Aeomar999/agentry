@@ -160,11 +160,8 @@ func (s *Server) moveCoordinator(w http.ResponseWriter, r *http.Request) {
 	if !already && !httpapi.ProposeOrRefuse(w, s.store, move) {
 		return
 	}
-	for _, task := range moving {
-		if !httpapi.ProposeOrRefuse(w, s.store, events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.CoordinatorMoved,
-			Data: map[string]any{"from": task.Coordinator, "to": to}}) {
-			return
-		}
+	if !s.followUp(w, s.coordinatorMoves(s.state.Roster(), team), "moved the "+team+" team's coordinator to "+to, "ask again") {
+		return
 	}
 	httpapi.Reply(w, map[string]string{"team": team, "coordinator": to})
 }
