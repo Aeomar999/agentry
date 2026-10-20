@@ -698,15 +698,66 @@ func TestAStoryLeftByARefusedErasureFilesAgain(t *testing.T) {
 }
 
 // A story of an erased epic leaves it, though the epic can't take its
-// task.story_removed.
+// task.story_removed: the route refuses to erase an epic with stories, but
+// an erasure from before it did left them.
 func TestAStoryLeavesAnErasedEpic(t *testing.T) {
 	f := newEraseFixture(t)
-	f.erase(t, "task-3")
+	if _, rejection, err := f.log.Erase("task-3", you, "Gone.", f.blobs); rejection != nil || err != nil {
+		t.Fatalf("erasing task-3 in the store: %v, %v", rejection, err)
+	}
 	if code, body := call(t, f.server, "PUT", "/api/tasks/task-2/epic", `{"epic":""}`); code != http.StatusOK {
 		t.Fatalf("taking task-2 out: %d %s", code, body)
 	}
 	if story, err := f.state.Task("task-2"); err != nil || story.Epic != "" {
 		t.Errorf("task-2's epic: %v, want none", err)
+	}
+}
+
+// An epic isn't erased while a story still names it, as the story would
+// then point at a task that is gone: you erase the stories, or move them
+// out, first. An archived epic is erased while its stories are archived
+// too. A refusal writes nothing.
+func TestAnEpicWithStoriesIsntErased(t *testing.T) {
+	refused := "task-3 has stories (task-2); erase or move them out of the epic first"
+	for _, c := range []struct {
+		name   string
+		before func(t *testing.T, f *eraseFixture)
+		want   string // the refusal, or "" for an erasure
+	}{
+		{"a live story", func(*testing.T, *eraseFixture) {}, refused},
+		{"an archived story", func(t *testing.T, f *eraseFixture) {
+			f.done(t)
+			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+		}, refused},
+		{"an archived epic's live story", func(t *testing.T, f *eraseFixture) {
+			storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs)
+		}, refused},
+		{"an archived epic's archived story", func(t *testing.T, f *eraseFixture) {
+			f.done(t)
+			storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs)
+			storetest.ArchiveIn(t, f.log, f.state, "task-3", f.blobs)
+		}, ""},
+		{"a story moved out", func(t *testing.T, f *eraseFixture) {
+			if code, body := call(t, f.server, "PUT", "/api/tasks/task-2/epic", `{"epic":""}`); code != http.StatusOK {
+				t.Fatalf("taking task-2 out: %d %s", code, body)
+			}
+		}, ""},
+		{"an erased story", func(t *testing.T, f *eraseFixture) { f.erase(t, "task-2") }, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newEraseFixture(t)
+			c.before(t, f)
+			last := f.log.LastPosition()
+			code, body := call(t, f.server, "POST", "/api/tasks/task-3/erase", `{"why":"Gone."}`)
+			switch {
+			case c.want == "" && code != http.StatusOK:
+				t.Errorf("erasing the epic: %d %s, want 200", code, body)
+			case c.want != "" && (code != http.StatusConflict || strings.TrimSpace(body) != c.want):
+				t.Errorf("erasing the epic: %d %s, want 409 %q", code, body, c.want)
+			case c.want != "" && f.log.LastPosition() != last:
+				t.Errorf("the refusal wrote up to %d from %d", f.log.LastPosition(), last)
+			}
+		})
 	}
 }
 

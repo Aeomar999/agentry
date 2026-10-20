@@ -35,7 +35,8 @@ type erased struct {
 // turn.ended until the loop stops it, and the loop leaves an erased task
 // alone. A turn that starts between the stop and the erasure's read of the
 // rows is still orphaned: the log refuses what it writes, but its process
-// and worktree go on. An archived task is erased as it is, from its blob. A refusal is
+// and worktree go on. An archived task is erased as it is, from its blob,
+// and an epic only once no story names it (keptByStories). A refusal is
 // answered 409 with its reason, and an error before the erasure commits
 // 500; neither has written anything. Once it commits the task is erased,
 // so what fails after that is a warning in the answer: a blob that won't
@@ -50,6 +51,10 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 	task, err := s.task(id)
 	if err == nil && task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
+		return
+	}
+	if refused := s.keptByStories(id); refused != "" {
+		http.Error(w, refused, http.StatusConflict)
 		return
 	}
 	if refused, err := s.leaveEpic(id); refused != "" {
@@ -89,6 +94,31 @@ func (s *Server) erase(w http.ResponseWriter, r *http.Request) {
 	warnings = append(warnings, s.redactCopies(id, elsewhere.copies)...)
 	warnings = append(warnings, s.writeOverOldText()...)
 	httpapi.Reply(w, erased{ID: id, At: erasure.At, Warnings: warnings})
+}
+
+// keptByStories is why epic id can't be erased yet, or "": a story still
+// names it, and would point at a task that is gone, its moves and its
+// report to the epic refused. A story erased, or moved out, names it no
+// more. An archived epic, which is done, may go with its stories archived
+// too: they are done, and have reported to it.
+func (s *Server) keptByStories(id string) string {
+	_, err := s.task(id)
+	epicArchived := errors.Is(err, current.ErrArchived)
+	var stories []string
+	for _, other := range s.state.TaskIDs() {
+		story, found := s.state.Summary(other)
+		if !found || story.Epic != id {
+			continue
+		}
+		if _, err := s.task(other); epicArchived && errors.Is(err, current.ErrArchived) {
+			continue
+		}
+		stories = append(stories, other)
+	}
+	if len(stories) == 0 {
+		return ""
+	}
+	return id + " has stories (" + strings.Join(stories, ", ") + "); erase or move them out of the epic first"
 }
 
 // leaveEpic takes a story out of its epic before it is erased, with the
