@@ -125,8 +125,9 @@ const create = () => act(async () => fireEvent.click(within(panel()).getByRole("
 const summary = () => document.getElementById("team-summary")!;
 const sent = () => vi.mocked(api).mock.calls.map(([method, path, body]) => [method, path, body]);
 const addTeam = () => screen.getByRole("button", { name: "Add a team" });
-// said checks the panel's live region says text.
-const said = (text: string) => expect(within(panel()).getByText(text).getAttribute("aria-live")).toBe("polite");
+// said checks the panel's live region says text, which it does a frame after the change.
+const said = async (text: string) => expect((await within(panel()).findByText(text)).getAttribute("aria-live")).toBe("polite");
+const liveRegion = () => panel().querySelector("p[aria-live].sr-only")!;
 
 describe("New team: Blank", () => {
   test("Build a team in Add a team opens the panel with one coordinator", () => {
@@ -263,7 +264,7 @@ describe("New team: Copy a template", () => {
     });
   });
 
-  test("picking another template after changing agents asks first, in place", () => {
+  test("picking another template after changing agents asks first, in place", async () => {
     openAt("/agents?team=new&template=writing");
     fireEvent.click(rowButton("writer"));
     fireEvent.change(field("Description"), { target: { value: "Drafts." } });
@@ -277,15 +278,27 @@ describe("New team: Copy a template", () => {
 
     fireEvent.change(within(panel()).getByLabelText("Template"), { target: { value: "visionaries" } });
     fireEvent.click(within(panel()).getByRole("button", { name: "Replace" }));
-    said("Replaced with Visionaries's 2 agents.");
+    await said("Replaced with Visionaries's 2 agents.");
     expect(teamName().value).toBe("Visionaries 2");
     expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
     expect(rowButton("visionary")).toBeTruthy();
   });
+  test("Blank after changing agents asks first, then says the team is blank", async () => {
+    openAt("/agents?team=new&template=writing");
+    fireEvent.click(rowButton("writer"));
+    fireEvent.change(field("Description"), { target: { value: "Drafts." } });
+    fireEvent.click(within(panel()).getByRole("radio", { name: "Blank" }));
+    within(panel()).getByRole("group", { name: "Replace your changed agent with a blank team?" });
+    fireEvent.click(within(panel()).getByRole("button", { name: "Replace" }));
+
+    await said("Replaced with a blank team: one agent, its coordinator.");
+    expect(rowButton("coordinator")).toBeTruthy();
+    expect(within(panel()).queryByRole("button", { name: /^writer/ })).toBeNull();
+  });
 });
 
 describe("New team: agents", () => {
-  test("Add agent opens a new row with focus in its Name; remove leaves a stub with Undo", () => {
+  test("Add agent opens a new row with focus in its Name; remove leaves a stub with Undo", async () => {
     openAt("/agents?team=new");
     fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
     expect(rowButton("New agent").getAttribute("aria-expanded")).toBe("true");
@@ -296,12 +309,25 @@ describe("New team: agents", () => {
     fireEvent.click(within(panel()).getByRole("button", { name: "Remove coordinator" }));
     const undo = within(panel()).getByRole("button", { name: "Undo, keep coordinator" });
     expect(within(panel()).getByText("coordinator removed")).toBeTruthy();
-    said("coordinator removed. Undo is next.");
+    await said("coordinator removed. Undo is next.");
     expect(document.activeElement).toBe(undo);
     fireEvent.click(undo);
-    said("coordinator is back.");
+    await said("coordinator is back.");
     expect(document.activeElement).toBe(rowButton("coordinator"));
     expect((within(panel()).getByRole("radio", { name: "Coordinator, coordinator" }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  test("the same words twice in a row are said again: the region empties, then speaks", async () => {
+    openAt("/agents?team=new");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    fireEvent.click(within(panel()).getByRole("button", { name: "Add agent" }));
+    const [first, second] = within(panel()).getAllByRole("button", { name: "Remove New agent" });
+    fireEvent.click(first);
+    await said("New agent removed. Undo is next.");
+
+    fireEvent.click(second);
+    expect(liveRegion().textContent).toBe("");
+    await said("New agent removed. Undo is next.");
   });
 
   test("the coordinator is one radio group across the rows", () => {

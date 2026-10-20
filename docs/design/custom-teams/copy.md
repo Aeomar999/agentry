@@ -322,6 +322,7 @@ Polite live region in the panel unless it says otherwise. Focus moves (in the de
 | Remove agent | `{agent} removed. Undo is next.` (new) / `{agent} will be removed when you save. Undo is next.` (edit) | Focus moves to Undo |
 | Undo | `{agent} is back.` | Focus on its name button |
 | Replace template | `Replaced with {template}'s {n} agents.` | |
+| Replace with Blank | `Replaced with a blank team: one agent, its coordinator.` | Added in task-178: Blank's replace needs words too |
 | Creating / saving | `Creating the team…` / `Saving the team…` | The footer line |
 | Created / saved | the toast's title | Toasts are already a live region |
 | Failed save | none | Focus moves to the summary; its heading and links are read |

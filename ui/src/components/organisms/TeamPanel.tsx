@@ -13,6 +13,7 @@ import {
   addCustomTeam,
   agentCount,
   backNotice,
+  blankNotice,
   blankTeam,
   changedAgents,
   checkTeam,
@@ -124,6 +125,12 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   }, [focusOn]);
 
   const focus = (id: string) => setFocusOn({ id });
+  // say empties the live region first and speaks on the next frame, so the
+  // same words twice in a row are read again.
+  const say = (text: string) => {
+    setNotice("");
+    requestAnimationFrame(() => setNotice(text));
+  };
   const change = (key: string, change: Partial<DraftAgent>) =>
     setRows((rows) =>
       rows.map((agent) => (agent.key === key ? { ...agent, ...change } : change.coordinates ? { ...agent, coordinates: false } : agent)),
@@ -151,7 +158,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
     setRemoved([]);
     setOpen(next.agents.slice(0, 1).map((agent) => agent.key));
     setReplacing(null);
-    setNotice(template ? replacedNotice(template) : "");
+    say(template ? replacedNotice(template) : blankNotice);
   }
 
   function addAgent() {
@@ -163,7 +170,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
 
   function remove(agent: DraftAgent) {
     setRemoved((removed) => [...removed, agent.key]);
-    setNotice(removedNotice(agent));
+    say(removedNotice(agent));
     focus(`${agent.key}-undo`);
   }
 
@@ -171,7 +178,7 @@ function TeamForm({ roster, templates, policy, engines, copied, returnTo, onClos
   function undo(agent: DraftAgent) {
     setRemoved((removed) => removed.filter((k) => k !== agent.key));
     if (draft.agents.some((other) => other.coordinates)) change(agent.key, { coordinates: false });
-    setNotice(backNotice(agent));
+    say(backNotice(agent));
     focus(toggleId(agent.key));
   }
 

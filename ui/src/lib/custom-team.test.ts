@@ -5,6 +5,7 @@ import {
   addCustomTeam,
   agentCount,
   backNotice,
+  blankNotice,
   blankTeam,
   checkTeam,
   changedAgents,
@@ -430,6 +431,7 @@ describe("the panel's sentences", () => {
     expect(removedNotice(row("a1", { name: " " }))).toBe("New agent removed. Undo is next.");
     expect(backNotice(row("a1"))).toBe("a1 is back.");
     expect(replacedNotice(research)).toBe("Replaced with Research's 3 agents.");
+    expect(blankNotice).toBe("Replaced with a blank team: one agent, its coordinator.");
   });
 });
 
