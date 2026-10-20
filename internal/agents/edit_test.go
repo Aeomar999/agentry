@@ -218,14 +218,16 @@ func TestRenamesFollowAnAgentToItsNameNow(t *testing.T) {
 // the team has now, until an agent has the name again.
 func TestRemovalsKeepAnAgentsTeamByItsNameNow(t *testing.T) {
 	stream := []events.Event{
-		{Proposal: TeamEdit{Team: "Data", To: "Numbers", Agents: []EditedAgent{{Was: "b", Name: "b"}}, Removed: []string{"a", "c", "d"}}.Proposal(you)},
+		{Proposal: TeamEdit{Team: "Data", To: "Numbers", Agents: []EditedAgent{{Was: "b", Name: "b"}}, Removed: []string{"a", "c", "d", "f"}}.Proposal(you)},
 		{Proposal: TeamRenaming("Numbers", "Figures", you)},
+		{Proposal: TeamEdit{Team: "Figures", To: "Charts", Agents: []EditedAgent{{Was: "b", Name: "b"}}}.Proposal(you)},
 		{Proposal: Agent{Name: "c", Team: "Other"}.Proposal(you, false)},
+		{Proposal: Agent{Name: "f", Team: "Other"}.Proposal(you, false)},
 		{Proposal: Agent{Name: "x"}.Renaming(you, "d")},
 		{Proposal: TeamEdit{Team: "Other", To: "Other", Agents: []EditedAgent{{Name: "e"}}, Removed: []string{"c"}}.Proposal(you)},
 	}
 	removals := RemovalsIn(stream)
-	if want := (Removals{"a": "Figures", "c": "Other"}); !maps.Equal(removals, want) {
+	if want := (Removals{"a": "Charts", "c": "Other"}); !maps.Equal(removals, want) {
 		t.Errorf("removals = %v, want %v", removals, want)
 	}
 }
