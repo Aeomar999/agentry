@@ -18,6 +18,8 @@ import { cn } from "@/lib/cn";
 // is always there (its name as the button that opens it, its badges, the
 // team's one coordinator radio and remove), then, open, every field of the
 // agent. Closed, it says its description and how many problems it has.
+// On a phone the header takes two lines: the name, its badges and remove,
+// then the coordinator radio and the description.
 // While the team saves the fields are read-only and the rest aria-disabled.
 
 interface AgentRowProps {
@@ -50,14 +52,14 @@ export function AgentRow(props: AgentRowProps) {
   const column = agent.coordinates ? "" : columnOfAgent(agent);
   return (
     <li className="border-b border-divider last:border-b-0">
-      <div className="flex min-h-11 items-center gap-2 px-2">
+      <div className="flex min-h-11 items-center gap-2 px-2 max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-0">
         <button
           type="button"
           id={toggleId(agent.key)}
           aria-expanded={open}
           aria-label={[name, ...marks].join(", ")}
           onClick={onToggle}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-left"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 text-left max-sm:col-span-2"
         >
           {open ? (
             <ChevronDown className="size-3.5 shrink-0 text-ink-muted" />
@@ -88,7 +90,7 @@ export function AgentRow(props: AgentRowProps) {
             <span className="min-w-0 shrink-[999] truncate text-[12px] text-ink-muted max-sm:hidden">{agent.description}</span>
           )}
         </button>
-        <span className="shrink-0">
+        <span className="shrink-0 max-sm:row-start-2 max-sm:pl-5.5 max-sm:[&>label]:min-h-11 max-sm:[&>label]:items-center">
           <Radio
             name="coordinator"
             checked={agent.coordinates}
@@ -107,8 +109,13 @@ export function AgentRow(props: AgentRowProps) {
           label={`Remove ${name}`}
           aria-disabled={saving || undefined}
           onClick={() => !saving && onRemove()}
-          className="size-7 hover:text-danger"
+          className="size-7 hover:text-danger max-sm:col-start-3 max-sm:row-start-1 max-sm:size-11"
         />
+        {!open && agent.description && (
+          <span aria-hidden className="min-w-0 truncate text-[12px] text-ink-muted max-sm:col-span-2 max-sm:row-start-2 sm:hidden">
+            {agent.description}
+          </span>
+        )}
       </div>
       {open && <AgentFields {...props} />}
     </li>

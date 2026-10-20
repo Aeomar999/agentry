@@ -2,13 +2,16 @@ import { ReactNode, RefObject, useEffect, useId, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { IconButton } from "@/components/atoms/IconButton";
+import { cn } from "@/lib/cn";
 
 // A modal side sheet over the right of the page: 680px wide, the whole
 // screen under 640px, over a flat scrim. Everything else on the page is
 // inert while it is open, so focus and the screen reader stay in it, and
 // the page doesn't scroll under it. Focus goes to returnTo when it closes,
 // or back where it was when it opened. The body scrolls between the title
-// and the footer. canClose false turns Close and Esc off, as while it saves.
+// and the footer; under 500px of height (a phone held sideways, 400% zoom,
+// the on-screen keyboard) nothing sticks and the whole sheet scrolls as one,
+// the footer last. canClose false turns Close and Esc off, as while it saves.
 interface SideSheetProps {
   title: string;
   returnTo?: RefObject<HTMLElement | null>; // for an opener that is gone by then, as one in a closed dialog
@@ -39,7 +42,10 @@ export function SideSheet({ title, returnTo, onClose, canClose = true, footer, c
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex h-full w-full max-w-[680px] flex-col border-l border-divider-2 bg-surface-1 max-sm:max-w-none max-sm:border-l-0"
+        className={cn(
+          "flex h-full w-full max-w-[680px] flex-col border-l border-divider-2 bg-surface-1 max-sm:max-w-none max-sm:border-l-0",
+          "[@media(max-height:500px)]:overflow-y-auto",
+        )}
       >
         <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-divider pr-2 pl-5">
           <h2 id={titleId} className="truncate text-[15px] font-semibold text-ink-primary">
@@ -47,7 +53,9 @@ export function SideSheet({ title, returnTo, onClose, canClose = true, footer, c
           </h2>
           <IconButton icon={<X />} label="Close" onClick={onClose} disabled={!canClose} />
         </div>
-        <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 py-5">{children}</div>
+        <div className="min-h-0 flex-1 scrollbar-thin overflow-y-auto px-5 py-5 [@media(max-height:500px)]:flex-none [@media(max-height:500px)]:overflow-visible">
+          {children}
+        </div>
         <div className="shrink-0 border-t border-divider px-5 py-3">{footer}</div>
       </div>
     </div>,
