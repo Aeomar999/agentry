@@ -292,6 +292,41 @@ func textIn(t *testing.T, f *eraseFixture, stream string, kind events.Type, fiel
 	return texts
 }
 
+// An erased task can never be done, so neither the list, a detail nor the
+// epic's story list shows it blocking the story after it; one that isn't
+// done still does.
+func TestAnErasedTaskBlocksNoStory(t *testing.T) {
+	f := newEraseFixture(t)
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "After both", "repo": "/r",
+		"coordinator": "tech-lead", "after": []string{"task-1", "task-2"}}})
+	if code, body := call(t, f.server, "PUT", "/api/tasks/task-4/epic", `{"epic":"task-3"}`); code != http.StatusOK {
+		t.Fatalf("task-4 into the epic: %d %s", code, body)
+	}
+	f.erase(t, "task-2")
+
+	var list []taskSummary
+	_, body := call(t, f.server, "GET", "/api/tasks", "")
+	json.Unmarshal([]byte(body), &list)
+	var detail, epic taskDetail
+	_, body = call(t, f.server, "GET", "/api/tasks/task-4", "")
+	json.Unmarshal([]byte(body), &detail)
+	_, body = call(t, f.server, "GET", "/api/tasks/task-3", "")
+	json.Unmarshal([]byte(body), &epic)
+	isFour := func(summary taskSummary) bool { return summary.ID == "task-4" }
+	for _, view := range []struct {
+		name      string
+		blockedBy func() []string
+	}{
+		{"the list", func() []string { return list[slices.IndexFunc(list, isFour)].BlockedBy }},
+		{"task-4's detail", func() []string { return detail.BlockedBy }},
+		{"the epic's story list", func() []string { return epic.StoryList[slices.IndexFunc(epic.StoryList, isFour)].BlockedBy }},
+	} {
+		if got := view.blockedBy(); !slices.Equal(got, []string{"task-1"}) {
+			t.Errorf("%s has task-4 blocked by %v, want only task-1", view.name, got)
+		}
+	}
+}
+
 // A turn that runs is stopped while the task is still there, so the runner
 // can find the machine it runs on; a task with no turn running isn't.
 func TestErasingStopsTheTurnThatRunsFirst(t *testing.T) {

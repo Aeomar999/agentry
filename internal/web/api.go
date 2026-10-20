@@ -38,17 +38,17 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) {
 	for _, summary := range summaries {
 		done[summary.ID] = summary.Status == tasks.Done
 	}
-	isDone := func(id string) bool {
+	blocksNone := func(id string) bool {
 		if isDone, listed := done[id]; listed {
 			return isDone
 		}
-		return s.isDone(id)
+		return s.blocksNone(id)
 	}
 	slots := s.slots()
 	for i, summary := range summaries {
 		// A task archived since Summaries was read is nil here: it is listed without BlockedBy or Queued.
 		if task, _ := s.state.Task(summary.ID); task != nil {
-			summaries[i].BlockedBy = blockedBy(task, isDone)
+			summaries[i].BlockedBy = blockedBy(task, blocksNone)
 			summaries[i].Queued = slots.Queued(task.ID)
 		}
 	}
@@ -364,7 +364,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 	}
 	slots := s.slots()
 	detail := detailOf(task, roster)
-	detail.BlockedBy = blockedBy(task, s.isDone)
+	detail.BlockedBy = blockedBy(task, s.blocksNone)
 	detail.Queued = slots.Queued(task.ID)
 	if epic, found := s.state.Summary(task.Epic); found {
 		detail.EpicTitle = epic.Title
@@ -377,7 +377,7 @@ func (s *Server) showTask(w http.ResponseWriter, r *http.Request) {
 		}
 		// An archived story is done, so nothing blocks it and it waits for no slot.
 		if story, _ := s.task(id); story != nil {
-			summary.BlockedBy = blockedBy(story, s.isDone)
+			summary.BlockedBy = blockedBy(story, s.blocksNone)
 			summary.Queued = slots.Queued(story.ID)
 		}
 		detail.StoryList = append(detail.StoryList, summary)
@@ -626,11 +626,12 @@ func (s *Server) readArchived(id string) (*archivedRead, error) {
 	return &archivedRead{task: task, marker: marker, history: history}, nil
 }
 
-// isDone says whether a task is done. An archived task is: only a done task
-// is archived. A broken or unknown one isn't.
-func (s *Server) isDone(id string) bool {
+// blocksNone says whether a story after task id may start for it: id is
+// done, or archived, as only a done task is, or erased, which can never
+// be done and leaves nothing to wait for. A broken or unknown one blocks.
+func (s *Server) blocksNone(id string) bool {
 	task, err := s.task(id)
-	if errors.Is(err, current.ErrArchived) {
+	if errors.Is(err, current.ErrArchived) || errors.Is(err, current.ErrErased) {
 		return true
 	}
 	return task != nil && task.IsDone

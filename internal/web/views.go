@@ -105,15 +105,15 @@ type eventEntry struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
-// blockedBy are the stories a story builds on that aren't done, while it
-// waits to start for them.
-func blockedBy(t *tasks.Task, done func(id string) bool) []string {
+// blockedBy are the stories a story builds on that still hold it back
+// (blocksNone), while it waits to start for them.
+func blockedBy(t *tasks.Task, blocksNone func(id string) bool) []string {
 	blocked := []string{}
 	if t.IsDone || t.Worktree != nil {
 		return blocked
 	}
 	for _, id := range t.After {
-		if !done(id) {
+		if !blocksNone(id) {
 			blocked = append(blocked, id)
 		}
 	}
