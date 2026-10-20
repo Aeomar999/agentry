@@ -11,6 +11,7 @@ const template = (team: string): TeamTemplate => ({
   team,
   description: `The ${team} team.`,
   features: [],
+  userMade: false,
   agents: [
     {
       name: `${team.toLowerCase()}-lead`,

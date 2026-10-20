@@ -14,6 +14,7 @@ const TEMPLATES: TeamTemplate[] = [
     team: "Visionaries",
     description: "",
     features: ["ideas"],
+    userMade: false,
     agents: [
       {
         name: "visionary",

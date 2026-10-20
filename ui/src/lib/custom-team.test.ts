@@ -126,6 +126,7 @@ const template: TeamTemplate = {
   team: "Writing",
   description: "Writes docs.",
   features: [],
+  userMade: false,
   agents: [
     {
       name: "editor",

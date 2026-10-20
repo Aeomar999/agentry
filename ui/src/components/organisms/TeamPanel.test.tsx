@@ -89,6 +89,7 @@ const WRITING: TeamTemplate = {
   team: "Writing",
   description: "Writes docs.",
   features: [],
+  userMade: false,
   agents: [
     member("editor", { coordinates: true, prompt: "", profile: "developer", color: "violet" }),
     member("writer", { engine: "codex", model: "gpt-5", profile: "developer", color: "blue", column: "review" }),
@@ -99,6 +100,7 @@ const IDEAS: TeamTemplate = {
   team: "Visionaries",
   description: "Suggests features.",
   features: ["ideas"],
+  userMade: false,
   agents: [member("visionary", { coordinates: true, profile: "read-mostly" }), member("skeptic", { profile: "read-mostly" })],
 };
 
