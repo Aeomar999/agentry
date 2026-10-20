@@ -114,8 +114,7 @@ func findIn(stream string, rows []row, secret string, who events.Actor, why stri
 }
 
 // rewrite is Redact's second half, under the lock: the checks, the
-// commit, the refold and the WAL emptied. The rules come before
-// rewritable, so a row is refused for what it is before how it is written.
+// commit, the refold and the WAL emptied.
 func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -123,10 +122,7 @@ func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) 
 	if rejection, err := s.unmoved(stream, found.through, "redact", "find its rows again"); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
-	if rejection := s.validate(found.redaction); rejection != nil {
-		return events.Event{}, rejection, nil
-	}
-	if rejection := rewritable(found.rows); rejection != nil {
+	if rejection := s.refusal(found); rejection != nil {
 		return events.Event{}, rejection, nil
 	}
 	event, before, err := s.commitRedact(found.redaction, found.rows)
@@ -144,18 +140,34 @@ func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) 
 	return event, nil, nil
 }
 
-// Matches is how many of a stream's rows, rejections included, hold
-// secret, as Redact would find them: what to show before redacting.
-func (s *Store) Matches(stream, secret string) (int, error) {
-	if reason := aSecret(secret); reason != "" {
-		return 0, fmt.Errorf("%s", reason)
+// refusal is why the rules or rewritable refuse what Redact found, under
+// the lock. The rules come first, so a row is refused for what it is
+// before how it is written.
+func (s *Store) refusal(found pending) *events.Rejection {
+	if rejection := s.validate(found.redaction); rejection != nil {
+		return rejection
 	}
-	rows, err := rowsOf(s.reads, stream, s.applied.Load())
-	if err != nil {
-		return 0, err
+	return rewritable(found.rows)
+}
+
+// Preview is what Redact would do with secret in stream, writing nothing:
+// the number of rows it would rewrite or, when it would refuse, its
+// rejection and none. It is what the page shows before the user confirms.
+// The rules are asked as Redact asks them, for a redaction with no reason
+// yet, by redactor, as who asks doesn't change what they allow; a reason
+// that holds the secret is refused when the redaction is asked for. The
+// error is for the database failing.
+func (s *Store) Preview(stream, secret string) (int, *events.Rejection, error) {
+	found, rejection, err := s.find(stream, secret, redactor, "")
+	if rejection != nil || err != nil {
+		return 0, rejection, err
 	}
-	rewrites, err := rewrittenIn(stream, rows, secret)
-	return len(rewrites), err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rejection := s.refusal(found); rejection != nil {
+		return 0, rejection, nil
+	}
+	return len(found.rows), nil, nil
 }
 
 // asItIs refuses to redact a stream as it is: one erased, of which nothing

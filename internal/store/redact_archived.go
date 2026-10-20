@@ -66,7 +66,7 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 	if err := removeRedacted(kept, live, blobs); err != nil {
 		return events.Event{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
-	if rejection, err := checkArchived(stream, append(kept, live...), secret, who, why); rejection != nil || err != nil {
+	if _, rejection, err := checkArchived(stream, append(kept, live...), secret, who, why); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	if _, rejection, err := s.Unarchive(stream, blobs); rejection != nil || err != nil {
@@ -115,14 +115,32 @@ func (s *Store) archivedRows(stream string, blobs Opener) (kept, live []row, rej
 	return kept, live, nil, err
 }
 
-// checkArchived refuses, before anything is written, what Redact would
-// refuse in an archived stream's rows.
-func checkArchived(stream string, rows []row, secret string, who events.Actor, why string) (*events.Rejection, error) {
+// checkArchived is what Redact would find in an archived stream's rows,
+// or what it would refuse in them, before anything is written.
+func checkArchived(stream string, rows []row, secret string, who events.Actor, why string) (pending, *events.Rejection, error) {
 	found, rejection, err := findIn(stream, rows, secret, who, why)
 	if rejection != nil || err != nil {
-		return rejection, err
+		return pending{}, rejection, err
 	}
-	return rewritable(found.rows), nil
+	return found, rewritable(found.rows), nil
+}
+
+// PreviewArchived is Preview for RedactArchived: the number of an archived
+// task's rows, read through its marker's blob and the live log, that it
+// would rewrite or, when it would refuse them before unarchiving the task,
+// its rejection and none. It writes nothing: not even the blobs an earlier
+// redaction couldn't delete, which RedactArchived deletes first. The rules
+// see the redaction only once the task is unarchived, so they aren't asked.
+func (s *Store) PreviewArchived(stream, secret string, blobs Opener) (int, *events.Rejection, error) {
+	kept, live, rejection, err := s.archivedRows(stream, blobs)
+	if rejection != nil || err != nil {
+		return 0, rejection, err
+	}
+	found, rejection, err := checkArchived(stream, append(kept, live...), secret, redactor, "")
+	if rejection != nil || err != nil {
+		return 0, rejection, err
+	}
+	return len(found.rows), nil, nil
 }
 
 // removeRedacted deletes the blobs an event.redacted among an archived

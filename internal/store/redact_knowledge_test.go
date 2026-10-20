@@ -104,7 +104,7 @@ func TestKnowledgeFromTheSecretOnIsWrittenAgainInFull(t *testing.T) {
 	if removed := redaction.Number("removed"); removed != 4*len(secret) {
 		t.Errorf("the redaction removed %d bytes, want %d", removed, 4*len(secret))
 	}
-	if count, err := s.Matches(events.AgentsStream, secret); count != 0 || err != nil {
+	if count, _, err := s.Preview(events.AgentsStream, secret); count != 0 || err != nil {
 		t.Errorf("the rows holding the secret after: %d, %v, want none", count, err)
 	}
 }
@@ -123,7 +123,7 @@ func TestASecretAcrossAPatchAndItsBaseIsFound(t *testing.T) {
 			t.Fatalf("the row at %d holds the secret whole: %s", r.Position, r.Data)
 		}
 	}
-	if count, err := s.Matches(events.AgentsStream, secret); count != 1 || err != nil {
+	if count, rejection, err := s.Preview(events.AgentsStream, secret); count != 1 || rejection != nil || err != nil {
 		t.Fatalf("the rows holding the secret: %d, %v, want the patch", count, err)
 	}
 	if _, rejection, err := s.Redact(events.AgentsStream, secret, you, ""); rejection != nil || err != nil {

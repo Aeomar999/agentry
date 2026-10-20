@@ -292,7 +292,7 @@ func TestAPatchKeepingPartOfTheSecretIsWrittenAsAFullCopy(t *testing.T) {
 		t.Errorf("the newest version is %+v, want a full copy of its text", newest)
 	}
 	CheckEqual(t, s, state)
-	if count, err := s.Matches(events.AgentsStream, secret); count != 0 || err != nil {
+	if count, _, err := s.Preview(events.AgentsStream, secret); count != 0 || err != nil {
 		t.Errorf("%d rows still hold the secret, %v", count, err)
 	}
 }

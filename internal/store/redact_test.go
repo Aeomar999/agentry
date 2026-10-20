@@ -258,7 +258,7 @@ func TestASecretWithJSONsSpecialCharactersIsRedacted(t *testing.T) {
 	const special = "p\"a\\ss\nwörd ✓ <&>"
 	acceptAll(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{
 		"title": "Log in with " + special + ".", "repo": "/src/app", "coordinator": "tech-lead", "steps": []any{map[string]any{"text": special}}}})
-	if count, err := s.Matches("task-1", special); count != 1 || err != nil {
+	if count, rejection, err := s.Preview("task-1", special); count != 1 || rejection != nil || err != nil {
 		t.Fatalf("the rows holding it: %d, %v, want 1", count, err)
 	}
 	if _, rejection, err := s.Redact("task-1", special, you, ""); rejection != nil || err != nil {
@@ -276,14 +276,15 @@ func TestASecretWithJSONsSpecialCharactersIsRedacted(t *testing.T) {
 	if fields := rows[1].Data; !strings.Contains(fields, `"$.steps[0].text","$.title"`) {
 		t.Errorf("the redaction's fields: %s", fields)
 	}
-	if count, err := s.Matches("task-1", special); count != 0 || err != nil {
+	if count, _, err := s.Preview("task-1", special); count != 0 || err != nil {
 		t.Errorf("the rows holding it after: %d, %v, want none", count, err)
 	}
 }
 
 // Redact refuses, and writes nothing, when no row holds the secret, the
 // reason given holds it, the secret is empty or part of [redacted], or the
-// stream took an event since its rows were read.
+// stream took an event since its rows were read. Preview gives the same
+// rejection, but for the reason, which it isn't given.
 func TestARefusedRedactionWritesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agentry.db")
 	s := openWithSecret(t, path, newCreated())
@@ -297,6 +298,12 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 	} {
 		if _, rejection, err := s.Redact(c.stream, c.secret, you, c.why); err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
+		}
+		if c.why != "" {
+			continue
+		}
+		if count, rejection, err := s.Preview(c.stream, c.secret); count != 0 || err != nil || rejection == nil || rejection.Reason != c.want {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", c.name, count, rejection, err, c.want)
 		}
 	}
 
@@ -312,8 +319,33 @@ func TestARefusedRedactionWritesNothing(t *testing.T) {
 	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {
 		t.Errorf("a refused redaction changed the log:\n%v\n%v", before, after)
 	}
-	if count, err := s.Matches("task-1", ""); err == nil {
-		t.Errorf("counting an empty secret: %d, want an error", count)
+}
+
+// Preview says what Redact would do, and writes nothing: the number of rows
+// it would rewrite, or the rules' rejection and none.
+func TestPreviewSaysWhatRedactWould(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s := openWithSecret(t, path, newCreated())
+	quoting := s.check
+	s.check = refusing(new(true))
+	before, last := rowsAt(t, path), s.LastPosition()
+	if count, rejection, err := s.Preview("task-1", secret); count != 0 || err != nil || rejection == nil || rejection.Reason != "no redaction now" {
+		t.Errorf("Preview with the rules refusing: %d, %v, %v, want refused", count, rejection, err)
+	}
+	s.check = quoting
+	count, rejection, err := s.Preview("task-1", secret)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) || s.LastPosition() != last {
+		t.Errorf("Preview changed the log:\n%v\n%v", before, after)
+	}
+	redacted, rejection, err := s.Redact("task-1", secret, you, "")
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if positions := redacted.Numbers("positions"); count != len(positions) {
+		t.Errorf("Preview counted %d rows, Redact rewrote %v", count, positions)
 	}
 }
 
@@ -383,8 +415,8 @@ func TestAKeyHoldingTheSecretIsRefused(t *testing.T) {
 }
 
 // Redact refuses a stream with a row whose key holds the secret, naming its
-// position, and writes nothing, also when no value holds it; Matches counts
-// the row.
+// position, and writes nothing, also when no value holds it; Preview
+// gives the same rejection.
 func TestRedactRefusesARowWithTheSecretInAKey(t *testing.T) {
 	for name, data := range map[string]string{
 		"and a value":  `{"coordinator":"tech-lead","repo":{"` + secret + `":"/src/` + secret + `"},"title":"Use it"}`,
@@ -396,8 +428,9 @@ func TestRedactRefusesARowWithTheSecretInAKey(t *testing.T) {
 		execOn(t, path, `INSERT INTO events (at, stream, actor_kind, actor_id, type, data) VALUES
 			('2026-10-19T09:00:00Z', 'task-1', 'human', 'you', 'task.created', '`+data+`')`)
 		s, _ = openAt(t, path)
-		if n, err := s.Matches("task-1", secret); n != 1 || err != nil {
-			t.Errorf("%s: Matches %d, %v, want 1", name, n, err)
+		want := "the row at 1 holds the secret in a key, which redacting doesn't rewrite"
+		if count, rejection, err := s.Preview("task-1", secret); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", name, count, rejection, err, want)
 		}
 		before := rowsAt(t, path)
 		_, rejection, err := s.Redact("task-1", secret, you, "")
@@ -413,7 +446,8 @@ func TestRedactRefusesARowWithTheSecretInAKey(t *testing.T) {
 // An archived task and an erased one are refused for that before anything
 // their live rows hold: a row after the marker, which only a crash or a
 // store with no rules leaves, holding the secret in a key or a value, or
-// no row holding it. Nothing is written.
+// no row holding it. Preview gives the same rejection, and nothing is
+// written.
 func TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows(t *testing.T) {
 	inAKey := events.Proposal{Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use it", "extra": map[string]any{secret: "x"}}}
 	inAValue := events.Proposal{Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Use " + secret}}
@@ -442,6 +476,9 @@ func TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows(t *testing.T) {
 			acceptAll(t, s, left)
 		}
 		before := rowsAt(t, path)
+		if count, rejection, err := s.Preview("task-1", secret); count != 0 || err != nil || rejection == nil || rejection.Reason != c.want {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", c.name, count, rejection, err, c.want)
+		}
 		if _, rejection, err := s.Redact("task-1", secret, you, ""); err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
 		}
@@ -482,8 +519,8 @@ const pin = "90210417"
 
 // A row that would still hold the secret once its strings are rewritten,
 // in a number beside a string holding it or in a number alone, is refused,
-// and nothing is written: the secret would stay in the log while the
-// redaction said it had gone.
+// by Preview too, and nothing is written: the secret would stay in the
+// log while the redaction said it had gone.
 func TestASecretLeftInANumberIsRefused(t *testing.T) {
 	for name, data := range map[string]map[string]any{
 		"beside a string": {"title": "PIN " + pin, "extra": 90210417},
@@ -495,8 +532,11 @@ func TestASecretLeftInANumberIsRefused(t *testing.T) {
 		maps.Copy(created.Data, data)
 		acceptAll(t, s, created)
 		before := rowsAt(t, path)
-		_, rejection, err := s.Redact("task-1", pin, you, "")
-		if want := "the row at 1 would still hold the secret outside the strings redacting rewrites, as in a number"; err != nil || rejection == nil || rejection.Reason != want {
+		want := "the row at 1 would still hold the secret outside the strings redacting rewrites, as in a number"
+		if count, rejection, err := s.Preview("task-1", pin); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", name, count, rejection, err, want)
+		}
+		if _, rejection, err := s.Redact("task-1", pin, you, ""); err != nil || rejection == nil || rejection.Reason != want {
 			t.Errorf("%s: %v, %v, want %q", name, rejection, err, want)
 		}
 		if after := rowsAt(t, path); !reflect.DeepEqual(after, before) {

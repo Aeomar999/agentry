@@ -52,6 +52,8 @@ var holdingSecret = `{"title":"Use ` + secret + `"}`
 // What Redact would refuse in an archived task's rows is refused before
 // the task is unarchived, and nothing is written: the same rows, marker
 // and blob. So is a task that isn't archived, which Redact redacts.
+// PreviewArchived gives the same rejection, but for the reason, which it
+// isn't given.
 func TestARefusedArchivedRedactionWritesNothing(t *testing.T) {
 	for _, c := range []struct {
 		name, stream string
@@ -75,6 +77,11 @@ func TestARefusedArchivedRedactionWritesNothing(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "agentry.db")
 		s, blobs, marker := archivedWithRow(t, path, acceptEvery, c.kind, c.data)
 		before := rowsAt(t, path)
+		if c.why == "" {
+			if count, rejection, err := s.PreviewArchived(c.stream, cmp.Or(c.secret, secret), blobs); count != 0 || err != nil || rejection == nil || rejection.Reason != c.want {
+				t.Errorf("%s: PreviewArchived %d, %v, %v, want %q", c.name, count, rejection, err, c.want)
+			}
+		}
 		if _, rejection, err := s.RedactArchived(c.stream, cmp.Or(c.secret, secret), you, c.why, summary, blobs); err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, c.want)
 		}
@@ -135,8 +142,8 @@ func TestARedactionRefusedAfterTheUnarchivingArchivesTheTaskAgain(t *testing.T) 
 	if !blobs.Has(old.Text("archive")) {
 		t.Error("the old blob is gone, though the redaction was refused")
 	}
-	if count, err := s.Matches("task-1", secret); count != 0 || err != nil {
-		t.Errorf("task-1's live rows holding the secret: %d, %v, want none: it is archived", count, err)
+	if count, rejection, err := s.PreviewArchived("task-1", secret, blobs); count != 1 || rejection != nil || err != nil {
+		t.Errorf("task-1's rows to redact: %d, %v, %v, want the one still holding the secret", count, rejection, err)
 	}
 
 	refuse = false
@@ -302,7 +309,7 @@ func TestARedactedTaskThatCantBeArchivedAgainIsLeftUnarchived(t *testing.T) {
 	if _, archived := MarkerOf(live); archived || err != nil {
 		t.Errorf("task-1 is archived: %v", err)
 	}
-	if count, err := s.Matches("task-1", secret); count != 0 || err != nil {
+	if count, _, err := s.Preview("task-1", secret); count != 0 || err != nil {
 		t.Errorf("task-1's rows holding the secret: %d, %v, want none", count, err)
 	}
 }
@@ -409,7 +416,7 @@ func TestABlobArchivingAgainPutThatWontDeleteIsNamed(t *testing.T) {
 	if _, archived := MarkerOf(live); archived || err != nil {
 		t.Errorf("task-1 is archived: %v", err)
 	}
-	if count, err := s.Matches("task-1", secret); count != 0 || err != nil {
+	if count, _, err := s.Preview("task-1", secret); count != 0 || err != nil {
 		t.Errorf("task-1's rows holding the secret: %d, %v, want none", count, err)
 	}
 }
@@ -417,7 +424,8 @@ func TestABlobArchivingAgainPutThatWontDeleteIsNamed(t *testing.T) {
 // An old blob that won't delete once the redaction commits still holds
 // the secret, which no row does any more: the next RedactArchived of the
 // task deletes it, though it finds nothing to redact, and keeps the blob
-// the task's marker names.
+// the task's marker names. PreviewArchived, which writes nothing, leaves
+// it.
 func TestAnOldBlobThatWontDeleteGoesNextTime(t *testing.T) {
 	s, disk, old := archivedWithRow(t, filepath.Join(t.TempDir(), "agentry.db"), acceptEvery, events.TaskRenamed, holdingSecret)
 	stuck := refusingRemove{disk, func(hash string) bool { return hash == old.Text("archive") }}
@@ -430,11 +438,42 @@ func TestAnOldBlobThatWontDeleteGoesNextTime(t *testing.T) {
 		t.Fatal("the old blob is gone")
 	}
 
+	if count, rejection, err := s.PreviewArchived("task-1", secret, disk); count != 0 || err != nil || rejection == nil || rejection.Reason != "no row of task-1 holds the secret" {
+		t.Errorf("PreviewArchived: %d, %v, %v, want no row holding it", count, rejection, err)
+	}
+	if !disk.Has(old.Text("archive")) {
+		t.Fatal("PreviewArchived deleted the old blob")
+	}
 	_, rejection, err = s.RedactArchived("task-1", secret, you, "", summary, disk)
 	if want := "no row of task-1 holds the secret"; err != nil || rejection == nil || rejection.Reason != want {
 		t.Errorf("redacting again: %v, %v, want %q", rejection, err, want)
 	}
 	if got, want := blobsIn(t, disk), []string{marker.Text("archive")}; !reflect.DeepEqual(got, want) {
 		t.Errorf("the blobs on disk are %v, want the marker's %v alone", got, want)
+	}
+}
+
+// PreviewArchived counts the rows RedactArchived would rewrite, read
+// through the marker's blob, and writes nothing: the same rows and blobs.
+func TestPreviewArchivedCountsTheRowsInTheBlob(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentry.db")
+	s, blobs, _ := archivedWithRow(t, path, acceptEvery, events.TaskRenamed, holdingSecret)
+	before, kept := rowsAt(t, path), blobsIn(t, blobs)
+	if count, rejection, err := s.Preview("task-1", secret); count != 0 || err != nil || rejection == nil || rejection.Reason != ArchivedRedactionRefusal("task-1") {
+		t.Errorf("Preview of an archived task: %d, %v, %v, want refused as archived", count, rejection, err)
+	}
+	count, rejection, err := s.PreviewArchived("task-1", secret, blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if after := rowsAt(t, path); !reflect.DeepEqual(after, before) || !reflect.DeepEqual(blobsIn(t, blobs), kept) {
+		t.Errorf("PreviewArchived changed the log or the blobs:\n%v\n%v", before, after)
+	}
+	redaction, rejection, err := s.RedactArchived("task-1", secret, you, "", summary, blobs)
+	if rejection != nil || err != nil {
+		t.Fatal(rejection, err)
+	}
+	if positions := redaction.Numbers("positions"); count != 1 || len(positions) != count {
+		t.Errorf("PreviewArchived counted %d rows, RedactArchived rewrote %v; want the one row", count, positions)
 	}
 }

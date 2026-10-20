@@ -80,10 +80,10 @@ func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 	dir := t.TempDir()
 	s, state := Open(t, filepath.Join(dir, "agentry.db"))
 	withPasted(t, s)
-	if count, err := s.Matches("task-1", pasted); count != 4 || err != nil {
+	if count, rejection, err := s.Preview("task-1", pasted); count != 4 || rejection != nil || err != nil {
 		t.Fatalf("the rows holding the secret: %d, %v, want the command, direction, report and rejection", count, err)
 	}
-	if count, err := s.Matches("task-1", short); count != 1 || err != nil {
+	if count, rejection, err := s.Preview("task-1", short); count != 1 || rejection != nil || err != nil {
 		t.Fatalf("the rows holding the short secret: %d, %v, want its direction", count, err)
 	}
 	// Into the file itself, so the rewrite changes pages already there: in
@@ -200,7 +200,8 @@ func TestASnapshotFromBeforeARedactionGoesOnToTheRedactedLog(t *testing.T) {
 
 // Test 4: an archived task and an erased one are refused for that, each
 // saying why, before what their live rows hold: whether a marker holds
-// the secret or no row does. The log is as it was.
+// the secret or no row does. Preview says the same, and the log is as it
+// was.
 func TestAnArchivedOrErasedTaskIsNotRedacted(t *testing.T) {
 	s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	twoTasks(t, s)
@@ -214,6 +215,9 @@ func TestAnArchivedOrErasedTaskIsNotRedacted(t *testing.T) {
 		{"task-2", "not-there", "task-2 is erased: there is nothing left to redact"},
 	} {
 		last := s.LastPosition()
+		if count, rejection, err := s.Preview(c.stream, c.secret); count != 0 || err != nil || rejection == nil || rejection.Reason != c.want {
+			t.Errorf("previewing %q in %s: %d, %v, %v, want %q", c.secret, c.stream, count, rejection, err, c.want)
+		}
 		if _, rejection, err := s.Redact(c.stream, c.secret, you, ""); err != nil || rejection == nil || rejection.Reason != c.want {
 			t.Errorf("redacting %q in %s: %v, %v, want %q", c.secret, c.stream, rejection, err, c.want)
 		}
@@ -225,7 +229,8 @@ func TestAnArchivedOrErasedTaskIsNotRedacted(t *testing.T) {
 
 // Test 5: with the rules on, as serve has them, a row with the secret in a
 // key is refused for that, not for its redaction naming no fields, whether
-// or not a value holds it too, and the log is as it was.
+// or not a value holds it too, and the log is as it was. Preview gives
+// the same reason, with no rows.
 func TestARowWithTheSecretInAKeyIsRefusedBeforeTheRules(t *testing.T) {
 	for name, extra := range map[string]any{
 		"only the key": map[string]any{pasted: "x"},
@@ -237,15 +242,15 @@ func TestARowWithTheSecretInAKeyIsRefusedBeforeTheRules(t *testing.T) {
 		) {
 			mustPropose(t, s, p)
 		}
-		if count, err := s.Matches("task-1", pasted); count != 1 || err != nil {
-			t.Errorf("%s: Matches %d, %v, want 1", name, count, err)
+		last := s.LastPosition()
+		want := "the row at " + strconv.FormatInt(last, 10) + " holds the secret in a key, which redacting doesn't rewrite"
+		if count, rejection, err := s.Preview("task-1", pasted); count != 0 || err != nil || rejection == nil || rejection.Reason != want {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", name, count, rejection, err, want)
 		}
 		before, err := s.Stream("task-1")
 		if err != nil {
 			t.Fatal(err)
 		}
-		last := s.LastPosition()
-		want := "the row at " + strconv.FormatInt(last, 10) + " holds the secret in a key, which redacting doesn't rewrite"
 		if _, rejection, err := s.Redact("task-1", pasted, you, ""); err != nil || rejection == nil || rejection.Reason != want {
 			t.Errorf("%s: %v, %v, want %q", name, rejection, err, want)
 		}
