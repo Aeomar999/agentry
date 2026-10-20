@@ -218,6 +218,16 @@ describe("New team: focus and scroll", () => {
     });
     expect(document.activeElement).toBe(teamName());
   });
+
+  test("the page doesn't scroll under the panel", () => {
+    const page = document.documentElement;
+    page.style.overflow = "auto";
+    openAt("/agents?team=new");
+    expect(page.style.overflow).toBe("hidden");
+    fireEvent.click(within(panel()).getByRole("button", { name: "Close" }));
+    expect(page.style.overflow).toBe("auto");
+    page.style.overflow = "";
+  });
 });
 
 describe("New team: Copy a template", () => {

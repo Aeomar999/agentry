@@ -5,7 +5,8 @@ import { IconButton } from "@/components/atoms/IconButton";
 
 // A modal side sheet over the right of the page: 680px wide, the whole
 // screen under 640px, over a flat scrim. Everything else on the page is
-// inert while it is open, so focus and the screen reader stay in it. Focus goes to returnTo when it closes,
+// inert while it is open, so focus and the screen reader stay in it, and
+// the page doesn't scroll under it. Focus goes to returnTo when it closes,
 // or back where it was when it opened. The body scrolls between the title
 // and the footer. canClose false turns Close and Esc off, as while it saves.
 interface SideSheetProps {
@@ -24,6 +25,7 @@ export function SideSheet({ title, returnTo, onClose, canClose = true, footer, c
   const [opener] = useState(() => document.activeElement);
   useInertBehind(sheet); // first, so the page is no longer inert when focus returns to it
   useFocusReturn(sheet, returnTo, opener);
+  useScrollLock();
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => event.key === "Escape" && canClose && onClose();
@@ -79,4 +81,18 @@ function useFocusReturn(sheet: RefObject<HTMLElement | null>, returnTo: RefObjec
       if (target instanceof HTMLElement) target.focus();
     };
   }, [sheet, returnTo, opener]);
+}
+
+// useScrollLock stops the page scrolling while the sheet is open: inert
+// doesn't stop the wheel over the scrim.
+function useScrollLock() {
+  useEffect(() => {
+    const page = document.scrollingElement ?? document.documentElement;
+    if (!(page instanceof HTMLElement)) return;
+    const was = page.style.overflow;
+    page.style.overflow = "hidden";
+    return () => {
+      page.style.overflow = was;
+    };
+  }, []);
 }
