@@ -10,16 +10,16 @@ import { RoleBadge } from "@/components/molecules/StatusBadges";
 import { Banner } from "@/components/molecules/Banner";
 import { Dialog } from "@/components/molecules/Dialog";
 import { Mono } from "@/components/molecules/Mono";
-import { MissingProfilesOffer } from "@/components/molecules/MissingProfilesOffer";
 import { AgentName } from "@/components/molecules/AgentName";
 import { SegmentedControl } from "@/components/molecules/SegmentedControl";
 import { useToast } from "@/components/organisms/Toasts";
+import { AddTeam } from "@/components/organisms/AddTeam";
 import { EditTeamPanel } from "@/components/organisms/EditTeamPanel";
 import { TeamPanel } from "@/components/organisms/TeamPanel";
 import { UseForEveryoneNotice } from "@/components/organisms/UseForEveryoneNotice";
 import { api } from "@/api/client";
 import { runsOn } from "@/lib/machines";
-import { addTeam, missingProfilesOf, teamOf, teamsOf } from "@/lib/teams";
+import { teamOf, teamsOf } from "@/lib/teams";
 import { profileInForce } from "@/lib/profiles";
 import type { Agent, Policy, TeamTemplate } from "@/api/types";
 import { useResource } from "@/live/use-resource";
@@ -78,7 +78,8 @@ export function AgentsPage() {
   const { data, error, reload } = useResource<Agent[]>("/api/agents");
   const agents = data ?? [];
   const teams = teamsOf(agents);
-  const templates = useResource<TeamTemplate[]>("/api/teams/templates").data ?? [];
+  const templatesRead = useResource<TeamTemplate[]>("/api/teams/templates");
+  const templates = templatesRead.data ?? [];
   const policy = useResource<Policy>("/api/policy");
   // A change to the policy changes the profiles in force, so both are read again.
   const reloadAll = () => Promise.all([reload(), policy.reload()]);
@@ -210,6 +211,7 @@ export function AgentsPage() {
             existing={teams.map((t) => t.team)}
             policyHash={policy.data?.hash ?? ""}
             onBuild={buildTeam}
+            onTemplatesChanged={templatesRead.reload}
             onAdded={(team) => {
               setAdding(false);
               reloadAll();
@@ -393,127 +395,6 @@ function Node({ agent }: { agent: Agent }) {
       </span>
       <span className="line-clamp-2 text-[11.5px] leading-4 text-ink-muted">{agent.description}</span>
     </Link>
-  );
-}
-
-// The ready-made teams, to add one: its agents come with prompts written
-// for its kind of work. A team whose profiles policy.toml lacks is refused
-// with the names of those profiles; it can then be added with them, in one
-// change of the policy made against the version the page saw (policyHash).
-// The offer shows in the refused team's card, next to what you clicked.
-interface AddTeamProps {
-  templates: TeamTemplate[];
-  existing: string[];
-  policyHash: string;
-  onBuild: (template?: string) => void; // opens the New team panel, blank or copying the template
-  onAdded: (team: string) => void;
-}
-
-interface NeedsProfiles {
-  team: string;
-  profiles: string[];
-}
-
-export function AddTeam({ templates, existing, policyHash, onBuild, onAdded }: AddTeamProps) {
-  const notify = useToast();
-  const [busy, setBusy] = useState("");
-  const [needs, setNeeds] = useState<NeedsProfiles | null>(null);
-  const offer = useRef<HTMLDivElement>(null);
-  // The card may be the last one, its offer below the dialog's fold.
-  useEffect(() => {
-    if (needs) offer.current?.scrollIntoView({ block: "nearest" });
-  }, [needs]);
-  async function add(team: string, addMissingProfiles = false) {
-    setBusy(team);
-    try {
-      await addTeam(team, addMissingProfiles ? policyHash : undefined);
-      notify("success", `Added the ${team} team`, "Pick it on New task; its coordinator takes the task.");
-      onAdded(team);
-    } catch (failure) {
-      const profiles = missingProfilesOf(failure);
-      if (profiles && !addMissingProfiles) setNeeds({ team, profiles });
-      else notify("danger", "The team wasn't added", (failure as Error).message);
-      setBusy("");
-    }
-  }
-  return (
-    <div className="flex flex-col gap-3">
-      <p className="text-[12px] text-ink-muted">
-        Each team comes with a coordinator and its specialists, each with a prompt written for the work. Add one as it is, change it first,
-        or build your own.
-      </p>
-      <h3 className="text-[12px] font-medium text-ink-secondary">Build your own</h3>
-      <div
-        role="group"
-        aria-label="A team of your own"
-        className="flex flex-col items-start gap-2 rounded-lg border border-divider bg-surface-0 p-4"
-      >
-        <span className="text-[14px] font-semibold text-ink-primary">A team of your own</span>
-        <p className="text-[12px] leading-5 text-ink-secondary">Start blank or copy a template, then change any agent.</p>
-        <Button size="sm" disabled={Boolean(busy)} onClick={() => onBuild()}>
-          Build a team
-        </Button>
-      </div>
-      <h3 className="text-[12px] font-medium text-ink-secondary">Built in</h3>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {templates.map((template) => {
-          const has = existing.includes(template.team);
-          return (
-            <div
-              key={template.team}
-              role="group"
-              aria-label={template.team}
-              className="flex flex-col gap-2 rounded-lg border border-divider bg-surface-0 p-4"
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-[14px] font-semibold text-ink-primary">{template.team}</span>
-                {has && <Badge>you have it</Badge>}
-              </span>
-              <p className="text-[12px] leading-5 text-ink-secondary">{template.description}</p>
-              <span className="flex flex-wrap gap-1.5">
-                {template.agents.map((a) => (
-                  <span
-                    key={a.name}
-                    title={a.description}
-                    className={cn(
-                      "rounded-sm px-1.5 font-mono text-[11px] leading-5",
-                      a.coordinates ? "bg-brand-soft text-brand" : "bg-surface-3 text-ink-secondary",
-                    )}
-                  >
-                    {a.name}
-                  </span>
-                ))}
-              </span>
-              <span className="mt-auto flex flex-wrap gap-2 pt-1">
-                <Button size="sm" variant={has ? "ghost" : "primary"} disabled={Boolean(busy)} onClick={() => add(template.team)}>
-                  {busy === template.team ? "Adding…" : has ? "Add another" : "Add this team"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Change it first, ${template.team}`}
-                  disabled={Boolean(busy)}
-                  onClick={() => onBuild(template.id)}
-                >
-                  Change it first
-                </Button>
-              </span>
-              {needs?.team === template.team && (
-                <div ref={offer}>
-                  <MissingProfilesOffer
-                    team={needs.team}
-                    profiles={needs.profiles}
-                    adding={busy === needs.team}
-                    disabled={Boolean(busy)}
-                    onAdd={() => add(needs.team, true)}
-                  />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 

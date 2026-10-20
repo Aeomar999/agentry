@@ -76,3 +76,16 @@ export function templateGroups(templates: TeamTemplate[]): { yours: TeamTemplate
     .map(({ template }) => template);
   return { yours, builtIn: templates.filter((template) => !template.userMade) };
 }
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// savedLine is where and when your template was saved, as its card says
+// it: `12 Oct`, with the year when it isn't this one. One saved by an older
+// Agentry names no team; one with no date has no line.
+export function savedLine(template: TeamTemplate, now = new Date()): string | undefined {
+  const saved = new Date(template.savedAt ?? "");
+  if (Number.isNaN(saved.getTime())) return undefined;
+  const year = saved.getFullYear() === now.getFullYear() ? "" : ` ${saved.getFullYear()}`;
+  const date = `${saved.getDate()} ${MONTHS[saved.getMonth()]}${year}`;
+  return template.from ? `Saved ${date} from the ${template.from} team.` : `Saved ${date}.`;
+}

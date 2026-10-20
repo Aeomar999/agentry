@@ -5,6 +5,7 @@ import {
   checkTemplateName,
   deleteTemplate,
   importTemplate,
+  savedLine,
   saveAsTemplate,
   templateExportURL,
   templateGroups,
@@ -156,5 +157,26 @@ describe("templateGroups", () => {
 
   test("with none of yours, yours is empty", () => {
     expect(templateGroups([template("software")])).toEqual({ yours: [], builtIn: [template("software")] });
+  });
+});
+
+describe("savedLine", () => {
+  const now = new Date(2026, 9, 20, 12);
+  const local = (year: number, month: number, day: number) => new Date(year, month, day, 9).toISOString();
+
+  test("says the day and month this year, and the team it came from", () => {
+    expect(savedLine(template("papers", { savedAt: local(2026, 9, 12), from: "Papers" }), now)).toBe("Saved 12 Oct from the Papers team.");
+  });
+
+  test("adds the year outside this one", () => {
+    expect(savedLine(template("desk", { savedAt: local(2025, 9, 12), from: "Desk" }), now)).toBe("Saved 12 Oct 2025 from the Desk team.");
+  });
+
+  test("names no team for one saved by an older Agentry", () => {
+    expect(savedLine(template("orders", { savedAt: local(2026, 0, 3) }), now)).toBe("Saved 3 Jan.");
+  });
+
+  test("is none without a date", () => {
+    expect(savedLine(template("software"), now)).toBeUndefined();
   });
 });
