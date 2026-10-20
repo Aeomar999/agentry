@@ -44,7 +44,7 @@ export interface LoadedTeam extends TeamDraft {
 // What the checks know besides the roster: the built-in templates (whose
 // team names are taken), the policy's profiles, and the engines Agentry runs.
 export interface TeamRules {
-  templates: Pick<TeamTemplate, "team">[];
+  templates: Pick<TeamTemplate, "team" | "userMade">[]; // a built-in one's team name is never free
   policy: Pick<Policy, "profiles" | "defaults">;
   engines: string[];
 }
@@ -82,8 +82,9 @@ export function blankTeam(roster: Agent[]): TeamDraft {
 }
 
 // copyTemplate is every agent of the template, prompts included, under the
-// template's team name with a number, since a built-in's own team name is
-// never free. Names you have already get a number, as the server's AddTeam
+// template's team name: with a number for a built-in one, whose own team
+// name is never free, and for one of yours when you have a team of its
+// name. Names you have already get a number, as the server's AddTeam
 // gives them.
 export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft {
   const taken = roster.map((agent) => agent.name);
@@ -92,7 +93,7 @@ export function copyTemplate(template: TeamTemplate, roster: Agent[]): TeamDraft
     taken.push(name);
     return { ...agent, key: nextKey(), name };
   });
-  return { team: freeTeamName(template.team, roster), agents };
+  return { team: freeTeamName(template.team, roster, template.userMade), agents };
 }
 
 // loadTeam is the team named, in any case, as a draft to edit: its agents,
@@ -184,8 +185,9 @@ function freeName(name: string, taken: string[]): string {
   return free;
 }
 
-function freeTeamName(team: string, roster: Agent[]): string {
+function freeTeamName(team: string, roster: Agent[], mayBeFree: boolean): string {
   const teams = roster.map(teamOf);
+  if (mayBeFree && !teams.some((other) => sameName(other, team))) return team;
   let n = 2;
   while (teams.some((other) => sameName(other, `${team} ${n}`))) n++;
   return `${team} ${n}`;
@@ -226,7 +228,7 @@ function checkTeamName(team: string, roster: Agent[], templates: TeamRules["temp
       summary: `Team name: you have a team called ${yours} already`,
     };
   }
-  const builtIn = templates.find((template) => sameName(template.team, team));
+  const builtIn = templates.find((template) => !template.userMade && sameName(template.team, team));
   if (builtIn) {
     return {
       message: `${builtIn.team} is a built-in team's name. Pick another, such as ${builtIn.team} 2.`,

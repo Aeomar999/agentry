@@ -106,7 +106,11 @@ const policy: Pick<Policy, "profiles" | "defaults"> = {
 };
 
 const rules: TeamRules = {
-  templates: [{ team: "Software" }, { team: "Writing" }],
+  templates: [
+    { team: "Software", userMade: false },
+    { team: "Writing", userMade: false },
+    { team: "Papers", userMade: true },
+  ],
   policy,
   engines: ["claude", "codex"],
 };
@@ -201,6 +205,12 @@ describe("copyTemplate", () => {
     expect(copyTemplate(template, [agent("x", "writing 2"), agent("y", "Writing 3")]).team).toBe("Writing 4");
   });
 
+  test("keeps the name of a template of yours, numbered only when you have a team of it", () => {
+    const yours: TeamTemplate = { ...template, team: "Papers", userMade: true };
+    expect(copyTemplate(yours, []).team).toBe("Papers");
+    expect(copyTemplate(yours, [agent("x", "papers")]).team).toBe("Papers 2");
+  });
+
   test("numbers names you have already, as the server's AddTeam does", () => {
     const team = copyTemplate(template, [agent("editor", "Docs"), agent("editor-2"), agent("writer")]);
     expect(team.agents.map((a) => a.name)).toEqual(["editor-3", "writer-2"]);
@@ -246,6 +256,10 @@ describe("checkTeam", () => {
     expect(problemsOf({ ...draft(), team: "WRITING" })).toEqual([
       ["Writing is a built-in team's name. Pick another, such as Writing 2.", "Team name: Writing is a built-in team's name"],
     ]);
+  });
+
+  test("team name a template of yours has is free", () => {
+    expect(problemsOf({ ...draft(), team: "Papers" })).toEqual([]);
   });
 
   test("no coordinator", () => {
