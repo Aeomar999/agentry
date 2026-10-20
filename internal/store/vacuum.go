@@ -17,8 +17,12 @@ const incremental = 2
 
 // GiveBackSpace gives the file's free pages back to the disk, and empties
 // the WAL into the file, so neither keeps the pages of the rows an
-// archiving round, or an erasure, deleted. A reader in the middle of a read keeps the WAL
-// from being emptied: the next round empties it.
+// archiving round or an erasure deleted, or the old text of rows a
+// redaction rewrote. A reader in the middle of a read keeps the WAL from
+// being emptied, so Erase and Redact, which run it themselves, may leave
+// it full; then it is run again: by the archiver after a round that
+// archived a task, by serve once at start, and by the erase and redact
+// routes before they answer (step 10d2).
 func (s *Store) GiveBackSpace() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

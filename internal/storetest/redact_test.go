@@ -1,6 +1,7 @@
 package storetest
 
 import (
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"reflect"
@@ -110,6 +111,55 @@ func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
 	}
+}
+
+// Test 1b: a reader in the middle of a read keeps Redact from emptying the
+// WAL, which still holds the old rows, and Redact says so; once the reader
+// is done, GiveBackSpace, run again as serve and the routes run it,
+// empties it, and the secret is in no byte on disk.
+func TestASecretAReaderKeptInTheWALGoesWhenTheSpaceIsGivenBack(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agentry.db")
+	s, _ := Open(t, path)
+	withPasted(t, s)
+	reading := readingIn(t, path)
+	_, rejection, err := s.Redact("task-1", pasted, you, "A token pasted by mistake.")
+	if rejection != nil || err == nil || !strings.Contains(err.Error(), "the old text may stay in the WAL") {
+		t.Fatalf("redacting with a reader in the WAL: %v, %v, want redacted and an error saying so", rejection, err)
+	}
+	if holding := filesHolding(t, dir, pasted); !slices.Contains(holding, "agentry.db-wal") {
+		t.Fatalf("with a reader in the WAL, the secret is in %v: want the WAL, or this test shows nothing", holding)
+	}
+	if err := reading.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.GiveBackSpace(); err != nil {
+		t.Fatal(err)
+	}
+	if holding := filesHolding(t, dir, pasted); len(holding) != 0 {
+		t.Errorf("once the space is given back, the secret is still in %v", holding)
+	}
+}
+
+// readingIn is a read under way on the log at path, from a connection of
+// its own, which keeps a checkpoint from emptying the WAL until it ends.
+func readingIn(t *testing.T, path string) *sql.Tx {
+	t.Helper()
+	db, err := sql.Open(store.Driver, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	reading, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { reading.Rollback() })
+	var rows int
+	if err := reading.QueryRow(`SELECT COUNT(*) FROM events`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	return reading
 }
 
 // Test 2: the state after a redaction is the one a replay of the

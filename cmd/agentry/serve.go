@@ -173,6 +173,11 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		return err
 	}
 	defer log.Close()
+	// An erasure or a redaction a reader kept from emptying the WAL left
+	// the old text there, which a crash can carry over to this start.
+	if err := log.GiveBackSpace(); err != nil {
+		slog.Warn("agentry: the space can't all be given back yet", "err", err)
+	}
 	snapshots := current.NewSnapshotWriter(snapshot, build, state, log)
 	snapshots.Start()
 	defer snapshots.Close() // the last snapshot, before the log closes

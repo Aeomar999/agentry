@@ -401,6 +401,66 @@ func withADoneTask(t *testing.T, dataDir, id string) {
 	}
 }
 
+// serve empties a WAL that a crash left holding old text as it starts: an
+// erasure or a redaction a reader kept from emptying it leaves the old
+// rows there, and only an archiving round would empty it otherwise. The
+// crash is a copy of the log and its WAL taken while it is open, and the
+// text is in a done task's summary, in overflow pages, which the writes of
+// the start don't put back in the WAL.
+func TestServeEmptiesTheWALACrashLeft(t *testing.T) {
+	const left = "left-in-the-wal-5e1d"
+	running := t.TempDir()
+	log, state := openLog(t, running)
+	defer log.Close()
+	if err := seedAgents(log, state); err != nil {
+		t.Fatal(err)
+	}
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "A task", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-1", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": strings.Repeat("Done. ", 2000) + left, "moved": true}},
+		{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Another", "repo": "/r", "coordinator": "tech-lead"}},
+		{Stream: "task-2", Actor: you, Type: events.TaskDone, Data: map[string]any{"summary": "Done.", "moved": true}},
+	} {
+		if _, rejection, err := log.Propose(p); rejection != nil || err != nil {
+			t.Fatalf("%s: %v, %v", p.Type, rejection, err)
+		}
+	}
+	dataDir := t.TempDir()
+	for _, name := range []string{"agentry.db", "agentry.db-wal"} {
+		content, err := os.ReadFile(filepath.Join(running, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dataDir, name), content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wal := filepath.Join(dataDir, "agentry.db-wal")
+	if !fileHolds(t, wal, left) {
+		t.Fatal("the WAL the crash left doesn't hold the text, so this test shows nothing")
+	}
+	stop := startServing(t, serveOptions{dataDir: dataDir})
+	if fileHolds(t, wal, left) {
+		t.Error("serve started with the old text still in the WAL")
+	}
+	stop()
+}
+
+// fileHolds says whether the file at path holds text; one that isn't there
+// holds nothing.
+func fileHolds(t *testing.T, path, text string) bool {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Contains(string(content), text)
+}
+
 // isArchived replays the log in dataDir and says whether it holds the task
 // as its summary alone.
 func isArchived(t *testing.T, dataDir, id string) bool {
