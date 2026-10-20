@@ -29,16 +29,24 @@ func Open(t testing.TB, path string) (*store.Store, *current.State) {
 // serve does; under a catalogue without them, idea streams are foreign.
 func OpenWith(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
 	t.Helper()
-	state := NewState(catalogue)
-	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
-	if err != nil {
-		t.Fatal(err)
-	}
+	s, state := openUnchecked(t, path, catalogue)
 	t.Cleanup(func() { s.Close() })
 	t.Cleanup(func() { // cleanups run last first: before the close
 		CheckEqual(t, s, state)
 		CheckSnapshots(t, path, catalogue, s.LastPosition())
 	})
+	return s, state
+}
+
+// openUnchecked is OpenWith with no checks when the test ends, and no
+// close: the test closes the store itself.
+func openUnchecked(t testing.TB, path string, catalogue *events.Catalogue) (*store.Store, *current.State) {
+	t.Helper()
+	state := NewState(catalogue)
+	s, err := store.Open(path, catalogue, state, func(p events.Proposal) *events.Rejection { return rules.Check(p, state, catalogue, ideas.Feature()) })
+	if err != nil {
+		t.Fatal(err)
+	}
 	return s, state
 }
 

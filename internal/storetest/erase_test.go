@@ -3,6 +3,8 @@ package storetest
 import (
 	"bytes"
 	"compress/gzip"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +22,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
+	"modernc.org/sqlite"
 )
 
 // Erasing, as the state and the files on disk see it
@@ -215,5 +219,120 @@ func TestAnErasedTasksIDIsNeverTakenAgain(t *testing.T) {
 	_, restarted := Open(t, path)
 	if next := restarted.NextTask(); next != "task-4" {
 		t.Errorf("the restarted state names %s next, want task-4", next)
+	}
+}
+
+// archivedAndKept seeds the roster, task-1 with planted in its title and
+// task-2 with kept in its, both on the same pages as the agents' rows.
+func archivedAndKept(t *testing.T, s *store.Store, kept string) {
+	t.Helper()
+	for _, p := range append(agents.SeedProposals(nil),
+		events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "One " + planted, "repo": "/r", "coordinator": "tech-lead"}},
+		events.Proposal{Stream: "task-2", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": "Two " + kept, "repo": "/r", "coordinator": "tech-lead"}},
+	) {
+		mustPropose(t, s, p)
+	}
+}
+
+// checkErased fails the test if planted is in any file under dir, or kept
+// in none, so the search reads the live rows.
+func checkErased(t *testing.T, dir, kept string) {
+	t.Helper()
+	if holding := filesHolding(t, dir, planted); len(holding) != 0 {
+		t.Errorf("after erasing, %q is still in %v", planted, holding)
+	}
+	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
+	}
+}
+
+// Test 6: a task archived and then erased is in no byte on disk. The
+// archive deleted its rows before the erasure, from pages that task-2's
+// and the agents' rows keep in use, so only secure_delete on for the
+// archive too zeroes them: the erasure zeroes only the marker.
+func TestAnArchivedTaskErasedIsInNoByteOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	s, state := Open(t, filepath.Join(dir, "agentry.db"))
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	const kept = "kept-5c2e"
+	archivedAndKept(t, s, kept)
+	ArchiveIn(t, s, state, "task-1", blobs)
+	erase(t, s, "task-1", blobs)
+	checkErased(t, dir, kept)
+}
+
+// Test 7: the same once the task has been archived, unarchived, reopened
+// and archived again: each archive and the unarchiving deleted rows.
+func TestATaskArchivedTwiceErasedIsInNoByteOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	s, state := Open(t, filepath.Join(dir, "agentry.db"))
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	const kept = "kept-8a61"
+	archivedAndKept(t, s, kept)
+	ArchiveIn(t, s, state, "task-1", blobs)
+	unarchive(t, s, "task-1", blobs)
+	reopen(t, s, "task-1")
+	ArchiveIn(t, s, state, "task-1", blobs)
+	erase(t, s, "task-1", blobs)
+	checkErased(t, dir, kept)
+}
+
+// Test 8: a folder whose task was archived by a build before secure_delete,
+// at schema version 1, opened by this one: the full VACUUM before the
+// migration clears the cells the archive freed, so the erasure leaves
+// nothing behind.
+func TestAnErasureClearsWhatAnOlderArchiveLeft(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "agentry.db")
+	blobs := sharedfiles.Disk{Dir: filepath.Join(dir, "files")}
+	const kept = "kept-e90d"
+	withoutSecureDelete(t, func() {
+		s, state := openUnchecked(t, path, events.Core())
+		archivedAndKept(t, s, kept)
+		ArchiveIn(t, s, state, "task-1", blobs)
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if holding := filesHolding(t, dir, planted); !slices.Contains(holding, "agentry.db") {
+		t.Fatalf("before the upgrade, %q is in %v: want the log, in the archive's freed cells", planted, holding)
+	}
+	atVersionOne(t, path)
+
+	s, _ := Open(t, path)
+	erase(t, s, "task-1", blobs)
+	checkErased(t, dir, kept)
+}
+
+// withoutSecureDelete runs body with the stores it opens opening as the
+// builds before secure_delete did: without it.
+func withoutSecureDelete(t *testing.T, body func()) {
+	t.Helper()
+	name := fmt.Sprintf("sqlite-insecure-%d", drivers.Add(1))
+	sql.Register(name, insecureDriver{})
+	previous := store.Driver
+	store.Driver = name
+	defer func() { store.Driver = previous }()
+	body()
+}
+
+type insecureDriver struct{}
+
+func (insecureDriver) Open(name string) (driver.Conn, error) {
+	return (&sqlite.Driver{}).Open(strings.Replace(name, "&_pragma=secure_delete(ON)", "", 1))
+}
+
+// atVersionOne takes the file at path back to schema version 1, before
+// erasing: migration 2's index dropped, so it runs again. Its delete
+// trigger stays, which migration 2 replaces anyway.
+func atVersionOne(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open(store.Driver, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`DROP INDEX events_erased; PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
 	}
 }
