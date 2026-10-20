@@ -300,6 +300,7 @@ Words the team uses that never show: *panel*, *row*, *accordion*, *draft*, *409*
 | Its card title | `A team of your own` | card group name | | |
 | Its card body | `Start blank or copy a template, then change any agent.` | | 2 lines | |
 | Its button | `Build a team` | | | |
+| Its second button | `Import a template` | | | Opens a picker for `.json` files. Busy `Importing…` |
 | Group 2 heading | `Your templates` | | | Only when you have one |
 | Card line | `Saved {date} from the {team} team.` | | | `{date}` as `12 Oct`; `12 Oct 2025` outside this year |
 | Delete template | `Delete template` | `Delete template, {template}` | | |
