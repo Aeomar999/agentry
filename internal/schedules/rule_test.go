@@ -120,6 +120,24 @@ func TestNextMakesOneSlotADay(t *testing.T) {
 	}
 }
 
+// Nuuk is UTC-02:00, and -01:00 from 01:00 UTC on 29 Mar 2026, when its
+// clocks skip from Saturday 23:00 to Sunday 00:00: a Saturday 23:30 slot
+// runs on Sunday.
+func TestNextMovesASlotInAGapEndingAtMidnightToTheNextDay(t *testing.T) {
+	daily := Rule{Every: "day", At: "23:30", Zone: "America/Nuuk"}
+	saturday := Rule{Every: "week", Days: []string{"sat"}, At: "23:30", Zone: "America/Nuuk"}
+	checkNext(t, []nextCase{
+		{"daily, Saturday's in the gap", daily, utc(3, 28, 12, 0), utc(3, 29, 1, 0)},
+		{"daily, and Sunday's as usual", daily, utc(3, 29, 1, 0), utc(3, 30, 0, 30)},
+		{"saturday, in the gap", saturday, utc(3, 28, 12, 0), utc(3, 29, 1, 0)},
+		{"saturday, the week after", saturday, utc(3, 29, 1, 0), utc(4, 5, 0, 30)},
+	})
+	got := saturday.Next(utc(3, 28, 12, 0))
+	if shown := got.Format("Mon 15:04 -07:00"); shown != "Sun 00:00 -01:00" {
+		t.Errorf("Saturday's 23:30 runs at %s, want Sun 00:00 -01:00", shown)
+	}
+}
+
 // A rule Next can't compute never fires.
 func TestNextOfAnUnusableRuleIsZero(t *testing.T) {
 	ok := Rule{Every: "week", Days: []string{"mon"}, At: "02:00", Zone: "Europe/London"}

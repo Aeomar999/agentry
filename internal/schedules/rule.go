@@ -25,7 +25,9 @@ var dayNames = map[string]time.Weekday{
 // Next is the rule's first slot strictly after after, as an instant in its
 // zone. A local time a clock change skips runs at the first instant after
 // the gap, and one it repeats at its first occurrence, so the rule makes
-// exactly one slot on each day it runs. A rule Next can't compute (an
+// one slot for each day it runs. That slot falls on the day itself, unless
+// a gap ends at midnight: then it runs at the next day's 00:00. A rule Next
+// can't compute (an
 // unknown every, day or zone, a bad at, a week with no days) returns the
 // zero time: such a schedule never fires.
 func (r Rule) Next(after time.Time) time.Time {

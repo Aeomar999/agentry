@@ -118,6 +118,11 @@ func TestEachTypeFoldsWhatItSays(t *testing.T) {
 			s.LastRun = Run{Task: "task-3", Reason: Unrecorded, Why: "made before a crash"}
 			s.Named = map[string]bool{"task-1": true, "task-3": true}
 		}},
+		{"skipped as unrecorded, with a slot", event(3, job, ScheduleSkipped, map[string]any{"slot": "2026-10-22T02:00:00+01:00",
+			"reason": Unrecorded, "task": "task-3"}), func(s *Schedule) {
+			s.LastRun = Run{Slot: slot("2026-10-22T02:00:00+01:00"), Task: "task-3", Reason: Unrecorded}
+			s.Named = map[string]bool{"task-1": true, "task-3": true}
+		}},
 		{"an unknown type", event(3, you, "schedule.renamed", map[string]any{"title": "Other"}), func(*Schedule) {}},
 	}
 	for _, c := range cases {
