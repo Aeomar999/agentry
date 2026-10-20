@@ -324,7 +324,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		DefaultRepo: o.repo, Clones: clones, Budget: o.budget, MaxTurns: o.maxTurns, Policy: agentPolicy, Desk: deskTerminal,
 		SetTheme: func(t string) { theme.Store(t) }, Fleet: fleet, Workers: links, PublicURL: o.publicURL, CA: serverCA,
 		NetworkURLs: network, LocalURL: localhostURL(listener.Addr(), scheme), Binary: self, Local: machines.Describe(), Blobs: blobs,
-		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push},
+		Features: installed, Logs: logs, Settings: settings.For, Worktrees: worktreeRoot, Push: push, StopSession: runner.Stop, Snapshots: snapshots},
 		hooks.HTTP(hooks.NewHandler(log, state, agentPolicy.Decide), hookToken), taskTerminal)
 	startPush(ctx, log, push, o.publicURL, func() []features.Waiting { return server.Waiting("") })
 	publicURL := cmp.Or(strings.TrimSuffix(o.publicURL, "/"), localURL(listener.Addr(), scheme))

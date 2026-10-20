@@ -24,29 +24,6 @@ import (
 // leaked is the secret in archived task-1, with text JSON escapes.
 const leaked = `ghp_"7c1e<a9`
 
-// writtenAs are the ways a file holds text: as it is, as a row's data
-// writes it, and as a blob writes that data again.
-func writtenAs(text string) []string {
-	once := strings.Trim(asJSON(text), `"`)
-	return []string{text, once, strings.Trim(asJSON(once), `"`)}
-}
-
-// holdingAny are the files under dir holding text in any way it is
-// written.
-func holdingAny(t *testing.T, dir, text string) []string {
-	t.Helper()
-	var holding []string
-	for _, form := range writtenAs(text) {
-		holding = append(holding, filesHolding(t, dir, form)...)
-	}
-	return holding
-}
-
-func asJSON(text string) string {
-	encoded, _ := json.Marshal(text) // a string always encodes
-	return string(encoded)
-}
-
 func redactArchived(t testing.TB, s *store.Store, state *current.State, id string, blobs store.ArchiveBlobs) events.Event {
 	t.Helper()
 	event, rejection, err := s.RedactArchived(id, leaked, you, "A token pasted by mistake.", summarise(state, id), blobs)
@@ -100,7 +77,7 @@ func TestARedactedArchivedTaskIsInNoByteOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := archivesOf(before)
-	if len(holdingAny(t, dir, leaked)) == 0 {
+	if len(HoldingAny(t, dir, leaked)) == 0 {
 		t.Fatalf("before redacting, %q is in no file", leaked)
 	}
 
@@ -121,10 +98,10 @@ func TestARedactedArchivedTaskIsInNoByteOnDisk(t *testing.T) {
 	if summary, _ := state.Summary("task-1"); summary.Title != "One "+store.Redacted {
 		t.Errorf("task-1's summary is titled %q, want it redacted", summary.Title)
 	}
-	if holding := holdingAny(t, dir, leaked); len(holding) != 0 {
+	if holding := HoldingAny(t, dir, leaked); len(holding) != 0 {
 		t.Errorf("after redacting, %q is still in %v", leaked, holding)
 	}
-	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+	if holding := FilesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
 	}
 
@@ -191,7 +168,7 @@ func TestARedactionDeletesEveryBlobTheTaskWasArchivedIn(t *testing.T) {
 			t.Errorf("the old blob %s is still there", hash)
 		}
 	}
-	if holding := holdingAny(t, dir, leaked); len(holding) != 0 {
+	if holding := HoldingAny(t, dir, leaked); len(holding) != 0 {
 		t.Errorf("after redacting, %q is still in %v", leaked, holding)
 	}
 }
@@ -246,7 +223,7 @@ func TestARedactedTaskLeftUnarchivedIsArchivedAndRedactedLater(t *testing.T) {
 	s.Close()
 	restarted, again := Open(t, path)
 	CheckEqual(t, restarted, again)
-	if holding := holdingAny(t, dir, leaked); len(holding) != 0 {
+	if holding := HoldingAny(t, dir, leaked); len(holding) != 0 {
 		t.Errorf("after redacting, %q is still in %v", leaked, holding)
 	}
 

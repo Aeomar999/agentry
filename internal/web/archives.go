@@ -99,6 +99,13 @@ func (a *archives) find(marker events.Event) *opened {
 	return found
 }
 
+// forget drops what the cache keeps of a stream, as once it is erased.
+func (a *archives) forget(stream string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.recent = slices.DeleteFunc(a.recent, func(o *opened) bool { return o.stream == stream })
+}
+
 // acceptedBefore is the accepted events before a position.
 func acceptedBefore(position int64, history []events.Event) []events.Event {
 	var accepted []events.Event

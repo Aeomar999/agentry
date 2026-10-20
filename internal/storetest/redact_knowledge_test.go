@@ -121,7 +121,7 @@ func TestARedactedKnowledgeSecretIsInNoByteOnDisk(t *testing.T) {
 	if err := s.GiveBackSpace(); err != nil {
 		t.Fatal(err)
 	}
-	if holding := holdingAny(t, dir, learntSecret); !slices.Contains(holding, "agentry.db") {
+	if holding := HoldingAny(t, dir, learntSecret); !slices.Contains(holding, "agentry.db") {
 		t.Fatalf("before redacting, the secret is in %v: want the log", holding)
 	}
 
@@ -129,7 +129,7 @@ func TestARedactedKnowledgeSecretIsInNoByteOnDisk(t *testing.T) {
 	if err := current.WriteSnapshot(filepath.Join(dir, "state.snapshot"), state, s, "build-1"); err != nil {
 		t.Fatal(err)
 	}
-	if holding := holdingAny(t, dir, learntSecret); len(holding) != 0 {
+	if holding := HoldingAny(t, dir, learntSecret); len(holding) != 0 {
 		t.Errorf("after redacting, the secret is still in %v", holding)
 	}
 }

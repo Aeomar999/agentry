@@ -1,16 +1,11 @@
 package storetest
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -43,35 +38,6 @@ func erase(t testing.TB, s *store.Store, id string, blobs store.Remover) events.
 // planted is in the erased tasks' words, and nowhere else.
 const planted = "planted-7f3a9c2e"
 
-// filesHolding are the files under dir whose bytes hold text, a gzipped
-// file's, such as an archive's blob, read unzipped too.
-func filesHolding(t *testing.T, dir, text string) []string {
-	t.Helper()
-	var holding []string
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return err
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if unzipped, err := gzip.NewReader(bytes.NewReader(content)); err == nil {
-			if content, err = io.ReadAll(unzipped); err != nil {
-				return fmt.Errorf("unzipping %s: %w", path, err)
-			}
-		}
-		if bytes.Contains(content, []byte(text)) {
-			holding = append(holding, filepath.Base(path))
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return holding
-}
-
 // Test 1: once a task is erased, a text planted in it is in no byte of
 // the log, its WAL, any blob or a snapshot written after. Two tasks hold
 // it: task-1 whole, with a direction long enough to need overflow pages,
@@ -95,7 +61,7 @@ func TestAnErasedTaskIsInNoByteOnDisk(t *testing.T) {
 		mustPropose(t, s, p)
 	}
 	ArchiveIn(t, s, state, "task-3", blobs)
-	if holding := filesHolding(t, dir, planted); len(holding) < 2 {
+	if holding := FilesHolding(t, dir, planted); len(holding) < 2 {
 		t.Fatalf("before erasing, %q is in %v: want the log and the blob", planted, holding)
 	}
 
@@ -104,10 +70,10 @@ func TestAnErasedTaskIsInNoByteOnDisk(t *testing.T) {
 	if err := current.WriteSnapshot(filepath.Join(dir, "state.snapshot"), state, s, "build-1"); err != nil {
 		t.Fatal(err)
 	}
-	if holding := filesHolding(t, dir, planted); len(holding) != 0 {
+	if holding := FilesHolding(t, dir, planted); len(holding) != 0 {
 		t.Errorf("after erasing, %q is still in %v", planted, holding)
 	}
-	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+	if holding := FilesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
 	}
 }
@@ -240,10 +206,10 @@ func archivedAndKept(t *testing.T, s *store.Store, kept string) {
 // in none, so the search reads the live rows.
 func checkErased(t *testing.T, dir, kept string) {
 	t.Helper()
-	if holding := filesHolding(t, dir, planted); len(holding) != 0 {
+	if holding := FilesHolding(t, dir, planted); len(holding) != 0 {
 		t.Errorf("after erasing, %q is still in %v", planted, holding)
 	}
-	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+	if holding := FilesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
 	}
 }
@@ -296,7 +262,7 @@ func TestAnErasureClearsWhatAnOlderArchiveLeft(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if holding := filesHolding(t, dir, planted); !slices.Contains(holding, "agentry.db") {
+	if holding := FilesHolding(t, dir, planted); !slices.Contains(holding, "agentry.db") {
 		t.Fatalf("before the upgrade, %q is in %v: want the log, in the archive's freed cells", planted, holding)
 	}
 	atVersionOne(t, path)

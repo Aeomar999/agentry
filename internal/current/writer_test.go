@@ -180,6 +180,46 @@ func TestWriteSoonWritesTheStateAsItIs(t *testing.T) {
 	}
 }
 
+// WriteNow returns once the state as it is now is on disk, with fewer
+// events than call for a snapshot and the interval not passed, as after an
+// erasure. It deletes a torn snapshot's copy too, and says when the write
+// fails. Once the writer has stopped it says so rather than waiting.
+func TestWriteNowWritesTheStateAndWaitsForIt(t *testing.T) {
+	logPath, _ := seededLog(t, someProposals()...)
+	var failing atomic.Bool
+	l := started(t, logPath, 1000, func(path string, write func(io.Writer) error) error {
+		if failing.Load() {
+			return errors.New("the disk is full")
+		}
+		return writeAtomically(path, write)
+	})
+	first := l.state.Position()
+	awaitSnapshot(t, l.path, first)
+	if err := os.WriteFile(l.path+".bad", []byte("a torn snapshot\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l.rename(t, "Renamed")
+	if err := l.writer.WriteNow(); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshotPosition(t, l.path); got != first+1 {
+		t.Errorf("after WriteNow the snapshot is at %d, want %d", got, first+1)
+	}
+	if _, err := os.Stat(l.path + ".bad"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the torn snapshot's copy is still there: %v", err)
+	}
+	failing.Store(true)
+	l.rename(t, "Not written")
+	if err := l.writer.WriteNow(); err == nil || !strings.Contains(err.Error(), "the disk is full") {
+		t.Errorf("a failed WriteNow: %v", err)
+	}
+	failing.Store(false)
+	l.writer.Close()
+	if err := l.writer.WriteNow(); err == nil {
+		t.Error("WriteNow after Close gave no error")
+	}
+}
+
 // Target 6: the writer holds no lock of the store's. A proposal commits,
 // and the state takes it, while a write is held part way through.
 func TestAProposalCommitsWhileTheWriterIsMidWrite(t *testing.T) {

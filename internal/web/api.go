@@ -531,7 +531,8 @@ func (s *Server) task(id string) (*tasks.Task, error) { return s.state.Task(id) 
 // shownTask is the task a read of its own is about, or nil once it has
 // answered that there is none, or that it can't be read. The state keeps
 // an archived task as its summary alone, so it is read back from its
-// history, and archived says what it was read from.
+// history, and archived says what it was read from. An erased task is
+// answered 410, with the day it was erased.
 func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.Task, archived *archivedRead) {
 	id := r.PathValue("task")
 	task, err := s.task(id)
@@ -541,6 +542,9 @@ func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.
 			return nil, nil
 		}
 		return archived.task, archived
+	}
+	if errors.Is(err, current.ErrErased) && s.gone(w, id) {
+		return nil, nil
 	}
 	if err != nil || task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)
@@ -555,11 +559,15 @@ func (s *Server) shownTask(w http.ResponseWriter, r *http.Request) (task *tasks.
 // first: its rows come back from its blob (Store.Unarchive), and the state
 // holds it whole again (docs/design/log-growth.md section 4, "Reopening an
 // archived task"). When the store refuses, its reason is the answer, with
-// 409, and when it fails, with 500; it has written nothing either way.
+// 409, and when it fails, with 500; it has written nothing either way. An
+// erased task is answered 410, as shownTask answers it.
 func (s *Server) reopenable(w http.ResponseWriter, id string) *tasks.Task {
 	task, err := s.task(id)
 	if errors.Is(err, current.ErrArchived) {
 		return s.unarchive(w, id)
+	}
+	if errors.Is(err, current.ErrErased) && s.gone(w, id) {
+		return nil
 	}
 	if err != nil || task == nil {
 		http.Error(w, "no such task", http.StatusNotFound)

@@ -93,7 +93,7 @@ func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, secret := range []string{pasted, short} {
-		if holding := filesHolding(t, dir, secret); !slices.Contains(holding, "agentry.db") {
+		if holding := FilesHolding(t, dir, secret); !slices.Contains(holding, "agentry.db") {
 			t.Fatalf("before redacting, %q is in %v: want the log", secret, holding)
 		}
 	}
@@ -104,11 +104,11 @@ func TestARedactedSecretIsInNoByteOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, secret := range []string{pasted, short} {
-		if holding := filesHolding(t, dir, secret); len(holding) != 0 {
+		if holding := FilesHolding(t, dir, secret); len(holding) != 0 {
 			t.Errorf("after redacting, %q is still in %v", secret, holding)
 		}
 	}
-	if holding := filesHolding(t, dir, kept); len(holding) == 0 {
+	if holding := FilesHolding(t, dir, kept); len(holding) == 0 {
 		t.Errorf("task-2's %q is in no file: the search can't see the live rows", kept)
 	}
 }
@@ -127,7 +127,7 @@ func TestASecretAReaderKeptInTheWALGoesWhenTheSpaceIsGivenBack(t *testing.T) {
 	if rejection != nil || err == nil || !strings.Contains(err.Error(), "the old text may stay in the WAL") {
 		t.Fatalf("redacting with a reader in the WAL: %v, %v, want redacted and an error saying so", rejection, err)
 	}
-	if holding := filesHolding(t, dir, pasted); !slices.Contains(holding, "agentry.db-wal") {
+	if holding := FilesHolding(t, dir, pasted); !slices.Contains(holding, "agentry.db-wal") {
 		t.Fatalf("with a reader in the WAL, the secret is in %v: want the WAL, or this test shows nothing", holding)
 	}
 	if err := reading.Rollback(); err != nil {
@@ -136,7 +136,7 @@ func TestASecretAReaderKeptInTheWALGoesWhenTheSpaceIsGivenBack(t *testing.T) {
 	if err := s.GiveBackSpace(); err != nil {
 		t.Fatal(err)
 	}
-	if holding := filesHolding(t, dir, pasted); len(holding) != 0 {
+	if holding := FilesHolding(t, dir, pasted); len(holding) != 0 {
 		t.Errorf("once the space is given back, the secret is still in %v", holding)
 	}
 }
@@ -240,10 +240,10 @@ func TestASnapshotFromBeforeARedactionGoesOnToTheRedactedLog(t *testing.T) {
 	if err := current.WriteSnapshot(newer, resumed, again, "build-1"); err != nil {
 		t.Fatal(err)
 	}
-	if holding := filesHolding(t, filepath.Dir(newer), pasted); len(holding) != 0 {
+	if holding := FilesHolding(t, filepath.Dir(newer), pasted); len(holding) != 0 {
 		t.Errorf("a snapshot of the resumed state holds the secret: %v", holding)
 	}
-	if holding := filesHolding(t, dir, pasted); !reflect.DeepEqual(holding, []string{"older.snapshot"}) {
+	if holding := FilesHolding(t, dir, pasted); !reflect.DeepEqual(holding, []string{"older.snapshot"}) {
 		t.Errorf("the secret is in %v, want only the snapshot from before", holding)
 	}
 }

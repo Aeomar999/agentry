@@ -1,8 +1,11 @@
 package current
 
 import (
+	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
+	"os"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/store"
@@ -31,9 +34,10 @@ type SnapshotWriter struct {
 	after      func(time.Duration) <-chan time.Time                 // the clock
 	atomically func(path string, write func(io.Writer) error) error // how a file is written
 
-	tried   int64         // the position of the last snapshot written or tried
-	written int64         // the position of the snapshot on disk, 0 for none of this state's
-	asked   chan struct{} // WriteSoon's, holding one ask
+	tried   int64           // the position of the last snapshot written or tried
+	written int64           // the position of the snapshot on disk, 0 for none of this state's
+	asked   chan struct{}   // WriteSoon's, holding one ask
+	now     chan chan error // WriteNow's: each ask waits for its write's error
 	stop    chan struct{}
 	done    chan struct{}
 }
@@ -46,7 +50,7 @@ func NewSnapshotWriter(path, build string, state *State, log *store.Store) *Snap
 	resumed := state.Resumed()
 	return &SnapshotWriter{path: path, build: build, state: state, log: log,
 		every: snapshotEvery, interval: snapshotInterval, after: time.After, atomically: writeAtomically,
-		tried: resumed, written: resumed, asked: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
+		tried: resumed, written: resumed, asked: make(chan struct{}, 1), now: make(chan chan error), stop: make(chan struct{}), done: make(chan struct{})}
 }
 
 // WriteSoon asks for a snapshot of the state as it is now, without waiting
@@ -56,6 +60,21 @@ func (w *SnapshotWriter) WriteSoon() {
 	select {
 	case w.asked <- struct{}{}:
 	default:
+	}
+}
+
+// WriteNow writes a snapshot of the state as it is now and waits for it,
+// as after an erasure or a redaction: the snapshot on disk may hold the
+// text taken out of the log (docs/design/log-growth.md section 5). It
+// deletes the copy a torn snapshot left beside it too, which may hold it
+// as well. The error says the old text may stay in either file.
+func (w *SnapshotWriter) WriteNow() error {
+	written := make(chan error, 1)
+	select {
+	case w.now <- written:
+		return <-written
+	case <-w.done:
+		return errors.New("the snapshot writer has stopped")
 	}
 }
 
@@ -89,6 +108,10 @@ func (w *SnapshotWriter) run() {
 				continue
 			}
 		case <-w.asked:
+		case written := <-w.now:
+			written <- errors.Join(w.write(), w.removeBad())
+			timer = w.after(w.interval)
+			continue
 		case <-timer:
 			if w.state.Position() == w.tried {
 				timer = w.after(w.interval)
@@ -102,16 +125,26 @@ func (w *SnapshotWriter) run() {
 
 // write writes a snapshot of the state as it is now. A new state, which
 // has no event yet, has nothing to write.
-func (w *SnapshotWriter) write() {
+func (w *SnapshotWriter) write() error {
 	held := w.state.copy()
 	if held.position == 0 {
-		return
+		return nil
 	}
 	w.tried = held.position
 	err := w.atomically(w.path, func(file io.Writer) error { return writeCopy(file, held, w.log, w.build) })
 	if err != nil {
 		slog.Warn("current: the snapshot can't be written, so the old one stays", "path", w.path, "position", held.position, "err", err)
-		return
+		return err
 	}
 	w.written = held.position
+	return nil
+}
+
+// removeBad deletes the torn snapshot Restore kept beside the path, if
+// there is one.
+func (w *SnapshotWriter) removeBad() error {
+	if err := os.Remove(w.path + ".bad"); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }

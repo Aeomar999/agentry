@@ -92,6 +92,27 @@ func (t *Task) applyFiles(e events.Event) {
 	}
 }
 
+// FileHashes are the blobs of shared files an event names: a file.added's,
+// and each of a files.fetched's. Erasing a task deletes those no other
+// task's event names (docs/design/log-growth.md section 5).
+func FileHashes(e events.Event) []string {
+	switch e.Type {
+	case events.FileAdded:
+		return []string{e.Text("hash")}
+	case events.FilesFetched:
+		var hashes []string
+		files, _ := e.Data["files"].([]any)
+		for _, item := range files {
+			f, _ := item.(map[string]any)
+			if hash, _ := f["hash"].(string); hash != "" {
+				hashes = append(hashes, hash)
+			}
+		}
+		return hashes
+	}
+	return nil
+}
+
 func (t *Task) addFile(e events.Event, name, hash string, size int64, from string) {
 	if t.Files == nil {
 		t.Files = map[string]SharedFile{}

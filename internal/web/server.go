@@ -51,6 +51,8 @@ type Config struct {
 	Logs        map[string]features.Proposer // each feature's proposer from features.Checked, by its Name: all its routes may write through
 	Worktrees   string                       // where this machine keeps tasks' worktrees: a call tried on the Policy page runs in one there
 	Push        *webpush.Store               // the VAPID keys and the browsers subscribed to pushes; nil for none
+	StopSession func(task string)            // ends a task's agent session, wherever it runs (turns.Runner.Stop); nil for none
+	Snapshots   *current.SnapshotWriter      // writes the state's snapshot; nil for none
 
 	Settings func(feature string) features.Settings // each feature's own table in the settings file, for its routes; nil for none
 }
@@ -105,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/tasks/{task}/turns", s.setMaxTurns)
 	api("PUT /api/tasks/{task}/repo", s.changeRepo)
 	api("PUT /api/tasks/{task}/rank", s.rank)
+	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
 	api("GET /api/tasks/{task}/files", s.listFiles)
 	api("GET /api/tasks/{task}/file", s.readFile)
 	api("GET /api/tasks/{task}/commits", s.listCommits)
