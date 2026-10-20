@@ -79,11 +79,18 @@ export function AgentsPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
   const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
+  const created = useRef(""); // the team the New team panel created, whose heading takes focus as it goes
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
   const cursor = useRowCursor(view === "list" ? ordered.length : 0, (index) => open(ordered[index]));
   const building = params.get("team") === "new";
+  // Once the panel has gone, and with it the inert page, so the heading can take focus.
+  useEffect(() => {
+    if (building || !created.current) return;
+    document.getElementById(teamId(created.current))?.querySelector("h2")?.focus();
+    created.current = "";
+  }, [building]);
   // The panel's address keeps the view behind it.
   const showPanel = (panel: Record<string, string>, replace = false) =>
     setParams(view === "teams" ? panel : { view, ...panel }, { replace });
@@ -193,6 +200,7 @@ export function AgentsPage() {
           onClose={() => showPanel({}, true)}
           onCreated={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
+            created.current = team;
             notify(team);
           }}
         />
@@ -202,7 +210,7 @@ export function AgentsPage() {
 
   function notify(team: string) {
     setParams({}, { replace: true });
-    document.getElementById(`team-${team}`)?.scrollIntoView({ behavior: "smooth" });
+    document.getElementById(teamId(team))?.scrollIntoView({ behavior: "smooth" });
   }
 }
 
@@ -213,10 +221,15 @@ interface TeamHeadingProps {
   onRemove?: () => void; // none for the last team
 }
 
+const teamId = (team: string) => `team-${team}`;
+
+// TeamHeading's h2 can take focus (not by Tab), as when the New team panel has just created the team.
 function TeamHeading({ team, count, description, onRemove }: TeamHeadingProps) {
   return (
-    <div id={`team-${team}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%]">{team}</h2>
+    <div id={teamId(team)} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h2 tabIndex={-1} className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%]">
+        {team}
+      </h2>
       <span className="text-[12px] text-ink-muted">
         {count} {count === 1 ? "agent" : "agents"}
       </span>

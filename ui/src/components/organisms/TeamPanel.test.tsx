@@ -213,14 +213,16 @@ describe("New team: focus and scroll", () => {
     expect(document.activeElement).toBe(addTeam());
   });
 
-  test("creating the team puts focus on Add a team", async () => {
+  test("creating the team puts focus on its heading on the page", async () => {
     vi.mocked(api).mockResolvedValue({});
+    afterReload = { "/api/agents": [...ROSTER, agent("editor", "Writing 2", { coordinates: true })] };
     openAt("/agents");
     fireEvent.click(addTeam());
     fireEvent.click(screen.getByRole("button", { name: "Change it first, Writing" }));
     await create();
     expect(screen.queryByRole("dialog", { name: "New team" })).toBeNull();
-    expect(document.activeElement).toBe(addTeam());
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Writing 2" }));
+    expect(document.activeElement!.getAttribute("tabindex")).toBe("-1");
   });
 
   test("focus stays in Team name when the panel finishes loading", () => {
