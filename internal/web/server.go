@@ -108,6 +108,8 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/tasks/{task}/repo", s.changeRepo)
 	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
+	api("POST /api/tasks/{task}/redact/preview", s.previewRedaction)
+	api("POST /api/tasks/{task}/redact", s.redact) // never the desk's: nothing undoes it
 	api("GET /api/tasks/{task}/files", s.listFiles)
 	api("GET /api/tasks/{task}/file", s.readFile)
 	api("GET /api/tasks/{task}/commits", s.listCommits)
@@ -134,6 +136,8 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/agents/{name}/rename", s.renameAgent)
 	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
+	api("POST /api/agents/redact/preview", s.previewAgentsRedaction)
+	api("POST /api/agents/redact", s.redactAgents) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
 	api("GET /api/settings", s.showSettings)
 	api("PUT /api/settings", s.changeSettings)
