@@ -25,7 +25,12 @@ import (
 // coordinatorHook is Ideas' part in the coordinator loop, for the
 // coordinators that suggest ideas.
 func coordinatorHook() *features.Coordinator {
-	return &features.Coordinator{For: Suggests, Brief: brief, Decision: IdeasFormat, Field: "ideas", Check: check, OnDone: onDone}
+	return &features.Coordinator{For: suggestsIn, Brief: brief, Decision: IdeasFormat, Field: "ideas", Check: check, OnDone: onDone}
+}
+
+// suggestsIn is Suggests with the bases of the templates in state.
+func suggestsIn(coordinator agents.Agent, state features.Reader) bool {
+	return Suggests(coordinator, agents.BasesIn(state))
 }
 
 // agentry is the coordinator loop, which keeps the ideas a done suggests.
@@ -139,11 +144,11 @@ func unknownRepeat(repeats string, list []*Idea) string {
 
 // autoAccepted is the note on an idea Agentry accepted for you under rule,
 // with how many viewpoints of the roster backed it.
-func autoAccepted(idea *Idea, roster agents.Roster, rule string) string {
+func autoAccepted(idea *Idea, roster agents.Roster, bases agents.Bases, rule string) string {
 	if rule != settings.NobodyDoubted {
 		return "auto-accepted: all Visionaries agreed"
 	}
-	return fmt.Sprintf("auto-accepted: nobody doubted it, %d backed it", len(Backers(idea, roster)))
+	return fmt.Sprintf("auto-accepted: nobody doubted it, %d backed it", len(Backers(idea, roster, bases)))
 }
 
 // acceptAgreed accepts for you, when you turned that on, each of the ideas
@@ -160,18 +165,18 @@ func acceptAgreed(c features.Core, repo string, added []string) {
 		return
 	}
 	list := List(c.Read, repo)
-	roster := c.Read.Roster()
+	roster, bases := c.Read.Roster(), agents.BasesIn(c.Read)
 	log := logOf(c)
 	for _, id := range added {
 		i := slices.IndexFunc(list, func(idea *Idea) bool { return idea.ID == id })
 		if i < 0 {
 			continue
 		}
-		if why := LeftForYou(c.Read, list[i], list, roster, now.AutoAcceptRule); why != "" {
+		if why := LeftForYou(c.Read, list[i], list, roster, bases, now.AutoAcceptRule); why != "" {
 			slog.Info("coordinator loop: an idea is left for you", "idea", id, "why", why)
 			continue
 		}
-		got, err := Accept(log, c.Read, id, Choice{Note: autoAccepted(list[i], roster, now.AutoAcceptRule), Defaults: c.Defaults, By: agentry})
+		got, err := Accept(log, c.Read, id, Choice{Note: autoAccepted(list[i], roster, bases, now.AutoAcceptRule), Defaults: c.Defaults, By: agentry})
 		if err != nil || !got.Accepted {
 			slog.Warn("coordinator loop: accepting an agreed idea", "idea", id, "task", got.Task, "refused", got.Refused, "err", err)
 			continue

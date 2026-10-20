@@ -50,22 +50,48 @@ func SaveTemplate(roster Roster, yours UserTemplates, removed RemovedTemplates, 
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
 	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team,
-		BasedOn: baseOf(roster.TemplateOf(team), yours, removed)}.Save(by)
+		BasedOn: Bases{Yours: yours, Removed: removed}.Of(roster.TemplateOf(team))}.Save(by)
 	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
 	return saving, nil
 }
 
-// baseOf is the built-in template a team linked to template comes from:
-// template itself when it is built in, the base of yours when it is yours,
-// live or removed, and "" for none.
-func baseOf(template string, yours UserTemplates, removed RemovedTemplates) string {
+// Bases resolve a team's template link to the built-in template whose
+// features the team keeps: a built-in link is its own base, a template of
+// yours, live or removed, has the base it was saved with, and anything
+// else has none.
+type Bases struct {
+	Yours   UserTemplates
+	Removed RemovedTemplates
+}
+
+// Of is the built-in template a team linked to template comes from, "" for
+// none.
+func (b Bases) Of(template string) string {
 	if _, builtIn := TemplateWithID(template); builtIn {
 		return template
 	}
-	if saved, ok := yours.WithID(template); ok {
+	if saved, ok := b.Yours.WithID(template); ok {
 		return saved.BasedOn
 	}
-	return removed[template]
+	return b.Removed[template]
+}
+
+// templateState is what BasesIn reads, as a features.Reader or the
+// current state has it.
+type templateState interface {
+	Templates() UserTemplates
+	RemovedTemplates() RemovedTemplates
+	Broken(stream string) error
+}
+
+// BasesIn are the bases of the templates in state. A broken templates
+// stream gives none of yours, so built-in links still resolve and those
+// teams keep working.
+func BasesIn(state templateState) Bases {
+	if state.Broken(events.TemplatesStream) != nil {
+		return Bases{}
+	}
+	return Bases{Yours: state.Templates(), Removed: state.RemovedTemplates()}
 }
 
 // Save is the event that saves u, as SaveTemplate's does: the rules check

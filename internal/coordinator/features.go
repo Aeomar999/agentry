@@ -20,15 +20,15 @@ import (
 // runs under recover, so a feature's panic costs only its own part.
 
 // hooksFor are the features whose coordinator hook is for coordinator, in
-// list's order. A feature whose For panics is left out.
-func hooksFor(list []features.Feature, coordinator agents.Agent) []features.Feature {
+// state, in list's order. A feature whose For panics is left out.
+func hooksFor(list []features.Feature, coordinator agents.Agent, state features.Reader) []features.Feature {
 	var hooks []features.Feature
 	for _, f := range list {
 		if f.Coordinator == nil {
 			continue
 		}
 		var matches bool
-		if guarded(f, "For", func() { matches = f.Coordinator.For(coordinator) }) == "" && matches {
+		if guarded(f, "For", func() { matches = f.Coordinator.For(coordinator, state) }) == "" && matches {
 			hooks = append(hooks, f)
 		}
 	}
@@ -61,7 +61,7 @@ func (l *Loop) unreadable(task *tasks.Task, roster agents.Roster, decision Decis
 		return ""
 	}
 	own, _ := roster.Get(task.Coordinator)
-	for _, f := range hooksFor(l.Features, own) {
+	for _, f := range hooksFor(l.Features, own, l.state) {
 		hook := f.Coordinator
 		field := decision.field(hook.Field)
 		if hook.Check == nil || field == nil {
@@ -82,7 +82,7 @@ func (l *Loop) unreadable(task *tasks.Task, roster agents.Roster, decision Decis
 // the done goes through.
 func (l *Loop) onDone(task *tasks.Task, roster agents.Roster, decision Decision) string {
 	own, _ := roster.Get(task.Coordinator)
-	hooks := hooksFor(l.Features, own)
+	hooks := hooksFor(l.Features, own, l.state)
 	var notes, read, unread []string
 	for _, f := range hooks {
 		hook := f.Coordinator

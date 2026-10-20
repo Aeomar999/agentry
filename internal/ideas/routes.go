@@ -42,12 +42,12 @@ func listIdeas(c features.Core, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	rule, roster := c.Read.Settings().AutoAcceptRule, c.Read.Roster()
+	rule, roster, bases := c.Read.Settings().AutoAcceptRule, c.Read.Roster(), agents.BasesIn(c.Read)
 	views := []ideaView{}
 	for _, idea := range list {
 		why := ""
 		if idea.State == Open {
-			why = LeftForYou(c.Read, idea, list, roster, rule)
+			why = LeftForYou(c.Read, idea, list, roster, bases, rule)
 		}
 		var became *tasks.Task
 		if idea.Became != "" {

@@ -14,23 +14,25 @@ import (
 const Name = "ideas"
 
 // Suggests says whether the coordinator's team was made from a template
-// that brings ideas, whatever the team is called. An agent from before
-// templates were recorded has its template from its team's name (the
-// roster sees to that), so an old Visionaries team still suggests them.
-func Suggests(coordinator agents.Agent) bool {
-	template, found := agents.TemplateWithID(coordinator.Template)
+// that brings ideas, whatever the team is called: a built-in one, or one
+// of yours (live or removed) based on it, as bases resolve it. An agent
+// from before templates were recorded has its template from its team's
+// name (the roster sees to that), so an old Visionaries team still
+// suggests them.
+func Suggests(coordinator agents.Agent, bases agents.Bases) bool {
+	template, found := agents.TemplateWithID(bases.Of(coordinator.Template))
 	return found && template.Lists(Name)
 }
 
 // Visionaries are the teams of the roster whose coordinators suggest ideas
 // (Suggests), in roster order, whatever they are called: a team made from
-// the Visionaries template, "Visionaries 2" too, and not one you made
-// yourself and called Visionaries. A follow-up session goes to the first;
+// the Visionaries template or one of yours based on it, "Visionaries 2"
+// too, and not one you made yourself and called Visionaries. A follow-up session goes to the first;
 // the viewpoints of all of them weigh in on an idea.
-func Visionaries(roster agents.Roster) []string {
+func Visionaries(roster agents.Roster, bases agents.Bases) []string {
 	var teams []string
 	for _, team := range roster.Teams() {
-		if coordinator, found := roster.Coordinator(team); found && Suggests(coordinator) {
+		if coordinator, found := roster.Coordinator(team); found && Suggests(coordinator, bases) {
 			teams = append(teams, team)
 		}
 	}
@@ -46,22 +48,22 @@ const MinBackers = 2
 // rule, "" when it would: it isn't open, it repeats another idea in list
 // (Duplicate), or the Visionaries of the roster don't agree on it as rule
 // asks (Disagreed). The loop, the rules and the Ideas page all ask it.
-func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, rule string) string {
+func NotAutoAccepted(idea *Idea, list []*Idea, roster agents.Roster, bases agents.Bases, rule string) string {
 	if idea.State != Open {
 		return "it was " + string(idea.State) + " already"
 	}
 	if original := Duplicate(idea, list); original != nil {
 		return duplicateText(original)
 	}
-	return Disagreed(idea, roster, rule)
+	return Disagreed(idea, roster, bases, rule)
 }
 
 // LeftForYou is NotAutoAccepted, and when that would accept the idea, the
 // open task in board it looks like (OpenTaskLike): Agentry never makes
 // another of an open task, as only you may choose to. The loop and the
 // Ideas page ask it.
-func LeftForYou(board Tasks, idea *Idea, list []*Idea, roster agents.Roster, rule string) string {
-	if why := NotAutoAccepted(idea, list, roster, rule); why != "" {
+func LeftForYou(board Tasks, idea *Idea, list []*Idea, roster agents.Roster, bases agents.Bases, rule string) string {
+	if why := NotAutoAccepted(idea, list, roster, bases, rule); why != "" {
 		return why
 	}
 	if like := OpenTaskLike(board, idea); like != nil {
@@ -79,14 +81,14 @@ func LeftForYou(board Tasks, idea *Idea, list []*Idea, roster agents.Roster, rul
 // NobodyDoubted needs MinBackers of them. No such team, or none with
 // viewpoints, agrees on nothing, and a rule Agentry doesn't know is the
 // strict one.
-func Disagreed(idea *Idea, roster agents.Roster, rule string) string {
-	if !slices.ContainsFunc(roster, isViewpointOf(Visionaries(roster))) {
+func Disagreed(idea *Idea, roster agents.Roster, bases agents.Bases, rule string) string {
+	if !slices.ContainsFunc(roster, isViewpointOf(Visionaries(roster, bases))) {
 		return "the Visionaries have no viewpoints"
 	}
 	if doubters := trimmed(idea.DoubtedBy); len(doubters) > 0 {
 		return "doubted by " + strings.Join(doubters, ", ")
 	}
-	backers, missing := backing(idea, roster)
+	backers, missing := backing(idea, roster, bases)
 	if rule != settings.NobodyDoubted {
 		if len(missing) > 0 {
 			return "not backed by " + strings.Join(missing, ", ")
@@ -106,15 +108,15 @@ func Disagreed(idea *Idea, roster agents.Roster, rule string) string {
 
 // Backers are the viewpoints of the roster's Visionaries teams, by their
 // roster names, that back the idea.
-func Backers(idea *Idea, roster agents.Roster) []string {
-	backers, _ := backing(idea, roster)
+func Backers(idea *Idea, roster agents.Roster, bases agents.Bases) []string {
+	backers, _ := backing(idea, roster, bases)
 	return backers
 }
 
 // backing splits the viewpoints of the roster's Visionaries teams into
 // those that back the idea and those that don't.
-func backing(idea *Idea, roster agents.Roster) (backers, missing []string) {
-	isViewpoint := isViewpointOf(Visionaries(roster))
+func backing(idea *Idea, roster agents.Roster, bases agents.Bases) (backers, missing []string) {
+	isViewpoint := isViewpointOf(Visionaries(roster, bases))
 	for _, viewpoint := range roster {
 		if !isViewpoint(viewpoint) {
 			continue

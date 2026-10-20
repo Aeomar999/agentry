@@ -61,7 +61,7 @@ func TestAnIdeaIsAgreedWhenEveryViewpointBacksIt(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
 			for _, rule := range []string{settings.EveryoneBacked, "a rule from a later version"} {
-				if got := ideas.Disagreed(idea, c.roster, rule); got != c.want {
+				if got := ideas.Disagreed(idea, c.roster, agents.Bases{}, rule); got != c.want {
 					t.Errorf("%s: got %q, want %q", rule, got, c.want)
 				}
 			}
@@ -93,12 +93,12 @@ func TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			idea := &ideas.Idea{BackedBy: c.backedBy, DoubtedBy: c.doubtedBy}
-			if got := ideas.Disagreed(idea, four, settings.NobodyDoubted); got != c.want {
+			if got := ideas.Disagreed(idea, four, agents.Bases{}, settings.NobodyDoubted); got != c.want {
 				t.Errorf("got %q, want %q", got, c.want)
 			}
 		})
 	}
-	if got := ideas.Disagreed(&ideas.Idea{BackedBy: []string{"skeptic", "technologist"}}, team("Visionaries"), settings.NobodyDoubted); got == "" {
+	if got := ideas.Disagreed(&ideas.Idea{BackedBy: []string{"skeptic", "technologist"}}, team("Visionaries"), agents.Bases{}, settings.NobodyDoubted); got == "" {
 		t.Error("a team with no viewpoints agrees on nothing")
 	}
 }
@@ -148,19 +148,19 @@ func TestTheViewpointsAreTheTemplateTeams(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := ideas.Visionaries(c.roster); !slices.Equal(got, c.teams) {
+			if got := ideas.Visionaries(c.roster, agents.Bases{}); !slices.Equal(got, c.teams) {
 				t.Errorf("the Visionaries teams: %q, want %q", got, c.teams)
 			}
 			idea := &ideas.Idea{State: ideas.Open, BackedBy: append(slices.Clone(four), "dreamer")}
 			for _, rule := range settings.AutoAcceptRules {
-				if got := ideas.Disagreed(idea, c.roster, rule); got != c.disagreed {
+				if got := ideas.Disagreed(idea, c.roster, agents.Bases{}, rule); got != c.disagreed {
 					t.Errorf("%s: disagreed %q, want %q", rule, got, c.disagreed)
 				}
-				if got := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, c.roster, rule); got != c.disagreed {
+				if got := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, c.roster, agents.Bases{}, rule); got != c.disagreed {
 					t.Errorf("%s: not auto-accepted %q, want %q", rule, got, c.disagreed)
 				}
 			}
-			if got := ideas.AutoAccepted(idea, c.roster, settings.NobodyDoubted); got != c.nobodyNote {
+			if got := ideas.AutoAccepted(idea, c.roster, agents.Bases{}, settings.NobodyDoubted); got != c.nobodyNote {
 				t.Errorf("note %q, want %q", got, c.nobodyNote)
 			}
 		})
@@ -181,19 +181,19 @@ func TestTheViewpointsOfEveryTemplateTeamCount(t *testing.T) {
 		}
 	}
 	roster := agents.FromEvents(log)
-	if got, want := ideas.Visionaries(roster), []string{"Visionaries", "Visionaries 2"}; !slices.Equal(got, want) {
+	if got, want := ideas.Visionaries(roster, agents.Bases{}), []string{"Visionaries", "Visionaries 2"}; !slices.Equal(got, want) {
 		t.Errorf("the Visionaries teams: %q, want %q", got, want)
 	}
 	// The second team's agents are named with -2, and its skeptic didn't weigh in.
 	idea := &ideas.Idea{State: ideas.Open, BackedBy: []string{"product-strategist", "user-advocate", "technologist", "skeptic",
 		"product-strategist-2", "user-advocate-2", "technologist-2"}}
-	if got, want := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, roster, settings.EveryoneBacked), "not backed by skeptic-2"; got != want {
+	if got, want := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, roster, agents.Bases{}, settings.EveryoneBacked), "not backed by skeptic-2"; got != want {
 		t.Errorf("not auto-accepted %q, want %q", got, want)
 	}
-	if got := ideas.Backers(idea, roster); len(got) != 7 {
+	if got := ideas.Backers(idea, roster, agents.Bases{}); len(got) != 7 {
 		t.Errorf("backers %q, want the 7 of both teams", got)
 	}
-	if got, want := ideas.AutoAccepted(idea, roster, settings.NobodyDoubted), "auto-accepted: nobody doubted it, 7 backed it"; got != want {
+	if got, want := ideas.AutoAccepted(idea, roster, agents.Bases{}, settings.NobodyDoubted), "auto-accepted: nobody doubted it, 7 backed it"; got != want {
 		t.Errorf("note %q, want %q", got, want)
 	}
 }
@@ -243,7 +243,7 @@ func TestAgentryAcceptsNoIdeaYouHadBefore(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			c.idea.BackedBy = []string{"dreamer", "builder"}
 			for _, rule := range settings.AutoAcceptRules {
-				if got := ideas.NotAutoAccepted(c.idea, append(c.list, c.idea), agreed, rule); got != c.want {
+				if got := ideas.NotAutoAccepted(c.idea, append(c.list, c.idea), agreed, agents.Bases{}, rule); got != c.want {
 					t.Errorf("%s: got %q, want %q", rule, got, c.want)
 				}
 			}
@@ -665,5 +665,67 @@ func TestAnIdeaWhoseEpicIsMissingSaysSo(t *testing.T) {
 	const want = "The epic task-9 this follows up wasn't found, so its limits weren't copied."
 	if description := loadTask(t, s, got.Task).Description; !strings.Contains(description, want) {
 		t.Errorf("description has no %q:\n%s", want, description)
+	}
+}
+
+// yours is a template of yours with id, based on base, as bases has it,
+// live or removed.
+func yours(id, base string, removed bool) agents.Bases {
+	if removed {
+		return agents.Bases{Removed: agents.RemovedTemplates{id: base}}
+	}
+	return agents.Bases{Yours: agents.UserTemplates{{ID: id, Team: "Dreams", BasedOn: base}}}
+}
+
+// A team linked to a template of yours suggests ideas when that template
+// is based on the Visionaries, whether you still have it or removed it.
+func TestATeamFromYourTemplateSuggestsByItsBase(t *testing.T) {
+	dreams := handMade("Dreams", "dreamer")
+	dreams[0].Template = "dreams"
+	cases := []struct {
+		name     string
+		roster   agents.Roster
+		bases    agents.Bases
+		suggests bool
+	}{
+		{"yours based on the Visionaries", dreams, yours("dreams", "visionaries", false), true},
+		{"yours removed, based on the Visionaries", dreams, yours("dreams", "visionaries", true), true},
+		{"yours with no base", dreams, yours("dreams", "", false), false},
+		{"yours removed with no base", dreams, yours("dreams", "", true), false},
+		{"yours based on Software", dreams, yours("dreams", "software", false), false},
+		{"another template of yours", dreams, yours("other", "visionaries", false), false},
+		{"the built-in Visionaries, yours unread", team("Visionaries", "dreamer"), agents.Bases{}, true},
+	}
+	for _, c := range cases {
+		lead, _ := c.roster.Coordinator(c.roster[0].Team)
+		if got := ideas.Suggests(lead, c.bases); got != c.suggests {
+			t.Errorf("%s: suggests %v, want %v", c.name, got, c.suggests)
+		}
+		var want []string
+		if c.suggests {
+			want = []string{c.roster[0].Team}
+		}
+		if got := ideas.Visionaries(c.roster, c.bases); !slices.Equal(got, want) {
+			t.Errorf("%s: the Visionaries teams %q, want %q", c.name, got, want)
+		}
+	}
+}
+
+// The viewpoints of a team from your Visionaries-based template weigh in on
+// an idea as a built-in Visionaries team's do.
+func TestTheViewpointsOfATeamFromYourTemplateCount(t *testing.T) {
+	dreams := handMade("Dreams", "dreamer", "builder")
+	dreams[0].Template = "dreams"
+	idea := &ideas.Idea{State: ideas.Open, BackedBy: []string{"dreamer"}}
+	for name, bases := range map[string]agents.Bases{"live": yours("dreams", "visionaries", false), "removed": yours("dreams", "visionaries", true)} {
+		if got, want := ideas.NotAutoAccepted(idea, []*ideas.Idea{idea}, dreams, bases, settings.EveryoneBacked), "not backed by builder"; got != want {
+			t.Errorf("%s: not auto-accepted %q, want %q", name, got, want)
+		}
+		if got := ideas.Backers(idea, dreams, bases); !slices.Equal(got, []string{"dreamer"}) {
+			t.Errorf("%s: backers %q", name, got)
+		}
+	}
+	if got, want := ideas.Disagreed(idea, dreams, yours("dreams", "software", false), settings.EveryoneBacked), "the Visionaries have no viewpoints"; got != want {
+		t.Errorf("based on Software: %q, want %q", got, want)
 	}
 }

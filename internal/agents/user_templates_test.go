@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"testing"
@@ -269,5 +270,53 @@ func TestRemovedTemplatesNextLeavesTheOriginal(t *testing.T) {
 	after = before.Next(logged(t, RemoveTemplate("ideas", you)), UserTemplates{ideas})
 	if after["ideas"] != "visionaries" || len(before) != 1 {
 		t.Errorf("after %v, before %v", after, before)
+	}
+}
+
+// Bases resolve a link to the built-in template its team keeps the features
+// of: a built-in link itself, yours, live or removed, its base, and anything
+// else none.
+func TestBasesResolveALinkToItsBuiltInTemplate(t *testing.T) {
+	ideas, plain := papers(), papers()
+	ideas.ID, ideas.BasedOn = "ideas", "visionaries"
+	bases := Bases{Yours: UserTemplates{ideas, plain}, Removed: RemovedTemplates{"gone": "visionaries", "bare": ""}}
+	for template, want := range map[string]string{"visionaries": "visionaries", "software": "software", "ideas": "visionaries",
+		"papers": "", "gone": "visionaries", "bare": "", "unknown": "", "": ""} {
+		if got := bases.Of(template); got != want {
+			t.Errorf("the base of %q: %q, want %q", template, got, want)
+		}
+	}
+}
+
+// templates is a state holding your templates, with its templates stream
+// broken or not.
+type templates struct {
+	yours   UserTemplates
+	removed RemovedTemplates
+	broken  error
+}
+
+func (s templates) Templates() UserTemplates           { return s.yours }
+func (s templates) RemovedTemplates() RemovedTemplates { return s.removed }
+func (s templates) Broken(stream string) error {
+	if stream == events.TemplatesStream {
+		return s.broken
+	}
+	return nil
+}
+
+// A broken templates stream gives none of yours, so a built-in link still
+// resolves.
+func TestABrokenTemplatesStreamLeavesOnlyBuiltInBases(t *testing.T) {
+	ideas := papers()
+	ideas.BasedOn = "visionaries"
+	state := templates{yours: UserTemplates{ideas}, removed: RemovedTemplates{"gone": "visionaries"}}
+	if bases := BasesIn(state); bases.Of("papers") != "visionaries" || bases.Of("gone") != "visionaries" {
+		t.Errorf("whole stream: %+v", bases)
+	}
+	state.broken = errors.New("a bad event")
+	bases := BasesIn(state)
+	if bases.Of("papers") != "" || bases.Of("gone") != "" || bases.Of("visionaries") != "visionaries" {
+		t.Errorf("broken stream: %+v", bases)
 	}
 }

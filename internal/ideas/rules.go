@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -106,7 +107,7 @@ func agentryMayAccept(idea *Idea, p events.Proposal, state features.Reader) stri
 	case !now.AutoAcceptIdeas:
 		return "Agentry accepts an idea for you only when you turn that on"
 	}
-	if why := NotAutoAccepted(idea, List(state, idea.Repo), state.Roster(), now.AutoAcceptRule); why != "" {
+	if why := NotAutoAccepted(idea, List(state, idea.Repo), state.Roster(), agents.BasesIn(state), now.AutoAcceptRule); why != "" {
 		return "Agentry accepts only an idea the Visionaries agreed on, by your rule, that repeats no other, and " + idea.ID + " isn't: " + why
 	}
 	return ""

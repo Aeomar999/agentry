@@ -155,10 +155,10 @@ type Core struct {
 }
 
 // Coordinator is a feature's part in the coordinator loop, for the
-// coordinators For says. Brief and OnDone run on the state of the moment,
-// so Brief is given the Reader to read the feature's streams from.
+// coordinators For says. For, Brief and OnDone run on the state of the
+// moment, so For and Brief are given the Reader to read it from.
 type Coordinator struct {
-	For      func(coordinator agents.Agent) bool                          // a Visionaries coordinator
+	For      func(coordinator agents.Agent, state Reader) bool            // a Visionaries coordinator
 	Brief    func(state Reader, task *tasks.Task) []Section               // more sections for its brief
 	Decision string                                                       // what its done decision may add, for "Your decision"
 	Field    string                                                       // the done decision's field it reads: "ideas"

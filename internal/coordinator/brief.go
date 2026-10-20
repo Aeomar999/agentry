@@ -20,7 +20,7 @@ const longestStep = 4000
 
 func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, f family, machines []machine, shared []sharedfiles.File,
 	state features.Reader, list []features.Feature) string {
-	hooks := hooksFor(list, coordinator)
+	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)

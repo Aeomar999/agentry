@@ -200,7 +200,7 @@ func TestAPanickingOnDoneIsANoteAndTheDoneGoesThrough(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
 	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent) bool { return true }, Field: "votes",
+		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
 		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { panic("a bad hook") }}})
 	run(t, loop, state)
 	const id = "task-1"
@@ -241,7 +241,7 @@ func TestAPanickingCheckLetsTheDoneThrough(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
 	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent) bool { return true }, Field: "votes",
+		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
 		Check:  func(json.RawMessage) error { panic("a bad hook") },
 		OnDone: func(features.Core, *tasks.Task, json.RawMessage) string { return "" }}})
 	run(t, loop, state)
@@ -261,7 +261,7 @@ func TestAFeatureWithNoLogWritesNothing(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
 	loop.Features = append(loop.Features, features.Feature{Name: "votes", Writes: []events.Type{events.TaskCreated},
-		Coordinator: &features.Coordinator{For: func(agents.Agent) bool { return true }, Field: "votes",
+		Coordinator: &features.Coordinator{For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
 			OnDone: func(c features.Core, task *tasks.Task, _ json.RawMessage) string {
 				_, rejection, err := c.Log.Create("task-", events.Proposal{Actor: agentry, Type: events.TaskCreated,
 					Data: map[string]any{"title": "Count", "repo": task.Repo, "coordinator": "tech-lead", "about": task.ID}})
@@ -287,7 +287,7 @@ func TestAHooksEventsCantPropose(t *testing.T) {
 	s, state, repo := withTeams(t, true)
 	loop := newLoop(s, state, t.TempDir())
 	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent) bool { return true }, Field: "votes",
+		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
 		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
 			if _, writes := c.Events.(features.Proposer); writes {
 				return "Core.Events is a Proposer"
@@ -316,7 +316,7 @@ func TestAHookReadsItsOwnSettings(t *testing.T) {
 		return features.SettingsIn(func() map[string]features.Table { return file }, feature)
 	}
 	loop.Features = append(loop.Features, features.Feature{Name: "votes", Coordinator: &features.Coordinator{
-		For: func(agents.Agent) bool { return true }, Field: "votes",
+		For: func(agents.Agent, features.Reader) bool { return true }, Field: "votes",
 		OnDone: func(c features.Core, _ *tasks.Task, _ json.RawMessage) string {
 			host, _ := c.Settings.Setting("host")
 			hook, _ := c.Settings.Secret("hook")
@@ -414,9 +414,39 @@ func TestATeamSuggestsIdeasByItsTemplate(t *testing.T) {
 	roster := agents.FromEvents(log)
 	for name, want := range map[string]bool{"tech-lead": false, "visionary-lead": true, "visionary-lead-2": true, "lead": false,
 		"Old Visionaries": true, "Old Visionaries 2": true} {
-		if coordinator, _ := roster.Get(name); ideas.Suggests(coordinator) != want {
+		if coordinator, _ := roster.Get(name); ideas.Suggests(coordinator, agents.Bases{}) != want {
 			t.Errorf("%s of team %q (template %q): suggests ideas %v, want %v", name, coordinator.TeamName(), coordinator.Template, !want, want)
 		}
+	}
+}
+
+// A team from a template of yours based on the Visionaries suggests ideas
+// through the loop too, while you have the template and after you remove
+// it: the ideas hook is for its coordinator.
+func TestATeamFromYourVisionariesTemplateGetsTheIdeasHook(t *testing.T) {
+	s, state, _ := withTeams(t, false)
+	visionaries, _ := agents.TemplateNamed("Visionaries")
+	dreams := agents.UserTemplate{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}
+	for _, agent := range visionaries.Prompted() {
+		agent.Team, agent.Template = "", "" // adding the template sets them
+		dreams.Agents = append(dreams.Agents, agent)
+	}
+	mustPropose(t, s, dreams.Save(you))
+	for _, p := range agents.AddTeam(dreams.Template(), state.Roster(), you) {
+		mustPropose(t, s, p)
+	}
+	lead, _ := state.Roster().Coordinator("Dreams")
+	list := []features.Feature{ideas.Feature()}
+	if hooks := hooksFor(list, lead, state); len(hooks) != 1 {
+		t.Errorf("your template's coordinator %s: hooks %v, want ideas", lead.Name, hooks)
+	}
+	mustPropose(t, s, agents.RemoveTemplate(dreams.ID, you))
+	if hooks := hooksFor(list, lead, state); len(hooks) != 1 {
+		t.Errorf("after removing the template: hooks %v, want ideas", hooks)
+	}
+	tech, _ := state.Roster().Get("tech-lead")
+	if hooks := hooksFor(list, tech, state); len(hooks) != 0 {
+		t.Errorf("tech-lead: hooks %v, want none", hooks)
 	}
 }
 
@@ -443,8 +473,8 @@ func TestAPanickingHookLeavesTheBriefToTheOthers(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, broken := range map[string]*features.Coordinator{
-		"For":   {For: func(agents.Agent) bool { panic("a bad hook") }},
-		"Brief": {For: func(agents.Agent) bool { return true }, Brief: func(features.Reader, *tasks.Task) []features.Section { panic("a bad hook") }},
+		"For":   {For: func(agents.Agent, features.Reader) bool { panic("a bad hook") }},
+		"Brief": {For: func(agents.Agent, features.Reader) bool { return true }, Brief: func(features.Reader, *tasks.Task) []features.Section { panic("a bad hook") }},
 	} {
 		t.Run(name, func(t *testing.T) {
 			brief, repo := visionariesBriefWith(t, features.Feature{Name: "votes", Coordinator: broken}, ideas.Feature())

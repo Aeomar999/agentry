@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
@@ -41,9 +42,9 @@ func (l *Loop) followUp(id string, close int64) {
 	if err != nil || epic == nil || epic.Kind != tasks.Epic || !epic.IsDone || l.followedUp(id, close) {
 		return
 	}
-	teams := ideas.Visionaries(roster)
+	teams := ideas.Visionaries(roster, agents.BasesIn(l.state))
 	if len(teams) == 0 {
-		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as no team was added from the Visionaries template. "+
+		l.skipFollowUp(epic, close, "Agentry started no Visionaries session about this epic, as no team comes from the Visionaries template or a template of yours based on it. "+
 			"To have one after the next epic you close, add one: on the Agents page, Add a team, Visionaries. "+
 			"Or turn these sessions off on the Ideas page.")
 		return

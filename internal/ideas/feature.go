@@ -3,6 +3,7 @@ package ideas
 import (
 	"fmt"
 
+	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
@@ -55,18 +56,18 @@ func next(prev any, e events.Event) any {
 func manifest(state features.Reader) features.Entry {
 	list := All(state)
 	entry := features.Entry{Badge: open(list)}
-	if teams := Visionaries(state.Roster()); len(teams) > 0 {
+	if teams := Visionaries(state.Roster(), agents.BasesIn(state)); len(teams) > 0 {
 		entry.Enabled, entry.Visible = true, true
 		entry.Why = fmt.Sprintf("the %s team suggests ideas", teams[0])
 		return entry
 	}
 	switch kept := len(list); kept {
 	case 0:
-		entry.Why = "add a team from the Visionaries template to get ideas"
+		entry.Why = "add a team from the Visionaries template, or one of yours based on it, to get ideas"
 	case 1:
-		entry.Visible, entry.Why = true, "kept while 1 idea remains; no team from the Visionaries template now"
+		entry.Visible, entry.Why = true, "kept while 1 idea remains; no team from the Visionaries template or one based on it now"
 	default:
-		entry.Visible, entry.Why = true, fmt.Sprintf("kept while %d ideas remain; no team from the Visionaries template now", kept)
+		entry.Visible, entry.Why = true, fmt.Sprintf("kept while %d ideas remain; no team from the Visionaries template or one based on it now", kept)
 	}
 	return entry
 }

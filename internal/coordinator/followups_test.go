@@ -162,13 +162,19 @@ func TestAnEpicMovedToDoneGetsNoSession(t *testing.T) {
 	}
 }
 
-// The session goes to a team made from the Visionaries template, whatever
-// it is called, never to one you made and called Visionaries; an old log's
+// The session goes to a team made from the Visionaries template, or from a
+// template of yours based on it, live or removed, whatever it is called,
+// never to one you made and called Visionaries; an old log's
 // Visionaries, from before agents recorded their template, still get it.
 func TestTheVisionariesSessionGoesByTemplate(t *testing.T) {
 	visionaries, _ := agents.TemplateNamed("Visionaries")
 	handMade := []agents.Agent{{Name: "dreamer-lead", Team: "Visionaries", Coordinates: true, Engine: "claude", Prompt: "Dream."},
 		{Name: "dreamer", Team: "Visionaries", Engine: "claude", Prompt: "Dream."}}
+	dreams := agents.UserTemplate{ID: "dreams", Team: "Dreams", BasedOn: "visionaries"}
+	for _, agent := range visionaries.Prompted() {
+		agent.Team, agent.Template = "", "" // adding the template sets them
+		dreams.Agents = append(dreams.Agents, agent)
+	}
 	cases := []struct {
 		name        string
 		add         func(roster agents.Roster) []events.Proposal
@@ -196,6 +202,18 @@ func TestTheVisionariesSessionGoesByTemplate(t *testing.T) {
 				ps = append(ps, agent.Proposal(you, false))
 			}
 			return ps
+		}, "", ""},
+		{"a team from your template based on the Visionaries", func(roster agents.Roster) []events.Proposal {
+			return append([]events.Proposal{dreams.Save(you)}, agents.AddTeam(dreams.Template(), roster, you)...)
+		}, "visionary-lead", "Dreams"},
+		{"a team from your removed template based on the Visionaries", func(roster agents.Roster) []events.Proposal {
+			ps := append([]events.Proposal{dreams.Save(you)}, agents.AddTeam(dreams.Template(), roster, you)...)
+			return append(ps, agents.RemoveTemplate(dreams.ID, you))
+		}, "visionary-lead", "Dreams"},
+		{"a team from your template based on nothing", func(roster agents.Roster) []events.Proposal {
+			plain := dreams
+			plain.BasedOn = ""
+			return append([]events.Proposal{plain.Save(you)}, agents.AddTeam(plain.Template(), roster, you)...)
 		}, "", ""},
 		{"an old log", func(roster agents.Roster) []events.Proposal {
 			ps := agents.AddTeam(visionaries, roster, you)
