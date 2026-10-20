@@ -30,6 +30,7 @@
     "data": {
       "additionalProperties": true,
       "required": [
+        "version",
         "team",
         "to",
         "agents",

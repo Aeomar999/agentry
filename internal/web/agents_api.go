@@ -204,6 +204,7 @@ func (s *Server) editTeam(writer http.ResponseWriter, r *http.Request) {
 		return
 	}
 	edit := agents.EditTeam(roster, team, cmp.Or(strings.TrimSpace(request.Team), team), request.Agents)
+	edit.Version = request.Version
 	if !s.mayEditTeam(w, edit, request.AddMissingProfiles, request.Hash) {
 		return
 	}

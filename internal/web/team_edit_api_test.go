@@ -242,14 +242,15 @@ func TestSavingATeamAgainFinishesItsTasksFollowUps(t *testing.T) {
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Chart the churn","team":"Data"}`)
 	roster := agents.FromEvents(mustStream(t, s))
-	cutShort := agents.EditTeam(roster, "Data", "Data", []agents.EditedAgent{
+	unfollowed := agents.EditTeam(roster, "Data", "Data", []agents.EditedAgent{
 		{Was: "data-lead", Name: "lead", Engine: "claude", Prompt: "Lead."},
 		{Was: "analyst", Name: "analyst", Engine: "claude", Prompt: "Analyse.", Coordinates: true},
 		{Was: "charter", Name: "charter", Engine: "claude", Prompt: "Chart."},
 	})
+	unfollowed.Version = roster.TeamVersion("Data")
 	worker := events.Actor{Kind: events.Worker, ID: "local"}
 	for _, p := range []events.Proposal{
-		cutShort.Proposal(httpapi.You),
+		unfollowed.Proposal(httpapi.You),
 		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
 		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}},
 	} {

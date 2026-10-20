@@ -17,10 +17,15 @@ type TeamProblem struct {
 	Reason string
 }
 
-// teamEdited refuses a team edit for the first of its problems.
+// teamEdited refuses a team edit for the first of its problems, or when
+// the team has changed since the version the edit found, as another edit
+// saved at the same time does.
 func teamEdited(state State, p events.Proposal) string {
 	if problems := TeamEditProblems(state, p); len(problems) > 0 {
 		return problems[0].Reason
+	}
+	if team := p.Text("team"); p.Text("version") != state.Roster().TeamVersion(team) {
+		return "the " + team + " team changed since you opened it: reload it"
 	}
 	return ""
 }

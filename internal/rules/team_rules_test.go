@@ -32,9 +32,10 @@ func dataTeam(t *testing.T, s *store.Store) {
 	}
 }
 
-// dataAsItIs is the Data team as dataTeam makes it, as an edit keeps it.
-func dataAsItIs() agents.TeamEdit {
-	return agents.TeamEdit{Team: "Data", To: "Data", Agents: []agents.EditedAgent{
+// dataAsItIs is the Data team as dataTeam makes it, as an edit of its
+// version in state keeps it.
+func dataAsItIs(state State) agents.TeamEdit {
+	return agents.TeamEdit{Version: state.Roster().TeamVersion("Data"), Team: "Data", To: "Data", Agents: []agents.EditedAgent{
 		{Was: "data-lead", Name: "data-lead", Engine: "claude", Prompt: "Lead.", Coordinates: true},
 		{Was: "analyst", Name: "analyst", Engine: "claude", Prompt: "Analyse."},
 		{Was: "charter", Name: "charter", Engine: "claude", Prompt: "Chart."},
@@ -46,7 +47,7 @@ func dataAsItIs() agents.TeamEdit {
 func TestATeamEditsProblemsAreListedAtOnce(t *testing.T) {
 	s, state := openSeededState(t)
 	dataTeam(t, s)
-	edit := dataAsItIs()
+	edit := dataAsItIs(state)
 	edit.To = "Research"                                                                             // a built-in template's team
 	edit.Agents[0].Coordinates = false                                                               // no coordinator
 	edit.Agents[1] = agents.EditedAgent{Was: "analyst", Name: "Analyst", Engine: "gpt", Prompt: " "} // a bad name, engine and prompt
@@ -88,7 +89,7 @@ func TestATeamEditAccountsForEveryAgent(t *testing.T) {
 		{"a team name taken", func(e *agents.TeamEdit) { e.To = "software" }, "there is a team called software already"},
 	}
 	for _, c := range cases {
-		edit := dataAsItIs()
+		edit := dataAsItIs(state)
 		c.edit(&edit)
 		_, rejection, err := s.Propose(edit.Proposal(you))
 		if err != nil {
@@ -108,7 +109,7 @@ func TestATeamEditAccountsForEveryAgent(t *testing.T) {
 func TestATeamEditIsWrittenWhole(t *testing.T) {
 	s, state := openSeededState(t)
 	dataTeam(t, s)
-	edit := dataAsItIs()
+	edit := dataAsItIs(state)
 	edit.To = "Numbers"
 	edit.Agents[0].Coordinates = false
 	edit.Agents[1].Name, edit.Agents[1].Coordinates = "data-lead", true // analyst takes data-lead's name, and coordinates
@@ -124,5 +125,28 @@ func TestATeamEditIsWrittenWhole(t *testing.T) {
 	}
 	if _, ok := roster.Get("charter"); ok || roster.TeamNamed("Data") != "" {
 		t.Error("charter, or the Data team, is still there")
+	}
+}
+
+// Of two edits of the same version, the second is refused once the first
+// is saved, rather than saving over it.
+func TestATeamEditOfAVersionNoLongerTheTeamsIsRefused(t *testing.T) {
+	s, state := openSeededState(t)
+	dataTeam(t, s)
+	first, second := dataAsItIs(state), dataAsItIs(state)
+	first.Agents[2].Prompt = "Chart well."
+	second.Agents[2].Prompt = "Chart fast."
+	if _, rejection, err := s.Propose(first.Proposal(you)); rejection != nil || err != nil {
+		t.Fatalf("the first edit: %v %v", rejection, err)
+	}
+	_, rejection, err := s.Propose(second.Proposal(you))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "the Data team changed since you opened it: reload it"; rejection == nil || rejection.Reason != want {
+		t.Errorf("the second edit was refused with %v, want %q", rejection, want)
+	}
+	if charter, _ := state.Roster().Get("charter"); charter.Prompt != "Chart well." {
+		t.Errorf("charter's prompt is %q, want the first edit's", charter.Prompt)
 	}
 }

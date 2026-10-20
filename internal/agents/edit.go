@@ -17,7 +17,10 @@ import (
 
 // TeamEdit is the team, as the roster names it, after an edit: To is its
 // name, Agents every agent it keeps or adds, Removed those it leaves out.
+// Version is the team's as the edit found it: the rules refuse the edit
+// once the team has changed since.
 type TeamEdit struct {
+	Version string        `json:"version"`
 	Team    string        `json:"team"`
 	To      string        `json:"to"`
 	Agents  []EditedAgent `json:"agents"`
@@ -46,7 +49,7 @@ func (t TeamEdit) Proposal(by events.Actor) events.Proposal {
 		removed = []string{}
 	}
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: events.TeamEdited, Data: map[string]any{
-		"team": t.Team, "to": t.To, "agents": t.Agents, "removed": removed,
+		"version": t.Version, "team": t.Team, "to": t.To, "agents": t.Agents, "removed": removed,
 	}}
 }
 
