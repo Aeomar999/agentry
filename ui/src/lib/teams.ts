@@ -29,9 +29,12 @@ export function templatesWith(templates: TeamTemplate[], feature: string): strin
 // teamMadeFrom is the team made from one of the templates, if you have one:
 // the team of a coordinator one of them made, as the server decides, so a
 // second copy ("Visionaries 2") counts and a team you made and named as the
-// template doesn't. The first such team when you have several.
+// template doesn't. A lead's base counts too, so a team from a template you
+// removed, which the list leaves out, keeps its feature. The first such team
+// when you have several.
 export function teamMadeFrom(agents: Agent[], templates: string[]): string | undefined {
-  const lead = agents.find((agent) => agent.coordinates && agent.template !== "" && templates.includes(agent.template));
+  const madeFrom = (id: string | undefined) => id !== undefined && id !== "" && templates.includes(id);
+  const lead = agents.find((agent) => agent.coordinates && (madeFrom(agent.template) || madeFrom(agent.base)));
   return lead && teamOf(lead);
 }
 

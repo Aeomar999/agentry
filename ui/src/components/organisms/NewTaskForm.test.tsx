@@ -86,4 +86,11 @@ describe("NewTaskForm: a team from a template of yours", () => {
     render(<NewTaskForm team="Ours" onCreated={() => {}} onCancel={() => {}} />);
     expect(screen.getByRole("textbox", { name: "The task" })).toBeTruthy();
   });
+
+  // The templates list leaves out one you removed; the lead's base still says.
+  test("asks the Visionaries when the template is removed and its base was theirs", () => {
+    agents.data = [...AGENTS, { ...lead("dreamer", "Dreamers", "dreams"), base: "visionaries" }];
+    render(<NewTaskForm team="Dreamers" onCreated={() => {}} onCancel={() => {}} />);
+    expect(screen.getByRole("textbox", { name: "Theme or question" })).toBeTruthy();
+  });
 });

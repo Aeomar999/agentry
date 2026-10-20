@@ -112,6 +112,17 @@ describe("finding the team with a feature", () => {
     expect(teamMadeFrom([agent("our-lead", "Ours", "ours", true)], templatesWith(templates, "ideas"))).toBeUndefined();
   });
 
+  // GET /api/teams/templates leaves out a template you removed; its teams'
+  // agents still name it, and the server gives them its base.
+  test("counts a lead whose template you removed by its base", () => {
+    const dreamer = { ...agent("dreamer", "Dreamers", "removed-dreams", true), base: "visionaries" };
+    expect(teamMadeFrom([dreamer], templatesWith(templates, "ideas"))).toBe("Dreamers");
+    const planner = { ...agent("planner", "Planning", "removed-plans", true), base: "software" };
+    expect(teamMadeFrom([planner], templatesWith(templates, "ideas"))).toBeUndefined();
+    const member = { ...agent("skeptic", "Dreamers", "removed-dreams"), base: "visionaries" };
+    expect(teamMadeFrom([member], templatesWith(templates, "ideas"))).toBeUndefined();
+  });
+
   // The built-in template comes last here, so only skipping yours finds it.
   test("useTeamWith finds the team from your template, and offers the built-in one to add", () => {
     const read = (data: unknown) => ({ data, error: "", status: 0, position: 0, reload: async () => {} });
