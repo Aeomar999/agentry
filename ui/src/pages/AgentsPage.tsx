@@ -234,7 +234,7 @@ const teamId = (team: string) => `team-${team}`;
 function TeamHeading({ team, count, description, onRemove }: TeamHeadingProps) {
   return (
     <div id={teamId(team)} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 tabIndex={-1} className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%]">
+      <h2 tabIndex={-1} className="font-display text-[17px] font-bold tracking-tight text-ink-primary [font-stretch:85%] outline-none">
         {team}
       </h2>
       <span className="text-[12px] text-ink-muted">
