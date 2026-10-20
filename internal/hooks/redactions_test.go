@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
@@ -129,6 +130,22 @@ func TestASecretThatWouldStillShowKeepsNothingTheTurnLearned(t *testing.T) {
 	endTurn(h, "task-1", "turn-2", "engineer", "Use gofmt.\nd]xx")
 	if engineer, _ := state.Roster().Get("engineer"); engineer.Knowledge != "Use gofmt." {
 		t.Errorf("the engineer knows %q, want what it knew before the turn", engineer.Knowledge)
+	}
+}
+
+// Replacing "yy" leaves "d]x" showing in "[redacted]x" when "d]x" was
+// replaced first, which the map's order decides: whichever order the two
+// are replaced in, the end isn't clean while either still shows.
+func TestASecretALaterReplacementLeavesShowingKeepsNothing(t *testing.T) {
+	s, state := engineerAtWork(t)
+	r := NewHandler(s, state, judgeByCommand).Redactions()
+	for range 50 {
+		r.Hold("d]x")(true)
+		r.Hold("yy")(true)
+		learned, clean := r.Ended(Turn{"task-1", "turn-2"}, "yyx")
+		if shows := strings.Contains(learned, "d]x") || strings.Contains(learned, "yy"); clean && shows {
+			t.Fatalf("%q reported clean", learned)
+		}
 	}
 }
 

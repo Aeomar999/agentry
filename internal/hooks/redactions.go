@@ -56,12 +56,12 @@ func (r *Redactions) Hold(secret string) (settle func(committed bool)) {
 	}
 }
 
-// add holds secret for every turn running now, and is the turns that
-// weren't holding it already.
+// add holds secret for every turn running now, and returns the turns it
+// added.
 func (r *Redactions) add(secret string) map[Turn]bool {
-	running := r.running()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	running := r.running()
 	turns := r.held[secret]
 	if turns == nil {
 		turns = map[Turn]bool{}
@@ -94,15 +94,19 @@ func (r *Redactions) Holds(secret string) bool {
 // next to store.Redacted, as the store refuses to leave it: then nothing the
 // turn learned may be kept.
 func (r *Redactions) Ended(turn Turn, learned string) (string, bool) {
-	running := r.running()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	clean := true
+	running := r.running()
 	for secret, turns := range r.held {
 		if turns[turn] {
 			learned = strings.ReplaceAll(learned, secret, store.Redacted)
-			clean = clean && !strings.Contains(learned, secret)
 		}
+	}
+	// Checked once every secret is replaced, as a later replacement can
+	// leave an earlier secret showing.
+	clean := true
+	for secret, turns := range r.held {
+		clean = clean && !(turns[turn] && strings.Contains(learned, secret))
 		for held := range turns {
 			if held == turn || !running[held] {
 				delete(turns, held)
@@ -115,7 +119,9 @@ func (r *Redactions) Ended(turn Turn, learned string) (string, bool) {
 	return learned, clean
 }
 
-// running is every turn open now.
+// running is every turn open now. It is read with r.mu held, so a hold
+// can't add a turn that a list read before it would then drop; the state
+// takes only its own lock and never calls back here.
 func (r *Redactions) running() map[Turn]bool {
 	open := map[Turn]bool{}
 	for _, task := range r.state.Tasks() {
