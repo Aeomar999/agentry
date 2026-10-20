@@ -87,8 +87,10 @@ export function AgentsPage() {
   const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
   // The team the panel created or saved, whose heading takes focus as it
   // goes: always for a new team; for one saved, only when focus had nowhere
-  // to go back to, as when it was renamed or opened from a link.
-  const landed = useRef<{ team: string; always: boolean } | null>(null);
+  // to go back to, as when it was renamed or opened from a link. A team
+  // removed hands focus to the next team's heading, or with none to the
+  // page's (null), since its Edit team button went with it.
+  const landed = useRef<{ team: string | null; always: boolean } | null>(null);
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
@@ -99,7 +101,8 @@ export function AgentsPage() {
     if (panel !== null || !landed.current) return;
     const { team, always } = landed.current;
     landed.current = null;
-    if (always || document.activeElement === document.body) document.getElementById(teamId(team))?.querySelector("h2")?.focus();
+    const heading = (team !== null && document.getElementById(teamId(team))?.querySelector("h2")) || document.querySelector("h1");
+    if (always || document.activeElement === document.body) heading?.focus();
   }, [panel]);
   // The panel's address keeps the view behind it.
   const showPanel = (panel: Record<string, string>, options?: NavigateOptions) =>
@@ -238,8 +241,10 @@ export function AgentsPage() {
             // there, takes focus back first; else the heading does.
             landed.current = { team, always: false };
           }}
-          onRemoved={async () => {
+          onRemoved={async (team) => {
+            const next = teams[teams.findIndex((t) => t.team === team) + 1];
             await reloadAll();
+            landed.current = { team: next?.team ?? null, always: true };
           }}
         />
       )}

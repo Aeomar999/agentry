@@ -57,7 +57,7 @@ interface EditTeamPanelProps {
   adding?: boolean; // + Add agent: the team opens with a new row added and open
   onClose: () => void;
   onSaved: (team: string) => Promise<void>; // shows the team saved on the page
-  onRemoved: () => Promise<void>; // shows the page without the team
+  onRemoved: (team: string) => Promise<void>; // shows the page without the team, as it was saved
 }
 
 const TITLE_ID = "team-panel-title";
@@ -116,8 +116,8 @@ function EditTeamForm(props: EditTeamFormProps) {
     : found.filter((p) => twoCoordinators && p.field === "agents");
   const missing = policy ? missingProfiles(draft, policy) : [];
   const changed = loaded !== null && unsaved(loaded, draft);
-  const removal = useRemoveTeam(loaded?.team ?? props.team, roster, list.focus, async () => {
-    await onRemoved();
+  const removal = useRemoveTeam(loaded?.team ?? props.team, roster, list.focus, async (removed) => {
+    await onRemoved(removed);
     guard.leave();
   });
   const guard = useCloseGuard(changed, saving || removal.busy, onClose);

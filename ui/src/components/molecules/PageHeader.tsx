@@ -25,7 +25,11 @@ export function PageHeader({ title, meta, badges, actions = [] }: PageHeaderProp
     <header className="flex flex-wrap items-start justify-between gap-3 border-b border-divider px-6 pt-5 pb-4">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="font-display text-[22px] leading-7 font-bold tracking-tight break-words text-ink-primary [font-stretch:85%]">
+          {/* The title can take focus (not by Tab), as when what had it has gone. */}
+          <h1
+            tabIndex={-1}
+            className="font-display text-[22px] leading-7 font-bold tracking-tight break-words text-ink-primary [font-stretch:85%] outline-none"
+          >
             {title}
           </h1>
           {badges}

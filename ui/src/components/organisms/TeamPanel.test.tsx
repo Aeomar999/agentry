@@ -1342,6 +1342,29 @@ describe("Edit team: Remove team", () => {
     expect(address()).toBe("/tasks");
   });
 
+  test("removed, focus goes to the next team's heading: its Edit team button went with it", async () => {
+    reads["/api/agents"] = [...DOCS, ...ROSTER];
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", removed: ["proofer", "writer", "editor"] });
+    afterReload = { "/api/agents": ROSTER };
+    openAt("/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 2 }));
+  });
+
+  test("removed with no team after it, focus goes to the page's heading", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", removed: ["proofer", "writer", "editor"] });
+    afterReload = { "/api/agents": ROSTER };
+    openAt("/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1, name: "Agents" }));
+  });
+
   test("with unsaved changes, removing closes without asking about them again", async () => {
     vi.mocked(api).mockResolvedValueOnce({ team: "Docs", removed: ["proofer", "writer", "editor"] });
     afterReload = { "/api/agents": ROSTER };

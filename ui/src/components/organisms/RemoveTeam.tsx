@@ -28,7 +28,12 @@ interface Refusal {
 // useRemoveTeam is the question's state: where it was asked, if it is,
 // the request while it runs, and the last refusal.
 // Keep puts focus back on the Remove team it was asked from.
-export function useRemoveTeam(team: string, roster: Agent[] | undefined, focus: (id: string) => void, onRemoved: () => Promise<void>) {
+export function useRemoveTeam(
+  team: string,
+  roster: Agent[] | undefined,
+  focus: (id: string) => void,
+  onRemoved: (team: string) => Promise<void>,
+) {
   const notify = useToast();
   const [asking, setAsking] = useState<Place | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,7 +50,7 @@ export function useRemoveTeam(team: string, roster: Agent[] | undefined, focus: 
       return;
     }
     notify("success", `Removed the ${team} team`);
-    await onRemoved();
+    await onRemoved(team);
   }
 
   const keep = () => {
