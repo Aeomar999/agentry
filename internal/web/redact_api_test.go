@@ -285,3 +285,44 @@ func TestAnArchivedTaskWhoseBlobIsLostFails(t *testing.T) {
 		t.Errorf("the failed redaction wrote up to %d from %d", f.log.LastPosition(), last)
 	}
 }
+
+// A redaction holds to the rows the page counted: once a row holding the
+// text is written after the count, the count sent is refused 409 with the
+// rows there are now, and nothing is written, nor does the server hold
+// the secret for running turns. Counted again, it redacts. A count below
+// one is refused 400.
+func TestARedactionWithAStaleCountIsRefused(t *testing.T) {
+	f := withSecret(t)
+	f.teach(t, "# Notes\n\nThe key is "+secretHere+".")
+	counted := map[string]int{}
+	for _, path := range []string{"/api/tasks/task-4/redact", "/api/agents/redact"} {
+		counted[path] = f.preview(t, path, secretHere)
+	}
+	f.propose(t, events.Proposal{Stream: "task-4", Actor: you, Type: events.TaskRenamed, Data: map[string]any{"title": "Deploy with " + secretHere}})
+	f.teach(t, "# Notes\n\nThe key is "+secretHere+".\n\nDeploy on Fridays.")
+	last := f.log.LastPosition()
+	for path, rows := range counted {
+		body, _ := json.Marshal(map[string]any{"text": secretHere, "why": "Pasted by mistake.", "rows": rows})
+		want := "3 rows hold this text now, not 2: count them again"
+		if path == "/api/agents/redact" {
+			want = "2 rows hold this text now, not 1: count them again"
+		}
+		if code, answer := call(t, f.server, "POST", path, string(body)); code != http.StatusConflict || strings.TrimSpace(answer) != want {
+			t.Errorf("%s with %d rows counted: %d %q, want 409 %q", path, rows, code, answer, want)
+		}
+		if code, answer := call(t, f.server, "POST", path, `{"text":"`+secretHere+`","rows":0}`); code != http.StatusBadRequest {
+			t.Errorf("%s with no rows counted: %d %s, want 400", path, code, answer)
+		}
+	}
+	if f.log.LastPosition() != last {
+		t.Errorf("the refusals wrote up to %d from %d", f.log.LastPosition(), last)
+	}
+	if f.hooks.Redactions().Holds(secretHere) {
+		t.Error("the secret is held for running turns after its redaction was refused")
+	}
+
+	body, _ := json.Marshal(map[string]any{"text": secretHere, "why": "Pasted by mistake.", "rows": 3})
+	if code, answer := call(t, f.server, "POST", "/api/tasks/task-4/redact", string(body)); code != http.StatusOK {
+		t.Errorf("counted again: %d %s, want 200", code, answer)
+	}
+}

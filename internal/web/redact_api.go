@@ -9,6 +9,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/store"
 )
 
 // redacted is what redacting a secret answers: the stream and how many of
@@ -34,7 +35,7 @@ const stillRunning = "an agent whose turn is running wrote its knowledge file, s
 // blob. It writes nothing. A refusal, such as no row holding the text, is
 // answered 409 with its reason.
 func (s *Server) previewRedaction(w http.ResponseWriter, r *http.Request) {
-	text, _, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
@@ -43,17 +44,18 @@ func (s *Server) previewRedaction(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, rejection, err := s.previewIn(id, text, archived)
+	rows, rejection, err := s.previewIn(id, asked.text, archived)
 	answerPreview(w, rows, rejection, err)
 }
 
 // redact replaces the text you marked with [redacted] in every row of a
 // task that holds it, an archived task's by unarchiving it, redacting it
-// and archiving it again (redactIn). Only the page may ask: nothing
-// undoes a redaction, so the desk can't. A new snapshot is written at
-// once.
+// and archiving it again (redactIn). When the page sends the rows its
+// preview counted, it is refused 409 unless that many hold the text as it
+// commits. Only the page may ask: nothing undoes a redaction, so the desk
+// can't. A new snapshot is written at once.
 func (s *Server) redact(w http.ResponseWriter, r *http.Request) {
-	text, why, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
@@ -62,28 +64,28 @@ func (s *Server) redact(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.answerRedaction(w, id, s.redactIn(id, text, why, archived))
+	s.answerRedaction(w, id, s.redactIn(id, asked, archived))
 }
 
 // previewAgentsRedaction is previewRedaction for the agents' stream: the
 // rows of their roster and knowledge that hold the text you marked.
 func (s *Server) previewAgentsRedaction(w http.ResponseWriter, r *http.Request) {
-	text, _, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	rows, rejection, err := s.store.Preview(events.AgentsStream, text)
+	rows, rejection, err := s.store.Preview(events.AgentsStream, asked.text)
 	answerPreview(w, rows, rejection, err)
 }
 
 // redactAgents is redact for the agents' stream, their roster and
 // knowledge (redactKnowledge).
 func (s *Server) redactAgents(w http.ResponseWriter, r *http.Request) {
-	text, why, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	s.answerRedaction(w, events.AgentsStream, s.redactIn(events.AgentsStream, text, why, false))
+	s.answerRedaction(w, events.AgentsStream, s.redactIn(events.AgentsStream, asked, false))
 }
 
 // streamRedaction is what redacting a secret from one stream did: the
@@ -105,27 +107,28 @@ func (s *Server) previewIn(stream, text string, archived bool) (int, *events.Rej
 	return s.store.Preview(stream, text)
 }
 
-// redactIn replaces text with [redacted] in every row of stream that holds
-// it: an archived task's by unarchiving it, redacting it and archiving it
-// again (Store.RedactArchived), and the agents' as redactKnowledge does.
+// redactIn replaces the text asked with [redacted] in every row of stream
+// that holds it, refused unless the rows asked hold it: an archived task's
+// by unarchiving it, redacting it and archiving it again
+// (Store.RedactArchivedCounted), and the agents' as redactKnowledge does.
 // The cache of opened archives drops an archived task, as its old
 // marker's entry still holds the text. The snapshot is the caller's to
 // write.
-func (s *Server) redactIn(stream, text, why string, archived bool) streamRedaction {
+func (s *Server) redactIn(stream string, asked redactionAsked, archived bool) streamRedaction {
 	var done streamRedaction
 	switch {
 	case archived:
-		done.redaction, done.rejection, done.err = s.store.RedactArchived(stream, text, httpapi.You, why, s.summarise(stream), s.config.Blobs)
+		done.redaction, done.rejection, done.err = s.store.RedactArchivedCounted(stream, asked.text, asked.rows, httpapi.You, asked.why, s.summarise(stream), s.config.Blobs)
 		s.archives.forget(stream)
 	case stream == events.AgentsStream:
-		done = s.redactKnowledge(text, why)
+		done = s.redactKnowledge(asked)
 	default:
-		done.redaction, done.rejection, done.err = s.store.Redact(stream, text, httpapi.You, why)
+		done.redaction, done.rejection, done.err = s.store.RedactCounted(stream, asked.text, asked.rows, httpapi.You, asked.why)
 	}
 	return done
 }
 
-// redactKnowledge redacts text from the agents' stream. A secret in an
+// redactKnowledge redacts the text asked from the agents' stream. A secret in an
 // agent's knowledge is in every version after it was written, and
 // Store.Redact rewrites each one that holds it as a full copy of its
 // redacted text.
@@ -136,30 +139,49 @@ func (s *Server) redactIn(stream, text, why string, archived bool) streamRedacti
 // the turns running as the redaction commits, whose ends redact it again
 // (hooks.Redactions); from before it commits, so a turn ending meanwhile
 // is caught too.
-func (s *Server) redactKnowledge(text, why string) streamRedaction {
-	settle := s.config.Redactions.Hold(text)
+func (s *Server) redactKnowledge(asked redactionAsked) streamRedaction {
+	settle := s.config.Redactions.Hold(asked.text)
 	var done streamRedaction
-	done.redaction, done.rejection, done.err = s.store.Redact(events.AgentsStream, text, httpapi.You, why)
+	done.redaction, done.rejection, done.err = s.store.RedactCounted(events.AgentsStream, asked.text, asked.rows, httpapi.You, asked.why)
 	settle(done.redaction.Position != 0)
-	if s.config.Redactions.Holds(text) {
+	if s.config.Redactions.Holds(asked.text) {
 		done.warnings = append(done.warnings, stillRunning)
 	}
 	return done
 }
 
-// secretOf is the text a redaction or its preview names and the reason
-// given, or false once it has answered 400 for a body it can't read or a
-// blank text. The text is kept as it is: the secret is what you marked.
-func secretOf(w http.ResponseWriter, r *http.Request) (text, why string, ok bool) {
-	var request struct{ Text, Why string }
+// redactionAsked is what a redaction or its preview asks for: the text,
+// kept as it is, as the secret is what you marked; the reason given; and
+// the rows the preview counted, or store.AnyCount when none were sent.
+type redactionAsked struct {
+	text, why string
+	rows      int
+}
+
+// secretOf is what a redaction or its preview asks for, or false once it
+// has answered 400 for a body it can't read, a blank text or rows below
+// one, as a redaction rewrites at least one.
+func secretOf(w http.ResponseWriter, r *http.Request) (redactionAsked, bool) {
+	var request struct {
+		Text, Why string
+		Rows      *int
+	}
 	if !httpapi.Decode(w, r, &request) {
-		return "", "", false
+		return redactionAsked{}, false
 	}
 	if strings.TrimSpace(request.Text) == "" {
 		http.Error(w, "mark the text to redact", http.StatusBadRequest)
-		return "", "", false
+		return redactionAsked{}, false
 	}
-	return request.Text, strings.TrimSpace(request.Why), true
+	asked := redactionAsked{text: request.Text, why: strings.TrimSpace(request.Why), rows: store.AnyCount}
+	if request.Rows != nil {
+		if *request.Rows < 1 {
+			http.Error(w, "rows is how many rows the preview counted: 1 or more", http.StatusBadRequest)
+			return redactionAsked{}, false
+		}
+		asked.rows = *request.Rows
+	}
+	return asked, true
 }
 
 // redactable is whether task id is archived, or false once it has answered

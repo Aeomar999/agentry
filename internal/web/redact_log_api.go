@@ -71,11 +71,11 @@ type logRedacted struct {
 // is answered as answerPreview answers one stream: 500 when a stream
 // failed, 409 otherwise.
 func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
-	text, _, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	preview := s.previewLog(text)
+	preview := s.previewLog(asked.text)
 	if preview.Rows == 0 {
 		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
@@ -89,11 +89,12 @@ func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 // answered as answerRedaction answers one stream. The snapshot is
 // written once, at the end. Only the page may ask, as for redact.
 func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
-	text, why, ok := secretOf(w, r)
+	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	preview := s.previewLog(text)
+	asked.rows = store.AnyCount // its rows are counted per stream, which this route doesn't take yet
+	preview := s.previewLog(asked.text)
 	if preview.Rows == 0 {
 		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
@@ -103,7 +104,7 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	for _, listed := range preview.Streams {
 		done := streamRedaction{rejection: listed.rejection, err: listed.err}
 		if listed.Error == "" {
-			done = s.redactIn(listed.Stream, text, why, listed.Archived)
+			done = s.redactIn(listed.Stream, asked, listed.Archived)
 		}
 		switch {
 		case done.redaction.Position != 0:

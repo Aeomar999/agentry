@@ -60,7 +60,17 @@ var redactor = events.Actor{Kind: events.System, ID: "redactor"}
 // rows are rewritten, but the old text may stay in the WAL until
 // GiveBackSpace runs again.
 func (s *Store) Redact(stream, secret string, who events.Actor, why string) (events.Event, *events.Rejection, error) {
-	return s.redact(stream, secret, nil, who, why)
+	return s.redact(stream, secret, nil, AnyCount, who, why)
+}
+
+// RedactCounted is Redact of the rows the user counted: when rows is not
+// AnyCount, it is refused unless that many rows hold the secret as it
+// commits. The user confirms a redaction after Preview counted the rows,
+// and a row written since, such as a message holding the text, would
+// otherwise be rewritten without their seeing it. The count is checked
+// under the lock, with the stream's rows as the commit finds them.
+func (s *Store) RedactCounted(stream, secret string, rows int, who events.Actor, why string) (events.Event, *events.Rejection, error) {
+	return s.redact(stream, secret, nil, rows, who, why)
 }
 
 // RedactRows is Redact of only the rows of stream at positions, such as
@@ -70,17 +80,23 @@ func (s *Store) Redact(stream, secret string, who events.Actor, why string) (eve
 // hold the secret is left as it is, and when none does, it is refused as
 // Redact is when no row does.
 func (s *Store) RedactRows(stream, secret string, positions []int64, who events.Actor, why string) (events.Event, *events.Rejection, error) {
-	return s.redact(stream, secret, onlyAt(positions), who, why)
+	return s.redact(stream, secret, onlyAt(positions), AnyCount, who, why)
 }
 
-// redact is Redact of the rows named.
-func (s *Store) redact(stream, secret string, named rowsNamed, who events.Actor, why string) (events.Event, *events.Rejection, error) {
+// redact is Redact of the rows named, refused unless counted of them hold
+// the secret.
+func (s *Store) redact(stream, secret string, named rowsNamed, counted int, who events.Actor, why string) (events.Event, *events.Rejection, error) {
 	found, rejection, err := s.find(stream, secret, named, who, why)
 	if rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
+	found.counted = counted
 	return s.rewrite(found)
 }
+
+// AnyCount is the count of a redaction that rewrites however many rows
+// hold the secret: no redaction rewrites none.
+const AnyCount = 0
 
 // rowsNamed is the rows a redaction may rewrite, by position: every row of
 // its stream when nil.
@@ -105,12 +121,31 @@ func (named rowsNamed) of(found []rewrittenRow) []rewrittenRow {
 }
 
 // pending is what Redact found to rewrite, with no lock held: the
-// redaction, the stream's last row then, and its rows that held the
-// secret, rewritten.
+// redaction, the stream's last row then, its rows that held the secret,
+// rewritten, and how many the user counted.
 type pending struct {
 	redaction events.Proposal
 	through   int64
 	rows      []rewrittenRow
+	counted   int
+}
+
+// recounted refuses a redaction whose rows aren't the number the user
+// counted, unless they counted none (AnyCount).
+func (found pending) recounted() *events.Rejection {
+	held := len(found.rows)
+	if found.counted == AnyCount || held == found.counted {
+		return nil
+	}
+	return &events.Rejection{Check: "redact", Reason: fmt.Sprintf("%s this text now, not %d: count them again", rowsHolding(held), found.counted)}
+}
+
+// rowsHolding is how many rows hold a text, in words.
+func rowsHolding(rows int) string {
+	if rows == 1 {
+		return "1 row holds"
+	}
+	return strconv.Itoa(rows) + " rows hold"
 }
 
 // find is Redact's first half, with no lock held: the stream's rows named
@@ -152,14 +187,19 @@ func findIn(stream string, rows []row, secret string, named rowsNamed, who event
 	return pending{redaction: redactionOf(stream, who, why, found), through: rows[len(rows)-1].Position, rows: found}, nil, nil
 }
 
-// rewrite is Redact's second half, under the lock: the checks, the
-// commit, the refold and the WAL emptied.
+// rewrite is Redact's second half, under the lock: the checks, the count
+// among them, the commit, the refold and the WAL emptied. As the stream
+// took nothing since its rows were read, they are the rows the commit
+// rewrites.
 func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stream := found.redaction.Stream
 	if rejection, err := s.unmoved(stream, found.through, "redact", "find its rows again"); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
+	}
+	if rejection := found.recounted(); rejection != nil {
+		return events.Event{}, rejection, nil
 	}
 	if rejection := s.refusal(found); rejection != nil {
 		return events.Event{}, rejection, nil

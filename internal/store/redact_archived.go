@@ -62,7 +62,15 @@ type ArchiveBlobs interface {
 // won't delete, or the WAL won't empty. A refused one's error says another
 // writer archived the task instead of that it is left unarchived.
 func (s *Store) RedactArchived(stream, secret string, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
-	return s.redactArchived(stream, secret, nil, who, why, summarise, blobs)
+	return s.redactArchived(stream, secret, nil, AnyCount, who, why, summarise, blobs)
+}
+
+// RedactArchivedCounted is RedactArchived of the rows the user counted, as
+// RedactCounted is Redact of them: the count is checked before the task
+// is unarchived, so a stale one writes nothing, and again as the
+// redaction commits.
+func (s *Store) RedactArchivedCounted(stream, secret string, rows int, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
+	return s.redactArchived(stream, secret, nil, rows, who, why, summarise, blobs)
 }
 
 // RedactArchivedRows is RedactArchived of only the rows at positions, as
@@ -70,11 +78,12 @@ func (s *Store) RedactArchived(stream, secret string, who events.Actor, why stri
 // the blob and back in the log once unarchived, so the positions read
 // through the blob name the same rows the redaction rewrites.
 func (s *Store) RedactArchivedRows(stream, secret string, positions []int64, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
-	return s.redactArchived(stream, secret, onlyAt(positions), who, why, summarise, blobs)
+	return s.redactArchived(stream, secret, onlyAt(positions), AnyCount, who, why, summarise, blobs)
 }
 
-// redactArchived is RedactArchived of the rows named.
-func (s *Store) redactArchived(stream, secret string, named rowsNamed, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
+// redactArchived is RedactArchived of the rows named, refused unless
+// counted of them hold the secret.
+func (s *Store) redactArchived(stream, secret string, named rowsNamed, counted int, who events.Actor, why string, summarise func() any, blobs ArchiveBlobs) (events.Event, *events.Rejection, error) {
 	kept, live, unarchived, rejection, err := s.archivedRows(stream, blobs)
 	if rejection != nil || err != nil {
 		return events.Event{}, rejection, err
@@ -82,13 +91,13 @@ func (s *Store) redactArchived(stream, secret string, named rowsNamed, who event
 	if err := removeRedacted(kept, live, blobs); err != nil {
 		return events.Event{}, nil, fmt.Errorf("redacting %s: %w", stream, err)
 	}
-	if _, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, named, who, why); rejection != nil || err != nil {
+	if _, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, named, counted, who, why); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
 	if _, rejection, err := s.Unarchive(stream, blobs); rejection != nil || err != nil {
 		return events.Event{}, rejection, err
 	}
-	redaction, archives, rejection, err := s.redactUnarchived(stream, secret, named, who, why)
+	redaction, archives, rejection, err := s.redactUnarchived(stream, secret, named, counted, who, why)
 	if redaction.Position == 0 { // nothing committed: the old blobs still hold what the rows do
 		return events.Event{}, rejection, errors.Join(err, s.archiveAgain(stream, summarise, blobs))
 	}
@@ -162,11 +171,16 @@ func unarchivedRow(marker events.Event, through int64) (row, error) {
 }
 
 // checkArchived is what Redact would find in an archived stream's rows
-// named, or what it would refuse in them, before anything is written.
-func (s *Store) checkArchived(stream string, rows []row, secret string, named rowsNamed, who events.Actor, why string) (pending, *events.Rejection, error) {
+// named, or what it would refuse in them, a count other than the user's
+// among it, before anything is written.
+func (s *Store) checkArchived(stream string, rows []row, secret string, named rowsNamed, counted int, who events.Actor, why string) (pending, *events.Rejection, error) {
 	found, rejection, err := findIn(stream, rows, secret, named, who, why)
 	if rejection != nil || err != nil {
 		return pending{}, rejection, err
+	}
+	found.counted = counted
+	if rejection := found.recounted(); rejection != nil {
+		return pending{}, rejection, nil
 	}
 	return found, s.rewritable(stream, found.rows), nil
 }
@@ -183,7 +197,7 @@ func (s *Store) PreviewArchived(stream, secret string, blobs Opener) (int, *even
 	if rejection != nil || err != nil {
 		return 0, rejection, err
 	}
-	found, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, nil, redactor, "")
+	found, rejection, err := s.checkArchived(stream, append(append(kept, live...), unarchived), secret, nil, AnyCount, redactor, "")
 	if rejection != nil || err != nil {
 		return 0, rejection, err
 	}
@@ -226,9 +240,10 @@ func removeRedacted(kept, live []row, blobs Remover) error {
 }
 
 // redactUnarchived is Redact of the rows named of a stream just
-// unarchived, its redaction naming the blobs every task.archived among its
-// rows names, which are returned to delete once it commits.
-func (s *Store) redactUnarchived(stream, secret string, named rowsNamed, who events.Actor, why string) (events.Event, []string, *events.Rejection, error) {
+// unarchived, refused unless counted of them hold the secret, its
+// redaction naming the blobs every task.archived among its rows names,
+// which are returned to delete once it commits.
+func (s *Store) redactUnarchived(stream, secret string, named rowsNamed, counted int, who events.Actor, why string) (events.Event, []string, *events.Rejection, error) {
 	rows, err := rowsOf(s.reads, stream, s.applied.Load())
 	if err != nil {
 		return events.Event{}, nil, nil, err
@@ -242,6 +257,7 @@ func (s *Store) redactUnarchived(stream, secret string, named rowsNamed, who eve
 		return events.Event{}, nil, rejection, err
 	}
 	found.redaction.Data["archives"] = archives
+	found.counted = counted
 	redaction, rejection, err := s.rewrite(found)
 	return redaction, archives, rejection, err
 }
