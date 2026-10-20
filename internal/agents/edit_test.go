@@ -231,3 +231,16 @@ func TestRemovalsKeepAnAgentsTeamByItsNameNow(t *testing.T) {
 		t.Errorf("removals = %v, want %v", removals, want)
 	}
 }
+
+// A team edit whose kept or new row takes a removed agent's name drops
+// that removal: the name is an agent's again.
+func TestRemovalsForgetANameATeamEditGivesAgain(t *testing.T) {
+	stream := []events.Event{
+		{Proposal: TeamEdit{Team: "Data", To: "Data", Agents: []EditedAgent{{Was: "b", Name: "b"}}, Removed: []string{"a", "c", "d"}}.Proposal(you)},
+		{Proposal: TeamEdit{Team: "Other", To: "Other", Agents: []EditedAgent{{Was: "x", Name: "c"}, {Name: "a"}}}.Proposal(you)},
+	}
+	removals := RemovalsIn(stream)
+	if want := (Removals{"d": "Data"}); !maps.Equal(removals, want) {
+		t.Errorf("removals = %v, want %v", removals, want)
+	}
+}
