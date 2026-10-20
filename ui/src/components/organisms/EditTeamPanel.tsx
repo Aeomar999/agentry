@@ -33,7 +33,9 @@ import {
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { teamsOf } from "@/lib/teams";
+import { isBuiltInTeam } from "@/lib/templates";
 import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
+import { SaveTemplateButton, SaveTemplateForm, useSaveTemplate } from "./SaveAsTemplate";
 import {
   DiscardQuestion,
   ErrorSummary,
@@ -120,11 +122,15 @@ function EditTeamForm(props: EditTeamFormProps) {
     await onRemoved(removed);
     guard.leave();
   });
-  const guard = useCloseGuard(changed, saving || removal.busy, onClose);
+  const coordinator = loaded?.agents.find((row) => row.coordinates);
+  const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", list.focus);
+  const guard = useCloseGuard(changed, saving || removal.busy || template.busy, onClose);
   const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
   const hasProblems = (key: string) => problems.some((p) => typeof p.field === "object" && p.field.row === key);
   const teamProblem = problems.find((p) => p.field === "team")?.message;
   const notFound = loaded !== null && loaded.agents.length === 0;
+  // A team under a built-in template's name can't be saved as a template.
+  const savesAsTemplate = ready !== undefined && loaded !== null && !isBuiltInTeam(ready.templates, loaded.team);
 
   // reload reads the roster again, then loads the team named from it.
   async function reload(name: string, refocus: boolean) {
@@ -194,8 +200,12 @@ function EditTeamForm(props: EditTeamFormProps) {
   // at a time: Back or a link held while it asks puts the close question in
   // its place until that is answered.
   const removeAsks = removal.asking !== null && !guard.asking;
-  // Nothing else saves while Remove team asks or runs.
   const removeHolds = removeAsks || removal.busy;
+  // Save as a template's form, in the same places, the same way.
+  const templateAsks = template.asking !== null && !guard.asking;
+  const templateHolds = templateAsks || template.busy;
+  // Nothing else saves while either asks or runs.
+  const holds = removeHolds || templateHolds;
   const removeQuestion = (place: "footer" | "body") =>
     loaded && (
       <RemoveTeamQuestion
@@ -207,6 +217,7 @@ function EditTeamForm(props: EditTeamFormProps) {
         saving={saving}
       />
     );
+  const templateForm = (place: "footer" | "body") => <SaveTemplateForm place={place} template={template} />;
   const footer = guard.asking ? (
     <DiscardQuestion
       question={opening?.question ?? discardEditQuestion(loaded?.team ?? props.team)}
@@ -218,19 +229,28 @@ function EditTeamForm(props: EditTeamFormProps) {
   ) : notFound ? undefined : loadError ? (
     <Footer onCancel={guard.ask} />
   ) : (
-    // While Remove team asks, its question takes the footer's place; on a
-    // phone it asks under This team, and the footer stays, off.
+    // While Remove team asks, or Save as a template's form is open, it takes
+    // the footer's place; on a phone it is under This team, and the footer
+    // stays, off.
     <>
       {removeAsks && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
-      <div className={removeAsks ? "sm:hidden" : undefined}>
+      {templateAsks && <div className="max-sm:hidden">{templateForm("footer")}</div>}
+      <div className={removeAsks || templateAsks ? "sm:hidden" : undefined}>
         <Footer
           text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
           saving={saving}
           off={loading || !changed}
-          locked={removeHolds}
+          locked={holds}
           primary={{ label: "Save changes", busy: "Saving…", onClick: () => save() }}
           onCancel={guard.ask}
-          start={!loading && <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving} />}
+          start={
+            !loading && (
+              <>
+                <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving || templateHolds} />
+                {savesAsTemplate && <SaveTemplateButton place="footer" template={template} changed={changed} off={saving || removeHolds} />}
+              </>
+            )
+          }
         />
       </div>
     </>
@@ -242,8 +262,8 @@ function EditTeamForm(props: EditTeamFormProps) {
       title={title}
       titleId={TITLE_ID}
       focusTitle={!adding}
-      onClose={removeAsks ? removal.keep : guard.ask}
-      canClose={!saving && !removal.busy}
+      onClose={removeAsks ? removal.keep : templateAsks ? template.cancel : guard.ask}
+      canClose={!saving && !removal.busy && !template.busy}
       footer={footer}
     >
       {/* On a phone every input and select in the panel is 44px tall, for thumbs. */}
@@ -280,7 +300,7 @@ function EditTeamForm(props: EditTeamFormProps) {
             {refused?.kind === "cut short" && (
               <CutShort
                 refusal={refused}
-                busy={saving || reloading || removeHolds}
+                busy={saving || reloading || holds}
                 onSaveAgain={() => sending(() => saveAgain(loaded), loaded, loaded)}
               />
             )}
@@ -299,7 +319,7 @@ function EditTeamForm(props: EditTeamFormProps) {
                   profiles={offer}
                   then="save"
                   adding={saving}
-                  disabled={removeHolds}
+                  disabled={holds}
                   onAdd={() => save(ready.policy.hash)}
                 />
               </div>
@@ -340,11 +360,28 @@ function EditTeamForm(props: EditTeamFormProps) {
               <h3 id="team-this" className="text-[12px] font-medium text-ink-secondary">
                 This team
               </h3>
-              {/* Save as a template goes first here (step 7). */}
+              {savesAsTemplate &&
+                (templateAsks ? (
+                  templateForm("body")
+                ) : (
+                  <SaveTemplateButton
+                    place="body"
+                    template={template}
+                    changed={changed}
+                    off={saving || removeHolds}
+                    className="flex-col items-stretch"
+                  />
+                ))}
               {removeAsks ? (
                 removeQuestion("body")
               ) : (
-                <RemoveTeamButton place="body" removal={removal} only={onlyTeam} off={saving} className="flex-col items-stretch" />
+                <RemoveTeamButton
+                  place="body"
+                  removal={removal}
+                  only={onlyTeam}
+                  off={saving || templateHolds}
+                  className="flex-col items-stretch"
+                />
               )}
             </section>
           </>

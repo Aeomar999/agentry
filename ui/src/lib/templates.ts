@@ -1,6 +1,6 @@
 import { api, ApiError, send } from "@/api/client";
 import type { TeamTemplate } from "@/api/types";
-import { whyNotCreated } from "./custom-team";
+import { sameName, whyNotCreated } from "./custom-team";
 
 // Your templates (docs/design/custom-teams.md, decision 5): a team saved as
 // it was last saved, to add again from Add a team. Saving, deleting,
@@ -19,6 +19,11 @@ export interface TemplateForm {
 // checkTemplateName is why the name can't be saved, before asking the
 // server, or undefined when it can.
 export const checkTemplateName = (name: string) => (name.trim() === "" ? "Give the template a name." : undefined);
+
+// isBuiltInTeam says whether team has a built-in template's team name, in
+// any case: no template of yours may have it, so such a team isn't saved as one.
+export const isBuiltInTeam = (templates: TeamTemplate[], team: string) =>
+  templates.some((template) => !template.userMade && sameName(template.team, team));
 
 // saveAsTemplate saves the team, as it was last saved, as your template.
 export function saveAsTemplate(team: string, form: TemplateForm): Promise<TeamTemplate> {

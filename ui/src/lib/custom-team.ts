@@ -57,7 +57,7 @@ let rows = 0;
 const nextKey = () => `agent-${++rows}`;
 
 // sameName compares names as the server does: trimmed, in any case.
-const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+export const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 // blankTeam is a team of one coordinator with no prompt, so the server's
 // default coordinator prompt is used, in a colour no roster agent has (the
