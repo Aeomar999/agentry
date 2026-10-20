@@ -37,7 +37,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	if text := machinesText(task, machines, roster.Assignees(coordinator.TeamName())); text != "" {
 		section(&b, "Machines", text)
 	}
-	otherTeams(&b, task, coordinator, roster)
+	otherTeams(&b, task, coordinator, roster, basesOf(state))
 	epicSection(&b, task, f)
 	for _, more := range briefSections(hooks, state, task) {
 		section(&b, more.Heading, more.Text)
@@ -164,9 +164,18 @@ func plan(b *strings.Builder, task *tasks.Task, agent, what string) {
 		"`- [ ] step`. Keep it short and concrete. "+keep)
 }
 
+// basesOf are the bases of the templates in state; none without a state,
+// so built-in links still resolve.
+func basesOf(state features.Reader) agents.Bases {
+	if state == nil {
+		return agents.Bases{}
+	}
+	return agents.BasesIn(state)
+}
+
 // otherTeams lists the other teams, and when to pass the task to one or ask
 // one for something.
-func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, roster agents.Roster) {
+func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, roster agents.Roster, bases agents.Bases) {
 	var list strings.Builder
 	for _, team := range roster.Teams() {
 		lead, ok := roster.Coordinator(team)
@@ -184,7 +193,7 @@ func otherTeams(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, 
 		ask = "give them a story of this epic, with \"team\" in the split"
 	}
 	text := list.String() + "\nYou are in the " + coordinator.TeamName() + " team. When this task needs something only " +
-		"another team does well" + routingExamples(roster) + ", " + ask + ". Ask for one thing at a time, and say exactly " +
+		"another team does well" + routingExamples(roster, bases) + ", " + ask + ". Ask for one thing at a time, and say exactly " +
 		"what you need and what done looks like."
 	if !task.TeamChosen && task.Parent == "" {
 		text += "\n\nThe user didn't choose a team for this task. Before anyone works on it, decide whose work it is: if it " +
@@ -217,13 +226,13 @@ var routedWork = []struct{ template, work string }{
 }
 
 // routingExamples is " (a document from Writing, ...)" for the teams in
-// roster made from routedWork's templates, by their names now; "" when
-// there are none.
-func routingExamples(roster agents.Roster) string {
+// roster linked to routedWork's templates, or to templates of yours based
+// on them, by their names now; "" when there are none.
+func routingExamples(roster agents.Roster, bases agents.Bases) string {
 	var examples []string
 	for _, routed := range routedWork {
 		for _, team := range roster.Teams() {
-			if roster.TemplateOf(team) == routed.template {
+			if bases.Of(roster.TemplateOf(team)) == routed.template {
 				examples = append(examples, routed.work+" from "+team)
 				break
 			}

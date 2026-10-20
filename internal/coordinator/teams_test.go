@@ -255,3 +255,14 @@ func TestAnAgentWithNoDescriptionIsListedByName(t *testing.T) {
 		t.Errorf("drafter should be listed by name alone:\n%s", brief)
 	}
 }
+
+// A team linked to a template of yours is routed to by the template's base.
+func TestTheRoutingSentenceFollowsYourTemplatesBase(t *testing.T) {
+	roster := rosterWith(append(agents.CustomTeam("Docs", "", []agents.Agent{
+		{Name: "docs-lead", Engine: "claude", Coordinates: true},
+	}, you), agents.TeamLinked("Docs", "handbook", you))...)
+	bases := agents.Bases{Yours: agents.UserTemplates{{ID: "handbook", Team: "Handbook", BasedOn: "writing"}}}
+	if got := routingExamples(roster, bases); got != " (a document from Docs, code from Software)" {
+		t.Errorf("a team linked to your Writing-based template: %q", got)
+	}
+}
