@@ -85,7 +85,10 @@ export function AgentsPage() {
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Removing | null>(null);
   const addTeam = useRef<HTMLButtonElement>(null); // where focus goes back to from the New team panel
-  const landed = useRef(""); // the team the panel created or renamed, whose heading takes focus as it goes
+  // The team the panel created or saved, whose heading takes focus as it
+  // goes: always for a new team; for one saved, only when focus had nowhere
+  // to go back to, as when it was renamed or opened from a link.
+  const landed = useRef<{ team: string; always: boolean } | null>(null);
   const canRemoveTeam = teams.length > 1;
   const open = (agent: Agent) => navigate(`/agents/${encodeURIComponent(agent.name)}`);
   const ordered = teams.flatMap((t) => t.agents);
@@ -94,8 +97,9 @@ export function AgentsPage() {
   // Once the panel has gone, and with it the inert page, so the heading can take focus.
   useEffect(() => {
     if (panel !== null || !landed.current) return;
-    document.getElementById(teamId(landed.current))?.querySelector("h2")?.focus();
-    landed.current = "";
+    const { team, always } = landed.current;
+    landed.current = null;
+    if (always || document.activeElement === document.body) document.getElementById(teamId(team))?.querySelector("h2")?.focus();
   }, [panel]);
   // The panel's address keeps the view behind it.
   const showPanel = (panel: Record<string, string>, options?: NavigateOptions) =>
@@ -218,7 +222,7 @@ export function AgentsPage() {
           onClose={closePanel}
           onCreated={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
-            landed.current = team;
+            landed.current = { team, always: true };
           }}
         />
       )}
@@ -230,10 +234,9 @@ export function AgentsPage() {
           onClose={closePanel}
           onSaved={async (team) => {
             await reloadAll(); // so the team is on the page as the panel closes
-            // Renamed, its Edit team button is gone, so focus goes to its heading.
-            // In any case: a team's section is keyed by its exact name. A link
-            // in another case has no Edit team button to go back to either.
-            if (team !== panel) landed.current = team;
+            // Its Edit team button, when it opened the panel and is still
+            // there, takes focus back first; else the heading does.
+            landed.current = { team, always: false };
           }}
         />
       )}

@@ -947,6 +947,17 @@ describe("Edit team: changing it", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit team, Docs" }));
   });
 
+  test("saved unrenamed from a link that spells the team exactly, the heading takes focus: there is no button to go back to", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
+    openAt("/agents?team=Docs");
+    fireEvent.click(docsRow("writer"));
+    typeInto("Description", "Drafts.");
+    await save();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Docs" }));
+  });
+
   test("a renamed, changed, added and removed agent each say so until saved, and all go in the PUT", async () => {
     vi.mocked(api).mockResolvedValueOnce({ team: "Docs", version: "v2" });
     openAt("/agents?team=Docs");
