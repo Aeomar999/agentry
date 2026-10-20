@@ -59,7 +59,8 @@ type State struct {
 	connections connections.Roster
 	settings    settings.Settings
 	templates   agents.UserTemplates
-	skipped     tally // foreign streams and unknown types
+	removed     agents.RemovedTemplates // built from the templates stream too
+	skipped     tally                   // foreign streams and unknown types
 
 	snapshot *snapshotAt   // read from a snapshot, still to be checked against the log by Resume
 	tail     *tail         // set while Resume applies the events after a snapshot
@@ -118,7 +119,7 @@ func (s *State) empty() {
 	s.owned, s.ownedOrder = map[string]any{}, map[string][]created{}
 	s.broken, s.archived, s.erased = map[string]error{}, map[string]tasks.Summary{}, map[string]tasks.Erasure{}
 	s.roster, s.workers, s.connections, s.settings = nil, workers.Roster{}, connections.Roster{}, settings.Default()
-	s.templates = nil
+	s.templates, s.removed = nil, nil
 	s.skipped = newTally()
 	s.snapshot, s.tail, s.resumed = nil, nil, 0
 }
@@ -177,6 +178,7 @@ func (s *State) fold(stream string, accepted []events.Event) {
 			s.settings = settings.FromEvents(accepted)
 		case events.TemplatesStream:
 			s.templates = agents.UserTemplatesFromEvents(accepted)
+			s.removed = agents.RemovedTemplatesFromEvents(accepted)
 		case events.PolicyStream:
 		default:
 			if owner != nil {
@@ -296,6 +298,7 @@ func (s *State) Apply(e events.Event) {
 		case events.SettingsStream:
 			s.settings = s.settings.Next(e)
 		case events.TemplatesStream:
+			s.removed = s.removed.Next(e, s.templates)
 			s.templates = s.templates.Next(e)
 		case events.PolicyStream:
 		default:
@@ -434,6 +437,7 @@ func (s *State) copy() *State {
 		connections: s.connections,
 		settings:    s.settings,
 		templates:   s.templates,
+		removed:     s.removed,
 		skipped:     s.skipped.clone(),
 	}
 }
@@ -623,6 +627,15 @@ func (s *State) Templates() agents.UserTemplates {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.templates.Clone()
+}
+
+// RemovedTemplates are the ids of the templates you removed, with the base
+// each had; a broken stream is kept as Roster's is. They share nothing with
+// the state's own.
+func (s *State) RemovedTemplates() agents.RemovedTemplates {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.removed.Clone()
 }
 
 // Unknown is what the state skipped or didn't understand: each foreign

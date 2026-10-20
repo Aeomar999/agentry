@@ -3,6 +3,7 @@ package agents
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"time"
 
@@ -36,7 +37,7 @@ func (u UserTemplate) Template() Template {
 // and template, which adding the template sets again. It is based on the
 // built-in template the team is linked to, directly or through one of
 // yours.
-func SaveTemplate(roster Roster, yours UserTemplates, team, name, id, description string, by events.Actor) (events.Proposal, error) {
+func SaveTemplate(roster Roster, yours UserTemplates, removed RemovedTemplates, team, name, id, description string, by events.Actor) (events.Proposal, error) {
 	var members []Agent
 	for _, a := range roster {
 		if a.TeamName() == team {
@@ -49,22 +50,22 @@ func SaveTemplate(roster Roster, yours UserTemplates, team, name, id, descriptio
 		return events.Proposal{}, errors.New("there is no team " + team)
 	}
 	saving := UserTemplate{ID: id, Team: name, Description: description, Agents: members, From: team,
-		BasedOn: baseOf(roster.TemplateOf(team), yours)}.Save(by)
+		BasedOn: baseOf(roster.TemplateOf(team), yours, removed)}.Save(by)
 	saving.Data["new"] = true // never replacing one: the rules refuse a name or id of yours
 	return saving, nil
 }
 
 // baseOf is the built-in template a team linked to template comes from:
 // template itself when it is built in, the base of yours when it is yours,
-// and "" for none.
-func baseOf(template string, yours UserTemplates) string {
+// live or removed, and "" for none.
+func baseOf(template string, yours UserTemplates, removed RemovedTemplates) string {
 	if _, builtIn := TemplateWithID(template); builtIn {
 		return template
 	}
 	if saved, ok := yours.WithID(template); ok {
 		return saved.BasedOn
 	}
-	return ""
+	return removed[template]
 }
 
 // Save is the event that saves u, as SaveTemplate's does: the rules check
@@ -150,6 +151,54 @@ func (t UserTemplates) Clone() UserTemplates {
 		cloned[i] = u
 	}
 	return cloned
+}
+
+// RemovedTemplates are the ids of the templates you removed, each with the
+// built-in template it was based on then ("" for none): the teams made
+// from one still name its id, and keep that base's features. A removed id
+// stays taken until an import saves it again.
+type RemovedTemplates map[string]string
+
+// RemovedTemplatesFromEvents is the removed templates after the templates
+// stream.
+func RemovedTemplatesFromEvents(stream []events.Event) RemovedTemplates {
+	var removed RemovedTemplates
+	var live UserTemplates
+	for _, e := range stream {
+		removed.Apply(e, live)
+		live.Apply(e)
+	}
+	return removed
+}
+
+// Next is the removed templates after e, built on a copy: r itself is left
+// as it was. live are the templates as they were before e, which hold the
+// base of a template e removes.
+func (r RemovedTemplates) Next(e events.Event, live UserTemplates) RemovedTemplates {
+	r = r.Clone()
+	r.Apply(e, live)
+	return r
+}
+
+// Apply changes the removed templates in place by one accepted event of
+// the templates stream; live are the templates as they were before it.
+func (r *RemovedTemplates) Apply(e events.Event, live UserTemplates) {
+	id := e.Text("id")
+	switch e.Type {
+	case events.TemplateSaved:
+		delete(*r, id)
+	case events.TemplateRemoved:
+		gone, _ := live.WithID(id) // the rules accepted it as one of yours
+		if *r == nil {
+			*r = RemovedTemplates{}
+		}
+		(*r)[id] = gone.BasedOn
+	}
+}
+
+// Clone is a copy of the removed templates that shares nothing with them.
+func (r RemovedTemplates) Clone() RemovedTemplates {
+	return maps.Clone(r)
 }
 
 // TemplateAgents reads a template.saved's agents, whether a proposal not

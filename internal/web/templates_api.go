@@ -47,7 +47,7 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		id = templateIDFor(name, s.templateIDTaken)
 	}
-	proposal, err := agents.SaveTemplate(roster, s.state.Templates(), team, name, id, strings.TrimSpace(request.Description), httpapi.You)
+	proposal, err := agents.SaveTemplate(roster, s.state.Templates(), s.state.RemovedTemplates(), team, name, id, strings.TrimSpace(request.Description), httpapi.You)
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
@@ -57,13 +57,17 @@ func (s *Server) saveTemplate(w http.ResponseWriter, r *http.Request) {
 
 // templateTaken is why a new template can't be called name or have id (""
 // for one still to be made), in the words the page shows under its name, or
-// "" when it can.
+// "" when it can. A removed template's id stays taken: its teams still
+// name it.
 func (s *Server) templateTaken(name, id string) string {
 	if taken := s.templateCalled(name); taken != "" {
 		return taken
 	}
 	if yours, taken := s.state.Templates().WithID(id); id != "" && taken {
 		return yoursCalled(yours.Team)
+	}
+	if _, removed := s.state.RemovedTemplates()[id]; removed {
+		return "You removed a template with the id " + id + ". Import its file to bring it back, or pick another id."
 	}
 	return ""
 }
@@ -215,9 +219,11 @@ func fitted(base, suffix string) string {
 	return base + suffix
 }
 
-// templateIDTaken says whether a built-in template or one of yours has id.
+// templateIDTaken says whether a built-in template or one of yours, there
+// or removed, has id.
 func (s *Server) templateIDTaken(id string) bool {
 	_, builtIn := agents.TemplateWithID(id)
 	_, yours := s.state.Templates().WithID(id)
-	return builtIn || yours
+	_, removed := s.state.RemovedTemplates()[id]
+	return builtIn || yours || removed
 }

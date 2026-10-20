@@ -59,6 +59,7 @@ func Equal(s *store.Store, state *State) error {
 		{events.ConnectionsStream, func(e []events.Event) (any, error) { return connections.FromEvents(e), nil }, held.Connections()},
 		{events.SettingsStream, func(e []events.Event) (any, error) { return settings.FromEvents(e), nil }, held.Settings()},
 		{events.TemplatesStream, func(e []events.Event) (any, error) { return agents.UserTemplatesFromEvents(e), nil }, held.Templates()},
+		{events.TemplatesStream, func(e []events.Event) (any, error) { return agents.RemovedTemplatesFromEvents(e), nil }, held.RemovedTemplates()},
 	}
 	for _, r := range rosters {
 		heldRoster := func() (any, error) { return r.held, held.Broken(r.stream) }

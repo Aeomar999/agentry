@@ -83,6 +83,7 @@ type savedState struct {
 	Prefixes    map[string]Unknown
 	Types       map[events.Type]Unknown
 	Erased      map[string]tasks.Erasure
+	Removed     agents.RemovedTemplates
 }
 
 // savedPlace is a created, exported for gob.
@@ -201,7 +202,7 @@ func (s *State) saved() savedState {
 		Position: s.position, Streams: s.streams, Created: placesOf(s.created), TasksMade: s.tasksMade,
 		OwnedOrder: ownedOrder, Broken: slices.Sorted(maps.Keys(s.broken)), Archived: s.archived, Erased: s.erased,
 		Roster: s.roster.Save(), Workers: s.workers.Save(), Connections: s.connections.Save(), Settings: s.settings,
-		Templates: s.templates, Prefixes: s.skipped.prefixes, Types: s.skipped.types,
+		Templates: s.templates, Prefixes: s.skipped.prefixes, Types: s.skipped.types, Removed: s.removed,
 	}
 }
 
@@ -345,7 +346,7 @@ func (s *State) decode(body []byte) (broken []string, err error) {
 		s.settings = saved.Settings
 	}
 	if !isBroken[events.TemplatesStream] {
-		s.templates = saved.Templates
+		s.templates, s.removed = saved.Templates, saved.Removed
 	}
 	s.skipped = tally{prefixes: saved.Prefixes, types: saved.Types}
 	return saved.Broken, nil

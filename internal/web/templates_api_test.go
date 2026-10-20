@@ -388,7 +388,7 @@ func TestASavedTemplateIsListedAfterARestart(t *testing.T) {
 	for _, p := range append(agents.SeedProposals(nil), agents.CustomTeam("Planning", members, httpapi.You)...) {
 		written.Propose(p)
 	}
-	saving, err := agents.SaveTemplate(state.Roster(), state.Templates(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)
+	saving, err := agents.SaveTemplate(state.Roster(), state.Templates(), state.RemovedTemplates(), "Planning", "Planning", "my-planning", "Ours.", httpapi.You)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,6 +470,52 @@ func TestATemplateKeepsItsBase(t *testing.T) {
 	}
 	if saved, _ := savedTemplates(t, s).WithID("more-ideas"); saved.BasedOn != "visionaries" {
 		t.Errorf("saved from a team of yours: %+v", saved)
+	}
+}
+
+// A team added from a template you then removed still names its id, so a
+// template saved from it keeps the base the removed one had.
+func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
+	server, s := newTestServer(t)
+	ideas := map[string]any{"id": "ideas", "team": "Ideas", "basedOn": "visionaries", "agents": []any{
+		map[string]any{"name": "dreamer", "engine": "claude", "prompt": "Dream.", "coordinates": true}}}
+	body, _ := json.Marshal(ideas)
+	call(t, server, "POST", "/api/teams/templates/import", string(body))
+	if code, reply := call(t, server, "POST", "/api/teams", `{"template":"ideas"}`); code != 200 {
+		t.Fatalf("add Ideas: %d %s", code, reply)
+	}
+	call(t, server, "DELETE", "/api/teams/templates/ideas", "")
+	if code, reply := call(t, server, "POST", "/api/teams/Ideas/template", `{"name":"More Ideas","id":"more-ideas"}`); code != 200 {
+		t.Fatalf("save: %d %s", code, reply)
+	}
+	if saved, _ := savedTemplates(t, s).WithID("more-ideas"); saved.BasedOn != "visionaries" {
+		t.Errorf("saved from a removed template's team: %+v", saved)
+	}
+}
+
+// A removed template's id stays taken, as its teams still name it: a save
+// giving it is refused, one without an id gets another, and only importing
+// the removed template's file brings it back.
+func TestARemovedTemplatesIDStaysTaken(t *testing.T) {
+	server, s := newTestServer(t)
+	madeAgent(t, server, "planner", "Planning", true)
+	call(t, server, "POST", "/api/teams/Planning/template", `{"description":"Ours."}`)
+	_, exported := call(t, server, "GET", "/api/teams/templates/planning/export", "")
+	call(t, server, "DELETE", "/api/teams/templates/planning", "")
+
+	want := "You removed a template with the id planning. Import its file to bring it back, or pick another id."
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{"name":"Others","id":"planning"}`); code != http.StatusConflict || strings.TrimSpace(body) != want {
+		t.Errorf("a new save with the removed id: %d %s", code, body)
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Planning/template", `{}`); code != 200 || !strings.Contains(body, `"id":"planning-2"`) {
+		t.Errorf("a new save without an id: %d %s", code, body)
+	}
+	call(t, server, "DELETE", "/api/teams/templates/planning-2", "")
+	if code, body := call(t, server, "POST", "/api/teams/templates/import", exported); code != 200 {
+		t.Fatalf("import: %d %s", code, body)
+	}
+	if saved, found := savedTemplates(t, s).WithID("planning"); !found || saved.Description != "Ours." {
+		t.Errorf("the import brought back %+v", saved)
 	}
 }
 

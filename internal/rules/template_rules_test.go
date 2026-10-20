@@ -379,7 +379,7 @@ func TestASavedTeamIsAccepted(t *testing.T) {
 			t.Fatalf("adding the Readers team: %v, %v", rejection, err)
 		}
 	}
-	p, err := agents.SaveTemplate(state.Roster(), state.Templates(), "Readers", "Readers", "mine", "My readers.", you)
+	p, err := agents.SaveTemplate(state.Roster(), state.Templates(), state.RemovedTemplates(), "Readers", "Readers", "mine", "My readers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,5 +388,16 @@ func TestASavedTeamIsAccepted(t *testing.T) {
 	}
 	if saved, ok := state.Templates().WithID("mine"); !ok || len(saved.Agents) == 0 {
 		t.Errorf("the saved template: %+v", saved)
+	}
+}
+
+// A removed template's id stays taken by the teams that still name it: a
+// new save under it is refused, as two at once could both pass the web's
+// check, and an import brings the template back.
+func TestARemovedTemplatesIDIsOnlyImported(t *testing.T) {
+	reasons := reasonsFor(t, newTemplate("papers", "Readers"), removingTemplate("papers"),
+		newTemplate("papers", "Others"), savingTemplate("papers", "Readers", research()))
+	if reasons[2] != "you removed a template with the id papers: import its file to bring it back" || reasons[3] != "" {
+		t.Errorf("after removing papers: %q, want the new save refused and the import taken", reasons)
 	}
 }

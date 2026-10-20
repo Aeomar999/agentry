@@ -87,7 +87,7 @@ func checkCore(p events.Proposal, state State, catalogue *events.Catalogue, inst
 		if err := state.Broken(events.TemplatesStream); err != nil {
 			return refuse("could not read the templates: " + err.Error())
 		}
-		if reason := rule(state.Templates(), p); reason != "" {
+		if reason := rule(state.Templates(), state.RemovedTemplates(), p); reason != "" {
 			return refuse(reason)
 		}
 	}

@@ -114,7 +114,8 @@ type Reader interface {
 	Workers() workers.Roster
 	Connections() connections.Roster
 	Settings() settings.Settings
-	Templates() agents.UserTemplates // the team templates you saved
+	Templates() agents.UserTemplates           // the team templates you saved
+	RemovedTemplates() agents.RemovedTemplates // the ids of those you removed, with the base each had
 	Broken(stream string) error
 	Owned(stream string) (any, error) // a feature's stream, as its Next left it; nil, nil when it holds nothing
 	OwnedIDs(prefix string) []string  // the streams with a prefix, in log order, broken ones too

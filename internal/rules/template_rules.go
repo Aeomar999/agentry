@@ -9,9 +9,9 @@ import (
 )
 
 // templateRules check the team templates you save against those saved
-// already: a template makes agents only when you add it, under the agent
-// rules then.
-var templateRules = map[events.Type]func(agents.UserTemplates, events.Proposal) string{
+// already, and those removed: a template makes agents only when you add
+// it, under the agent rules then.
+var templateRules = map[events.Type]func(agents.UserTemplates, agents.RemovedTemplates, events.Proposal) string{
 	events.TemplateSaved:   aSavedTemplate,
 	events.TemplateRemoved: aRemovedTemplate,
 }
@@ -25,7 +25,7 @@ var asAnAgent = allOf(nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, colum
 // AddTeam gives it when the name is taken: "-99" still fits the agent rules.
 const templateAgentNameLimit = 28
 
-func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
+func aSavedTemplate(saved agents.UserTemplates, removed agents.RemovedTemplates, p events.Proposal) string {
 	switch team := p.Text("team"); {
 	case strings.TrimSpace(team) == "":
 		return "a template needs a team name"
@@ -44,7 +44,7 @@ func aSavedTemplate(saved agents.UserTemplates, p events.Proposal) string {
 		return reason
 	}
 	if p.Flag("new") {
-		if reason := notYoursYet(saved, p.Text("team"), p.Text("id")); reason != "" {
+		if reason := notYoursYet(saved, removed, p.Text("team"), p.Text("id")); reason != "" {
 			return reason
 		}
 	} else if reason := noOtherCalled(saved, p.Text("team"), p.Text("id")); reason != "" {
@@ -93,10 +93,14 @@ func builtInBase(basedOn string) string {
 }
 
 // notYoursYet refuses a new template, saved from a team, a name or id one of
-// yours has: the web checks before saving too, and this keeps two saves at
-// once from both passing it, the second replacing the first. Only Propose
-// runs it, so older logs holding a save that replaced one still replay.
-func notYoursYet(saved agents.UserTemplates, team, id string) string {
+// yours has, or the id of one you removed, whose teams still name it: the
+// web checks before saving too, and this keeps two saves at once from both
+// passing it, the second replacing the first. Only Propose runs it, so
+// older logs holding a save that replaced one still replay.
+func notYoursYet(saved agents.UserTemplates, removed agents.RemovedTemplates, team, id string) string {
+	if _, gone := removed[id]; gone {
+		return "you removed a template with the id " + id + ": import its file to bring it back"
+	}
 	for _, yours := range saved {
 		switch {
 		case strings.EqualFold(yours.Team, team):
@@ -157,7 +161,7 @@ func keepsNothingOfAnInstall(agent agents.Agent) string {
 	return ""
 }
 
-func aRemovedTemplate(saved agents.UserTemplates, p events.Proposal) string {
+func aRemovedTemplate(saved agents.UserTemplates, _ agents.RemovedTemplates, p events.Proposal) string {
 	id := p.Text("id")
 	if strings.TrimSpace(id) == "" {
 		return "which template? It needs an id"

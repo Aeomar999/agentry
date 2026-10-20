@@ -1,7 +1,10 @@
 package current
 
 import (
+	"errors"
+	"maps"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,5 +133,70 @@ func TestTemplatesComeBackFromASnapshot(t *testing.T) {
 	want := agents.UserTemplates{{ID: "papers", Team: "Papers", Description: "Again", Agents: []agents.Agent{chief, redrafts}, SavedAt: savedAgain}}
 	if got := restored.Templates(); !reflect.DeepEqual(got, want) {
 		t.Errorf("after the snapshot's tail:\n%+v\nwant %+v", got, want)
+	}
+}
+
+// Removing a template keeps its id and base, at every split of the log,
+// until an import saves it again.
+func TestRemovedTemplatesKeepTheirBase(t *testing.T) {
+	based := saved("ideas", "", chief)
+	based.Data["basedOn"] = "visionaries"
+	steps := []struct {
+		name string
+		p    events.Proposal
+		want agents.RemovedTemplates
+	}{
+		{"save", saved("papers", "First", chief), nil},
+		{"save one with a base", based, nil},
+		{"remove the first", removed("papers"), agents.RemovedTemplates{"papers": ""}},
+		{"remove the one with a base", removed("ideas"), agents.RemovedTemplates{"papers": "", "ideas": "visionaries"}},
+		{"import the first", saved("papers", "First", chief), agents.RemovedTemplates{"ideas": "visionaries"}},
+	}
+	var proposals []events.Proposal
+	for _, step := range steps {
+		proposals = append(proposals, step.p)
+		log := logOf(proposals...)
+		for split := range len(log) + 1 {
+			s := loaded(log[:split])
+			for _, e := range log[split:] {
+				s.Apply(e)
+			}
+			if got := s.RemovedTemplates(); !maps.Equal(got, step.want) {
+				t.Fatalf("%s, loading %d of %d events: %v, want %v", step.name, split, len(log), got, step.want)
+			}
+		}
+	}
+}
+
+// The removed templates come back from a snapshot, unless the templates
+// stream was broken: Resume rebuilds that from the log.
+func TestRemovedTemplatesComeBackFromASnapshot(t *testing.T) {
+	path, log := seededLog(t, saved("papers", "First", chief), removed("papers"))
+	cut := log[len(log)-1].Position
+	restored := Restore(snapshotted(t, path, cut, nil), "build-1", withIdeas, ideas.Streams())
+	if got, want := restored.RemovedTemplates(), (agents.RemovedTemplates{"papers": ""}); !maps.Equal(got, want) {
+		t.Errorf("the snapshot holds %v, want %v", got, want)
+	}
+
+	breaks := func(s *State) { s.broken[events.TemplatesStream] = errors.New("broken") }
+	restored = Restore(snapshotted(t, path, cut, breaks), "build-1", withIdeas, ideas.Streams())
+	if got := restored.RemovedTemplates(); got != nil {
+		t.Errorf("a broken templates stream's snapshot holds %v", got)
+	}
+}
+
+// Equal compares the removed templates with a replay, apart from the
+// templates themselves.
+func TestEqualSeesWrongRemovedTemplates(t *testing.T) {
+	s := openStore(t, saved("papers", "First", chief), removed("papers"))
+	state := New(withIdeas, ideas.Streams())
+	state.Loaded(0)
+	fromTheLog(t, s, state)
+	if err := Equal(s, state); err != nil {
+		t.Fatal(err)
+	}
+	state.removed = agents.RemovedTemplates{"papers": "visionaries"}
+	if err := Equal(s, state); err == nil || !strings.HasPrefix(err.Error(), "templates: ") {
+		t.Errorf("Equal with a wrong base: %v", err)
 	}
 }

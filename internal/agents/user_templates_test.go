@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestASavedTeamIsAddedBackTheSame(t *testing.T) {
 	log = append(log, events.Event{Proposal: Agent{Name: "reader"}.Learned(you, "Skim the abstract first.")})
 	made := FromEvents(log)
 
-	saving, err := SaveTemplate(made, nil, "Papers", "Papers", "papers", "Reads papers.", you)
+	saving, err := SaveTemplate(made, nil, nil, "Papers", "Papers", "papers", "Reads papers.", you)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,13 +113,13 @@ func equalAgents(a, b Agent) bool {
 }
 
 func TestSavingATeamThatIsntThere(t *testing.T) {
-	if _, err := SaveTemplate(FromEvents(seeded()), nil, "Papers", "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
+	if _, err := SaveTemplate(FromEvents(seeded()), nil, nil, "Papers", "Papers", "papers", "", events.Actor{Kind: events.Human, ID: "you"}); err == nil {
 		t.Error("saved a team with no agents")
 	}
 }
 
 func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
-	saving, err := SaveTemplate(FromEvents(seeded()), nil, DefaultTeam, DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
+	saving, err := SaveTemplate(FromEvents(seeded()), nil, nil, DefaultTeam, DefaultTeam, "mine", "", events.Actor{Kind: events.Human, ID: "you"})
 	if members, _ := TemplateAgents(saving.Data); err != nil || len(members) != len(defaults) {
 		t.Errorf("the %s team saved %d agents (%v)", DefaultTeam, len(members), err)
 	}
@@ -130,7 +131,7 @@ func TestTheDefaultTeamIsSavedByItsName(t *testing.T) {
 func TestATemplateKeepsItsNameItsTeamAndWhenItWasSaved(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	log := added(papers().Template(), seeded())
-	saving, err := SaveTemplate(FromEvents(log), nil, "Papers", "Reading Room", "reading-room", "", you)
+	saving, err := SaveTemplate(FromEvents(log), nil, nil, "Papers", "Reading Room", "reading-room", "", you)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +174,7 @@ func TestATemplateWithNoSourceTeamSavesNoFrom(t *testing.T) {
 // so the rules refuse a name or id of yours, and an import's does not.
 func TestASavedTeamIsANewTemplate(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
-	saving, err := SaveTemplate(FromEvents(seeded()), nil, DefaultTeam, DefaultTeam, "mine", "", you)
+	saving, err := SaveTemplate(FromEvents(seeded()), nil, nil, DefaultTeam, DefaultTeam, "mine", "", you)
 	if err != nil || saving.Data["new"] != true {
 		t.Errorf("saved %+v (%v), want new", saving.Data, err)
 	}
@@ -204,7 +205,7 @@ func TestASavedTemplateIsBasedOnTheBuiltInTemplateItsTeamCameFrom(t *testing.T) 
 		"a team from yours with a base": {fromYours, "Papers", "visionaries"},
 		"a team you made yourself":      {madeByHand, "Papers", ""},
 	} {
-		saving, err := SaveTemplate(FromEvents(c.log), UserTemplates{ideas}, c.team, "Mine", "mine", "", you)
+		saving, err := SaveTemplate(FromEvents(c.log), UserTemplates{ideas}, nil, c.team, "Mine", "mine", "", you)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -215,5 +216,58 @@ func TestASavedTemplateIsBasedOnTheBuiltInTemplateItsTeamCameFrom(t *testing.T) 
 		if _, written := saving.Data["basedOn"]; written != (c.want != "") {
 			t.Errorf("%s: saved %+v", name, saving.Data)
 		}
+	}
+}
+
+// A team from a template you removed still names its id, so saving it again
+// keeps the base the removed template had.
+func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	log := added(papers().Template(), seeded())
+	saving, err := SaveTemplate(FromEvents(log), nil, RemovedTemplates{"papers": "visionaries"}, "Papers", "Mine", "mine", "", you)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saving.Data["basedOn"] != "visionaries" {
+		t.Errorf("saved %+v, want based on visionaries", saving.Data)
+	}
+}
+
+// A removed template keeps the base it had then, with or without one, and
+// an import of its id takes it out again.
+func TestRemovedTemplatesKeepTheirBaseUntilImported(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	ideas := papers()
+	ideas.ID, ideas.Team, ideas.BasedOn = "ideas", "Ideas", "visionaries"
+	stream := []events.Event{
+		logged(t, papers().Save(you)), logged(t, ideas.Save(you)),
+		logged(t, RemoveTemplate("papers", you)), logged(t, RemoveTemplate("ideas", you)),
+	}
+	removed := RemovedTemplatesFromEvents(stream)
+	if want := (RemovedTemplates{"papers": "", "ideas": "visionaries"}); !maps.Equal(removed, want) {
+		t.Errorf("removed %v, want %v", removed, want)
+	}
+	brought := RemovedTemplatesFromEvents(append(stream, logged(t, ideas.Save(you))))
+	if want := (RemovedTemplates{"papers": ""}); !maps.Equal(brought, want) {
+		t.Errorf("after the import: %v, want %v", brought, want)
+	}
+	if live := UserTemplatesFromEvents(stream); len(live) != 0 {
+		t.Errorf("the templates still hold %+v", live)
+	}
+}
+
+// Next builds on a copy, as the state hands the old map to readers.
+func TestRemovedTemplatesNextLeavesTheOriginal(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	before := RemovedTemplates{"papers": ""}
+	after := before.Next(logged(t, papers().Save(you)), nil)
+	if len(after) != 0 || !maps.Equal(before, RemovedTemplates{"papers": ""}) {
+		t.Errorf("after %v, before %v", after, before)
+	}
+	ideas := papers()
+	ideas.ID, ideas.BasedOn = "ideas", "visionaries"
+	after = before.Next(logged(t, RemoveTemplate("ideas", you)), UserTemplates{ideas})
+	if after["ideas"] != "visionaries" || len(before) != 1 {
+		t.Errorf("after %v, before %v", after, before)
 	}
 }
