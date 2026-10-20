@@ -4,19 +4,21 @@ import (
 	"encoding/json"
 	"math/rand/v2"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 // For seeded random data, nested objects and arrays with keys in any
-// order, spaces between tokens, numbers as they were written, and strings
-// of quotes, backslashes, control characters, <>&, text beyond ASCII and
-// the secret at the start, middle or end, or repeated, redactedData writes
-// the bytes expected: each string that held the secret encoded again with
-// it replaced, and every other byte as it was. They decode to the data
-// with the secret replaced in every string, and the fields and the bytes
-// removed are the ones the data held.
+// order, the secret among them, spaces between tokens, numbers as they
+// were written, and strings of quotes, backslashes, control characters,
+// <>&, text beyond ASCII and the secret at the start, middle or end, or
+// repeated, redactedData writes the bytes expected: each string value that
+// held the secret encoded again with it replaced, and every other byte,
+// the keys included, as it was. They decode to the data with the secret
+// replaced in every string value, and the fields and the bytes removed are
+// the ones the data held.
 func TestRedactedDataChangesOnlyTheStringsHoldingTheSecret(t *testing.T) {
 	for _, secret := range []string{secret, `p"a\ss`, "<tok\n>", "wörd ✓"} {
 		for seed := range uint64(300) {
@@ -72,9 +74,11 @@ func (g *randomData) space() {
 // keys are the keys an object may have, plain or not.
 var keys = []string{"title", "a", "_k", "k1", "a b", "x.y", `q"k`, "ünï", "<k>", ""}
 
-// object writes an object at path with its keys in a random order.
+// object writes an object at path with its keys in a random order, one
+// of them may be the secret, which stays as it was.
 func (g *randomData) object(path string, depth int) {
 	g.both("{")
+	keys := append(slices.Clone(keys), g.secret)
 	order := g.r.Perm(len(keys))[:g.r.IntN(5)]
 	for i, k := range order {
 		if i > 0 {

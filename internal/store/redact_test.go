@@ -365,6 +365,38 @@ func TestARowNotWrittenAsTheLogWritesIsNotRedacted(t *testing.T) {
 	}
 }
 
+// A key that holds the secret stays as it was, while the value beside it
+// is redacted: no event type has a map whose keys a user writes.
+func TestAKeyHoldingTheSecretIsKept(t *testing.T) {
+	data := `{"` + secret + `X":"` + secret + `X"}`
+	rw, err := redactedData(data, secret)
+	if err != nil || rw.refused != "" {
+		t.Fatal(err, rw.refused)
+	}
+	if want := `{"` + secret + `X":"` + Redacted + `X"}`; rw.data != want {
+		t.Errorf("got %s, want %s", rw.data, want)
+	}
+	if want := []string{`$."` + secret + `X"`}; !reflect.DeepEqual(rw.fields, want) {
+		t.Errorf("fields %v, want %v", rw.fields, want)
+	}
+}
+
+// A string holding the secret that json.Marshal would write otherwise, a
+// < not escaped, a / or an A escaped, or a raw U+2028, is refused.
+func TestAStringEscapedOtherwiseIsRefused(t *testing.T) {
+	for name, raw := range map[string]string{
+		"a < not escaped": `"<` + secret + `"`,
+		"a / escaped":     `"\/` + secret + `"`,
+		"an A escaped":    `"\u0041` + secret + `"`,
+		"a raw U+2028":    "\"\u2028" + secret + `"`,
+	} {
+		rw, err := redactedData(`{"title":`+raw+`}`, secret)
+		if err != nil || !strings.HasPrefix(rw.refused, "isn't written as the log writes data") {
+			t.Errorf("%s: refused %q, %v", name, rw.refused, err)
+		}
+	}
+}
+
 // Propose refuses event.redacted from anyone: only Redact writes it, with
 // its rows.
 func TestOnlyRedactWritesARedaction(t *testing.T) {

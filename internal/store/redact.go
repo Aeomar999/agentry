@@ -184,15 +184,21 @@ func rewritten(rows []row, secret string) ([]rewrittenRow, error) {
 // [redacted]. No fields means the data doesn't hold the secret.
 func redactedData(data, secret string) (rewrittenRow, error) {
 	var found finding
+	escapedOtherwise := false
 	rewritten, err := eachString(data, func(text, raw, path string) (string, bool) {
-		return found.in(text, raw, path, secret)
+		replaced, ok := found.in(text, path, secret)
+		if !ok {
+			return "", false
+		}
+		escapedOtherwise = escapedOtherwise || encoded(text) != raw
+		return encoded(replaced), true
 	})
 	if err != nil || len(found.fields) == 0 {
 		return rewrittenRow{}, err
 	}
 	rw := rewrittenRow{data: rewritten, fields: found.fields, removed: found.removed}
 	switch {
-	case found.escapedOtherwise:
+	case escapedOtherwise:
 		rw.refused = "isn't written as the log writes data: a string holding the secret is escaped otherwise, so rewriting it would change more than the secret"
 	case found.survives:
 		rw.refused = "would still show the secret next to " + Redacted
@@ -203,7 +209,8 @@ func redactedData(data, secret string) (rewrittenRow, error) {
 // eachString is data with each string value, not a key, put through
 // rewrite: given its text, decoded, its raw bytes, quotes included, and
 // its JSON path, rewrite says what to write in its place, or false to keep
-// it. Every other byte is copied as it was.
+// it. Every other byte is copied as it was. Keys are kept as they are: no
+// event type has a map whose keys a user writes, so no secret is in one.
 func eachString(data string, rewrite func(text, raw, path string) (string, bool)) (string, error) {
 	decoder := json.NewDecoder(strings.NewReader(data))
 	decoder.UseNumber()
@@ -301,16 +308,14 @@ func (c cursor) pastValue() {
 // order the row holds them: for data appendEvent wrote, each object's keys
 // sorted.
 type finding struct {
-	fields           []string
-	removed          int
-	survives         bool // the secret is still in a string once replaced
-	escapedOtherwise bool // a string that held it isn't escaped as appendEvent escapes
+	fields   []string
+	removed  int
+	survives bool // the secret is still in a string once replaced
 }
 
-// in is the string at path, whose text and raw bytes are given, with
-// secret replaced and encoded again, which it notes, or false when the
-// text doesn't hold the secret.
-func (f *finding) in(text, raw, path, secret string) (string, bool) {
+// in is text, the string at path, with secret replaced, which it notes,
+// or false when the text doesn't hold the secret.
+func (f *finding) in(text, path, secret string) (string, bool) {
 	copies := strings.Count(text, secret)
 	if copies == 0 {
 		return "", false
@@ -319,8 +324,7 @@ func (f *finding) in(text, raw, path, secret string) (string, bool) {
 	f.removed += copies * len(secret)
 	replaced := strings.ReplaceAll(text, secret, Redacted)
 	f.survives = f.survives || strings.Contains(replaced, secret)
-	f.escapedOtherwise = f.escapedOtherwise || encoded(text) != raw
-	return encoded(replaced), true
+	return replaced, true
 }
 
 // encoded is text as a JSON string, as appendEvent's json.Marshal writes it.
