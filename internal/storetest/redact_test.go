@@ -313,3 +313,85 @@ func TestARowWithTheSecretInAKeyIsRefusedBeforeTheRules(t *testing.T) {
 		}
 	}
 }
+
+// Test 6: with the rules on, a row that holds the secret only in a number,
+// alone or beside a string holding it in another row, is refused for
+// that, not for its redaction naming no fields: in a live task, in an
+// agent's knowledge and in an archived task. Preview gives the same
+// reason, and the log is as it was.
+func TestASecretLeftInANumberIsRefusedBeforeTheRules(t *testing.T) {
+	for _, c := range []struct {
+		name, stream, secret string
+		archived             bool
+		// held proposes the row holding the secret in a number, after
+		// any others holding it, and returns its position.
+		held func(*testing.T, *store.Store, *current.State) int64
+	}{
+		{"a live task, alone", "task-1", "7901", false, inAPort("One")},
+		{"a live task, beside a string", "task-1", "7901", false, inAPort("PIN 7901")},
+		{"an archived task", "task-1", "7901", true, inAPort("One")},
+		{"knowledge", events.AgentsStream, "5151", false, func(t *testing.T, s *store.Store, state *current.State) int64 {
+			engineer, _ := state.Roster().Get("engineer")
+			learned := engineer.Learned(you, "plain")
+			learned.Data["n"] = 5151
+			return proposed(t, s, learned)
+		}},
+	} {
+		s, state := Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+		for _, p := range agents.SeedProposals(nil) {
+			mustPropose(t, s, p)
+		}
+		at := c.held(t, s, state)
+		blobs := sharedfiles.Disk{Dir: t.TempDir()}
+		preview, redact := s.Preview, func(stream, secret string) (events.Event, *events.Rejection, error) {
+			return s.Redact(stream, secret, you, "")
+		}
+		if c.archived {
+			ArchiveIn(t, s, state, c.stream, blobs)
+			preview = func(stream, secret string) (int, *events.Rejection, error) {
+				return s.PreviewArchived(stream, secret, blobs)
+			}
+			redact = func(stream, secret string) (events.Event, *events.Rejection, error) {
+				return s.RedactArchived(stream, secret, you, "", summarise(state, stream), blobs)
+			}
+		}
+		before, err := s.Stream(c.stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last := s.LastPosition()
+		want := "the row at " + strconv.FormatInt(at, 10) + " holds the secret outside its text, as in a number"
+		if count, rejection, err := preview(c.stream, c.secret); count != 0 || err != nil || rejection == nil || !strings.HasPrefix(rejection.Reason, want) {
+			t.Errorf("%s: Preview %d, %v, %v, want %q", c.name, count, rejection, err, want)
+		}
+		if _, rejection, err := redact(c.stream, c.secret); err != nil || rejection == nil || !strings.HasPrefix(rejection.Reason, want) {
+			t.Errorf("%s: %v, %v, want %q", c.name, rejection, err, want)
+		}
+		after, err := s.Stream(c.stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.LastPosition() != last || !reflect.DeepEqual(after, before) {
+			t.Errorf("%s: a refused redaction changed the log:\n%v\n%v", c.name, before, after)
+		}
+	}
+}
+
+// inAPort creates task-1 with title and has its worktree take port 7901,
+// returning that row's position.
+func inAPort(title string) func(*testing.T, *store.Store, *current.State) int64 {
+	return func(t *testing.T, s *store.Store, _ *current.State) int64 {
+		mustPropose(t, s, events.Proposal{Stream: "task-1", Actor: you, Type: events.TaskCreated, Data: map[string]any{"title": title, "repo": "/r", "coordinator": "tech-lead"}})
+		return proposed(t, s, events.Proposal{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "agentry/task-1", "port": 7901}})
+	}
+}
+
+// proposed proposes p, which must be accepted, and returns its position.
+func proposed(t *testing.T, s *store.Store, p events.Proposal) int64 {
+	t.Helper()
+	e, rejection, err := s.Propose(p)
+	if rejection != nil || err != nil {
+		t.Fatalf("proposing %s on %s: %v, %v", p.Type, p.Stream, rejection, err)
+	}
+	return e.Position
+}

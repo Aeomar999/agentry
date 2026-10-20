@@ -140,14 +140,15 @@ func (s *Store) rewrite(found pending) (events.Event, *events.Rejection, error) 
 	return event, nil, nil
 }
 
-// refusal is why the rules or rewritable refuse what Redact found, under
-// the lock. The rules come first, so a row is refused for what it is
-// before how it is written.
+// refusal is why rewritable or the rules refuse what Redact found, under
+// the lock. rewritable comes first: a row it can't rewrite, such as one
+// holding the secret only in a number, has no fields in the redaction,
+// and the rules would refuse that for naming none instead of saying why.
 func (s *Store) refusal(found pending) *events.Rejection {
-	if rejection := s.validate(found.redaction); rejection != nil {
+	if rejection := rewritable(found.rows); rejection != nil {
 		return rejection
 	}
-	return rewritable(found.rows)
+	return s.validate(found.redaction)
 }
 
 // Preview is what Redact would do with secret in stream, writing nothing:
