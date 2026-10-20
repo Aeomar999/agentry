@@ -2023,6 +2023,30 @@ func TestMovingATeamsCoordinatorAgainFinishesTheMove(t *testing.T) {
 	}
 }
 
+// A step handed to one of the team's agents holds the move back, as that
+// agent is about to be at work, even with no turn open yet.
+func TestAStepHandedToATeamsAgentHoldsTheCoordinatorBack(t *testing.T) {
+	server, s := newTestServer(t)
+	if code, body := call(t, server, "POST", "/api/teams", dataTeam); code != 200 {
+		t.Fatalf("adding the Data team: %d %s", code, body)
+	}
+	call(t, server, "POST", "/api/tasks", `{"title":"Chart the sign-ups","team":"Data"}`)
+	worker := events.Actor{Kind: events.Worker, ID: "local"}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.WorktreeReady, Data: map[string]any{"path": "/w", "branch": "b", "port": 7901}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnStarted, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "hash": "h"}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: "turn-1", Data: map[string]any{"agent": "data-lead", "report": "r"}},
+		{Stream: "task-1", Actor: events.Actor{Kind: events.Agent, ID: "data-lead"}, Type: events.TaskAssigned, Data: map[string]any{"agent": "analyst", "instructions": "go"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	if code, body := call(t, server, "POST", "/api/teams/Data/coordinator", `{"agent":"analyst"}`); code != http.StatusConflict || !strings.Contains(body, "while task-1 has data-lead or analyst at work") {
+		t.Errorf("moving it while analyst has a step to take: %d %s, want 409", code, body)
+	}
+}
+
 // An agent sent with no team joins the default team, as agents from before
 // teams do, and once Software is respelled it joins the respelled team, not a
 // coordinator-less twin of it.
