@@ -237,12 +237,12 @@ func TestATeamFromARemovedTemplateKeepsItsBase(t *testing.T) {
 
 // Updating a template saves its team's agents as they are now over it,
 // keeping its id, name and base, and its description unless another is
-// given.
+// given. The team, Papers, is named apart from its template, Ideas.
 func TestATemplateIsUpdatedFromItsTeam(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
+	roster := FromEvents(added(papers().Template(), seeded()))
 	ideas := papers()
-	ideas.BasedOn = "visionaries"
-	roster := FromEvents(added(ideas.Template(), seeded()))
+	ideas.Team, ideas.BasedOn = "Ideas", "visionaries"
 	for i, a := range roster {
 		if a.Name == "reader" {
 			roster[i].Prompt = "Read the papers twice."
@@ -258,9 +258,9 @@ func TestATemplateIsUpdatedFromItsTeam(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
-		saved, _ := UserTemplatesFromEvents([]events.Event{logged(t, papers().Save(you)), logged(t, saving)}).WithID("papers")
+		saved, _ := UserTemplatesFromEvents([]events.Event{logged(t, ideas.Save(you)), logged(t, saving)}).WithID("papers")
 		reader := saved.Agents[slices.IndexFunc(saved.Agents, func(a Agent) bool { return a.Name == "reader" })]
-		if saved.Team != "Papers" || saved.BasedOn != "visionaries" || saved.Description != c.want || reader.Prompt != "Read the papers twice." {
+		if saved.Team != "Ideas" || saved.BasedOn != "visionaries" || saved.Description != c.want || reader.Prompt != "Read the papers twice." {
 			t.Errorf("%s: updated to %+v", c.name, saved)
 		}
 		if !saving.Flag("replacing") || saving.Flag("new") {
