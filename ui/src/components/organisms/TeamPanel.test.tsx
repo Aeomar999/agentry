@@ -1376,6 +1376,8 @@ describe("Edit team: Remove team", () => {
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(address()).toBe("/agents");
+    await back();
+    expect(address()).toBe("/tasks");
   });
 
   test("while it removes, the question says so and nothing else can be pressed", async () => {
