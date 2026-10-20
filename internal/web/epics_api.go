@@ -14,17 +14,31 @@ import (
 
 // setEpic files a task under an epic as one of its stories, moves it to
 // another, or with "" takes it out of the one it is in. The desk may do
-// it too: it sorts work, and approves nothing.
+// it too: it sorts work, and approves nothing. A task or epic there is
+// none of is answered as noTask answers it: 410 once erased, else 404.
 func (s *Server) setEpic(w http.ResponseWriter, r *http.Request) {
 	var request struct{ Epic string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
-	if refused := s.fileUnder(r.PathValue("task"), strings.TrimSpace(request.Epic)); refused != "" {
+	id, epic := r.PathValue("task"), strings.TrimSpace(request.Epic)
+	for _, named := range []string{id, epic} {
+		if named != "" && s.isNone(named) {
+			s.noTask(w, named)
+			return
+		}
+	}
+	if refused := s.fileUnder(id, epic); refused != "" {
 		http.Error(w, refused, http.StatusConflict)
 		return
 	}
-	httpapi.Reply(w, map[string]string{"task": r.PathValue("task"), "epic": request.Epic})
+	httpapi.Reply(w, map[string]string{"task": id, "epic": request.Epic})
+}
+
+// isNone is whether there is no task id, never made or erased.
+func (s *Server) isNone(id string) bool {
+	task, err := s.task(id)
+	return errors.Is(err, current.ErrErased) || err == nil && task == nil
 }
 
 // fileUnder makes the task a story of epic, out of any epic it was in, and

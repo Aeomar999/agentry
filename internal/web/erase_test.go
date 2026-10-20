@@ -469,8 +469,9 @@ func TestAnErasedTaskBlocksNoStory(t *testing.T) {
 }
 
 // A route that acts on a task answers an erased one 410, with the day, as
-// the reads do: the board's move, the limits, the repo, the shared files
-// and the Workspace. A task there never was is still 404.
+// the reads do: the board's move, the limits, the repo, the epic, the
+// shared files and the Workspace, and filing under an erased epic. A task
+// there never was is still 404.
 func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 	f := newEraseFixture(t)
 	answer := f.erase(t, "task-2")
@@ -481,6 +482,8 @@ func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 		{"PUT", "/api/tasks/{task}/budget", `{"budget":5}`},
 		{"PUT", "/api/tasks/{task}/turns", `{"maxTurns":5}`},
 		{"PUT", "/api/tasks/{task}/repo", string(repo)},
+		{"PUT", "/api/tasks/{task}/epic", `{"epic":""}`},
+		{"PUT", "/api/tasks/task-1/epic", `{"epic":"{task}"}`},
 		{"GET", "/api/tasks/{task}/shared", ""},
 		{"GET", "/api/tasks/{task}/shared/file?name=mine.md", ""},
 		{"POST", "/api/tasks/{task}/shared?name=new.md", "notes"},
@@ -488,13 +491,13 @@ func TestTheRoutesOnAnErasedTaskSayItIsGone(t *testing.T) {
 		{"GET", "/api/tasks/{task}/file?path=README.md", ""},
 		{"GET", "/api/tasks/{task}/commits", ""},
 	} {
-		erased := strings.ReplaceAll(c.path, "{task}", "task-2")
-		if code, body := call(t, f.server, c.method, erased, c.body); code != http.StatusGone || strings.TrimSpace(body) != want {
-			t.Errorf("%s %s: %d %q, want 410 %q", c.method, erased, code, body, want)
+		erased, erasedBody := strings.ReplaceAll(c.path, "{task}", "task-2"), strings.ReplaceAll(c.body, "{task}", "task-2")
+		if code, body := call(t, f.server, c.method, erased, erasedBody); code != http.StatusGone || strings.TrimSpace(body) != want {
+			t.Errorf("%s %s %s: %d %q, want 410 %q", c.method, erased, erasedBody, code, body, want)
 		}
-		unknown := strings.ReplaceAll(c.path, "{task}", "task-9")
-		if code, body := call(t, f.server, c.method, unknown, c.body); code != http.StatusNotFound {
-			t.Errorf("%s %s: %d %q, want 404", c.method, unknown, code, body)
+		unknown, unknownBody := strings.ReplaceAll(c.path, "{task}", "task-9"), strings.ReplaceAll(c.body, "{task}", "task-9")
+		if code, body := call(t, f.server, c.method, unknown, unknownBody); code != http.StatusNotFound {
+			t.Errorf("%s %s %s: %d %q, want 404", c.method, unknown, unknownBody, code, body)
 		}
 	}
 }
