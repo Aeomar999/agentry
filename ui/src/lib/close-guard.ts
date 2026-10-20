@@ -8,8 +8,9 @@ import { useBlocker } from "react-router-dom";
 // changes is held, so the panel's history entry stays, and asks the same.
 // Following a link with changes is held too; opening then says where the
 // link goes, so the panel can ask about that instead. Reload and closing
-// the tab get the browser's own prompt. While busy (a save) nothing asks
-// and Back stays put; the save's answer decides.
+// the tab get the browser's own prompt. While busy (a save or a remove)
+// nothing asks and Back stays put, changes or not; the answer decides
+// (decision 8).
 export interface CloseGuard {
   asking: boolean;
   opening: string; // the path of the link that was held while asking, "" for closing
@@ -24,10 +25,12 @@ export function useCloseGuard(changed: boolean, busy: boolean, onClose: () => vo
   const from = useRef<Element | null>(null); // where focus was when ask was called
   const [opening, setOpening] = useState("");
   const blocker = useBlocker(({ nextLocation, historyAction }) => {
-    const hold = changed && !leaving.current;
-    if (hold && !from.current) from.current = document.activeElement; // asking from Close already knows
-    if (hold) setOpening(historyAction === "PUSH" ? nextLocation.pathname : "");
-    return hold;
+    if (leaving.current) return false;
+    if (busy) return true; // and reset below, so Back stays put
+    if (!changed) return false;
+    if (!from.current) from.current = document.activeElement; // asking from Close already knows
+    setOpening(historyAction === "PUSH" ? nextLocation.pathname : "");
+    return true;
   });
   const asking = asked || (blocker.state === "blocked" && !busy);
 

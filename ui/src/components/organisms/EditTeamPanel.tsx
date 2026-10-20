@@ -116,11 +116,11 @@ function EditTeamForm(props: EditTeamFormProps) {
     : found.filter((p) => twoCoordinators && p.field === "agents");
   const missing = policy ? missingProfiles(draft, policy) : [];
   const changed = loaded !== null && unsaved(loaded, draft);
-  const guard = useCloseGuard(changed, saving, onClose);
   const removal = useRemoveTeam(loaded?.team ?? props.team, roster, list.focus, async () => {
     await onRemoved();
     guard.leave();
   });
+  const guard = useCloseGuard(changed, saving || removal.busy, onClose);
   const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
   const hasProblems = (key: string) => problems.some((p) => typeof p.field === "object" && p.field.row === key);
   const teamProblem = problems.find((p) => p.field === "team")?.message;

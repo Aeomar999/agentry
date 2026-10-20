@@ -1235,6 +1235,24 @@ describe("Edit team: saving", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  test("Back while Save again runs, with nothing left unsaved, stays put", async () => {
+    const error = "saved the Handbook team, but 1 task still needs moving: save again to finish (task-1: busy)";
+    vi.mocked(api)
+      .mockRejectedValueOnce(new ApiError(error, 409, { error, version: "v3" }))
+      .mockReturnValueOnce(new Promise(() => {}));
+    afterReload = { "/api/agents": [...ROSTER, ...DOCS.map((a) => ({ ...a, team: "Handbook", teamVersion: "v3" }))] };
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    typeInto("Team name", "Handbook");
+    await save();
+    await settle();
+    await act(async () => fireEvent.click(within(summary()).getByRole("button", { name: "Save again" })));
+    await back();
+
+    expect(address()).toBe("/agents?team=Docs");
+    expect(saveButton().textContent).toBe("Saving…");
+  });
+
   test("a profile policy.toml lacks is offered on the 409, and the retry carries the policy's hash", async () => {
     reads["/api/agents"] = [...ROSTER, ...DOCS.map((a) => (a.name === "writer" ? { ...a, profile: "read-mostly" } : a))];
     vi.mocked(api)
@@ -1348,6 +1366,28 @@ describe("Edit team: Remove team", () => {
     expect(within(question).getByRole("button", { name: "Keep" }).hasAttribute("disabled")).toBe(true);
     expect(inSheet().getByRole("button", { name: "Close" }).hasAttribute("disabled")).toBe(true);
     expect(inSheet().getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  test.each([
+    ["no changes", false],
+    ["unsaved changes", true],
+  ])("Back while it removes, with %s, stays put; the panel then goes back over its entry once", async (_, typed) => {
+    let removed = () => {};
+    vi.mocked(api).mockReturnValueOnce(new Promise((resolve) => (removed = () => resolve({ team: "Docs", removed: [] }))));
+    afterReload = { "/api/agents": ROSTER };
+    openAt("/tasks", "/agents");
+    fireEvent.click(screen.getByRole("button", { name: "Edit team, Docs" }));
+    if (typed) typeInto("Team name", "Handbook");
+    fireEvent.click(removeButton());
+    await act(async () => fireEvent.click(within(removeQuestion()!).getByRole("button", { name: "Remove" })));
+    await back();
+
+    expect(address()).toBe("/agents?team=Docs");
+    expect(within(removeQuestion()!).getByRole("button", { name: "Removing…" })).toBeTruthy();
+    expect(inSheet().queryByRole("group", { name: "Discard your changes to Docs?" })).toBeNull();
+    await act(async () => removed());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(address()).toBe("/agents");
   });
 
   test("a refusal quotes the server, links its tasks and takes focus; Remove stays off until the roster changes", async () => {
