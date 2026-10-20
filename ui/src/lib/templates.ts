@@ -1,6 +1,7 @@
 import { api, ApiError, send } from "@/api/client";
 import type { Agent, TeamTemplate } from "@/api/types";
 import { sameName, whyNotCreated } from "./custom-team";
+import { teamsOf } from "./teams";
 
 // Your templates (docs/design/custom-teams.md, decision 5): a team saved as
 // it was last saved, to add again from Add a team. Saving, deleting,
@@ -33,10 +34,39 @@ export function builtInTemplateOf(roster: Agent[], templates: TeamTemplate[], ag
   return templates.find((template) => !template.userMade && template.id === made && template.description !== "");
 }
 
-// saveAsTemplate saves the team, as it was last saved, as your template.
-export function saveAsTemplate(team: string, form: TemplateForm): Promise<TeamTemplate> {
+// A template saved from a team, and why that team isn't linked to it, if
+// it isn't: its teams keep a template's features through the link.
+export type SavedTemplate = TeamTemplate & { notLinked?: string };
+
+// saveAsTemplate saves the team, as it was last saved, as your template,
+// and links the team to it.
+export function saveAsTemplate(team: string, form: TemplateForm): Promise<SavedTemplate> {
   return api("POST", `/api/teams/${encodeURIComponent(team)}/template`, { name: form.name.trim(), description: form.description.trim() });
 }
+
+// yourLinkedTemplate is the template of yours, still there, that team's
+// coordinator is linked to: the one Update my template saves it over.
+export function yourLinkedTemplate(roster: Agent[], templates: TeamTemplate[], team: string): TeamTemplate | undefined {
+  const lead = teamsOf(roster)
+    .find((group) => sameName(group.team, team))
+    ?.agents.find((agent) => agent.coordinates);
+  return lead?.template ? templates.find((template) => template.userMade && template.id === lead.template) : undefined;
+}
+
+// updateTemplate saves the team, as it was last saved, over the template of
+// yours it is linked to, keeping that template's name and description.
+export function updateTemplate(team: string): Promise<SavedTemplate> {
+  return api("POST", `/api/teams/${encodeURIComponent(team)}/template`, { replacing: true });
+}
+
+export const whyTemplateNotUpdated = (failure: unknown) => failed("Couldn't update the template", failure);
+
+// linkTeam links the team to template id, as a save that couldn't link it offers.
+export function linkTeam(team: string, id: string): Promise<unknown> {
+  return api("POST", `/api/teams/${encodeURIComponent(team)}/link`, { template: id });
+}
+
+export const whyTeamNotLinked = (failure: unknown) => failed("Couldn't link the team", failure);
 
 // whyTemplateNotSaved is a refused save as the form shows it: the server
 // refuses a name a template has, in any case, with a 409 in the copy deck's

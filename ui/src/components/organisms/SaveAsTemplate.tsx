@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import type { TeamTemplate } from "@/api/types";
 import { Button } from "@/components/atoms/Button";
 import { Input } from "@/components/atoms/Input";
 import { errorId, Field } from "@/components/molecules/Field";
 import { useToast } from "@/components/organisms/Toasts";
 import { cn } from "@/lib/cn";
-import { checkTemplateName, saveAsTemplate, type TemplateForm, type TemplateRefusal, whyTemplateNotSaved } from "@/lib/templates";
+import {
+  checkTemplateName,
+  linkTeam,
+  type SavedTemplate,
+  saveAsTemplate,
+  type TemplateFailure,
+  type TemplateForm,
+  type TemplateRefusal,
+  updateTemplate,
+  whyTeamNotLinked,
+  whyTemplateNotSaved,
+  whyTemplateNotUpdated,
+} from "@/lib/templates";
 import type { Place } from "./RemoveTeam";
 
 // Save as a template in the Edit team panel (docs/design/custom-teams.md,
@@ -19,17 +30,23 @@ import type { Place } from "./RemoveTeam";
 // team as last saved, and description its coordinator's, for the form's
 // defaults; changed says the panel has unsaved changes, so save refuses as
 // the form says. Cancel and success put focus back on the button it came
-// from.
+// from. A template saved that the team couldn't be linked to is unlinked,
+// with Link this team's request and refusal, until it is linked or another
+// is saved.
 export function useSaveTemplate(team: string, description: string, changed: boolean, focus: (id: string) => void) {
   const notify = useToast();
   const [asking, setAsking] = useState<Place | null>(null);
   const [form, setForm] = useState<TemplateForm>({ name: "", description: "" });
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<TemplateRefusal | null>(null);
+  const [unlinked, setUnlinked] = useState<{ saved: SavedTemplate; place: Place } | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [linkRefused, setLinkRefused] = useState<TemplateFailure | null>(null);
 
   function ask(place: Place) {
     setForm({ name: team, description });
     setRefused(null);
+    setUnlinked(null);
     setAsking(place);
   }
 
@@ -45,7 +62,7 @@ export function useSaveTemplate(team: string, description: string, changed: bool
     if (empty) return setRefused({ kind: "name", message: empty });
     setRefused(null);
     setBusy(true);
-    let saved: TeamTemplate;
+    let saved: SavedTemplate;
     try {
       saved = await saveAsTemplate(team, form);
     } catch (failure) {
@@ -54,22 +71,47 @@ export function useSaveTemplate(team: string, description: string, changed: bool
     } finally {
       setBusy(false);
     }
+    if (saved.notLinked && asking) {
+      setUnlinked({ saved, place: asking });
+      setLinkRefused(null);
+      setAsking(null);
+      focus(LINK_ID);
+      return;
+    }
     notify("success", `Saved ${saved.team} to your templates`, "Add it again from Add a team.");
     cancel();
   }
 
-  return { asking, form, busy, refused, ask, change: setForm, cancel, save };
+  async function link() {
+    if (!unlinked) return;
+    setLinkRefused(null);
+    setLinking(true);
+    try {
+      await linkTeam(team, unlinked.saved.id);
+    } catch (failure) {
+      setLinkRefused(whyTeamNotLinked(failure));
+      return;
+    } finally {
+      setLinking(false);
+    }
+    notify("success", `Linked the ${team} team to ${unlinked.saved.team}`, "It keeps the template's features.");
+    setUnlinked(null);
+    focus(idOf(unlinked.place, "button"));
+  }
+
+  return { asking, form, busy, refused, unlinked, linking, linkRefused, ask, change: setForm, cancel, save, link };
 }
 
 export type TeamTemplateSave = ReturnType<typeof useSaveTemplate>;
 
 const idOf = (place: Place, part: string) => `team-template-${place}-${part}`;
+const LINK_ID = "team-link";
 
 interface SaveTemplateButtonProps {
   place: Place;
   template: TeamTemplateSave;
   changed: boolean; // it saves the team as last saved, so your changes go first
-  off: boolean; // while the team saves, or Remove team asks or runs
+  off: boolean; // while the team saves, or Remove team or Update my template asks or runs
   className?: string;
 }
 
@@ -79,7 +121,7 @@ export function SaveTemplateButton({ place, template, changed, off, className }:
     <span className={cn("flex items-center gap-x-3 gap-y-1", className)}>
       <Button
         id={idOf(place, "button")}
-        disabled={changed || off}
+        disabled={changed || off || template.linking}
         aria-describedby={changed ? idOf(place, "why") : undefined}
         onClick={() => template.ask(place)}
         className="max-sm:h-11 max-sm:w-full"
@@ -180,5 +222,123 @@ export function SaveTemplateForm({ place, template, changed }: SaveTemplateFormP
         </Button>
       </div>
     </form>
+  );
+}
+
+interface LinkTeamOfferProps {
+  template: TeamTemplateSave;
+  off: boolean; // while the team saves, or anything else asks or runs
+}
+
+// LinkTeamOffer is a template saved from the team that the team couldn't
+// be linked to, at the top of the panel's body, where it stays until the
+// team is linked: why, and Link this team. It takes focus as it shows, and
+// a refusal is said in it in the server's words.
+export function LinkTeamOffer({ template, off }: LinkTeamOfferProps) {
+  const { unlinked, linking, linkRefused } = template;
+  if (!unlinked) return null;
+  return (
+    <div
+      id={LINK_ID}
+      tabIndex={-1}
+      aria-labelledby={`${LINK_ID}-title`}
+      className="flex flex-col items-start gap-2 border border-warning/40 bg-warning-soft px-3 py-2.5 outline-none focus-visible:border-focus"
+    >
+      <h3 id={`${LINK_ID}-title`} className="text-[13px] font-medium text-warning-ink">
+        Saved {unlinked.saved.team} to your templates, but this team isn&apos;t linked to it yet
+      </h3>
+      <p className="text-[13px] text-ink-secondary">{unlinked.saved.notLinked}</p>
+      {linkRefused && (
+        <div role="alert" className="text-[13px] text-danger-ink">
+          <p className="font-medium">{linkRefused.title}</p>
+          <p>{linkRefused.detail}</p>
+        </div>
+      )}
+      <Button size="sm" disabled={linking || off} onClick={template.link}>
+        {linking ? "Linking…" : "Link this team"}
+      </Button>
+    </div>
+  );
+}
+
+// useUpdateTemplate is Update my template's state: the request while it
+// runs, and the last refusal with where it was pressed. Like Save as a
+// template it saves the team as last saved, so changed holds it.
+export function useUpdateTemplate(team: string, changed: boolean) {
+  const notify = useToast();
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<{ place: Place; failure: TemplateFailure } | null>(null);
+
+  async function update(place: Place) {
+    if (changed) return;
+    setRefused(null);
+    setBusy(true);
+    try {
+      const updated = await updateTemplate(team);
+      notify("success", `Updated ${updated.team} in your templates`, `It has the ${team} team as last saved.`);
+    } catch (failure) {
+      setRefused({ place, failure: whyTemplateNotUpdated(failure) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return { busy, refused, update };
+}
+
+export type TeamTemplateUpdate = ReturnType<typeof useUpdateTemplate>;
+
+const updateIdOf = (place: Place, part: string) => `team-update-${place}-${part}`;
+
+interface UpdateTemplateButtonProps {
+  place: Place;
+  update: TeamTemplateUpdate;
+  changed: boolean; // it saves the team as last saved, so your changes go first
+  off: boolean; // while the team saves, or anything else asks or runs
+  className?: string;
+}
+
+// UpdateTemplateButton saves the team over the template of yours it is
+// linked to, or says beside it why it can't.
+export function UpdateTemplateButton({ place, update, changed, off, className }: UpdateTemplateButtonProps) {
+  return (
+    <span className={cn("flex items-center gap-x-3 gap-y-1", className)}>
+      <Button
+        id={updateIdOf(place, "button")}
+        disabled={changed || off || update.busy}
+        aria-describedby={changed ? updateIdOf(place, "why") : undefined}
+        onClick={() => update.update(place)}
+        className="max-sm:h-11 max-sm:w-full"
+      >
+        {update.busy ? "Updating…" : "Update my template"}
+      </Button>
+      {changed && (
+        <span id={updateIdOf(place, "why")} className="text-[12px] text-ink-muted">
+          Save your changes first.
+        </span>
+      )}
+    </span>
+  );
+}
+
+// UpdateTemplateRefusal is a refused update where it was pressed, as Save
+// as a template's form says its refusals, taking focus as it shows.
+export function UpdateTemplateRefusal({ place, update }: { place: Place; update: TeamTemplateUpdate }) {
+  const failure = useRef<HTMLDivElement>(null);
+  const refused = update.refused?.place === place ? update.refused.failure : null;
+  useEffect(() => {
+    if (refused) failure.current?.focus();
+  }, [refused]);
+  if (!refused) return null;
+  return (
+    <div
+      ref={failure}
+      id={updateIdOf(place, "failure")}
+      tabIndex={-1}
+      className="text-[12px] text-danger-ink outline-none focus-visible:outline-focus"
+    >
+      <p className="font-medium">{refused.title}</p>
+      <p>{refused.detail}</p>
+    </div>
   );
 }

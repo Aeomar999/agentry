@@ -33,9 +33,17 @@ import {
 } from "@/lib/custom-team";
 import { useCloseGuard } from "@/lib/close-guard";
 import { teamsOf } from "@/lib/teams";
-import { builtInTemplateOf, isBuiltInTeam } from "@/lib/templates";
+import { builtInTemplateOf, isBuiltInTeam, yourLinkedTemplate } from "@/lib/templates";
 import { RemoveTeamButton, RemoveTeamQuestion, useRemoveTeam } from "./RemoveTeam";
-import { SaveTemplateButton, SaveTemplateForm, useSaveTemplate } from "./SaveAsTemplate";
+import {
+  LinkTeamOffer,
+  SaveTemplateButton,
+  SaveTemplateForm,
+  UpdateTemplateButton,
+  UpdateTemplateRefusal,
+  useSaveTemplate,
+  useUpdateTemplate,
+} from "./SaveAsTemplate";
 import {
   DiscardQuestion,
   ErrorSummary,
@@ -125,7 +133,9 @@ function EditTeamForm(props: EditTeamFormProps) {
   });
   const coordinator = loaded?.agents.find((row) => row.coordinates);
   const template = useSaveTemplate(loaded?.team ?? props.team, coordinator?.description ?? "", changed, list.focus);
-  const guard = useCloseGuard(changed, saving || removal.busy || template.busy, onClose);
+  const update = useUpdateTemplate(loaded?.team ?? props.team, changed);
+  const running = saving || removal.busy || template.busy || template.linking || update.busy;
+  const guard = useCloseGuard(changed, running, onClose);
   const onlyTeam = ready !== undefined && teamsOf(ready.roster).length <= 1;
   const hasProblems = (key: string) => problems.some((p) => typeof p.field === "object" && p.field.row === key);
   const teamProblem = problems.find((p) => p.field === "team")?.message;
@@ -134,6 +144,9 @@ function EditTeamForm(props: EditTeamFormProps) {
   const savesAsTemplate = ready !== undefined && loaded !== null && !isBuiltInTeam(ready.templates, loaded.team);
   // Other coordinators read a built-in template's description, when the team was made from one, over its coordinator's.
   const builtIn = ready && coordinator && builtInTemplateOf(ready.roster, ready.templates, coordinator.name);
+  // A team linked to a template of yours you still have can update it.
+  const updatesTemplate =
+    ready !== undefined && loaded !== null && yourLinkedTemplate(ready.roster, ready.templates, loaded.team) !== undefined;
 
   // reload reads the roster again, then loads the team named from it.
   async function reload(name: string, refocus: boolean) {
@@ -206,9 +219,9 @@ function EditTeamForm(props: EditTeamFormProps) {
   const removeHolds = removeAsks || removal.busy;
   // Save as a template's form, in the same places, the same way.
   const templateAsks = template.asking !== null && !guard.asking;
-  const templateHolds = templateAsks || template.busy;
-  // Nothing else saves while either asks or runs.
-  const holds = removeHolds || templateHolds;
+  const templateHolds = templateAsks || template.busy || template.linking;
+  // Nothing else saves while any of them asks or runs, Update my template too.
+  const holds = removeHolds || templateHolds || update.busy;
   const removeQuestion = (place: "footer" | "body") =>
     loaded && (
       <RemoveTeamQuestion
@@ -238,6 +251,11 @@ function EditTeamForm(props: EditTeamFormProps) {
     <>
       {removeAsks && <div className="max-sm:hidden">{removeQuestion("footer")}</div>}
       {templateAsks && <div className="max-sm:hidden">{templateForm("footer")}</div>}
+      {!removeAsks && !templateAsks && (
+        <div className="max-sm:hidden">
+          <UpdateTemplateRefusal place="footer" update={update} />
+        </div>
+      )}
       <div className={removeAsks || templateAsks ? "sm:hidden" : undefined}>
         <Footer
           text={loading ? "Loading…" : editFooterLine(tried ? problems.length : 0, saving, changed)}
@@ -249,8 +267,13 @@ function EditTeamForm(props: EditTeamFormProps) {
           start={
             !loading && (
               <>
-                <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving || templateHolds} />
-                {savesAsTemplate && <SaveTemplateButton place="footer" template={template} changed={changed} off={saving || removeHolds} />}
+                <RemoveTeamButton place="footer" removal={removal} only={onlyTeam} off={saving || templateHolds || update.busy} />
+                {savesAsTemplate && (
+                  <SaveTemplateButton place="footer" template={template} changed={changed} off={saving || removeHolds || update.busy} />
+                )}
+                {updatesTemplate && (
+                  <UpdateTemplateButton place="footer" update={update} changed={changed} off={saving || removeHolds || templateHolds} />
+                )}
               </>
             )
           }
@@ -266,7 +289,7 @@ function EditTeamForm(props: EditTeamFormProps) {
       titleId={TITLE_ID}
       focusTitle={!adding}
       onClose={removeAsks ? removal.keep : templateAsks ? template.cancel : guard.ask}
-      canClose={!saving && !removal.busy && !template.busy}
+      canClose={!running}
       footer={footer}
     >
       {/* On a phone every input and select in the panel is 44px tall, for thumbs. */}
@@ -283,6 +306,7 @@ function EditTeamForm(props: EditTeamFormProps) {
         {notFound && <NotFound onBack={guard.leave} />}
         {ready && loaded && !notFound && (
           <>
+            <LinkTeamOffer template={template} off={saving || removeHolds || templateAsks || update.busy} />
             {refused?.kind === "changed" && (
               <ChangedElsewhere
                 refusal={refused}
@@ -374,10 +398,22 @@ function EditTeamForm(props: EditTeamFormProps) {
                     place="body"
                     template={template}
                     changed={changed}
-                    off={saving || removeHolds}
+                    off={saving || removeHolds || update.busy}
                     className="flex-col items-stretch"
                   />
                 ))}
+              {updatesTemplate && !templateAsks && (
+                <>
+                  <UpdateTemplateButton
+                    place="body"
+                    update={update}
+                    changed={changed}
+                    off={saving || removeHolds || templateHolds}
+                    className="flex-col items-stretch"
+                  />
+                  <UpdateTemplateRefusal place="body" update={update} />
+                </>
+              )}
               {removeAsks ? (
                 removeQuestion("body")
               ) : (
@@ -385,7 +421,7 @@ function EditTeamForm(props: EditTeamFormProps) {
                   place="body"
                   removal={removal}
                   only={onlyTeam}
-                  off={saving || templateHolds}
+                  off={saving || templateHolds || update.busy}
                   className="flex-col items-stretch"
                 />
               )}
