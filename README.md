@@ -379,3 +379,8 @@ Releases live on GitHub only; GitLab just checks, builds and deploys.
 1. Tag the commit on `dev` and push the tag: `git tag v0.1.0 && git push github v0.1.0`.
 2. Run `make package` on the tagged commit in a clean checkout. The zip names come from the tag; a tree with changes adds `-dirty`.
 3. Publish the zips: `gh release create v0.1.0 release/agentry-v0.1.0-*.zip --repo francischempa/agentry --title v0.1.0 --notes "What changed"`. The version in the name keeps older zips in `release/` out of the release.
+
+### License
+
+Agentry is licensed under the [Apache License 2.0](LICENSE).
+Contributions are accepted under the same license.
