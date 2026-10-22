@@ -55,7 +55,7 @@ func (s *Server) tools() []features.Tool {
 		{Name: "list_tasks", Description: "Every task of this repo (or all repos), newest first, with its status, epic and what it waits for.",
 			Input: schema.Object(schema.Props{"all": schema.Boolean("every repo, not only this one"), "status": schema.Text("only this status: working, needs you, held, done")}), Run: s.listTasks},
 		{Name: "show_task", Description: "One task: its description, what it waits for, its summary when done, and its latest steps.",
-			Input: schema.Object(schema.Props{"task": schema.Text("its id, such as task-4")}, "task"), Run: s.showTask},
+			Input: schema.Object(schema.Props{"task": schema.Text("its id, such as task-4 (or epic-2 for an epic)")}, "task"), Run: s.showTask},
 		{Name: "create_task", Description: "Hand work to Agentry: a task (a story), or an epic of stories. It works in this repo unless repo says otherwise. Show the user the title and description before creating it, unless they said to go ahead.",
 			Input: schema.Object(schema.Props{
 				"title":       schema.Text("one imperative line under 80 characters"),
@@ -105,7 +105,7 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 	if err != nil {
 		return "", err
 	}
-	shown := s.inScope(all, a.All)
+	shown, idOf := s.inScope(all, a.All), shownIDs(all)
 	var b strings.Builder
 	fmt.Fprintf(&b, "Agentry board for %s (%s)\n", s.scope(a.All), s.agentry.PageURL("/tasks"))
 	// What needs you is everywhere: it waits for you whichever repo it is in.
@@ -131,20 +131,20 @@ func (s *Server) status(_ context.Context, arguments json.RawMessage) (string, e
 			what += " (" + tasks.ColumnName(t.Column) + ")"
 		}
 		if len(t.BlockedBy) > 0 {
-			what = "waits for " + strings.Join(t.BlockedBy, ", ")
+			what = "waits for " + strings.Join(idsAs(t.BlockedBy, idOf), ", ")
 		}
-		return t.ID + " " + t.Title + ": " + what + " · " + usageOf(t), true
+		return t.shown() + " " + t.Title + ": " + what + " · " + usageOf(t), true
 	}))
 	section(&b, "Epics", lines(shown, func(t task) (string, bool) {
 		if t.Closing != "" && t.Status == "working" {
-			return fmt.Sprintf("%s %s: all %d stories done, open until the user closes it (close_epic) or adds a story", t.ID, t.Title, t.Stories), t.Kind == "epic"
+			return fmt.Sprintf("%s %s: all %d stories done, open until the user closes it (close_epic) or adds a story", t.shown(), t.Title, t.Stories), t.Kind == "epic"
 		}
-		return fmt.Sprintf("%s %s: %d of %d stories done", t.ID, t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
+		return fmt.Sprintf("%s %s: %d of %d stories done", t.shown(), t.Title, t.StoriesDone, t.Stories), t.Kind == "epic" && t.Status != "done"
 	}))
 	section(&b, "Not started (in the Backlog or To do)", lines(shown, func(t task) (string, bool) {
-		line := t.ID + " " + t.Title
+		line := t.shown() + " " + t.Title
 		if t.Epic != "" {
-			line += " (story of " + t.Epic + ")"
+			line += " (story of " + tasks.ShownEpic(t.Epic) + ")"
 		}
 		return line, t.Status == "held"
 	}))
@@ -170,12 +170,12 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 		if t.Column != "" && t.Column != "done" { // done says it already
 			status += " · " + tasks.ColumnName(t.Column)
 		}
-		fmt.Fprintf(&b, "%s [%s] %s", t.ID, status, t.Title)
+		fmt.Fprintf(&b, "%s [%s] %s", t.shown(), status, t.Title)
 		switch {
 		case t.Kind == "epic":
 			fmt.Fprintf(&b, " (epic, %d of %d stories done)", t.StoriesDone, t.Stories)
 		case t.Epic != "":
-			fmt.Fprintf(&b, " (story of %s)", t.Epic)
+			fmt.Fprintf(&b, " (story of %s)", tasks.ShownEpic(t.Epic))
 		}
 		if t.Kind != "epic" { // an epic's work is its stories'
 			fmt.Fprintf(&b, " · %s", usageOf(t))
@@ -197,12 +197,13 @@ func (s *Server) listTasks(_ context.Context, arguments json.RawMessage) (string
 func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task string }
 	json.Unmarshal(arguments, &a)
+	a.Task = tasks.StoredID(a.Task)
 	var t detail
 	if err := s.agentry.Call("GET", "/api/tasks/"+a.Task, nil, &t); err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.ID, t.Title, statusOf(t.task), columnOf(t.task), t.Coordinator, t.Repo,
+	fmt.Fprintf(&b, "%s: %s\nStatus: %s · %s · coordinator %s · repo %s\nOn the page: %s\n", t.shown(), t.Title, statusOf(t.task), columnOf(t.task), t.Coordinator, t.Repo,
 		s.agentry.PageURL("/tasks/"+t.ID))
 	if t.Status == "done" && t.DoneByYou {
 		b.WriteString("Moved to Done by you.\n")
@@ -213,7 +214,7 @@ func (s *Server) showTask(_ context.Context, arguments json.RawMessage) (string,
 	if t.Kind == "epic" {
 		fmt.Fprintf(&b, "An epic: %d of %d stories done.\n", t.StoriesDone, t.Stories)
 	} else if t.Epic != "" {
-		fmt.Fprintf(&b, "A story of %s.\n", t.Epic)
+		fmt.Fprintf(&b, "A story of %s.\n", tasks.ShownEpic(t.Epic))
 	}
 	fmt.Fprintf(&b, "Budget: %s\n", usageOf(t.task))
 	if t.TokensUnknown != "" {
@@ -292,6 +293,7 @@ func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (strin
 	if a.Repo == "" {
 		a.Repo = s.repo
 	}
+	a.Epic, a.Stories = tasks.StoredID(a.Epic), idsAs(a.Stories, tasks.StoredID)
 	if a.Epic != "" {
 		a.Repo = "" // a story works where its epic does
 	}
@@ -307,7 +309,7 @@ func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (strin
 	if err != nil {
 		return "", err
 	}
-	text := fmt.Sprintf("Created %s: %s\n%s", created.Stream, a.Title, s.agentry.PageURL("/tasks/"+created.Stream))
+	text := fmt.Sprintf("Created %s: %s\n%s", tasks.ShownID(created.Stream, tasks.Kind(a.Kind)), a.Title, s.agentry.PageURL("/tasks/"+created.Stream))
 	switch {
 	case a.Epic != "":
 		text += "\nIt waits in the user's Backlog until they start it."
@@ -325,10 +327,11 @@ func (s *Server) createTask(_ context.Context, arguments json.RawMessage) (strin
 func (s *Server) tell(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task, Text string }
 	json.Unmarshal(arguments, &a)
+	a.Task = tasks.StoredID(a.Task)
 	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/message", map[string]string{"text": a.Text}, nil); err != nil {
 		return "", err
 	}
-	return "Sent to " + a.Task + "'s coordinator. It reads it now; the task's chat shows it.", nil
+	return "Sent to " + s.shownNow()(a.Task) + "'s coordinator. It reads it now; the task's chat shows it.", nil
 }
 
 func (s *Server) answer(ctx context.Context, arguments json.RawMessage) (string, error) {
@@ -339,25 +342,27 @@ func (s *Server) answer(ctx context.Context, arguments json.RawMessage) (string,
 	if closes(a.Answer) {
 		return s.closeEpic(ctx, json.RawMessage(fmt.Sprintf(`{"epic": %q}`, a.Task)))
 	}
+	a.Task = tasks.StoredID(a.Task)
 	if q, ok := s.questionOf(a.Task); ok && copies(q, a.Answer) {
 		return s.approveCopy(ctx, q)
 	}
 	if err := s.agentry.Call("POST", "/api/tasks/"+a.Task+"/answer", map[string]string{"answer": a.Answer}, nil); err != nil {
 		return "", err
 	}
-	return "Answered " + a.Task + ". Its coordinator carries on.", nil
+	return "Answered " + s.shownNow()(a.Task) + ". Its coordinator carries on.", nil
 }
 
 func (s *Server) fileUnder(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task, Epic string }
 	json.Unmarshal(arguments, &a)
+	a.Task, a.Epic = tasks.StoredID(a.Task), tasks.StoredID(a.Epic)
 	if err := s.agentry.Call("PUT", "/api/tasks/"+a.Task+"/epic", map[string]string{"epic": a.Epic}, nil); err != nil {
 		return "", err
 	}
 	if a.Epic == "" {
 		return a.Task + " is out of its epic.", nil
 	}
-	return a.Task + " is a story of " + a.Epic + ".", nil
+	return a.Task + " is a story of " + tasks.ShownEpic(a.Epic) + ".", nil
 }
 
 // setPriority gives the tasks their own ranks back, in the order wanted, so
@@ -365,10 +370,12 @@ func (s *Server) fileUnder(_ context.Context, arguments json.RawMessage) (string
 func (s *Server) setPriority(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Tasks []string }
 	json.Unmarshal(arguments, &a)
+	a.Tasks = idsAs(a.Tasks, tasks.StoredID)
 	all, _, err := s.board()
 	if err != nil {
 		return "", err
 	}
+	idOf := shownIDs(all)
 	var ranks []float64
 	for _, id := range a.Tasks {
 		i := slices.IndexFunc(all, func(t task) bool { return t.ID == id })
@@ -380,21 +387,23 @@ func (s *Server) setPriority(_ context.Context, arguments json.RawMessage) (stri
 	sort.Float64s(ranks)
 	for i, id := range a.Tasks {
 		if err := s.agentry.Call("PUT", "/api/tasks/"+id+"/rank", map[string]float64{"rank": ranks[i]}, nil); err != nil {
-			return "", fmt.Errorf("%s: %w", id, err)
+			return "", fmt.Errorf("%s: %w", idOf(id), err)
 		}
 	}
-	return "In this order now: " + strings.Join(a.Tasks, ", ") + ".", nil
+	return "In this order now: " + strings.Join(idsAs(a.Tasks, idOf), ", ") + ".", nil
 }
 
 func (s *Server) start(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Tasks []string }
 	json.Unmarshal(arguments, &a)
+	a.Tasks = idsAs(a.Tasks, tasks.StoredID)
+	idOf := s.shownNow()
 	for _, id := range a.Tasks {
 		if err := s.agentry.Call("POST", "/api/tasks/"+id+"/direct", map[string]string{"to": "in-progress"}, nil); err != nil {
-			return "", fmt.Errorf("%s: %w", id, err)
+			return "", fmt.Errorf("%s: %w", idOf(id), err)
 		}
 	}
-	return "Started " + strings.Join(a.Tasks, ", ") + ". They are on the Tasks board now.", nil
+	return "Started " + strings.Join(idsAs(a.Tasks, idOf), ", ") + ". They are on the Tasks board now.", nil
 }
 
 // ---- what only the user decides -----------------------------------------------
@@ -404,26 +413,27 @@ func (s *Server) start(_ context.Context, arguments json.RawMessage) (string, er
 func (s *Server) closeEpic(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Epic string }
 	json.Unmarshal(arguments, &a)
-	title, text, ok := s.closable(a.Epic)
+	id, shown := tasks.StoredID(a.Epic), tasks.ShownEpic(tasks.StoredID(a.Epic))
+	title, text, ok := s.closable(id)
 	if !ok {
-		return "", fmt.Errorf("%s isn't ready to close: not every story of it is done", a.Epic)
+		return "", fmt.Errorf("%s isn't ready to close: not every story of it is done", a.Epic) // as you named it: it may be no epic
 	}
 	if !s.canElicit {
-		return "Closing an epic is the user's to approve. Give them this link: " + s.agentry.PageURL("/tasks/"+a.Epic), nil
+		return "Closing an epic is the user's to approve. Give them this link: " + s.agentry.PageURL("/tasks/"+id), nil
 	}
-	answer, ok, err := s.elicit(ctx, "Close the epic "+a.Epic+", "+title+"?\n\n"+text, schema.Object(schema.Props{
+	answer, ok, err := s.elicit(ctx, "Close "+shown+", "+title+"?\n\n"+text, schema.Object(schema.Props{
 		"decision": schema.Enum("Close it, or keep it open to tell its coordinator what else it needs", "close", "keep open"),
 	}, "decision"))
 	if err != nil {
 		return "", err
 	}
 	if !ok || answer["decision"] != "close" {
-		return "The user kept " + a.Epic + " open. Ask them what else it needs, and send it with answer_question.", nil
+		return "The user kept " + shown + " open. Ask them what else it needs, and send it with answer_question.", nil
 	}
-	if err := s.agentry.Call("POST", "/api/tasks/"+a.Epic+"/answer", map[string]string{"answer": waitlist.CloseEpic}, nil); err != nil {
+	if err := s.agentry.Call("POST", "/api/tasks/"+id+"/answer", map[string]string{"answer": waitlist.CloseEpic}, nil); err != nil {
 		return "", err
 	}
-	return "The user closed " + a.Epic + ".", nil
+	return "The user closed " + shown + ".", nil
 }
 
 // closable gives the epic's title and what to show you before closing it,
@@ -443,6 +453,7 @@ func (s *Server) closable(id string) (title, text string, ok bool) {
 func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task string }
 	json.Unmarshal(arguments, &a)
+	a.Task = tasks.StoredID(a.Task)
 	_, waiting, err := s.board()
 	if err != nil {
 		return "", err
@@ -470,7 +481,7 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 			return "", err
 		}
 		if !ok {
-			done = append(done, q.Task+" "+q.Action+": left for later")
+			done = append(done, q.shown()+" "+q.Action+": left for later")
 			break
 		}
 		verb, past := "approve", "approved"
@@ -479,10 +490,10 @@ func (s *Server) reviewApprovals(ctx context.Context, arguments json.RawMessage)
 		}
 		reason, _ := answer["reason"].(string)
 		if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/actions/"+q.Action+"/"+verb, map[string]string{"reason": reason}, nil); err != nil {
-			done = append(done, q.Task+" "+q.Action+": "+err.Error())
+			done = append(done, q.shown()+" "+q.Action+": "+err.Error())
 			continue
 		}
-		done = append(done, q.Task+" "+q.Action+": "+past+" by the user")
+		done = append(done, q.shown()+" "+q.Action+": "+past+" by the user")
 	}
 	return strings.Join(done, "\n"), nil
 }
@@ -494,7 +505,7 @@ const heldAtLayout = "Mon 2 Jan 15:04 MST"
 // approvalText asks about one action. A held one was refused long ago, so
 // approving it now means something else, and the branch may have moved.
 func approvalText(q question) string {
-	text := fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.Task, q.TaskTitle, q.Tool, q.Text, q.Reason)
+	text := fmt.Sprintf("%s, on %s (%s), asks to run:\n\n%s: %s\n\nWhy it asks: %s", q.Agent, q.shown(), q.TaskTitle, q.Tool, q.Text, q.Reason)
 	if q.Held {
 		text += fmt.Sprintf("\n\nNo answer came in time: it was held at %s, and %s was told no and carried on. "+
 			"If you approve, the coordinator hears of it and %s may run this exact command once, in its next turn. Check it still fits the branch.",
@@ -522,7 +533,7 @@ func (s *Server) approveCopy(ctx context.Context, q question) (string, error) {
 	if err := s.agentry.Call("POST", "/api/tasks/"+q.Task+"/answer", map[string]string{"answer": waitlist.CopyFile}, nil); err != nil {
 		return "", err
 	}
-	return "The user allowed it: the file is in " + q.Task + "'s shared files.", nil
+	return "The user allowed it: the file is in " + q.shown() + "'s shared files.", nil
 }
 
 func closes(answer string) bool {
@@ -614,6 +625,39 @@ func lines[T any](items []T, line func(T) (string, bool)) []string {
 		if text, ok := line(item); ok {
 			out = append(out, text)
 		}
+	}
+	return out
+}
+
+// shown is the task's id as you read it: epic-N for an epic.
+func (t task) shown() string { return tasks.ShownID(t.ID, tasks.Kind(t.Kind)) }
+
+// shown is the id of the task q waits on, as you read it.
+func (q question) shown() string { return tasks.ShownID(q.Task, tasks.Kind(q.TaskKind)) }
+
+// shownIDs gives each task's id as you read it, by its kind on the board
+// all; an id not on it stays as it is.
+func shownIDs(all []task) func(id string) string {
+	kinds := map[string]tasks.Kind{}
+	for _, t := range all {
+		kinds[t.ID] = tasks.Kind(t.Kind)
+	}
+	return func(id string) string { return tasks.ShownID(id, kinds[id]) }
+}
+
+// shownNow is shownIDs of the board now: when it can't be read, every id
+// stays as it is.
+func (s *Server) shownNow() func(id string) string {
+	var all []task
+	s.agentry.Call("GET", "/api/tasks", nil, &all)
+	return shownIDs(all)
+}
+
+// idsAs are the ids, each as id gives it, such as tasks.StoredID.
+func idsAs(ids []string, id func(string) string) []string {
+	var out []string
+	for _, each := range ids {
+		out = append(out, id(each))
 	}
 	return out
 }

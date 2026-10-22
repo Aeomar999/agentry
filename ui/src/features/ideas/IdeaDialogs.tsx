@@ -12,6 +12,7 @@ import type { ServerConfig, TaskSummary } from "@/api/types";
 import { LimitChoice, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { useResource } from "@/live/use-resource";
 import { COLUMN_TITLES } from "@/lib/columns";
+import { shownEpic, shownId } from "@/lib/shown-id";
 import { TaskLink } from "./IdeaCard";
 import type { Idea, IdeaAcceptance, IdeaDuplicate } from "./types";
 import { useToast } from "@/components/organisms/Toasts";
@@ -49,7 +50,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       const asked = { kind, note, ...(limit !== undefined && { budget: sent(limit) }), ...(start && { start }), ...(anyway && { anyway }) };
       const got = await api<IdeaAcceptance>("POST", path(idea, "accept"), asked);
       setMade(got);
-      if (got.accepted) notify("success", `Made ${got.task} from the idea`, placeOf(got.column));
+      if (got.accepted) notify("success", `Made ${shownId(got.task, got.kind)} from the idea`, placeOf(got.column));
     } catch (failure) {
       const task = duplicateOf(failure);
       if (task) setLike({ task, start });
@@ -63,7 +64,7 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       {made ? (
         <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
           <p>
-            Made <TaskLink id={made.task} /> from it. {placeOf(made.column)}
+            Made <TaskLink id={made.task} kind={made.kind} /> from it. {placeOf(made.column)}
           </p>
           {!made.accepted && <Banner title="The idea wasn't marked accepted">{made.refused}</Banner>}
           <div className="flex gap-2">
@@ -75,7 +76,8 @@ export function AcceptIdeaDialog({ idea, onClose }: { idea: Idea; onClose: () =>
       ) : like ? (
         <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
           <Banner tone="warning" title="It looks like an open task">
-            <TaskLink id={like.task.id}>{like.task.title || like.task.id}</TaskLink> ({like.task.id}). {placeOf(like.task.column)}
+            <TaskLink id={like.task.id}>{like.task.title || shownId(like.task.id, like.task.kind)}</TaskLink> (
+            {shownId(like.task.id, like.task.kind)}). {placeOf(like.task.column)}
           </Banner>
           <p>Nothing was made. Make another task from the idea anyway, or cancel to leave the idea open.</p>
           {refused && <Banner title="It wasn't accepted">{refused}</Banner>}
@@ -163,8 +165,8 @@ function untouchedBudget(
 ): { limit: number; from: string } | null {
   if (!config) return null;
   if (!idea.epic) return { limit: config.budget, from: "" };
-  if (epic) return { limit: epic.budget, from: `From epic ${idea.epic}. ` };
-  if (epicError) return { limit: config.budget, from: `Epic ${idea.epic} wasn't found, so the server's default applies. ` };
+  if (epic) return { limit: epic.budget, from: `From ${shownEpic(idea.epic)}. ` };
+  if (epicError) return { limit: config.budget, from: `${shownEpic(idea.epic)} wasn't found, so the server's default applies. ` };
   return null;
 }
 

@@ -9,6 +9,7 @@ import { MarkText } from "@/components/molecules/MarkText";
 import { Warnings } from "@/components/molecules/Warnings";
 import { useCountedRedaction } from "@/lib/counted-redaction";
 import { rowsOf } from "@/lib/rows";
+import { shownId } from "@/lib/shown-id";
 import { AGENTS } from "@/lib/streams";
 import { dateTime } from "@/lib/time";
 
@@ -26,13 +27,13 @@ interface Target {
   redact: (text: string, why: string, rows: number) => Promise<Redaction>;
 }
 
-type Where = { task: string } | { agents: true };
+type Where = { task: string; kind?: string } | { agents: true };
 
 function targetOf(where: Where): Target {
   if ("agents" in where) return { name: AGENTS, preview: previewAgentsRedaction, redact: redactAgents };
-  const { task } = where;
+  const { task, kind } = where;
   return {
-    name: task,
+    name: shownId(task, kind),
     preview: (text) => previewRedaction(task, text),
     redact: (text, why, rows) => redact(task, text, why, rows),
   };

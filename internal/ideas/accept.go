@@ -29,11 +29,12 @@ type Choice struct {
 // not be marked accepted, as when you dismissed it a moment before: then
 // Task names the task and Refused says why.
 type Acceptance struct {
-	Task      string // the task made from the idea, "" when none was
-	Column    string // Task's column on the board once Accept is done (tasks.Task.BoardColumn), "" when it can't be read
-	Accepted  bool   // the idea is marked accepted, pointing at Task
-	Refused   string // why it stopped short, "" once Accepted
-	Duplicate string // the open task the idea looks like, when that stopped it and nothing was written
+	Task      string     // the task made from the idea, "" when none was
+	Column    string     // Task's column on the board once Accept is done (tasks.Task.BoardColumn), "" when it can't be read
+	Kind      tasks.Kind // and its kind, Story when it can't be read
+	Accepted  bool       // the idea is marked accepted, pointing at Task
+	Refused   string     // why it stopped short, "" once Accepted
+	Duplicate string     // the open task the idea looks like, when that stopped it and nothing was written
 }
 
 // Board is what Accept reads of every idea, every task and the agents, as
@@ -70,7 +71,7 @@ func Accept(log Log, board Board, id string, choice Choice) (Acceptance, error) 
 	defer accepting.Unlock()
 	got, err := accept(log, board, id, choice)
 	if err == nil && got.Task != "" {
-		got.Column = columnOf(board, got.Task)
+		got.Column, got.Kind = placed(board, got.Task)
 	}
 	return got, err
 }
@@ -123,13 +124,14 @@ func (choice Choice) acceptor() events.Actor {
 	return choice.By
 }
 
-// columnOf is the task's column on the board, "" when it can't be read.
-func columnOf(board Board, taskID string) string {
+// placed is the task's column on the board and its kind, "" and Story
+// when it can't be read.
+func placed(board Board, taskID string) (string, tasks.Kind) {
 	task, err := board.Task(taskID)
 	if err != nil || task == nil {
-		return ""
+		return "", tasks.Story
 	}
-	return task.BoardColumn(board.Roster())
+	return task.BoardColumn(board.Roster()), task.Kind
 }
 
 // accepting runs one Accept at a time.

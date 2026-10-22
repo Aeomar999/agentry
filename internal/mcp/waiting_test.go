@@ -14,7 +14,7 @@ import (
 )
 
 // The news a waiter wakes Claude with: only what is new since it started,
-// of each kind.
+// of each kind, with an epic named epic-N.
 func TestTheNewsIsWhatIsNew(t *testing.T) {
 	var mu sync.Mutex
 	board := map[string]any{
@@ -49,7 +49,7 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 	mu.Lock()
 	board["/api/tasks"] = []map[string]any{
 		{"id": "task-1", "title": "Old", "status": "done"},
-		{"id": "task-2", "title": "Snake", "status": "done", "told": map[string]string{"at": "2026-10-17T21:00:00Z", "from": "tech-lead", "text": "Moved it to the desktop."}},
+		{"id": "task-2", "title": "Snake", "status": "done", "kind": "epic", "told": map[string]string{"at": "2026-10-17T21:00:00Z", "from": "tech-lead", "text": "Moved it to the desktop."}},
 	}
 	board["/api/workers"] = map[string]any{"workers": []map[string]any{{"name": "build-box", "online": false, "since": "t", "tasks": []string{"task-2"}}}}
 	mu.Unlock()
@@ -64,8 +64,8 @@ func TestTheNewsIsWhatIsNew(t *testing.T) {
 		t.Fatal("no news")
 	}
 	got := strings.Join(lines, "\n")
-	for _, want := range []string{"done: task-2 is done: Snake. The game runs.", "said: task-2 (Snake): tech-lead says: Moved it to the desktop.",
-		"offline: the machine build-box went offline; task-2 waits until it is back"} {
+	for _, want := range []string{"done: epic-2 is done: Snake. The game runs.", "said: epic-2 (Snake): tech-lead says: Moved it to the desktop.",
+		"offline: the machine build-box went offline; epic-2 waits until it is back"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}

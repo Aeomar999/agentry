@@ -2,6 +2,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Dialog } from "@/components/molecules/Dialog";
 import { NewTaskForm } from "./NewTaskForm";
 import type { NewKind } from "@/lib/new-task";
+import { shownEpic } from "@/lib/shown-id";
 
 // NewTaskDialog is New task as a modal, over any page, while the address
 // asks for it (lib/new-task). A new story stays where you are, so you can
@@ -24,7 +25,7 @@ export function NewTaskDialog() {
     });
 
   return (
-    <Dialog title={epic ? `New story of ${epic}` : kind === "epic" ? "New epic" : "New task"} onClose={close} large>
+    <Dialog title={epic ? `New story of ${shownEpic(epic)}` : kind === "epic" ? "New epic" : "New task"} onClose={close} large>
       <NewTaskForm
         key={`${kind}-${epic}-${team}`}
         start={kind}

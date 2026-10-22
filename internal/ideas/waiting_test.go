@@ -76,7 +76,7 @@ func TestWhatWaitsForYouIsTheSameList(t *testing.T) {
 		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "task-1: tech-lead asks: Which layout?"},
 		{Key: "task-2/approval/push-1/git push origin HEAD:dev", Task: "task-2", Kind: "needs you", Line: "task-2: Waiting for you to approve the push to dev (review_approvals)"},
 		{Key: "task-3/budget//It used its budget. Raise it?", Task: "task-3", Kind: "needs you", Line: "task-3: Agentry asks: It used its budget. Raise it?"},
-		{Key: "task-4/question//Every story is done. Close it?", Task: "task-4", Kind: "needs you", Line: "task-4: the epic Ship the epic is ready to close (close_epic)"},
+		{Key: "task-4/question//Every story is done. Close it?", Task: "task-4", Kind: "needs you", Line: "epic-4: the epic Ship the epic is ready to close (close_epic)"},
 		{Key: "task-5/waiting//Trust this folder?", Task: "task-5", Kind: "needs you", Line: "task-5: tech-lead is stuck on a prompt in its terminal: Trust this folder?"},
 		{Key: "task-6/question//Copy /etc/hosts into the worktree?", Task: "task-6", Kind: "needs you",
 			Line: `task-6: Copy /etc/hosts into the worktree? (answer_question with "Copy it" asks the user)`},

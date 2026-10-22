@@ -10,6 +10,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { StoryProgress } from "@/components/molecules/StoryProgress";
 import { tokens } from "@/lib/tokens";
 import { waitingLine } from "@/lib/epics";
+import { shownEpic } from "@/lib/shown-id";
 import { fileUnder } from "@/lib/epic-api";
 import { useNewTask } from "@/lib/new-task";
 import { rankAt } from "@/lib/rank";
@@ -81,7 +82,7 @@ export function StoryTable({ epic, onChanged }: { epic: TaskDetail; onChanged: (
   async function takeOut(story: TaskSummary) {
     try {
       await fileUnder(story.id, "");
-      notify("success", `${story.id} is out of ${epic.id}`);
+      notify("success", `${story.id} is out of ${shownEpic(epic.id)}`);
       onChanged();
     } catch (failure) {
       notify("danger", "It is still in the epic", (failure as Error).message);
@@ -183,7 +184,7 @@ function AddStories({ epic, onClose, onAdded }: { epic: TaskDetail; onClose: () 
       }
     }
     if (failed.length) notify("danger", "Some weren't added", failed.join("\n"));
-    else notify("success", `Added ${picked.length} to ${epic.id}`, "The epic's coordinator reads it at its next turn.");
+    else notify("success", `Added ${picked.length} to ${shownEpic(epic.id)}`, "The epic's coordinator reads it at its next turn.");
     onAdded();
   }
 
@@ -198,7 +199,7 @@ function AddStories({ epic, onClose, onAdded }: { epic: TaskDetail; onClose: () 
               checked={picked.includes(task.id)}
               onChange={(on) => setPicked(on ? [...picked, task.id] : picked.filter((id) => id !== task.id))}
               label={`${task.id} · ${task.title}`}
-              hint={[task.status, task.epic && `moves from ${task.epic}`].filter(Boolean).join(" · ")}
+              hint={[task.status, task.epic && `moves from ${shownEpic(task.epic)}`].filter(Boolean).join(" · ")}
             />
           ))}
           {candidates.length === 0 && <p className="py-3 text-[12px] text-ink-faint">No other tasks to add.</p>}

@@ -16,7 +16,8 @@ import (
 
 // GET /api/waiting is the core's entries oldest first, then what each
 // feature says waits about ?repo=, worked out on the server's state. A
-// feature is asked though nothing shows it, and none waiting is [].
+// feature is asked though nothing shows it, and none waiting is []. An
+// epic's line names it epic-N; its key and task stay task-N.
 func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	for _, p := range agents.SeedProposals(nil) {
@@ -35,7 +36,7 @@ func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
 		t.Errorf("nothing waiting: %d %q", code, body)
 	}
 
-	call(t, server, "POST", "/api/tasks", `{"title":"Pick a layout"}`)
+	call(t, server, "POST", "/api/tasks", `{"title":"Pick a layout","kind":"epic"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Ship it"}`)
 	worker, coordinator := events.Actor{Kind: events.Worker, ID: "laptop"}, events.Actor{Kind: events.Agent, ID: "tech-lead"}
 	for _, p := range []events.Proposal{
@@ -57,7 +58,7 @@ func TestWaitingIsTheCoreThenEachFeature(t *testing.T) {
 	}
 	want := []features.Waiting{
 		{Key: "task-2/approval/push-1/git push", Task: "task-2", Kind: "needs you", Line: "task-2: Waiting for you to approve a push (review_approvals)"},
-		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "task-1: tech-lead asks: Which layout?"},
+		{Key: "task-1/question//Which layout?", Task: "task-1", Kind: "needs you", Line: "epic-1: tech-lead asks: Which layout?"},
 		{Key: "polls/1", Kind: "polls", Line: `1 poll in "/src/app" of 2 tasks`},
 	}
 	if fmt.Sprint(waiting) != fmt.Sprint(want) {

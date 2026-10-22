@@ -378,6 +378,7 @@ export interface Question {
   kind: "approval" | "question" | "budget" | "turns" | "waiting";
   task: string;
   taskTitle: string;
+  taskKind?: "epic"; // left out for a story or a task on its own
   agent: string;
   at: string;
   text: string;

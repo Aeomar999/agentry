@@ -6,12 +6,13 @@ import { Input } from "@/components/atoms/Input";
 import { Dialog } from "@/components/molecules/Dialog";
 import { Field, FieldError } from "@/components/molecules/Field";
 import { Panel } from "@/components/molecules/Panel";
+import { shownId } from "@/lib/shown-id";
 
 // EraseTask is the Details tab's way to erase the task for good
 // (docs/design/log-growth.md section 5, "Removing a whole task"), behind a
 // question that says nothing undoes it and what goes. The server refuses,
 // with its reason, an epic whose stories still name it.
-export function EraseTask({ task, onErased }: { task: string; onErased: (erasure: Erasure) => void }) {
+export function EraseTask({ task, kind, onErased }: { task: string; kind?: string; onErased: (erasure: Erasure) => void }) {
   const [asking, setAsking] = useState(false);
   return (
     <Panel title="Erase this task" tone="danger">
@@ -23,12 +24,22 @@ export function EraseTask({ task, onErased }: { task: string; onErased: (erasure
           Erase this task…
         </Button>
       </div>
-      {asking && <EraseQuestion task={task} onKeep={() => setAsking(false)} onErased={onErased} />}
+      {asking && <EraseQuestion task={task} kind={kind} onKeep={() => setAsking(false)} onErased={onErased} />}
     </Panel>
   );
 }
 
-function EraseQuestion({ task, onKeep, onErased }: { task: string; onKeep: () => void; onErased: (erasure: Erasure) => void }) {
+function EraseQuestion({
+  task,
+  kind,
+  onKeep,
+  onErased,
+}: {
+  task: string;
+  kind?: string;
+  onKeep: () => void;
+  onErased: (erasure: Erasure) => void;
+}) {
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState("");
@@ -45,7 +56,7 @@ function EraseQuestion({ task, onKeep, onErased }: { task: string; onKeep: () =>
   }
 
   return (
-    <Dialog title={`Erase ${task} for good?`} onClose={onKeep} held={busy}>
+    <Dialog title={`Erase ${shownId(task, kind)} for good?`} onClose={onKeep} held={busy}>
       <div className="flex flex-col gap-3 text-[13px] text-ink-secondary">
         <p className="font-medium text-ink-primary">Nothing undoes this.</p>
         <p>If an agent's turn is running on it, the turn is stopped first. Then these go:</p>

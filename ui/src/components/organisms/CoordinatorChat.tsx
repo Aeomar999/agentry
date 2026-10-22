@@ -20,6 +20,7 @@ import { CHAT_TYPES, ChatEntry, ChatItem, chatOf, threadOf } from "@/lib/chat";
 import { clockTime } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { linkInto } from "@/lib/links";
+import { shownId } from "@/lib/shown-id";
 import { useEvents } from "@/live/use-events";
 import { useToast } from "./Toasts";
 import { useOpenQuestion } from "@/components/templates/AdminShell";
@@ -133,7 +134,7 @@ export function CoordinatorChat({ task, onSent, onOpenQuestion }: CoordinatorCha
             {status.text}
           </span>
         </div>
-        <span className="ml-auto text-[11px] text-ink-faint">Runs task {task.id}</span>
+        <span className="ml-auto text-[11px] text-ink-faint">Runs {shownId(task.id, task.kind)}</span>
       </header>
 
       <div className="relative min-h-0 flex-1">

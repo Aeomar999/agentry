@@ -15,6 +15,7 @@ import { LimitSelect } from "@/components/molecules/LimitSelect";
 import { LimitChoice, LimitKind, SCALES, choiceOf, limitOf, sent } from "@/lib/limits";
 import { LabelInput } from "@/components/molecules/LabelInput";
 import { knownLabels } from "@/lib/labels";
+import { shownEpic, shownId } from "@/lib/shown-id";
 import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";
 import { useToast } from "./Toasts";
@@ -97,8 +98,8 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
       });
       notify(
         "success",
-        `Created ${created.stream}`,
-        epic ? `A story of ${epic}, in your Backlog until you start it.` : "The coordinator reads it next.",
+        `Created ${shownId(created.stream, sentKind)}`,
+        epic ? `A story of ${shownEpic(epic)}, in your Backlog until you start it.` : "The coordinator reads it next.",
       );
       const unshared: string[] = [];
       for (const file of attached) {
@@ -218,7 +219,7 @@ export function NewTaskForm({ start = "task", epic = "", team: preset = "", onCr
       {epic ? (
         <Field label="Epic" htmlFor="task-kind" hint="It is a story of this epic, and waits in your Backlog until you start it.">
           <span id="task-kind" className="font-mono text-[13px] text-ink-primary">
-            {epic}
+            {shownEpic(epic)}
           </span>
         </Field>
       ) : asksVisionaries ? null : (

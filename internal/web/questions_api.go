@@ -18,7 +18,8 @@ type question struct {
 	Kind      string    `json:"kind"` // "approval", "question", "budget", "turns" or "waiting"
 	Task      string    `json:"task"`
 	TaskTitle string    `json:"taskTitle"`
-	Agent     string    `json:"agent"` // who asks
+	TaskKind  string    `json:"taskKind,omitempty"` // "epic" for an epic, left out for a story or a task on its own
+	Agent     string    `json:"agent"`              // who asks
 	At        time.Time `json:"at"`
 	Text      string    `json:"text"`    // the question, or the command to approve
 	Context   string    `json:"context"` // the step before it, so you know what led here
@@ -57,7 +58,7 @@ func (s *Server) questions() []question {
 func questionsOf(t *tasks.Task) []question {
 	var questions []question
 	base := func(kind, key string) question {
-		return question{ID: t.ID + "/" + kind + "/" + key, Kind: kind, Task: t.ID, TaskTitle: t.Title, Context: contextOf(t)}
+		return question{ID: t.ID + "/" + kind + "/" + key, Kind: kind, Task: t.ID, TaskTitle: t.Title, TaskKind: string(t.Kind), Context: contextOf(t)}
 	}
 	for _, a := range t.WaitingForYou() {
 		q := base("approval", a.ID)

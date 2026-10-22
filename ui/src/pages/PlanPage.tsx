@@ -24,6 +24,7 @@ import type { TaskSummary } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { fileUnder } from "@/lib/epic-api";
 import { waitingLine } from "@/lib/epics";
+import { shownEpic } from "@/lib/shown-id";
 import { useNewTask } from "@/lib/new-task";
 import { rankAt } from "@/lib/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
@@ -80,7 +81,7 @@ export function PlanPage() {
     try {
       if (task.epic !== column) {
         await fileUnder(task.id, column);
-        notify("success", column ? `${task.id} is a story of ${column}` : `${task.id} is out of its epic`);
+        notify("success", column ? `${task.id} is a story of ${shownEpic(column)}` : `${task.id} is out of its epic`);
       }
       const rank = rankAt(order, task, at);
       if (rank !== null) await api("PUT", `/api/tasks/${encodeURIComponent(task.id)}/rank`, { rank });
@@ -204,8 +205,8 @@ function PlanColumn({ epic, cards, dragging, onDragStart, onDragEnd, onDrop, onO
           {epic && (
             <button
               type="button"
-              aria-label={`Open ${epic.id}`}
-              title={`Open ${epic.id}`}
+              aria-label={`Open ${shownEpic(epic.id)}`}
+              title={`Open ${shownEpic(epic.id)}`}
               onClick={() => onOpen(epic)}
               className="flex size-5 shrink-0 cursor-pointer items-center justify-center text-ink-faint hover:text-ink-primary [&>svg]:size-3.5"
             >
@@ -217,7 +218,7 @@ function PlanColumn({ epic, cards, dragging, onDragStart, onDragEnd, onDrop, onO
           <>
             <StoryProgress done={epic.storiesDone} total={epic.stories} />
             <span className="flex items-center gap-2 font-mono text-[11px] text-ink-faint">
-              {epic.id}
+              {shownEpic(epic.id)}
               {epic.status === "needs you" ? (
                 <button type="button" onClick={() => onOpen(epic)} className="ml-auto cursor-pointer text-warning hover:underline">
                   needs you

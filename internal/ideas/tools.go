@@ -48,10 +48,10 @@ func tools(agentry features.API, repo string) []features.Tool {
 
 // listed is an idea as GET /api/ideas answers it: the parts the tools read.
 type listed struct {
-	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became string
-	About, AboutTitle                                                         string // the epic whose close started its session
-	BackedBy, DoubtedBy                                                       []string
-	AutoAccepted                                                              bool // Agentry accepted it for you
+	ID, Title, Problem, Proposal, Size, Task, Repo, Kind, State, Note, Became, BecameKind string
+	About, AboutTitle                                                                     string // the epic whose close started its session
+	BackedBy, DoubtedBy                                                                   []string
+	AutoAccepted                                                                          bool // Agentry accepted it for you
 }
 
 func (s session) listIdeas(_ context.Context, arguments json.RawMessage) (string, error) {
@@ -87,7 +87,7 @@ func (s session) listIdeas(_ context.Context, arguments json.RawMessage) (string
 		}
 		switch i.State {
 		case "accepted":
-			fmt.Fprintf(&b, "    became %s", i.Became)
+			fmt.Fprintf(&b, "    became %s", tasks.ShownID(i.Became, tasks.Kind(i.BecameKind)))
 		case "dismissed":
 			b.WriteString("    dismissed")
 		default:
@@ -144,9 +144,9 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 		a.Start = answer["start"] == "start"
 	}
 	var got struct {
-		Task, Column string
-		Accepted     bool
-		Refused      string
+		Task, Column, Kind string
+		Accepted           bool
+		Refused            string
 	}
 	body := map[string]any{"kind": a.Kind, "note": a.Note}
 	if a.Start {
@@ -167,7 +167,7 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 	if err != nil {
 		return "", fmt.Errorf("%s wasn't accepted: %w", i.ID, err)
 	}
-	text := fmt.Sprintf("%s became %s%s: %s", i.ID, got.Task, placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
+	text := fmt.Sprintf("%s became %s%s: %s", i.ID, tasks.ShownID(got.Task, tasks.Kind(got.Kind)), placeOf(got.Column), s.agentry.PageURL("/tasks/"+got.Task))
 	if !got.Accepted {
 		text += "\nThe idea isn't marked accepted: " + got.Refused
 	}
@@ -176,7 +176,7 @@ func (s session) acceptIdea(ctx context.Context, arguments json.RawMessage) (str
 
 // openTask is the open task an idea looks like, as accepting it answers
 // (routes.go duplicateView).
-type openTask struct{ ID, Title, Column string }
+type openTask struct{ ID, Title, Column, Kind string }
 
 // duplicateOf is the open task an accept was refused for looking like: a
 // 409 whose body is JSON naming it.
@@ -197,7 +197,7 @@ func duplicateOf(err error) (openTask, bool) {
 // doesn't, and without elicitation it never does: the reply names the task
 // for you to decide.
 func (s session) makeAnyway(ctx context.Context, i listed, like openTask) (again bool, why string, err error) {
-	task := fmt.Sprintf("%s %q%s: %s", like.ID, like.Title, placeOf(like.Column), s.agentry.PageURL("/tasks/"+like.ID))
+	task := fmt.Sprintf("%s %q%s: %s", tasks.ShownID(like.ID, tasks.Kind(like.Kind)), like.Title, placeOf(like.Column), s.agentry.PageURL("/tasks/"+like.ID))
 	ask := features.AskOf(ctx)
 	if ask == nil {
 		return false, i.ID + " looks like the open task " + task + "\nNothing was written. If the user wants another task anyway, call accept_idea again with anyway.", nil
@@ -311,7 +311,7 @@ func headerOf(i listed) string {
 		parts = append(parts, "suggested in "+i.Task)
 	}
 	if i.About != "" {
-		parts = append(parts, "after the epic "+i.About+" "+strconv.Quote(i.AboutTitle)+" closed")
+		parts = append(parts, "after "+tasks.ShownEpic(i.About)+" "+strconv.Quote(i.AboutTitle)+" closed")
 	}
 	return strings.Join(parts, ", ")
 }

@@ -6,6 +6,7 @@ import { AgentName } from "./AgentName";
 import { timeAgo } from "@/lib/time";
 import { tokens } from "@/lib/tokens";
 import { waitingLine } from "@/lib/epics";
+import { shownEpic, shownId } from "@/lib/shown-id";
 import { EpicBadge, StoryProgress } from "./StoryProgress";
 import { QueuedBadge } from "./StatusBadges";
 
@@ -57,10 +58,10 @@ export function TaskCard({
         <button
           type="button"
           onClick={(event) => (event.stopPropagation(), onPickEpic(task.epic))}
-          title={`Show only ${task.epic}'s stories`}
+          title={`Show only ${shownEpic(task.epic)}'s stories`}
           className="cursor-pointer truncate text-left font-mono text-[11px] text-ink-faint hover:text-info"
         >
-          {task.epic} · {epicTitle || "epic"}
+          {shownEpic(task.epic)} · {epicTitle || "epic"}
         </button>
       )}
       <span className="flex items-start gap-1.5">
@@ -72,7 +73,7 @@ export function TaskCard({
       {task.kind === "epic" && <StoryProgress done={task.storiesDone} total={task.stories} />}
       <LabelList labels={task.labels} onPick={onPickLabel} />
       <span className="flex items-center gap-2 font-mono text-[11px] whitespace-nowrap text-ink-faint">
-        {task.id}
+        {shownId(task.id, task.kind)}
         <span className="ml-auto">
           <span className={cn(task.overBudget && "text-danger")}>{tokens(task.tokensUsed)} tok</span> · {task.turns} turns
         </span>

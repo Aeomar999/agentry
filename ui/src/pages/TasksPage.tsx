@@ -27,6 +27,7 @@ import { useNewTask } from "@/lib/new-task";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { grouped, waitingLine } from "@/lib/epics";
+import { shownEpic, shownId } from "@/lib/shown-id";
 import { stageOf } from "@/lib/columns";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 import { useFeatures, withTheirCards } from "@/features";
@@ -82,7 +83,7 @@ function columnsFor(pickLabel: (label: string) => void, folding: Folding): Colum
           ) : (
             <span className="w-3" />
           )}
-          <Mono className="text-ink-muted">{task.id}</Mono>
+          <Mono className="text-ink-muted">{shownId(task.id, task.kind)}</Mono>
         </span>
       ),
     },
@@ -207,7 +208,9 @@ export function TasksPage() {
         (!label || task.labels.includes(label)) &&
         (!epic || task.id === epic || task.epic === epic) &&
         words.every((word) =>
-          `${task.id} ${task.title} ${task.repo} ${task.currentAgent} ${task.labels.join(" ")}`.toLowerCase().includes(word),
+          `${task.id} ${shownId(task.id, task.kind)} ${task.title} ${task.repo} ${task.currentAgent} ${task.labels.join(" ")}`
+            .toLowerCase()
+            .includes(word),
         ),
     );
   }, [tasks, filter, label, epic, search, showBacklog]);
@@ -257,7 +260,7 @@ export function TasksPage() {
           />
         ))}
         {label && <FilterChip label={`label: ${label}  ×`} active onClick={() => setParam("label", null)} />}
-        {epic && <FilterChip label={`epic: ${epicTitle ?? epic}  ×`} active onClick={() => setParam("epic", null)} />}
+        {epic && <FilterChip label={`epic: ${epicTitle ?? shownEpic(epic)}  ×`} active onClick={() => setParam("epic", null)} />}
         <div className="ml-auto flex items-center gap-2" data-page-search>
           <FilterChip
             label={showBacklog ? "Hide the backlog" : "Show the backlog"}

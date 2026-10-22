@@ -2,6 +2,7 @@ import type { TaskDetail, TaskSummary } from "@/api/types";
 import { Select } from "@/components/atoms/Select";
 import { useResource } from "@/live/use-resource";
 import { fileUnder } from "@/lib/epic-api";
+import { shownEpic } from "@/lib/shown-id";
 import { useToast } from "./Toasts";
 
 // EpicPicker files a task under one of the epics still going, moves it to
@@ -15,7 +16,7 @@ export function EpicPicker({ task, onChanged }: { task: TaskDetail; onChanged: (
   async function pick(epic: string) {
     try {
       await fileUnder(task.id, epic);
-      notify("success", epic ? `${task.id} is a story of ${epic}` : `${task.id} is out of its epic`);
+      notify("success", epic ? `${task.id} is a story of ${shownEpic(epic)}` : `${task.id} is out of its epic`);
       onChanged();
     } catch (failure) {
       notify("danger", "That didn't change", (failure as Error).message);
@@ -27,7 +28,7 @@ export function EpicPicker({ task, onChanged }: { task: TaskDetail; onChanged: (
       <option value="">No epic</option>
       {epics.map((epic) => (
         <option key={epic.id} value={epic.id}>
-          {epic.id} · {epic.title}
+          {shownEpic(epic.id)} · {epic.title}
         </option>
       ))}
     </Select>

@@ -21,8 +21,8 @@ const CopyFile = "Copy it"
 
 // Question is what an entry is worded from, as GET /api/questions lists it.
 type Question struct {
-	Kind, Task, TaskTitle, Agent, Text, Action string
-	Options                                    []string
+	Kind, Task, TaskTitle, TaskKind, Agent, Text, Action string
+	Options                                              []string
 }
 
 // Entry is q as one thing waiting for you. Its key lasts while q waits.
@@ -32,21 +32,22 @@ func Entry(q Question) features.Waiting {
 
 // Line is q for a person, with the tool that deals with it.
 func Line(q Question) string {
+	id := tasks.ShownID(q.Task, tasks.Kind(q.TaskKind))
 	switch q.Kind {
 	case "approval":
-		return fmt.Sprintf("%s: %s (review_approvals)", q.Task, tasks.OneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
+		return fmt.Sprintf("%s: %s (review_approvals)", id, tasks.OneLine(tasks.WaitingLine(q.Agent, q.Text), 140))
 	case "waiting":
-		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", q.Task, q.Agent, tasks.OneLine(q.Text, 120))
+		return fmt.Sprintf("%s: %s is stuck on a prompt in its terminal: %s", id, q.Agent, tasks.OneLine(q.Text, 120))
 	}
 	if slices.Contains(q.Options, CloseEpic) {
-		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", q.Task, q.TaskTitle)
+		return fmt.Sprintf("%s: the epic %s is ready to close (close_epic)", id, q.TaskTitle)
 	}
 	if slices.Contains(q.Options, CopyFile) {
-		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", q.Task, tasks.OneLine(q.Text, 200), CopyFile)
+		return fmt.Sprintf("%s: %s (answer_question with %q asks the user)", id, tasks.OneLine(q.Text, 200), CopyFile)
 	}
 	asker := q.Agent
 	if asker == tasks.Loop {
 		asker = "Agentry" // its own stops: a budget, a limit of turns
 	}
-	return fmt.Sprintf("%s: %s asks: %s", q.Task, asker, tasks.OneLine(q.Text, 160))
+	return fmt.Sprintf("%s: %s asks: %s", id, asker, tasks.OneLine(q.Text, 160))
 }

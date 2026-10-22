@@ -114,7 +114,10 @@ export function IdeasPage() {
                 {ideas[0].about && (
                   <>
                     {" "}
-                    · after you closed <TaskLink id={ideas[0].about}>{ideas[0].aboutTitle || undefined}</TaskLink>
+                    · after you closed{" "}
+                    <TaskLink id={ideas[0].about} kind="epic">
+                      {ideas[0].aboutTitle || undefined}
+                    </TaskLink>
                   </>
                 )}
               </span>
@@ -282,7 +285,7 @@ function HistoryRow({ idea }: { idea: Idea }) {
         <span className="ml-auto flex gap-3 text-[12px] text-ink-muted">
           {idea.became && (
             <span>
-              became <TaskLink id={idea.became} />
+              became <TaskLink id={idea.became} kind={idea.becameKind} />
               {idea.becameColumn && <> ({COLUMN_TITLES[idea.becameColumn]})</>}
             </span>
           )}
