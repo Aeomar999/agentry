@@ -175,7 +175,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 	code, body := call(t, server, "POST", "/api/ideas/"+id+"/accept", `{"kind":"epic","note":"Soon"}`)
 	var got ideas.AcceptReply
 	json.Unmarshal([]byte(body), &got)
-	if code != 200 || got != (ideas.AcceptReply{Task: "task-2", Column: "backlog", Accepted: true}) {
+	if code != 200 || got != (ideas.AcceptReply{Task: "task-2", Column: "backlog", Kind: tasks.Epic, Accepted: true}) {
 		t.Fatalf("accept: %d %s", code, body)
 	}
 	if _, body := call(t, server, "GET", "/api/tasks/task-2", ""); !strings.Contains(body, `"kind":"epic"`) || !strings.Contains(body, `"parked":"backlog"`) ||
@@ -192,7 +192,7 @@ func TestYouAcceptAnIdeaOnce(t *testing.T) {
 		t.Errorf("dismissing an accepted idea: %d", code)
 	}
 	if _, body := call(t, server, "GET", "/api/ideas", ""); !strings.Contains(body, `"state":"accepted"`) || !strings.Contains(body, `"became":"task-2"`) ||
-		!strings.Contains(body, `"becameColumn":"backlog"`) || !strings.Contains(body, `"autoAccepted":false`) {
+		!strings.Contains(body, `"becameColumn":"backlog"`) || !strings.Contains(body, `"becameKind":"epic"`) || !strings.Contains(body, `"autoAccepted":false`) {
 		t.Errorf("the accepted idea: %s", body)
 	}
 }

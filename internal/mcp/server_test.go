@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,8 +21,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/features"
 )
 
-// A fake Agentry: two tasks, one action waiting for approval and an epic
-// asking to be closed. It records what the tools ask of it.
+// A fake Agentry: tasks, epics and a story of one, one action waiting for
+// approval and an epic asking to be closed. It records what the tools ask of it.
 func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 	var mu sync.Mutex
 	calls := &[]string{}
@@ -39,17 +41,20 @@ func fakeAgentry(t *testing.T) (*httptest.Server, *[]string) {
 				{"id":"task-1","title":"Fix the login","repo":"/repo","status":"needs you","currentAgent":"deployer","rank":-1,"budget":5000000,"tokensUsed":1200000,"maxTurns":24,"turnsSinceAnswer":4},
 				{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","rank":-3},
 				{"id":"task-4","title":"Release","repo":"/repo","status":"working","currentAgent":"deployer","column":"shipping","rank":-4,"turns":7,"turnsSinceAnswer":2},
-				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9}]`)
+				{"id":"task-9","title":"Elsewhere","repo":"/other","status":"working","currentAgent":"engineer","rank":-9},
+				{"id":"task-6","title":"Polish the menu","repo":"/repo","status":"held","epic":"task-3","rank":-6}]`)
 		case "GET /api/tasks/task-3":
 			io.WriteString(w, `{"id":"task-3","title":"Polish","repo":"/repo","status":"working","kind":"epic","stories":3,"storiesDone":3,"closing":"All polished.","tokensUnknown":"Tokens unknown on 2 turns: transcript not saved"}`)
+		case "GET /api/tasks/task-6":
+			io.WriteString(w, `{"id":"task-6","title":"Polish the menu","repo":"/repo","status":"held","epic":"task-3"}`)
 		case "GET /api/tasks/task-5":
 			io.WriteString(w, `{"id":"task-5","title":"Login page","repo":"/repo","status":"done","column":"done","pushed":true,"doneByYou":true}`)
 		case "GET /api/questions":
 			io.WriteString(w, `[{"kind":"approval","task":"task-1","taskTitle":"Fix the login","agent":"deployer","text":"git push origin dev","action":"push-1","tool":"Bash","reason":"pushing asks you"},
-				{"kind":"question","task":"task-2","taskTitle":"Ship it","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
+				{"kind":"question","task":"task-2","taskTitle":"Ship it","taskKind":"epic","agent":"tech-lead","text":"Every story of this epic is done. Close it?","options":["Close the epic"]}]`)
 		case "GET /api/waiting":
 			io.WriteString(w, `[{"key":"task-1/approval/push-1/git push origin dev","task":"task-1","kind":"needs you","line":"task-1: Waiting for you to approve the push to dev (review_approvals)"},
-				{"key":"task-2/question//Every story of this epic is done. Close it?","task":"task-2","kind":"needs you","line":"task-2: the epic Ship it is ready to close (close_epic)"}]`)
+				{"key":"task-2/question//Every story of this epic is done. Close it?","task":"task-2","kind":"needs you","line":"epic-2: the epic Ship it is ready to close (close_epic)"}]`)
 		case "POST /api/tasks":
 			io.WriteString(w, `{"stream":"task-10","notFiled":[]}`)
 		default:
@@ -175,7 +180,7 @@ func TestTheBoardAndHandingOverWork(t *testing.T) {
 	}
 
 	board := c.tool("status", map[string]any{})
-	for _, want := range []string{"Agentry board for /repo", "task-1: Waiting for you to approve the push to dev (review_approvals)", "task-2: the epic Ship it is ready to close", "task-2 Ship it: 2 of 2 stories done",
+	for _, want := range []string{"Agentry board for /repo", "task-1: Waiting for you to approve the push to dev (review_approvals)", "epic-2: the epic Ship it is ready to close", "epic-2 Ship it: 2 of 2 stories done",
 		"task-4 Release: deployer is working (Shipping) · 0 tokens (no limit) · 7 turns (no limit)"} {
 		if !strings.Contains(board, want) {
 			t.Errorf("the board is missing %q:\n%s", want, board)
@@ -253,7 +258,7 @@ func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 		var p struct{ Message string }
 		json.Unmarshal(params, &p)
 		asked = append(asked, method+": "+p.Message)
-		if strings.Contains(p.Message, "Close the epic") {
+		if strings.Contains(p.Message, "Close epic-2, Ship it?") {
 			return map[string]any{"action": "accept", "content": map[string]any{"decision": "close"}}
 		}
 		return map[string]any{"action": "accept", "content": map[string]any{"decision": "deny", "reason": "not on a Friday"}}
@@ -261,7 +266,7 @@ func TestApprovalsAreAskedOfTheUser(t *testing.T) {
 	if text := c.tool("review_approvals", map[string]any{}); !strings.Contains(text, "task-1 push-1: denied by the user") {
 		t.Errorf("review: %s", text)
 	}
-	if text := c.tool("close_epic", map[string]any{"epic": "task-2"}); !strings.Contains(text, "The user closed task-2") {
+	if text := c.tool("close_epic", map[string]any{"epic": "task-2"}); !strings.Contains(text, "The user closed epic-2") {
 		t.Errorf("close: %s", text)
 	}
 	if len(asked) != 2 || !strings.Contains(asked[0], "elicitation/create: deployer, on task-1 (Fix the login), asks to run") {
@@ -286,16 +291,16 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 		return map[string]any{"action": "accept", "content": map[string]any{"decision": decision}}
 	})
 	board := c.tool("status", map[string]any{})
-	if !strings.Contains(board, "task-3 Polish: all 3 stories done, open until the user closes it (close_epic)") {
+	if !strings.Contains(board, "epic-3 Polish: all 3 stories done, open until the user closes it (close_epic)") {
 		t.Errorf("the open epic should be on the board:\n%s", board)
 	}
-	if needs := board[:strings.Index(board, "Epics")]; strings.Contains(needs, "task-3") {
+	if needs := board[:strings.Index(board, "Epics")]; strings.Contains(needs, "epic-3") {
 		t.Errorf("an epic left open isn't waiting for you:\n%s", board)
 	}
-	if text := c.tool("close_epic", map[string]any{"epic": "task-3"}); !strings.Contains(text, "The user closed task-3") {
+	if text := c.tool("close_epic", map[string]any{"epic": "task-3"}); !strings.Contains(text, "The user closed epic-3") {
 		t.Errorf("close: %s", text)
 	}
-	if len(asked) != 1 || !strings.Contains(asked[0], "Close the epic task-3, Polish?") || !strings.Contains(asked[0], "All polished.") {
+	if len(asked) != 1 || !strings.Contains(asked[0], "Close epic-3, Polish?") || !strings.Contains(asked[0], "All polished.") {
 		t.Errorf("asked: %v", asked)
 	}
 	if !strings.Contains(strings.Join(*calls, "\n"), `POST /api/tasks/task-3/answer {"answer":"Close the epic"}`) {
@@ -311,7 +316,7 @@ func TestYouCloseAnEpicYouLeftOpen(t *testing.T) {
 	for _, try := range []struct {
 		decision, says string
 		sent           []string
-	}{{"keep open", "The user kept task-3 open", nil}, {"close", "The user closed task-3", []string{closeAnswer}}} {
+	}{{"keep open", "The user kept epic-3 open", nil}, {"close", "The user closed epic-3", []string{closeAnswer}}} {
 		asked, *calls, decision = nil, nil, try.decision
 		text := c.tool("answer_question", map[string]any{"task": "task-3", "answer": " close the EPIC "})
 		sent := slices.DeleteFunc(slices.Clone(*calls), func(call string) bool { return !strings.HasPrefix(call, "POST /api/tasks/task-3/answer") })
@@ -376,5 +381,80 @@ func TestTheTaskSaysItsColumn(t *testing.T) {
 	}
 	if got := columnOf(task{Column: "in-progress"}); got != "on the board: In progress" {
 		t.Errorf("in progress: %q", got)
+	}
+}
+
+// Every tool that takes a task takes an epic as epic-N too, and asks the
+// API for task-N: the API knows only that.
+func TestToolsTakeAnEpicAsEpicN(t *testing.T) {
+	c, calls := start(t, false, nil)
+	shared := filepath.Join(t.TempDir(), "notes.txt")
+	os.WriteFile(shared, []byte("notes"), 0o644)
+	for _, call := range []struct {
+		tool      string
+		arguments map[string]any
+		sent      string
+	}{
+		{"show_task", map[string]any{"task": "epic-3"}, "GET /api/tasks/task-3 "},
+		{"tell_coordinator", map[string]any{"task": "epic-3", "text": "hi"}, `POST /api/tasks/task-3/message {"text":"hi"}`},
+		{"answer_question", map[string]any{"task": "epic-3", "answer": "yes"}, `POST /api/tasks/task-3/answer {"answer":"yes"}`},
+		{"file_under_epic", map[string]any{"task": "task-1", "epic": "epic-3"}, `PUT /api/tasks/task-1/epic {"epic":"task-3"}`},
+		{"file_under_epic", map[string]any{"task": "task-1", "epic": ""}, `PUT /api/tasks/task-1/epic {"epic":""}`},
+		{"create_task", map[string]any{"title": "More", "epic": "epic-3"}, `"epic":"task-3"`},
+		{"create_task", map[string]any{"title": "Group", "kind": "epic", "stories": []string{"task-1", "epic-9"}}, `"stories":["task-1","task-9"]`},
+		{"set_priority", map[string]any{"tasks": []string{"epic-3", "task-1"}}, `PUT /api/tasks/task-3/rank {"rank":-3}`},
+		{"start", map[string]any{"tasks": []string{"epic-2"}}, `POST /api/tasks/task-2/direct {"to":"in-progress"}`},
+		{"close_epic", map[string]any{"epic": "epic-3"}, "GET /api/tasks/task-3 "},
+		{"attach_file", map[string]any{"task": "epic-3", "path": shared}, "POST /api/tasks/task-3/shared "},
+		{"get_file", map[string]any{"task": "epic-3", "name": "x", "to": t.TempDir()}, "GET /api/tasks/task-3/shared/file "},
+		{"review_approvals", map[string]any{"task": "epic-1"}, "GET /api/questions "}, // it filters what waits itself
+	} {
+		*calls = nil
+		c.tool(call.tool, call.arguments)
+		if all := strings.Join(*calls, "\n"); !strings.Contains(all, call.sent) || strings.Contains(all, "epic-") {
+			t.Errorf("%s %v should send %q as task-N:\n%s", call.tool, call.arguments, call.sent, all)
+		}
+	}
+}
+
+// Every answer names an epic epic-N, a story task-N with its epic as
+// epic-N, and a task on its own task-N. Links stay task-N: the page knows only that.
+func TestAnswersNameAnEpicAsEpicN(t *testing.T) {
+	c, _ := start(t, false, nil)
+	shared := filepath.Join(t.TempDir(), "notes.txt")
+	os.WriteFile(shared, []byte("notes"), 0o644)
+	for _, call := range []struct {
+		tool      string
+		arguments map[string]any
+		want      []string
+	}{
+		{"status", map[string]any{}, []string{"\n- epic-2: the epic Ship it is ready to close (close_epic)\n", "\n- epic-2 Ship it: 2 of 2 stories done\n",
+			"\n- task-6 Polish the menu (story of epic-3)\n", "\n- task-4 Release: deployer is working"}},
+		{"list_tasks", map[string]any{}, []string{"epic-2 [needs you] Ship it (epic, 2 of 2 stories done)\n", "\ntask-6 [held] Polish the menu (story of epic-3) ·",
+			"\ntask-1 [needs you] Fix the login ·"}},
+		{"show_task", map[string]any{"task": "epic-3"}, []string{"epic-3: Polish\n", "On the page: https://agentry.example/tasks/task-3\n", "An epic: 3 of 3 stories done."}},
+		{"show_task", map[string]any{"task": "task-6"}, []string{"task-6: Polish the menu\n", "A story of epic-3."}},
+		{"show_task", map[string]any{"task": "task-5"}, []string{"task-5: Login page\n"}},
+		{"create_task", map[string]any{"title": "Group", "kind": "epic"}, []string{"Created epic-10: Group\nhttps://agentry.example/tasks/task-10"}},
+		{"create_task", map[string]any{"title": "One", "epic": "task-3"}, []string{"Created task-10: One\n"}},
+		{"file_under_epic", map[string]any{"task": "task-6", "epic": "task-3"}, []string{"task-6 is a story of epic-3."}},
+		{"tell_coordinator", map[string]any{"task": "task-3", "text": "hi"}, []string{"Sent to epic-3's coordinator."}},
+		{"tell_coordinator", map[string]any{"task": "task-1", "text": "hi"}, []string{"Sent to task-1's coordinator."}},
+		{"answer_question", map[string]any{"task": "epic-2", "answer": "yes"}, []string{"Answered epic-2."}},
+		{"answer_question", map[string]any{"task": "epic-9", "answer": "Close the epic"}, []string{"epic-9 isn't ready to close"}}, // as you named it
+		{"set_priority", map[string]any{"tasks": []string{"task-3", "task-1"}}, []string{"In this order now: epic-3, task-1."}},
+		{"start", map[string]any{"tasks": []string{"task-6", "epic-2"}}, []string{"Started task-6, epic-2."}},
+		{"close_epic", map[string]any{"epic": "task-3"}, []string{"Give them this link: https://agentry.example/tasks/task-3"}},
+		{"close_epic", map[string]any{"epic": "task-9"}, []string{"task-9 isn't ready to close"}}, // no epic: named as you gave it
+		{"attach_file", map[string]any{"task": "task-3", "path": shared}, []string{"Shared " + shared + " with epic-3 as notes.txt."}},
+		{"get_file", map[string]any{"task": "task-3", "name": "x", "to": t.TempDir()}, []string{"Saved x from epic-3 to "}},
+		{"review_approvals", map[string]any{"task": "epic-1"}, []string{"1 actions wait for the user's approval"}}, // task-1's, found as epic-1
+	} {
+		got := c.tool(call.tool, call.arguments)
+		for _, want := range call.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s %v should say %q:\n%s", call.tool, call.arguments, want, got)
+			}
+		}
 	}
 }

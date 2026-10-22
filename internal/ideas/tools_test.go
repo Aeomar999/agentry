@@ -19,7 +19,8 @@ import (
 // records what the tools ask of it, and refuses as the server does: an idea
 // that isn't open can't be accepted or dismissed. An accepted idea's task
 // is in the column asked for, In progress with start, unless column is set;
-// with like, an idea isn't accepted without anyway, as it looks like task-30.
+// with like, an idea isn't accepted without anyway, as it looks like the
+// epic task-30. Accepted as an epic, its task says it is one.
 type ideasAgentry struct {
 	mu     sync.Mutex
 	ideas  []map[string]any
@@ -33,7 +34,7 @@ func newIdeasAgentry(t *testing.T) (*ideasAgentry, client.Client) {
 		{"id": "idea-4", "title": "Faster boot", "problem": "Start takes 9 s.", "proposal": "Load lazily.", "size": "S", "task": "task-24", "repo": "/other", "state": "open",
 			"about": "task-20", "aboutTitle": "Boot faster"},
 		{"id": "idea-3", "title": "Webhook log", "problem": "No one sees failures.", "proposal": "A log page.", "size": "M", "task": "task-24", "repo": "/repo",
-			"state": "accepted", "became": "task-30", "note": "soon"},
+			"state": "accepted", "became": "task-30", "becameKind": "epic", "note": "soon"},
 		{"id": "idea-2", "title": "Dark sidebar", "problem": "Too bright.", "proposal": "A dark one.", "size": "S", "task": "task-24", "repo": "/repo",
 			"state": "dismissed", "note": "not now"},
 		{"id": "idea-1", "title": "Retry webhooks", "problem": "Webhooks fail on a 503.", "proposal": "Retry them three times.", "size": "M", "kind": "epic",
@@ -80,14 +81,14 @@ func (f *ideasAgentry) serve(w http.ResponseWriter, r *http.Request) {
 				if f.like && !choice.Anyway {
 					w.WriteHeader(http.StatusConflict)
 					json.NewEncoder(w).Encode(map[string]any{"error": id + ` looks like the open task task-30 "Retry failed webhooks"`,
-						"duplicate": map[string]string{"id": "task-30", "title": "Retry failed webhooks", "column": "backlog"}})
+						"duplicate": map[string]string{"id": "task-30", "title": "Retry failed webhooks", "column": "backlog", "kind": "epic"}})
 					return
 				}
 				column := map[bool]string{false: "backlog", true: "in-progress"}[choice.Start]
 				if f.column != nil {
 					column = *f.column
 				}
-				json.NewEncoder(w).Encode(map[string]any{"task": "task-31", "column": column, "accepted": true, "refused": ""})
+				json.NewEncoder(w).Encode(map[string]any{"task": "task-31", "column": column, "kind": map[string]string{"epic": "epic"}[choice.Kind], "accepted": true, "refused": ""})
 				return
 			}
 			io.WriteString(w, `{}`)
@@ -178,7 +179,7 @@ func TestListIdeasShowsTheOpenOnesUnlessAsked(t *testing.T) {
 	}
 
 	all := c.tool("list_ideas", map[string]any{"state": "all"})
-	for _, want := range []string{"idea-3 [accepted] Webhook log", "became task-30: soon", "idea-2 [dismissed] Dark sidebar", "dismissed: not now", "idea-1 [open]"} {
+	for _, want := range []string{"idea-3 [accepted] Webhook log", "became epic-30: soon", "idea-2 [dismissed] Dark sidebar", "dismissed: not now", "idea-1 [open]"} {
 		if !strings.Contains(all, want) {
 			t.Errorf("missing %q in:\n%s", want, all)
 		}
@@ -186,7 +187,7 @@ func TestListIdeasShowsTheOpenOnesUnlessAsked(t *testing.T) {
 	if dismissed := c.tool("list_ideas", map[string]any{"state": "dismissed"}); !strings.Contains(dismissed, "idea-2") || strings.Contains(dismissed, "idea-1 [") {
 		t.Errorf("dismissed:\n%s", dismissed)
 	}
-	if everywhere := c.tool("list_ideas", map[string]any{"all": true}); !strings.Contains(everywhere, `idea-4 [open] Faster boot (size S, task, suggested in task-24, after the epic task-20 "Boot faster" closed)`) {
+	if everywhere := c.tool("list_ideas", map[string]any{"all": true}); !strings.Contains(everywhere, `idea-4 [open] Faster boot (size S, task, suggested in task-24, after epic-20 "Boot faster" closed)`) {
 		t.Errorf("every repo:\n%s", everywhere)
 	}
 }
@@ -257,7 +258,7 @@ func TestTheUserDecidesOnAnIdea(t *testing.T) {
 // descriptions say must be the user's own decision.
 func TestWithoutElicitationTheArgumentsAreTheDecision(t *testing.T) {
 	c, fake := startOnIdeas(t, false, nil)
-	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "note": "go"}); !strings.Contains(text, "idea-1 became task-31") {
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "note": "go"}); !strings.Contains(text, "idea-1 became epic-31") {
 		t.Errorf("accept: %s", text)
 	}
 	if text := c.tool("dismiss_idea", map[string]any{"id": "idea-1", "note": "no"}); !strings.Contains(text, "The user dismissed idea-1") {
@@ -292,10 +293,10 @@ func TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway(t *testing.T) {
 
 	again = "leave open"
 	text := c.tool("accept_idea", map[string]any{"id": "idea-1"})
-	if !strings.Contains(text, "The user left idea-1 open") || !strings.Contains(text, "task-30") || !strings.Contains(text, "Nothing was written.") {
+	if !strings.Contains(text, "The user left idea-1 open") || !strings.Contains(text, "epic-30") || !strings.Contains(text, "Nothing was written.") {
 		t.Errorf("left open: %s", text)
 	}
-	if len(asked) != 2 || !strings.Contains(asked[1], `looks like the open task task-30 "Retry failed webhooks", in the user's Backlog`) ||
+	if len(asked) != 2 || !strings.Contains(asked[1], `looks like the open task epic-30 "Retry failed webhooks", in the user's Backlog`) ||
 		!strings.Contains(asked[1], "https://agentry.example/tasks/task-30") || !strings.Contains(asked[1], "Make another task anyway?") {
 		t.Errorf("asked: %q", asked)
 	}
@@ -315,11 +316,11 @@ func TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway(t *testing.T) {
 	plain, fake := startOnIdeas(t, false, nil)
 	fake.like = true
 	text = plain.tool("accept_idea", map[string]any{"id": "idea-1"})
-	if !strings.Contains(text, `idea-1 looks like the open task task-30 "Retry failed webhooks"`) || !strings.Contains(text, "Nothing was written.") ||
+	if !strings.Contains(text, `idea-1 looks like the open task epic-30 "Retry failed webhooks"`) || !strings.Contains(text, "Nothing was written.") ||
 		!strings.Contains(text, "call accept_idea again with anyway") {
 		t.Errorf("without elicitation: %s", text)
 	}
-	if text := plain.tool("accept_idea", map[string]any{"id": "idea-1", "anyway": true}); !strings.Contains(text, "idea-1 became task-31") {
+	if text := plain.tool("accept_idea", map[string]any{"id": "idea-1", "anyway": true}); !strings.Contains(text, "idea-1 became epic-31") {
 		t.Errorf("with anyway: %s", text)
 	}
 	want = []string{`POST /api/ideas/idea-1/accept {"kind":"epic","note":""}`, `POST /api/ideas/idea-1/accept {"anyway":true,"kind":"epic","note":""}`}
@@ -374,10 +375,10 @@ func TestTheArgumentsAreSentAsGiven(t *testing.T) {
 // an accept that doesn't start sends what it always did.
 func TestAcceptingAnIdeaCanStartItsTask(t *testing.T) {
 	c, fake := startOnIdeas(t, false, nil)
-	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": true}); !strings.Contains(text, "idea-1 became task-31, started (In progress)") {
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": true}); !strings.Contains(text, "idea-1 became epic-31, started (In progress)") {
 		t.Errorf("started: %s", text)
 	}
-	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": false}); !strings.Contains(text, "idea-1 became task-31, in the user's Backlog") {
+	if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": false}); !strings.Contains(text, "idea-1 became epic-31, in the user's Backlog") {
 		t.Errorf("not started: %s", text)
 	}
 	want := []string{`POST /api/ideas/idea-1/accept {"kind":"epic","note":"","start":true}`, `POST /api/ideas/idea-1/accept {"kind":"epic","note":""}`}
@@ -428,12 +429,12 @@ func TestAnAcceptedIdeaSaysWhereItsTaskReallyIs(t *testing.T) {
 		column string
 		reply  string
 	}{
-		{true, "backlog", "idea-1 became task-31, in the user's Backlog"},
-		{false, "in-progress", "idea-1 became task-31, started (In progress)"},
-		{false, "review", "idea-1 became task-31, started (Review)"},
-		{true, "todo", "idea-1 became task-31, in To do:"},
-		{true, "done", "idea-1 became task-31, Done:"},
-		{true, "", "idea-1 became task-31: https://agentry.example/tasks/task-31"},
+		{true, "backlog", "idea-1 became epic-31, in the user's Backlog"},
+		{false, "in-progress", "idea-1 became epic-31, started (In progress)"},
+		{false, "review", "idea-1 became epic-31, started (Review)"},
+		{true, "todo", "idea-1 became epic-31, in To do:"},
+		{true, "done", "idea-1 became epic-31, Done:"},
+		{true, "", "idea-1 became epic-31: https://agentry.example/tasks/task-31"},
 	} {
 		fake.column = &step.column
 		if text := c.tool("accept_idea", map[string]any{"id": "idea-1", "start": step.start}); !strings.Contains(text, step.reply) {

@@ -21,7 +21,7 @@ func (s *Server) Waiting(repo string) []features.Waiting {
 	waiting := []features.Waiting{}
 	for _, q := range s.questions() {
 		waiting = append(waiting, waitlist.Entry(waitlist.Question{Kind: q.Kind, Task: q.Task, TaskTitle: q.TaskTitle,
-			Agent: q.Agent, Text: q.Text, Action: q.Action, Options: q.Options}))
+			TaskKind: q.TaskKind, Agent: q.Agent, Text: q.Text, Action: q.Action, Options: q.Options}))
 	}
 	for _, f := range s.config.Features {
 		if f.Waiting != nil {

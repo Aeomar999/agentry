@@ -97,7 +97,7 @@ func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 	case got.Task == "":
 		http.Error(w, got.Refused, http.StatusConflict)
 	default:
-		httpapi.Reply(w, acceptance{Task: got.Task, Column: got.Column, Accepted: got.Accepted, Refused: got.Refused})
+		httpapi.Reply(w, acceptance{Task: got.Task, Column: got.Column, Kind: got.Kind, Accepted: got.Accepted, Refused: got.Refused})
 	}
 }
 
@@ -106,7 +106,7 @@ func acceptIdea(c features.Core, w http.ResponseWriter, r *http.Request) {
 func refuseDuplicate(c features.Core, w http.ResponseWriter, got Acceptance) {
 	like := duplicateView{ID: got.Duplicate}
 	if task, err := c.Read.Task(got.Duplicate); err == nil && task != nil {
-		like.Title, like.Column = task.Title, task.BoardColumn(c.Read.Roster())
+		like.Title, like.Column, like.Kind = task.Title, task.BoardColumn(c.Read.Roster()), task.Kind
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusConflict)
@@ -180,12 +180,13 @@ type ideaView struct {
 	AboutTitle   string     `json:"aboutTitle"` // that epic's title
 	Kind         tasks.Kind `json:"kind"`       // what it suggests making of it: "" for a story, "epic"
 	State        State      `json:"state"`
-	Note         string     `json:"note"`               // what you said when you accepted or dismissed it
-	DecidedAt    time.Time  `json:"decidedAt,omitzero"` // when it was accepted or dismissed; left out while it is open
-	Became       string     `json:"became"`             // the task an accepted idea became
-	BecameColumn string     `json:"becameColumn"`       // that task's column on the board now, as a task summary's column; "" when it can't be read
-	Auto         bool       `json:"autoAccepted"`       // Agentry accepted it, as the Visionaries agreed, not you
-	Repeats      string     `json:"repeats"`            // an idea the Visionaries said it raises again, "" for none
+	Note         string     `json:"note"`                 // what you said when you accepted or dismissed it
+	DecidedAt    time.Time  `json:"decidedAt,omitzero"`   // when it was accepted or dismissed; left out while it is open
+	Became       string     `json:"became"`               // the task an accepted idea became
+	BecameColumn string     `json:"becameColumn"`         // that task's column on the board now, as a task summary's column; "" when it can't be read
+	BecameKind   tasks.Kind `json:"becameKind,omitempty"` // and its kind: "epic" for an epic
+	Auto         bool       `json:"autoAccepted"`         // Agentry accepted it, as the Visionaries agreed, not you
+	Repeats      string     `json:"repeats"`              // an idea the Visionaries said it raises again, "" for none
 	CreatedAt    time.Time  `json:"createdAt"`
 	// NotAutoAccepted says why Agentry wouldn't accept an open idea for you
 	// under your rule (LeftForYou), even with that turned off; "" when
@@ -206,17 +207,18 @@ func viewOf(idea *Idea, about, became *tasks.Task, roster agents.Roster, notAuto
 		view.About, view.AboutTitle = about.ID, about.Title
 	}
 	if became != nil {
-		view.BecameColumn = became.BoardColumn(roster)
+		view.BecameColumn, view.BecameKind = became.BoardColumn(roster), became.Kind
 	}
 	return view
 }
 
 // acceptance is what accepting an idea did (Acceptance).
 type acceptance struct {
-	Task     string `json:"task"`     // the task made from the idea
-	Column   string `json:"column"`   // its column on the board now, as a task summary's column; "" when it can't be read
-	Accepted bool   `json:"accepted"` // the idea is marked accepted
-	Refused  string `json:"refused"`  // why it isn't, "" once accepted
+	Task     string     `json:"task"`           // the task made from the idea
+	Column   string     `json:"column"`         // its column on the board now, as a task summary's column; "" when it can't be read
+	Kind     tasks.Kind `json:"kind,omitempty"` // its kind: "epic" for an epic
+	Accepted bool       `json:"accepted"`       // the idea is marked accepted
+	Refused  string     `json:"refused"`        // why it isn't, "" once accepted
 }
 
 // duplicateRefusal is the 409 for an idea that looks like an open task.
@@ -227,7 +229,8 @@ type duplicateRefusal struct {
 
 // duplicateView is the open task an idea looks like.
 type duplicateView struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Column string `json:"column"` // its column on the board, as a task summary's column; "" when it can't be read
+	ID     string     `json:"id"`
+	Title  string     `json:"title"`
+	Column string     `json:"column"`         // its column on the board, as a task summary's column; "" when it can't be read
+	Kind   tasks.Kind `json:"kind,omitempty"` // its kind: "epic" for an epic
 }

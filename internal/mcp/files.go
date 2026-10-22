@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
 // Sharing files between this machine and a task, from Claude Code.
@@ -17,6 +19,7 @@ import (
 func (s *Server) attachFile(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task, Path, As string }
 	json.Unmarshal(arguments, &a)
+	a.Task = tasks.StoredID(a.Task)
 	file, err := os.Open(a.Path)
 	if err != nil {
 		return "", err
@@ -34,12 +37,13 @@ func (s *Server) attachFile(_ context.Context, arguments json.RawMessage) (strin
 		return "", err
 	}
 	response.Body.Close()
-	return fmt.Sprintf("Shared %s with %s as %s. Its agents find it in .agentry/files.", a.Path, a.Task, name), nil
+	return fmt.Sprintf("Shared %s with %s as %s. Its agents find it in .agentry/files.", a.Path, s.shownNow()(a.Task), name), nil
 }
 
 func (s *Server) getFile(_ context.Context, arguments json.RawMessage) (string, error) {
 	var a struct{ Task, Name, To string }
 	json.Unmarshal(arguments, &a)
+	a.Task = tasks.StoredID(a.Task)
 	response, err := s.raw(http.MethodGet, "/api/tasks/"+a.Task+"/shared/file?name="+url.QueryEscape(a.Name), nil)
 	if err != nil {
 		return "", err
@@ -62,7 +66,7 @@ func (s *Server) getFile(_ context.Context, arguments json.RawMessage) (string, 
 		return "", err
 	}
 	absolute, _ := filepath.Abs(to)
-	return fmt.Sprintf("Saved %s from %s to %s (%d bytes).", a.Name, a.Task, absolute, size), nil
+	return fmt.Sprintf("Saved %s from %s to %s (%d bytes).", a.Name, s.shownNow()(a.Task), absolute, size), nil
 }
 
 // raw calls the server with a body that isn't JSON, such as a file.

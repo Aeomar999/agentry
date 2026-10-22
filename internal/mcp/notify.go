@@ -30,11 +30,12 @@ func (s *Server) Watch(ctx context.Context) {
 			time.Sleep(notifyEvery)
 			continue
 		}
+		idOf := s.shownNow() // fresh is never empty here
 		for _, w := range fresh {
-			title := map[string]string{"done": "Agentry: " + w.Task + " is done", "said": "Agentry: " + w.Task + "'s coordinator",
+			title := map[string]string{"done": "Agentry: " + idOf(w.Task) + " is done", "said": "Agentry: " + idOf(w.Task) + "'s coordinator",
 				"offline": "Agentry: a machine went offline", "ideas": "Agentry: a new idea"}[w.Kind]
 			if title == "" {
-				title = "Agentry: " + w.Task + " needs you"
+				title = "Agentry: " + idOf(w.Task) + " needs you"
 			}
 			notify(title, w.Line+"\n"+s.agentry.PageURL("/tasks/"+w.Task))
 			seen[w.Key] = true

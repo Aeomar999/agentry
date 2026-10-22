@@ -48,11 +48,11 @@ func News(agentry client.Client) ([]Waiting, error) {
 	}
 	for _, t := range board {
 		if t.Status == "done" {
-			all = append(all, Waiting{Key: "done/" + t.ID, Task: t.ID, Line: t.ID + " is done: " + t.Title, Kind: "done"})
+			all = append(all, Waiting{Key: "done/" + t.ID, Task: t.ID, Line: t.shown() + " is done: " + t.Title, Kind: "done"})
 		}
 		if t.Told != nil {
 			all = append(all, Waiting{Key: "said/" + t.ID + "/" + t.Told.At, Task: t.ID, Kind: "said",
-				Line: fmt.Sprintf("%s (%s): %s says: %s", t.ID, t.Title, t.Told.From, tasks.OneLine(t.Told.Text, 400))})
+				Line: fmt.Sprintf("%s (%s): %s says: %s", t.shown(), t.Title, t.Told.From, tasks.OneLine(t.Told.Text, 400))})
 		}
 	}
 	var fleet struct {
@@ -66,7 +66,7 @@ func News(agentry client.Client) ([]Waiting, error) {
 		for _, w := range fleet.Workers {
 			if !w.Online && len(w.Tasks) > 0 { // offline with nothing on it is no news
 				all = append(all, Waiting{Key: "offline/" + w.Name + "/" + w.Since, Task: w.Tasks[0], Kind: "offline",
-					Line: fmt.Sprintf("the machine %s went offline; %s waits until it is back", w.Name, strings.Join(w.Tasks, ", "))})
+					Line: fmt.Sprintf("the machine %s went offline; %s waits until it is back", w.Name, strings.Join(idsAs(w.Tasks, shownIDs(board)), ", "))})
 			}
 		}
 	}

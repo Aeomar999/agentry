@@ -131,7 +131,7 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 			id := suggest(t, s, repo, map[string]any{"kind": c.suggested})
 
 			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: c.chosen, Note: "Yes, soon", Defaults: tasks.Limits{Budget: 500, MaxTurns: 7}})
-			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Accepted: true}) {
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "backlog", Kind: c.want, Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			task := loadTask(t, s, "task-2")
@@ -159,13 +159,13 @@ func TestAcceptMakesABacklogTaskInTheIdeasRepo(t *testing.T) {
 // A task you start as you accept it is made unparked, in one event, so it
 // starts as a task you make does; the replayed log agrees.
 func TestAcceptAndStartMakesATaskOutOfTheBacklog(t *testing.T) {
-	for _, kind := range []string{"task", "epic"} {
+	for kind, want := range map[string]tasks.Kind{"task": tasks.Story, "epic": tasks.Epic} {
 		t.Run(kind, func(t *testing.T) {
 			s, state, repo := openSeeded(t)
 			id := suggest(t, s, repo, nil)
 
 			got, err := ideas.Accept(s, state, id, ideas.Choice{Kind: kind, Defaults: tasks.Limits{Budget: 700, MaxTurns: 9}, Start: true})
-			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "in-progress", Accepted: true}) {
+			if err != nil || got != (ideas.Acceptance{Task: "task-2", Column: "in-progress", Kind: want, Accepted: true}) {
 				t.Fatalf("accept: %+v %v", got, err)
 			}
 			stream, err := s.Stream("task-2")

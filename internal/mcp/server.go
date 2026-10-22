@@ -159,7 +159,7 @@ func (s *Server) instructions() string {
 const instructionsStart = `Agentry is the user's task board where AI agents do the work: each task goes to a team's coordinator agent, which hands it from agent to agent (engineer, reviewer, tester, deployer, or another team's) until it is checked and done. Its tools let you hand work to it from this repo and keep the user informed.
 
 - Turning a request into work: write a task with a one-line imperative title and a description of what to change, why, and how to tell it works. New tasks work in this repo unless you name another. Show the user the title and description first unless they said to go ahead.
-- Epics: a goal too big for one change is an epic (kind "epic"); its coordinator splits it into stories, which wait in the user's Backlog until they start them. File tasks under an epic with file_under_epic, set priority with set_priority, and start stories with start.
+- Epics: a goal too big for one change is an epic (kind "epic"), shown as epic-N (tools take epic-N or task-N for it); its coordinator splits it into stories, which wait in the user's Backlog until they start them. File tasks under an epic with file_under_epic, set priority with set_priority, and start stories with start.
 - Questions from coordinators: relay them to the user and send the user's own answer with answer_question. Never answer for the user.
 - Approvals: review_approvals and close_epic ask the user directly in Claude Code; you can't approve for them. Offer to run them when something waits.`
 
