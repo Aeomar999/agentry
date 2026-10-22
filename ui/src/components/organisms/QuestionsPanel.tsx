@@ -9,6 +9,7 @@ import type { Question } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { cn } from "@/lib/cn";
 import { timeAgo } from "@/lib/time";
+import { shownId } from "@/lib/shown-id";
 import { Answer, Approval, LimitStopChoice } from "./NeedsYouPanel";
 
 // Everything waiting for you, from every task, in the dock: the list on the
@@ -61,7 +62,7 @@ export function QuestionsPanel({ onOpenTerminal, focus }: QuestionsPanelProps) {
               <span className="flex items-center gap-2 text-[11px] text-ink-muted">
                 <span className="text-warning">{KINDS[q.kind].icon}</span>
                 {KINDS[q.kind].label}
-                <span className="font-mono">{q.task}</span>
+                <span className="font-mono">{shownId(q.task, q.taskKind)}</span>
                 <span className="ml-auto font-mono text-ink-faint">{timeAgo(q.at)}</span>
               </span>
               <span className="line-clamp-2 text-[12px] text-ink-primary">{q.text}</span>
@@ -90,7 +91,7 @@ function QuestionDetail({
     <div className="flex min-w-0 flex-1 scrollbar-thin flex-col gap-3 overflow-y-auto p-4">
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-muted">
         <Link to={`/tasks/${q.task}`} className="font-mono text-ink-secondary hover:text-ink-primary">
-          {q.task}
+          {shownId(q.task, q.taskKind)}
         </Link>
         <span className="truncate text-ink-primary">{q.taskTitle}</span>
       </div>

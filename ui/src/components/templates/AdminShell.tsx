@@ -19,6 +19,7 @@ import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
 import { CrumbContext } from "@/lib/breadcrumb";
 import { readStored, writeStored } from "@/lib/stored";
+import { shownId } from "@/lib/shown-id";
 import { useFeatures, visibleFeatures } from "@/features";
 
 // The one template: top bar, sidebar, status bar, the terminal dock, the
@@ -139,7 +140,7 @@ export function AdminShell() {
         .map((task) => ({
           id: `terminal-${task.id}`,
           group: "Commands",
-          label: `Open the terminal of ${task.id}`,
+          label: `Open the terminal of ${shownId(task.id, task.kind)}`,
           hint: task.currentAgent,
           icon: <SquareTerminal />,
           run: () => openTaskTerminal(task.id),
@@ -151,14 +152,7 @@ export function AdminShell() {
         icon: theme === "dark" ? <Sun /> : <Moon />,
         run: toggleTheme,
       },
-      ...tasks.map((task) => ({
-        id: `task-${task.id}`,
-        group: "Tasks",
-        label: task.title,
-        hint: `${task.id} · ${task.status}`,
-        icon: <ListTodo />,
-        run: () => navigate(`/tasks/${task.id}`),
-      })),
+      ...tasks.map((task) => taskItem(task, () => navigate(`/tasks/${task.id}`))),
       ...agents.map((agent) => ({
         id: `agent-${agent.name}`,
         group: "Agents",
@@ -237,4 +231,17 @@ export function AdminShell() {
       </QuestionContext.Provider>
     </CrumbContext.Provider>
   );
+}
+
+// taskItem is a task in the palette, found by its id as shown or as stored.
+export function taskItem(task: TaskSummary, run: () => void): PaletteItem {
+  return {
+    id: `task-${task.id}`,
+    group: "Tasks",
+    label: task.title,
+    hint: `${shownId(task.id, task.kind)} · ${task.status}`,
+    terms: task.id,
+    icon: <ListTodo />,
+    run,
+  };
 }

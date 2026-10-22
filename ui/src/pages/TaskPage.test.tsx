@@ -147,6 +147,33 @@ describe("TaskPage for a live task", () => {
   });
 });
 
+describe("TaskPage's ids", () => {
+  const ids = () => screen.getAllByText(/^(task|epic)-\d+$/).map((shown) => shown.textContent);
+
+  test("shows an epic as epic-N, in the header and its details", () => {
+    page(detail({ kind: "epic" }), "details");
+    expect(ids()).toEqual(["epic-1", "epic-1"]);
+    fireEvent.click(button("Erase this task…")!);
+    expect(screen.getByRole("dialog", { name: "Erase epic-1 for good?" })).toBeTruthy();
+  });
+
+  test("shows a story as task-N, with its epic as epic-M, linking to task-M", () => {
+    page(detail({ epic: "task-9", epicTitle: "Ship v2" }));
+    expect(ids()).toEqual(["task-1", "epic-9"]);
+    expect(screen.getByRole("link", { name: "epic-9" }).getAttribute("href")).toBe("/tasks/task-9");
+  });
+
+  test("names an archived story's epic as epic-M in its details", () => {
+    page(detail({ epic: "task-9", archived: true, archivedAt: ARCHIVED_AT }), "details");
+    expect(ids()).toEqual(["task-1", "epic-9", "task-1", "epic-9"]);
+  });
+
+  test("shows a task on its own as task-N", () => {
+    page(detail());
+    expect(ids()).toEqual(["task-1"]);
+  });
+});
+
 const ERASED_AT = "2026-10-20T09:30:00Z";
 
 describe("TaskPage erasing the task", () => {

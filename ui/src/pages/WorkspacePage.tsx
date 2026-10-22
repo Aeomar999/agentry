@@ -18,6 +18,7 @@ import { useResource } from "@/live/use-resource";
 import { modKey } from "@/lib/shortcuts";
 import { readStored, writeStored } from "@/lib/stored";
 import { cn } from "@/lib/cn";
+import { shownId } from "@/lib/shown-id";
 
 // A task's Workspace, in its own tab, laid out like an editor's
 // git view: source control (what isn't committed, then the branch's commits,
@@ -87,8 +88,8 @@ export function WorkspacePage() {
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
   useEffect(() => {
-    document.title = `${taskId} workspace · Agentry`;
-  }, [taskId]);
+    document.title = `${shownId(taskId, task?.kind)} workspace · Agentry`;
+  }, [taskId, task?.kind]);
 
   const counts = { M: 0, A: 0, D: 0, U: 0 };
   for (const f of changes) if (f.change) counts[f.change]++;
@@ -132,7 +133,7 @@ export function WorkspacePage() {
           <Link to={`/tasks/${taskId}`} className="flex items-center gap-2" title="Back to the task">
             <LogoTile />
           </Link>
-          <Mono className="text-ink-muted">{taskId}</Mono>
+          <Mono className="text-ink-muted">{shownId(taskId, task?.kind)}</Mono>
           <span className="min-w-0 truncate text-[13px] font-medium text-ink-primary">{task?.title}</span>
           {task && <TaskStatusBadge status={task.status} />}
           <span className="ml-auto flex items-center gap-3 font-mono text-[12px]">

@@ -12,6 +12,7 @@ import { useToast } from "./Toasts";
 import { rankAt } from "@/lib/rank";
 import { DropLine, slotAt, slotIndex } from "@/lib/drag";
 import { DONE_DAYS, onBoard } from "@/lib/epics";
+import { shownEpic, shownId } from "@/lib/shown-id";
 import { COLUMN_TITLES } from "@/lib/columns";
 
 // The board's columns are the stages of the work: Backlog (shown when you
@@ -123,12 +124,12 @@ export function TaskBoard({ columns: listed, tasks, agents, showBacklog, onOpen,
     settle(true);
     if (rank !== null) saveRank(task, rank);
     const toasts: Record<BoardColumn, [string, string]> = {
-      backlog: [`Parked ${task.id} in the Backlog`, "It waits there until you move it on."],
-      todo: [`Parked ${task.id} in To do`, "It waits there until you move it on."],
-      "in-progress": [`Moved ${task.id} to In progress`, "The coordinator hands it to an agent that builds it."],
-      review: [`Moved ${task.id} to Review`, "The coordinator has it checked next."],
-      shipping: [`Moved ${task.id} to Shipping`, "The coordinator hands it to an agent that ships it."],
-      done: [`${task.id} is done`, "The coordinator writes its summary."],
+      backlog: [`Parked ${shownId(task.id, task.kind)} in the Backlog`, "It waits there until you move it on."],
+      todo: [`Parked ${shownId(task.id, task.kind)} in To do`, "It waits there until you move it on."],
+      "in-progress": [`Moved ${shownId(task.id, task.kind)} to In progress`, "The coordinator hands it to an agent that builds it."],
+      review: [`Moved ${shownId(task.id, task.kind)} to Review`, "The coordinator has it checked next."],
+      shipping: [`Moved ${shownId(task.id, task.kind)} to Shipping`, "The coordinator hands it to an agent that ships it."],
+      done: [`${shownId(task.id, task.kind)} is done`, "The coordinator writes its summary."],
     };
     notify("success", ...toasts[to]);
   }
@@ -255,7 +256,7 @@ function EpicHeading({ epic, count, onPick }: { epic?: TaskSummary; count: numbe
     <button
       type="button"
       onClick={() => onPick(epic.id)}
-      title={`Show only ${epic.id}'s stories`}
+      title={`Show only ${shownEpic(epic.id)}'s stories`}
       className="flex cursor-pointer items-center gap-1.5 px-1 pt-2 text-left text-[11px] font-semibold text-ink-secondary hover:text-ink-primary"
     >
       <span className="truncate">{epic.title}</span>
@@ -275,13 +276,14 @@ interface DirectDialogProps {
 function DirectDialog({ task, to, onClose, onSend }: DirectDialogProps) {
   const [note, setNote] = useState("");
   const reopen = task.status === "done" ? "Reopen and " : "";
+  const id = shownId(task.id, task.kind);
   const titles: Record<BoardColumn, string> = {
-    backlog: `${reopen}park ${task.id} in the Backlog?`,
-    todo: `${reopen}park ${task.id} in To do?`,
-    "in-progress": task.parked ? `Start ${task.id}?` : `${reopen}send ${task.id} back for more work?`,
-    review: `${reopen}have ${task.id} reviewed next?`,
-    shipping: `${reopen}ship ${task.id} now?`,
-    done: `Move ${task.id} to Done?`,
+    backlog: `${reopen}park ${id} in the Backlog?`,
+    todo: `${reopen}park ${id} in To do?`,
+    "in-progress": task.parked ? `Start ${id}?` : `${reopen}send ${id} back for more work?`,
+    review: `${reopen}have ${id} reviewed next?`,
+    shipping: `${reopen}ship ${id} now?`,
+    done: `Move ${id} to Done?`,
   };
   const title = titles[to].charAt(0).toUpperCase() + titles[to].slice(1);
   const send = () => onSend(note);

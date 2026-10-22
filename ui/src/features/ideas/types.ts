@@ -21,6 +21,7 @@ export interface Idea {
   note: string; // what you said when you accepted or dismissed it
   decidedAt?: string; // when it was accepted or dismissed; absent while it is open
   became: string; // the task an accepted idea became
+  becameKind?: "epic"; // and its kind, left out for a story
   becameColumn: BoardColumn | ""; // that task's column now, "" when it can't be read
   autoAccepted: boolean; // Agentry accepted it, as the Visionaries agreed by your rule, not you
   repeats: string; // an idea the Visionaries said it raises again, "" for none
@@ -33,6 +34,7 @@ export interface Idea {
 export interface IdeaAcceptance {
   task: string;
   column: BoardColumn | ""; // the task's column now, "" when it can't be read; a retry keeps the task where it was made
+  kind?: "epic"; // the task's kind, left out for a story
   accepted: boolean;
   refused: string;
 }
@@ -43,4 +45,5 @@ export interface IdeaDuplicate {
   id: string;
   title: string;
   column: BoardColumn | ""; // "" when it can't be read
+  kind?: "epic"; // left out for a story
 }

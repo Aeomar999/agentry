@@ -39,6 +39,7 @@ import { ErasedTask } from "@/components/organisms/ErasedTask";
 import { RedactText } from "@/components/organisms/RedactText";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 import { waitingLine } from "@/lib/epics";
+import { shownId } from "@/lib/shown-id";
 import type { Action, Agent, Erasure, LogEvent, TaskDetail, Turn } from "@/api/types";
 import { teamOf, teamsOf } from "@/lib/teams";
 import { SHOWS, Show, activityOf, rowFor } from "@/lib/activity";
@@ -152,9 +153,9 @@ type TabId = (typeof TABS)[number];
 
 export function TaskPage() {
   const { taskId = "" } = useParams();
-  useBreadcrumb({ label: "Tasks", to: "/tasks" }, { label: taskId });
   const [params, setParams] = useSearchParams();
   const { data: task, error, status, position, reload } = useResource<TaskDetail>(`/api/tasks/${encodeURIComponent(taskId)}`);
+  useBreadcrumb({ label: "Tasks", to: "/tasks" }, { label: shownId(taskId, task?.kind) });
   const clock = useNow(Boolean(task && task.status !== "done"));
   const roster = useResource<Agent[]>("/api/agents").data ?? [];
   const links = useTaskLinks(taskId, useTaskCommits(taskId));
@@ -170,7 +171,7 @@ export function TaskPage() {
   // An erased task is gone for good: erased here, the page keeps what the
   // erasure said; read again, the server says when (410). The route keeps
   // this page when only the id changes, so the erasure holds for its own task.
-  if (erasure?.id === taskId) return <ErasedTask id={taskId} erasure={erasure} />;
+  if (erasure?.id === taskId) return <ErasedTask id={shownId(taskId, task?.kind)} erasure={erasure} />;
   if (status === 410) return <ErasedTask id={taskId} said={error} />;
   if (error && !task) {
     return (
@@ -255,7 +256,7 @@ export function TaskPage() {
         ]}
         meta={
           <>
-            <Mono>{task.id}</Mono>
+            <Mono>{shownId(task.id, task.kind)}</Mono>
             {team && (
               <>
                 <span>·</span>
@@ -266,7 +267,7 @@ export function TaskPage() {
               <>
                 <span>·</span>
                 <span>
-                  story of <TaskLink id={task.epic} />
+                  story of <TaskLink id={task.epic} kind="epic" />
                   {task.epicTitle && <span className="text-ink-muted"> {task.epicTitle}</span>}
                 </span>
               </>
@@ -428,7 +429,9 @@ export function TaskPage() {
               </Scroll>
             )}
             {tab === "stories" && <StoryTable epic={task} onChanged={reload} />}
-            {tab === "files" && <SharedFiles task={task.id} files={task.shared ?? []} readOnly={archived} onChanged={reload} />}
+            {tab === "files" && (
+              <SharedFiles task={task.id} kind={task.kind} files={task.shared ?? []} readOnly={archived} onChanged={reload} />
+            )}
             {tab === "coordinator" && <CoordinatorChat task={task} onSent={reload} />}
             {tab === "activity" && (
               <ActivityFeed
@@ -491,7 +494,7 @@ export function TaskPage() {
                   <Panel title="Task">
                     <KeyValueList
                       items={[
-                        { label: "Id", value: <Mono>{task.id}</Mono> },
+                        { label: "Id", value: <Mono>{shownId(task.id, task.kind)}</Mono> },
                         { label: "Status", value: <TaskStatusBadge status={task.status} /> },
                         ...(isEpic ? [] : [{ label: "Board column", value: COLUMN_TITLES[task.column] }]),
                         {
@@ -505,7 +508,7 @@ export function TaskPage() {
                                 label: "Epic",
                                 value: archived ? (
                                   task.epic ? (
-                                    <TaskLink id={task.epic} />
+                                    <TaskLink id={task.epic} kind="epic" />
                                   ) : (
                                     <Mono className="text-ink-muted">none</Mono>
                                   )
@@ -551,7 +554,7 @@ export function TaskPage() {
                     />
                   </Panel>
                   <div className="lg:col-span-2">
-                    <EraseTask task={task.id} onErased={setErasure} />
+                    <EraseTask task={task.id} kind={task.kind} onErased={setErasure} />
                   </div>
                 </div>
               </Scroll>
@@ -559,7 +562,9 @@ export function TaskPage() {
           </div>
         </div>
       </div>
-      {redacting !== null && <RedactText task={task.id} marked={redacting} onClose={() => setRedacting(null)} onRedacted={reload} />}
+      {redacting !== null && (
+        <RedactText task={task.id} kind={task.kind} marked={redacting} onClose={() => setRedacting(null)} onRedacted={reload} />
+      )}
     </div>
   );
 }
@@ -655,10 +660,10 @@ function MadeFromLink({ stream }: { stream: string }) {
 }
 
 // TaskLink goes to another task, such as the one another team does for this.
-function TaskLink({ id }: { id: string }) {
+function TaskLink({ id, kind }: { id: string; kind?: string }) {
   return (
     <Link to={`/tasks/${id}`} className="font-mono text-info hover:underline">
-      {id}
+      {shownId(id, kind)}
     </Link>
   );
 }

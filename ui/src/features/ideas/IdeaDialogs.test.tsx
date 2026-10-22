@@ -62,6 +62,24 @@ describe("AcceptIdeaDialog", () => {
     expect(calls.mock.calls[1][2]).toMatchObject({ kind: "task", anyway: true });
   });
 
+  test("names an epic it looks like or made as epic-N, linking to task-N", async () => {
+    const calls = vi.mocked(api);
+    calls.mockReset();
+    const likeEpic = new ApiError("idea-2 looks like the open task task-2", 409, {
+      duplicate: { id: "task-2", title: "", column: "", kind: "epic" },
+    });
+    calls
+      .mockRejectedValueOnce(likeEpic)
+      .mockResolvedValueOnce({ task: "task-3", column: "backlog", kind: "epic", accepted: true, refused: "" });
+    open();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept as a task" }));
+    const link = await screen.findByRole("link", { name: "epic-2" });
+    expect(link.parentElement?.textContent).toContain("epic-2 (epic-2).");
+    fireEvent.click(screen.getByRole("button", { name: "Make another anyway" }));
+    expect((await screen.findByRole("link", { name: "epic-3" })).getAttribute("href")).toBe("/tasks/task-3");
+  });
+
   test("Cancel leaves the idea open, sending nothing more", async () => {
     const calls = vi.mocked(api);
     calls.mockReset();

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { FeaturesReply, TaskSummary } from "@/api/types";
 import { task } from "@/api/tasks.fixtures";
@@ -49,5 +49,29 @@ describe("TasksPage's board", () => {
   test("shows a card in Shipping while the manifest loads", () => {
     page("/tasks?view=board", [task("task-1", "shipping")]);
     expect(screen.getByText("Title of task-1")).toBeTruthy();
+  });
+});
+
+describe("TasksPage's ids", () => {
+  const epic: TaskSummary = { ...task("task-21", "in-progress"), kind: "epic" };
+  const story: TaskSummary = { ...task("task-22", "todo"), epic: "task-21" };
+  const own = task("task-30", "todo");
+  const ids = () => screen.getAllByRole("row").map((row) => row.querySelector("td")?.textContent ?? "");
+
+  test("show an epic as epic-N in the list, and a story or a task on its own as task-N", () => {
+    page("/tasks?view=list", [epic, story, own]);
+    expect(ids().filter(Boolean)).toEqual(["epic-21", "task-22", "task-30"]);
+  });
+
+  test("find an epic by epic-N", () => {
+    page("/tasks?view=list", [epic, story, own]);
+    fireEvent.change(screen.getByPlaceholderText("Filter tasks"), { target: { value: "epic-21" } });
+    expect(ids().filter(Boolean)).toEqual(["epic-21"]);
+  });
+
+  test("still find an epic by its task-N id", () => {
+    page("/tasks?view=list", [epic, story, own]);
+    fireEvent.change(screen.getByPlaceholderText("Filter tasks"), { target: { value: "task-21" } });
+    expect(ids().filter(Boolean)).toEqual(["epic-21"]);
   });
 });

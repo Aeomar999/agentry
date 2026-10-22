@@ -7,6 +7,7 @@ import { AgentName } from "@/components/molecules/AgentName";
 import { Markdown } from "@/components/molecules/Markdown";
 import { Panel } from "@/components/molecules/Panel";
 import { cn } from "@/lib/cn";
+import { shownId } from "@/lib/shown-id";
 import type { Idea } from "./types";
 
 export const SIZES: Record<Idea["size"], string> = { S: "small", M: "medium", L: "large" };
@@ -46,7 +47,7 @@ export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: 
           <span className="ml-auto flex flex-wrap gap-x-3 text-[12px] text-ink-muted">
             {idea.epic && (
               <span>
-                follows up <TaskLink id={idea.epic} />
+                follows up <TaskLink id={idea.epic} kind="epic" />
               </span>
             )}
             <span>
@@ -59,15 +60,15 @@ export function IdeaCard({ idea, onAccept, onDismiss }: { idea: Idea; onAccept: 
   );
 }
 
-// TaskLink goes to a task, showing its id in mono or, given children such as
-// its title, those in the normal font.
-export function TaskLink({ id, children }: { id: string; children?: ReactNode }) {
+// TaskLink goes to a task, showing its id (epic-N for an epic) in mono or,
+// given children such as its title, those in the normal font.
+export function TaskLink({ id, kind, children }: { id: string; kind?: string; children?: ReactNode }) {
   return (
     <Link
       to={`/tasks/${encodeURIComponent(id)}`}
       className={cn("text-ink-secondary underline-offset-2 hover:text-ink-primary hover:underline", children === undefined && "font-mono")}
     >
-      {children ?? id}
+      {children ?? shownId(id, kind)}
     </Link>
   );
 }

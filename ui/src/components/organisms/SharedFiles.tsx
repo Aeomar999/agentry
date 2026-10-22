@@ -9,6 +9,7 @@ import { useToast } from "./Toasts";
 import { downloadURL, share, sizeOf, SharedFile } from "@/lib/shared";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
+import { shownId } from "@/lib/shown-id";
 
 // A task's shared files: drop files here (or choose them) to share them,
 // download any, take one away. Agents find them in .agentry/files of their
@@ -16,11 +17,13 @@ import { cn } from "@/lib/cn";
 // An archived task's only show: it takes no events.
 export function SharedFiles({
   task,
+  kind,
   files,
   readOnly,
   onChanged,
 }: {
   task: string;
+  kind?: string;
   files: SharedFile[];
   readOnly?: boolean;
   onChanged: () => void;
@@ -45,7 +48,7 @@ export function SharedFiles({
     }
     setSending(0);
     if (chosen.length > failed)
-      notify("success", `Shared ${chosen.length - failed} with ${task}`, "The next agent finds them in .agentry/files.");
+      notify("success", `Shared ${chosen.length - failed} with ${shownId(task, kind)}`, "The next agent finds them in .agentry/files.");
     onChanged();
   }
 

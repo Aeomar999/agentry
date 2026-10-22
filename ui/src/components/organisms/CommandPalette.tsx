@@ -11,6 +11,7 @@ export interface PaletteItem {
   group: string; // "Go to", "Tasks", "Agents", "Commands"
   label: string;
   hint?: string; // muted text on the right: an id, a status
+  terms?: string; // more words that find it, not shown
   icon?: ReactNode;
   run: () => void;
 }
@@ -37,7 +38,7 @@ export function CommandPalette({ open, items, onClose }: CommandPaletteProps) {
   const matches = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     return items.filter((item) => {
-      const text = `${item.group} ${item.label} ${item.hint ?? ""}`.toLowerCase();
+      const text = `${item.group} ${item.label} ${item.hint ?? ""} ${item.terms ?? ""}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
   }, [items, query]);
