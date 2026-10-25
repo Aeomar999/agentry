@@ -211,7 +211,7 @@ func handoffBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, in
 	section(&b, "What to review", reviewText(task.Worktree.Base, commits))
 	section(&b, "The builder's last report", builderReport(task, roster))
 	if last := lastReported(task, agent.Name); last != nil {
-		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+tasks.Shorten(last.Report, longestReport))
+		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+quoted(last.Report))
 		section(&b, "Changed since your last verdict", changedSince(commits, last.StartedAt))
 	}
 	finish(&b, agent)
@@ -238,6 +238,37 @@ func reported(turn *tasks.Turn) bool {
 // longestReport caps a report quoted whole in a handoff: a review needs
 // all of a builder's report, a runaway one still shouldn't swamp the brief.
 const longestReport = 3 * longestStep
+
+// quoted is a report as a handoff quotes it: capped at longestReport, with
+// its Markdown headings two levels down. Agents head their reports
+// themselves ("## Report for the coordinator"), and quoted as they are,
+// those read as sections of the brief, so where the report ends is lost.
+// Headings inside fenced code are code and stay as they are.
+func quoted(report string) string {
+	lines := strings.Split(tasks.Shorten(report, longestReport), "\n")
+	fenced := false
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(strings.TrimSpace(line), "```"):
+			fenced = !fenced
+		case !fenced && isHeading(line):
+			lines[i] = strings.Repeat("#", min(headingLevel(line)+2, 6)) + line[headingLevel(line):]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// isHeading says whether the line is a Markdown heading: one to six "#"
+// then a space, or nothing more.
+func isHeading(line string) bool {
+	level := headingLevel(line)
+	return level >= 1 && level <= 6 && (len(line) == level || line[level] == ' ')
+}
+
+// headingLevel counts the "#" the line starts with.
+func headingLevel(line string) int {
+	return len(line) - len(strings.TrimLeft(line, "#"))
+}
 
 // mostFilesListed is how many touched files a handoff lists by name;
 // beyond that it gives the count and the command that lists them.
@@ -307,7 +338,7 @@ func builderReport(task *tasks.Task, roster agents.Roster) string {
 		if !reported(turn) || !ok || agent.Coordinates || agent.Column == agents.Reviews {
 			continue
 		}
-		text := "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + tasks.Shorten(turn.Report, longestReport)
+		text := "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + quoted(turn.Report)
 		if latest := task.LastTurnOf(turn.Agent); latest.ID != turn.ID && latest.Ended && latest.Issue != "" {
 			text += "\n\nIts latest turn, " + latest.ID + ", was cut short: " + latest.Issue
 		}

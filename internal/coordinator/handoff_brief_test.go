@@ -128,6 +128,48 @@ func TestAReReviewsHandoffHasItsEarlierFindingsAndWhatChangedSince(t *testing.T)
 	}
 }
 
+// A report the handoff quotes keeps its own headings below the brief's
+// sections, so the lines that start with "## " are the handoff's alone and
+// a reader can tell where the quoted report ends. Code in a fence stays.
+func TestAQuotedReportsHeadingsStayBelowTheHandoffsSections(t *testing.T) {
+	roster := defaultRoster()
+	const report = "## Report for the coordinator\n\nDone.\n\n```sh\n# comment\ngrep TODO src/\n```\n\n# Left\n\nNothing."
+	task := firstReview().
+		turn("turn-4", "reviewer", report+"\n\nVerdict: changes requested").
+		turn("turn-5", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove the one in src/b.go."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Remove the one in src/b.go."}).
+		turn("turn-6", "engineer", report).
+		turn("turn-7", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review the fix."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review the fix."}).task()
+	task.Turn("turn-4").StartedAt = day(2)
+
+	brief := handoffBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review the fix.", nil, twoCommits())
+	var sections []string
+	for _, line := range strings.Split(brief, "\n") {
+		if strings.HasPrefix(line, "## ") {
+			sections = append(sections, line)
+		}
+	}
+	want := []string{"## What you know from earlier tasks", "## The task", "## Your instructions from the coordinator", "## Where the work is",
+		"## Shared files", "## Your plan", "## What to review", "## The builder's last report", "## Your earlier findings",
+		"## Changed since your last verdict", "## When you finish"}
+	if fmt.Sprint(sections) != fmt.Sprint(want) {
+		t.Errorf("the handoff's sections are %q, want %q:\n%s", sections, want, brief)
+	}
+	for _, want := range []string{"From engineer, in turn-6:\n\n#### Report for the coordinator\n\nDone.",
+		"From your last turn on this task, turn-4:\n\n#### Report for the coordinator\n\nDone.", "\n### Left\n"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("the handoff is missing %q:\n%s", want, brief)
+		}
+	}
+	if n := strings.Count(brief, "#### Report for the coordinator"); n != 2 {
+		t.Errorf("the quoted heading appears %d times, want 2:\n%s", n, brief)
+	}
+	if n := strings.Count(brief, "```sh\n# comment\ngrep TODO src/\n```"); n != 2 {
+		t.Errorf("the fenced comment should stay as it is in both reports, found %d:\n%s", n, brief)
+	}
+}
+
 // With no commit newer than the reviewer's last turn, the handoff says so:
 // the coordinator may have asked for a re-check all the same.
 func TestAReReviewWithNothingNewerSaysSo(t *testing.T) {
