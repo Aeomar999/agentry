@@ -94,7 +94,7 @@ Feature: Reliability
     Given a task whose open turn went on with the agent's last session, or a fork of it, or a sibling story's session
     And the turn has not acknowledged its prompt and its process is not running
     When 4 seconds have passed since the turn started
-    Then the watchdog stops the session and raises 1 issue with retryFresh set to yes, saying the resumed session didn't start
+    Then the watchdog stops the session and raises 1 issue with retryFresh set to yes, saying the resumed session didn't start, or the forked session when the turn forked
     # internal/watchdog/watchdog.go; internal/watchdog/watchdog_test.go
 
   @REL-45 @test
@@ -203,7 +203,8 @@ Feature: Reliability
 
   @REL-18 @manual
   Scenario: Stop Agentry stops the server and the running sessions carry on
-    # cmd/agentry/open.go runStopServer: SIGTERM, then up to 50 waits of 100 ms = 5 seconds
+    # cmd/agentry/open.go runStopServer: procs.Terminate, then up to 50 waits of 100 ms = 5 seconds
+    # internal/procs/procs_unix.go Terminate sends SIGTERM; internal/procs/procs_windows.go Terminate kills the process, since Windows has no polite signal
     # internal/sessions/session.go Start: each session's host is detached from the server
     # Steps:
     # 1. Start Agentry and make a task, so an agent's session is running.
@@ -329,13 +330,17 @@ Feature: Reliability
     # internal/current/snapshot_bench_test.go startupLimit = 500 ms, startupLimitOne = 750 ms, tailLimit = 100 ms, tailEvents = 10,000
     Given a log of 1 GB of history, its done tasks archived, and a snapshot of the working set
     When the state is opened from the snapshot on 2 or more cores
-    Then the open takes at most 500 ms
+    Then the open takes at most 500 ms, and the snapshot body's decode, the main part of it, measured 0.10 s on 2 cores and 0.08 s on 8
     When the state is opened from the snapshot on 1 core
-    Then the open takes at most 750 ms
+    Then the open takes at most 750 ms, and the body's decode measured 0.14 s
     When the snapshot is 10,000 events behind the log
     Then applying the tail adds at most 100 ms
     # Measured by TestStartupBench in internal/current/startup_bench_test.go on a copy of a real log grown to 1 GB
     # of history, run with AGENTRY_BENCH_DB=<copy>/agentry.db go test ./internal/current -run TestStartupBench -v -count=1 -timeout 30m.
+    # Measured in October 2026 during the log-growth build, on a 1 GB synthetic log grown from the 19 October copy:
+    # a 201.7 MB body (128.5 MB of working-set tasks, 90,000 summaries), written as gob (127.7 MB, 64 streams),
+    # decodes in 0.14 / 0.10 / 0.08 s on 1 / 2 / 8 cores. That decode is the main part of the open; the numbers are
+    # in docs/design/log-growth.md, section "Measured in build step 2: gob".
     # The limits are the constants in internal/current/snapshot_bench_test.go; TestTheSnapshotBenchRunsOnASmallLog
     # runs the same measurement on a small log in every go test run.
     # PLAN.md T-066; internal/current/startup_bench_test.go
@@ -395,9 +400,17 @@ Feature: Reliability
     When it is archived
     Then the live log holds 0 of those rows and 1 task.archived marker in their place
     And the marker names exactly 1 blob, which holds the N rows, and the task's summary
-    And a delete of any row the marker does not cover is refused by the database: yes
     When the delete would remove other than N rows
     Then the whole archive is undone, marker and all: yes
+    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go
+
+  @REL-52 @test
+  Scenario: A delete of rows no task.archived marker covers is refused by the database
+    # internal/store/archive.go: the log is append-only by trigger; only a marker in the same transaction lets its own rows go
+    Given a live log with a task's rows in it and no task.archived marker for them
+    When a statement deletes all of the log's rows, or the row at position 1
+    Then each delete is refused by the database as append-only: yes
+    And 0 rows are gone
     # README.md, Archiving, erasing and redacting; internal/store/archive_test.go
 
   @REL-31 @test
@@ -406,9 +419,17 @@ Feature: Reliability
     Given a task archived with its history
     When its page is read
     Then it reads as before archiving, marked archived with the date: yes
-    And a message sent to it is refused: yes
     When its blob is missing
     Then the read fails with an error: yes
+    # README.md, Archiving, erasing and redacting; internal/web/archives_test.go
+
+  @REL-53 @test
+  Scenario: An archived task takes no event but task.unarchived
+    # internal/rules/rules.go: on an archived stream every event but task.unarchived is refused; event.redacted is refused with its own reason
+    Given a task archived with its history, read back once
+    When a message is sent to it, or its labels or its rank are set
+    Then each request is refused: yes, and none is answered 200
+    And the task is still archived in the state: yes
     # README.md, Archiving, erasing and redacting; internal/web/archives_test.go
 
   @REL-32 @test
@@ -579,8 +600,14 @@ Feature: Reliability
     Given a join code made now
     When a machine joins with it within 1 hour
     Then it joins: yes
-    When the same code is used again, or a wrong code
-    Then it joins: no
-    When the code is used 1 hour and 1 second after it was made
-    Then it joins: no
+    # README.md, Add machines; internal/workers/workers_test.go
+
+  @REL-54 @test
+  Scenario: A used, wrong or expired join code is refused
+    # internal/workers/workers.go InviteLifetime = 1 hour; expired means 1 second past the hour in the test
+    Given a join code made now and used once by a machine
+    When the same code is used again, or a code that was never made
+    Then the join is refused: yes
+    When a fresh code is used 1 hour and 1 second after it was made
+    Then the join is refused: yes
     # README.md, Add machines; internal/workers/workers_test.go
