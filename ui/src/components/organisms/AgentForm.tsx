@@ -48,7 +48,7 @@ const BLANK: Agent = {
 const RESUME_HINTS: Record<Agent["resume"], string> = {
   "": "A reviewer starts fresh and gets a compact handoff of the change; every other agent goes on with its own session from its last turn, which costs fewer tokens.",
   resume:
-    "Goes on with its own session from its last turn on the task, which costs fewer tokens. A reviewer set this way sees the trail it saw before, not a fresh handoff of the change.",
+    "Goes on with its own session from its last turn on the task, which costs fewer tokens, and is told what happened since. Its first turn on a task is fresh: a reviewer then gets a compact handoff of the change.",
   fresh:
     "Starts a new session every turn, briefed from scratch. A reviewer gets a compact handoff of the change instead of the whole trail.",
 };

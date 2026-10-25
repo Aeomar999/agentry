@@ -15,7 +15,7 @@ describe("how an agent starts each turn", () => {
     expect(startsEachTurn({ column: "", resume: "fresh" })).toBe("Fresh (set to start fresh)");
     expect(startsEachTurn({ column: "", resume: "" })).toBe("Going on with its session");
     expect(startsEachTurn({ column: "ship", resume: "" })).toBe("Going on with its session");
-    expect(startsEachTurn({ column: "review", resume: "resume" })).toBe("Going on with its session (set to)");
+    expect(startsEachTurn({ column: "review", resume: "resume" })).toBe("Going on with its session (set to resume)");
   });
 
   it("tells a draft what By its work comes to, from its column or whether it reviews", () => {

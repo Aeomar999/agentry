@@ -28,7 +28,7 @@ export function startsFresh({ column, resume }: Pick<Agent, "column" | "resume">
 // going on, and why when that is set or a reviewer's default.
 export function startsEachTurn(agent: Pick<Agent, "column" | "resume">): string {
   if (agent.resume === "fresh") return "Fresh (set to start fresh)";
-  if (agent.resume === "resume") return "Going on with its session (set to)";
+  if (agent.resume === "resume") return "Going on with its session (set to resume)";
   return startsFresh(agent) ? "Fresh (reviewers start fresh)" : "Going on with its session";
 }
 
