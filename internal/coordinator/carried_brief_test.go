@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,13 +20,34 @@ func newStory() history {
 		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Add the lint."})
 }
 
-// What the sibling's session knows that this task's brief must not carry.
-var siblingsTrail = []string{"Remove the TODOs", "Every TODO in src/ goes.", "Removed 3.", "One is left in src/b.go.", "/w/task-1", "agentry/task-1"}
+// sibling is task-1, the story of epic-1 whose session the engineer brings
+// to the new story: fixRound, with its own trail and worktree.
+func sibling() *tasks.Task {
+	task := fixRound().task()
+	task.ID, task.Epic = "task-1", "epic-1"
+	return task
+}
+
+// siblingsWords is what the sibling's session knows that this task's brief
+// must not carry: its title, description, worktree and every step of its
+// trail, instructions and reports alike.
+func siblingsWords(t *testing.T, sibling *tasks.Task) []string {
+	t.Helper()
+	words := []string{sibling.Title, sibling.Description, sibling.Worktree.Path, sibling.Worktree.Branch}
+	for _, step := range sibling.Trail {
+		words = append(words, step.Text)
+	}
+	if len(sibling.Trail) < 4 || slices.Contains(words, "") {
+		t.Fatalf("the sibling has too little of its own to tell its words apart: %q", words)
+	}
+	return words
+}
 
 func TestABriefFromASiblingsSessionSaysItIsANewTask(t *testing.T) {
 	roster := defaultRoster()
+	sibling := sibling()
 	task := newStory().task()
-	task.ID = "task-3"
+	task.ID, task.Epic = "task-3", sibling.Epic
 	engineer := agentNamed(t, roster, "engineer")
 
 	brief := resumedWorkerBrief(task, engineer, roster, "Add the lint.", 0, "task-1", nil)
@@ -39,7 +61,7 @@ func TestABriefFromASiblingsSessionSaysItIsANewTask(t *testing.T) {
 			t.Errorf("the brief from task-1's session is missing %q:\n%s", want, brief)
 		}
 	}
-	for _, left := range append(siblingsTrail, "goes on from your last turn on this task", "## What has happened since your last turn", engineer.Prompt) {
+	for _, left := range append(siblingsWords(t, sibling), "goes on from your last turn on this task", "## What has happened since your last turn", engineer.Prompt) {
 		if strings.Contains(brief, left) {
 			t.Errorf("the brief from task-1's session should leave out %q:\n%s", left, brief)
 		}
@@ -51,12 +73,13 @@ func TestABriefFromASiblingsSessionSaysItIsANewTask(t *testing.T) {
 
 func TestACoordinatorBriefFromASiblingsSessionKeepsTheLiveState(t *testing.T) {
 	roster := defaultRoster()
+	sibling := sibling()
 	task := newStory().task()
-	task.ID, task.Epic = "task-3", "epic-1"
-	epic := &tasks.Task{ID: "epic-1", Title: "Tidy the code", Description: "No TODOs anywhere.", Coordinator: "tech-lead"}
+	task.ID, task.Epic = "task-3", sibling.Epic
+	epic := &tasks.Task{ID: sibling.Epic, Title: "Tidy the code", Description: "No TODOs anywhere.", Coordinator: "tech-lead"}
 
-	brief := resumedCoordinatorBrief(task, agentNamed(t, roster, "tech-lead"), roster, 0, "task-1",
-		family{epic: epic, stories: []*tasks.Task{task}}, twoMachines, nil, nil, nil)
+	brief := resumedCoordinatorBrief(task, agentNamed(t, roster, "tech-lead"), roster, 0, sibling.ID,
+		family{epic: epic, stories: []*tasks.Task{sibling, task}}, twoMachines, nil, nil, nil)
 	for _, want := range []string{"# Agentry brief: tech-lead, task-3, turn-2, going on from task-1", "this is a new task, task-3",
 		"## The task\n\nTitle: Lint for TODOs", "## What has happened on this task so far", "1. you → tech-lead: ",
 		"tech-lead → engineer: Add the lint.", "worktree, /w/task-3, on branch agentry/task-3", "## Machines",
@@ -65,7 +88,7 @@ func TestACoordinatorBriefFromASiblingsSessionKeepsTheLiveState(t *testing.T) {
 			t.Errorf("the coordinator brief from task-1's session is missing %q:\n%s", want, brief)
 		}
 	}
-	for _, left := range append(siblingsTrail, "goes on from your last turn on this task") {
+	for _, left := range append(siblingsWords(t, sibling), "goes on from your last turn on this task") {
 		if strings.Contains(brief, left) {
 			t.Errorf("the coordinator brief from task-1's session should leave out %q:\n%s", left, brief)
 		}
