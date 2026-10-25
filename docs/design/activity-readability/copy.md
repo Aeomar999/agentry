@@ -1,6 +1,6 @@
 # Readable Activity and Handoffs: copy deck
 
-The final words for [Direction A, Author bands](flows.md), for [the spec](../../../spec.md). It is the one list of strings for this work ([flows.md › Strings](flows.md#strings) points here); they are grouped by screen and state, with where each shows, the final text, its accessible name when that differs, plurals and a length limit. Wireframes: [desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg).
+The final words for [Direction A, Author bands](flows.md), for [the spec](brief.md). It is the one list of strings for this work ([flows.md › Strings](flows.md#strings) points here); they are grouped by screen and state, with where each shows, the final text, its accessible name when that differs, plurals and a length limit. Wireframes: [desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg).
 
 **Who reads it.** One person running a board of AI agents on their own work, usually catching up in the morning after a night of turns. They scan for *who* did *what*, then read the few entries that matter. So: the author's name first, plain verbs, short facts, nothing to decode.
 

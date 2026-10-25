@@ -1,6 +1,6 @@
 # Readable Activity and Handoffs: flows for Direction A, Author bands
 
-For [the spec](../../../spec.md) and the chosen [Direction A](direction-a.svg) in [the directions](directions.md). This is the detail the Software team builds from. The final words are in [the copy deck](copy.md): where this file or a wireframe disagrees with it, copy.md wins. Revised after [the critique](critique.md) (spec decision 9); each fix is listed under [Critique fixes](#critique-fixes).
+For [the spec](brief.md) and the chosen [Direction A](direction-a.svg) in [the directions](directions.md). This is the detail the Software team builds from. The final words are in [the copy deck](copy.md): where this file or a wireframe disagrees with it, copy.md wins. Revised after [the critique](critique.md) (spec decision 9); each fix is listed under [Critique fixes](#critique-fixes).
 
 Wireframes (regenerate with `cd docs/design/source && python3 -B activity_bands.py ../activity-readability`):
 

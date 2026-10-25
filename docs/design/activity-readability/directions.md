@@ -1,6 +1,6 @@
 # Readable Activity and Handoffs: three directions
 
-For [the spec](../../../spec.md). Three ways to read a task's Activity and Handoffs tabs, which differ most on how the author stays obvious and on density. The parts that barely differ (Markdown, links, code) are set out once, then each direction says what it does with them. The recommendation is at the end.
+For [the spec](brief.md). Three ways to read a task's Activity and Handoffs tabs, which differ most on how the author stays obvious and on density. The parts that barely differ (Markdown, links, code) are set out once, then each direction says what it does with them. The recommendation is at the end.
 
 Wireframes (light theme, the page's own tokens; regenerate with `cd docs/design/source && python3 -B activity_directions.py ../activity-readability`):
 

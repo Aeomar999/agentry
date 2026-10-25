@@ -1,6 +1,6 @@
 # Critique: readable Activity and Handoffs (Direction A, Author bands)
 
-Reviewed against [the spec](../../../spec.md) (decisions 1 to 8), [flows.md](flows.md), [copy.md](copy.md) and the five wireframes ([desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg)), rendered to PNG and read at full size. I also read today's `ActivityFeed.tsx`, `HandoffTimeline.tsx`, `Markdown.tsx`, `MonacoColorize.tsx`, `lib/monaco.ts`, `CoordinatorChat.tsx` (`linkInto`, `Avatar`) and `globals.css`, and recomputed every contrast ratio from the tokens (WCAG relative luminance, `color-mix` in sRGB).
+Reviewed against [the spec](brief.md) (decisions 1 to 8), [flows.md](flows.md), [copy.md](copy.md) and the five wireframes ([desktop](activity-desktop.svg), [phone](activity-mobile.svg), [Handoffs](handoffs.svg), [states](states.svg), [dark](activity-dark.svg)), rendered to PNG and read at full size. I also read today's `ActivityFeed.tsx`, `HandoffTimeline.tsx`, `Markdown.tsx`, `MonacoColorize.tsx`, `lib/monaco.ts`, `CoordinatorChat.tsx` (`linkInto`, `Avatar`) and `globals.css`, and recomputed every contrast ratio from the tokens (WCAG relative luminance, `color-mix` in sRGB).
 
 Severities: **blocker** (can't ship), **major** (fails a spec measure or WCAG AA, or can't be built as written), **minor** (should fix in this build), **nit** (polish). Owner: **designer** (flows.md, SVGs) or **writer** (copy.md).
 

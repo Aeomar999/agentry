@@ -8,7 +8,7 @@ A task's Activity and Handoffs tabs show agents' briefs and reports as raw text:
 
 ## The direction, in a line
 
-**Author bands** ([spec decision 1](../../spec.md)): every row in a turn already belongs to that turn's agent and the turn band already sticks, so making the band the author header names the author of every row on screen, with the least new UI and today's density.
+**Author bands** ([spec decision 1](activity-readability/brief.md)): every row in a turn already belongs to that turn's agent and the turn band already sticks, so making the band the author header names the author of every row on screen, with the least new UI and today's density.
 
 ## Before and after
 
@@ -64,7 +64,7 @@ A task id or commit written in backticks links the same way and reads like the b
 
 **Author bands (Activity).** Every run of rows by one author sits under a band: chip in the agent's colour, the **name in text**, team and role (dropped when the role is the name), turn id, `continued` and `on {worker}` when they apply, status, tokens. On desktop the turn's start time and duration stay in the time rail, as today. Your rows and Agentry's get neutral bands, so nothing is unattributed; a message from you during a running turn gets its own `you` band, and the turn resumes under a `continued` band. Each band sticks until the next section pushes it out; bands are 44px at every width, stuck or not, and each is an `h3`. On a phone the band shows only chip, name (truncated past 120px), status and duration, on one line: the rail there has room for the time only, so the duration moves into the band; team, role, turn id and tokens stay in the band's accessible name.
 
-**Card headers (Handoffs).** Each card is an `<article>` whose header, `from → to` with chips and names and the time, sticks while you read a long brief. The card stops being one big button; its footer (`Led to turn-5 · engineer · 48m · 14 actions · Activity ›`; while the turn runs, a `running` badge and the action count instead of the duration) opens the turn's Activity, so links in the brief work. On a phone the header stays on one line (names truncate at 96px each) and the footer keeps only the turn, the agent and the badge: `Led to turn-6 · reviewer · running · Activity ›`. There the agent's name shrinks to fit, at most 72px, while the badge and `Activity ›` never shrink, so `turn-100` and above still fit ([spec decision 11](../../spec.md)).
+**Card headers (Handoffs).** Each card is an `<article>` whose header, `from → to` with chips and names and the time, sticks while you read a long brief. The card stops being one big button; its footer (`Led to turn-5 · engineer · 48m · 14 actions · Activity ›`; while the turn runs, a `running` badge and the action count instead of the duration) opens the turn's Activity, so links in the brief work. On a phone the header stays on one line (names truncate at 96px each) and the footer keeps only the turn, the agent and the badge: `Led to turn-6 · reviewer · running · Activity ›`. There the agent's name shrinks to fit, at most 72px, while the badge and `Activity ›` never shrink, so `turn-100` and above still fit ([spec decision 11](activity-readability/brief.md)).
 
 ## Accessibility and look
 
@@ -80,7 +80,7 @@ A task id or commit written in backticks links the same way and reads like the b
 
 ## Documents
 
-- [spec.md](../../spec.md): who, the problem, constraints, decisions 1 to 11
+- [brief.md](activity-readability/brief.md): who, the problem, constraints, decisions 1 to 11
 - [flows.md](activity-readability/flows.md): the five flows, states, the URL check and its tests, the build checklist
 - [copy.md](activity-readability/copy.md): every string and accessible name
 - [critique.md](activity-readability/critique.md): the critique and the turn 14 re-check
