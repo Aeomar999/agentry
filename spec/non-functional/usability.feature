@@ -19,7 +19,7 @@ Feature: Usability
     And opened with Ctrl+J while something waits for the user, the dock opens on Questions, not on the tab it was left on
     # ui/src/components/templates/AdminShell.tsx lines 40, 41, 61 to 66, 70 to 76 and 90; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
     # Steps:
-    # 1. Open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
+    # 1. In a private window, open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
     # 2. Reload, press Ctrl+J, and read the dock's height and its tabs.
     # 3. With <a task> waiting for the user, close the dock on the Claude tab and press Ctrl+J: it opens on Questions.
     # README.md, Use it, The dock; PLAN.md T-045
@@ -268,7 +268,7 @@ Feature: Usability
   Scenario: An agent's session starts in the page's theme, and a terminal on the page follows a theme change
     # the session starts in the page's theme: internal/engines/claude.go lines 45-46 write the theme into the session's settings
     # the terminal follows a theme change: ui/src/components/organisms/TerminalView.tsx lines 46-49 watch the html element's class
-    Given the page in the light theme
+    Given the page in the light theme and an agent that runs on Claude Code
     When the user starts a task, switches the page to the dark theme, and starts another task
     Then the first agent's terminal opens light, and turns dark at the switch without a reload: yes
     And the second agent's session starts dark: yes
