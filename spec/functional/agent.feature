@@ -16,8 +16,8 @@ Feature: The agents
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
     When the engineer's turn starts
-    Then its brief opens with its own prompt, "You are the engineer", and shows exactly those instructions
-    And the prompt is the engineer's own, not the coordinator's
+    Then its own prompt, "You are the engineer", and those instructions are shown in its brief
+    # not under test, checked by hand: the brief opens with the prompt, and the prompt is the engineer's own, not the coordinator's: internal/coordinator/brief.go workerBrief
     # each prompt is embedded from defaults/<name>.md, or defaults/<team folder>/<name>.md for the other teams: internal/agents/defaults.go, teams.go Prompted
 
   @AGENT-03 @test
@@ -26,17 +26,19 @@ Feature: The agents
     Given the engineer's brief, whose "When you finish" section asks for 1 short report for the coordinator
     When the engineer ends its turn with the report "Removed 3 TODOs and committed."
     Then the next turn is the coordinator's, and no other agent's turn starts first
-    And the report is shown in the coordinator's brief as exactly 1 step, "engineer → tech-lead: Removed 3 TODOs and committed."
-    And the brief told the agent not to stop to ask questions, and to put them in the report
+    And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
+    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/coordinator/brief.go line 394
     # finish: internal/coordinator/brief.go
 
   @AGENT-04 @test
   Scenario: An agent works only in the task's worktree, on branch agentry/<task>
     # internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask
+    # the words on repos and folders outside it: internal/coordinator/ideas_test.go TestAVisionariesBriefIsAsItWasBeforeTheHook (testdata/visionaries-brief.md); PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given a task task-3 whose worktree is ready on branch agentry/task-3, with port 7903
     When any agent's turn starts on it
-    Then the brief's "Where the work is" names exactly that worktree and branch, and says never to create or change repos or folders outside it
-    And the same port, 7903, is in the PORT environment variable of the turn
+    Then the brief's "Where the work is" names that worktree and branch, and says never to create or change repos or folders outside it
+    And the worktree's port is in the PORT environment variable of the turn: yes
+    # not under test, checked by hand: the port is task-3's own 7903; the turns test checks PORT=7901 for its own worktree
     # whereText: internal/coordinator/brief.go; PORT: internal/turns/turns.go environment; the branch: internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
 
   @AGENT-05 @test
@@ -54,16 +56,16 @@ Feature: The agents
     Given the brief's "What you know from earlier tasks" shows the agent's notes and asks it to update .agentry/knowledge.md before it finishes
     When the engineer's turn ends with "This repo formats with gofmt -s." in that file
     Then the engineer's knowledge is exactly that text, recorded once, by the engineer
-    And its next brief shows the same notes
+    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/coordinator/brief.go knowledge, line 432
     # KnowledgeFile: internal/machines/local.go; knowledge: internal/coordinator/brief.go
 
   @AGENT-07 @test
   Scenario: Each default agent runs under the profile the code gives it
-    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile
+    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile; the 5: TestTheDefaultsAreFiveAgentsWithPrompts in the same file
     Given a new install's Software team
     When the roster is read
     Then it has exactly 5 agents: tech-lead under read-only, engineer under developer, reviewer under read-only, tester under developer, deployer under developer
-    And exactly 2 of them check work, the reviewer and the tester; the deployer ships it, and the engineer builds it
+    # not under test, checked by hand: exactly 2 of them check work, the reviewer and the tester; the deployer ships it, and the engineer builds it
     # internal/agents/defaults.go; the columns: internal/agents/agent.go Builds, Reviews, Ships
 
   @AGENT-08 @test
@@ -73,7 +75,8 @@ Feature: The agents
     When the roster is read
     Then all 5 Visionaries are under read-mostly, and only the skeptic's work counts as review
     And network-lead is under read-only, network-engineer under developer, network-verifier and network-security under network-diagnosis, the last 2 counting as review
-    And every profile a template names is 1 of the 6 in the shipped policy
+    And every profile a template names is in the shipped policy
+    # not under test, checked by hand: the shipped policy has 6 profiles
     # internal/agents/agents_test.go TestTheNetworkingTeam; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
 
   @AGENT-56 @manual
@@ -122,9 +125,10 @@ Feature: The agents
   Scenario: The developer profile allows what stays inside the workspace
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
-    When it runs ls -la, npm test, git add -A && git commit -m 'remove TODO', echo hi > notes.md, mkdir -p src/refunds, rm notes.md, or git fetch origin && git merge origin/dev
-    Then each is allowed by the rule "stays inside the workspace"
-    And Edit on src/billing.ts in the workspace is allowed by "edit inside the workspace, the diff is reviewed", and Read is allowed anywhere
+    When it runs ls -la, npm test, git add -A && git commit -m 'remove TODO', echo hi > notes.md, mkdir -p src/refunds && touch src/refunds/index.ts, rm notes.md, or git fetch origin && git merge origin/dev
+    Then each is allowed
+    And Edit on src/billing.ts in the workspace is allowed, and Read is allowed anywhere
+    # not under test, checked by hand: the rules that allow them, "stays inside the workspace" (internal/policy/default.toml line 171) and "edit inside the workspace, the diff is reviewed" (line 158)
     # the rules: internal/policy/default.toml lines 151 to 195
 
   @AGENT-13 @test
@@ -135,6 +139,7 @@ Feature: The agents
     Then each is asked, and none runs before the user answers
     And a tool the policy does not name, and a command it cannot read, are asked too
     # otherwise = "ask" and unreadable = "ask": internal/policy/default.toml lines 84 to 86; WebFetch: line 146
+    # none runs before the answer: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @AGENT-14 @test
   Scenario: A setting or an upper-case variable before a command asks, a plain toolchain setting does not
@@ -164,17 +169,18 @@ Feature: The agents
     Given a checking agent's report
     When Agentry reads its verdict
     Then "Verdict: approved" and "verdict - approved, with two nits" are approved, and "**Verdict: Changes needed**" and "Verdict: not approved" are changes needed
-    And a report with no verdict in its last 5 lines, such as "I approved of the naming.", has no verdict, and the coordinator is told to ask that agent again for one
+    And a report such as "I approved of the naming." has no verdict
+    # not under test, checked by hand: a verdict above the last 5 lines is not read (internal/coordinator/checks.go line 40), and the coordinator is told to ask that agent again for one (line 140)
     # verdictOf: internal/coordinator/checks.go; the message for no verdict: unchecked in the same file
     # verdictOf also reads "Verdict: rejected" as changes needed (checks.go, the rejected prefix); TestVerdictOf has no such case
 
   @AGENT-17 @test
   Scenario: Every checking agent's brief ends with how to give its verdict
-    # internal/coordinator/resumed_brief_test.go TestAResumedReviewerBriefStillEndsWithTheVerdict
+    # internal/coordinator/resumed_brief_test.go TestAResumedReviewerBriefStillEndsWithTheVerdict; fresh: internal/coordinator/handoff_brief_test.go TestAReReviewsHandoffHasItsEarlierFindingsAndWhatChangedSince
     Given an agent whose work counts as review, such as the reviewer
     When its brief is written, fresh or for a resumed session
     Then the brief ends with exactly the 2 lines it may use, "Verdict: approved" and "Verdict: changes needed", and says to approve only work it would ship as it is
-    And an agent whose work counts as building gets no verdict section
+    # not under test, checked by hand: an agent whose work counts as building gets no verdict section
     # VerdictFormat: internal/coordinator/checks.go; finish: internal/coordinator/brief.go
 
   @AGENT-18 @test
@@ -182,8 +188,9 @@ Feature: The agents
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the reviewer under read-only
     When it calls Edit on main.go, or runs git commit -am 'x' or git push origin HEAD:dev
-    Then each is denied by "this agent changes nothing" or "never commits or changes branches"
-    And Edit on .agentry/knowledge.md in the workspace is allowed by "keeps its own notes", and the same file in another folder is denied
+    Then each is denied
+    And Edit on .agentry/knowledge.md in the workspace is allowed, and Write on the same file in another folder is denied
+    # not under test, checked by hand: the rules, "this agent changes nothing", "never commits or changes branches" and "keeps its own notes", at the lines below
     And Read on main.go, git diff c1169f1..HEAD and go test -v ./... && gofmt -l . are allowed
     # [profiles.read-only]: internal/policy/default.toml line 198; "keeps its own notes" line 211; "this agent changes nothing" line 219; "never commits or changes branches" line 322
 
@@ -202,12 +209,12 @@ Feature: The agents
     # last line is a verdict.
 
   @AGENT-20 @test
-  Scenario: The tester runs under developer, so it can commit tests, and its work counts as review
+  Scenario: The tester runs under developer, so it can commit tests
     # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile
     Given the Software team as shipped
     When the tester's profile and column are read
     Then its profile is exactly "developer", the same as the engineer's
-    And its work counts as review, so its verdict is 1 of the checks a done decision waits for
+    # not under test, checked by hand: its work counts as review, so its verdict is 1 of the checks a done decision waits for
     # Column: Reviews on the tester: internal/agents/defaults.go; checks by column: internal/coordinator/checks.go recordOf
 
   # --- The deployer
@@ -232,7 +239,7 @@ Feature: The agents
     When Agentry asks whether the turn pushed the work
     Then yes only for an action whose command starts with git push, approved, with a result
     And a denied push, a push with no result yet, and git status each count as no
-    And a push wrapped in timeout or chained after cd is not seen, which is why the prompt gives the exact command
+    # not under test, checked by hand: a push wrapped in timeout or chained after cd is not seen, which is why the prompt gives the exact command: internal/tasks/task.go line 397
     # Pushed: internal/tasks/task.go; a done task shows Shipped only then: internal/tasks/summary_test.go TestOnlyATaskWithAFinishedApprovedPushIsPushed
 
   @AGENT-23 @test
@@ -240,7 +247,8 @@ Feature: The agents
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given the deployer under developer
     When it runs git push origin HEAD:dev, or a bare git push
-    Then each is asked, by the rule "every push leaves this machine: you approve it"
+    Then each is asked, and the verdict for git push origin HEAD:dev names the rule "every push leaves this machine: you approve it"
+    # the rule named: internal/policy/default_test.go TestAVerdictNamesItsRule; not under test, checked by hand: the same rule for the bare git push
     And the push runs only once the user approves, and the agent is told "you approved"
     And the deployer's prompt names no push that the policy would allow without asking
     # the rule: internal/policy/default.toml line 134; the wait: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
@@ -248,7 +256,7 @@ Feature: The agents
 
   @AGENT-24 @test
   Scenario: A push the user does not answer is held for them, and the deployer told to carry on
-    # internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser
+    # internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; "Don't retry": TestAnAskIsHeldBeforeTheDeadlineTheHookSent in the same file
     Given the deployer asked to push and the user gave no answer before the hook's deadline
     When the wait runs out
     Then the agent is told no, with "the command is held for the user's approval. Don't retry it now"
