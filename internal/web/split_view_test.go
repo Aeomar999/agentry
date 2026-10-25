@@ -40,3 +40,22 @@ func TestATaskWithNoSplitTurnsHasNoSplit(t *testing.T) {
 		t.Errorf("task %s has a split", body)
 	}
 }
+
+// A turn says whether it resumed a session or started fresh and why; a turn
+// from a log that said neither carries neither.
+func TestATurnSaysWhetherItResumedOnlyWhenKnown(t *testing.T) {
+	task := &tasks.Task{Turns: []*tasks.Turn{
+		{ID: "turn-1", Ended: true, FreshBecause: "first turn"},
+		{ID: "turn-2", Ended: true, FromSession: "4f1c"},
+		{ID: "turn-3", Ended: true},
+	}}
+	detail := detailOf(task, agents.Roster{})
+	for i, want := range []string{`"freshBecause":"first turn"`, `"fromSession":"4f1c"`} {
+		if body, _ := json.Marshal(detail.Turns[i]); !strings.Contains(string(body), want) {
+			t.Errorf("turn-%d %s, want %s", i+1, body, want)
+		}
+	}
+	if old, _ := json.Marshal(detail.Turns[2]); strings.Contains(string(old), "fromSession") || strings.Contains(string(old), "freshBecause") {
+		t.Errorf("turn-3 %s says how it started though its log didn't", old)
+	}
+}

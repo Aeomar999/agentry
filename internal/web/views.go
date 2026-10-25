@@ -73,6 +73,8 @@ type turn struct {
 	TokensUnknown string      `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
 	Split         *tokenSplit `json:"split,omitempty"`         // how tokens splits, when the engine said
 	EngineSession string      `json:"engineSession,omitempty"` // the engine's own id for the session, when it said
+	FromSession   string      `json:"fromSession,omitempty"`   // the engine session it resumed, "" when it started fresh
+	FreshBecause  string      `json:"freshBecause,omitempty"`  // why it started fresh, "" when it resumed or the log didn't say
 	Plan          string      `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
 	PlanFrom      string      `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
 	Stopped       bool        `json:"stopped"`                 // you ended it, to tell the coordinator something
@@ -166,7 +168,8 @@ func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
 			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown,
-			Split: splitOf(tu.Split), EngineSession: tu.EngineSession, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
+			Split: splitOf(tu.Split), EngineSession: tu.EngineSession,
+			FromSession: tu.FromSession, FreshBecause: tu.FreshBecause, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
 		if resets := tu.ResetsAt; !resets.IsZero() {
 			detail.Turns[len(detail.Turns)-1].ResetsAt = &resets
 		}
