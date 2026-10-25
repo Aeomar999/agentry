@@ -1,6 +1,6 @@
 # The Agentry spec
 
-This folder is the specification of Agentry as it is today: what it does, for whom, and how well. It is the document AI agents build from and audit against, Agentry's own agents included. The application follows this document. It describes behaviour that exists on dev now, nothing planned, so a scenario that is here is a promise the code already keeps.
+This folder is the specification of Agentry as it is today: what it does, for whom, and how well. It is the document AI agents build from and audit against, Agentry's own agents included. The application follows this document. Its baseline, every file outside `spec/proposals`, describes behaviour that exists on dev now, so a scenario there is a promise the code already keeps. `spec/proposals` holds what is agreed and not built yet, written the same way so it can be built from.
 
 ## How to read it
 
@@ -40,6 +40,7 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/non-functional/usability.feature` | the page: keys, panels and what the user sees |
 | `spec/non-functional/compatibility.feature` | the systems, engines and browsers Agentry runs on and with |
 | `spec/non-functional/observability.feature` | what Agentry shows about itself: tokens, turns, events, the status line |
+| `spec/proposals/*.feature` | features agreed and not built, one file each, as below in Proposals |
 
 ## IDs
 
@@ -72,11 +73,11 @@ Every scenario is tagged with an ID: the prefix of its file, a dash and a number
 | `compatibility.feature` | `@COMPAT-nn` |
 | `observability.feature` | `@OBS-nn` |
 
-An ID is never renumbered or reused once it is published. The functional IDs were renumbered once, when the files were regrouped from one file per role into one file per feature; the rule holds for every change after it. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check.
+An ID is never renumbered or reused once it is published. The functional IDs were renumbered once, when the files were regrouped from one file per role into one file per feature; the rule holds for every change after it. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check, except under `spec/proposals`, whose IDs are `@PROP-nn`.
 
 ## Role tags
 
-Every functional scenario carries exactly one role tag, straight after its ID: `@user`, `@coordinator`, `@agent`, `@claude-code` or `@worker`, the role whose point of view it takes. A non-functional scenario carries none.
+Every functional scenario carries exactly one role tag, straight after its ID: `@user`, `@coordinator`, `@agent`, `@claude-code` or `@worker`, the role whose point of view it takes. A non-functional scenario carries none. A proposal follows the rule of the file it moves to, as below in Proposals.
 
 ## The rules for every scenario
 
@@ -100,11 +101,26 @@ Scenario Outline and Examples tables are not used; write one scenario per case, 
 
 Anyone who changes what Agentry does, an agent or a person, keeps this folder true in the same change:
 
-1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next number after the highest one in its file, never a gap a removed scenario left. Something built that `spec/NOT-YET.md` lists comes off that list in the same commit.
+1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next number after the highest one in its file, never a gap a removed scenario left. Building a proposal moves its scenarios out of `spec/proposals` and deletes its file in the same commit, as below in Proposals.
 2. Every scenario added or changed follows the rules for every scenario above.
 3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @HANDOFF-43, changed @TASK-12`, or says `no behaviour change`.
 4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
 5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
+
+## Proposals
+
+`spec/proposals` holds the features that are agreed and not built, one `.feature` file each, under any name. A file holds every scenario its feature needs, functional and non-functional together (its limits, its security, its cost), so each proposal is read and agreed as a whole.
+
+A proposal file has a Feature line, then a short paragraph of plain prose: what the feature adds, why, and what Agentry does instead today. Then come its scenarios. Where PLAN.md or the design notes leave a choice open, the scenario states the recommended option, and the file ends with an `# Open questions` comment block, one question to a line.
+
+Every proposal scenario follows the rules for every scenario, with these tags:
+
+- An ID `@PROP-nn`, numbered from 01 across the whole folder, not per file. A PROP ID is never reused, even after its proposal is built and its file deleted.
+- One target tag, the feature file the scenario moves to when it is built: `@to-<stem>`, the name of a file in the ID table without `.feature`, such as `@to-policy` or `@to-security`, or `@to-new-<stem>` for a file that does not exist yet, such as `@to-new-output-gate`, in lower-case words joined by dashes.
+- The check tag it is meant to have once built. A `@test` proposal may name a test that does not exist yet.
+- The role tag rule of its target: exactly one role tag for a functional file, none needed for a non-functional one, and one or none for a new file, whose kind is decided when it is made.
+
+When a proposal is built, its scenarios move to their `@to-` files in the same change, each taking the next free ID there and a real check tag. A `@test` scenario must then cite a test that exists. A `@to-new-` target means creating that file and adding it, with its prefix, to the ID table and to the checker. The proposal file is deleted in the same change, so the folder only ever holds what is agreed and not built.
 
 ## Running the check
 
@@ -115,7 +131,7 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, exactly one role tag in a functional file, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, exactly one role tag in a functional file, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's. Under `spec/proposals` it checks the same rules, with a `@PROP-nn` ID in place of the file's prefix, exactly one `@to-` tag naming a file in the ID table or a `new-` stem, and the target's role tag rule, as above in Proposals; it does not look up a proposal's citations.
 
 ## Citations
 
@@ -128,15 +144,16 @@ The check reads every comment line in a scenario's body, from the `Scenario:` li
 
 In a `@test` scenario, the check fails on a path that does not exist (`cited path internal/x/gone_test.go does not exist`), on a Go test that has no `func TestName(` line at the start of a line in its file (`TestA is not defined in internal/x/x_test.go`), and on a Go test with no `_test.go` file before it. A `@manual` or `@benchmark` scenario may cite what it likes. A passing run prints how many paths and Go tests were checked.
 
-Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34, and PROP 0, so the rule holds for every proposal. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
-A passing run prints the scenarios per file and the totals per check tag, and exits 0:
+A passing run prints the scenarios per file, the totals per check tag for the baseline and then, on a line of their own, for the proposals, and exits 0:
 
 ```
 spec/functional/agents.feature: 19 scenarios
 spec/functional/approvals-and-questions.feature: 7 scenarios
 ...
 24 files, 651 scenarios: 485 @test, 16 @benchmark, 150 @manual
+proposals: 0 files, 0 scenarios: 0 @test, 0 @benchmark, 0 @manual
 cited by @test: 1498 paths, 813 Go tests
 ```
 
