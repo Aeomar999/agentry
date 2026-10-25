@@ -10,7 +10,7 @@ Agentry is made by [Agent3 Labs](https://agent3labs.com), which also makes Hawse
 
 Every action an agent takes passes Agentry's gate first, and your policy decides what runs, what is refused and what waits for you. Agents can work on any of your machines, Linux, macOS or Windows, and you can drive it all from the browser or from Claude Code in any repo. Every step is an event in one append-only log.
 
-`PLAN.md` has what's built, what's next, and the decisions behind it.
+What's next is on the Agentry board, and what's built is in the git history. What Agentry does is in [`spec/`](spec/README.md), with what is agreed but not built yet in `spec/proposals/`. Why it is built this way is in [docs/decisions.md](docs/decisions.md), and the design notes are in [docs/design/](docs/design/).
 
 ## What it looks like
 
