@@ -4,11 +4,12 @@
 # usage: tools/measure/team.sh <cfg>
 set -eu; . tools/measure/env.sh
 CFG=$1
-BODY=$(tools/measure/api.sh $CFG GET /api/teams/templates | jq -c '
+BODY=$(tools/measure/api.sh $CFG GET /api/teams/templates | jq -c --arg lead $LEAD --arg eng $ENGINEER --arg rev $REVIEWER '
   [.[] | select(.team=="Software" or (.id|ascii_downcase|test("software")))][0] as $t
   | {team: "Measure", copiedFrom: $t.id,
      agents: [$t.agents[] | select(.coordinates or .name=="engineer" or .name=="reviewer")
-              | {name, description, prompt, engine, model, profile, color, coordinates,
+              | {description, prompt, engine, model, profile, color, coordinates,
+                 name: (if .coordinates then $lead elif .name=="engineer" then $eng else $rev end),
                  column: (if .name=="reviewer" then "review" else .column end), resume: ""}]}')
 echo "$BODY" | jq -c '{team, copiedFrom, agents: [.agents[] | {name, coordinates, column}]}'
 tools/measure/api.sh $CFG POST /api/teams "$BODY"

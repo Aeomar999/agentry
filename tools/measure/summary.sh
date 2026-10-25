@@ -7,4 +7,4 @@ CFG=$1
 jq -r '"task \(.id) column=\(.column) turns=\(.turnList|length) tokensUsed=\(.tokensUsed) split=\(.tokensSplit)"' $M/$CFG-task.json
 jq -r '.turnList[] | "\(.id) \(.agent) ended=\(.ended) tokens=\(.tokens) split=\(.split) fresh=\(.freshBecause // "-") from=\(.fromSession // "-") session=\(.engineSession // "-") forked=\(.forked // false)"' $M/$CFG-task.json
 echo "--- reviewer reports (turn.ended)"
-jq -r '.events[] | select(.type=="turn.ended" and .data.agent=="reviewer") | "## \(.correlation // .turn // "?")\n\(.data.report)\n"' $M/$CFG-events.json
+jq -r --arg rev $REVIEWER '.events[] | select(.type=="turn.ended" and .data.agent==$rev) | "## \(.correlation // .turn // "?")\n\(.data.report)\n"' $M/$CFG-events.json
