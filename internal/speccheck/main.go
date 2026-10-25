@@ -19,12 +19,22 @@
 //   - is numbered above its prefix's entry in lastIDBeforeLineRule and
 //     cites "line N" or "lines N".
 //
+// A file under proposals/ holds a feature that is agreed and not built. Any
+// file name is allowed there, and its scenarios follow the rules above with
+// these changes: the ID tag is @PROP-nn; each scenario has exactly one
+// target tag, @to-<stem> naming a file of the prefix table without
+// .feature, or @to-new-<stem> for a file that does not exist yet; the role
+// tag rule is the target's (exactly one for a functional file, none needed
+// for a non-functional one, one or none for a new one); and a @test
+// scenario's citations are not looked up, as its test may not exist yet.
+//
 // Cited paths are read from the folder's parent, the repo root. A Scenario
 // Outline is reported and not counted: this spec writes one Scenario per
 // case. The checker also reports an em-dash anywhere in any file under the
 // folder. Problems are printed as file:line: message; the scenarios per
-// file, the totals per check tag and how many cited paths and Go tests were
-// checked are printed either way; the exit code is 1 on any problem.
+// file, the totals per check tag, outside proposals/ and then under it, and
+// how many cited paths and Go tests were checked are printed either way;
+// the exit code is 1 on any problem.
 package main
 
 import (
@@ -52,17 +62,29 @@ func main() {
 
 // printCounts writes the scenarios per feature file and the totals per
 // check tag, the part of the output a passing run shows too.
+// The proposals are totalled on a line of their own, so the baseline's
+// totals stay what exists.
 func printCounts(w io.Writer, result Result) {
-	scenarios := 0
+	var files, scenarios [2]int // outside proposals/, then under it
 	for _, file := range result.Files {
 		fmt.Fprintf(w, "%s: %s\n", file.Path, plural(file.Scenarios, "scenario"))
-		scenarios += file.Scenarios
+		group := 0
+		if file.Proposal {
+			group = 1
+		}
+		files[group]++
+		scenarios[group] += file.Scenarios
 	}
-	fmt.Fprintf(w, "%s, %s: %d @test, %d @benchmark, %d @manual\n",
-		plural(len(result.Files), "file"), plural(scenarios, "scenario"),
-		result.Tags[tagTest], result.Tags[tagBenchmark], result.Tags[tagManual])
+	printTotals(w, "", files[0], scenarios[0], result.Tags)
+	printTotals(w, "proposals: ", files[1], scenarios[1], result.ProposalTags)
 	fmt.Fprintf(w, "cited by @test: %s, %s\n",
 		plural(result.Paths, "path"), plural(result.Tests, "Go test"))
+}
+
+func printTotals(w io.Writer, label string, files, scenarios int, tags map[string]int) {
+	fmt.Fprintf(w, "%s%s, %s: %d @test, %d @benchmark, %d @manual\n", label,
+		plural(files, "file"), plural(scenarios, "scenario"),
+		tags[tagTest], tags[tagBenchmark], tags[tagManual])
 }
 
 func printProblems(w io.Writer, problems []Problem) {

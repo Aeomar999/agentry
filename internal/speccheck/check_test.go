@@ -438,7 +438,120 @@ func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
 spec/functional/tasks-and-board.feature: 1 scenario
 spec/non-functional/limits.feature: 1 scenario
 3 files, 4 scenarios: 2 @test, 1 @benchmark, 1 @manual
+proposals: 0 files, 0 scenarios: 0 @test, 0 @benchmark, 0 @manual
 cited by @test: 2 paths, 0 Go tests
+`
+	if out.String() != want {
+		t.Errorf("counts:\n%s\nwant:\n%s", out.String(), want)
+	}
+}
+
+// goodProposal is goodScenario as a proposal: a @PROP ID and a target tag.
+var goodProposal = strings.Replace(goodScenario, "@TASK-01 @user @test", "@PROP-01 @user @test @to-tasks-and-board", 1)
+
+func TestAProposalCarriesExactlyOneKnownTarget(t *testing.T) {
+	for name, c := range map[string]struct{ tags, want string }{
+		"none":                  {"@PROP-01 @user @test", "proposals/board.feature:5: no target tag; a proposal has exactly one @to-<stem>, naming the file it moves to when built: the known stems are agents, approvals-and-questions,"},
+		"two":                   {"@PROP-01 @user @test @to-policy @to-security", "proposals/board.feature:5: more than one target tag (@to-policy, @to-security); a proposal has exactly one"},
+		"an unknown stem":       {"@PROP-01 @user @test @to-billing", "proposals/board.feature:5: unknown target @to-billing; the known stems are agents, approvals-and-questions,"},
+		"a stem with .feature":  {"@PROP-01 @user @test @to-policy.feature", "proposals/board.feature:5: unknown target @to-policy.feature;"},
+		"a capital new stem":    {"@PROP-01 @user @test @to-new-Output-gate", "proposals/board.feature:5: unknown target @to-new-Output-gate; the known stems are agents, approvals-and-questions, claude-code-tools, compatibility, coordinator-and-handoffs, epics-and-stories, ideas, limits, notifications, observability, operations, performance, policy, reliability, security, sessions, settings, shared-files, sign-in, tasks-and-board, teams-and-templates, usability, workers, worktrees-and-branches, or new-<stem> in lower-case words joined by dashes for a file that does not exist yet"},
+		"a functional file":     {"@PROP-01 @user @test @to-policy", ""},
+		"a non-functional file": {"@PROP-01 @test @to-security", ""},
+		"a new file":            {"@PROP-01 @test @to-new-output-gate", ""},
+		"a new file and role":   {"@PROP-01 @agent @test @to-new-output-gate", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := strings.Replace(goodProposal, "@PROP-01 @user @test @to-tasks-and-board", c.tags, 1)
+			got := problemsOf(t, map[string]string{"proposals/board.feature": text})
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}
+
+func TestAProposalCarriesItsTargetsRoleTag(t *testing.T) {
+	for name, c := range map[string]struct{ tags, want string }{
+		"functional, none":        {"@PROP-01 @test @to-policy", "proposals/board.feature:5: no role tag; a functional scenario has exactly one of @user, @coordinator, @agent, @claude-code, @worker (@to-policy is a functional file)"},
+		"functional, two":         {"@PROP-01 @user @agent @test @to-policy", "proposals/board.feature:5: more than one role tag (@user, @agent); a functional scenario has exactly one (@to-policy is a functional file)"},
+		"non-functional, one":     {"@PROP-01 @user @test @to-security", ""},
+		"a new file, two":         {"@PROP-01 @user @agent @test @to-new-output-gate", "proposals/board.feature:5: more than one role tag (@user, @agent); a proposal for a new file has one or none"},
+		"an unknown target, none": {"@PROP-01 @test @to-billing", "proposals/board.feature:5: unknown target @to-billing"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := strings.Replace(goodProposal, "@PROP-01 @user @test @to-tasks-and-board", c.tags, 1)
+			got := problemsOf(t, map[string]string{"proposals/board.feature": text})
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}
+
+func TestAProposalCarriesAPropID(t *testing.T) {
+	for name, c := range map[string]struct{ tags, want string }{
+		"no ID":        {"@user @test @to-policy", "proposals/board.feature:5: no ID tag; this file's scenarios are tagged @PROP-nn"},
+		"a file's ID":  {"@POLICY-01 @user @test @to-policy", "proposals/board.feature:5: ID @POLICY-01 does not match this file's prefix @PROP-nn"},
+		"no check tag": {"@PROP-01 @user @to-policy", "proposals/board.feature:5: no check tag; a scenario has exactly one of @test, @benchmark, @manual"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := strings.Replace(goodProposal, "@PROP-01 @user @test @to-tasks-and-board", c.tags, 1)
+			expectProblems(t, problemsOf(t, map[string]string{"proposals/board.feature": text}), c.want)
+		})
+	}
+}
+
+func TestAProposalCitesNoLineNumber(t *testing.T) {
+	text := strings.Replace(goodProposal, "# internal/web/api_test.go", "# internal/policy/rules.go, line 12", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"proposals/board.feature": text}),
+		"proposals/board.feature:10: a line number goes stale")
+}
+
+func TestAProposalMayNameATestThatDoesNotExistYet(t *testing.T) {
+	missing := func(text string) string {
+		return strings.Replace(text, "# internal/web/api_test.go", "# internal/gate/output_test.go TestAResultIsHeld", 1)
+	}
+	expectProblems(t, problemsOf(t, map[string]string{"proposals/output-gate.feature": missing(goodProposal)}))
+
+	// The same scenario under functional/ still fails.
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": missing(goodScenario)}),
+		"tasks-and-board.feature:10: cited path internal/gate/output_test.go does not exist")
+}
+
+func TestAPropIDIsUsedOnceInTheFolder(t *testing.T) {
+	expectProblems(t, problemsOf(t, map[string]string{
+		"proposals/a-gate.feature": goodProposal,
+		"proposals/b-gate.feature": goodProposal,
+	}), "proposals/b-gate.feature:4: ID @PROP-01 is already used at ")
+}
+
+func TestProposalsAreTotalledApartFromTheBaseline(t *testing.T) {
+	second := strings.NewReplacer("Feature: Tasks\n  What the person at the page does.\n\n", "",
+		"@PROP-01 @user @test", "@PROP-02 @user @manual").Replace(goodProposal)
+	dir := writeSpec(t, map[string]string{
+		"functional/tasks-and-board.feature": goodScenario,
+		"proposals/output-gate.feature":      goodProposal + "\n" + second,
+	})
+	t.Chdir(filepath.Dir(dir))
+	result, err := Check("spec")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Problems) != 0 {
+		t.Fatalf("a good spec has problems: %+v", result.Problems)
+	}
+	var out bytes.Buffer
+	printCounts(&out, result)
+	want := `spec/functional/tasks-and-board.feature: 1 scenario
+spec/proposals/output-gate.feature: 2 scenarios
+1 file, 1 scenario: 1 @test, 0 @benchmark, 0 @manual
+proposals: 1 file, 2 scenarios: 1 @test, 0 @benchmark, 1 @manual
+cited by @test: 1 path, 0 Go tests
 `
 	if out.String() != want {
 		t.Errorf("counts:\n%s\nwant:\n%s", out.String(), want)
