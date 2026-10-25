@@ -486,7 +486,7 @@ Feature: Tasks and the board
   @TASK-41 @user @test
   Scenario: The tokens and turns under the header, with the pencil
     # ui/src/pages/TaskPage.test.tsx "can change its budget and max turns while it isn't done" and "shows its tokens and turns, and changes neither"
-    # ui/src/components/organisms/LimitEditor.tsx lines 36 to 52; the lists are @USER-06's, from ui/src/lib/limits.ts lines 26 and 33
+    # ui/src/components/organisms/LimitEditor.tsx lines 36 to 52; the lists are @TASK-05's, from ui/src/lib/limits.ts lines 26 and 33
     Given a working task with a budget of 5000 tokens, 1200 used, and 8 max turns
     When the facts are shown
     Then the Tokens fact and the "Turns since your answer" fact are shown
@@ -678,7 +678,7 @@ Feature: Tasks and the board
     # internal/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge and TestTheArchiverRunsAtStartAndThenHourly
     # the age: 30 days unless -archive-after says otherwise, and 0 never archives: cmd/agentry/serve.go lines 70 to 72 and 105; the test's age, 30 days: internal/archive/archive_test.go line 22
     # a round every hour: internal/archive/archive.go line 20, roundEvery
-    # the task list still shows an archived task as done, with its summary; its page is marked Archived and read only: @USER-73 and @USER-74; README.md, Archiving, erasing and redacting
+    # the task list still shows an archived task as done, with its summary; its page is marked Archived and read only: @TASK-52 and @TASK-53; README.md, Archiving, erasing and redacting
     Given the default archive age, 30 days, and 3 tasks done, task-1 first, task-3 reopened since
     When a round runs 30 days after task-1 was done
     Then exactly 1 task is archived, task-1; task-2 and task-3 are not

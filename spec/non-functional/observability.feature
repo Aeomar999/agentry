@@ -290,7 +290,7 @@ Feature: Observability
     When its Details tab is shown
     Then under each turn's tokens it reads exactly "resumed", "forked", "resumed from task-2" or "forked from task-2", with the session id shown on hover; "forked from task-2" links to task-2's page, and a plain "resumed" has no link
     And the turn that started fresh reads "fresh: " and its reason, and the turn whose log said neither reads nothing of how it started
-    # Agentry task-206, sessions shared across an epic's stories (COORD-51, COORD-52); ui/src/pages/TaskPage.test.tsx "says which story a turn's session came from, and whether it forked it" and "shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say"
+    # Agentry task-206, sessions shared across an epic's stories (SESSION-02, SESSION-03); ui/src/pages/TaskPage.test.tsx "says which story a turn's session came from, and whether it forked it" and "shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say"
 
   @OBS-29 @test
   Scenario: A worker that connects is listed online, with its details and history
