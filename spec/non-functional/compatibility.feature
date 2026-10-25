@@ -200,7 +200,7 @@ Feature: Compatibility
     Given the page open in a browser, in each of the 5 install states
     When the user looks at the top bar and presses Install app where it shows
     Then with an offer ready the button shows the browser's own install prompt, once per offer; the browser makes a new one if it is dismissed
-    And on an insecure page the button opens a note: open Agentry at http://localhost:<port> on the computer it runs on, or over https; with a server CA the note gives the https address and its trust page too
+    And on an insecure page the button opens a note that browsers install apps only from secure pages: open Agentry at http://localhost:<port> on the computer it runs on, or over https; with a server CA the note gives the https address and its trust page too
     And when the service worker was refused, the note points to the trust page when the server has one, and the button is hidden when it has none
     And once installed, or with no offer and no refusal, the button is hidden; the installed app opens standalone, in its own window, and shows the sign-in page when it has no token yet
     # README.md, What Start Agentry does (As an app), Signing in the installed app, or another device; ui/src/lib/install.ts lines 19-21, 41-49, 66-73; ui/src/components/molecules/InstallAppButton.tsx lines 35-81; ui/public/manifest.webmanifest (display standalone); no test
@@ -224,7 +224,7 @@ Feature: Compatibility
     Then every one of the 26 dependencies is an exact version: react 19.3.1, react-dom 19.3.1, typescript 5.9.3, vite 8.3.4, vitest 5.0.5, tailwindcss 4.3.3, @xterm/xterm 5.5.0 and monaco-editor 0.52.2 among them
     And 0 of them carries a range marker such as ^ or ~
     And there is no engines field and no .nvmrc or .tool-versions: the Node version is not pinned for the UI build
-    And npm run lint is tsc --noEmit and prettier --check src, and make test runs it after go vet and go test
+    And npm run lint is exactly tsc --noEmit and prettier --check src, and make test runs it after go vet and go test
     # README.md, Work on it; measured 2026-10-25 at commit 5ecec34a with grep -c of a version starting in ^ or ~ in ui/package.json (0 of 26 version lines), grep "engines" in it (none) and ls -a of the root and ui (no .nvmrc, no .tool-versions); ui/package.json; Makefile lines 25-26
 
   # --- HTTPS across devices ---

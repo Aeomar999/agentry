@@ -14,7 +14,7 @@ Feature: Security
     Given an agent's turn is running under Claude Code with the PreToolUse hook installed as the gate for every tool
     When the agent asks to run a tool
     Then the hook posts the call to the server exactly once
-    And the agent gets the server's reply, allow or deny, before the tool runs
+    And the agent gets the server's reply, allow or deny, as the hook's only output, before the tool runs
     # README.md, What happens to one action; PLAN.md T-009; cmd/agentry/hook_test.go
 
   @SEC-03 @test
@@ -293,7 +293,7 @@ Feature: Security
     Given an asked action waiting in Needs you while the hook waits
     When the user approves it
     Then the agent is told "Agentry: you approved: " followed by the user's reason, exactly once
-    And the command runs
+    And the command is allowed
     # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go
 
   @SEC-36 @manual

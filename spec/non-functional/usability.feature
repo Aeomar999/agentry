@@ -138,7 +138,7 @@ Feature: Usability
     Given the page open with the cursor in a text field
     When the user presses Ctrl+K, or ⌘ K on a Mac
     Then the command palette opens, a dialog named "Command palette", and the key does not reach the field
-    And ArrowDown and ArrowUp move the cursor one match at a time, Enter runs the match under it and Esc closes it
+    And ArrowDown and ArrowUp move the cursor exactly one match at a time, Enter runs the match under it and Esc closes it
     And the palette lists Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one terminal command per working task with an agent, and the theme switch, exactly those
     # README.md, Use it, Keys; PLAN.md T-017; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-160; organisms/CommandPalette.tsx lines 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
 

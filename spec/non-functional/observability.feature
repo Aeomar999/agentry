@@ -130,7 +130,7 @@ Feature: Observability
     Given a task moved to a worker, whose turn resumes an engine session there
     When the page watches the task's terminal on the server
     Then the screen streamed from the worker holds the engine's command with its resumed session, within 5 seconds
-    And the worker reports that the task's agent runs there
+    And asked whether the task's agent runs there, the worker answers yes
     # README.md, Add machines; README.md, How it works, Work across machines; PLAN.md T-022; internal/web/workers_test.go
 
   @OBS-16 @manual
