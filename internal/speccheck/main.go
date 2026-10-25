@@ -11,9 +11,11 @@
 //     and no outcome word;
 //   - uses the words quickly, properly or appropriately.
 //
-// It also reports an em-dash anywhere in any file under the folder. Problems
-// are printed as file:line: message; the scenarios per file and the totals
-// per check tag are printed either way; the exit code is 1 on any problem.
+// A Scenario Outline is reported and not counted: this spec writes one
+// Scenario per case. The checker also reports an em-dash anywhere in any
+// file under the folder. Problems are printed as file:line: message; the
+// scenarios per file and the totals per check tag are printed either way;
+// the exit code is 1 on any problem.
 package main
 
 import (

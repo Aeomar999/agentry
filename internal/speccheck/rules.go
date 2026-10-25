@@ -35,10 +35,11 @@ var checkTags = []string{tagTest, tagBenchmark, tagManual}
 
 // outcomeWords are the words that make a Then a yes/no outcome when it has
 // no number. Matched as whole words, case-insensitive; a contraction such
-// as "doesn't" is one word and matches nothing. spec/README.md lists them.
+// as "doesn't" is one word and matches nothing. This is the one list;
+// spec/README.md rule 4 repeats it word for word.
 var outcomeWords = []string{
-	"not", "no", "never", "yes", "exactly", "every", "each", "once", "only", "same",
-	"empty", "refused", "denied", "allowed", "asked", "shown", "hidden", "kept", "runs", "does",
+	"not", "no", "never", "nothing", "cannot", "yes", "exactly", "every", "each", "once",
+	"only", "same", "empty", "refused", "denied", "allowed", "asked", "shown", "hidden", "kept",
 }
 
 // bannedWords say nothing a checker can judge, so no scenario may use them.
@@ -90,6 +91,15 @@ func idProblem(s scenario, prefix string) string {
 	}
 	if got, _ := idOf(ids[0].name); got != prefix {
 		return fmt.Sprintf("ID %s does not match this file's prefix @%s-nn", ids[0].name, prefix)
+	}
+	return ""
+}
+
+// tagHint adds, to a missing-tag message, why the tags were missed: they
+// sit above a blank line instead of directly above the Scenario line.
+func tagHint(s scenario) string {
+	if s.tagsAbove {
+		return "; the tags must be on the line directly above Scenario:"
 	}
 	return ""
 }

@@ -55,11 +55,14 @@ func Check(folder string) (Result, error) {
 // checkFeature counts one feature file's scenarios and adds what is wrong
 // with them to the result.
 func checkFeature(result *Result, seen map[string]string, path, text string) {
-	scenarios := parseFeature(path, text)
+	scenarios, outlines := parseFeature(path, text)
 	result.Files = append(result.Files, FileCount{Path: path, Scenarios: len(scenarios)})
 	prefix, known := prefixes[filepath.Base(path)]
 	if !known {
 		result.Problems = append(result.Problems, Problem{path, 1, "unknown feature file name; the known names are " + knownNames()})
+	}
+	for _, l := range outlines {
+		result.Problems = append(result.Problems, Problem{path, l.number, "Scenario Outline is not used in this spec: write one Scenario per case"})
 	}
 	for _, s := range scenarios {
 		for _, t := range s.tags {
@@ -78,11 +81,11 @@ func scenarioProblems(s scenario, prefix string, seen map[string]string) []Probl
 	}
 	if prefix != "" {
 		if message := idProblem(s, prefix); message != "" {
-			at(s.line, message)
+			at(s.line, message+tagHint(s))
 		}
 	}
 	if message := checkTagProblem(s); message != "" {
-		at(s.line, message)
+		at(s.line, message+tagHint(s))
 	}
 	for _, id := range idTags(s) {
 		where := fmt.Sprintf("%s:%d", s.file, id.line)

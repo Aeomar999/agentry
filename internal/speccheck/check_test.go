@@ -110,7 +110,11 @@ func TestAThenStatesANumberOrAnOutcome(t *testing.T) {
 		"an outcome word":        {"Then the task is shown on the board", false},
 		"the word in any case":   {"Then NOT a thing changes", false},
 		"a contraction":          {"Then the task doesn't move", true},
-		"the word inside a word": {"Then nothing moves", true},
+		"the word inside a word": {"Then the task is noted", true},
+		"runs says nothing":      {"Then the page runs", true},
+		"does says nothing":      {"Then the task does its work", true},
+		"a cannot case":          {"Then the agent cannot push", false},
+		"nothing happens":        {"Then nothing moves", false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			text := strings.Replace(goodScenario, "Then the task is shown in To do", c.then, 1)
@@ -149,6 +153,50 @@ func TestVagueWordsAreRefused(t *testing.T) {
 	}
 }
 
+func TestAScenarioOutlineIsRefusedAndNotCounted(t *testing.T) {
+	outline := goodScenario + `
+  @USER-02 @test
+  Scenario Outline: A task ends up <outcome>
+    Given a task
+    When the coordinator decides
+    Then the task is <outcome>
+
+    Examples:
+      | outcome |
+      | done    |
+`
+	dir := writeSpec(t, map[string]string{"functional/user.feature": outline})
+	result, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Files[0].Scenarios; got != 1 {
+		t.Errorf("counted %d scenarios, want 1: the outline is not one", got)
+	}
+	if got := result.Tags[tagTest]; got != 1 {
+		t.Errorf("counted %d @test, want 1: the outline's tags are not counted", got)
+	}
+	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": outline}),
+		"user.feature:13: Scenario Outline is not used in this spec: write one Scenario per case")
+}
+
+func TestABlankLineBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
+	text := strings.Replace(goodScenario, "@USER-01 @test\n", "@USER-01 @test\n\n", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
+		"user.feature:6: no ID tag; this file's scenarios are tagged @USER-nn; the tags must be on the line directly above Scenario:",
+		"user.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:")
+
+	// With no tag line above, the hint is not given.
+	text = strings.Replace(goodScenario, "  @USER-01 @test\n", "", 1)
+	got := problemsOf(t, map[string]string{"functional/user.feature": text})
+	expectProblems(t, got, "user.feature:4: no ID tag", "user.feature:4: no check tag")
+	for _, p := range got {
+		if strings.Contains(p, "directly above") {
+			t.Errorf("hint given with no tag line above: %s", p)
+		}
+	}
+}
+
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{
 		"functional/user.feature": goodScenario,
@@ -171,14 +219,10 @@ func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
     Then exactly one agent gets a turn
 
   @COORD-02 @benchmark
-  Scenario Outline: Decisions are read fast
-    Given <n> decisions
+  Scenario: Decisions are read fast
+    Given 1000 decisions
     When they are read
     Then it takes under 1 second
-
-    Examples:
-      | n    |
-      | 1000 |
 `
 	dir := writeSpec(t, map[string]string{
 		"README.md":                      "# The spec\n",
