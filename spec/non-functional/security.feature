@@ -87,17 +87,15 @@ Feature: Security
     And every verdict names its profile, its rule and the rule's place, rules counted from 1, 0 for otherwise and Agentry's own files
     # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile, TestAVerdictNamesItsRule; internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
 
-  @SEC-11 @manual
+  @SEC-11 @test
   Scenario: A shell command Agentry cannot parse gets the profile's unreadable
-    Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
+    # internal/policy/decide_test.go TestAnUnreadableCommandGetsTheProfilesUnreadable
+    Given a profile with unreadable = "deny" and otherwise = "ask"
     When the agent runs a shell command with an unterminated quote
-    Then the call is asked, by the profile's unreadable
+    Then the call is denied, by "Agentry couldn't read this shell command"
+    And a readable command no rule matches is still asked, by otherwise
+    And with unreadable = "ask", the same unterminated command is asked by "Agentry couldn't read this shell command"
     # README.md, The policy; PLAN.md T-039; internal/policy/decide.go line 89
-    # Steps: in policy.toml, comment out use_for_everyone and set the developer profile's unreadable = "deny", leaving
-    # otherwise = "ask"; save. On the Policy page, under developer, Try a call: tool Bash, command echo 'unterminated.
-    # The verdict is deny by "Agentry couldn't read this shell command"; frobnicate is still ask by otherwise. Put unreadable
-    # back to "ask" and the same call is ask by that rule. (internal/policy/default_test.go TestTheDeveloperProfile asserts
-    # ask only, which otherwise gives too.)
 
   @SEC-67 @test
   Scenario: The gate judges only the shell's code: quoted text and a heredoc's body are data
@@ -415,16 +413,14 @@ Feature: Security
     Then the API answers HTTP 200 each way
     # README.md, Signing in the installed app, or another device; PLAN.md T-006; internal/web/api_test.go TestTheAPINeedsTheUIToken for ?token= and the cookie; the Bearer header is how every test there calls the API (call)
 
-  @SEC-46 @manual
+  @SEC-46 @test
   Scenario: The hook token does not open the API
+    # internal/web/held_approval_test.go TestTheHookTokenDoesNotOpenTheAPI
     Given the server has a page token and a hook token
     When a request carries the hook token as a Bearer header, or no token at all
     Then the API answers HTTP 401
     And an agent can never approve its own request
-    # README.md, What happens to one action; PLAN.md T-009; internal/web/api_test.go TestTheAPINeedsTheUIToken refuses no token and the made-up "hook-token", but its server has no hook token, so it proves only that a wrong token is refused
-    # Steps: start agentry serve and run curl --cacert <data dir>/tls/ca.crt -H "Authorization: Bearer $(cat <data dir>/hook-token)" <agentry address>/api/tasks:
-    # 401. The same with no header: 401; with <data dir>/ui-token: 200. Then POST to <agentry address>/api/tasks/<task>/actions/<action>/approve
-    # with the hook token, for an action waiting in Needs you: 401, and the action still waits.
+    # README.md, What happens to one action; PLAN.md T-009
 
   @SEC-47 @test
   Scenario: The desk token opens tasks
