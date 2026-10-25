@@ -174,7 +174,7 @@ func words(text string) []string {
 
 // lastIDBeforeLineRule is each prefix's highest ID when the rule against
 // line references came in. A scenario numbered above its prefix's entry
-// may not cite "line N" or "lines N": lines move as dev moves, so it names
+// may not cite "line N" or "lines N", in any case, in a comment: lines move as dev moves, so it names
 // a function or a test instead. The scenarios at or below the entry are
 // left as they are.
 var lastIDBeforeLineRule = map[string]int{
@@ -183,17 +183,18 @@ var lastIDBeforeLineRule = map[string]int{
 	"USE": 29, "COMPAT": 27, "OBS": 34,
 }
 
-var lineReference = regexp.MustCompile(`\blines? [0-9]`)
+var lineReference = regexp.MustCompile(`(?i)\blines? [0-9]`)
 
-// lineReferences finds the lines of a scenario that cite a line number,
-// when the scenario is newer than the rule against them.
+// lineReferences finds the comment lines of a scenario that cite a line
+// number, when the scenario is newer than the rule against them. A step may
+// say "line 1 of the report": that is what Agentry does, not a citation.
 func lineReferences(s scenario, prefix string) []line {
 	if !newerThanLineRule(s, prefix) {
 		return nil
 	}
 	var found []line
-	for _, l := range append([]line{{s.line, s.title}}, s.body...) {
-		if lineReference.MatchString(l.text) {
+	for _, l := range s.body {
+		if isComment(l.text) && lineReference.MatchString(l.text) {
 			found = append(found, l)
 		}
 	}

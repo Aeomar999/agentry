@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -235,26 +236,30 @@ func TestARejectedScenarioIsNotCountedUnderAnyCheckTag(t *testing.T) {
 
 func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 	repo := map[string]string{
-		"../" + goodTestFile:       "package web\n\nfunc TestCreate(t *testing.T) {}\n\nfunc TestList(t *testing.T) {}\n",
-		"../internal/web/api.go":   "package web\n",
-		"../ui/src/Badge.test.tsx": "",
-		"../README.md":             "# Agentry\n",
+		"../" + goodTestFile:            "package web\n\nfunc TestCreate(t *testing.T) {}\n\nfunc TestList(t *testing.T) {}\n",
+		"../internal/web/api.go":        "package web\n",
+		"../internal/web/empty_test.go": "",
+		"../ui/src/Badge.test.tsx":      "",
+		"../README.md":                  "# Agentry\n",
 	}
 	for name, c := range map[string]struct{ tags, comment, want string }{
-		"a path and its tests":    {"@USER-01 @test", "# internal/web/api_test.go TestCreate and TestList", ""},
-		"a missing path":          {"@USER-01 @test", "# internal/web/gone_test.go", "user.feature:10: cited path internal/web/gone_test.go does not exist"},
-		"a renamed test":          {"@USER-01 @test", "# internal/web/api_test.go TestMake", "user.feature:10: TestMake is not defined in internal/web/api_test.go"},
-		"a test with no path":     {"@USER-01 @test", "# the list: TestList", "user.feature:10: TestList is cited with no Go test file before it"},
-		"in the same file":        {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestList in the same file", ""},
-		"gone from the file":      {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestGone in the same file", "user.feature:10: TestGone is not defined in internal/web/api_test.go"},
-		"on the next line":        {"@USER-01 @test", "# internal/web/api_test.go TestCreate\n    # the list: TestGone", "user.feature:11: TestGone is not defined in internal/web/api_test.go"},
-		"a test before its path":  {"@USER-01 @test", "# TestCreate in internal/web/api_test.go", ""},
-		"a non-test file between": {"@USER-01 @test", "# internal/web/api_test.go TestCreate; the handler: internal/web/api.go\n    # TestList", ""},
-		"a UI path":               {"@USER-01 @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
-		"a missing UI path":       {"@USER-01 @test", "# ui/src/Gone.test.tsx", "user.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
-		"a glob":                  {"@USER-01 @test", "# every page: ui/src/**/*.tsx", ""},
-		"a root file":             {"@USER-01 @test", "# README.md, Use it; PLAN.md T-013", "user.feature:10: cited path PLAN.md does not exist"},
-		"a manual scenario":       {"@USER-01 @manual", "# internal/web/gone_test.go TestGone", ""},
+		"a path and its tests":       {"@USER-01 @test", "# internal/web/api_test.go TestCreate and TestList", ""},
+		"a missing path":             {"@USER-01 @test", "# internal/web/gone_test.go", "user.feature:10: cited path internal/web/gone_test.go does not exist"},
+		"a renamed test":             {"@USER-01 @test", "# internal/web/api_test.go TestMake", "user.feature:10: TestMake is not defined in internal/web/api_test.go"},
+		"a test with no path":        {"@USER-01 @test", "# the list: TestList", "user.feature:10: TestList is cited with no Go test file before it"},
+		"in the same file":           {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestList in the same file", ""},
+		"gone from the file":         {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestGone in the same file", "user.feature:10: TestGone is not defined in internal/web/api_test.go"},
+		"on the next line":           {"@USER-01 @test", "# internal/web/api_test.go TestCreate\n    # the list: TestGone", "user.feature:11: TestGone is not defined in internal/web/api_test.go"},
+		"a test before its path":     {"@USER-01 @test", "# TestCreate in internal/web/api_test.go", ""},
+		"a non-test file between":    {"@USER-01 @test", "# internal/web/api_test.go TestCreate; the handler: internal/web/api.go\n    # TestList", ""},
+		"a path with a line":         {"@USER-01 @test", "# internal/web/api.go:42 and internal/web/api.go:3-5", ""},
+		"a missing path with a line": {"@USER-01 @test", "# internal/web/gone.go:42", "user.feature:10: cited path internal/web/gone.go does not exist"},
+		"an empty test file":         {"@USER-01 @test", "# internal/web/empty_test.go TestCreate", "user.feature:10: TestCreate is not defined in internal/web/empty_test.go"},
+		"a UI path":                  {"@USER-01 @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
+		"a missing UI path":          {"@USER-01 @test", "# ui/src/Gone.test.tsx", "user.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
+		"a glob":                     {"@USER-01 @test", "# every page: ui/src/**/*.tsx", ""},
+		"a root file":                {"@USER-01 @test", "# README.md, Use it; PLAN.md T-013", "user.feature:10: cited path PLAN.md does not exist"},
+		"a manual scenario":          {"@USER-01 @manual", "# internal/web/gone_test.go TestGone", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)
@@ -290,6 +295,8 @@ func TestANewScenarioCitesNoLineNumber(t *testing.T) {
 		"a new manual ID":      {"@USER-134 @manual", "# internal/web/api.go line 12", "user.feature:10: a line number goes stale"},
 		"an old ID with line":  {"@USER-133 @test", "# internal/web/api_test.go, line 12", ""},
 		"a new ID with a name": {"@USER-134 @test", "# internal/web/api_test.go, the timeline 5 times", ""},
+		"a capital Line":       {"@USER-134 @test", "# internal/web/api_test.go, Line 12", "user.feature:10: a line number goes stale"},
+		"a capital Lines":      {"@USER-134 @test", "# internal/web/api_test.go, Lines 3 to 5", "user.feature:10: a line number goes stale"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			text := strings.NewReplacer("@USER-01 @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
@@ -301,6 +308,49 @@ func TestANewScenarioCitesNoLineNumber(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAStepMaySayLine(t *testing.T) {
+	text := strings.NewReplacer("@USER-01 @test", "@USER-134 @test",
+		"Then the task is shown in To do", "Then line 1 of the report is the verdict").Replace(goodScenario)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}))
+
+	text = strings.Replace(text, "# internal/web/api_test.go", "# internal/web/api_test.go, line 1 of the report is the verdict", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
+		"user.feature:10: a line number goes stale")
+}
+
+// notInTheRootLists are the repo root's entries that are not cited: git's
+// own and what .gitignore leaves out. A name starting with a dot that is a
+// folder is skipped too, as .agentry is.
+var notInTheRootLists = []string{".git", "bin", "release", "agentry", "node_modules", "__pycache__", "*.db", "*.db-wal", "*.db-shm"}
+
+func TestTheRootListsNameEveryTopFolderAndRootFile(t *testing.T) {
+	entries, err := os.ReadDir(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if ignored(name) || entry.IsDir() && strings.HasPrefix(name, ".") {
+			continue
+		}
+		if entry.IsDir() && !slices.Contains(rootFolders, name) {
+			t.Errorf("the top folder %s is not in rootFolders, so a path under it is not checked", name)
+		}
+		if !entry.IsDir() && !slices.Contains(rootFiles, name) {
+			t.Errorf("the root file %s is not in rootFiles, so citing it is not checked", name)
+		}
+	}
+}
+
+func ignored(name string) bool {
+	for _, pattern := range notInTheRootLists {
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {

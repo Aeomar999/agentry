@@ -15,11 +15,18 @@ import (
 // repeats both lists.
 var (
 	rootFolders = []string{"cmd", "deploy", "docs", "internal", "packaging", "spec", "tools", "ui"}
-	rootFiles   = []string{".gitlab-ci.yml", "Dockerfile", "Makefile", "PLAN.md", "README.md", "docker-stack.dev.yml", "go.mod", "spec.md"}
+	rootFiles   = []string{
+		".dockerignore", ".gitignore", ".gitlab-ci.yml", "Dockerfile", "LICENSE", "Makefile", "NOTICE",
+		"PLAN.md", "README.md", "docker-stack.dev.yml", "go.mod", "go.sum", "spec.md",
+	}
 )
 
 // testName matches a Go test's name at the start of a token.
 var testName = regexp.MustCompile(`^Test[A-Z0-9_][A-Za-z0-9_]*`)
+
+// lineSuffix is a line number or range after a path, as in x.go:42 or
+// x.go:3-5.
+var lineSuffix = regexp.MustCompile(`:[0-9]+(-[0-9]+)?$`)
 
 // A citation is a repo path, or a Go test in a test file, that a comment
 // line under a scenario names.
@@ -65,12 +72,14 @@ func citations(s scenario) []citation {
 }
 
 // commentTokens splits a comment line into words with the punctuation
-// around them cut off, so "internal/x_test.go;" reads as the path.
+// around them cut off, so "internal/x_test.go;" reads as the path, and with
+// a line number cut off, so "internal/x.go:42" does too.
 func commentTokens(text string) []string {
 	var tokens []string
 	for _, field := range strings.Fields(strings.TrimPrefix(text, "#")) {
 		token := strings.TrimLeft(field, "(\"'`")
 		token = strings.TrimRight(token, ",;:.)\"'`")
+		token = lineSuffix.ReplaceAllString(token, "")
 		if token != "" {
 			tokens = append(tokens, token)
 		}
@@ -97,13 +106,19 @@ func isGoTestFile(path string) bool { return strings.HasSuffix(path, "_test.go")
 // A citer judges citations against the repo, reading each test file once.
 type citer struct {
 	root  string
-	files map[string]string // test file path -> its text, "" when unreadable
-	paths int               // cited paths checked
-	tests int               // cited Go tests checked
+	files map[string]testFile // by path
+	paths int                 // cited paths checked
+	tests int                 // cited Go tests checked
+}
+
+// A testFile is a cited test file as it was read.
+type testFile struct {
+	text     string
+	readable bool
 }
 
 func newCiter(root string) *citer {
-	return &citer{root: root, files: map[string]string{}}
+	return &citer{root: root, files: map[string]testFile{}}
 }
 
 // problems checks a @test scenario's citations: every cited path exists,
@@ -130,7 +145,7 @@ func (c *citer) check(cite citation) string {
 	if cite.path == "" {
 		return fmt.Sprintf("%s is cited with no Go test file before it; name the _test.go file", cite.test)
 	}
-	text, readable := c.testFile(cite.path)
+	text, readable := c.read(cite.path)
 	if !readable {
 		return "" // the missing path is already a problem of its own
 	}
@@ -141,11 +156,13 @@ func (c *citer) check(cite citation) string {
 	return ""
 }
 
-func (c *citer) testFile(path string) (text string, readable bool) {
-	if text, read := c.files[path]; read {
-		return text, text != ""
+// read gives a cited test file's text, reading the file the first time.
+func (c *citer) read(path string) (text string, readable bool) {
+	file, read := c.files[path]
+	if !read {
+		bytes, err := os.ReadFile(filepath.Join(c.root, filepath.FromSlash(path)))
+		file = testFile{text: string(bytes), readable: err == nil}
+		c.files[path] = file
 	}
-	bytes, err := os.ReadFile(filepath.Join(c.root, filepath.FromSlash(path)))
-	c.files[path] = string(bytes)
-	return string(bytes), err == nil && len(bytes) > 0
+	return file.text, file.readable
 }
