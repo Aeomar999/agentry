@@ -12,7 +12,7 @@ ID=$(cat $M/$CFG-task.id 2>/dev/null || true)
 case $STEP in
 task)
   tools/measure/api.sh $CFG POST /api/tasks '{"title":"Add format_duration to durations.py","description":"Add format_duration(seconds) to durations.py, the inverse of parse_duration: 5400 -> '"'"'1h30m'"'"', 45 -> '"'"'45s'"'"', 0 -> '"'"'0s'"'"'. Add tests in test_durations.py. Done when python3 -m pytest passes (or python3 -m unittest if pytest is missing). Engineer builds, reviewer reviews, nothing else: no tester, no deployer, no push. When the reviewer approves, finish. Reviewer: a SHORT report, the verdict, then numbered findings with file:line, then the verdict again as the last line.","team":"Measure","kind":"story","budget":-1,"maxTurns":-1}' \
-    | tee $M/$CFG-task-created.json | jq -r .id > $M/$CFG-task.id
+    | tee $M/$CFG-task-created.json | jq -r .stream > $M/$CFG-task.id
   echo "task $(cat $M/$CFG-task.id)";;
 plant)
   tools/measure/plant.sh $CFG $ID;;
