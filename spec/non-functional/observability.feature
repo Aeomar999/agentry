@@ -6,53 +6,56 @@ Feature: Observability
     Given a task whose 2 turns have ended, each with the tokens its engine counted from its transcript
     When the task is read from the log
     Then the task's tokens used are exactly the sum of the 2 turns' tokens
-    And the sum is shown on the task's page, in the list and on its card
-    # PLAN.md T-051; README.md, Use it, Budgets and turn limits; internal/tasks/split_test.go
+    # not under test, checked by hand: the sum is shown on the task's page (ui/src/pages/TaskPage.tsx line 373), in the list (ui/src/pages/TasksPage.tsx line 116) and on its card (ui/src/components/molecules/TaskCard.tsx line 78)
+    # PLAN.md T-051; README.md, Use it, Budgets and turn limits; internal/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-02 @test
-  Scenario: Every event in the log passed the catalogue's shape and writer checks
-    Given a log opened with the catalogue, which knows each type's stream kind, required fields and writers
+  Scenario: The catalogue refuses a proposal of the wrong shape or from the wrong writer
+    Given a catalogue that knows each type's stream kind, required fields and writers
     When a proposal arrives with the unknown type "task.exploded", one with a required field missing, one with no actor, a turn.started with no correlation, an agents event in a task stream, and one from a kind of actor the type does not allow
     Then the first 5 are refused with the check "shape", and the last with the check "who"
-    And a task.created with its title, repo and coordinator from a human is not refused: it is the event in the log
-    And a proposal with no actor is refused, so every event in the log names who wrote it, a kind and an id
-    # README.md, How it works, How it fits together; PLAN.md T-002; internal/events/catalogue_test.go
+    And a task.created with its title, repo and coordinator from a human is not refused: yes
+    # not under test, checked by hand: the store runs both checks on every proposal before it writes one (internal/store/store.go lines 341 and 344), and the shape check wants an actor's kind and id (internal/events/catalogue.go line 367), so every event in the log names who wrote it
+    # README.md, How it works, How it fits together; PLAN.md T-002; internal/events/catalogue_test.go TestCheckShapeAndWriter
 
   @OBS-03 @test
   Scenario: A refused proposal is kept in the log as a rejection, not as the event
     Given a task whose task.created is in the log
     When a second task.created for it is proposed, and then a proposal of the unknown type "task.exploded"
     Then the second task.created is refused with the check "order" and the unknown type with the check "shape"
-    And each refusal is written as a proposal.rejected event in the task's stream, by system:validator, with the type, who sent it, the check and the reason
+    And each refusal is written to the log as a proposal.rejected event, the first saying who sent it and the reason "task already exists": yes
     And the task's stream of accepted events still holds exactly 1
-    # README.md, How it works, What happens to one action; PLAN.md T-003; internal/store/store_test.go
+    # not under test, checked by hand: a rejection is in the task's stream, by system:validator, with the type and the check (internal/store/store.go lines 397 and 399)
+    # README.md, How it works, What happens to one action; PLAN.md T-003; internal/store/store_test.go TestProposeAppendsOrRecordsTheRejection
 
   @OBS-04 @test
-  Scenario: Every event type has a schema its events are checked against
-    Given the catalogue with the Ideas feature, and the 81 schema files under internal/events/schemas, one per type
+  Scenario: Every event type has a schema file its events validate against
+    Given the catalogue with the Ideas feature, and the schema files under internal/events/schemas, one per type
     When an event with just what its type needs is checked against its file, and events with an empty actor id, a missing data.agent, a position of 1.5 and an "at" of "yesterday" are checked
-    Then the event with just what its type needs passes for every one of the 81 types
+    Then the event with just what its type needs passes for every one of the catalogue's types
     And each bad event is refused with a problem that names the field: "actor.id: want at least 1 characters", "data.agent: required field missing", "position: want an integer" and "at: want a date-time"
     And the unknown type "task.exploded" has no spec and no schema file
-    # PLAN.md T-036; internal/events/validate_test.go
+    # not under test, checked by hand: there are 81 files, one per type (ls internal/events/schemas); the store checks proposals with the catalogue (internal/store/store.go lines 341 and 344), and only tests call Validate (internal/events/validate.go line 20)
+    # PLAN.md T-036; internal/events/validate_test.go TestAnEventValidatesAgainstItsSchema, TestAnEventValidatesAgainstSchemasOwnOutput and TestEveryCommittedSchemaChecksAnEvent
 
   @OBS-05 @test
   Scenario: A task's events API is its whole record, in order, rejections included
     Given a task with 600 label events and 1 refused proposal among them, and another task's events between
     When the page walks GET /api/tasks/{task}/events from ?after=0, each page after the last position of the one before, with the default page and with ?limit=7
     Then the pages add up to exactly the task's record, in position order, the rejection included and no other task's event
-    And each entry carries its position, time, type, actor as kind:id, correlation and data
     And each page says with "more" whether events lie beyond it, yes or no
-    # README.md, Use it, A task; internal/web/events_api_test.go
+    # not under test, checked by hand: each entry carries its position, time, type, actor as kind:id, correlation and data (internal/web/views.go lines 122 to 129); the test builds the record it compares with through the same entryOf
+    # README.md, Use it, A task; internal/web/events_api_test.go TestTheEventPagesAddUpToTheTasksRecord; the rejection and "more": TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
 
   @OBS-06 @test
-  Scenario: The page reads the newest events first and earlier pages on request
-    Given a task page whose detail was read at log position 10, and a log with 7 events for it
-    When the Activity or Events tab opens, and then Load earlier is clicked until there is nothing earlier
+  Scenario: A task's event pages read the newest events first and earlier pages on request
+    Given a task's event pages watched from log position 10, and a log with 7 events for it
+    When they are watched, and then an earlier page is asked for until there is nothing earlier
     Then the first read is the page before position 11, and no second read follows while the log stays at 10
-    And each Load earlier reads the page before the oldest event held, and a second click while one is read asks nothing more
+    And each earlier page read is the page before the oldest event held, and a second ask while one is read asks nothing more
     And once the task's first event is held, there is no earlier page to offer
-    # README.md, Use it, A task; ui/src/live/event-pages.test.ts
+    # not under test, checked by hand: the Activity and Events tabs read through these pages, and their Load earlier button asks for the earlier page (ui/src/live/use-events.ts line 20)
+    # README.md, Use it, A task; ui/src/live/event-pages.test.ts "reads the newest page, before where the detail was read, and nothing more while the log stays" and "load earlier reads the page before the oldest held, until there is none"
 
   @OBS-07 @test
   Scenario: Activity is everything that happened, newest first, under bands that say who wrote it
@@ -60,17 +63,18 @@ Feature: Observability
     When its Activity tab is shown
     Then the rows come newest first, in 8 runs, each under a band naming its author: an agent with its team and role, "you", or "Agentry"
     And a turn's band names the turn, the machine it ran on, whether it ended or runs, its tokens as "41k tokens" and its duration as "5m 00s"
-    And clicking a turn's band narrows the feed to that turn only
+    And clicking a turn's band asks for that turn alone, and narrowed to it the feed shows only that turn's band: yes
     But a task with no rows yet says "Nothing here yet"
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.test.tsx
+    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "is one list of runs, one item each, with its band and its rows; no regions among them", "puts the turn's facts in the band: badge, tokens, and the duration for a phone", "narrows to the turn from its band, and from its continued band", "narrowed, the band is the turn's heading alone, with no Show only" and "a new task"
 
   @OBS-08 @test
-  Scenario: A coordinator's handoff shows under its turn and opens the turn it led to
+  Scenario: A coordinator's handoff shows under its turn and offers the turn it led to
     Given a coordinator's turn that assigned the engineer on a named machine, and the engineer's turn after it
     When Activity is shown
     Then the handoff is shown as the newest row under the coordinator's turn band, reading "coordinator to engineer on" the machine it named, with the instructions it gave
-    And its button "Show only turn-2" narrows the feed to the engineer's turn only
-    # README.md, How it works, How a task moves; ui/src/components/organisms/ActivityFeed.test.tsx
+    And it carries a button "Show only turn-2": yes
+    # not under test, checked by hand: the button narrows the feed to that turn (ui/src/components/organisms/ActivityFeed.tsx line 410)
+    # README.md, How it works, How a task moves; ui/src/components/organisms/ActivityFeed.test.tsx "keeps the coordinator's handoff under its turn's band, from → to with ' to ' said"
 
   @OBS-09 @test
   Scenario: When the events cannot be read, Activity says so and offers Try again
@@ -79,32 +83,35 @@ Feature: Observability
     Then an alert is shown that says "Couldn't load the activity", quotes the server's answer and adds "If it keeps failing, check that Agentry is still running."
     And the two clicks make exactly 1 read, with focus kept on the feed through the loading
     And a retry that fails shows the alert again, and one that succeeds shows the rows with no alert
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.retry.test.tsx
+    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"; the words: ui/src/components/organisms/ActivityFeed.test.tsx "an error, with what the server said and Try again"
 
   @OBS-10 @test
-  Scenario: The handoff path above the tabs counts an agent's turns in a row as one step
+  Scenario: The handoff path counts an agent's turns in a row as one step
     Given a task whose turns went coordinator, engineer, engineer, reviewer
-    When the task page is shown
+    When its handoff path is shown
     Then the engineer's 2 turns in a row are one step marked "×2", in muted ink
     And the chevrons between the steps are hidden from screen readers, exactly 2 of them when the task is done
-    # README.md, Use it, A task; ui/src/components/molecules/HandoffPath.test.tsx
+    # not under test, checked by hand: the task page shows the path above its tabs (ui/src/pages/TaskPage.tsx line 438)
+    # README.md, Use it, A task; ui/src/components/molecules/HandoffPath.test.tsx "counts an agent's turns in a row in muted ink, not faint" and "hides its chevrons from screen readers"
 
   @OBS-11 @test
-  Scenario: The Handoffs tab is every step of the trail, newest first, each opening the turn it led to
+  Scenario: The Handoffs timeline is every step of the trail, newest first, each offering the turn it led to
     Given a task whose trail has steps from you to the coordinator, and from the coordinator to the engineer and to the reviewer, with the engineer's turn ended and the reviewer's running
-    When the Handoffs tab is shown
+    When the handoff timeline is shown
     Then each step is an article named "<from> to <to>, <time>", newest first
-    And the footer of the step to the engineer reads "Led to turn-4·engineer·48m 00s·14 actions·210k tokens", is named "Led to turn-4, engineer. Open its activity" for screen readers, and opens that turn's activity, exactly once per click
+    And the footer of the step to the engineer reads "Led to turn-4·engineer·48m 00s·14 actions·210k tokens", is named "Led to turn-4, engineer. Open its activity" for screen readers, and a click asks to open turn-4: yes
     And the step to the reviewer is shown as running in its footer, or as usage limit while its turn waits for one
-    And a step said to you leads to no turn, so it has no button
-    # README.md, Use it, A task; ui/src/components/organisms/HandoffTimeline.test.tsx
+    And a step with no turn, such as the user's to the coordinator, has no button
+    # README.md, Use it, A task; ui/src/components/organisms/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn", "opens the turn a footer names", "puts the running badge in a running turn's footer, and in its name", "says a turn waiting for the usage limit is waiting, not running" and "makes the footer the card's only button, and no button wraps the card"
 
   @OBS-12 @test
   Scenario: The coordinator's brief carries the trail, numbered, as who handed what to whom
-    Given a task the coordinator assigned to the engineer, whose turn ended with the report "Removed 3 TODOs and committed."
-    When the coordinator's next brief is written
-    Then its section "What has happened so far" lists every step as "N. from → to: text", the first "1. you → tech-lead: ..." and the latest "engineer → tech-lead: Removed 3 TODOs and committed."
-    # README.md, How it works, How a task moves; PLAN.md T-032; internal/coordinator/loop_test.go
+    Given a task "Remove the TODOs" the coordinator assigned to the engineer, whose turn ended with the report "Removed 3 TODOs and committed."
+    When the coordinator's briefs are written
+    Then the first holds "1. you → tech-lead: Remove the TODOs"
+    And the one after the engineer's turn holds "engineer → tech-lead: Removed 3 TODOs and committed."
+    # not under test, checked by hand: the trail is under the section "What has happened so far", every step numbered as "N. from → to: text" (internal/coordinator/brief.go lines 50 and 124)
+    # README.md, How it works, How a task moves; PLAN.md T-032; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
   @OBS-13 @test
   Scenario: A viewer of the live terminal gets the size, the screen so far, then the live output
