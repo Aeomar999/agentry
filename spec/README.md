@@ -13,8 +13,8 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | File | What it is about |
 | --- | --- |
 | `spec/README.md` | this file: the layout, the rules and how to run the check |
-| `spec/glossary.md` | every noun Agentry uses, one line each (coming in the next step) |
-| `spec/constraints.md` | how Agentry is built and must stay built, with how each constraint is checked (coming in the next step) |
+| `spec/glossary.md` | every noun Agentry uses, one line each |
+| `spec/constraints.md` | how Agentry is built and must stay built, with how each constraint is checked |
 | `spec/NOT-YET.md` | behaviour left out of this baseline because it is not built on dev |
 | `spec/functional/user.feature` | the user: the person at the page |
 | `spec/functional/coordinator.feature` | the coordinator: the agent that reads each report and decides the next step |

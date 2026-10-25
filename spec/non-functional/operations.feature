@@ -231,7 +231,7 @@ Feature: Operations
     And the CA lasts 10 years
     And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges: yes
     And a leaf it signs for a name on the public web verifies: no
-    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214); the ranges are 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8 (internal/tlsca/ca.go lines 73 to 78), which the test compares with that list itself; leaves for 192.168.1.20, 100.64.0.7, fd7a:115c::1 and loopback verify
+    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214); the ranges are 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8 (internal/tlsca/ca.go lines 73 to 78), which the test compares with that list itself; leaves for <a 192.168 address>, <a 100.64 address>, <an fd00::/8 address> and loopback verify
     # README.md, What the CA can sign; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained and TestALeafForThePublicWebIsRefused; the leaves: internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies
 
   @OPS-36 @test
