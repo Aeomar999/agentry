@@ -21,7 +21,7 @@ const MaxResumedContext = 150_000
 // The machine is a worker's name, or "" or workers.Local for this one.
 func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh string) {
 	worker = cmp.Or(worker, workers.Local)
-	last := t.lastTurnOf(agent)
+	last := t.LastTurnOf(agent)
 	switch {
 	case last == nil:
 		return "", "first turn"
@@ -47,7 +47,8 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 	return last.EngineSession, ""
 }
 
-func (t *Task) lastTurnOf(agent string) *Turn {
+// LastTurnOf is the agent's latest turn on the task, nil before its first.
+func (t *Task) LastTurnOf(agent string) *Turn {
 	for i := len(t.Turns) - 1; i >= 0; i-- {
 		if t.Turns[i].Agent == agent {
 			return t.Turns[i]

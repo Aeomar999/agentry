@@ -90,7 +90,7 @@ func TestOnlyTheAgentsOwnLatestTurnCounts(t *testing.T) {
 
 // Logs from before story 2 have no fromSession or freshBecause; test logs
 // may have no engine either. All three apply empty, and an unknown engine
-// starts fresh.
+// starts fresh. A turn.started with no seen saw the whole trail.
 func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
@@ -109,15 +109,15 @@ func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 	}
 
 	old := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni"})
-	if turn := old.Turn("turn-1"); turn.Engine != "" || turn.FromSession != "" || turn.FreshBecause != "" {
+	if turn := old.Turn("turn-1"); turn.Engine != "" || turn.FromSession != "" || turn.FreshBecause != "" || turn.Seen != 2 { // the trail as it was then: created, assigned
 		t.Errorf("an old turn.started applies empty values: %+v", turn)
 	}
 	if session, fresh := old.SessionToResume("engineer", "claude", "omni"); session != "" || fresh != "engine unknown" {
 		t.Errorf("an old turn with no engine starts fresh: got %q, fresh because %q", session, fresh)
 	}
 
-	resumed := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "fromSession": "s-0"})
-	if turn := resumed.Turn("turn-1"); turn.Engine != "claude" || turn.FromSession != "s-0" || turn.FreshBecause != "" {
+	resumed := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "fromSession": "s-0", "seen": float64(0)})
+	if turn := resumed.Turn("turn-1"); turn.Engine != "claude" || turn.FromSession != "s-0" || turn.FreshBecause != "" || turn.Seen != 0 {
 		t.Errorf("a resumed turn keeps its engine and the session it resumed: %+v", turn)
 	}
 	fresh := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "freshBecause": "first turn"})

@@ -325,7 +325,7 @@ func (t *Task) Apply(e events.Event) {
 
 	case events.TurnStarted:
 		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Worker: cmp.Or(e.Text("worker"), workers.Local), Hash: e.Text("hash"),
-			Engine: e.Text("engine"), FromSession: e.Text("fromSession"), FreshBecause: e.Text("freshBecause"), PlanFrom: e.Text("planFrom"), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
+			Engine: e.Text("engine"), FromSession: e.Text("fromSession"), FreshBecause: e.Text("freshBecause"), PlanFrom: e.Text("planFrom"), Seen: seenBy(e, len(t.Trail)), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
 		coordinates, unheard := e.Text("agent") == t.Coordinator, false
