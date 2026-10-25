@@ -2,6 +2,8 @@
 
 A task board where the workers are AI agents. You describe a task; a coordinator agent hands it from agent to agent (an engineer, a reviewer, a tester, a deployer, or another team's) and reads every report back, until the work is checked and done. You watch it all live, step in when you want, and approve what matters.
 
+Agentry is made by [Agent3 Labs](https://agent3labs.com), which also makes Hawser, a private network between your own machines.
+
 <p align="center">
   <img src="docs/screenshots/tasks-board.png" alt="The Tasks board in Agentry: Backlog, To do, In progress, Review and Done columns of real tasks, each card showing its epic, which agent is working on it, its labels and how many turns it has taken" width="100%">
 </p>
@@ -41,23 +43,23 @@ Every action an agent takes passes Agentry's gate first, and your policy decides
 
 Agentry itself needs nothing else: no Docker, no Node, no tmux. Start Agentry says if git or Claude Code is missing.
 
-The zips are on the [releases page](https://github.com/francischempa/agentry/releases/latest). Each is named for its version, such as `agentry-v0.1.0-mac-intel.zip`.
+The zips are on the [releases page](https://github.com/agent3-labs/agentry/releases/latest). Each is named for its version, such as `agentry-v0.1.0-mac-intel.zip`.
 
 ### Mac
 
-1. [Download](https://github.com/francischempa/agentry/releases/latest) `agentry-<version>-mac-apple-silicon.zip` (M1 and later) or `agentry-<version>-mac-intel.zip`.
+1. [Download](https://github.com/agent3-labs/agentry/releases/latest) `agentry-<version>-mac-apple-silicon.zip` (M1 and later) or `agentry-<version>-mac-intel.zip`.
 2. Unzip it, and double-click **Start Agentry.command** in the Agentry folder.
 3. The first time, macOS says it can't check the developer, since Agentry isn't signed yet: right-click Start Agentry.command, choose **Open**, then **Open** again. After that it opens with a double-click.
 
 ### Windows
 
-1. [Download](https://github.com/francischempa/agentry/releases/latest) `agentry-<version>-windows-x64.zip` (or `-windows-arm64.zip` on an ARM PC).
+1. [Download](https://github.com/agent3-labs/agentry/releases/latest) `agentry-<version>-windows-x64.zip` (or `-windows-arm64.zip` on an ARM PC).
 2. Unzip it (right-click, Extract All), and double-click **Start Agentry.cmd** in the Agentry folder.
 3. The first time, Windows may say it protected your PC, since Agentry isn't signed yet: click **More info**, then **Run anyway**.
 
 ### Linux
 
-1. [Download](https://github.com/francischempa/agentry/releases/latest) `agentry-<version>-linux-x64.zip` (or `-linux-arm64.zip`).
+1. [Download](https://github.com/agent3-labs/agentry/releases/latest) `agentry-<version>-linux-x64.zip` (or `-linux-arm64.zip`).
 2. Unzip it with a tool that keeps permissions (`unzip` does), and run `./start-agentry.sh` in the Agentry folder.
 3. If it won't run: `chmod +x agentry start-agentry.sh stop-agentry.sh`.
 
@@ -378,7 +380,7 @@ Releases live on GitHub only; GitLab just checks, builds and deploys.
 
 1. Tag the commit on `dev` and push the tag: `git tag v0.1.0 && git push github v0.1.0`.
 2. Run `make package` on the tagged commit in a clean checkout. The zip names come from the tag; a tree with changes adds `-dirty`.
-3. Publish the zips: `gh release create v0.1.0 release/agentry-v0.1.0-*.zip --repo francischempa/agentry --title v0.1.0 --notes "What changed"`. The version in the name keeps older zips in `release/` out of the release.
+3. Publish the zips: `gh release create v0.1.0 release/agentry-v0.1.0-*.zip --repo agent3-labs/agentry --title v0.1.0 --notes "What changed"`. The version in the name keeps older zips in `release/` out of the release.
 
 ### License
 

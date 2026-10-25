@@ -9,9 +9,9 @@ import (
 )
 
 // resumable is an engineer's turn its next one resumes: ended, on claude on
-// omni, with a session id.
+// tower, with a session id.
 func resumable() *Turn {
-	return &Turn{ID: "turn-1", Agent: "engineer", Engine: "claude", Worker: "omni", EngineSession: "s-1", Ended: true}
+	return &Turn{ID: "turn-1", Agent: "engineer", Engine: "claude", Worker: "tower", EngineSession: "s-1", Ended: true}
 }
 
 func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testing.T) {
@@ -22,22 +22,22 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 		worker        string
 		session, want string
 	}{
-		{"resumes", func(*Turn) {}, "claude", "omni", "s-1", ""},
-		{"first turn", func(turn *Turn) { turn.Agent = "reviewer" }, "claude", "omni", "", "first turn"},
-		{"not ended", func(turn *Turn) { turn.Ended = false }, "claude", "omni", "", "its last turn hasn't ended"},
-		{"failed", func(turn *Turn) { turn.Issue = "the session ended without a report" }, "claude", "omni", "", "its last turn failed"},
-		{"resume failed", func(turn *Turn) { turn.Issue, turn.FromSession = "its resumed session didn't start", "s-0" }, "claude", "omni", "", "its resume failed"},
-		{"resumed, then crashed", func(turn *Turn) { turn.Issue, turn.FromSession, turn.Acknowledged = "crashed", "s-0", true }, "claude", "omni", "", "its last turn failed"},
-		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "omni", "", "its last turn was stopped"},
+		{"resumes", func(*Turn) {}, "claude", "tower", "s-1", ""},
+		{"first turn", func(turn *Turn) { turn.Agent = "reviewer" }, "claude", "tower", "", "first turn"},
+		{"not ended", func(turn *Turn) { turn.Ended = false }, "claude", "tower", "", "its last turn hasn't ended"},
+		{"failed", func(turn *Turn) { turn.Issue = "the session ended without a report" }, "claude", "tower", "", "its last turn failed"},
+		{"resume failed", func(turn *Turn) { turn.Issue, turn.FromSession = "its resumed session didn't start", "s-0" }, "claude", "tower", "", "its resume failed"},
+		{"resumed, then crashed", func(turn *Turn) { turn.Issue, turn.FromSession, turn.Acknowledged = "crashed", "s-0", true }, "claude", "tower", "", "its last turn failed"},
+		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "tower", "", "its last turn was stopped"},
 		{"work moved", func(*Turn) {}, "claude", "workstation", "", "the work moved to workstation"},
-		{"another engine", func(*Turn) {}, "codex", "omni", "", "another engine"},
-		{"engine unknown", func(turn *Turn) { turn.Engine = "" }, "claude", "omni", "", "engine unknown"},
-		{"no session id", func(turn *Turn) { turn.EngineSession = "" }, "claude", "omni", "", "no session id"},
+		{"another engine", func(*Turn) {}, "codex", "tower", "", "another engine"},
+		{"engine unknown", func(turn *Turn) { turn.Engine = "" }, "claude", "tower", "", "engine unknown"},
+		{"no session id", func(turn *Turn) { turn.EngineSession = "" }, "claude", "tower", "", "no session id"},
 		{"moved here", func(*Turn) {}, "claude", workers.Local, "", "the work moved to local"},
 		{"moved here, unnamed", func(*Turn) {}, "claude", "", "", "the work moved to local"},
-		{"too big", func(turn *Turn) { turn.Context = 182_000 }, "claude", "omni", "", "context too big (182k tokens)"},
-		{"just over the limit", func(turn *Turn) { turn.Context = 150_500 }, "claude", "omni", "", "context too big (151k tokens)"},
-		{"unknown context", func(turn *Turn) { turn.Context = 0 }, "claude", "omni", "s-1", ""},
+		{"too big", func(turn *Turn) { turn.Context = 182_000 }, "claude", "tower", "", "context too big (182k tokens)"},
+		{"just over the limit", func(turn *Turn) { turn.Context = 150_500 }, "claude", "tower", "", "context too big (151k tokens)"},
+		{"unknown context", func(turn *Turn) { turn.Context = 0 }, "claude", "tower", "s-1", ""},
 	} {
 		turn := resumable()
 		c.change(turn)
@@ -66,7 +66,7 @@ func TestAContextAtTheLimitStillResumes(t *testing.T) {
 		turn := resumable()
 		turn.Context, turn.Split = c.context, c.split
 		task := &Task{Turns: []*Turn{turn}}
-		if session, fresh := task.SessionToResume("engineer", "claude", "omni"); (session != "") != c.resume {
+		if session, fresh := task.SessionToResume("engineer", "claude", "tower"); (session != "") != c.resume {
 			t.Errorf("%s: got %q, fresh because %q; want resume %v", c.name, session, fresh, c.resume)
 		}
 	}
@@ -77,15 +77,15 @@ func TestOnlyTheAgentsOwnLatestTurnCounts(t *testing.T) {
 	older.EngineSession = "s-0"
 	latest := resumable()
 	latest.ID, latest.EngineSession = "turn-3", "s-1"
-	reviewer := &Turn{ID: "turn-2", Agent: "reviewer", Engine: "claude", Worker: "omni", EngineSession: "r-1", Ended: true}
+	reviewer := &Turn{ID: "turn-2", Agent: "reviewer", Engine: "claude", Worker: "tower", EngineSession: "r-1", Ended: true}
 	running := &Turn{ID: "turn-4", Agent: "reviewer", Engine: "codex", Worker: "workstation"} // still open, elsewhere
 	task := &Task{Turns: []*Turn{older, reviewer, latest, running}}
-	if session, fresh := task.SessionToResume("engineer", "claude", "omni"); session != "s-1" {
+	if session, fresh := task.SessionToResume("engineer", "claude", "tower"); session != "s-1" {
 		t.Errorf("the engineer resumes its latest session, past the reviewer's turns: got %q, fresh because %q", session, fresh)
 	}
 
 	latest.EngineSession = ""
-	if session, fresh := task.SessionToResume("engineer", "claude", "omni"); session != "" || fresh != "no session id" {
+	if session, fresh := task.SessionToResume("engineer", "claude", "tower"); session != "" || fresh != "no session id" {
 		t.Errorf("an older session isn't picked when the latest has none: got %q, fresh because %q", session, fresh)
 	}
 }
@@ -96,7 +96,7 @@ func TestOnlyTheAgentsOwnLatestTurnCounts(t *testing.T) {
 func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
-	worker := events.Actor{Kind: events.Worker, ID: "omni"}
+	worker := events.Actor{Kind: events.Worker, ID: "tower"}
 	event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
 		return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
 	}
@@ -110,19 +110,19 @@ func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 		})
 	}
 
-	old := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni"})
+	old := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "tower"})
 	if turn := old.Turn("turn-1"); turn.Engine != "" || turn.FromSession != "" || turn.FreshBecause != "" || turn.Seen != 2 { // the trail as it was then: created, assigned
 		t.Errorf("an old turn.started applies empty values: %+v", turn)
 	}
-	if session, fresh := old.SessionToResume("engineer", "claude", "omni"); session != "" || fresh != "engine unknown" {
+	if session, fresh := old.SessionToResume("engineer", "claude", "tower"); session != "" || fresh != "engine unknown" {
 		t.Errorf("an old turn with no engine starts fresh: got %q, fresh because %q", session, fresh)
 	}
 
-	resumed := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "fromSession": "s-0", "seen": float64(0)})
+	resumed := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "tower", "engine": "claude", "fromSession": "s-0", "seen": float64(0)})
 	if turn := resumed.Turn("turn-1"); turn.Engine != "claude" || turn.FromSession != "s-0" || turn.FreshBecause != "" || turn.Seen != 0 {
 		t.Errorf("a resumed turn keeps its engine and the session it resumed: %+v", turn)
 	}
-	fresh := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "freshBecause": "first turn"})
+	fresh := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "tower", "engine": "claude", "freshBecause": "first turn"})
 	if turn := fresh.Turn("turn-1"); turn.FromSession != "" || turn.FreshBecause != "first turn" {
 		t.Errorf("a fresh turn keeps why: %+v", turn)
 	}
@@ -133,14 +133,14 @@ func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 func TestATurnFromBeforeTheContextWasKeptResumes(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
-	worker := events.Actor{Kind: events.Worker, ID: "omni"}
+	worker := events.Actor{Kind: events.Worker, ID: "tower"}
 	event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
 		return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
 	}
 	task := FromEvents([]events.Event{
 		event(you, events.TaskCreated, "", map[string]any{"title": "t", "coordinator": "tech-lead"}),
 		event(lead, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}),
-		event(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "freshBecause": "first turn"}),
+		event(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "engineer", "hash": "h", "worker": "tower", "engine": "claude", "freshBecause": "first turn"}),
 		event(worker, events.SessionStarted, "turn-1", map[string]any{"engineSession": "s-1"}),
 		event(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "engineer", "report": "done", "tokens": float64(1_000_400),
 			"inputTokens": float64(400), "cacheWriteTokens": float64(60_000), "cacheReadTokens": float64(920_000), "outputTokens": float64(20_000)}),
@@ -148,7 +148,7 @@ func TestATurnFromBeforeTheContextWasKeptResumes(t *testing.T) {
 	if turn := task.Turn("turn-1"); turn.Context != 0 || turn.Split.CacheRead != 920_000 {
 		t.Errorf("context %d, split %+v; want 0 and the split", turn.Context, turn.Split)
 	}
-	if session, fresh := task.SessionToResume("engineer", "claude", "omni"); session != "s-1" {
+	if session, fresh := task.SessionToResume("engineer", "claude", "tower"); session != "s-1" {
 		t.Errorf("got %q, fresh because %q; want s-1", session, fresh)
 	}
 }

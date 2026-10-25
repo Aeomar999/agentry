@@ -2,7 +2,7 @@
 # Node is needed only for `make ui`; the built UI is committed, so
 # `go build` and `go install` work without it.
 
-.PHONY: all ui build workers test package
+.PHONY: all ui build workers test spec package
 
 all: ui build workers
 
@@ -24,6 +24,10 @@ workers:
 test:
 	go vet ./... && go test ./...
 	cd ui && npm run lint
+
+# The spec folder's checks: every scenario tagged, numbered and judged.
+spec:
+	spec/check
 
 # The downloads: a zip for each kind of computer, in release/, with all it
 # needs to run Agentry (Start Agentry opens it in the browser).

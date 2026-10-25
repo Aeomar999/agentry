@@ -96,8 +96,12 @@ func (w *Watchdog) Check(now time.Time) {
 
 func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) {
 	if w.resumeFailed(now, task, turn) {
+		how := "resumed"
+		if turn.Forked {
+			how = "forked"
+		}
 		w.raiseIssue(task.ID, map[string]any{"retryFresh": true, "reason": fmt.Sprintf(
-			"%s's resumed session didn't start (its process exited before taking the prompt); starting it fresh", turn.Agent)})
+			"%s's %s session didn't start (its process exited before taking the prompt); starting it fresh", turn.Agent, how)})
 		return
 	}
 	if problem := w.findProblem(now, task, turn); problem != "" {
@@ -116,9 +120,10 @@ func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) 
 }
 
 // resumeFailed says whether a turn that went on with the agent's last
-// session ended before it took its prompt: the engine couldn't resume it,
-// such as a session it no longer has. One that took its prompt and then
-// exited crashed, which findProblem tells.
+// session, or a fork of it, here or from a sibling story, ended before it
+// took its prompt: the engine couldn't resume it, such as a session it no
+// longer has. One that took its prompt and then exited crashed, which
+// findProblem tells.
 func (w *Watchdog) resumeFailed(now time.Time, task *tasks.Task, turn *tasks.Turn) bool {
 	return turn.FromSession != "" && !turn.Acknowledged && now.Sub(turn.StartedAt) > w.limits.StartGrace && !w.isRunning(task.ID)
 }

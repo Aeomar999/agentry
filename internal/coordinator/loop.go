@@ -20,6 +20,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 	"gitlab.com/dev.chempa/agentry/internal/workers"
+	"gitlab.com/dev.chempa/agentry/internal/workspace"
 	"gitlab.com/dev.chempa/agentry/internal/worktrees"
 )
 
@@ -241,22 +242,44 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	}
 }
 
-// briefFor is the brief for the agent's turn in session: the whole of it
-// for a fresh one, or what has changed since for one that goes on with its
-// last session.
+// briefFor is the brief for the agent's turn in session: what has changed
+// since for one that goes on with its last session; for a fresh one, the
+// whole of it, or the handoff for an agent that checks the work.
 func (l *Loop) briefFor(task *tasks.Task, roster agents.Roster, move Move, session turns.Session) string {
 	shared, _ := l.filesFor(task)
 	agent := move.Agent
 	if session.Resumes() {
 		if agent.Coordinates {
-			return resumedCoordinatorBrief(task, agent, roster, session.Seen, l.familyOf(task), l.machines(), shared, l.state, l.Features)
+			return resumedCoordinatorBrief(task, agent, roster, session.Seen, session.From, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 		}
-		return resumedWorkerBrief(task, agent, roster, move.Handoff, session.Seen, shared)
+		return resumedWorkerBrief(task, agent, roster, move.Handoff, session.Seen, session.From, shared)
 	}
 	if agent.Coordinates {
 		return coordinatorBrief(task, agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 	}
+	if agent.Column == agents.Reviews {
+		return handoffBrief(task, agent, roster, move.Handoff, shared, l.commitsToReview(task))
+	}
 	return workerBrief(task, agent, roster, move.Handoff, shared)
+}
+
+// commitsTimeout is how long the machine the work is on has to list the
+// task branch's commits for a handoff: a brief shouldn't wait on it.
+const commitsTimeout = 10 * time.Second
+
+// commitsToReview is the task branch's commits, newest first, for a
+// checking agent's handoff; none, with a warning, when the machine the
+// work is on can't list them in time. The brief says so and gives the
+// commands instead.
+func (l *Loop) commitsToReview(task *tasks.Task) []workspace.Commit {
+	ctx, cancel := context.WithTimeout(context.Background(), commitsTimeout)
+	defer cancel()
+	commits, err := l.fleet.Of(task.Worktree.Worker).Commits(ctx, workspace.Workspace{Dir: task.Worktree.Path, Base: task.Worktree.Base})
+	if err != nil {
+		slog.Warn("coordinator loop: listing the commits to review", "task", task.ID, "err", err)
+		return nil
+	}
+	return commits
 }
 
 // moveWork takes the task's work from the machine it is on to target: the

@@ -40,6 +40,7 @@ type EditedAgent struct {
 	Coordinates bool   `json:"coordinates"`
 	Color       string `json:"color"`
 	Column      string `json:"column"`
+	Resume      string `json:"resume"` // "" by column, ResumesSession or StartsFresh; old edits have none
 }
 
 // Proposal is the event that edits the team.
@@ -75,7 +76,7 @@ func TeamEditOf(p events.Proposal) (TeamEdit, error) {
 // Edited is a's definition as a team edit carries it, with no Was.
 func (a Agent) Edited() EditedAgent {
 	return EditedAgent{Name: a.Name, Description: a.Description, Prompt: a.Prompt, Engine: a.Engine, Model: a.Model,
-		Profile: a.Profile, Coordinates: a.Coordinates, Color: a.Color, Column: a.Column}
+		Profile: a.Profile, Coordinates: a.Coordinates, Color: a.Color, Column: a.Column, Resume: a.Resume}
 }
 
 // TeamVersion is the version of team as the team panel edits it: a hash of
@@ -138,7 +139,7 @@ func (a Agent) editedTo(e EditedAgent, team string) Agent {
 	definition.Was = ""
 	untouched := a.untouched && a.Edited() == definition
 	a.Name, a.Description, a.Prompt, a.Engine, a.Model = e.Name, e.Description, e.Prompt, e.Engine, e.Model
-	a.Profile, a.Coordinates, a.Color, a.Column = e.Profile, e.Coordinates, e.Color, e.Column
+	a.Profile, a.Coordinates, a.Color, a.Column, a.Resume = e.Profile, e.Coordinates, e.Color, e.Column, e.Resume
 	a.Team, a.untouched = team, untouched
 	return a
 }
@@ -152,7 +153,7 @@ func EditTeam(roster Roster, team, to string, rows []EditedAgent) TeamEdit {
 	plain := make([]Agent, len(rows))
 	for i, row := range rows {
 		plain[i] = Agent{Name: row.Name, Description: row.Description, Prompt: row.Prompt, Engine: row.Engine, Model: row.Model,
-			Profile: row.Profile, Coordinates: row.Coordinates, Color: row.Color, Column: row.Column}
+			Profile: row.Profile, Coordinates: row.Coordinates, Color: row.Color, Column: row.Column, Resume: row.Resume}
 	}
 	to, plain = trimmed(to, plain)
 	edit := TeamEdit{Team: team, To: to}

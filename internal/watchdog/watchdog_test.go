@@ -3,6 +3,7 @@ package watchdog
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,18 +137,25 @@ func TestAResumeThatDidNotStartIsRetriedFresh(t *testing.T) {
 	for _, c := range []struct {
 		name         string
 		fromSession  string
+		more         map[string]any // more of turn.started's data
 		acknowledged bool
 		retry        bool
+		says         string
 	}{
-		{"resumed, never took its prompt", "s-1", false, true},
-		{"fresh", "", false, false},
-		{"resumed, took its prompt", "s-1", true, false},
+		{"resumed, never took its prompt", "s-1", nil, false, true, "engineer's resumed session didn't start"},
+		{"forked, never took its prompt", "s-1", map[string]any{"forked": true}, false, true, "engineer's forked session didn't start"},
+		{"from a sibling, never took its prompt", "s-1", map[string]any{"sessionFrom": "task-2"}, false, true, "engineer's resumed session didn't start"},
+		{"fresh", "", nil, false, false, "process exited in turn-2"},
+		{"resumed, took its prompt", "s-1", nil, true, false, "process exited in turn-2"},
+		{"forked, took its prompt", "s-1", map[string]any{"forked": true}, true, false, "process exited in turn-2"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := newWorld(t)
 			w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
 			w.propose(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
-			w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2", "fromSession": c.fromSession})
+			started := map[string]any{"agent": "engineer", "hash": "h2", "fromSession": c.fromSession}
+			maps.Copy(started, c.more)
+			w.propose(worker, events.TurnStarted, "turn-2", started)
 			if c.acknowledged {
 				w.propose(worker, events.PromptAcknowledged, "turn-2", map[string]any{"hash": "h2"})
 			}
@@ -164,12 +172,8 @@ func TestAResumeThatDidNotStartIsRetriedFresh(t *testing.T) {
 			if retry := raised.Flag("retryFresh"); raised.Type != events.IssueRaised || retry != c.retry {
 				t.Fatalf("last event %s with retryFresh %v, want issue.raised with %v", raised.Type, retry, c.retry)
 			}
-			want := "process exited in turn-2"
-			if c.retry {
-				want = "engineer's resumed session didn't start"
-			}
-			if !strings.Contains(issue, want) {
-				t.Errorf("issue %q, want it to say %q", issue, want)
+			if !strings.Contains(issue, c.says) {
+				t.Errorf("issue %q, want it to say %q", issue, c.says)
 			}
 		})
 	}

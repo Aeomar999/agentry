@@ -1,10 +1,16 @@
-Feature: The user at the page
+Feature: The user
 
   The user is the person at the Agentry page: they describe work in their own words,
   watch it move across the board, answer what the agents ask, and shape epics and
   their stories in Plan. Every scenario here is behaviour that exists on dev today.
 
-  # @USER-01 is the foundation story's stub and is merged in from dev
+  @USER-01 @test
+  Scenario: A new task goes to its team's coordinator
+    Given Agentry runs with its Software team
+    When the user adds a task from the page, with a description in their own words
+    Then the task is shown with the team's coordinator as its coordinator
+    And the path its work took shows exactly 1 handoff, from the user to the coordinator
+    # README.md, First steps; internal/web/api_test.go
 
   @USER-02 @manual
   Scenario: New task opens as a modal from the key n and the New task button

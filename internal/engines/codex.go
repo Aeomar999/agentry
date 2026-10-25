@@ -27,10 +27,14 @@ func (codex) Prepare(s Session) error {
 }
 
 // Launch: hook trust is bypassed as in proof 07; registering trust properly
-// is T-028. `codex resume` takes the same flags, then the session and prompt.
+// is T-028. `codex resume` and `codex fork` take the same flags, then the
+// session and prompt.
 func (codex) Launch(s Session, prompt string) []string {
 	command := []string{"codex"}
-	if s.Resume != "" {
+	switch {
+	case s.Resume != "" && s.Fork:
+		command = append(command, "fork")
+	case s.Resume != "":
 		command = append(command, "resume")
 	}
 	if s.Model != "" {

@@ -3,13 +3,16 @@ package coordinator
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workspace"
 )
 
 // A brief is everything an agent is given for one turn. In a fresh session
@@ -18,7 +21,10 @@ import (
 // last session on the task still has all that, so its brief is what has
 // happened since and what every turn needs anew: its instructions or the
 // decision to make, where the work is and the plan file, which is per turn.
-// Both are made from the same sections.
+// An agent that checks work starts fresh by default, and gets a handoff
+// instead of the trail: the task, the commits to review and the builder's
+// report, with its own earlier findings when it has checked before. All
+// three are made from the same sections.
 
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
@@ -48,15 +54,17 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 
 // resumedCoordinatorBrief is the coordinator's brief for a turn that goes on
 // with its last session, whose brief was made from the trail's first seen
-// steps. The machines online and the epic's stories change without a step
-// on the trail, so it has them as they are now. Of the task's kind, only
-// the epic it is or is a story of: how to split it was in its first brief.
-func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, f family, machines []machine,
-	shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
+// steps; or, when from is another story of the epic, with its session
+// there (see goingOn). The machines online and the epic's stories change
+// without a step on the trail, so it has them as they are now. Of the
+// task's kind, only the epic it is or is a story of: how to split it was
+// in its first brief.
+func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, from string, f family,
+	machines []machine, shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
 	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
-	resumedHeader(&b, coordinator, task)
-	section(&b, "What has happened since your last turn", cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
+	trailHeading := goingOn(&b, coordinator, task, from)
+	section(&b, trailHeading, cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
 		"The last step is the newest. Decide what happens next.")
 	coordinatorWork(&b, task, coordinator, shared)
 	machinesSection(&b, task, coordinator, roster, machines)
@@ -153,17 +161,19 @@ func workerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, ins
 }
 
 // resumedWorkerBrief is the agent's brief for a turn that goes on with its
-// last session, whose brief was made from the trail's first seen steps. The
-// newest step, the handoff giving these instructions, is left to them.
-func resumedWorkerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, seen int,
+// last session, whose brief was made from the trail's first seen steps; or,
+// when from is another story of the epic, with its session there (see
+// goingOn). The newest step, the handoff giving these instructions, is
+// left to them.
+func resumedWorkerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, seen int, from string,
 	shared []sharedfiles.File) string {
 	steps := since(task.Trail, seen)
 	if last := len(steps) - 1; last >= 0 && steps[last].To == agent.Name {
 		steps = steps[:last]
 	}
 	var b strings.Builder
-	resumedHeader(&b, agent, task)
-	section(&b, "What has happened since your last turn", cmp.Or(trailText(steps, seen), "Nothing but your new instructions."))
+	trailHeading := goingOn(&b, agent, task, from)
+	section(&b, trailHeading, cmp.Or(trailText(steps, seen), "Nothing but your new instructions."))
 	workerWork(&b, task, agent, roster, instructions, shared)
 	keepYourNotes(&b)
 	finish(&b, agent)
@@ -180,6 +190,201 @@ func workerWork(b *strings.Builder, task *tasks.Task, agent agents.Agent, roster
 	section(b, "Where the work is", whereText(task))
 	section(b, "Shared files", sharedText(task, shared, false))
 	plan(b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
+}
+
+// handoffBrief is the brief for an agent that checks work, in a fresh
+// session: what a review needs and nothing of the trail. It has the task,
+// the instructions and the work's place as workerBrief does; then the
+// commits to review, as a range and the files it touches, with the git
+// commands that show them, never the diff itself; the builder's last
+// report; and, when the agent has checked this task before, its own
+// earlier findings and what changed since. commits are the task branch's,
+// newest first, as the machine the work is on lists them; nil when it
+// couldn't.
+func handoffBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, shared []sharedfiles.File,
+	commits []workspace.Commit) string {
+	var b strings.Builder
+	header(&b, agent, task)
+	knowledge(&b, agent)
+	section(&b, "The task", taskText(task))
+	workerWork(&b, task, agent, roster, instructions, shared)
+	section(&b, "What to review", reviewText(task.Worktree.Base, commits))
+	section(&b, "The builder's last report", builderReport(task, roster))
+	if last := lastReported(task, agent.Name); last != nil {
+		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+quoted(last.Report))
+		section(&b, "Changed since your last verdict", changedSince(commits, last.StartedAt))
+	}
+	finish(&b, agent)
+	return b.String()
+}
+
+// lastReported is the agent's latest ended turn on the task that left a
+// report; nil when none did. A turn cut short or stopped leaves none, and
+// a handoff that quoted it would read as if the range had been checked.
+func lastReported(task *tasks.Task, agent string) *tasks.Turn {
+	for i := len(task.Turns) - 1; i >= 0; i-- {
+		if turn := task.Turns[i]; turn.Agent == agent && reported(turn) {
+			return turn
+		}
+	}
+	return nil
+}
+
+// reported says whether the turn ended with a report.
+func reported(turn *tasks.Turn) bool {
+	return turn.Ended && strings.TrimSpace(turn.Report) != ""
+}
+
+// longestReport caps a report quoted whole in a handoff: a review needs
+// all of a builder's report, a runaway one still shouldn't swamp the brief.
+const longestReport = 3 * longestStep
+
+// quoted is a report as a handoff quotes it: capped at longestReport, with
+// its Markdown headings two levels down. Agents head their reports
+// themselves ("## Report for the coordinator"), and quoted as they are,
+// those read as sections of the brief, so where the report ends is lost.
+// Headings inside fenced code are code and stay as they are.
+func quoted(report string) string {
+	lines := strings.Split(tasks.Shorten(report, longestReport), "\n")
+	fenced := false
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(strings.TrimSpace(line), "```"):
+			fenced = !fenced
+		case !fenced && isHeading(line):
+			lines[i] = strings.Repeat("#", min(headingLevel(line)+2, 6)) + line[headingLevel(line):]
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// isHeading says whether the line is a Markdown heading: one to six "#"
+// then a space, or nothing more.
+func isHeading(line string) bool {
+	level := headingLevel(line)
+	return level >= 1 && level <= 6 && (len(line) == level || line[level] == ' ')
+}
+
+// headingLevel counts the "#" the line starts with.
+func headingLevel(line string) int {
+	return len(line) - len(strings.TrimLeft(line, "#"))
+}
+
+// mostFilesListed is how many touched files a handoff lists by name;
+// beyond that it gives the count and the command that lists them.
+const mostFilesListed = 40
+
+// reviewText is the range to review, the files it touches and the git
+// commands that show them. With no commits listed it says so and still
+// gives the commands, so the agent can look for itself.
+func reviewText(base string, commits []workspace.Commit) string {
+	var b strings.Builder
+	if len(commits) == 0 {
+		b.WriteString("Nothing is listed here: the branch has no commits since " + shortHash(base) + " yet, or Agentry couldn't read them. " +
+			"Check for yourself with the commands below; if there is nothing to review, say so in your report.\n\n")
+	} else {
+		fmt.Fprintf(&b, "The commit range is %s..%s: %s on the branch since it started.\n\n%s\n\n",
+			shortHash(base), shortHash(commits[0].Hash), count(len(commits), "commit"), filesText(touched(commits), base))
+	}
+	b.WriteString("Read the change with git, in the worktree; this brief never carries the diff itself:\n\n" +
+		"    git log --oneline " + base + "..HEAD\n" +
+		"    git diff " + base + "..HEAD\n" +
+		"    git diff " + base + "..HEAD -- <file>\n")
+	return b.String()
+}
+
+// touched are the files the commits change, each once, sorted by path,
+// with its change in the newest commit that touched it.
+func touched(commits []workspace.Commit) []workspace.File {
+	seen := map[string]bool{}
+	var files []workspace.File
+	for _, commit := range commits { // newest first
+		for _, f := range commit.Files {
+			if !seen[f.Path] {
+				seen[f.Path] = true
+				files = append(files, f)
+			}
+		}
+	}
+	slices.SortFunc(files, func(a, b workspace.File) int { return strings.Compare(a.Path, b.Path) })
+	return files
+}
+
+// filesText lists the files by name while there are few enough to read;
+// past that it gives the count and the command that lists them.
+func filesText(files []workspace.File, base string) string {
+	if len(files) > mostFilesListed {
+		return fmt.Sprintf("It touches %s; list them with `git diff --stat %s..HEAD`.", count(len(files), "file"), base)
+	}
+	if len(files) == 0 {
+		return "It touches no files."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "It touches %s:\n", count(len(files), "file"))
+	for _, f := range files {
+		fmt.Fprintf(&b, "- %s %s\n", cmp.Or(string(f.Change), "-"), f.Path)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// builderReport is the latest report on the task by an agent that builds or
+// ships the work, with who wrote it; a note when there is none yet. When
+// that agent's turn since was cut short, a line says so: the reviewer then
+// knows the report may not be the last word on the branch.
+func builderReport(task *tasks.Task, roster agents.Roster) string {
+	for i := len(task.Turns) - 1; i >= 0; i-- {
+		turn := task.Turns[i]
+		agent, ok := roster.Get(turn.Agent)
+		if !reported(turn) || !ok || agent.Coordinates || agent.Column == agents.Reviews {
+			continue
+		}
+		text := "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + quoted(turn.Report)
+		if latest := task.LastTurnOf(turn.Agent); latest.ID != turn.ID && latest.Ended && latest.Issue != "" {
+			text += "\n\nIts latest turn, " + latest.ID + ", was cut short: " + latest.Issue
+		}
+		return text
+	}
+	return "No agent that builds the work has reported on this task yet."
+}
+
+// changedSince is what the branch gained after the agent's last turn began,
+// at since: the newer commits, the files they touch, and the command that
+// shows them together. Commit times are git's committer dates, so after a
+// rebase every commit looks new; that errs towards reviewing more.
+func changedSince(commits []workspace.Commit, since time.Time) string {
+	var newer []workspace.Commit
+	for _, commit := range commits { // newest first
+		if commit.At.After(since) {
+			newer = append(newer, commit)
+		}
+	}
+	if len(newer) == 0 {
+		return "No commits since your last turn. The coordinator may still have asked you to check again; your instructions say what."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s since your last turn, newest first:\n", count(len(newer), "commit"))
+	for _, commit := range newer {
+		fmt.Fprintf(&b, "- %s %s\n", shortHash(commit.Hash), commit.Subject)
+	}
+	oldest := newer[len(newer)-1].Hash
+	fmt.Fprintf(&b, "\n%s\n\nSee them together with `git diff %s^..HEAD`.", filesText(touched(newer), oldest+"^"), oldest)
+	return b.String()
+}
+
+// shortHash is the hash as git shows it in a one-line log.
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
+// count is "1 commit" or "3 commits".
+func count(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // finish is how the agent ends its turn: with a report, and a reviewer's
@@ -216,10 +421,10 @@ func hasCheckers(roster agents.Roster, team string) bool {
 	return false
 }
 
-// keepYourNotes reminds an agent going on with its session of the notes its
-// first brief asked it to keep.
+// keepYourNotes reminds an agent going on with its session of the notes the
+// session's first brief asked it to keep, on this task or a sibling story.
 func keepYourNotes(b *strings.Builder) {
-	section(b, "Your notes", "Before you finish, update your notes in "+machines.KnowledgeFile+", as your first brief on this task said.")
+	section(b, "Your notes", "Before you finish, update your notes in "+machines.KnowledgeFile+", as the first brief of this session said.")
 }
 
 // knowledge is the agent's notes from earlier tasks, and how to keep them.
@@ -346,6 +551,25 @@ func resumedHeader(b *strings.Builder, agent agents.Agent, task *tasks.Task) {
 	b.WriteString("This turn goes on from your last turn on this task, in the same session. You still have what you knew " +
 		"then: your role, your notes, the task, its earlier trail, the files you read and the work you did. This brief is " +
 		"only what has happened since and what this turn needs.\n\n")
+}
+
+// goingOn begins a resumed brief and is the heading of its trail. A session
+// from another story, from, knows that story's task, worktree and trail,
+// not this one's: so it says this is a new task and what it is, and the
+// trail, from its start (seen is 0), is this task's own.
+func goingOn(b *strings.Builder, agent agents.Agent, task *tasks.Task, from string) (trailHeading string) {
+	if from == "" || from == task.ID {
+		resumedHeader(b, agent, task)
+		return "What has happened since your last turn"
+	}
+	fmt.Fprintf(b, "# Agentry brief: %s, %s, %s, going on from %s\n\n", agent.Name, task.ID, task.NextTurnID(), from)
+	fmt.Fprintf(b, "This turn goes on with your session from %s, another story of the same epic. You still have what you knew "+
+		"there: your role, your notes, and the code you read. But this is a new task, %s, with its own worktree and branch, "+
+		"below. The files you read in that session may differ on this branch, so read them again before you edit them. "+
+		"Nothing of %s's trail or instructions carries over: this brief is what this task is and what has happened on it.\n\n",
+		from, task.ID, from)
+	section(b, "The task", taskText(task))
+	return "What has happened on this task so far"
 }
 
 func section(b *strings.Builder, title, body string) {

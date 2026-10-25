@@ -70,6 +70,9 @@ func (claude) Launch(s Session, prompt string) []string {
 	}
 	if s.Resume != "" {
 		command = append(command, "--resume", s.Resume)
+		if s.Fork {
+			command = append(command, "--fork-session")
+		}
 	}
 	return append(command, "--settings", claudeSettings(s), "--permission-mode", "bypassPermissions", prompt)
 }
