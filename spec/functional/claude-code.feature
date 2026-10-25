@@ -317,19 +317,24 @@ Feature: Agentry from Claude Code
   Scenario: start takes tasks out of the Backlog
     Given 2 tasks waiting in the user's Backlog
     When Claude calls start with both ids
-    Then each task is directed to In progress: yes
+    Then a task named is directed to In progress: yes
     And the reply names the 2 as started, epics as epic-N: yes
-    # not under test, checked by hand: the reply says they are on the Tasks board now (internal/mcp/tools.go line 406)
+    # not under test, checked by hand: each of the 2 is directed to In progress, and the reply says they are on the Tasks board now (internal/mcp/tools.go line 406)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN (the call, for epic-2); the reply: TestAnswersNameAnEpicAsEpicN
 
-  @CC-31 @test
+  @CC-31 @manual
   Scenario: set_priority orders tasks among themselves
     Given 2 tasks with ranks of their own
     When Claude calls set_priority with their ids in the order wanted
     Then the first task named is sent the lowest of the 2 ranks they held between them: yes
     # not under test, checked by hand: the second gets the other rank, and no other task moves (internal/mcp/tools.go lines 387 to 392)
     And the reply says In this order now, naming the 2 as task-N or epic-N: yes
-    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN calls it, but its fixture already holds the asserted rank
+    # (epic-3 at -3, the lower of the 2), so it passes with no reordering; the reply: TestAnswersNameAnEpicAsEpicN
+    # Steps: take 2 tasks A and B and give them ranks with PUT /api/tasks/A/rank {"rank": -1} and
+    # PUT /api/tasks/B/rank {"rank": -3}; call set_priority with {"tasks": ["A", "B"]}, A first though it ranks lower;
+    # the reply reads In this order now: A, B. Then GET /api/tasks and read each task's rank field: A holds -3 and B -1,
+    # every other task's rank is as it was, and on the Tasks page A now sits above B in its column.
 
   @CC-32 @test
   Scenario: file_under_epic files a task under an epic, moves it, or takes it out
