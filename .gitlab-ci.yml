@@ -27,6 +27,7 @@ check:
   # The tests run real sessions (each in a pty, kept by agentry itself) and git worktrees.
   script:
     - 'test -f internal/web/dist/index.html || { echo "The UI is not built. Run make ui and commit internal/web/dist."; exit 1; }'
+    - spec/check
     - go vet ./...
     - go test ./...
   rules:

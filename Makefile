@@ -22,6 +22,7 @@ workers:
 	done
 
 test:
+	spec/check
 	go vet ./... && go test ./...
 	cd ui && npm run lint
 
