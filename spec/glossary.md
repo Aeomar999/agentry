@@ -34,7 +34,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **coordinator**: an ordinary agent, one per team, that reads a task, names it, hands each step to one of its team's agents, reads every report and issue, and ends each turn with a decision; it never starts anyone itself.
 - **Coordinator tab**: the chat with a task's coordinator on its page; what the user sends stops the turn in progress so the coordinator reads it at once.
 - **credential**: what a worker or a connected machine proves itself with after joining with a code; the machine keeps it and the log holds only its hash.
-- **critic**: a checker on the Research team, and the design-critic on the Design team, whose report ends with a verdict (internal/agents/defaults).
+- **critic**: a checker that ends its report with `Verdict: approved` or `Verdict: changes needed`, as the reviewer, tester, fact-checker and network checkers do (README.md, Checks).
 - **data folder**: `.agentry` in the user's home folder, or where `-data` points: the log, the settings, the tokens, the CA and the tasks' worktrees.
 - **decision**: what a coordinator's reply ends with, in a fixed format the loop parses: hand the task to an agent, ask the user, move it, or say it is done; also the policy's decision on one action, allow, ask or deny (internal/coordinator).
 - **default repo**: the repo new tasks work in unless the task names another: `-repo`, or the git repo `Agentry` in the user's home folder, made on first start.
