@@ -31,17 +31,15 @@ Feature: Security
   Scenario: A gate hook blocks on any failure and a report hook never blocks
     Given Agentry prepares an engine's hook settings for a task
     When the settings are written
-    Then every gate event's command ends with "|| exit 2"
-    And every report event's command ends with "|| true"
-    And the gate hook's timeout is exactly 1800 seconds
+    Then the PreToolUse gate's command ends with "|| exit 2", so the hook blocks the call on every failure
+    And the Stop report's command ends with "|| true", so a report never blocks
     # PLAN.md T-008; internal/engines/engines_test.go
 
   @SEC-05 @test
   Scenario: The hook gives up before the engine would kill it
     Given the engine lets a gate hook run for 1800 seconds
     When a turn's environment is prepared
-    Then the hook's own deadline is exactly 1790 seconds
-    And the deadline is 10 seconds shorter than the engine's timeout, so the hook fails closed and never open
+    Then the hook's own deadline is more than 0 and less than 1800 seconds, so the hook fails closed and never open
     # PLAN.md T-009; internal/turns/turns_test.go
 
   @SEC-06 @test
@@ -83,8 +81,8 @@ Feature: Security
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
     When the agent calls a tool Agentry has no rule for
     Then the call is asked, by the profile's otherwise
-    And every verdict names its profile, its rule and the rule's place, counted from 1
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go
+    And every verdict names its profile, its rule and the rule's place, rules counted from 1, 0 for otherwise and Agentry's own files
+    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go; internal/policy/effective_test.go
 
   @SEC-11 @test
   Scenario: A shell command Agentry cannot parse gets the profile's unreadable
@@ -96,7 +94,7 @@ Feature: Security
   @SEC-12 @test
   Scenario: As shipped, every agent allows everything but Agentry's own files
     Given the shipped policy as written, with use_for_everyone set to allow-everything
-    When any agent pushes to dev with force, reads .env or installs a package
+    When any agent pushes to main with force, pushes to dev, reads .env, installs a package or writes a file outside the worktree
     Then the call is allowed
     And every verdict's profile is allow-everything, whatever the agent's own
     # README.md, The policy; PLAN.md T-069; internal/policy/default_test.go
@@ -108,7 +106,7 @@ Feature: Security
     Then the call is denied
     And the rule is "Agentry's own files are off limits", the same under every profile
     And a command whose text names the hook token's environment variable is denied too
-    # README.md, The policy; PLAN.md T-040; internal/policy/default_test.go
+    # README.md, The policy; PLAN.md T-040; internal/policy/default_test.go; cmd/agentry/jobs_test.go for features.toml, protected by cmd/agentry/policy.go with the hook, desk and helper token files
 
   @SEC-14 @test
   Scenario: Under developer, shell work inside the workspace is allowed
@@ -141,10 +139,10 @@ Feature: Security
   @SEC-17 @test
   Scenario: Under developer, rm -rf is denied in every spelling
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
-    When it runs rm -rf in any of its 7 spellings, alone or hidden in a chain after another command
+    When it runs rm -rf alone, or hidden in a chain after another command
     Then the call is denied
-    And the rule is "never rm -rf"
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go
+    And the rule is "never rm -rf", whose 7 spellings are listed in the shipped policy's default.toml
+    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go asserts the 2 forms; internal/policy/default.toml lists the 7 spellings
 
   @SEC-18 @test
   Scenario: Under developer, a push to main or master is denied
@@ -196,8 +194,8 @@ Feature: Security
     Then every call is denied
     And the edit is denied by the rule "this agent changes nothing"
     And the commit and the push are denied by the rule "never commits or changes branches"
-    And the redirect and tee are denied by the rule "writes no files from the shell"
-    And sort -o, find -delete and gofmt -w are denied by the rule "runs nothing that changes files"
+    And the redirect is denied by the rule "writes no files from the shell"
+    And tee, sort -o, find -delete and gofmt -w are denied by the rule "runs nothing that changes files"
     And eslint --fix and jest --coverage are denied by the rule "test and lint tools write no files"
     # README.md, The policy; PLAN.md T-041; internal/policy/default_test.go
 
@@ -298,13 +296,13 @@ Feature: Security
     And the command runs
     # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go
 
-  @SEC-36 @test
+  @SEC-36 @manual
   Scenario: The user's denial stops the asked command
-    Given an asked action waiting in Needs you while the hook waits
-    When the user denies it
-    Then the agent is told "Agentry: you denied: " followed by the user's reason, exactly once
-    And the command does not run
-    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go
+    Given a task whose agent runs under the developer profile, and the agent runs a command the policy asks about, such as a git push, so the action waits in Needs you while the hook waits
+    When the user opens Needs you, writes a reason and denies the action
+    Then the agent's terminal shows "Agentry: you denied: " followed by the user's reason, exactly once
+    And the command does not run, so the branch is not pushed
+    # README.md, What happens to one action; PLAN.md T-013; the text is internal/hooks/handler.go's reply on action.denied; no test asserts it while the hook waits
 
   @SEC-37 @test
   Scenario: A late approval lets the same command through once, for the agent that asked
@@ -320,7 +318,7 @@ Feature: Security
   Scenario: A broken policy file never replaces a working one
     Given a working policy.toml in force
     When the file is saved with a decision word Agentry does not know
-    Then the file is refused with the line and the unknown word
+    Then the file is refused with a message that names the unknown word
     And the policy before it stays in force, with no rule changed
     And the same broken file is reported exactly once, not on every watch
     # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go
@@ -432,11 +430,11 @@ Feature: Security
   Scenario: The sign-in cookie lasts a year and is HttpOnly
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
-    Then its name is agentry_ui, its path is /, and it lasts exactly 365 days
+    Then its name is agentry_ui, its path is /, and it lasts at least 300 days, 365 as the code sets it
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go; cmd/agentry/https_test.go; internal/web/api_test.go
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go asserts at least 300 days, internal/web/server.go setUICookie sets 365; cmd/agentry/https_test.go; internal/web/api_test.go
 
   @SEC-53 @test
   Scenario: A sign-in code is 8 characters and signs another device in
@@ -545,3 +543,17 @@ Feature: Security
     Then the other device gets a 308 redirect to https
     And this machine gets the page as it is, with no redirect
     # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go
+
+  @SEC-65 @manual
+  Scenario: The gate hook's timeout is 1800 seconds in the engine's settings
+    Given Agentry prepares an engine's hook settings for a task
+    When the user opens the written settings file and finds the PreToolUse hook
+    Then its timeout is exactly 1800 seconds
+    # PLAN.md T-008; internal/engines/engine.go GateTimeoutSeconds, written by internal/engines/hook_config.go gateHook; no test asserts the number
+
+  @SEC-66 @manual
+  Scenario: The hook's deadline is 10 seconds shorter than the engine's timeout
+    Given a turn's environment prepared for an agent
+    When the user reads the hook deadline variable in that environment
+    Then its value is exactly 1790 seconds
+    # PLAN.md T-009; internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number

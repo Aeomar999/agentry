@@ -27,19 +27,23 @@ Feature: Limits
 
   @LIM-04 @test
   Scenario: On the API and the MCP tool, 0 takes the default and -1 is no limit
-    Given a server whose default budget is 5,000,000 tokens and default turn limit is 24
-    When tasks are created with budget 0 and maxTurns 0, with budget -1 and maxTurns -1, and with budget 2,000,000
-    Then the first task gets a budget of 5,000,000 and 24 turns
-    And the second task has no budget and no turn limit
-    And the third task's budget is 2,000,000
-    # README.md, Use it from Claude Code; PLAN.md T-064; internal/httpapi/httpapi_test.go; internal/web/api_test.go
+    Given a server whose default budget is 5,000,000 tokens and default turn limit is 2
+    When tasks are created with no limits given, with budget 200,000 and maxTurns 50, with budget -1 and maxTurns -1, and with budget 0 and maxTurns 0
+    Then the first and the fourth task get a budget of 5,000,000 and 2 turns
+    And the second task gets a budget of 200,000 and 50 turns
+    And the third task has no budget and no turn limit
+    And a task created with maxTurns -5 is refused with HTTP 409
+    And the config endpoint shows a budget of 5,000,000 and 2 turns
+    # README.md, Use it from Claude Code; PLAN.md T-064; internal/web/api_test.go
 
   @LIM-05 @test
   Scenario: A task that comes from another takes that task's limits
-    Given an epic with a budget of 1,000,000 tokens and 6 turns, and the server's defaults of 5,000,000 and 24
-    When the epic is split into stories, and a task is created on its own with no limits given
-    Then each story has a budget of 1,000,000 and 6 turns, the same as its epic
-    And the task on its own takes the defaults, 5,000,000 tokens and 24 turns
+    Given the server's defaults of 5,000,000 tokens and 24 turns, a task with a budget of 700 tokens and 3 turns, and a task with no limits
+    When a new task takes its limits from the first task, another from the unlimited task, and a third from no task
+    Then the one from the first task has a budget of 700 and 3 turns, the same as its source
+    And the one from the unlimited task has no budget and no turn limit
+    And the one from no task takes the defaults, 5,000,000 tokens and 24 turns
+    And with unlimited defaults, the one from no task has no budget and no turn limit
     # README.md, Use it; PLAN.md T-080; internal/tasks/limits_test.go
 
   @LIM-06 @test
@@ -57,7 +61,6 @@ Feature: Limits
     Then the task is shown in Needs you
     And the question is "This task has had 24 of its 24 turns without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on."
     And after the user's answer the count of turns since the answer is 0 and the coordinator carries on
-    And a task from a log written before each task had its own limit gets 24
     # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go
 
   @LIM-08 @test
@@ -117,7 +120,7 @@ Feature: Limits
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
     And after a turn that ends normally, or the user's answer, the count of issues in a row is 0
-    # README.md, How a task moves; PLAN.md T-032; internal/coordinator/next_test.go; internal/tasks/limited_test.go
+    # README.md, How a task moves; PLAN.md T-032; internal/coordinator/next_test.go; internal/tasks/retry_fresh_test.go for the retry
 
   @LIM-15 @test
   Scenario: Done tasks are archived after 30 days unless the flag says otherwise
@@ -183,11 +186,11 @@ Feature: Limits
 
   @LIM-22 @test
   Scenario: A live terminal is sized between 20 by 5 and 500 by 200
-    Given a task's session that starts at 120 columns by 36 rows
-    When a viewer asks for 600 columns by 1 row, and another for 10 columns by 300 rows
-    Then the first viewer gets 500 columns by 5 rows
-    And the second viewer gets 20 columns by 200 rows
-    # README.md, Use it; PLAN.md T-018; internal/terminal/terminal_test.go
+    Given a task's session with a viewer in control
+    When the viewer in control asks for 9999 columns by 1 row
+    Then every viewer sees the session sized at 500 columns by 5 rows
+    And the bounds are 20 to 500 columns and 5 to 200 rows
+    # README.md, Use it; PLAN.md T-018; internal/terminal/terminal_test.go asserts the clamp to 500 by 5; the bounds are internal/terminal/viewers.go
 
   @LIM-23 @manual
   Scenario: A viewer too slow for the live terminal is disconnected
@@ -239,7 +242,7 @@ Feature: Limits
     Given a turn is open and the watchdog ticks every second
     When the watchdog measures the turn
     Then a process not up 3 seconds after the start is an issue
-    And a prompt not echoed after 60 seconds is an issue
+    And a prompt not echoed after 60 seconds puts the task in Needs you with "hasn't received its prompt after 1m0s", so the user opens its terminal
     And no event at all for 10 minutes is a stall, unless the turn waits for the user
     And one approved tool call with no result after 20 minutes is an issue
     And the same command requested 5 times in a row is an issue
