@@ -997,3 +997,809 @@ Feature: The user at the page
     Given task-5 with a worktree
     When the user clicks Workspace
     Then exactly 1 new browser tab opens at /tasks/task-5/workspace
+
+  @USER-81 @manual
+  Scenario: Ideas is in the sidebar under Work, with the count of open ideas
+    # the Work section, Tasks then Plan, then each feature's item with its badge: ui/src/components/organisms/Sidebar.tsx lines 14 to 22 and 65 to 77
+    # the Ideas item: ui/src/features/ideas/index.tsx line 10; its badge counts the open ideas: internal/ideas/routes_test.go TestIdeasBadgeCountsOpenIdeas
+    # the page header: ui/src/features/ideas/IdeasPage.tsx lines 64 to 66
+    Given a Visionaries team and 2 open ideas
+    When the sidebar is shown
+    Then Work lists exactly 3 items in order: Tasks, Plan, Ideas
+    And the Ideas item carries the count 2, and Tasks the count of tasks that need you
+    When the user opens Ideas
+    Then the page is titled "Ideas" and exactly this line is shown under it: "Features the Visionaries suggest, from sessions on a theme or a question. Accept one to make it a task in your Backlog, or accept and start it."
+    And the header shows exactly 1 button, "Ask the visionaries"
+
+  @USER-82 @test
+  Scenario: Open ideas are grouped by the session that suggested them, newest session first
+    # internal/ideas/routes_test.go TestIdeasListNewestSessionFirst
+    # the groups on the page: ui/src/features/ideas/IdeasPage.tsx lines 106 to 124 and 304 to 312, sessionsOf
+    Given task-1, an older session in one repo, and task-2, a newer session in another
+    And task-2 suggested an idea, then task-1 one, then task-2 another
+    When the ideas are read
+    Then they come in exactly the order task-2's second, task-2's first, task-1's
+    And each is open, with an empty backedBy and no decidedAt
+    When one repo's ideas are read with ?repo=
+    Then exactly 1 idea comes back, task-1's
+    When a repo with no ideas is read
+    Then the list is empty
+
+  @USER-83 @manual
+  Scenario: An idea's card: the problem, the proposal, why now, the size, the risks and who backed or doubted it
+    # ui/src/features/ideas/IdeaCard.tsx lines 25 and 26, the badges; lines 31 to 37, the parts; line 39, Not auto-accepted; lines 41 to 55, the buttons and links; line 97, "no one"
+    # the sizes S, M and L read small, medium and large: ui/src/features/ideas/IdeaCard.tsx line 13
+    # README.md, Ideas
+    Given an open idea of size M, backed by product-strategist and technologist, doubted by skeptic, that follows up epic-7 and was suggested by task-12
+    When its card is shown
+    Then the title is shown with the badge "medium", and the badge "epic" only when the idea suggests an epic
+    And exactly 4 parts are shown in order, "Problem", "Proposal", "Why now" and "Risks", a part with no text hidden
+    And "Backed by" lists exactly 2 agents and "Doubted by" exactly 1; with nobody it reads "no one"
+    And the line "Not auto-accepted: doubted by skeptic" is shown
+    And the foot shows Accept, Dismiss, "follows up epic-7" and "from task-12", each a link to the task
+
+  @USER-84 @test
+  Scenario: Accept makes a task or an epic in the idea's repo, in your Backlog, with your note
+    # internal/ideas/ideas_test.go TestAcceptMakesABacklogTaskInTheIdeasRepo and TestAnIdeaIsAcceptedOrDismissedOnce; internal/ideas/routes_test.go TestYouAcceptAnIdeaOnce
+    # README.md, Ideas
+    Given an open idea "Search the board" in a repo, suggested as a task
+    When the user accepts it as an epic with the note "Yes, soon"
+    Then exactly 1 task is made, kind epic, parked in backlog, in the idea's repo, for the coordinator tech-lead
+    And its description names each of the idea's id, its title "Search the board", its proposal and the note "Yes, soon"
+    And the idea is accepted, became that task, with the note "Yes, soon" kept
+    And the reply is exactly task-2, column backlog, kind epic, accepted true
+    When the user accepts it again
+    Then it is refused with 409 "accepted already"
+    When the user dismisses it instead
+    Then it is refused with 409
+
+  @USER-85 @manual
+  Scenario: The Accept dialog: task or epic, the note, the token budget and where the task went
+    # ui/src/features/ideas/IdeaDialogs.tsx line 63, the title; lines 95 to 109, Make it; line 110, Note; lines 113 to 127, Token budget; lines 130 to 139, the buttons
+    # what was made: lines 64 to 75 and 176 to 191, placeOf; the toast: line 53
+    # the budget preset to the epic's for an idea that follows one up, else the server's: lines 160 to 171, untouchedBudget
+    Given an open idea "Dark mode" that follows up epic-7, whose budget is 2,000,000 tokens
+    When the user clicks Accept on its card
+    Then a dialog "Accept “Dark mode”" is shown with "Make it" offering exactly 2 choices, "A task" and "An epic", the suggested one pressed
+    And the hint shown for a task is exactly "The session suggests one task: one change, on one branch."
+    And "Note" is optional, "Kept with the idea, in its history."
+    And "Token budget" is preset to exactly 2,000,000, the hint starting "From epic-7."
+    And exactly 3 buttons are shown: "Accept as a task", "Accept and start" and Cancel
+    When the user clicks "Accept as a task"
+    Then the dialog reads "Made task-N from it. In your Backlog until you start it." with only a Close button, the task linked
+    And a toast "Made task-N from the idea" is shown once
+    Given the task was made but the idea not marked accepted
+    Then the banner "The idea wasn't marked accepted" is shown with the server's reason
+
+  @USER-86 @test
+  Scenario: Accept and start makes the task In progress, with the budget you give
+    # internal/ideas/routes_test.go TestYouAcceptAndStartAnIdea and TestATaskFromAnIdeaYouAcceptTakesTheServersLimits
+    # internal/ideas/ideas_test.go TestAcceptAndStartMakesATaskOutOfTheBacklog and TestAgentryCantAcceptAndStart
+    # 5,000,000 tokens and 12 turns are the test server's limits: internal/ideas/routes_test.go line 256
+    Given a server whose defaults are 5,000,000 tokens and 12 turns, and open ideas to accept
+    When the user accepts 1 with start and a budget of 700
+    Then the task is made In progress, not parked, with a budget of exactly 700 and the server's 12 turns
+    When the user accepts 1 with start and no budget
+    Then its budget is exactly 5,000,000
+    When the user accepts 1 with start and a budget of -1
+    Then its budget is 0, which is no limit
+    When the user accepts 1 without start and a budget of 0
+    Then the task is parked in backlog with the budget 5,000,000
+    When an accept sends start as "yes" or 1, or a budget of -2 or "lots"
+    Then each is refused with 400 and no task is made
+    And every accepted idea's becameColumn is the column its task is in: in-progress or backlog
+    Given Agentry accepting an agreed idea for you
+    Then it never starts the task: an accept with start is refused and nothing is made
+
+  @USER-87 @test
+  Scenario: An idea that looks like an open task makes none until you say anyway
+    # internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
+    # ui/src/features/ideas/IdeaDialogs.test.tsx "shows the open task an idea looks like, and makes another only when you say anyway" and "Cancel leaves the idea open, sending nothing more"
+    # the titles share more than half their words, past the filler words: internal/ideas/duplicate.go line 121, SameTitleAbove 0.5
+    # the banner and the buttons: ui/src/features/ideas/IdeaDialogs.tsx lines 76 to 92
+    Given the idea "Make a ship the user chose actually push, and count it shipped only after the push" accepted as task-2
+    And the open idea "Make a ship the user chose push, and count it shipped only when it pushed" in the same repo
+    When the user accepts the second
+    Then it is refused with 409 "looks like the open task task-2", the body naming task-2, its title and its column backlog
+    And nothing is written to the log
+    And the dialog shows the banner "It looks like an open task" with a link to task-2 and reads "Nothing was made. Make another task from the idea anyway, or cancel to leave the idea open."
+    When the user clicks "Make another anyway"
+    Then exactly 1 more request is sent, with anyway true, and task-3 is made in the Backlog
+    When the user clicks Cancel instead
+    Then the dialog closes and nothing more is sent: the idea stays open
+
+  @USER-88 @test
+  Scenario: Dismiss puts the idea in the history with your reason
+    # internal/ideas/routes_test.go TestYouDismissAnIdea and TestAnUnknownIdeaIsNotFound; internal/ideas/ideas_test.go TestDismissKeepsYourNote
+    # the dialog "Dismiss “<title>”" with Reason, Dismiss and Keep, and the toast "Dismissed “<title>”" with "It is in the history.": ui/src/features/ideas/IdeaDialogs.tsx lines 205 to 229
+    Given an open idea "Dark mode"
+    When the user dismisses it with the note " The OS does it "
+    Then the idea is dismissed with exactly the note "The OS does it" and a decidedAt
+    When the user accepts it afterwards
+    Then it is refused with 409
+    When an idea that does not exist, or a task's id, is accepted or dismissed
+    Then each is refused with 404 "no such idea"
+
+  @USER-89 @manual
+  Scenario: The History panel, and the page with every idea decided
+    # ui/src/features/ideas/IdeasPage.tsx lines 86 to 104, the empty states; lines 137 to 145, History; lines 274 to 301, a row
+    # README.md, Ideas: the history, "Auto-accepted" with its note on hover
+    Given 3 ideas: 1 accepted as task-9, now In progress, 1 Agentry auto-accepted and 1 dismissed with a note
+    When the Ideas page is shown
+    Then "No open ideas: you have decided on every one. Ask the visionaries for more." is shown above the history
+    And the panel "History" reads "3 decided" and lists each idea with its badge, accepted or dismissed
+    And the accepted row reads "became task-9 (In progress)", "from task-N" and the date; the dismissed row shows its note under it
+    And the auto-accepted row wears the badge "Auto-accepted", its note shown on hover
+    Given no ideas at all and a Visionaries team
+    Then "No ideas yet" is shown with the button "Ask the visionaries"
+
+  @USER-90 @test
+  Scenario: Auto-accept is off until you turn it on, and starting them counts only with it
+    # internal/web/settings_api_test.go TestYouTurnAutoAcceptingIdeasOnAndOff and TestYouChooseTheAutoAcceptRule
+    # internal/ideas/agreed_test.go TestAgentryAcceptsOnlyWhatTheSettingAndTheVisionariesAllow and TestAgentryStartsOnlyWhileTheSettingsSay
+    # the defaults: internal/settings/settings.go line 46
+    Given settings never changed
+    When they are read
+    Then visionariesOnEpicClose is yes, autoAcceptIdeas and autoStartIdeas are no, and autoAcceptRule is everyoneBacked
+    When the user turns autoAcceptIdeas and autoStartIdeas on
+    Then both are saved and the reply holds every setting
+    When the user turns autoStartIdeas off
+    Then autoAcceptIdeas is kept on
+    When autoAcceptIdeas is sent as "yes", or autoAcceptRule as mostBacked
+    Then each is refused with 400, the rule's refusal naming everyoneBacked and nobodyDoubted, and the settings are kept
+    Given auto-accept off and an idea every viewpoint backed
+    Then Agentry accepts nothing, and the rules refuse an accept in its name
+    Given auto-accept on
+    Then an idea 1 viewpoint doubted, or 1 did not back, stays open for you; your own accept of it is allowed
+    And with autoStartIdeas or autoAcceptIdeas off, a start in Agentry's name is refused
+
+  @USER-91 @test
+  Scenario: Which ideas count as agreed: Everyone backed it, or Nobody doubted it
+    # internal/ideas/agreed_test.go TestAnIdeaIsAgreedWhenEveryViewpointBacksIt and TestAnIdeaNobodyDoubtedIsAgreedWithTwoBackers; internal/ideas/routes_test.go TestAnOpenIdeaSaysWhyItWasntAutoAccepted
+    # the 4 viewpoints of the Visionaries template, product-strategist, user-advocate, technologist and skeptic, under visionary-lead: internal/agents/teams.go lines 71 to 79
+    # the page's line: ui/src/features/ideas/IdeaCard.tsx line 39
+    Given the Visionaries team with its 4 viewpoints
+    When an idea is judged under "Everyone backed it"
+    Then it is agreed only when every 1 of the 4 backed it and none doubted it
+    And 1 doubter gives "doubted by skeptic", 1 missing backer "not backed by skeptic", and nobody "not backed by product-strategist, user-advocate, technologist, skeptic"
+    And a team of only its coordinator agrees on nothing: "the Visionaries have no viewpoints"
+    When an idea is judged under "Nobody doubted it"
+    Then 2 backers and no doubter is agreed; 1 backer is "only one backer"; none is "no backers"
+    And a backer outside the team, or named twice, does not count
+    Given auto-accept off
+    When the ideas are read
+    Then each open idea says why under the rule set, such as "doubted by skeptic", and an agreed one says nothing
+
+  @USER-92 @test
+  Scenario: Agentry never accepts a duplicate, and says which idea it repeats
+    # internal/ideas/agreed_test.go TestAgentryAcceptsNoIdeaYouHadBefore and TestTheRulesRefuseAgentryADuplicate; internal/ideas/duplicate_test.go TestAnIdeaLooksLikeAnOpenTaskWithACloseTitle
+    # the same title once case, punctuation and filler words are dropped, or more than 35% shared words in the problems and proposals, each at least 10 words: internal/ideas/duplicate.go lines 66 to 72, 144 and 148
+    # README.md, Ideas: "Under either rule Agentry never accepts a duplicate"
+    Given an open idea "Search the board" every viewpoint backed
+    When another idea " search the Board" in the same repo was dismissed earlier
+    Then the open idea is not auto-accepted: "duplicate of idea-1"
+    When the earlier idea was accepted and became task-64
+    Then the reason is exactly "duplicate of idea-1 (task-64)"
+    When the same title was suggested later and is open or dismissed
+    Then this idea is the original: nothing stops it; a later one counts only once it was accepted
+    When the same title is in another repo, or the Visionaries named the idea it repeats
+    Then another repo's never counts, and a named one gives "duplicate of <that id>"
+    And the rules refuse Agentry's accept of a duplicate even when every viewpoint agreed
+
+  @USER-93 @manual
+  Scenario: The settings on the Ideas page: follow-ups on an epic close, auto-accept, the rule and starting them
+    # ui/src/features/ideas/IdeasPage.tsx lines 226 to 262, the controls; lines 180 to 184, the 2 rules and their hints; lines 264 to 267, Saving and the banners
+    # README.md, Ideas: the ticks at the top of the Ideas page; the page has them, not Settings
+    Given the Ideas page with a Visionaries team and settings never changed
+    When the controls are shown
+    Then "Ask the visionaries for follow-ups when you close an epic" is ticked and "Auto-accept ideas the Visionaries agree on" is not
+    And "Which ideas qualify" offers exactly 2 rules, "Everyone backed it" and "Nobody doubted it", the first picked, both greyed out
+    And "and start them" is greyed out and not ticked
+    When the user ticks "Auto-accept ideas the Visionaries agree on"
+    Then "Saving…" is shown once, and the rules and "and start them" can be changed
+    When a change is refused
+    Then the banner "The setting wasn't saved" is shown with the server's words, and the control shows what the server kept
+
+  @USER-94 @test
+  Scenario: Ideas shows while a Visionaries team or an idea is there, and the page says what it is otherwise
+    # internal/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
+    # ui/src/features/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
+    # the explainer and the offer: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
+    Given no Visionaries team and no ideas
+    When the features are read
+    Then ideas is not enabled and not visible, its why "add a team from the Visionaries template to get ideas"
+    And the Ideas page is in its off view, which shows what Ideas is and only the button "Ask the visionaries"
+    When the Visionaries team is added
+    Then ideas is enabled and shown: "the Visionaries team suggests ideas"
+    When the team is removed while 2 ideas are left
+    Then ideas is visible but not enabled: "kept while 2 ideas remain; no team from the Visionaries template or one based on it now"
+    Given 4 ideas, 1 accepted and 1 dismissed
+    Then the badge is exactly 2
+    Given no template that turns Ideas on
+    Then the page reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button
+
+  @USER-95 @manual
+  Scenario: Ask the visionaries opens New task with the team picked, adding the team first when you have none
+    # ui/src/features/ideas/visionaries.ts lines 49 to 75, ask; ui/src/features/ideas/IdeasPage.tsx lines 58 and 72, the button's label
+    # ui/src/lib/new-task.ts: ?new=task&newTeam=<team>; README.md, Ideas, "Ask the visionaries"
+    Given the Ideas page and a team made from the Visionaries template
+    When the user clicks "Ask the visionaries"
+    Then the New task dialog opens with that team picked and the address carries exactly ?new=task&newTeam=Visionaries
+    Given no such team yet
+    Then the button shown reads exactly "Add the Visionaries team"
+    When the user clicks it
+    Then the team is added from its template once, the button reads "Adding the team…" meanwhile, and New task opens when the team shows
+    When the policy lacks the profile the team needs
+    Then the banner "The Visionaries team needs the read-mostly profile, which your policy file doesn't have" is shown with "Add the profile and the team"
+    When the team was added but does not show up
+    Then the banner "The Visionaries team isn't there" is shown, reading "The team was added but didn't show up; try again."
+
+  @USER-96 @manual
+  Scenario: The Agents page: the teams as cards, an org chart or a list, each team with its 3 actions
+    # ui/src/pages/AgentsPage.tsx lines 126 to 157, the header and the views; lines 276 to 298, a team's heading; line 96, Remove team only with more than 1 team
+    # the list's 7 columns: ui/src/pages/AgentsPage.tsx lines 45 to 69; a card: lines 304 to 340; the org chart: lines 343 to 401
+    # README.md, Use it, "Teams"
+    Given the Software and Writing teams, 9 agents in all
+    When the Agents page is shown
+    Then the header has exactly 2 buttons, "Add a team" and "New agent", and the line reads "2 teams · 9 agents"
+    And the views are Teams, "Org chart" and List, the address carrying ?view=org or ?view=list for the last 2
+    And each team's heading shows its name, "5 agents" or "4 agents", "· <description>" from its template, then "Edit team", "+ Add agent" and "Remove team"
+    And each card shows the agent, the badge "coordinator" on the lead, a Review or Shipping badge where its work shows, its description, engine · model, profile and where it runs
+    When the user picks List
+    Then exactly 7 columns read Name, Team, Role, Description, Engine, Profile, "Runs on"
+    When the user picks "Org chart"
+    Then each team shows its coordinator, badged "lead", over its agents; a team with none reads "This team has no coordinator yet."
+    Given only 1 team
+    Then "Remove team" is hidden on its heading
+
+  @USER-97 @test
+  Scenario: Add a team from a template: Build your own, then your templates newest first, then the built-in ones
+    # ui/src/components/organisms/AddTeam.test.tsx "yours come between Build your own and Built in, newest first, each saying when and where it was saved", "only yours can be deleted or exported", "every card's actions are named with it, and its coordinator chip uses the brand ink" and "is added by its id"
+    # ui/src/pages/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it", run for an add, a delete and an import
+    # a built-in template is added by its team name, yours by its id: ui/src/components/organisms/AddTeam.tsx lines 75 to 81
+    Given 3 built-in templates and 3 templates of yours, Orders, Papers and Desk, saved on 3 dates
+    When the user clicks "Add a team"
+    Then the dialog "Add a team" shows exactly 3 headings in order: "Build your own", "Your templates", "Built in"
+    And exactly 7 cards come in the order "A team of your own", Orders, Papers, Desk, Software, Writing, Visionaries: yours newest first
+    And Papers reads "Saved 12 Oct from the Reading team."
+    And only yours have "Delete template" and an Export link to /api/teams/templates/papers/export; a built-in one has neither
+    And each card's buttons are named with it: "Add this team, Software", "Change it first, Papers", and "Add another" for a team you have
+    When the user clicks "Add this team, Papers"
+    Then exactly 1 request adds the template papers by its id, and a toast "Added the Papers team" with "Pick it on New task; its coordinator takes the task." is shown once
+    And while the add runs, Esc and a click outside leave the dialog open; once it ends, both close it
+
+  @USER-98 @test
+  Scenario: A team whose profile the policy lacks is refused, then added with the profile in one click
+    # internal/web/policy_api_test.go TestATeamNeedsItsProfilesInThePolicy
+    # ui/src/components/organisms/AddTeam.test.tsx "refused for its profiles, offers them in its own card and adds it with them"
+    # the offer's words: ui/src/components/molecules/MissingProfilesOffer.tsx lines 20 to 29
+    Given a policy file without the read-mostly profile
+    When the user adds the Visionaries team
+    Then it is refused with 409, naming exactly 1 missing profile, read-mostly, and the Policy page, and nothing is proposed
+    And the offer "The Visionaries team needs the read-mostly profile, which your policy file doesn't have" is shown in that card, with "Add the profile and the team"
+    When the user clicks it
+    Then exactly 1 more request is sent, with addMissingProfiles and the policy's hash the page saw
+    And the policy is changed exactly once, "added profile read-mostly for team Visionaries", and the team is there with its 4 agents under visionary-lead
+    When a template that does not exist is named, or the hash is stale
+    Then the first is refused with 404 and the second with 409, each as JSON with an error line
+    When an agent is added with a profile nobody wrote
+    Then it is refused with 400 "no profile called dreaming", never naming the policy file's path
+
+  @USER-99 @test
+  Scenario: Build a team of your own: the New team panel, blank or from a copy of a template
+    # ui/src/components/organisms/TeamPanel.test.tsx "Build a team in Add a team opens the panel with one coordinator" and "creates the team as typed, the coordinator on the default prompt"
+    # internal/agents/custom_test.go TestACustomTeamGetsDefaultPrompts
+    # the panel "New team" at ?team=new: ui/src/pages/AgentsPage.tsx lines 114 to 117; "Team name", "Start from" with Blank and "Copy a template", "Create team": ui/src/components/organisms/TeamPanel.tsx lines 63, 174, 202 and 289 to 297
+    Given the Add a team dialog
+    When the user clicks "Build a team"
+    Then the dialog closes and the panel "New team" opens with the focus in "Team name", empty
+    And "Start from" has Blank pressed, no Template list, and exactly 1 row, the coordinator, open and picked as "Coordinator, coordinator"
+    And the foot reads "Creates the team and its coordinator." and the prompt's hint "Empty: it uses Agentry's coordinator prompt for a team of these agents."
+    When the user types " Docs " and clicks "Create team"
+    Then exactly 1 request is sent: the team "Docs" with 1 agent, coordinator, coordinates true, engine claude, colour blue, an empty prompt
+    And the server gives an empty prompt its default: the coordinator's starts "You are the coordinator", an agent's names it as "one of the agents of the <team> team" and ends "Your job: <its description>"
+    And a prompt the user wrote is kept as written
+
+  @USER-100 @test
+  Scenario: What a team of your own is refused for, every problem at once
+    # internal/agents/custom_test.go TestACustomTeamIsRefused
+    # ui/src/components/organisms/TeamPanel.test.tsx "an empty team name is in the summary, which takes focus, and under the field" and "every problem at once: team, agents and each row's fields"
+    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 53
+    Given the New team panel
+    When the user clicks "Create team" with no name
+    Then nothing is sent, the summary reads "Couldn't create the team: 1 thing to fix" and takes the focus, and "Give the team a name." is shown under the field
+    When a team is sent with a name a team has, in any case, or a built-in template's team
+    Then it is refused: "a team called Writing already", "a team called wRiTiNg already" or "NETWORKING is the name of the Networking template's team"
+    When a team is sent with no agents, no coordinator or 2
+    Then it is refused: "the Kitchen team needs agents", "exactly one coordinator; it has none", "exactly one coordinator; it has two: chef, taster"
+    When an agent's name is blank, in upper case, 32 characters, repeated or in the roster
+    Then each is refused: "every agent of the Kitchen team needs a name", "lowercase letters, digits and dashes, starting with a letter", "two agents called cook", "an agent called editor already exists"
+    When an agent's column is serve or its colour mauve
+    Then each is refused, the column being builds, review or ship only
+
+  @USER-101 @test
+  Scenario: Edit a team: saved whole in one request, its tasks following, with the profiles it needs
+    # internal/web/team_edit_api_test.go TestATeamIsSavedWholeInOneRequest and TestATeamEditNeedsItsProfilesInThePolicy
+    # the panel "Edit the <team> team" at ?team=<name>, "Save changes" and "No changes to save.": ui/src/lib/custom-team.ts lines 464 and 478; ui/src/components/organisms/EditTeamPanel.tsx line 268
+    Given the Data team with its lead, analyst and charter, the analyst having learned "Know."
+    When the user saves the team as " Numbers ", the analyst renamed statistician on codex, charter removed and plotter added
+    Then exactly 1 team.edited event is written and the reply names the team Numbers with its new version
+    And statistician keeps "Know." and is in Numbers, plotter is in Numbers with its prompt, and charter is no longer there
+    And the team's version is no longer the one sent
+    When an agent is saved with a profile nobody ships
+    Then it is refused with 400 naming row 1, field profile: "analyst's profile dreaming isn't in policy.toml"
+    When an agent is saved with a shipped profile the policy lacks
+    Then it is refused with 409 naming missingProfiles read-mostly
+    When the save is sent again with addMissingProfiles
+    Then it is saved, the agent has read-mostly, and the policy changed exactly once
+
+  @USER-102 @test
+  Scenario: Rename a team, and remove a team or an agent once no unfinished task needs it
+    # internal/web/api_test.go TestATeamIsRenamedWithItsTasks, TestATeamIsRemovedWithItsAgents and TestAgentsAreEditedFromThePage
+    # ui/src/components/organisms/TeamPanel.test.tsx "Remove team asks in the footer, focus on Keep; Keep puts the footer back and focus on Remove team" and "Remove removes the team, closes the panel going back over its entry, says so and shows the page without it"
+    # the refusals: internal/web/agents_api.go lines 78, 387 and 399; the page's dialog "Remove the <team> team?": ui/src/pages/AgentsPage.tsx lines 431 to 437
+    Given the Data team with task-1 open
+    When the user renames it " Analytics "
+    Then the reply is exactly team Data, to Analytics; its coordinator and 2 agents are in Analytics and no team is called Data
+    And task-1 stays with data-lead, and a new task for analytics goes to data-lead
+    Given only the Software team
+    When the user removes it
+    Then it is refused with 409 "the only one"
+    Given the Writing team with task-1 open
+    When the user removes the team, or its editor
+    Then each is refused with 409 naming task-1; an agent no task needs is removed
+    When the user removes the only coordinator of a team
+    Then it is refused with 409
+    When the user clicks "Remove team" in the Edit team panel
+    Then "Remove the Docs team and its 3 agents?" is shown with "Their prompts and what they learned go too.", the focus on Keep, nothing sent yet
+    When the user clicks Remove
+    Then exactly 1 request removes the team, a toast "Removed the Docs team" is shown once, and the panel closes
+
+  @USER-103 @test
+  Scenario: Save a team as a template, never over a name a template has
+    # internal/web/templates_api_test.go TestATemplateIsSavedUnderItsName and TestATemplateNameOrIDTakenIsRefused
+    # ui/src/components/organisms/TeamPanel.test.tsx "the footer becomes a form, named, with the team's name and its coordinator's description, focus on Template name" and "saved, the form closes, says so and focus goes back to Save as a template" and "with unsaved changes it is off and says why beside it, as on a phone"
+    # "Save your changes first." while the panel has unsaved changes: ui/src/components/organisms/SaveAsTemplate.tsx lines 134 to 145
+    Given the Edit team panel of the Planning team, with no unsaved changes
+    When the user clicks "Save as a template"
+    Then a form "Save as a template" is shown in the footer's place, "Template name" preset to Planning and "What it's for" to the coordinator's description, the focus in the name
+    And the hint reads "Keeps each agent's prompt and settings and which one coordinates; not knowledge or where they run."
+    When the user saves it with no name
+    Then the template is saved as exactly id planning, team Planning, from Planning, yours, with the time it was saved
+    When the user saves it as "  Reading Room  "
+    Then its id is reading-room and its team "Reading Room"; built-in templates carry no saved time and no from
+    When the user saves a name of yours in another case, or padded, or a built-in template's, or an id of yours
+    Then each is refused with 409: "You have a template called My Planning already. Pick another name." or "Software is a built-in template. Pick another name.", and nothing is written
+    When the save goes through on the page
+    Then a toast "Saved Docs kit to your templates" with "Add it again from Add a team." is shown once and the form closes
+    Given unsaved changes in the panel
+    Then "Save as a template" is disabled, "Save your changes first." shown beside it
+
+  @USER-104 @test
+  Scenario: A team from your template comes with its prompts, a second copy is numbered, and Update my template saves it back
+    # internal/agents/user_templates_test.go TestATeamIsAddedFromAUserTemplateWithItsPrompts, TestAUserTemplatesDescriptionFillsAnEmptyCoordinators and TestAUserTemplateAddedAgainGetsNumbers
+    # internal/web/templates_api_test.go TestATemplateIsUpdatedFromItsTeam; ui/src/components/organisms/TeamPanel.test.tsx "it updates the template with the team as last saved, and says so" and "with unsaved changes it is off and says why beside it, as on a phone"
+    Given your template Papers, described "Reads papers.", with lead and reader
+    When the user adds a team from it
+    Then lead coordinates Papers with the prompt "Hand out the reading." and reader is in Papers with "Read the papers.", each linked to the template papers
+    And lead's empty description is filled with "Reads papers."; one it has is kept, and reader's stays empty
+    When the user adds it again
+    Then the second team is "Papers 2" with lead-2 and reader-2, the same prompts
+    Given the Dreamers team saved as your template Dreams, "Big ideas.", and its lead's prompt changed since
+    When the user clicks "Update my template"
+    Then exactly 1 request is sent, replacing true, and the template keeps its id dreams and name Dreams with the prompt as last saved
+    And a description sent is trimmed and kept, none keeps "Big ideas."; you still have exactly 1 template
+    And a toast "Updated Docs kit in your templates" with "It has the Docs team as last saved." is shown once
+    Given unsaved changes
+    Then "Update my template" is disabled, "Save your changes first." shown beside it, in the footer and in the body
+
+  @USER-105 @test
+  Scenario: Export, import and delete one of your templates; a built-in one is neither exported nor removed
+    # internal/web/templates_api_test.go TestAnExportedTemplateImportsAsItWas and TestATemplateIsRemoved
+    # ui/src/components/organisms/AddTeam.test.tsx "Import a template opens a picker for .json files", "an import is sent as it is, said in a toast, and the list read again", "a refused import says why under the button, a name you have in the server's words" and "Delete deletes it, reads the list again and moves focus to the next card's Add this team"
+    # a built-in template: internal/web/templates_api.go lines 188 and 264
+    Given your template my-planning
+    When the user clicks Export on its card
+    Then the file my-planning.json is downloaded as an attachment, 200
+    When the user deletes the template and imports the file
+    Then the template is back exactly as it was, yours, saved anew
+    When the user clicks "Import a template"
+    Then a file picker opens for .json files only
+    And an import that goes through shows a toast "Imported Papers to your templates" once and the list is read again
+    When the import names a template you have
+    Then the card "A team of your own" reads "Couldn't import the template" and "You have a template called Papers already. Pick another name.", and the button is not disabled
+    When the user clicks "Delete template, Papers" then Delete
+    Then the template is deleted, a toast "Deleted the Papers template" is shown once, and the focus moves to the next card's "Add this team"
+    When a built-in template is exported or removed
+    Then the export is refused with 400 and the removal with 409
+
+  @USER-106 @test
+  Scenario: What a team does: its coordinator's description, read by other coordinators or taken from its template
+    # ui/src/components/organisms/TeamPanel.test.tsx "it shows the coordinator's description and the line other coordinators read, following the team's name", "a team made from a built-in template is read by the template's description, even with a new coordinator" and "on a team with no template, the coordinator's Description says other coordinators read it"
+    # internal/web/templates_api_test.go TestYourTemplatesDescriptionDescribesItsCoordinator; internal/agents/user_templates_test.go TestAUserTemplatesDescriptionFillsAnEmptyCoordinators
+    # the field "What this team does" and its hint: ui/src/components/organisms/TeamPanelParts.tsx lines 169 to 176; the heading's "· <description>": ui/src/pages/AgentsPage.tsx lines 169 and 285
+    Given the Edit team panel of a team with no template
+    When "What this team does" is shown
+    Then it holds exactly the coordinator's description, with the hint "One line. Other coordinators read it to choose what to send this team."
+    And the line other coordinators read is shown following the team's name as it is typed
+    Given a team made from a built-in template
+    Then only the template's description is read, and the coordinator's Description says so
+    Given a team added from your template
+    Then its coordinator is described by the template's description only when it has none of its own
+    And the Agents page heading shows "· <description>" only for a team whose template has one
+
+  @USER-107 @manual
+  Scenario: An agent's page and its edit page: the prompt, what it knows, its engine, model, profile and where it runs
+    # ui/src/pages/AgentPage.tsx lines 41 and 42, the buttons; line 48, Prompt; line 51, Knowledge; lines 55 to 66, Settings; line 32, no such agent
+    # ui/src/pages/AgentEditPage.tsx lines 25 and 26; ui/src/components/organisms/AgentForm.tsx lines 109 to 175, the Agent panel; lines 179 to 223, Engine; lines 226 to 255, Runs on; line 258, the button
+    # the model names claude knows: ui/src/components/organisms/AgentForm.tsx line 27; the knowledge history shows at most 8 changes: ui/src/components/organisms/KnowledgeEditor.tsx line 63
+    Given the engineer, on claude with no model, under the developer profile
+    When its page is shown
+    Then the header shows its name, role badge and description, with exactly 2 buttons, "Redact a text" and Edit
+    And the panel "Prompt" reads "Its standing instructions, given at the start of every turn"
+    And the panel "Knowledge" has Save, disabled until the text changes, and lists at most 8 past changes, newest first, each by an agent or "you"
+    And "Settings" lists exactly 5 rows: Engine claude, Model "the engine's default", "Policy profile" developer, Role "Works on the task", "Runs on"
+    When the user clicks Edit
+    Then the form shows exactly 6 fields in the Agent panel: Name, Team, Description, Colour, "Its work counts as" with Building, Review and Shipping, and Coordinates
+    And Engine offers exactly claude and codex, Model lists opus, sonnet and haiku for claude, and "Policy profile" starts "default (developer)"
+    And Save is disabled while the name or the prompt is empty
+    When the user opens /agents/new
+    Then the page is titled "New agent" and exactly this line is shown: "The coordinator can hand work to it from its next turn."
+    Given a name no agent has
+    Then the page reads "No agent named <name>"
+
+  @USER-108 @test
+  Scenario: An agent is added, changed, renamed and removed from the page, and what it knows can be edited
+    # internal/web/api_test.go TestAgentsAreEditedFromThePage, TestRenamingAnAgentKeepsItsTasksGoing, TestYouEditWhatAnAgentKnows and TestTheKnowledgeHistoryIsTheSameFromPatches
+    # the toasts "Added <name>" and "Saved <name>" with "The coordinator sees it from its next turn.": ui/src/components/organisms/AgentForm.tsx line 72; "Saved what <name> knows": ui/src/components/organisms/KnowledgeEditor.tsx line 39
+    Given the Software team's 5 agents
+    When the user adds designer and changes the engineer to codex with the model gpt-5
+    Then the roster has exactly 6 agents, the engineer on codex, gpt-5, with an empty list of workers, not null
+    When an agent is saved with a worker that does not exist, or the only coordinator is removed
+    Then each is refused with 409
+    When the user removes designer
+    Then it is removed: exactly 5 agents again
+    When the user renames the coordinator to lead-dev
+    Then it keeps its prompt, its knowledge and coordinates; its open task goes on with lead-dev, and the task's first step is kept naming the old name
+    When the user renames it to a name in use
+    Then it is refused with 409
+    When the user saves the engineer's knowledge as "  Prefer table tests.  "
+    Then it is kept trimmed, its history has a change by "you", and a later change to the engineer's settings leaves it
+    And the history lists exactly the same versions whether the log kept each as a copy or as a patch, across a rename
+
+  @USER-109 @test
+  Scenario: The Policy page: the 6 default profiles, who uses which, and what is in force
+    # internal/web/policy_api_test.go TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # the 6 profiles Agentry ships, developer, read-only, read-mostly, network-diagnosis, autonomous and allow-everything: internal/policy/default.toml lines 82, 198, 333, 473, 658 and 683; use_for_everyone as shipped: line 79
+    # the Software team's profiles, tech-lead and reviewer read-only, the rest developer: README.md, The policy, "Profiles"
+    Given a policy file without read-mostly, with use_for_everyone set to allow-everything
+    When the policy is read
+    Then exactly 6 default profiles are listed, read-mostly missing and read-only current, the missing one with the text it would add
+    And read-only is used by exactly 2 agents, reviewer and tech-lead
+    And the reviewer's profile in force reads "read-only, overridden by allow-everything", and the agents list shows each agent's profile in force the same way
+
+  @USER-110 @test
+  Scenario: A missing default profile is added from the page, logged with its diff and a backup
+    # internal/web/policy_api_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/policy/live_test.go TestAgentryKeepsItsNewestBackups
+    # the 20 newest backups are kept: internal/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
+    Given a policy file without read-mostly, whose row reads "Your file doesn't have it. Adding it appends the <version> default, under a comment naming the version."
+    When "Add this profile" is sent without the file's hash, or with a stale one
+    Then it is refused with 409 "changed since the page loaded it: try again"
+    When it is sent with the hash the page saw
+    Then the file gains exactly 1 profile, read-mostly, under "# Added by Agentry <version>, the default profile of that version."
+    And exactly 1 policy event is logged, by you, "added profile read-mostly", with the diff adding [profiles.read-mostly] and the file's text
+    And a backup beside the file holds exactly the file as it was
+    When it is added twice, or a profile Agentry does not ship is added
+    Then the first is refused with 409 "already has" and the second with 404, and no refused change is logged
+    Given 25 changes made by Agentry
+    Then exactly 20 backups are kept, the newest ones
+
+  @USER-111 @test
+  Scenario: An outdated default is updated; one you changed is never overwritten, only replaced by choice
+    # internal/web/policy_api_test.go TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice
+    # the rows "outdated" and "yours" with "Update to the <version> default", "Keep mine" and "Use the default": ui/src/components/organisms/DefaultProfiles.tsx lines 91 to 113 and 121 to 131
+    Given a policy file from a build before v0.1.0, whose read-only is outdated
+    When the user clicks "Update to the <version> default" on read-only
+    Then the file holds this version's read-only and exactly 1 event, yours, "updated read-only to the <version> default", with its diff
+    Given read-only edited by hand, its row marked "yours": "You changed it, so Agentry won't overwrite it. Yours against the default:"
+    When an update is sent for it
+    Then it is refused with 409 "won't overwrite it" and the file is kept as edited
+    When the user clicks "Use the default"
+    Then the file is exactly as Agentry ships it, and the event reads "replaced your read-only with the <version> default" with the diff
+
+  @USER-112 @test
+  Scenario: use_for_everyone: the notice on the Policy and Agents pages, and turning it off
+    # internal/web/policy_api_test.go TestTurningOffUseForEveryoneGivesEachAgentItsOwnProfile and TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47; shown on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # README.md, The policy, "Allow everything, as shipped"
+    Given the policy as shipped, use_for_everyone set to allow-everything
+    When the policy is read
+    Then the reviewer's profile in force reads exactly "read-only, overridden by allow-everything"
+    When the user clicks "Turn it off"
+    Then use_for_everyone is no longer set and the reviewer's profile in force is exactly read-only, not overridden
+    When it is turned off again
+    Then it is refused with 409 "isn't set"
+
+  @USER-113 @test
+  Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
+    # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
+    # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
+    Given the policy as shipped and the developer profile's panel
+    When the user tries Bash "go test ./..."
+    Then the verdict shown is allow by the rule "stays inside the workspace", with its why, "as if run in <workspace>"
+    And the verdict names the rule's place among the profile's rules, exactly 1 row for the page to mark
+    When the user tries Bash "git push origin feature", Bash "sudo ls", or Read of a private key under .ssh
+    Then the verdicts are ask "every push leaves this machine: you approve it", deny "never sudo" and deny "never touch secrets"
+    And under read-only, Edit of main.go is deny "this agent changes nothing"
+    And each adds "But today allow-everything decides for every agent:" with allow, while use_for_everyone is set; with it off, no such line
+    And a built-in verdict names no rule place
+    When a call is tried
+    Then nothing is logged and the policy's hash is the same
+    When the profile does not exist, the tool is empty, or the workspace is a relative path
+    Then they are refused with 404, 400 and 400; a tool with no input is judged
+
+  @USER-114 @test
+  Scenario: History lists every version, newest first, and Revert restores one as a new version after showing its diff
+    # internal/web/policy_api_test.go TestEveryVersionShowsInTheHistoryAndCanBeRestored, TestAVersionShowsWhatRevertingToItWouldChange and TestARevertMayNotTakeAProfileFromItsAgents
+    # the panel "History", who made each version, "refused", "in force", Diff and Revert: ui/src/components/organisms/PolicyHistory.tsx lines 26 to 91 and 135 to 138; the dialog: lines 96 to 129
+    Given 3 versions: one loaded without its text, the first loaded, and use_for_everyone turned off on the page
+    When the history is read
+    Then exactly 3 versions come newest first: "turned off use_for_everyone", "first loaded", "loaded"
+    And only the 2 with their text can be reverted to, and none of them is marked on disk
+    When the user reads what reverting to the first would change
+    Then the diff runs from the version in force to it, turning use_for_everyone back on, and the version names allow-everything where the one in force names no profile
+    And the version in force shows an empty diff
+    When the user reverts to the first
+    Then the file is the first version again and exactly 1 new version is logged, yours, "reverted to the version of <date>"
+    When a version without its text, position 999, or the version in force is reverted to
+    Then they are refused with 409 "can't be restored", 404, and 409 "in force"
+    When a revert would take read-mostly from the Visionaries
+    Then it is refused with 409 naming the profile and visionary-lead, and the file is kept
+
+  @USER-115 @manual
+  Scenario: The Policy page's panels and banners: each profile, the override, the file, a mistake in it and the reload within 2 seconds
+    # ui/src/pages/PolicyPage.tsx lines 47 to 60, the path and the hash; lines 63 to 73, the banners; lines 89 to 93, the file; lines 99 to 161, a profile's panel
+    # the notice: ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47, on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # the file is watched every 2 seconds: cmd/agentry/serve.go line 280; "Profiles agents need": ui/src/components/organisms/MissingProfiles.tsx lines 26 to 48
+    # README.md, The policy
+    Given the Policy page
+    When it is shown
+    Then the header shows the file's path and "file <hash>", the first 8 characters of the hash
+    And the banner "Edit the file to change the policy" is shown, reading "Rules are read top to bottom and the first that matches decides. Save the file and it takes effect within two seconds."
+    And the panel policy.toml, "The file as loaded", shows every line of the file
+    And each profile is a panel marked "used by every agent", "default" or "not in use", with "otherwise <decision>" and a table of its rules: #, Decision, Rule, Why
+    And a profile no agent names reads "No agent has this profile."; under the override the users read "Agents' own profile, overridden for now:"
+    And under use_for_everyone the notice "Every agent uses allow-everything; their own profiles are ignored" is shown with "Turn it off", on the Agents page too
+    And with an agent whose own profile the file lacks, the notice reads "Turning this off denies every call by <agent> until <profile> is back." with "Add it" for a profile Agentry ships
+    When the user saves the file with a mistake
+    Then within 2 seconds the banner "The file has a mistake, so the version before it is still in force" is shown with the mistake, and the version before stays in force
+    Given an agent whose profile the file lacks and Agentry does not ship
+    Then the panel "Profiles agents need" lists it, marked missing, with each agent that uses it
+
+  @USER-116 @test
+  Scenario: The Settings page lists the features that are off, with the way to turn each on, and what the log holds that this build skipped
+    # ui/src/pages/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
+    # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67
+    Given a fresh install, with no Visionaries team
+    When the Settings page is shown
+    Then "Features that are off" lists exactly 1 feature, Ideas, with "add a team from the Visionaries template to get ideas" and the button "Ask the visionaries"
+    And "Every feature is on." is not shown
+    Given Ideas on
+    Then Ideas is not listed, no button is shown, and "Every feature is on." is shown
+    Given the features not read yet
+    Then nothing is said either way
+    Given events the server skipped, 31 from the prefix idea- and 4 of the type git.pr_opened
+    Then exactly 2 lines read "31 events from a feature this build doesn't have: idea-" and "4 events of a type this build doesn't know: git.pr_opened"
+    Given a feature only the server lists, or one with no button
+    Then the first is not listed at all, and the second shows its label and why alone
+
+  @USER-117 @manual
+  Scenario: Redact a text everywhere, from the Settings page
+    # ui/src/pages/SettingsPage.tsx lines 53 to 69; ui/src/components/organisms/RedactLog.tsx lines 39 and 44
+    # README.md, Archiving, erasing and redacting
+    Given the Settings page
+    When the user clicks "Redact a text everywhere" in the Privacy panel
+    Then the address carries ?redact=everywhere and the dialog "Redact a text everywhere" is shown
+    And its field's hint reads "Paste it. It is matched exactly, spaces and all, in every task, archived ones too, in the agents and what they learned, and in Agentry's other records, such as the policy, the workers and the ideas."
+    When the user closes the dialog
+    Then ?redact is no longer in the address and nothing was redacted
+
+  @USER-118 @test
+  Scenario: A one-time code signs another device in once, within 5 minutes
+    # internal/web/signin_test.go TestASigninCodeSignsInOnce, TestASigninCodeExpires and TestIssuingPastTheCapDropsTheOldestCode
+    # 8 characters from 31 letters and digits, no 0, O, 1, I or L, shown as XXXX-XXXX, 5 minutes, at most 20 live: internal/web/signin.go lines 25 to 28 and 74
+    # the cookie lasts 365 days: internal/web/server.go line 325
+    # README.md, Signing in the installed app, or another device
+    Given a device that is signed in asked for a code
+    When the other device sends the code in lower case with spaces around its dash
+    Then it is signed in: the reply holds the token and a cookie, HttpOnly, SameSite Lax, path /, lasting at least 300 days, not Secure over plain http
+    And the cookie alone opens the API, with no token sent
+    When the same code is sent again
+    Then it is refused with 401 and no cookie
+    Given a code 5 minutes old
+    Then it is refused with 401; one a second short of 5 minutes signs in
+    Given 21 codes issued
+    Then the oldest no longer works, while the second and the 21st do
+
+  @USER-119 @test
+  Scenario: Wrong codes are limited: 5 a minute from one address, 30 a minute from everyone
+    # internal/web/signin_test.go TestFailedSigninsAreLimited, TestFailedSigninsSentAtOnceAreLimited, TestSigningInDoesNotCountAsAFailure and TestThePastedTokenSignsIn
+    # 5 failures a minute per client, 30 failed codes a minute in all: internal/web/signin.go lines 30 to 35; the refusals' words: lines 37 and 38
+    Given a live code
+    When one address sends 5 wrong codes within a minute
+    Then its next try, with a good code or the token, is refused with 429 and Retry-After 60
+    And another address signs in with the code; a minute later the first address is allowed again
+    When 30 wrong codes come from 30 addresses within a minute
+    Then every code is refused with 429 for a minute, while the token still signs in
+    When 50 wrong codes are sent at once from one address
+    Then exactly 5 are refused with 401 and 45 with 429
+    And a sign-in that succeeds never counts as a failure
+    When a wrong token is sent, or neither a code nor a token
+    Then they are refused with 401 "wrong token: paste the link `agentry serve` printed" and 400 "send a code or the token"
+    And behind an https proxy the cookie is Secure, yes
+
+  @USER-120 @manual
+  Scenario: The person menu, Sign in another device, and the sign-in page
+    # ui/src/components/organisms/AccountMenu.tsx lines 29 and 40 to 45; ui/src/components/organisms/SignInDeviceDialog.tsx lines 50, 74 to 96, 97 to 110 and 111 to 118
+    # ui/src/pages/SignInPage.tsx lines 52 to 78; what the field takes: ui/src/lib/signin.ts lines 12 to 24, a code being at most 8 characters, line 6
+    # README.md, Signing in the installed app, or another device
+    Given a device that is signed in
+    When the user clicks "Signing in" in the top bar
+    Then a menu lists exactly 3 items: "Sign in another device", "Notifications on this device" and "Sign out"
+    When the user picks "Sign in another device"
+    Then the dialog shows a code like ABCD-EFGH, a QR code of <address>/?signin=<code>, and "Expires in 5:00" counting down
+    And it reads "The code works once, for five minutes. A new code doesn't stop this one working." with the buttons "New code" and Done
+    And a list of addresses is shown only when the server has more than 1, each with its label
+    When the code runs out
+    Then "Expired: make a new code" is shown and the QR code is faded
+    Given the other device, which opens the sign-in page
+    Then the page reads "Sign in" with exactly 1 field, "Code, token or link", and the hint on where to get a code or paste the link
+    When the user pastes the printed link, its bare token, a code with or without its dash, or scans the QR code
+    Then each signs in once; a link with no token or code in it is refused on the page
+    When a wrong code is sent
+    Then the banner "Couldn't sign in" is shown with the server's words
+
+  @USER-121 @test
+  Scenario: Sign out forgets the cookie on the server and the token on the device
+    # internal/web/signin_test.go TestSigningOutClearsTheCookie
+    # the page forgets its token and says "Couldn't sign out" when the server refuses: ui/src/components/organisms/AccountMenu.tsx lines 44 and 45
+    Given a device that is signed in
+    When the user picks "Sign out"
+    Then the reply is 200 with the cookie emptied, path /, expiring at once
+
+  @USER-122 @test
+  Scenario: Install app shows only where the browser can install the page
+    # ui/src/lib/install.test.ts "is refused on a secure page whose service worker the browser refused", "is unavailable on a secure page with a service worker and no offer yet" and "is insecure on a plain http page, whatever the service worker did"
+    # the 5 states and the button hidden when installed or unavailable, or refused with no CA: ui/src/lib/install.ts line 17 and 52 to 57; ui/src/components/molecules/InstallAppButton.tsx lines 35 and 36
+    # the manifest: ui/public/manifest.webmanifest, display standalone, 3 icons
+    # README.md, HTTPS and installing the app on other devices
+    Given a secure page whose service worker the browser refused to register
+    Then the install state is exactly "refused"
+    Given a secure page with a service worker and no offer from the browser yet
+    Then the install state is exactly "unavailable"
+    Given a page over plain http at a network address
+    Then the install state is exactly "insecure", whatever the service worker did
+
+  @USER-123 @manual
+  Scenario: The Install app button's note, where the page cannot be installed
+    # ui/src/components/molecules/InstallAppButton.tsx lines 47 to 81
+    # README.md, HTTPS and installing the app on other devices
+    Given Agentry open over plain http at a network address, without -https
+    When the user clicks "Install app"
+    Then a note is shown: browsers install apps only from secure pages; open Agentry at the localhost address with the port on the computer it runs on, or over https, and install it there
+    Given the same page while the server serves -https with its own CA
+    Then the note names the https address and its trust page, exactly 2 links, and ends saying the localhost address with the port works too on the computer Agentry runs on
+    Given a secure page where the browser refused the service worker, with a trust page
+    Then the note shown reads "The browser won't install the app here. If it warned about the certificate, trust Agentry's certificate on the trust page, then reload this page."
+    When the browser offers to install
+    Then the button installs with exactly 1 prompt, and the button is hidden once the app is installed
+
+  @USER-124 @test
+  Scenario: Trusting a device once: the trust page per address, with the CA's fingerprint
+    # internal/web/trust_test.go TestThePageIsToldWhereToTrustTheServersOwnCA; ui/src/lib/trust.test.ts "keeps the first eight pairs of a SHA-256"
+    # the dialog's section "First time on this device? Trust Agentry's certificate", with its QR code and the fingerprint: ui/src/components/organisms/SignInDeviceDialog.tsx lines 53 to 73
+    # README.md, HTTPS and installing the app on other devices, "Trust a device once"
+    Given the server serving -https with its own CA, reachable at 2 network addresses and localhost
+    When a sign-in code is issued
+    Then each address carries exactly 1 trust page, at /trust/ over plain http at that address, with the CA's fingerprint
+    And the page cuts the fingerprint to its first 8 pairs, the rest behind an ellipsis
+    Given a public address behind a proxy doing TLS
+    Then that address carries no trust page, and the others still do
+    Given a server with no CA of its own
+    Then no reply speaks of trust
+    And no reply ever holds the token or a private key
+
+  @USER-125 @test
+  Scenario: Notifications on this device need an https public address and a browser that takes pushes
+    # internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL
+    # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "with push off at the server, its reason shows and there is no button", "with push on, the button shows" and "with push on but a browser without it, the browser's reason shows and there is no button"
+    # the reasons: internal/webpush/webpush.go lines 234 to 236 and ui/src/lib/push.ts lines 14 and 17
+    Given a server started without -public-url
+    When the user opens "Notifications on this device"
+    Then push is not available: the note reads "Push needs an https address. Start Agentry with -public-url https://… so phones can reach it." and no button is shown
+    Given -public-url over plain http
+    Then the reason names that address, and subscribing is refused with 409 and the reason
+    Given -public-url over https
+    Then push is available with the server's public key, and the button "Notify me on this device" is shown
+    Given a browser with no push, or notifications blocked for the site
+    Then the browser's reason is shown instead and no button
+
+  @USER-126 @test
+  Scenario: Turning notifications on and off for this device
+    # internal/web/push_api_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
+    # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"
+    # "Notifications weren't allowed." when the browser refuses permission, in the banner "Couldn't change notifications": ui/src/lib/push.ts line 43; ui/src/components/organisms/NotifyDeviceDialog.tsx line 45
+    Given push available and this browser not subscribed
+    When the user clicks "Notify me on this device" and allows notifications
+    Then the browser's subscription is sent once and the dialog reads "This device is notified when something waits for you." with "Stop notifying this device"
+    When the same endpoint is sent twice
+    Then exactly 1 subscription is kept
+    When the user clicks "Stop notifying this device"
+    Then the subscription is removed, 0 subscribed, and removing it again is 404
+    When a subscription with no endpoint, an http endpoint or no keys is sent
+    Then each is refused with 400 and none is kept
+    Given a subscription this browser made with another server's key
+    Then it is dropped in the browser, nothing is sent, and the button is shown again
+
+  @USER-127 @test
+  Scenario: What arrives: 1 push per device for each thing that newly waits for you, and tapping it opens the task
+    # internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice and TestTwoNewEntriesAreTwoPushes
+    # ui/src/lib/sw.test.ts "shows its title and body, tagged, with the page to open", "opens its page when no window of the app is open", "shows its page in the app's open window" and "opens only Agentry, whatever address the push names"
+    # a push carries at most 500 characters of the line: internal/webpush/sink.go line 15
+    Given 2 devices subscribed and an approval already waiting when the server starts
+    When the server starts
+    Then nothing is pushed for what already waited
+    When a new approval waits on task-4
+    Then each device gets exactly 1 push: title "Agentry", body "task-4: Waiting for you to approve the push to dev", opening /tasks/task-4
+    And checking again pushes nothing more
+    When an approval and 3 open ideas newly wait at once
+    Then exactly 2 pushes go out, the ideas one opening /
+    When a push arrives in the browser
+    Then a notification is shown with its title, body and tag; one that cannot be read shows "Agentry" with an empty body
+    When the user taps it
+    Then its page opens in the app's open window, or in a new one; a push naming another site opens only Agentry's start page
+
+  @USER-128 @manual
+  Scenario: The ? overlay shows exactly the 14 shortcuts, in 4 groups
+    # the list: ui/src/lib/shortcuts.ts lines 14 to 29; the modifier the page shows, modKey: line 12
+    # ui/src/components/organisms/ShortcutOverlay.tsx lines 8, 16, 19 and 37
+    Given any page, with no field focused
+    When the user presses ?
+    Then a dialog "Keyboard shortcuts" is shown with exactly 14 rows in 4 groups: Anywhere, "Go to", Tasks, Lists
+    And Anywhere lists 6: modKey K "Command palette", modKey J "Show or hide the terminal", ? "Show these shortcuts", n "New task", / "Search this page", Esc "Close a palette or overlay"
+    And "Go to" lists 3: g then t Tasks, g then a Agents, g then p Policy, each chord drawn as 2 keys with "then" between
+    And Tasks lists 2: 1 "Tasks as a list", 2 "Tasks as a board"; Lists lists 3: j "Next row", k "Previous row", Enter "Open the row"
+    And modKey is drawn as the page renders it for this device, exactly 1 of ⌘ and Ctrl
+    When the user presses Esc or clicks outside
+    Then the dialog is hidden
+
+  @USER-129 @test
+  Scenario: The command palette finds tasks by their shown id, and an epic by task-N too
+    # ui/src/components/organisms/CommandPalette.test.tsx "show an epic as epic-N and a task on its own as task-N", "find an epic by epic-N" and "still find an epic by task-N"
+    # the field "Search tasks, agents and commands": ui/src/components/organisms/CommandPalette.tsx line 84
+    Given the palette open with the epic task-21 "Ship v2" and the task task-30 "Fix the login", both working
+    When nothing is typed
+    Then exactly 2 rows read "Ship v2 epic-21 · working" and "Fix the login task-30 · working"
+    When the user types epic-21
+    Then exactly 1 row, the epic, is shown
+    When the user types task-21
+    Then the same 1 row, the epic, is shown
+
+  @USER-130 @manual
+  Scenario: The keys: the palette and the terminal from anywhere, g chords, j, k and Enter, and nothing while typing
+    # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/components/templates/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
+    # keys do nothing while typing, a field, a textarea, a select or the terminal: ui/src/lib/shortcuts.ts lines 33 to 37 and 49; Enter only with nothing focused: line 50; a chord's second key within 1200 ms: line 59
+    # the palette's keys, groups and "Nothing matches": ui/src/components/organisms/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/pages/TasksPage.tsx line 242, ui/src/pages/AgentsPage.tsx line 99
+    Given any page
+    When the user presses modKey K, even while typing in a field or the terminal
+    Then the palette opens, the focus in "Search tasks, agents and commands", and the same keys close it
+    And its rows are grouped "Go to", Commands, Tasks and Agents; ArrowDown and ArrowUp move, Enter runs the row, Esc closes; "Nothing matches "<text>"." is shown for no match
+    When the user presses modKey J
+    Then the dock is shown or hidden, from a field too
+    When the user presses g then t, g then a, or g then p within 1.2 seconds
+    Then the page goes to Tasks, Agents or Policy; a second key later than that is not a chord
+    When the user presses j, k and Enter on the Tasks list or the Agents list
+    Then the cursor moves down, up, never past the ends, and Enter opens the row under it
+    When the focus is in a field, a textarea, a select, the terminal or on a button
+    Then n, /, ?, g, j, k, 1 and 2 are text or the control's own, not shortcuts, and Enter is the control's
+    And a key with Ctrl, Alt or the command key held is never one of these
