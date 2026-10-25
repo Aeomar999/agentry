@@ -249,7 +249,7 @@ func (l *Loop) briefFor(task *tasks.Task, roster agents.Roster, move Move, sessi
 	agent := move.Agent
 	if session.Resumes() {
 		if agent.Coordinates {
-			return resumedCoordinatorBrief(task, agent, roster, session.Seen, shared, l.state, l.Features)
+			return resumedCoordinatorBrief(task, agent, roster, session.Seen, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 		}
 		return resumedWorkerBrief(task, agent, roster, move.Handoff, session.Seen, shared)
 	}

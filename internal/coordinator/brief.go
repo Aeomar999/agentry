@@ -37,9 +37,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 		team.WriteString(about("- "+agent.Name, agent.Description) + "\n")
 	}
 	section(&b, "The agents you can hand work to", team.String())
-	if text := machinesText(task, machines, roster.Assignees(coordinator.TeamName())); text != "" {
-		section(&b, "Machines", text)
-	}
+	machinesSection(&b, task, coordinator, roster, machines)
 	otherTeams(&b, task, coordinator, roster, basesOf(state))
 	epicSection(&b, task, f)
 	hookSections(&b, hooks, state, task)
@@ -50,15 +48,18 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 
 // resumedCoordinatorBrief is the coordinator's brief for a turn that goes on
 // with its last session, whose brief was made from the trail's first seen
-// steps.
-func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, shared []sharedfiles.File,
-	state features.Reader, list []features.Feature) string {
+// steps. The machines online and the epic's stories change without a step
+// on the trail, so it has them as they are now.
+func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, f family, machines []machine,
+	shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
 	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
 	resumedHeader(&b, coordinator, task)
 	section(&b, "What has happened since your last turn", cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
 		"The last step is the newest. Decide what happens next.")
 	coordinatorWork(&b, task, coordinator, shared)
+	machinesSection(&b, task, coordinator, roster, machines)
+	epicSection(&b, task, f)
 	hookSections(&b, hooks, state, task)
 	keepYourNotes(&b)
 	yourDecision(&b, task, roster, hooks)
@@ -70,6 +71,14 @@ func coordinatorWork(b *strings.Builder, task *tasks.Task, coordinator agents.Ag
 	section(b, "Where the work is", whereText(task))
 	section(b, "Shared files", sharedText(task, shared, true))
 	plan(b, task, coordinator.Name, "your plan for the task as a whole: the stages it goes through, which agent does each, and what is done")
+}
+
+// machinesSection is the machines the coordinator's team may run on, when
+// there is more than this one to choose from.
+func machinesSection(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, roster agents.Roster, machines []machine) {
+	if text := machinesText(task, machines, roster.Assignees(coordinator.TeamName())); text != "" {
+		section(b, "Machines", text)
+	}
 }
 
 func hookSections(b *strings.Builder, hooks []features.Feature, state features.Reader, task *tasks.Task) {
