@@ -21,7 +21,9 @@ describe("how an agent starts each turn", () => {
   it("tells a draft what By its work comes to, from its column or whether it reviews", () => {
     expect(byItsWork({ column: "review", resume: "", coordinates: false })).toBe("Fresh, since its work counts as review.");
     expect(byItsWork({ column: "", resume: "", coordinates: false })).toBe("Going on with its session, since its work counts as building.");
-    expect(byItsWork({ column: "ship", resume: "fresh", coordinates: false })).toBe("Going on with its session, since its work counts as shipping.");
+    expect(byItsWork({ column: "ship", resume: "fresh", coordinates: false })).toBe(
+      "Going on with its session, since its work counts as shipping.",
+    );
     expect(byItsWork({ column: "", resume: "", coordinates: true })).toBe("Going on with its session, since it doesn't review.");
     expect(byItsWork({ column: "review", resume: "", coordinates: true })).toBe("Fresh, since it reviews.");
   });

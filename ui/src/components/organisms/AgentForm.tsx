@@ -47,8 +47,10 @@ const BLANK: Agent = {
 // What each way of starting a turn means, under the Starts each turn field.
 const RESUME_HINTS: Record<Agent["resume"], string> = {
   "": "A reviewer starts fresh and gets a compact handoff of the change; every other agent goes on with its own session from its last turn, which costs fewer tokens.",
-  resume: "Goes on with its own session from its last turn on the task, which costs fewer tokens. A reviewer set this way sees the trail it saw before, not a fresh handoff of the change.",
-  fresh: "Starts a new session every turn, briefed from scratch. A reviewer gets a compact handoff of the change instead of the whole trail.",
+  resume:
+    "Goes on with its own session from its last turn on the task, which costs fewer tokens. A reviewer set this way sees the trail it saw before, not a fresh handoff of the change.",
+  fresh:
+    "Starts a new session every turn, briefed from scratch. A reviewer gets a compact handoff of the change instead of the whole trail.",
 };
 
 export function AgentForm({ agent }: { agent?: Agent }) {

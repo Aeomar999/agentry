@@ -376,6 +376,14 @@ describe("checkTeam", () => {
     ]);
   });
 
+  test("a way of starting each turn outside by its work, resume and fresh", () => {
+    const resume = "later" as DraftAgent["resume"];
+    expect(problemsOf(draft(row("analyst", { resume })))).toEqual([
+      ["It can't start each turn later. Pick By its work, Going on with its session or Fresh.", "analyst: it can't start each turn later"],
+    ]);
+    for (const resume of ["", "resume", "fresh"] as const) expect(problemsOf(draft(row("analyst", { resume })))).toEqual([]);
+  });
+
   test("finds every problem at once, in screen order", () => {
     const team: TeamDraft = {
       team: "docs",
@@ -564,6 +572,11 @@ describe("addCustomTeam", () => {
     expect(api).toHaveBeenCalledWith("POST", "/api/teams", sent);
   });
 
+  test("sends how each agent starts its turns, trimmed", async () => {
+    await addCustomTeam({ ...team, agents: [{ ...team.agents[0], resume: " fresh " as DraftAgent["resume"] }] });
+    expect(api).toHaveBeenCalledWith("POST", "/api/teams", { ...sent, agents: [{ ...sent.agents[0], resume: "fresh" }] });
+  });
+
   test("with the policy's hash, asks for the missing profiles too", async () => {
     await addCustomTeam(team, "h1");
     expect(api).toHaveBeenCalledWith("POST", "/api/teams", { ...sent, addMissingProfiles: true, hash: "h1" });
@@ -624,6 +637,14 @@ describe("loadTeam", () => {
       },
     ]);
     expect(new Set(loaded.agents.map((agent) => agent.key)).size).toBe(2);
+  });
+
+  test("carries how each agent starts its turns", () => {
+    const fresh = [docs[0], { ...docs[1], resume: "fresh" as const }, docs[2]];
+    expect(loadTeam(fresh, "docs").agents.map((agent) => [agent.name, agent.resume])).toEqual([
+      ["editor", ""],
+      ["writer", "fresh"],
+    ]);
   });
 
   test("a team you don't have has no agents and no version", () => {

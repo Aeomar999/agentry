@@ -941,6 +941,36 @@ describe("New team: opened cold", () => {
   });
 });
 
+describe("New team: how each agent starts its turns", () => {
+  test("a row says what By its work comes to for it, and the choice is sent with the team", async () => {
+    vi.mocked(api).mockResolvedValue({});
+    openAt("/agents");
+    fireEvent.click(addTeam());
+    fireEvent.click(screen.getByRole("button", { name: "Change it first, Writing" }));
+
+    fireEvent.click(rowButton("writer"));
+    const starts = field("Starts each turn") as unknown as HTMLSelectElement;
+    expect(starts.value).toBe("");
+    expect(within(panel()).getByText("Fresh, since its work counts as review.")).toBeTruthy();
+    fireEvent.change(starts, { target: { value: "resume" } });
+    expect(
+      within(panel()).getByText("Goes on with its own session from its last turn on the task, which costs fewer tokens."),
+    ).toBeTruthy();
+
+    fireEvent.click(rowButton("editor"));
+    expect(within(panel()).getByText("Going on with its session, since it doesn't review.")).toBeTruthy();
+
+    await create();
+    expect(sent().at(-1)).toEqual([
+      "POST",
+      "/api/teams",
+      expect.objectContaining({
+        agents: [expect.objectContaining({ name: "editor", resume: "" }), expect.objectContaining({ name: "writer", resume: "resume" })],
+      }),
+    ]);
+  });
+});
+
 // The Docs team, as the Edit team panel opens it: editor coordinates writer and proofer.
 const DOCS = [
   agent("editor", "Docs", { coordinates: true, description: "Leads the docs.", prompt: "You lead.", color: "violet", teamVersion: "v1" }),
@@ -1300,6 +1330,24 @@ describe("Edit team: saving", () => {
     expect(inSheet().getByText("writer is a reserved name.")).toBeTruthy();
     fireEvent.click(within(summary()).getByRole("button", { name: "writer: writer is a reserved name" }));
     expect(document.activeElement).toBe(inSheet().getByLabelText("Name"));
+  });
+
+  test("a problem with how an agent starts its turns lands on that field of its row", async () => {
+    vi.mocked(api).mockRejectedValueOnce(
+      new ApiError("the Docs team can't be saved", 400, {
+        problems: [{ row: 2, field: "resume", error: 'proofer\'s resume setting must be by its column (""), resume or fresh, not later' }],
+      }),
+    );
+    openAt("/agents?team=Docs");
+    typeInto("Team name", "Handbook");
+    await save();
+
+    expect(docsRow("proofer").getAttribute("aria-expanded")).toBe("true");
+    const starts = inSheet().getByLabelText("Starts each turn") as HTMLSelectElement;
+    expect(starts.getAttribute("aria-invalid")).toBe("true");
+    expect(inSheet().getByText(/^proofer's resume setting must be by its column/)).toBeTruthy();
+    fireEvent.click(within(summary()).getByRole("button", { name: /^proofer: proofer's resume setting/ }));
+    expect(document.activeElement).toBe(starts);
   });
 
   test("a removed agent tasks still need says so on its stub; its link goes to Undo, which clears it", async () => {
