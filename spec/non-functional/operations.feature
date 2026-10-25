@@ -1,4 +1,13 @@
-Feature: Operations: installing, running, securing, cleaning up and shipping Agentry
+Feature: Operations
+  Running Agentry: the policy file, the settings, the log and its upkeep.
+
+  @OPS-01 @test
+  Scenario: A policy file that does not load is refused and the policy before it stays
+    Given Agentry running with a policy.toml in force
+    When the file is saved with a mistake in it
+    Then the new file is refused and the policy before it is kept in force
+    And what is wrong with the file is shown on the Policy page
+    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go, internal/web/api_test.go
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. Addresses are written as placeholders: the server's
@@ -21,6 +30,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the folder holds 1 agentry program, 5 builds for other kinds of machine, Start Agentry.command, Stop Agentry.command and README.txt
     And the page opens in the browser, signed in: yes
     And Start Agentry says whether git or Claude Code is missing: yes
+    # README.md, Install, Mac; packaging/main.go
 
   @OPS-03 @manual
   Scenario: Install on Windows by downloading the zip, extracting it and double-clicking Start Agentry.cmd
@@ -36,6 +46,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the folder holds agentry.exe, 5 builds for other kinds of machine, Start Agentry.cmd, Stop Agentry.cmd and README.txt
     And the window waits for a key after printing the links: yes
     And the page opens in the browser, signed in: yes
+    # README.md, Install, Windows; packaging/main.go
 
   @OPS-04 @manual
   Scenario: Install on Linux by downloading the zip, unzipping it and running start-agentry.sh
@@ -49,11 +60,11 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     When the zip for it is downloaded, unzipped and ./start-agentry.sh is run
     Then the folder holds agentry, 5 builds for other kinds of machine, start-agentry.sh, stop-agentry.sh and README.txt
     And the page opens in the browser, signed in: yes
+    # README.md, Install, Linux; packaging/main.go
 
   # Start Agentry and Stop Agentry
 
   @OPS-05 @test
-  # cmd/agentry/open_test.go
   Scenario: Start Agentry starts the server in the background and prints one signed-in link per address
     # packaging/files/start-unix.sh and start-windows.cmd run agentry open
     # cmd/agentry/open.go runOpen: a server already running is opened, not started again; startServer writes serve.log and serve.pid in the data folder
@@ -67,9 +78,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given a server listening on this computer only
     When agentry open runs
     Then it prints only this computer's link: yes
+    # README.md, What Start Agentry does; cmd/agentry/open_test.go
 
   @OPS-06 @test
-  # cmd/agentry/open_test.go
   Scenario: Start Agentry passes serve's flags on, and says when they wait for the next start
     # cmd/agentry/open.go passedOn: -https, -budget, -max-turns, -resume-sessions, -archive-after
     Given agentry open run with -https, -budget 0 and -max-turns=0 while no server runs
@@ -81,6 +92,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given agentry open run with -https, -budget and -max-turns while a server already runs
     Then it opens the page and says Agentry is already running and the 3 flags apply only when it next starts: yes
     And it says to give -https on every start, since Start Agentry does not pass it: yes
+    # README.md, What Start Agentry does; cmd/agentry/open_test.go
 
   @OPS-07 @manual
   Scenario: Stop Agentry stops the server that Start Agentry started
@@ -96,12 +108,12 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     When Stop Agentry is run
     Then the server process is asked to stop and has ended within 5 seconds: yes
     And serve.pid is removed: yes
-    And it prints that Agentry stopped and agents' sessions that were running carry on
+    And it prints that Agentry stopped and that agents' sessions that were running carry on: yes
     When Stop Agentry is run again
     Then it prints that Agentry isn't running, and exits 0
+    # README.md, What Start Agentry does; cmd/agentry/open.go
 
   @OPS-08 @test
-  # cmd/agentry/serve_test.go
   Scenario: Only one server runs on a data folder at a time
     # cmd/agentry/serve_lock.go lockFile = serve.lock; serve_lock_unix.go flock LOCK_EX|LOCK_NB; serve_lock_windows.go LockFileEx exclusive
     Given a server running on a data folder, with a snapshot write under way and a task's files in it
@@ -109,6 +121,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it fails, saying another agentry serve is using the folder, with the first one's pid: yes
     And the folder's files are exactly as before: yes
     And the lock is released when the first server ends, however it ends: yes
+    # cmd/agentry/serve_lock.go; cmd/agentry/serve_test.go
 
   # Where data lives
 
@@ -128,17 +141,17 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     # 3. On a worker, list .agentry-worker in the home folder.
     Given Agentry started with no -data and no -repo
     Then the data folder is .agentry in the home folder on Mac, Windows and Linux alike: yes
-    And it holds the log agentry.db, the snapshot state.snapshot, and the folders files, repos and worktrees
+    And it holds the log agentry.db, the snapshot state.snapshot, and the 3 folders files, repos and worktrees
     And it holds the 4 token files ui-token, hook-token, desk-token and helper-token, which stay the same across restarts
-    And it holds policy.toml, features.toml, push.json, server.json, serve.lock, serve.log and serve.pid, and tls when -https is on
+    And it holds each of policy.toml, features.toml, push.json, server.json, serve.lock, serve.log and serve.pid, and tls only when -https is on
     And new tasks work in the git repo Agentry in the home folder unless they name another: yes
-    And the sessions' sockets are in the temporary folder agentry-<uid> on Mac and Linux, and in the user cache folder under agentry\sessions on Windows
-    And a worker keeps its credential, repos, worktrees and worker.log in .agentry-worker in its home folder
+    And the sessions' sockets are kept in the temporary folder agentry-<uid> on Mac and Linux, and in the user cache folder under agentry\sessions on Windows
+    And a worker's credential, repos, worktrees and worker.log are kept in .agentry-worker in its home folder
+    # README.md, From the source; cmd/agentry/serve.go
 
   # The address
 
   @OPS-10 @test
-  # cmd/agentry/serve_test.go
   Scenario: The server listens on every interface on port 7800 unless -addr says otherwise
     # cmd/agentry/serve.go -addr default 0.0.0.0:7800; localURL, localhostURL, networkURLs
     Given a server started with the default -addr
@@ -147,6 +160,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given a server started with -addr 127.0.0.1:7800
     Then other machines reach it: no
     And it prints links for network addresses: no, only this computer's
+    # README.md, From the source; cmd/agentry/serve_test.go
 
   @OPS-11 @manual
   Scenario: Start Agentry takes the first free port from 7800, trying 20 ports
@@ -154,16 +168,23 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     # Steps:
     # 1. Occupy port 7800 with another program.
     # 2. Run agentry open with no server running, and read the port in the printed links.
-    # 3. Occupy ports 7800 to 7819 and run agentry open again.
     Given port 7800 is taken by another program
     When agentry open starts a server
     Then the server listens on port 7801: yes
+    # README.md, What Start Agentry does; cmd/agentry/open.go
+
+  @OPS-31 @manual
+  Scenario: Start Agentry fails when ports 7800 to 7819 are all taken
+    # cmd/agentry/open.go freeAddress tries port to port+19 and gives up after the 20th
+    # Steps:
+    # 1. Occupy ports 7800 to 7819 with other programs.
+    # 2. Run agentry open with no server running, and read what it prints.
     Given ports 7800 to 7819 are all taken
     When agentry open starts a server
     Then it fails, saying there is no free port from 7800 to 7819, and exits 1
+    # README.md, What Start Agentry does; cmd/agentry/open.go
 
   @OPS-12 @test
-  # internal/web/addresses_test.go
   Scenario: -public-url is the address people open, for the printed link and the install commands
     # cmd/agentry/serve.go -public-url; the printed link is it, or the listened address when it is empty; "From another machine" links print only without it
     Given a server started with -public-url set to an https address, listening on every interface
@@ -175,11 +196,11 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the list holds 1 entry per network address and this computer's, and the first network address is chosen: yes
     Given a server listening on this computer only
     Then the list holds exactly 1 address, this computer's
+    # README.md, Add machines; internal/web/addresses_test.go
 
   # HTTPS with the local CA
 
   @OPS-13 @test
-  # internal/tlsca/ca_test.go
   Scenario: The first start with -https makes a CA that signs only for this machine and private addresses
     # internal/tlsca/ca.go Folder = tls, caLifetime = 10 years, the key is 0600 on Mac and Linux, privateRanges
     Given a data folder with no tls folder
@@ -189,9 +210,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8: yes
     And a leaf it signs for a name on the public web verifies: no
     And a key others may read, a key that is a link, or a half-made CA is refused: yes
+    # README.md, What the CA can sign; internal/tlsca/ca_test.go
 
   @OPS-14 @test
-  # internal/tlsca/issuer_test.go
   Scenario: The server certificate is issued in memory and renewed by itself
     # internal/tlsca/issue.go leafLifetime = 397 days, always localhost, 127.0.0.1, ::1; hosts.go adds the hostname, hostname.local and every network address
     # internal/tlsca/issuer.go renewBefore = 30 days, hostsFresh = 30 seconds
@@ -204,9 +225,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     When the certificate is within 30 days of its end
     Then a new one is issued: yes
     And a client that trusts the CA connects: yes
+    # README.md, HTTPS and installing the app on other devices; internal/tlsca/issuer_test.go
 
   @OPS-15 @test
-  # cmd/agentry/https_test.go
   Scenario: One port serves https and plain http, and hands out the CA to any device that asks
     # cmd/agentry/https.go frontDoor, trustPrefix = /trust/ (internal/web/addresses.go TrustPath); ca.crt, ca.pem and agentry.mobileconfig under it
     Given a server with -https on one port
@@ -217,6 +238,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     And /trust/ and the CA certificate under it are served to anyone, with no token, over plain http and https alike: yes
     And the CA's key is served: no
     And the sign-in cookie is marked Secure over TLS: yes
+    # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go
 
   @OPS-16 @manual
   Scenario: A device trusts the CA once, then installs the app over https
@@ -231,21 +253,26 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it shows the CA's SHA-256 fingerprint, and it equals the one agentry ca prints: yes
     When the CA is downloaded and trusted as the page says, and the https address is opened
     Then the page is secure and Install app works: yes
+    # README.md, Trust a device once; cmd/agentry/trust.html
 
   @OPS-17 @test
-  # cmd/agentry/ca_test.go
   Scenario: Regenerating the CA means every device, worker and connected Claude Code trusts again
     # cmd/agentry/ca.go -regenerate; internal/tlsca/ca.go Regenerate
+    Given a server stopped, with its data folder holding a CA
+    When agentry ca -regenerate runs for that folder
+    Then the CA's fingerprint differs from before: yes
+    And it says devices that trusted the old one must trust the new one from /trust/, and workers and Claude Code machines must join again with the new fingerprint: yes
+    # README.md, Regenerate the CA; cmd/agentry/ca_test.go
+
+  @OPS-32 @test
+  Scenario: agentry ca -regenerate is refused while the server runs
+    # cmd/agentry/ca.go -regenerate
     Given a server running from a data folder
     When agentry ca -regenerate runs for that folder
     Then it refuses, saying to stop Agentry first, and exits 1
-    Given the server stopped
-    When agentry ca -regenerate runs
-    Then the CA's fingerprint differs from before: yes
-    And it says devices that trusted the old one must trust the new one from /trust/, and workers and Claude Code machines must join again with the new fingerprint: yes
+    # README.md, Regenerate the CA; cmd/agentry/ca_test.go
 
   @OPS-18 @test
-  # cmd/agentry/worker_test.go
   Scenario: A worker joins an https server by the CA's fingerprint, and is refused on a wrong one before the code is sent
     # cmd/agentry/server_ca.go trustServer; cmd/agentry/worker.go runJoin -ca-fingerprint
     Given a server with -https whose CA has fingerprint F
@@ -258,17 +285,14 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given a worker that joined over plain http before -https was turned on
     When the join command runs again with the fingerprint
     Then the worker is moved to https and keeps its credential, and the code is used: no
+    # README.md, Workers and Claude Code over https; cmd/agentry/worker_test.go
 
   # Push notifications
 
   @OPS-19 @test
-  # internal/web/push_api_test.go
   Scenario: Push notifications need an https public address and a subscription from the browser
-    # internal/webpush/webpush.go Available: -public-url must be an https address; File = push.json beside the log
-    # internal/web/push_api.go: subscribing is refused while push is off, 400 when malformed
-    Given a server with no -public-url, or one that is not https
-    Then GET /api/push says push is available: no, with the reason
-    And POST /api/push/subscriptions is refused: yes
+    # internal/webpush/webpush.go File = push.json beside the log
+    # internal/web/push_api.go: 400 when the subscription is malformed
     Given a server with an https -public-url
     When a browser posts its push subscription
     Then it is answered 200 and kept in push.json, with the VAPID key pair, beside the log and never in it: yes
@@ -277,9 +301,19 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it is answered 400 with a reason: yes
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
+    # README.md, From the source; internal/web/push_api_test.go
+
+  @OPS-33 @test
+  Scenario: Push is off, and subscribing is refused, without an https public address
+    # internal/webpush/webpush.go Available: -public-url must be an https address
+    # internal/web/push_api.go: subscribing is refused while push is off
+    Given a server with no -public-url, or one that is not https
+    When the page asks whether push is available and a browser posts a subscription
+    Then GET /api/push says push is available: no, with the reason
+    And POST /api/push/subscriptions is refused: yes
+    # README.md, From the source; internal/web/push_api_test.go
 
   @OPS-20 @test
-  # internal/webpush/sink_test.go
   Scenario: What newly needs the user is pushed once to each subscribed device
     # cmd/agentry/push.go pushTimeout = 30 seconds, pushFallback = 30 seconds; internal/webpush/sink.go lineShown = 500
     Given 2 subscribed devices and an entry already waiting when the server started
@@ -291,6 +325,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     When a device's push service says the subscription is gone
     Then that device is dropped and the other still gets its pushes: yes
     And a push carries at most 500 characters of the entry's line
+    # README.md, From the source; internal/webpush/sink_test.go
 
   # The workers' background services
 
@@ -315,9 +350,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the worker is running again: yes, except a plain background process, which is not started again
     When agentry worker stop runs
     Then it says agents running there keep going until their turn ends: yes
+    # README.md, Add machines; internal/workerservice/service.go
 
   @OPS-22 @test
-  # internal/workerlink/update_test.go
   Scenario: A worker updates itself to the server's agentry and restarts
     # internal/workerlink/update.go: before each dial the worker compares its build with the server's by ETag and replaces itself
     # cmd/agentry/worker.go runAsWorker: Run returns ErrUpdated and the process restarts into the new program (not covered by the test)
@@ -325,9 +360,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     When it checks for an update
     Then it replaces its own program with the server's: yes
     And the program keeps its executable mode: yes
+    # README.md, Add machines; internal/workerlink/update_test.go
 
   @OPS-23 @test
-  # cmd/agentry/mcp_test.go
   Scenario: Claude Code on another machine names the server by AGENTRY_URL, AGENTRY_TOKEN and AGENTRY_CA_FINGERPRINT
     # cmd/agentry/mcp.go: the Integrations page's command runs agentry mcp connect [-ca-fingerprint F] <server> <code>; the hooks and agentry mcp read the three variables, or find the server as connect saved it
     # cmd/agentry/kept_ca.go: a CA checked by fingerprint is kept beside the saved connection, so later runs make 0 requests for it
@@ -342,11 +377,11 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it refuses before the code is sent: yes
     When agentry mcp connect is given an https server and no fingerprint, and the machine does not trust the certificate
     Then it refuses, naming -ca-fingerprint and the fingerprint the server offered: yes
+    # README.md, Workers and Claude Code over https; cmd/agentry/mcp_test.go
 
   # Erasing and redacting
 
   @OPS-24 @test
-  # internal/web/erase_test.go
   Scenario: Erasing a task removes every row of it and what copied its words, for good
     # internal/web/erase_api.go erase: POST /api/tasks/{task}/erase, with an optional reason; the page only, never the desk
     # internal/store/erase.go Erase: the rows, the archive blobs its markers name, a task.erased marker with who, when and why
@@ -360,18 +395,23 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given a live task with a session running
     When it is erased
     Then its session is stopped before its rows are read: yes
+    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go
+
+  @OPS-34 @test
+  Scenario: Erasing an epic a story still names, or a task already erased, is refused
+    # internal/web/erase_api.go: 409 before anything is written
     Given an epic with a story still naming it, or a task already erased
     When it is erased
     Then it is refused with 409 and nothing is written: yes
+    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go
 
   @OPS-25 @test
-  # internal/web/redact_api_test.go
   Scenario: Redacting a text counts first, then rewrites only the rows that hold it
     # internal/web/server.go: POST /api/tasks/{task}/redact/preview and /redact, /api/agents/redact, /api/redact for the whole log
     # internal/store/redact.go Redacted = [redacted]; redact_archived.go: unarchive, redact, archive again in a new blob, delete the old
     Given a task whose description holds a secret, and a snapshot on disk that holds it too
     When the redaction is previewed
-    Then the preview says how many rows hold the text
+    Then the preview shows exactly the count of rows that hold the text
     When the redaction is confirmed with that count
     Then those rows read [redacted] in place of the secret, with every other byte as it was: yes
     And the secret is found on the disk, in the log, the WAL or the snapshot: no
@@ -383,9 +423,9 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Given an agent whose knowledge holds the secret in a version
     When the agents are redacted
     Then each version that holds it is written again whole without it, and 0 versions are added
+    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go
 
   @OPS-26 @test
-  # internal/store/redact_test.go
   Scenario: A redaction that cannot leave the rest of a row as it was is refused
     # internal/store/redact.go: the refusals, each with its reason, before anything is written
     Given a row that holds the text in a key
@@ -399,6 +439,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it is refused: yes
     Given a stream that is erased or archived
     Then it is refused before its rows are read: yes
+    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go
 
   # The Makefile and the CI check
 
@@ -420,6 +461,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then it runs go vet, go test and the UI's lint, and fails if any fails: yes
     When make package runs
     Then it builds the UI first and then runs the packaging program: yes
+    # README.md, Work on it; Makefile
 
   @OPS-28 @manual
   Scenario: The CI check fails when the UI is not built and committed, then vets and tests
@@ -436,6 +478,7 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the job check fails within its first step, saying the UI is not built and to run make ui and commit internal/web/dist
     When the UI is built and committed
     Then the job check runs go vet and go test, with a timeout of 15 minutes
+    # README.md, Work on it; .gitlab-ci.yml
 
   # How a release is packaged
 
@@ -448,19 +491,27 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     # Steps:
     # 1. On a clean checkout of the tagged commit, run make package.
     # 2. List release/ and unzip -l one zip of each system.
-    # 3. Run go run ./packaging in a tree without internal/web/dist/index.html.
+    # 3. Make a change in the tree and run make package again.
     Given a clean checkout at tag v0.1.0 with the UI built
     When make package runs
     Then release holds 6 zips: agentry-v0.1.0-mac-apple-silicon.zip, mac-intel, linux-x64, linux-arm64, windows-x64 and windows-arm64
     And each zip holds 1 folder, Agentry, with 1 agentry program for its system and 5 builds for the others
-    And the Mac zips hold Start Agentry.command and Stop Agentry.command, the Windows zips Start Agentry.cmd and Stop Agentry.cmd, and the Linux zips start-agentry.sh and stop-agentry.sh
+    And each Mac zip holds Start Agentry.command and Stop Agentry.command, each Windows zip Start Agentry.cmd and Stop Agentry.cmd, and each Linux zip start-agentry.sh and stop-agentry.sh
     And each zip holds README.txt naming version v0.1.0 and the first-run note for its system
     Given a tree with changes
     When make package runs
     Then the version in the zip names ends in -dirty: yes
+    # README.md, Make a release; packaging/main.go
+
+  @OPS-35 @manual
+  Scenario: The packaging program is refused without the page built
+    # packaging/main.go run: refuses unless internal/web/dist/index.html is there
+    # Steps:
+    # 1. Run go run ./packaging in a tree without internal/web/dist/index.html.
     Given a tree without internal/web/dist/index.html
     When go run ./packaging runs
     Then it refuses, saying to run it from the repo's root with the page built, and exits 1
+    # README.md, Make a release; packaging/main.go
 
   @OPS-30 @manual
   Scenario: The deploy target runs one image from dev, pinned to one node, with its home as a volume
@@ -475,3 +526,4 @@ Feature: Operations: installing, running, securing, cleaning up and shipping Age
     Then the deploy target runs the new image, stopping the old copy first: yes
     And the container is checked every 30 seconds at port 7800 and given 30 seconds to stop, so a hook call waiting for the user can record its denial: yes
     And Claude's sign-in, the repos and Agentry's log and policy survive the redeploy in the home volume: yes
+    # README.md, Deploy it; docker-stack.dev.yml
