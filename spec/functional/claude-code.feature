@@ -398,23 +398,24 @@ Feature: Agentry from Claude Code
     # internal/ideas/tools.go listIdeas: the problem and feature lines are each cut at 300 characters (tasks.OneLine)
     And who backed and who doubted it are named: yes
     When Claude calls list_ideas with state all
-    Then all 4 ideas are listed: accepted ones say what they became, as task-N or epic-N, and dismissed ones say dismissed with the user's note
+    Then this repo's accepted and dismissed ideas are listed too: accepted ones say what they became, such as epic-30, and dismissed ones say dismissed with the user's note
     When Claude calls list_ideas with all
     Then every repo's ideas are listed: yes
     When Claude calls list_ideas with a state that is not open, accepted, dismissed or all
     Then the tool fails, naming the 4 states there are
-    # internal/ideas/tools_test.go
+    # internal/ideas/tools_test.go TestListIdeasShowsTheOpenOnesUnlessAsked; the unknown state: TestTheArgumentsAreSentAsGiven
 
   @CC-39 @test
   Scenario: accept_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls accept_idea for it
-    Then Claude Code asks the user 1 time, showing the problem and the feature, with the kind, a note and start to choose
-    And when the user accepts with a kind and a note, 1 accept is posted with that kind and note, and the reply names the task-N it became with 1 link
+    Then Claude Code asks the user 1 time, showing the problem and the feature, with start to choose
+    # not under test, checked by hand: the kind and a note to choose too (internal/ideas/tools.go lines 132 and 133)
+    And when the user accepts with a kind and a note, 1 accept is posted with that kind and note, and the reply names the task-N it became with a link
     And when the user chooses leave open, declines or closes the question, 0 posts are sent and the reply says nothing was written
     When the user accepts with start
     Then 1 accept is posted with start, and the reply says the task started
-    # internal/ideas/tools_test.go
+    # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea; the feature: TestAnIdeaWithoutSizeOrTask; start: TestAcceptingAnIdeaCanStartItsTask
 
   @CC-40 @test
   Scenario: Without elicitation accept_idea and dismiss_idea act on the arguments as the user's decision
@@ -424,8 +425,9 @@ Feature: Agentry from Claude Code
     When Claude calls dismiss_idea with its id and a note
     Then 1 dismiss is posted with the note, and the reply says the user dismissed the idea
     When Claude calls accept_idea with a kind that is neither task nor epic
-    Then the tool fails with the server's reason, an idea becomes a task or an epic, and 0 tasks are made
-    # internal/ideas/tools_test.go
+    Then the tool fails with the server's reason, an idea becomes a task or an epic: yes
+    # not under test, checked by hand: 0 tasks are made; the fake server refuses the kind
+    # internal/ideas/tools_test.go TestWithoutElicitationTheArgumentsAreTheDecision; the kind refused: TestTheArgumentsAreSentAsGiven
 
   @CC-41 @test
   Scenario: An idea that looks like an open task makes none until the user chooses to anyway
@@ -441,7 +443,7 @@ Feature: Agentry from Claude Code
     Then the reply names the 1 open task it looks like, says nothing was written, and says to call accept_idea again with anyway
     When Claude calls accept_idea with anyway
     Then the accept is posted with anyway and the task is made: yes
-    # internal/ideas/tools_test.go
+    # internal/ideas/tools_test.go TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway; the server's 409: internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
 
   @CC-42 @test
   Scenario: Only an open task in the idea's repo counts as the task it looks like
@@ -449,22 +451,24 @@ Feature: Agentry from Claude Code
     When the open task it looks like is found
     Then a done task counts: no, a task in another repo counts: no, and a task in the Backlog counts: yes
     And of 2 candidates the closest title wins, and on a tie the 1 made first
-    # internal/ideas/duplicate_test.go
+    # internal/ideas/duplicate_test.go TestOnlyAnOpenTaskInTheReposCounts
 
   @CC-43 @test
   Scenario: dismiss_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls dismiss_idea for it
-    Then Claude Code asks the user 1 time, with a note to give so the Visionaries don't suggest it again
+    Then Claude Code asks the user: yes
+    # not under test, checked by hand: it asks 1 time, with a note to give so the Visionaries don't suggest it again (internal/ideas/tools.go line 229)
     And when the user dismisses with a note, 1 dismiss is posted with it and the reply says the user dismissed the idea
     And when the user chooses leave open, 0 posts are sent
     When Claude calls dismiss_idea for an idea accepted already
-    Then the tool fails, saying the idea was accepted already, and the idea is changed: no
+    Then the tool fails, saying the idea was accepted already: yes
     When Claude calls accept_idea for an idea dismissed already
-    Then the tool fails, saying the idea was dismissed already, and a task is made: no
+    Then the tool fails, saying the idea was dismissed already: yes
+    # not under test, checked by hand: the idea is kept as it was and no task is made; the fake server refuses both
     When Claude calls accept_idea for an id no idea has
     Then the tool fails, saying no idea with that id
-    # internal/ideas/tools_test.go
+    # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea
 
   @CC-44 @test
   Scenario: The ideas tools are listed only while the Ideas feature shows
@@ -475,7 +479,7 @@ Feature: Agentry from Claude Code
     When the Visionaries team is added, so the feature turns on
     Then the session sends notifications/tools/list_changed 1 time
     And tools/list has all 3 ideas tools: yes
-    # internal/ideas/mcp_test.go
+    # internal/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows, for any feature
 
   # ---- Hearing from Agentry -------------------------------------------------
 
@@ -485,9 +489,8 @@ Feature: Agentry from Claude Code
     When Claude calls any tool but status
     Then the reply ends with Waiting for the user (1): and that 1 line
     # internal/mcp/tools.go waitingNote: at most 5 waiting lines are shown
-    When Claude calls status
-    Then the note is added: no, since the board says it already
-    # internal/mcp/features_test.go
+    # internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits (list_tasks)
+    # not under test, checked by hand: status gets no note, since the board says it already (internal/mcp/server.go line 116)
 
   @CC-46 @test
   Scenario: Each waiting line names its task as the user knows it, and the tool that deals with it
@@ -498,17 +501,17 @@ Feature: Agentry from Claude Code
     # internal/waitlist/waitlist.go Line: an approval ends with (review_approvals), cut at 140 characters; a copy says answer_question with Copy it asks the user, cut at 200
     # internal/waitlist/waitlist.go Line: an agent stuck on a prompt is cut at 120 characters; a question at 160, with Agentry's own stops named as Agentry
     And the approving answers Close the epic and Copy it are the coordinator's own 2 words: yes
-    # internal/waitlist/waitlist_test.go
+    # internal/waitlist/waitlist_test.go TestALineNamesAnEpicAsEpicN and TestTheApprovingAnswersAreTheCoordinators
 
   @CC-47 @test
   Scenario: Open ideas wait for the user as one line
-    Given 4 open ideas across 2 repos
+    Given 4 open ideas
     When the lines waiting for the user are read outside a repo
     Then there is 1 line: 4 open ideas from the Visionaries, the 3 newest titles, and 1 more, ending (list_ideas all)
     And when all open ideas are in this repo, the line ends (list_ideas), with all added: no
     And an idea the user decides on changes the line's key: no, so it is news 0 times
     And an idea Agentry accepted for the user by their rule is counted: no
-    # internal/ideas/waiting_test.go
+    # internal/ideas/waiting_test.go TestOpenIdeasWaitForYou; this repo and (list_ideas): TestOpenIdeasPointAtTheirRepo
 
   @CC-48 @manual
   Scenario: SessionStart and UserPromptSubmit tell Claude what waits for the user
@@ -529,11 +532,11 @@ Feature: Agentry from Claude Code
   Scenario: The news a waiter wakes Claude with is only what is new
     Given 1 task done before the waiter started, and a worker online with a task
     When a task finishes, its coordinator tells the user something, and the worker goes offline with that task on it
-    Then the news has 3 lines: the task is done with its summary, what the coordinator says, and the machine went offline with the task waiting until it is back
+    Then the news says the task is done with its summary, what the coordinator says, and that the machine went offline with the task waiting until it is back: yes
     # internal/mcp/waiting.go News: a summary is cut at 300 characters, a coordinator's word at 400
     And the task done before the waiter started is in the news: no
     And an epic is named epic-N: yes
-    # internal/mcp/waiting_test.go
+    # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
   @CC-50 @manual
   Scenario: After each reply a waiter wakes Claude when something new waits
@@ -595,16 +598,18 @@ Feature: Agentry from Claude Code
   Scenario: A hidden feature's tool cannot be called
     Given a feature the server shows: no
     When Claude calls one of its tools
-    Then the tool fails with no tool and its name, and 0 calls reach the server for it
-    # internal/mcp/features_test.go
+    Then the tool fails with no tool and its name: yes
+    # not under test, checked by hand: 0 calls reach the server for it (internal/mcp/server.go line 121 answers before any call)
+    # internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows
 
   @CC-55 @test
   Scenario: The model cannot approve, close or copy for the user
     Given an approval and an epic asking to close, and a Claude Code that cannot ask the user
     When Claude calls review_approvals, close_epic, or answer_question with Close the epic
-    Then approve, deny and Close the epic are posted 0 times
-    And each reply says the decision is the user's and gives 1 link to the page
-    # internal/mcp/server_test.go
+    Then approve and Close the epic are posted 0 times
+    And review_approvals says the approval is theirs to give, with a link to the page, answer_question says closing is the user's to approve, and close_epic gives a link to the epic's page: yes
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; close_epic: TestAnswersNameAnEpicAsEpicN
+    # not under test, checked by hand: deny is posted 0 times too, and each of the 3 replies says the decision is the user's with 1 link (internal/mcp/tools.go lines 422 and 471)
 
   @CC-56 @manual
   Scenario: A wrong id is refused with its name
