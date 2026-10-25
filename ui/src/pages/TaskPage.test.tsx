@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { TaskDetail } from "@/api/types";
 import { task } from "@/api/tasks.fixtures";
@@ -339,6 +339,25 @@ describe("TaskPage tokens", () => {
     const reason = screen.getByText(long);
     expect(reason.closest("tr")!.textContent).toContain("turn-1");
     expect(screen.getByText("transcript not saved").closest("tr")!.textContent).toContain("turn-2");
+  });
+
+  test("shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say", () => {
+    page(
+      detail({
+        turnList: [
+          { ...turn, id: "turn-1", tokens: 53174, split, freshBecause: "context too big (182k tokens)" },
+          { ...turn, id: "turn-2", tokens: 1000, fromSession: "4f1c-9a2e" },
+          { ...turn, id: "turn-3", tokens: 1000 },
+        ],
+      }),
+      "details",
+    );
+    const [first, second, third] = ["turn-1", "turn-2", "turn-3"].map((id) => screen.getByText(id).closest("tr")!);
+    expect(first.textContent).toContain("out370fresh: context too big (182k tokens)");
+    expect(first.textContent).not.toContain("resumed");
+    expect(within(second).getByText("resumed").title).toBe("4f1c-9a2e");
+    expect(second.textContent).not.toContain("fresh");
+    expect(third.textContent).not.toMatch(/resumed|fresh/);
   });
 
   test("shows the task's split and what isn't split", () => {

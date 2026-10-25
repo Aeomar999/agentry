@@ -127,6 +127,22 @@ function TurnSplit({ split }: { split: TokenSplit }) {
   );
 }
 
+// How a turn started, under its tokens: it resumed a session (its id on
+// hover) or started fresh and why. Nothing for a turn whose log didn't say.
+// It takes no width of its own and wraps within what the split sets, so a
+// long reason never widens the table.
+function TurnStart({ turn }: { turn: Turn }) {
+  const style = "self-stretch text-right text-[11px] whitespace-normal text-ink-muted [contain:inline-size]";
+  if (turn.fromSession) {
+    return (
+      <span className={style} title={turn.fromSession}>
+        resumed
+      </span>
+    );
+  }
+  return turn.freshBecause ? <span className={style}>fresh: {turn.freshBecause}</span> : null;
+}
+
 const TURN_COLUMNS: Column<Turn>[] = [
   { header: "Turn", className: "w-20", render: (t) => <Mono className="text-ink-muted">{t.id}</Mono> },
   { header: "Agent", className: "w-32", render: (t) => <AgentName name={t.agent} /> },
@@ -138,15 +154,19 @@ const TURN_COLUMNS: Column<Turn>[] = [
   {
     header: "Tokens",
     className: "w-20 text-right",
-    render: (t) =>
-      t.tokensUnknown ? (
-        <Mono className="ml-auto block w-max max-w-[23ch] text-[11px] whitespace-normal text-warning">{t.tokensUnknown}</Mono>
-      ) : (
-        <span className="flex flex-col items-end">
-          <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
-          {t.split && <TurnSplit split={t.split} />}
-        </span>
-      ),
+    render: (t) => (
+      <span className="flex flex-col items-end">
+        {t.tokensUnknown ? (
+          <Mono className="ml-auto block w-max max-w-[23ch] text-[11px] whitespace-normal text-warning">{t.tokensUnknown}</Mono>
+        ) : (
+          <>
+            <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
+            {t.split && <TurnSplit split={t.split} />}
+          </>
+        )}
+        <TurnStart turn={t} />
+      </span>
+    ),
   },
   {
     header: "Outcome",

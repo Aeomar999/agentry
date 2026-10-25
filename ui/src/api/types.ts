@@ -97,6 +97,8 @@ export interface Turn {
   tokensUnknown?: string; // why tokens is 0, when the engine couldn't say
   split?: TokenSplit; // how tokens splits, when the engine said
   engineSession?: string; // the engine's own id for the session, when it said
+  fromSession?: string; // the engine session it resumed, absent when it started fresh
+  freshBecause?: string; // why it started fresh, absent when it resumed or the log didn't say
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something
