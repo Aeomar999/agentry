@@ -420,10 +420,10 @@ Feature: Workers
     When a move to that same machine is recorded
     Then it is refused: yes
     When a move to a worker is recorded
-    Then it is accepted, 1 move
+    Then it is accepted: yes
     When a move is recorded while a turn runs
     Then it is refused: yes
-    # internal/rules/worker_rules_test.go
+    # internal/rules/worker_rules_test.go TestWorkMovesOnlyToAnotherMachine
 
   @WORKER-31 @test
   Scenario: A task's shared files follow the work to the next machine
@@ -434,7 +434,8 @@ Feature: Workers
     # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
     # internal/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
     And a shared file's name may leave .agentry/files: no
-    # internal/sharedfiles/sharedfiles_test.go
+    # internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees, TestNamesStayInsideTheFolder;
+    # the turn's files kept by their hash on the server: internal/coordinator/files_test.go TestSharedFilesFollowTheWork
 
   @WORKER-32 @test
   Scenario: A worker fetches a file into the shared files only from inside its worktrees, unless the user allows
@@ -443,9 +444,11 @@ Feature: Workers
     Then it is refused as outside the worker's folder, and 0 files are sent
     When the fetch names a folder inside the worktrees
     Then every file in it is sent under the name given, 1 file for 1 file
-    When the user has allowed it, by answering Copy it
+    When the user has allowed it
     Then the file outside is sent: yes
-    # internal/sharedfiles/sharedfiles_test.go
+    # not under test, checked by hand: the user allows it by answering Copy it (internal/coordinator/files.go line 29); files_test checks the question offers it
+    # internal/sharedfiles/sharedfiles_test.go TestFetchAsksOutsideTheBoundary; 0 files before the user allows it:
+    # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
 
   # ---- A machine going offline mid-task --------------------------------------
 
@@ -454,20 +457,21 @@ Feature: Workers
     Given a worker running a task's turn
     When its link drops
     # internal/machines/fleet.go OfflineGrace
-    Then for 30 seconds the task counts as running there, so the watchdog takes the agent as crashed: no
-    And after 30 seconds, nothing runs there that Agentry can see
+    Then just after, the task counts as running there: yes
+    And once its grace has passed, nothing runs there that Agentry can see
+    # not under test, checked by hand: the grace is 30 seconds (internal/machines/fleet.go line 28; the test uses the constant), so the watchdog takes the agent as crashed: no
     And a worker never seen runs anything: no
     And a stale link's end removes a newer link: no
-    # internal/machines/fleet_test.go
+    # internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @WORKER-34 @test
   Scenario: The user hears that a machine went offline with work on it
     Given a worker online with 1 task on it
     When it goes offline
-    Then the news for the user has 1 line: the machine went offline, and the task waits until it is back
-    And a worker offline with 0 tasks on it is news: no
+    Then the news for the user says the machine went offline, and the task waits until it is back: yes
+    # not under test, checked by hand: it is 1 line, and a worker offline with 0 tasks on it is news: no (internal/mcp/waiting.go line 67)
     # internal/coordinator/loop.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
-    # internal/mcp/waiting_test.go
+    # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
   @WORKER-35 @manual
   Scenario: A worker offline longer than its grace stops the task until it is back
@@ -505,7 +509,7 @@ Feature: Workers
     Then the worker has claude: yes
     When an agent on another engine is checked against it
     Then the worker has that engine: no
-    # internal/workers/workers_test.go
+    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   # ---- What a worker cannot do -----------------------------------------------
 
@@ -513,10 +517,10 @@ Feature: Workers
   Scenario: Without a credential the server takes, a worker reaches nothing
     Given a worker the user removed on the Workers page
     When it dials the link with its old credential
-    Then it is refused with status 401, saying the worker isn't joined
-    And its open link is dropped at once: yes
+    Then it is refused with status 401: yes
+    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 230), and its open link is dropped at once (line 149)
     # internal/web/workers_api.go requireWorker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential
-    # internal/web/workers_test.go
+    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @WORKER-39 @test
   Scenario: An agent's hook call needs the hook token, and only the working agent passes the gate
@@ -527,24 +531,27 @@ Feature: Workers
     Then it is answered with status 200
     When a gate call names an agent that is not the one working
     Then the action is denied: yes
-    # internal/hooks/handler_test.go
+    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken, TestOnlyTheWorkingAgentPassesTheGate
 
   @WORKER-40 @test
   Scenario: The gate fails closed when the server cannot answer
     Given an agent session on a worker whose server is unreachable, slow or broken
     When the engine's gate hook calls `agentry hook`
-    Then the hook exits 2 within its own deadline, so the action is blocked, 1 time each
+    Then the hook exits 2 within its own deadline, so the action is blocked: yes
     # internal/turns/turns.go environment: the deadline is 1790 seconds, 10 under the engine's gate timeout of 1800 (internal/engines/engine.go GateTimeoutSeconds)
-    And the server's reply, when it comes, is printed as it is and its exit code kept: yes
-    # cmd/agentry/hook_test.go
+    And the server's reply, when it comes, is printed as it is: yes
+    # not under test, checked by hand: its exit code is kept (cmd/agentry/hook.go line 50); the test's reply has exit code 0, the default
+    # cmd/agentry/hook_test.go TestTheHookFailsClosed, TestTheHookPassesTheServersReplyThrough
 
   @WORKER-41 @test
   Scenario: An agent on any machine never pushes to main, never force pushes, and every push asks the user
     Given an agent with the developer profile
     # internal/policy/default.toml profiles.developer.rules
-    When it runs git push to main or master, by name or by refspec, from any folder
+    When it runs git push to main, by name or by refspec, with or without -C
     Then the policy denies it: yes
-    When it runs git push with a force flag, in any spelling
+    # not under test, checked by hand: master the same (internal/policy/default.toml line 111)
+    When it runs git push with -f or --force, before or after the branch
     Then the policy denies it: yes
+    # not under test, checked by hand: a + refspec the same (internal/policy/default.toml line 117)
     # internal/policy/default.toml "every push leaves this machine: you approve it": any other git push asks the user first
-    # internal/policy/default_test.go
+    # internal/policy/default_test.go TestTheDeveloperProfile
