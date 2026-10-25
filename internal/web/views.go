@@ -74,6 +74,8 @@ type turn struct {
 	Split         *tokenSplit `json:"split,omitempty"`         // how tokens splits, when the engine said
 	EngineSession string      `json:"engineSession,omitempty"` // the engine's own id for the session, when it said
 	FromSession   string      `json:"fromSession,omitempty"`   // the engine session it resumed, "" when it started fresh
+	SessionFrom   string      `json:"sessionFrom,omitempty"`   // the task whose turn FromSession was, "" when it was this one's or the log didn't say
+	Forked        bool        `json:"forked,omitempty"`        // it went on with a copy of FromSession, which another turn was busy in
 	FreshBecause  string      `json:"freshBecause,omitempty"`  // why it started fresh, "" when it resumed or the log didn't say
 	Plan          string      `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
 	PlanFrom      string      `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
@@ -169,7 +171,7 @@ func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
 			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown,
 			Split: splitOf(tu.Split), EngineSession: tu.EngineSession,
-			FromSession: tu.FromSession, FreshBecause: tu.FreshBecause, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
+			FromSession: tu.FromSession, SessionFrom: tu.SessionFrom, Forked: tu.Forked, FreshBecause: tu.FreshBecause, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
 		if resets := tu.ResetsAt; !resets.IsZero() {
 			detail.Turns[len(detail.Turns)-1].ResetsAt = &resets
 		}

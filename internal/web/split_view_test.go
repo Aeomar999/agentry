@@ -41,21 +41,28 @@ func TestATaskWithNoSplitTurnsHasNoSplit(t *testing.T) {
 	}
 }
 
-// A turn says whether it resumed a session or started fresh and why; a turn
-// from a log that said neither carries neither.
+// A turn says whether it resumed a session or started fresh and why, and
+// when the session was a sibling story's, which one and whether it forked
+// it; a turn from a log that said none of this carries none of it.
 func TestATurnSaysWhetherItResumedOnlyWhenKnown(t *testing.T) {
 	task := &tasks.Task{Turns: []*tasks.Turn{
 		{ID: "turn-1", Ended: true, FreshBecause: "first turn"},
 		{ID: "turn-2", Ended: true, FromSession: "4f1c"},
-		{ID: "turn-3", Ended: true},
+		{ID: "turn-3", Ended: true, FromSession: "4f1c", SessionFrom: "task-1"},
+		{ID: "turn-4", Ended: true, FromSession: "4f1c", SessionFrom: "task-1", Forked: true},
+		{ID: "turn-5", Ended: true},
 	}}
 	detail := detailOf(task, agents.Roster{})
-	for i, want := range []string{`"freshBecause":"first turn"`, `"fromSession":"4f1c"`} {
+	for i, want := range []string{`"freshBecause":"first turn"`, `"fromSession":"4f1c"`,
+		`"fromSession":"4f1c","sessionFrom":"task-1"`, `"fromSession":"4f1c","sessionFrom":"task-1","forked":true`} {
 		if body, _ := json.Marshal(detail.Turns[i]); !strings.Contains(string(body), want) {
 			t.Errorf("turn-%d %s, want %s", i+1, body, want)
 		}
 	}
-	if old, _ := json.Marshal(detail.Turns[2]); strings.Contains(string(old), "fromSession") || strings.Contains(string(old), "freshBecause") {
-		t.Errorf("turn-3 %s says how it started though its log didn't", old)
+	if own, _ := json.Marshal(detail.Turns[1]); strings.Contains(string(own), "sessionFrom") || strings.Contains(string(own), "forked") {
+		t.Errorf("turn-2 %s names a story or a fork though its session was this task's own", own)
+	}
+	if old, _ := json.Marshal(detail.Turns[4]); strings.Contains(string(old), "ession") || strings.Contains(string(old), "fresh") || strings.Contains(string(old), "forked") {
+		t.Errorf("turn-5 %s says how it started though its log didn't", old)
 	}
 }
