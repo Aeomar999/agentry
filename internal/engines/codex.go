@@ -26,13 +26,21 @@ func (codex) Prepare(s Session) error {
 	return writeJSON(filepath.Join(s.Worktree, ".codex", "hooks.json"), hookSettings(s.HookCommand, codexGates, codexReports))
 }
 
-// Launch: hook trust is bypassed as in proof 07; registering trust properly is T-028.
+// Launch: hook trust is bypassed as in proof 07; registering trust properly
+// is T-028. `codex resume` takes the same flags, then the session and prompt.
 func (codex) Launch(s Session, prompt string) []string {
 	command := []string{"codex"}
+	if s.Resume != "" {
+		command = append(command, "resume")
+	}
 	if s.Model != "" {
 		command = append(command, "--model", s.Model)
 	}
-	return append(command, "-s", "workspace-write", "-a", "never", "--dangerously-bypass-hook-trust", prompt)
+	command = append(command, "-s", "workspace-write", "-a", "never", "--dangerously-bypass-hook-trust")
+	if s.Resume != "" {
+		command = append(command, s.Resume)
+	}
+	return append(command, prompt)
 }
 
 func (codex) IsGate(event string) bool { return slices.Contains(codexGates, event) }

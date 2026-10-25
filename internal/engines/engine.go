@@ -16,7 +16,8 @@ type Engine interface {
 	Prepare(s Session) error
 
 	// Launch is the command to run in the session's terminal, in never-ask
-	// mode so Agentry's gate is the only one, starting on the given prompt.
+	// mode so Agentry's gate is the only one, starting on the given prompt;
+	// it goes on with s.Resume's session when that is set.
 	Launch(s Session, prompt string) []string
 
 	// IsGate says whether a hook event waits for Agentry's decision.
@@ -39,6 +40,7 @@ type Session struct {
 	HookCommand string // runs Agentry's hook: HookCommand + " " + event name
 	Model       string // "" for the engine's default
 	Theme       string // "light" or "dark", the page's; "" leaves the engine's own
+	Resume      string // the engine session to go on with, "" for a fresh one
 }
 
 type Decision string

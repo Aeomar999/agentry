@@ -68,6 +68,9 @@ func (claude) Launch(s Session, prompt string) []string {
 	if s.Model != "" {
 		command = append(command, "--model", s.Model)
 	}
+	if s.Resume != "" {
+		command = append(command, "--resume", s.Resume)
+	}
 	return append(command, "--settings", claudeSettings(s), "--permission-mode", "bypassPermissions", prompt)
 }
 
