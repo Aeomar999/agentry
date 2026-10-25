@@ -171,9 +171,9 @@ func claudeLastMessage(transcript string) string {
 // is the turn's, as when each turn was its own session. A reply can appear
 // on several lines with the same usage, so each message is counted once.
 // The sum is not how big the session is: every call reads the context
-// again, so context is the input of the last call counted alone.
+// again, so contextTokens is the input of the last call counted alone.
 // When there is nothing to count, it says why instead.
-func claudeTokens(transcript string, started time.Time) (used Tokens, context int, unknown string) {
+func claudeTokens(transcript string, started time.Time) (used Tokens, contextTokens int, unknown string) {
 	file, err := os.Open(transcript)
 	if errors.Is(err, fs.ErrNotExist) { // also when the path is ""
 		return Tokens{}, 0, TranscriptNotSaved
@@ -214,11 +214,11 @@ func claudeTokens(transcript string, started time.Time) (used Tokens, context in
 		used.CacheWrite += u.CacheWrite
 		used.CacheRead += u.CacheRead
 		used.Output += u.Output
-		context = u.Input + u.CacheWrite + u.CacheRead
+		contextTokens = u.Input + u.CacheWrite + u.CacheRead
 	}
 	switch {
 	case len(seen) > 0:
-		return used, context, ""
+		return used, contextTokens, ""
 	case undated: // whether any of it is this turn's can't be told
 		return Tokens{}, 0, NoUsageDated
 	case earlier:
