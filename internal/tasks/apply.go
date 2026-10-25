@@ -435,7 +435,7 @@ func (t *Task) Apply(e events.Event) {
 			// same agent gets the same step again, and the coordinator is
 			// only told. It still counts as an issue, so retries are bounded.
 			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator, Text: e.Text("reason")})
-			again := turn.Handoff
+			again := turn.Handoff // its own At on purpose: the same step as in the trail, not a new one
 			t.PendingDecision, t.Handoff = "", &again
 			break
 		}
