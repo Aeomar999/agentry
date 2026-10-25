@@ -60,29 +60,31 @@ Feature: Observability
   @OBS-07 @test
   Scenario: Activity is everything that happened, newest first, under bands that say who wrote it
     Given a task with 3 turns, 2 messages from you, a note from Agentry and a message from another team's coordinator
-    When its Activity tab is shown
+    When the Activity feed is shown
     Then the rows come newest first, in 8 runs, each under a band naming its author: an agent with its team and role, "you", or "Agentry"
     And a turn's band names the turn, the machine it ran on, whether it ended or runs, its tokens as "41k tokens" and its duration as "5m 00s"
     And clicking a turn's band asks for that turn alone, and narrowed to it the feed shows only that turn's band: yes
     But a task with no rows yet says "Nothing here yet"
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
     # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "is one list of runs, one item each, with its band and its rows; no regions among them", "puts the turn's facts in the band: badge, tokens, and the duration for a phone", "narrows to the turn from its band, and from its continued band", "narrowed, the band is the turn's heading alone, with no Show only" and "a new task"
 
   @OBS-08 @test
   Scenario: A coordinator's handoff shows under its turn and offers the turn it led to
     Given a coordinator's turn that assigned the engineer on a named machine, and the engineer's turn after it
-    When Activity is shown
+    When the Activity feed is shown
     Then the handoff is shown as the newest row under the coordinator's turn band, reading "coordinator to engineer on" the machine it named, with the instructions it gave
     And it carries a button "Show only turn-2": yes
-    # not under test, checked by hand: the button narrows the feed to that turn (ui/src/components/organisms/ActivityFeed.tsx line 410)
+    # not under test, checked by hand: the button narrows the feed to that turn (ui/src/components/organisms/ActivityFeed.tsx line 410); the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
     # README.md, How it works, How a task moves; ui/src/components/organisms/ActivityFeed.test.tsx "keeps the coordinator's handoff under its turn's band, from → to with ' to ' said"
 
   @OBS-09 @test
   Scenario: When the events cannot be read, Activity says so and offers Try again
     Given a task whose events read fails with "502 Bad Gateway"
-    When the Activity tab is shown, Try again is clicked twice at once, and later a retry fails again
+    When the Activity feed is shown, Try again is clicked twice at once, and later a retry fails again
     Then an alert is shown that says "Couldn't load the activity", quotes the server's answer and adds "If it keeps failing, check that Agentry is still running."
     And the two clicks make exactly 1 read, with focus kept on the feed through the loading
     And a retry that fails shows the alert again, and one that succeeds shows the rows with no alert
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
     # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"; the words: ui/src/components/organisms/ActivityFeed.test.tsx "an error, with what the server said and Try again"
 
   @OBS-10 @test
@@ -192,9 +194,9 @@ Feature: Observability
   @OBS-21 @test
   Scenario: A push goes once to every subscribed browser for each thing that newly waits
     Given 2 browsers subscribed, and an approval waiting already when the push sink starts
-    When a question starts waiting, the sink checks twice, then the approval leaves and comes back
+    When a new entry starts waiting, the sink checks twice, then the approval leaves and comes back
     Then the approval waiting at the start is not pushed
-    And the question is pushed exactly once to each of the 2 browsers, and the second check pushes nothing
+    And the new entry is pushed exactly once to each of the 2 browsers
     And 2 new entries at once are 2 pushes, and an entry that leaves and comes back is pushed again
     And a browser whose push fails does not stop the others from getting theirs
     # README.md, Install, Push; internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestTwoNewEntriesAreTwoPushes, TestAnEntryThatLeavesAndComesBackIsNewAgain and TestADeviceThatFailsDoesNotStopTheOthers
@@ -220,11 +222,12 @@ Feature: Observability
 
   @OBS-24 @test
   Scenario: Push is offered only at an https public address, and keeps its data out of the log
-    Given a server started with no -public-url, one with an http -public-url, and one with an https -public-url
+    Given a server whose public address is unset, http, or https
     When GET /api/push is read and a browser subscribes at each
     Then push is available only at the https one, and only there is the public key given
     And the other two say why, "Start Agentry with -public-url https://" or "-public-url is http://...", and the subscription is refused with that reason
     And subscribing and unsubscribing write 0 events, and no event holds a subscription's address
+    # not under test, checked by hand: serve sets it from -public-url (cmd/agentry/serve.go lines 98 and 328)
     # README.md, Install, Push; internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL and TestPushDataStaysOutOfTheLog
 
   @OBS-25 @test
@@ -299,4 +302,4 @@ Feature: Observability
     Then the server closes the silent link and writes a worker.disconnected event, not when a newer link from the same worker replaced it
     And the link with no hello is closed with "say hello first", and no worker.connected is written for it
     And at the restart every worker the log had online is recorded offline, until it dials in again
-    # README.md, Add machines; internal/workerlink/server.go, StatusEvery, silentFor, Connect and ForgetConnections; no test covers these; the 30-second offline mark on the page is in limits
+    # README.md, Add machines; internal/workerlink/server.go, StatusEvery, silentFor, Connect and ForgetConnections; no test covers these; the 20-second offline mark on the Workers page is LIM-31; OfflineGrace, 30 seconds, is how long its turns still count as running (REL-41)

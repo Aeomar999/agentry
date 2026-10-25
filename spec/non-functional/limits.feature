@@ -5,8 +5,8 @@ Feature: Limits
   Scenario: A task stops at its token budget
     Given a task with a token budget of 100k tokens
     When its turns have used 110k tokens
-    Then no new turn starts, and the user is asked, the question saying 110k tokens of its 100k budget: yes
-    And after the user's answer the coordinator gets the next turn: yes
+    Then the coordinator's next move asks the user, not a turn, the question saying 110k tokens of its 100k budget: yes
+    And after the user's answer the next move is the coordinator's turn: yes
     # not under test, checked by hand: the question goes on "Raise the budget to go on, or tell the coordinator to wrap up." (internal/coordinator/next.go line 70), and after that one turn the budget asks again, as it waits for a turn since the answer (line 67)
     # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
 
@@ -29,7 +29,7 @@ Feature: Limits
   @LIM-04 @test
   Scenario: On the API and the MCP tool, 0 takes the default and -1 is no limit
     Given a server whose default budget is 5,000,000 tokens and default turn limit is 2
-    When tasks are created with no limits given, with budget 200,000 and maxTurns 50, with budget -1 and maxTurns -1, and with budget 0 and maxTurns 0
+    When tasks are created with no limits given, with budget 200,000 and maxTurns 50, with budget -1 and maxTurns -1, and with budget 0 and maxTurns 0, and through create_task with no limits
     Then the first and the fourth task get a budget of 5,000,000 and 2 turns
     And the second task gets a budget of 200,000 and 50 turns
     And the third task has no budget and no turn limit
@@ -61,9 +61,9 @@ Feature: Limits
   Scenario: A task has 24 turns without the user's answer before it asks
     Given a task created with the default turn limit
     When its 24th turn since the user last answered ends without finishing
-    Then the coordinator loop asks the user instead of starting a turn: yes
+    Then the coordinator's next move asks the user, not a turn: yes
     And the question says "24 of its 24 turns"
-    And after the user's answer the coordinator carries on: yes
+    And after the user's answer the next move is the coordinator's turn: yes
     # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463)
     # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
@@ -121,7 +121,7 @@ Feature: Limits
   Scenario: Three issues in a row stop the task
     Given a task whose last 2 turns ended in an issue, with no turn ending normally in between
     When a 3rd issue is raised
-    Then the coordinator loop asks the user instead of starting a turn: yes
+    Then the coordinator's next move asks the user, not a turn: yes
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
     # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/tasks/apply.go lines 386 and 463)
