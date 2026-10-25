@@ -66,6 +66,8 @@ func TestACustomTeamIsRefused(t *testing.T) {
 			"cook's column must be builds (\"\"), review or ship, not serve"},
 		{"an unknown colour", "Kitchen", func(a []Agent) []Agent { a[2].Color = "mauve"; return a },
 			"taster's colour must be one of"},
+		{"an unknown resume setting", "Kitchen", func(a []Agent) []Agent { a[2].Resume = "sometimes"; return a },
+			"taster's resume must be by its column (\"\"), resume or fresh, not sometimes"},
 	} {
 		members := crew()
 		if c.change != nil {
