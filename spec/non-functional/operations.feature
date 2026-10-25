@@ -4,10 +4,11 @@ Feature: Operations
   @OPS-01 @test
   Scenario: A policy file that does not load is refused and the policy before it stays
     Given Agentry running with a policy.toml in force
-    When the file is saved with a mistake in it
-    Then the new file is refused and the policy before it is kept in force
-    And what is wrong with the file is shown on the Policy page
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go, internal/web/api_test.go
+    When the file is saved with a mistake in it and read again
+    Then the new file is refused and the policy before it is kept in force: yes
+    And GET /api/policy gives what is wrong with the file: yes
+    # not under test, checked by hand: serve reads the file again every 2 seconds (cmd/agentry/serve.go line 280), and the Policy page shows the problem (ui/src/pages/PolicyPage.tsx line 63)
+    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne, internal/web/api_test.go TestThePolicyShowsWithItsProblem
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. Addresses are written as placeholders: the server's
@@ -65,20 +66,21 @@ Feature: Operations
   # Start Agentry and Stop Agentry
 
   @OPS-05 @test
-  Scenario: Start Agentry starts the server in the background and prints one signed-in link per address
+  Scenario: Start Agentry prints one signed-in link per address and opens this computer's
     # packaging/files/start-unix.sh and start-windows.cmd run agentry open
     # cmd/agentry/open.go runOpen: a server already running is opened, not started again; startServer writes serve.log and serve.pid in the data folder
     # cmd/agentry/open.go runOpen waits up to 30 seconds, checking every 200 ms, for the new server to answer
     Given a server listening on every interface on port 7901, with a public address set
-    When agentry open runs
+    When agentry open finds it running and opens its page
     Then it prints 1 link for this computer, at localhost, carrying the page's token
     And it prints 1 link for the public address and 1 for each of this machine's network addresses, each carrying the token
     And it opens exactly 1 of them in the browser, this computer's
     And it says the window can be closed and Agentry keeps running: yes
     Given a server listening on this computer only
-    When agentry open runs
+    When agentry open finds it running and opens its page
     Then it prints only this computer's link: yes
-    # README.md, What Start Agentry does; cmd/agentry/open_test.go
+    # not under test, checked by hand: with no server answering, agentry open starts one in the background (cmd/agentry/open.go line 69)
+    # README.md, What Start Agentry does; cmd/agentry/open_test.go TestOpenPagePrintsEveryLink and TestOpenPageOnThisComputerOnly; 1 link per network address: cmd/agentry/serve_test.go TestNetworkURLs
 
   @OPS-06 @test
   Scenario: Start Agentry passes serve's flags on, and says when they wait for the next start
@@ -90,9 +92,10 @@ Feature: Operations
     When it starts the server
     Then the server is started with 0 extra flags, so serve's own defaults hold
     Given agentry open run with -https, -budget and -max-turns while a server already runs
-    Then it opens the page and says Agentry is already running and the 3 flags apply only when it next starts: yes
+    Then it says Agentry is already running and the 3 flags apply only when it next starts: yes
     And it says to give -https on every start, since Start Agentry does not pass it: yes
-    # README.md, What Start Agentry does; cmd/agentry/open_test.go
+    # not under test, checked by hand: the test builds the message alone; agentry open prints it and opens the page when a server runs (cmd/agentry/open.go lines 53 to 57)
+    # README.md, What Start Agentry does; cmd/agentry/open_test.go TestOpenPassesItsServeFlagsOn and TestOpenSaysFlagsWaitForTheNextStart
 
   @OPS-07 @manual
   Scenario: Stop Agentry stops the server that Start Agentry started
@@ -118,10 +121,11 @@ Feature: Operations
     # cmd/agentry/serve_lock.go lockFile = serve.lock; serve_lock_unix.go flock LOCK_EX|LOCK_NB; serve_lock_windows.go LockFileEx exclusive
     Given a server running on a data folder, with a snapshot write under way and a task's files in it
     When a second agentry serve starts on the same folder, on another port
-    Then it fails, saying another agentry serve is using the folder, with the first one's pid: yes
+    Then it fails, saying another agentry serve is using the folder: yes
     And the folder's files are exactly as before: yes
-    And the lock is released when the first server ends, however it ends: yes
-    # cmd/agentry/serve_lock.go; cmd/agentry/serve_test.go
+    And the lock is released when the first server ends: yes
+    # not under test, checked by hand: the error ends with the first one's pid (cmd/agentry/serve_lock.go lines 31 and 49), and the system frees the lock when the process ends, however it ends
+    # cmd/agentry/serve_lock.go; cmd/agentry/serve_test.go TestASecondServeOnTheSameFolderLeavesItAlone
 
   # Where data lives
 
@@ -152,7 +156,7 @@ Feature: Operations
 
   # The address
 
-  @OPS-10 @test
+  @OPS-10 @manual
   Scenario: The server listens on every interface on port 7800 unless -addr says otherwise
     # cmd/agentry/serve.go -addr default 0.0.0.0:7800; localURL, localhostURL, networkURLs
     Given a server started with the default -addr
@@ -161,7 +165,12 @@ Feature: Operations
     Given a server started with -addr 127.0.0.1:7800
     Then other machines reach it: no
     And it prints links for network addresses: no, only this computer's
-    # README.md, From the source; cmd/agentry/serve_test.go
+    # The tests give the URL functions an address; none starts serve with its default -addr (cmd/agentry/serve.go line 97): cmd/agentry/serve_test.go TestLocalURL, TestLocalhostURL and TestNetworkURLs
+    # Steps:
+    # 1. Run agentry serve with no -addr and read the links it prints: one at localhost on port 7800 and one per network address.
+    # 2. From <another machine>, open http://<network address>:7800: the page answers.
+    # 3. Stop it, run agentry serve -addr 127.0.0.1:7800: it prints only this computer's link, and <another machine> cannot open the page.
+    # README.md, From the source
 
   @OPS-11 @manual
   Scenario: Start Agentry takes the first free port from 7800, trying 20 ports
@@ -188,44 +197,47 @@ Feature: Operations
   @OPS-12 @test
   Scenario: -public-url is the address people open, for the printed link and the install commands
     # cmd/agentry/serve.go -public-url; the printed link is it, or the listened address when it is empty; "From another machine" links print only without it
-    Given a server started with -public-url set to an https address, listening on every interface
-    When the page asks for the addresses other machines reach
+    Given a server whose public address is an https address, with 2 network addresses
+    When the addresses other machines reach are listed for a request at loopback
     Then the list leads with the public address, then 1 entry per network address, then this computer's: yes
     And the address chosen for the install commands is the public address: yes
-    Given a server started with no -public-url, listening on every interface
-    When the page open at localhost asks for the addresses
+    Given a server with no public address, with 2 network addresses
+    When the addresses are listed for a request at localhost
     Then the list holds 1 entry per network address and this computer's, and the first network address is chosen: yes
     Given a server listening on this computer only
     Then the list holds exactly 1 address, this computer's
-    # README.md, Add machines; internal/web/addresses_test.go
+    # not under test, checked by hand: serve sets the public address from -public-url and the network addresses from the interfaces it listens on (cmd/agentry/serve.go lines 98, 328 and 329)
+    # README.md, Add machines; internal/web/addresses_test.go TestAddresses
 
   # HTTPS with the local CA
 
   @OPS-13 @test
-  Scenario: The first start with -https makes a CA that signs only for this machine and private addresses
+  Scenario: The CA, made on first use, signs only for this machine and private addresses
     # internal/tlsca/ca.go Folder = tls, caLifetime = 10 years, the key is 0600 on Mac and Linux, privateRanges
     Given a data folder with no tls folder
-    When the server starts with -https
+    When the CA is opened in it, twice
     Then tls/ca.key and the CA certificate are made once and reused at the next start: yes
     And the CA lasts 10 years
-    And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8: yes
+    And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges: yes
     And a leaf it signs for a name on the public web verifies: no
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go
+    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214); the ranges are 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8 (internal/tlsca/ca.go lines 73 to 78), which the test compares with that list itself; leaves for 192.168.1.20, 100.64.0.7, fd7a:115c::1 and loopback verify
+    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained and TestALeafForThePublicWebIsRefused; the leaves: internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies
 
   @OPS-36 @test
   Scenario: A CA key that others may read, a key that is a link, or a half-made CA is refused
     # internal/tlsca/ca.go readKey: the key must be a regular file that only its owner may read (0600) on Mac and Linux; open: a key or a certificate without the other is an incomplete CA
     # internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused, TestAHalfMadeOrMismatchedCAIsRefused
-    Given a tls folder holding a key that others may read, a key that is a link, or a CA whose key or certificate is missing
-    When the server starts with -https
+    Given a tls folder holding a key that others may read, a key that is a link, or a key whose certificate is missing
+    When the CA is opened
     Then the CA is refused, with what is wrong with it named: yes
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go
+    # not under test, checked by hand: serve opens the CA with -https (cmd/agentry/serve.go line 214), and a certificate whose key is missing is refused alike (internal/tlsca/ca.go line 99)
+    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused and TestAHalfMadeOrMismatchedCAIsRefused
 
   @OPS-14 @test
   Scenario: The server certificate is issued in memory and renewed by itself
     # internal/tlsca/issue.go leafLifetime = 397 days, always localhost, 127.0.0.1, ::1; hosts.go adds the hostname, hostname.local and every network address
     # internal/tlsca/issuer.go renewBefore = 30 days, hostsFresh = 30 seconds
-    Given a running server with -https
+    Given the certificate issuer a server with -https hands its handshakes
     Then every handshake while nothing changes gets the same certificate: yes
     And the certificate lasts 397 days and never past the CA's end: yes
     When this machine's addresses change
@@ -234,7 +246,8 @@ Feature: Operations
     When the certificate is within 30 days of its end
     Then a new one is issued: yes
     And a client that trusts the CA connects: yes
-    # README.md, HTTPS and installing the app on other devices; internal/tlsca/issuer_test.go
+    # not under test, checked by hand: serve's TLS config asks the issuer for each handshake's certificate (cmd/agentry/https.go line 20)
+    # README.md, HTTPS and installing the app on other devices; internal/tlsca/issuer_test.go TestTheSameCertificateWhileNothingChanges, TestANewCertificateWhenTheAddressesChange, TestTheHostsAreAskedForAtMostEvery30Seconds, TestANewCertificateNearItsEnd and TestAClientTrustingTheCAConnects; the 397 days: internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies and TestALeafNeverOutlivesTheCA
 
   @OPS-15 @test
   Scenario: One port serves https and plain http, and hands out the CA to any device that asks
@@ -247,7 +260,7 @@ Feature: Operations
     And /trust/ and the CA certificate under it are served to anyone, with no token, over plain http and https alike: yes
     And the CA's key is served: no
     And the sign-in cookie is marked Secure over TLS: yes
-    # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go
+    # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go TestOnePortServesTLSAndPlainHTTP, TestTheFrontDoor, TestTheFrontDoorSendsNoOneWhereTheCertificateDoesNotReach, TestTheCACertificateIsServedToAnyone, TestTheCAKeyIsNeverServed and TestTheCookieIsSecureOverTLS; /trust/: cmd/agentry/trust_test.go TestTheTrustPageIsServedToAnyone
 
   @OPS-16 @manual
   Scenario: A device trusts the CA once, then installs the app over https
@@ -270,8 +283,9 @@ Feature: Operations
     Given a server stopped, with its data folder holding a CA
     When agentry ca -regenerate runs for that folder
     Then the CA's fingerprint differs from before: yes
-    And it says devices that trusted the old one must trust the new one from /trust/, and workers and Claude Code machines must join again with the new fingerprint: yes
-    # README.md, Regenerate the CA; cmd/agentry/ca_test.go
+    And it says devices no longer trust the server and to trust the new one from /trust/, and to join again with -ca-fingerprint and the new fingerprint: yes
+    # not under test, checked by hand: the words "Workers and connected Claude Code machines" (cmd/agentry/ca.go line 46); the test asserts the fragments only
+    # README.md, Regenerate the CA; cmd/agentry/ca_test.go TestCARegenerate
 
   @OPS-32 @test
   Scenario: agentry ca -regenerate is refused while the server runs
@@ -279,7 +293,7 @@ Feature: Operations
     Given a server running from a data folder
     When agentry ca -regenerate runs for that folder
     Then it refuses, saying to stop Agentry first, and exits 1
-    # README.md, Regenerate the CA; cmd/agentry/ca_test.go
+    # README.md, Regenerate the CA; cmd/agentry/ca_test.go TestCARegenerateRefusesWhileTheServerRuns
 
   @OPS-18 @test
   Scenario: A worker joins an https server by the CA's fingerprint
@@ -289,8 +303,9 @@ Feature: Operations
     Then the worker keeps the CA and joins over https: yes
     Given a worker that joined over plain http before -https was turned on
     When the join command runs again with the fingerprint
-    Then the worker is moved to https and keeps its credential, and the code is used: no
-    # README.md, Workers and Claude Code over https; cmd/agentry/worker_test.go
+    Then the worker is moved to https, keeping the CA, and the code is used: no
+    # not under test, checked by hand: the worker keeps its credential, as only the server and the CA are changed (cmd/agentry/worker.go line 149)
+    # README.md, Workers and Claude Code over https; cmd/agentry/worker_test.go TestJoiningOverHTTPSWithTheRightFingerprintKeepsTheCA and TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS
 
   @OPS-37 @test
   Scenario: A worker join is refused on a wrong fingerprint, or on none when the machine does not trust the server, before the code is sent
@@ -314,7 +329,7 @@ Feature: Operations
     And it is still there after a restart: yes
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
-    # README.md, From the source; internal/web/push_api_test.go
+    # README.md, From the source; internal/web/push_api_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
 
   @OPS-38 @test
   Scenario: A malformed push subscription, or one whose endpoint is not https, is refused with 400
@@ -331,16 +346,17 @@ Feature: Operations
   Scenario: Push is off, and subscribing is refused, without an https public address
     # internal/webpush/webpush.go Available: -public-url must be an https address
     # internal/web/push_api.go: subscribing is refused while push is off
-    Given a server with no -public-url, or one that is not https
+    Given a server whose public address is unset, or not https
     When the page asks whether push is available and a browser posts a subscription
     Then GET /api/push says push is available: no, with the reason
     And POST /api/push/subscriptions is refused: yes
-    # README.md, From the source; internal/web/push_api_test.go
+    # not under test, checked by hand: serve sets the public address from -public-url (cmd/agentry/serve.go lines 98 and 328)
+    # README.md, From the source; internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL
 
   @OPS-20 @test
   Scenario: What newly needs the user is pushed once to each subscribed device
     # cmd/agentry/push.go pushTimeout = 30 seconds, pushFallback = 30 seconds; internal/webpush/sink.go lineShown = 500
-    Given 2 subscribed devices and an entry already waiting when the server started
+    Given 2 subscribed devices and an entry already waiting when the push sink started
     Then the entry already waiting is pushed: no
     When 1 new entry needs the user
     Then each device gets 1 push for it
@@ -348,8 +364,9 @@ Feature: Operations
     Then it is pushed again: yes
     When a device's push service says the subscription is gone
     Then that device is dropped and the other still gets its pushes: yes
-    And a push carries at most 500 bytes of the entry's line, cut on a character boundary and ended with an ellipsis when it is cut
-    # README.md, From the source; internal/webpush/sink_test.go
+    And a push carries at most 500 bytes of the entry's line, ended with an ellipsis when it is cut
+    # not under test, checked by hand: the cut falls on a character boundary (internal/webpush/sink.go line 115), and serve starts the sink (cmd/agentry/push.go line 32)
+    # README.md, From the source; internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestAnEntryThatLeavesAndComesBackIsNewAgain, TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs and TestALongLineIsCutToFitAPush
 
   # The workers' background services
 
@@ -377,27 +394,28 @@ Feature: Operations
     # README.md, Add machines; internal/workerservice/service.go
 
   @OPS-22 @test
-  Scenario: A worker updates itself to the server's agentry and restarts
+  Scenario: A worker replaces itself with the server's agentry
     # internal/workerlink/update.go: before each dial the worker compares its build with the server's by ETag and replaces itself
-    # cmd/agentry/worker.go runAsWorker: Run returns ErrUpdated and the process restarts into the new program (not covered by the test)
+    # not under test, checked by hand: Run returns ErrUpdated and the process restarts into the new program (cmd/agentry/worker.go runAsWorker)
     Given a worker whose agentry differs from the one the server has for its system
     When it checks for an update
     Then it replaces its own program with the server's: yes
     And the program keeps its executable mode: yes
-    # README.md, Add machines; internal/workerlink/update_test.go
+    # README.md, Add machines; internal/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
 
   @OPS-23 @test
   Scenario: Claude Code on another machine names the server by AGENTRY_URL, AGENTRY_TOKEN and AGENTRY_CA_FINGERPRINT
     # cmd/agentry/mcp.go: the Integrations page's command runs agentry mcp connect [-ca-fingerprint F] <server> <code>; the hooks and agentry mcp read the three variables, or find the server as connect saved it
     # cmd/agentry/kept_ca.go: a CA checked by fingerprint is kept beside the saved connection, so later runs make 0 requests for it
     Given AGENTRY_URL at an https server, AGENTRY_TOKEN and AGENTRY_CA_FINGERPRINT set
-    When agentry mcp reaches the server
-    Then it trusts only the CA with that fingerprint, and the call succeeds: yes
-    When the hooks reach the server with the same variables
-    Then the CA is fetched and checked 1 time, and later runs fetch it 0 times, with the fingerprint accepted with or without colons and in either case
+    When agentry mcp is given that server, token and fingerprint
+    Then it trusts the CA with that fingerprint, and the call succeeds: yes
+    When the three variables are read, as the hooks and agentry mcp read them, in 3 runs
+    Then the CA is asked for 2 times in all, the first run's check, with the fingerprint accepted with or without colons and in either case
     When AGENTRY_CA_FINGERPRINT names another CA
     Then the kept CA is checked again and the server is refused: yes
-    # README.md, Workers and Claude Code over https; cmd/agentry/mcp_test.go
+    # not under test, checked by hand: the hooks and agentry mcp read the variables through connectFromEnv (cmd/agentry/claudecode.go lines 47 and 144, cmd/agentry/mcp.go line 286)
+    # README.md, Workers and Claude Code over https; cmd/agentry/mcp_test.go TestMCPWithServerAndTokenOverHTTPS, TestTheHooksCheckTheCAOnce and TestAnotherFingerprintChecksTheCAAgain
 
   @OPS-39 @test
   Scenario: agentry mcp connect is refused on a wrong fingerprint, or on none when the machine does not trust the server, before the code is sent
@@ -420,13 +438,13 @@ Feature: Operations
     When it is erased
     Then the answer names the task and a time within 1 minute of now
     And its rows, its archive files and the shared files only it names are gone from the disk: yes
-    And the copies of its words in its epic's and its asker's rows read [redacted], and the rest of those rows is as it was: yes
+    And the copies of its words in its epic's and its asker's rows read [redacted], and the same words in their own rows, such as their titles, are kept: yes
     And the other tasks are still in the state: yes
     And the task reads as erased on that day, not as no such task: yes
     Given a live task with a session running
     When it is erased
-    Then its session is stopped before its rows are read: yes
-    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go
+    Then its session is stopped while the task is still there: yes
+    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go TestErasingALiveTaskLeavesNoTraceOnDisk, TestErasingAnArchivedTaskLeavesNoTraceOnDisk, TestErasingKeepsTheSameWordsOutsideTheCopies, TestAnErasedTaskReadsAsGone and TestErasingStopsTheTurnThatRunsFirst
 
   @OPS-34 @test
   Scenario: Erasing an epic a story still names, or a task already erased, is refused
@@ -434,7 +452,7 @@ Feature: Operations
     Given an epic with a story still naming it, or a task already erased
     When it is erased
     Then it is refused with 409 and nothing is written: yes
-    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go
+    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go TestAnEpicWithStoriesIsntErased and TestARefusedErasureWritesNothing
 
   @OPS-25 @test
   Scenario: Redacting a text counts first, then rewrites only the rows that hold it
@@ -451,8 +469,8 @@ Feature: Operations
     Then it is unarchived, redacted and archived again in a new file, and its old file is deleted: yes
     Given an agent whose knowledge holds the secret in a version
     When the agents are redacted
-    Then each version that holds it is written again whole without it, and 0 versions are added
-    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go
+    Then each version that holds it is written again whole without it: yes
+    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go TestRedactingALiveTaskLeavesNoTraceOnDisk, TestRedactingAnArchivedTaskLeavesNoTraceOnDisk and TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk; the preview's count of 2: TestARedactionWithAStaleCountIsRefused; every other byte: internal/store/redact_test.go TestRedactRewritesOnlyTheSecret; the versions: internal/store/redact_knowledge_test.go TestKnowledgeFromTheSecretOnIsWrittenAgainInFull
 
   @OPS-40 @test
   Scenario: A redaction confirmed with a stale count is refused with 409
@@ -479,7 +497,7 @@ Feature: Operations
     Then it is refused: yes
     Given a stream that is erased or archived
     Then it is refused before its rows are read: yes
-    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go
+    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go TestRedactRefusesARowWithTheSecretInAKey, TestASecretLeftInANumberIsRefused, TestARowNotWrittenAsTheLogWritesIsNotRedacted, TestAStringEscapedOtherwiseIsRefused, TestASecretLeftNextToRedactedIsRefused, TestARefusedRedactionWritesNothing and TestAnArchivedOrErasedStreamIsRefusedBeforeItsRows
 
   # The Makefile and the CI check
 
