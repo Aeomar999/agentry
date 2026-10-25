@@ -26,6 +26,8 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 		{"first turn", func(turn *Turn) { turn.Agent = "reviewer" }, "claude", "omni", "", "first turn"},
 		{"not ended", func(turn *Turn) { turn.Ended = false }, "claude", "omni", "", "its last turn hasn't ended"},
 		{"failed", func(turn *Turn) { turn.Issue = "the session ended without a report" }, "claude", "omni", "", "its last turn failed"},
+		{"resume failed", func(turn *Turn) { turn.Issue, turn.FromSession = "its resumed session didn't start", "s-0" }, "claude", "omni", "", "its resume failed"},
+		{"resumed, then crashed", func(turn *Turn) { turn.Issue, turn.FromSession, turn.Acknowledged = "crashed", "s-0", true }, "claude", "omni", "", "its last turn failed"},
 		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "omni", "", "its last turn was stopped"},
 		{"work moved", func(*Turn) {}, "claude", "workstation", "", "the work moved to workstation"},
 		{"another engine", func(*Turn) {}, "codex", "omni", "", "another engine"},

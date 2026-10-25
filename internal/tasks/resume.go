@@ -17,6 +17,8 @@ const MaxResumedContext = 150_000
 // one of its latest turn on this task, when that turn ended on the same
 // engine and machine, and reported a session whose context isn't over
 // MaxResumedContext; a context the engine didn't report still resumes.
+// A turn that resumed and failed before it took its prompt couldn't
+// resume, so the next starts fresh, and only once: it resumes nothing.
 // Otherwise it is "", with a short plain reason for starting fresh.
 // The machine is a worker's name, or "" or workers.Local for this one.
 func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh string) {
@@ -27,6 +29,8 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 		return "", "first turn"
 	case !last.Ended:
 		return "", "its last turn hasn't ended"
+	case last.Issue != "" && last.FromSession != "" && !last.Acknowledged:
+		return "", "its resume failed"
 	case last.Issue != "":
 		return "", "its last turn failed"
 	case last.Stopped:
