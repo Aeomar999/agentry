@@ -76,10 +76,11 @@ type Turn struct {
 	Engine    string            `json:"engine"`
 	Model     string            `json:"model"`
 	Theme     string            `json:"theme"`
-	Brief     string            `json:"brief"`     // what the agent is to do, written to BriefFile
-	BriefFile string            `json:"briefFile"` // relative to the worktree
-	Knowledge string            `json:"knowledge"` // what the agent knows, written to its knowledge file
-	Plan      string            `json:"plan"`      // a plan carried over from the agent's last turn, written to its plan file; "" for none
-	Prompt    string            `json:"prompt"`    // the one line the engine starts on
-	Env       map[string]string `json:"env"`       // the session's environment; the machine adds where its hooks post
+	Brief     string            `json:"brief"`            // what the agent is to do, written to BriefFile
+	BriefFile string            `json:"briefFile"`        // relative to the worktree
+	Knowledge string            `json:"knowledge"`        // what the agent knows, written to its knowledge file
+	Plan      string            `json:"plan"`             // a plan carried over from the agent's last turn, written to its plan file; "" for none
+	Prompt    string            `json:"prompt"`           // the one line the engine starts on
+	Resume    string            `json:"resume,omitempty"` // the engine session to go on with; "" starts a fresh one
+	Env       map[string]string `json:"env"`              // the session's environment; the machine adds where its hooks post
 }

@@ -136,9 +136,9 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 		t.Errorf("commits on the worker: %+v %v", commits, err)
 	}
 
-	// A turn runs there, and its terminal shows here.
+	// A turn runs there, going on with its session, and its terminal shows here.
 	turn := machines.Turn{Task: "task-1", ID: "turn-1", Worktree: there.Path, Engine: "claude", Brief: "b", BriefFile: ".agentry/turn-1.md",
-		Prompt: "Read .agentry/turn-1.md and do what it says.", Env: map[string]string{"AGENTRY_TASK": "task-1"}}
+		Prompt: "Read .agentry/turn-1.md and do what it says.", Resume: "s-1", Env: map[string]string{"AGENTRY_TASK": "task-1"}}
 	defer sessions.Stop(sessions.SocketFor("task-1"))
 	if err := laptop.PrepareTurn(ctx, turn); err != nil {
 		t.Fatal(err)
@@ -148,8 +148,8 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 	}
 	waitFor(t, "the worker to say the agent runs", func() (bool, bool) { return true, laptop.IsRunning("task-1") })
 	screen := watchTerminal(t, ctx, terminal.NewHub(), laptop)
-	if !strings.Contains(screen, "fake claude is working") {
-		t.Errorf("the worker's terminal: %q", screen)
+	if !strings.Contains(screen, "fake claude is working --resume s-1 ") {
+		t.Errorf("the worker's terminal, resuming the session: %q", screen)
 	}
 
 	// The work comes back, with what the agent left.
@@ -210,7 +210,7 @@ func fakeClaudeOnPath(t *testing.T) {
 	t.Helper()
 	sessionstest.Isolate(t)
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.1.301 (Claude Code)'; exit 0; }\necho fake claude is working\n"+sessionstest.Wait()+"\n"), 0o755)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n[ \"$1\" = --version ] && { echo '2.1.301 (Claude Code)'; exit 0; }\necho fake claude is working \"$@\"\n"+sessionstest.Wait()+"\n"), 0o755)
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
 }
 
