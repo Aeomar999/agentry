@@ -61,11 +61,13 @@ Every scenario, with no exceptions:
    - `@benchmark`: a measured number, with where and when it was measured.
    - `@manual`: a person checks it, and the steps they take are the Given, When and Then.
 3. Has a Given that states the conditions or the load.
-4. Has a number or a yes/no outcome word in every Then, and in every And or But that continues a Then. The outcome words, matched as whole words in any case, are: not, no, never, yes, exactly, every, each, once, only, same, empty, refused, denied, allowed, asked, shown, hidden, kept, runs, does. A contraction such as "doesn't" is one word and counts for nothing: write "does not".
+4. Has a number or a yes/no outcome word in every Then, and in every And or But that continues a Then. The outcome words, matched as whole words in any case, are: not, no, never, nothing, cannot, yes, exactly, every, each, once, only, same, empty, refused, denied, allowed, asked, shown, hidden, kept. Any contraction (doesn't, isn't, can't, won't) is one word and counts for nothing: write does not, is not, cannot, will not.
 5. Covers what cannot happen too: a refusal, a denial or a cap is a scenario of its own.
 6. Is written in plain sentences, in Agentry's own words, as the README and the page use them. No marketing language, no em-dash, and never the words quickly, properly or appropriately.
 7. Names where it comes from in a comment line, such as `# README.md, Use it` or `# PLAN.md T-013`, and for `@test` the test file.
 8. Names no host, machine name, address or email address: say the machine, the user.
+
+Scenario Outline and Examples tables are not used; write one scenario per case, so every Then is a plain sentence the checker can read.
 
 ## Running the check
 
@@ -76,7 +78,7 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. Rules 3, 5, 7 and 8 are the reviewer's.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. Rules 3, 5, 7 and 8 are the reviewer's.
 
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 
