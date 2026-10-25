@@ -440,68 +440,72 @@ Feature: Security
     Given a Claude Code connection's credential, which counts as the page token on the rest of the API
     When that credential asks for a sign-in code
     Then the answer is HTTP 401
-    And the real page token asking the same gets exactly 1 code
-    # README.md, Use it from Claude Code; PLAN.md T-063; internal/web/signin_test.go
+    And the real page token asking the same gets a code: yes
+    # README.md, Use it from Claude Code; PLAN.md T-063; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes
 
   @SEC-52 @test
   Scenario: The sign-in cookie lasts a year and is HttpOnly
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
-    Then its name is agentry_ui, its path is /, and it lasts at least 300 days, 365 as the code sets it
+    Then its name is agentry_ui, its path is /, and it lasts at least 300 days
+    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 325); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 237)
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go asserts at least 300 days, internal/web/server.go setUICookie sets 365; cmd/agentry/https_test.go; internal/web/api_test.go
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestASigninCodeSignsInOnce, TestThePastedTokenSignsIn; cmd/agentry/https_test.go TestTheCookieIsSecureOverTLS; internal/web/api_test.go TestServesTheAppFilesWithoutTheToken
 
   @SEC-53 @test
   Scenario: A sign-in code is 8 characters and signs another device in
     Given a signed-in device asks for a code
-    When the code is shown and another device types it, in any case, with or without spaces and dashes
+    When the code is shown and another device types it in lower case, with spaces around the dash
     Then the code has exactly 8 characters from a 31-character alphabet with no 0, O, 1, I or L, shown as 4-4
-    And the other device gets the page token and the cookie, so every API call from it is allowed
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    And the other device gets the page token and the cookie, and the cookie alone opens the API: yes
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes for the shape, TestASigninCodeSignsInOnce
 
   @SEC-54 @test
   Scenario: A sign-in code works once and for 5 minutes
     Given a sign-in code that was issued 300 seconds ago, or one already used
     When a device types it
     Then the answer is HTTP 401
-    And the code is kept in memory only, never in the log
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    And a code 1 second short of 5 minutes still signs in: yes
+    # not under test, checked by hand: the codes are kept in memory only, never in the log (internal/web/signin.go line 46)
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestASigninCodeExpires, TestASigninCodeSignsInOnce
 
   @SEC-55 @test
   Scenario: At most 20 codes are live at once
     Given 20 codes have been issued and none used
     When a 21st code is issued
     Then the oldest code no longer works
-    And the 20 newest codes still work
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    And the next oldest and the newest codes still work: yes
+    # internal/web/signin.go line 28 maxLiveCodes = 20; the test uses the constant
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestIssuingPastTheCapDropsTheOldestCode
 
   @SEC-56 @test
   Scenario: Wrong codes from every address together are limited too
     Given 30 wrong codes have come from every address together within a minute
     When any address sends another code
     Then the answer is HTTP 429
-    And wrong tokens do not count toward that cap of 30, so the printed link still signs in
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    And the page token still signs in past that cap, so the printed link works: yes
+    And a code 1 minute later signs in again: yes
+    # not under test, checked by hand: wrong tokens do not count toward the cap of 30 (internal/web/signin.go lines 33 and 138)
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestFailedSigninsAreLimited
 
   @SEC-57 @test
   Scenario: Guesses sent at once do not all get checked
     Given one address sends 50 wrong codes at the same moment
     When the server counts them
-    Then no more than 5 are checked, because each attempt counts as failed before it is checked
-    And the lock-out ends 60 seconds after the oldest counted failure, when the next try is checked, not refused
-    And a successful sign-in is taken back out of the count, so a right code after 4 wrong ones leaves 4
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    Then 5 are refused with 401 and the other 45 with 429, because each attempt counts as failed before it is checked
+    And the lock-out has ended 1 minute later, when the next try is checked, not refused: yes
+    And a successful sign-in does not count, so after 6 sign-ins and 4 wrong codes a right code still signs in: yes
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestFailedSigninsSentAtOnceAreLimited, TestFailedSigninsAreLimited, TestSigningInDoesNotCountAsAFailure
 
   @SEC-58 @test
   Scenario: Signing out clears this device's cookie
     Given a signed-in device
     When the user signs out
-    Then the cookie is cleared with a MaxAge of -1
-    And the page keeps no stored token
-    And the server's page token is not rotated, so other devices stay signed in
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go
+    Then the cookie is cleared, empty with a MaxAge below 0 and path /: yes
+    # not under test, checked by hand: the page keeps no stored token (ui/src/api/client.ts lines 150 and 151), and sign out only clears the cookie, so the server's page token is not rotated and other devices stay signed in (internal/web/signin.go line 251)
+    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestSigningOutClearsTheCookie
 
   @SEC-59 @test
   Scenario: A feature's secret reaches its job and never the log
@@ -510,9 +514,9 @@ Feature: Security
     Then the job gets the secret's value exactly as written
     And the secret is not in the server's output
     And the secret is not in agentry.db, its WAL or the snapshot
-    And the page and the API never show it
+    # not under test, checked by hand: the page and the API never show it; no route serves features.toml, GET /api/settings shows Agentry's own settings (internal/web/settings_api.go line 27)
     And no agent may read features.toml, whatever the policy says
-    # README.md, Features' settings and secrets; cmd/agentry/jobs_test.go; internal/policy/default_test.go
+    # README.md, Features' settings and secrets; cmd/agentry/jobs_test.go TestASecretReachesTheJobAndNeitherLog, TestTheSettingsFileIsProtected (under the shipped policy, whose use_for_everyone is allow-everything)
 
   @SEC-60 @test
   Scenario: A broken settings file is refused without quoting it
@@ -522,7 +526,7 @@ Feature: Security
     And the error names the file and the line, never what the line holds
     And a table header that is not a feature name is not named in the error
     And each feature reads only its own table
-    # README.md, Features' settings and secrets; internal/settingsfile/settingsfile_test.go
+    # README.md, Features' settings and secrets; internal/settingsfile/settingsfile_test.go TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted, TestAHeaderThatIsntAFeatureNameIsNotLogged, TestAFeatureReadsOnlyItsOwnTable
 
   @SEC-61 @test
   Scenario: A secret that reached the log can be redacted without being kept
@@ -530,19 +534,19 @@ Feature: Security
     When the user redacts it
     Then every row holding it is rewritten to "[redacted]"
     And the log records which rows changed, never the secret nor its hash
-    And a turn that was running keeps the secret out of what it writes back, from memory only
-    And the held secrets are gone when the server restarts, kept nowhere on disk
-    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go; internal/hooks/redactions_test.go
+    And a turn that was running keeps the secret out of what it writes back: yes
+    # not under test, checked by hand: the held secrets are in memory only, gone when the server restarts and kept nowhere on disk (internal/hooks/redactions.go line 17)
+    # README.md, Archiving, erasing and redacting; internal/store/redact_test.go TestRedactRewritesOnlyTheSecret; internal/hooks/redactions_test.go TestASecretIsLetGoOnceEveryTurnRunningThenHasEnded
 
   @SEC-62 @test
   Scenario: Agentry's own CA signs a server certificate that is renewed in time
     Given agentry serve runs with -https
     When the CA and the server certificate are made
-    Then the CA lasts exactly 10 years and is name-constrained to this machine's names, loopback and the private ranges
+    Then the CA lasts 10 years and is name-constrained to this machine's names, loopback and the private ranges
     And the server certificate lasts 397 days and never past the CA's end
-    And the server certificate is kept only in memory
+    # not under test, checked by hand: the server certificate is kept only in memory (internal/tlsca/issuer.go line 24)
     And it is renewed 30 days before its end, or when the machine's addresses change
-    # README.md, What the CA can sign; internal/tlsca/ca_test.go; internal/tlsca/issue_test.go
+    # README.md, What the CA can sign; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused, TestTheCAIsNameConstrained; internal/tlsca/issue_test.go TestTheCertificateNamesEveryHostAndVerifies, TestALeafNeverOutlivesTheCA; internal/tlsca/issuer_test.go TestANewCertificateNearItsEnd, TestANewCertificateWhenTheAddressesChange
 
   @SEC-63 @test
   Scenario: The CA's key never leaves the server
@@ -551,7 +555,7 @@ Feature: Security
     Then the trust page and the certificate are shown
     And the key is never served
     And the key's file mode is 0600 in a 0700 folder
-    # README.md, Trust a device once; cmd/agentry/https_test.go; internal/tlsca/ca_test.go
+    # README.md, Trust a device once; cmd/agentry/trust_test.go TestTheTrustPageIsServedToAnyone; cmd/agentry/https_test.go TestTheCACertificateIsServedToAnyone, TestTheCAKeyIsNeverServed; internal/tlsca/ca_test.go TestTheCAIsMadeOnceAndReused
 
   @SEC-64 @test
   Scenario: Plain HTTP from another device is sent to https
@@ -559,7 +563,7 @@ Feature: Security
     When a device other than this machine opens plain http, and this machine opens plain http on loopback
     Then the other device gets a 308 redirect to https
     And this machine gets the page as it is, with no redirect
-    # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go
+    # README.md, HTTPS and installing the app on other devices; cmd/agentry/https_test.go TestTheFrontDoor
 
   @SEC-65 @manual
   Scenario: The gate hook's timeout is 1800 seconds in the engine's settings
