@@ -63,7 +63,7 @@ func TestAFirstReviewsHandoffIsTheTaskTheRangeAndTheBuildersReport(t *testing.T)
 		"## The task\n\nTitle: Remove the TODOs\n\nEvery TODO in src/ goes.", "Done when `grep TODO src/` finds nothing.",
 		"## Your instructions from the coordinator\n\nReview it.", "worktree, /w/task-1, on branch agentry/task-1, which started from commit b0b0b0b0",
 		"## Shared files", "The task has no shared files yet.", ".agentry/turn-4-plan.md",
-		"## What to review\n\nThe commit range is b0b0b0b0..c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2: 2 commits on the branch since it started.",
+		"## What to review\n\nThe commit range is b0b0b0b0..c2c2c2c2: 2 commits on the branch since it started.",
 		"It touches 2 files:\n- M src/a.go\n- M src/b.go\n", "git log --oneline b0b0b0b0..HEAD", "git diff b0b0b0b0..HEAD\n", "git diff b0b0b0b0..HEAD -- <file>",
 		"never carries the diff itself", "## The builder's last report\n\nFrom engineer, in turn-2:\n\nRemoved 3.",
 		"## When you finish", strings.TrimSpace(VerdictFormat)} {
@@ -143,6 +143,93 @@ func TestAReReviewWithNothingNewerSaysSo(t *testing.T) {
 	}
 }
 
+// cutShort is a turn of the agent's that ended with an issue, so it left
+// no report.
+func (h history) cutShort(id, agent, reason string) history {
+	return h.add(worker, events.TurnStarted, id, map[string]any{"agent": agent, "hash": "h"}).
+		add(watchdog, events.IssueRaised, "", map[string]any{"reason": reason})
+}
+
+// A reviewer whose only earlier turn was cut short has no findings to be
+// given back, so its retry is briefed as a first review: neither section
+// is there to suggest the range was checked.
+func TestAReviewerWhoseOnlyTurnWasCutShortGetsAFirstReview(t *testing.T) {
+	roster := defaultRoster()
+	task := firstReview().
+		cutShort("turn-4", "reviewer", "the agent's process exited").
+		turn("turn-5", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review it."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review it."}).task()
+
+	brief := handoffBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review it.", nil, twoCommits())
+	for _, left := range []string{"## Your earlier findings", "## Changed since your last verdict", "(It left no report.)", "No commits since your last turn"} {
+		if strings.Contains(brief, left) {
+			t.Errorf("a retry after a cut-short turn should leave out %q:\n%s", left, brief)
+		}
+	}
+	if !strings.Contains(brief, "## The builder's last report\n\nFrom engineer, in turn-2:\n\nRemoved 3.") {
+		t.Errorf("the retry still has the builder's report:\n%s", brief)
+	}
+}
+
+// A reviewer that reported once and was then cut short on a retry is given
+// back the report it did write, and what changed since that turn.
+func TestAReviewerCutShortOnARetryIsGivenItsRealFindings(t *testing.T) {
+	roster := defaultRoster()
+	task := fixRound().
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Remove the one in src/b.go."}).
+		turn("turn-6", "engineer", "Removed it.").
+		turn("turn-7", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review the fix."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review the fix."}).
+		cutShort("turn-8", "reviewer", "the engine crashed").
+		turn("turn-9", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review the fix."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review the fix."}).task()
+	task.Turn("turn-4").StartedAt = day(2) // the real review, between the two commits
+	task.Turn("turn-8").StartedAt = day(5) // the cut-short retry, after both
+
+	brief := handoffBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review the fix.", nil, twoCommits())
+	for _, want := range []string{"## Your earlier findings\n\nFrom your last turn on this task, turn-4:\n\nOne is left in src/b.go.",
+		"## Changed since your last verdict\n\n1 commit since your last turn, newest first:\n- c2c2c2c2 fix: remove the last TODO\n"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("the handoff is missing %q:\n%s", want, brief)
+		}
+	}
+	for _, left := range []string{"turn-8", "(It left no report.)", "No commits since your last turn"} {
+		if strings.Contains(brief, left) {
+			t.Errorf("the handoff should leave out %q:\n%s", left, brief)
+		}
+	}
+}
+
+// The builder's report is the last one written, not the last turn: a turn
+// cut short after it is noted under the report instead of hiding it. A
+// shipper's report counts as a builder's, since it too may have changed
+// the branch.
+func TestTheBuildersReportSurvivesACutShortTurnAfterIt(t *testing.T) {
+	roster := defaultRoster()
+	task := firstReview().
+		turn("turn-4", "reviewer", "One is left.\n\nVerdict: changes requested").
+		turn("turn-5", "tech-lead", `{"action": "assign", "agent": "engineer", "instructions": "Remove it."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Remove it."}).
+		cutShort("turn-6", "engineer", "the agent's process exited").
+		turn("turn-7", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review what is there."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review what is there."}).task()
+
+	brief := handoffBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review what is there.", nil, twoCommits())
+	want := "## The builder's last report\n\nFrom engineer, in turn-2:\n\nRemoved 3.\n\nIts latest turn, turn-6, was cut short: the agent's process exited\n"
+	if !strings.Contains(brief, want) || strings.Contains(brief, "(It left no report.)") {
+		t.Errorf("the handoff is missing %q:\n%s", want, brief)
+	}
+
+	shipped := firstReview().
+		turn("turn-4", "deployer", "Rebased onto dev; the tests pass.").
+		turn("turn-5", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review it."}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review it."}).task()
+	brief = handoffBrief(shipped, agentNamed(t, roster, "reviewer"), roster, "Review it.", nil, twoCommits())
+	if want := "## The builder's last report\n\nFrom deployer, in turn-4:\n\nRebased onto dev; the tests pass."; !strings.Contains(brief, want) {
+		t.Errorf("a shipper's report counts as the builder's; missing %q:\n%s", want, brief)
+	}
+}
+
 // With no commits listed, nil or none, the handoff says so and still names
 // the commands; with no builder's turn, it says that too.
 func TestAHandoffWithNoCommitsNamesTheCommands(t *testing.T) {
@@ -219,7 +306,8 @@ func TestTheLoopHandsAFreshReviewerTheHandoff(t *testing.T) {
 	endTurn(t, s, id, "turn-3", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review it."}`)
 	task = waitForTurn(t, s, id, "turn-4", "reviewer")
 	brief := readBrief(t, task, "turn-4")
-	for _, want := range []string{"## What to review\n\nThe commit range is " + task.Worktree.Base + "..", "1 commit on the branch", "It touches 1 file:\n- A src.go\n",
+	for _, want := range []string{"## What to review\n\nThe commit range is " + shortHash(task.Worktree.Base) + "..", "git log --oneline " + task.Worktree.Base + "..HEAD",
+		"1 commit on the branch", "It touches 1 file:\n- A src.go\n",
 		"## The builder's last report\n\nFrom engineer, in turn-2:\n\nRemoved 3.", "## Your instructions from the coordinator\n\nReview it."} {
 		if !strings.Contains(brief, want) {
 			t.Errorf("the fresh reviewer's brief is missing %q:\n%s", want, brief)

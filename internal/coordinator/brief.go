@@ -210,13 +210,29 @@ func handoffBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, in
 	workerWork(&b, task, agent, roster, instructions, shared)
 	section(&b, "What to review", reviewText(task.Worktree.Base, commits))
 	section(&b, "The builder's last report", builderReport(task, roster))
-	if last := task.LastTurnOf(agent.Name); last != nil && last.Ended {
-		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+
-			cmp.Or(tasks.Shorten(last.Report, longestReport), "(It left no report.)"))
+	if last := lastReported(task, agent.Name); last != nil {
+		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+tasks.Shorten(last.Report, longestReport))
 		section(&b, "Changed since your last verdict", changedSince(commits, last.StartedAt))
 	}
 	finish(&b, agent)
 	return b.String()
+}
+
+// lastReported is the agent's latest ended turn on the task that left a
+// report; nil when none did. A turn cut short or stopped leaves none, and
+// a handoff that quoted it would read as if the range had been checked.
+func lastReported(task *tasks.Task, agent string) *tasks.Turn {
+	for i := len(task.Turns) - 1; i >= 0; i-- {
+		if turn := task.Turns[i]; turn.Agent == agent && reported(turn) {
+			return turn
+		}
+	}
+	return nil
+}
+
+// reported says whether the turn ended with a report.
+func reported(turn *tasks.Turn) bool {
+	return turn.Ended && strings.TrimSpace(turn.Report) != ""
 }
 
 // longestReport caps a report quoted whole in a handoff: a review needs
@@ -233,11 +249,11 @@ const mostFilesListed = 40
 func reviewText(base string, commits []workspace.Commit) string {
 	var b strings.Builder
 	if len(commits) == 0 {
-		b.WriteString("Nothing is listed here: the branch has no commits since " + base + " yet, or Agentry couldn't read them. " +
+		b.WriteString("Nothing is listed here: the branch has no commits since " + shortHash(base) + " yet, or Agentry couldn't read them. " +
 			"Check for yourself with the commands below; if there is nothing to review, say so in your report.\n\n")
 	} else {
 		fmt.Fprintf(&b, "The commit range is %s..%s: %s on the branch since it started.\n\n%s\n\n",
-			base, commits[0].Hash, count(len(commits), "commit"), filesText(touched(commits), base))
+			shortHash(base), shortHash(commits[0].Hash), count(len(commits), "commit"), filesText(touched(commits), base))
 	}
 	b.WriteString("Read the change with git, in the worktree; this brief never carries the diff itself:\n\n" +
 		"    git log --oneline " + base + "..HEAD\n" +
@@ -280,16 +296,22 @@ func filesText(files []workspace.File, base string) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// builderReport is the report of the task's latest ended turn by an agent
-// that builds the work, with who wrote it; a note when there is none yet.
+// builderReport is the latest report on the task by an agent that builds or
+// ships the work, with who wrote it; a note when there is none yet. When
+// that agent's turn since was cut short, a line says so: the reviewer then
+// knows the report may not be the last word on the branch.
 func builderReport(task *tasks.Task, roster agents.Roster) string {
 	for i := len(task.Turns) - 1; i >= 0; i-- {
 		turn := task.Turns[i]
 		agent, ok := roster.Get(turn.Agent)
-		if !turn.Ended || !ok || agent.Coordinates || agent.Column != agents.Builds {
+		if !reported(turn) || !ok || agent.Coordinates || agent.Column == agents.Reviews {
 			continue
 		}
-		return "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + cmp.Or(tasks.Shorten(turn.Report, longestReport), "(It left no report.)")
+		text := "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + tasks.Shorten(turn.Report, longestReport)
+		if latest := task.LastTurnOf(turn.Agent); latest.ID != turn.ID && latest.Ended && latest.Issue != "" {
+			text += "\n\nIts latest turn, " + latest.ID + ", was cut short: " + latest.Issue
+		}
+		return text
 	}
 	return "No agent that builds the work has reported on this task yet."
 }
