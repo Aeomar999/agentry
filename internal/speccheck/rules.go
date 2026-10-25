@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -9,9 +10,11 @@ import (
 	"unicode"
 )
 
-// prefixes gives each feature file, by its base name, the prefix of its
-// scenario IDs. A feature file with any other name is a problem.
-var prefixes = map[string]string{
+// functionalPrefixes and nonFunctionalPrefixes give each feature file, by
+// its base name, the prefix of its scenario IDs: the files under
+// functional/, then those under non-functional/. prefixes holds both; a
+// feature file with any other name is a problem, outside proposals/.
+var functionalPrefixes = map[string]string{
 	"tasks-and-board.feature":          "TASK",
 	"epics-and-stories.feature":        "EPIC",
 	"approvals-and-questions.feature":  "APPROVE",
@@ -28,14 +31,40 @@ var prefixes = map[string]string{
 	"notifications.feature":            "NOTIFY",
 	"settings.feature":                 "SET",
 	"claude-code-tools.feature":        "TOOLS",
-	"reliability.feature":              "REL",
-	"security.feature":                 "SEC",
-	"operations.feature":               "OPS",
-	"performance.feature":              "PERF",
-	"limits.feature":                   "LIM",
-	"usability.feature":                "USE",
-	"compatibility.feature":            "COMPAT",
-	"observability.feature":            "OBS",
+}
+
+var nonFunctionalPrefixes = map[string]string{
+	"reliability.feature":   "REL",
+	"security.feature":      "SEC",
+	"operations.feature":    "OPS",
+	"performance.feature":   "PERF",
+	"limits.feature":        "LIM",
+	"usability.feature":     "USE",
+	"compatibility.feature": "COMPAT",
+	"observability.feature": "OBS",
+}
+
+var prefixes = joined(functionalPrefixes, nonFunctionalPrefixes)
+
+// proposalPrefix is the prefix of every scenario ID under proposals/,
+// whatever the file's name.
+const proposalPrefix = "PROP"
+
+// targetTagStart starts a proposal's target tag, @to-policy or
+// @to-new-output-gate: the feature file its scenario moves to when built.
+const targetTagStart = "@to-"
+
+// newStem is the stem of a target file that does not exist yet: new- and
+// lower-case words joined by dashes.
+var newStem = regexp.MustCompile(`^new-[a-z]+(-[a-z]+)*$`)
+
+// joined is one table holding every entry of the tables.
+func joined(tables ...map[string]string) map[string]string {
+	all := map[string]string{}
+	for _, table := range tables {
+		maps.Copy(all, table)
+	}
+	return all
 }
 
 // The check tags: every scenario carries exactly one.
@@ -146,12 +175,7 @@ func checkTagProblem(s scenario) string {
 // roleTagProblem says what is wrong with a functional scenario's role
 // tags, or "" when it has exactly one of them.
 func roleTagProblem(s scenario) string {
-	var found []string
-	for _, t := range s.tags {
-		if slices.Contains(roleTags, t.name) {
-			found = append(found, t.name)
-		}
-	}
+	found := roleTagsOf(s)
 	switch len(found) {
 	case 1:
 		return ""
@@ -159,6 +183,83 @@ func roleTagProblem(s scenario) string {
 		return "no role tag; a functional scenario has exactly one of " + strings.Join(roleTags, ", ")
 	}
 	return "more than one role tag (" + strings.Join(found, ", ") + "); a functional scenario has exactly one"
+}
+
+func roleTagsOf(s scenario) []string {
+	var found []string
+	for _, t := range s.tags {
+		if slices.Contains(roleTags, t.name) {
+			found = append(found, t.name)
+		}
+	}
+	return found
+}
+
+// targetProblem says what is wrong with a proposal's target tags, or ""
+// when it has exactly one and it names a feature file in prefixes or a new
+// one. target is that tag's stem, such as policy or new-output-gate, or ""
+// when there is a problem.
+func targetProblem(s scenario) (target, problem string) {
+	var found []string
+	for _, t := range s.tags {
+		if strings.HasPrefix(t.name, targetTagStart) {
+			found = append(found, t.name)
+		}
+	}
+	switch {
+	case len(found) == 0:
+		return "", "no target tag; a proposal has exactly one " + targetTagStart + "<stem>, naming the file it moves to when built: " + targetHint()
+	case len(found) > 1:
+		return "", "more than one target tag (" + strings.Join(found, ", ") + "); a proposal has exactly one"
+	}
+	stem := strings.TrimPrefix(found[0], targetTagStart)
+	if _, known := prefixes[stem+".feature"]; !known && !newStem.MatchString(stem) {
+		return "", "unknown target " + found[0] + "; " + targetHint()
+	}
+	return stem, ""
+}
+
+// strayTargetProblem says what is wrong with a target tag on a scenario
+// in no file directly under proposals/, or "" when it has none: a built
+// scenario drops it.
+func strayTargetProblem(s scenario) string {
+	for _, t := range s.tags {
+		if strings.HasPrefix(t.name, targetTagStart) {
+			return "target tag " + t.name + " belongs only in a file directly under spec/proposals; a built scenario drops it"
+		}
+	}
+	return ""
+}
+
+func targetHint() string {
+	return "the known stems are " + knownStems() + ", or new-<stem> in lower-case words joined by dashes for a file that does not exist yet"
+}
+
+// proposalRoleProblem applies the role tag rule of a proposal's target: a
+// proposal aimed at a functional file needs exactly one role tag, as a
+// scenario in that file would; one aimed at a non-functional file carries
+// none, as the scenarios there carry none; one aimed at a new file may carry
+// one or none, since whether that file is functional is decided when it is
+// made.
+func proposalRoleProblem(s scenario, target string) string {
+	if _, functional := functionalPrefixes[target+".feature"]; functional {
+		if message := roleTagProblem(s); message != "" {
+			return message + " (" + targetTagStart + target + " is a functional file)"
+		}
+		return ""
+	}
+	found := roleTagsOf(s)
+	if _, nonFunctional := nonFunctionalPrefixes[target+".feature"]; nonFunctional && len(found) > 0 {
+		noun := "role tag"
+		if len(found) > 1 {
+			noun = "role tags"
+		}
+		return noun + " " + strings.Join(found, ", ") + " on a proposal for a non-functional file; a non-functional scenario carries none (" + targetTagStart + target + " is a non-functional file)"
+	}
+	if strings.HasPrefix(target, "new-") && len(found) > 1 {
+		return "more than one role tag (" + strings.Join(found, ", ") + "); a proposal for a new file has one or none"
+	}
+	return ""
 }
 
 // hasTag is true when the scenario carries the tag.
@@ -219,7 +320,7 @@ var lastIDBeforeLineRule = map[string]int{
 	"SESSION": 5, "HANDOFF": 42, "TURN": 19, "TREE": 12, "MACHINE": 34, "FILES": 8,
 	"SIGNIN": 7, "NOTIFY": 3, "SET": 4, "TOOLS": 54,
 	"REL": 54, "SEC": 68, "OPS": 42, "PERF": 16, "LIM": 35,
-	"USE": 29, "COMPAT": 27, "OBS": 34,
+	"USE": 29, "COMPAT": 27, "OBS": 34, "PROP": 0,
 }
 
 var lineReference = regexp.MustCompile(`(?i)\blines? [0-9]`)

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,15 +21,17 @@ type Problem struct {
 type FileCount struct {
 	Path      string
 	Scenarios int
+	Proposal  bool // the file is under proposals/
 }
 
 // Result is what one run of the checker found.
 type Result struct {
-	Files    []FileCount    // every .feature file, in path order
-	Tags     map[string]int // scenarios per check tag
-	Paths    int            // paths cited by @test scenarios, checked
-	Tests    int            // Go tests cited by @test scenarios, checked
-	Problems []Problem
+	Files        []FileCount    // every .feature file, in path order
+	Tags         map[string]int // scenarios per check tag, outside proposals/
+	ProposalTags map[string]int // scenarios per check tag, under proposals/
+	Paths        int            // paths cited by @test scenarios, checked
+	Tests        int            // Go tests cited by @test scenarios, checked
+	Problems     []Problem
 }
 
 // Check walks the spec folder and judges every feature file in it, then
@@ -36,7 +39,7 @@ type Result struct {
 // the repo root. The error is for a folder that cannot be read, not for a
 // spec that fails: that is in the problems.
 func Check(folder string) (Result, error) {
-	result := Result{Tags: map[string]int{}}
+	result := Result{Tags: map[string]int{}, ProposalTags: map[string]int{}}
 	seen := map[string]string{} // ID -> where it was first used
 	cites := newCiter(filepath.Dir(filepath.Clean(folder)))
 	err := filepath.WalkDir(folder, func(path string, entry fs.DirEntry, err error) error {
@@ -49,7 +52,7 @@ func Check(folder string) (Result, error) {
 		}
 		result.Problems = append(result.Problems, emDashes(path, string(text))...)
 		if filepath.Ext(path) == ".feature" {
-			checkFeature(&result, seen, cites, path, string(text))
+			checkFeature(&result, seen, cites, folder, path, string(text))
 		}
 		return nil
 	})
@@ -58,12 +61,21 @@ func Check(folder string) (Result, error) {
 }
 
 // checkFeature counts one feature file's scenarios and adds what is wrong
-// with them to the result.
-func checkFeature(result *Result, seen map[string]string, cites *citer, path, text string) {
+// with them to the result. A file directly under the folder's proposals/
+// holds features agreed and not built: any name is allowed there, its IDs
+// are @PROP-nn, each scenario names its target file, and a @test
+// scenario's citations are not looked up, since its test may not exist
+// yet. A target tag anywhere else is a problem.
+func checkFeature(result *Result, seen map[string]string, cites *citer, folder, path, text string) {
 	scenarios, outlines := parseFeature(path, text)
-	result.Files = append(result.Files, FileCount{Path: path, Scenarios: len(scenarios)})
+	rel, _ := filepath.Rel(folder, path)
+	proposal := filepath.Dir(rel) == "proposals"
+	result.Files = append(result.Files, FileCount{Path: path, Scenarios: len(scenarios), Proposal: proposal})
 	prefix, known := prefixes[filepath.Base(path)]
-	functional := filepath.Base(filepath.Dir(path)) == "functional"
+	tags := result.Tags
+	if proposal {
+		prefix, known, tags = proposalPrefix, true, result.ProposalTags
+	}
 	if !known {
 		result.Problems = append(result.Problems, Problem{path, 1, "unknown feature file name; the known names are " + knownNames()})
 	}
@@ -74,16 +86,33 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, path, te
 		// A scenario rejected for its check tags counts under none of them.
 		if checkTagProblem(s) == "" {
 			for _, t := range s.tags {
-				result.Tags[t.name]++
+				tags[t.name]++
 			}
 		}
 		result.Problems = append(result.Problems, scenarioProblems(s, prefix, seen)...)
-		if functional {
-			if message := roleTagProblem(s); message != "" {
-				result.Problems = append(result.Problems, Problem{s.file, s.line, message + tagHint(s)})
+		at := func(message string) {
+			result.Problems = append(result.Problems, Problem{s.file, s.line, message + tagHint(s)})
+		}
+		switch {
+		case proposal:
+			target, message := targetProblem(s)
+			if message == "" {
+				message = proposalRoleProblem(s, target)
+			}
+			if message != "" {
+				at(message)
+			}
+		default:
+			if message := strayTargetProblem(s); message != "" {
+				at(message)
+			}
+			if filepath.Base(filepath.Dir(path)) == "functional" {
+				if message := roleTagProblem(s); message != "" {
+					at(message)
+				}
 			}
 		}
-		if hasTag(s, tagTest) {
+		if hasTag(s, tagTest) && !proposal {
 			result.Problems = append(result.Problems, cites.problems(s)...)
 		}
 	}
@@ -146,4 +175,14 @@ func knownNames() string {
 	}
 	slices.Sort(names)
 	return strings.Join(names, ", ")
+}
+
+// knownStems are the names in prefixes without .feature: what a
+// proposal's target tag may name.
+func knownStems() string {
+	var stems []string
+	for _, name := range slices.Sorted(maps.Keys(prefixes)) {
+		stems = append(stems, strings.TrimSuffix(name, ".feature"))
+	}
+	return strings.Join(stems, ", ")
 }
