@@ -166,6 +166,6 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **worker**: a machine, besides the one Agentry runs on, that has joined so agents can run on it; it dials out to the server, runs as a background service and keeps its own credential.
 - **Workers page**: where Add worker gives the install command for each system, and each machine shows with its status, whether work runs there and since when.
 - **working**: a task's status while an agent has a turn open on it.
-- **Workspace**: a task's worktree as an editor's git view, from the Workspace button on the task page: what is not committed, the branch's commits, every file with its git status, previews of Markdown and SVG, and a dock with the Coordinator chat, Claude and the agent's Terminal; PLAN.md T-055 first called it Peek.
+- **Workspace**: a task's worktree as an editor's git view, from the Workspace button on the task page: what is not committed, the branch's commits, every file with its git status, previews of Markdown and SVG, and a dock with the Coordinator chat, Claude and the agent's Terminal; the build plan first called it Peek.
 - **worktree**: a task's own git worktree of its repo, on branch `agentry/<task>` with its own leased port, where every turn runs; it is removed once its branch is merged into dev.
 - **wrap-up turn**: the coordinator's one last turn after the user moves a task to Done, To do or the Backlog, to write its summary and tidy up; it never waits for a slot.
