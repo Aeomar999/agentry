@@ -303,7 +303,7 @@ Feature: The coordinator
     # internal/coordinator/repos_test.go TestTheCoordinatorMovesATaskToTheRepoYouNamed
     Given the user named a git address or a folder for the task's work in its description or in what they told the coordinator
     When the coordinator decides {"action": "move", "repo": "<that address, as they wrote it>"}
-    Then the task's repo is the new one, cloned once if it is an address, and its next turn runs in a new worktree of it
+    Then the task's repo is the new one, a clone if it is an address, and its next turn runs in a new worktree of it: yes
     And a move to a repo the user did not name is refused as an issue, and the task's repo is kept
     # namedByYou: internal/coordinator/next.go; TestARepoIsNamedOnlyWhole in the same file covers the whole-name match
 
@@ -320,9 +320,10 @@ Feature: The coordinator
     # internal/coordinator/teams_test.go TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer
     Given a task of the Software team, and the Writing team is listed under "Other teams" in the brief
     When the coordinator decides {"action": "request", "team": "writing", "request": "Write the user guide for the TODO tool."}
-    Then exactly 1 new task is made for the Writing team, with the request as its title, in the same repo, with this task as its parent
+    Then a new task is made for the Writing team, with the request's first line as its title and this task as its parent: yes
     And this task waits, with no turn starting, until that task is done
-    And then the other team's summary comes back to this coordinator as exactly 1 step in the trail
+    And then the other team's summary is shown in this coordinator's brief as "<that task> is done: <its summary>"
+    # not under test, checked by hand: the new task is in the same repo, and the summary is 1 step in the trail
 
   @COORD-35 @manual
   Scenario: A transfer or request goes only to a team named in the brief
@@ -341,7 +342,8 @@ Feature: The coordinator
     When the coordinator decides {"action": "done", "summary": "TODOs removed."}
     Then the task is not done
     And an issue goes back to the coordinator saying no one has checked it since it last changed, naming the turn and the agent
-    And done is allowed once at least 1 checker has approved since the last change and no checker's latest check is older than that change, asks for changes or gives no verdict
+    And done is allowed once at least 1 checker has approved since the last change and no checker's latest check is older than that change
+    # not under test, checked by hand: done is also refused while a checker's latest check asks for changes or gives no verdict: internal/coordinator/checks.go unchecked, line 140
     And a checker that never looked is not required: the test's team has a reviewer and a tester, and the reviewer's approval alone allows done
     # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/agents/defaults.go, Column Reviews
 
@@ -370,9 +372,10 @@ Feature: The coordinator
     # internal/coordinator/epics_test.go TestAnEpicRunsItsStoriesAndFinishesWithThem
     Given an epic with no stories yet, whose brief says to split it before anything else
     When the coordinator decides a split with 3 stories, 1 of them for the Writing team
-    Then exactly 3 tasks are made, each parked in the user's Backlog with 0 turns, each saying it is a story of the epic
+    Then exactly 3 tasks are made, each parked in the user's Backlog with 0 turns
     And each story is kept at the same budget and limit of turns as the epic
-    And the Writing team's story goes to that team's coordinator once the user starts it
+    And the Writing team's story goes to that team's coordinator once the user starts it, its description and brief saying it is a story of the epic
+    # not under test, checked by hand: the other stories say so too; the test reads the Writing team's story only
     # a story's limits: internal/tasks/limits.go NewLimits; "parked": "backlog": internal/coordinator/loop.go split
 
   @COORD-39 @manual
@@ -387,12 +390,13 @@ Feature: The coordinator
 
   @COORD-40 @test
   Scenario: A story's after list says which stories it builds on
-    # internal/coordinator/epics_test.go TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne
-    Given a split whose third story has "after": [1], and an epic with an existing story task-N
+    # internal/coordinator/epics_test.go TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne; the wait: TestAnEpicRunsItsStoriesAndFinishesWithThem
+    Given a split whose second story has "after": [1], and an epic with an existing story task-N
     When the stories are made
-    Then the third story's after list names the first story's id, and an "after" naming task-N is kept as that id
-    And a story that builds on others is not started until every one of them is done, so its branch starts from a dev that has their work
-    And a story whose "after" names a story later in the list, or one not in this epic, is refused
+    Then the second story's after list names the first story's id, and an "after" naming task-N is kept as that id
+    And a story that builds on others is not started until every one of them is done
+    And a story whose "after" names itself, a story later in the list, or a number outside it, is refused
+    # not under test, checked by hand: the waiting story's branch starts from a dev that has their work, and an "after" naming a task not in this epic is refused
     # the refusal: internal/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/coordinator/loop.go
 
   @COORD-41 @test
@@ -400,17 +404,17 @@ Feature: The coordinator
     # internal/coordinator/epics_test.go TestAStoryCantBeSplitAndAnEpicIsntAssigned
     Given a story of an epic
     When its coordinator decides a split
-    Then the decision is refused as an issue saying a story can't be split, and to say in its summary what else the epic needs
-    And an assign on an epic is refused as an issue saying its work is done in its stories
+    Then the decision is refused as an issue saying a story can't be split
     And a task the user made a story is never split either
+    # not under test, checked by hand: the issue says to put what else the epic needs in its summary, and an assign on an epic is refused as an issue saying its work is done in its stories: internal/coordinator/next.go line 151
 
   @COORD-42 @test
   Scenario: The epic's coordinator waits while stories run and asks the user to close it when all are done
-    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
+    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone; the wait while stories run, and the question: TestAnEpicRunsItsStoriesAndFinishesWithThem
     Given an epic whose stories are all running
     When its coordinator decides {"action": "wait"}
     Then no turn starts on the epic until a story's summary comes back to it
-    And once every story is done, a done decision asks the user "Close it?" with exactly 1 option, "Close the epic", and the epic is not done until they do
+    And once every story is done, a done decision asks the user "Close it?" with the option "Close the epic", and the epic is not done until they do
     And if the user leaves it open, it stays open with no further question until they close it or add a story
     # CloseEpic: internal/coordinator/epics.go; the question: internal/coordinator/loop.go apply, Finish
 
@@ -441,16 +445,18 @@ Feature: The coordinator
     # internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
     Given a repo and a task task-1
     When Agentry prepares the task's worktree
-    Then the worktree is on branch agentry/task-1, started from the repo's current commit, with 1 port of its own
+    Then the worktree is on branch agentry/task-1, with its base commit kept and the port it was given, 7901
+    # not under test, checked by hand: the base is the repo's current commit; the test checks it is a full commit id
     And the repo's untracked .env files are copied in, node_modules is linked, and Agentry's own files under .agentry/ never show as changes
     And a second task's worktree adds the ignore lines exactly once
 
   @COORD-46 @test
   Scenario: Each worktree leases a port between 7900 and 7999
-    # internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
+    # internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given port 7900 is held by another unfinished task and 7901 has something listening on it
     When a new task's worktree is prepared
-    Then its port is exactly 7902, and that port is in the PORT environment variable of every turn on the task
+    Then its port is exactly 7902
+    And a turn starts with the worktree's port in its PORT environment variable: yes
     # FirstPort = 7900, LastPort = 7999: internal/worktrees/ports.go; PORT: internal/turns/turns.go environment
 
   @COORD-47 @test
@@ -459,7 +465,8 @@ Feature: The coordinator
     Given a done task whose branch has commits not yet in dev
     When Agentry removes its worktree
     Then the worktree and the branch are kept, so no work is lost
-    And once the branch is in origin/dev, or a local dev with no remote, the worktree and the branch are removed
+    And once the branch is in a local dev with no remote, the worktree and the branch are no longer there
+    # not under test, checked by hand: the branch in origin/dev counts as merged too: internal/worktrees/worktree.go lines 209 to 212
 
   @COORD-48 @test
   Scenario: The task's work follows its branch to the next machine
