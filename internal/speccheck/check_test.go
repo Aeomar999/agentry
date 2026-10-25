@@ -296,6 +296,10 @@ func TestANewScenarioCitesNoLineNumber(t *testing.T) {
 		"an old ID with line":  {"@USER-133 @test", "# internal/web/api_test.go, line 12", ""},
 		"a new ID with a name": {"@USER-134 @test", "# internal/web/api_test.go, the timeline 5 times", ""},
 		"a capital Line":       {"@USER-134 @test", "# internal/web/api_test.go, Line 12", "user.feature:10: a line number goes stale"},
+		"a new ID with :N":     {"@USER-134 @test", "# internal/web/api_test.go:42", "user.feature:10: a line number goes stale"},
+		"a new ID with :N-M":   {"@USER-134 @test", "# internal/web/api_test.go:3-5;", "user.feature:10: a line number goes stale"},
+		"an old ID with :N":    {"@USER-133 @test", "# internal/web/api_test.go:42", ""},
+		"a time is not a path": {"@USER-134 @test", "# internal/web/api_test.go, at 10:30", ""},
 		"a capital Lines":      {"@USER-134 @test", "# internal/web/api_test.go, Lines 3 to 5", "user.feature:10: a line number goes stale"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -320,37 +324,38 @@ func TestAStepMaySayLine(t *testing.T) {
 		"user.feature:10: a line number goes stale")
 }
 
-// notInTheRootLists are the repo root's entries that are not cited: git's
-// own and what .gitignore leaves out. A name starting with a dot that is a
-// folder is skipped too, as .agentry is.
-var notInTheRootLists = []string{".git", "bin", "release", "agentry", "node_modules", "__pycache__", "*.db", "*.db-wal", "*.db-shm"}
-
-func TestTheRootListsNameEveryTopFolderAndRootFile(t *testing.T) {
-	entries, err := os.ReadDir(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if ignored(name) || entry.IsDir() && strings.HasPrefix(name, ".") {
-			continue
-		}
-		if entry.IsDir() && !slices.Contains(rootFolders, name) {
-			t.Errorf("the top folder %s is not in rootFolders, so a path under it is not checked", name)
-		}
-		if !entry.IsDir() && !slices.Contains(rootFiles, name) {
-			t.Errorf("the root file %s is not in rootFiles, so citing it is not checked", name)
+func TestEveryRootListEntryIsInTheRepo(t *testing.T) {
+	root := filepath.Join("..", "..")
+	for _, name := range append(slices.Clone(rootFolders), rootFiles...) {
+		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+			t.Errorf("%s is in the root lists but not at the repo root", name)
 		}
 	}
 }
 
-func ignored(name string) bool {
-	for _, pattern := range notInTheRootLists {
-		if matched, _ := filepath.Match(pattern, name); matched {
-			return true
-		}
+func TestACitationUnderAnUnlistedTopFolderFails(t *testing.T) {
+	repo := map[string]string{
+		"../scripts/build.sh": "",
+		"../bin/agentry":      "",
+		"../.gitignore":       "bin/\n",
 	}
-	return false
+	for name, c := range map[string]struct{ comment, want string }{
+		"an unlisted folder":  {"# internal/web/api_test.go; scripts/build.sh", "user.feature:10: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list; add scripts to rootFolders"},
+		"a word with a slash": {"# internal/web/api_test.go, read and/or write", ""},
+		"an ignored folder":   {"# internal/web/api_test.go; built to bin/agentry", ""},
+		"a dot folder":        {"# internal/web/api_test.go; .agentry/files", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := maps.Clone(repo)
+			files["functional/user.feature"] = strings.Replace(goodScenario, "# internal/web/api_test.go", c.comment, 1)
+			got := problemsOf(t, files)
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
 }
 
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {

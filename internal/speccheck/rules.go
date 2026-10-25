@@ -174,9 +174,10 @@ func words(text string) []string {
 
 // lastIDBeforeLineRule is each prefix's highest ID when the rule against
 // line references came in. A scenario numbered above its prefix's entry
-// may not cite "line N" or "lines N", in any case, in a comment: lines move as dev moves, so it names
-// a function or a test instead. The scenarios at or below the entry are
-// left as they are.
+// may not cite "line N" or "lines N", in any case, or a path such as
+// x.go:42, in a comment: lines move as dev moves, so it names a function
+// or a test instead. The scenarios at or below the entry are left as they
+// are.
 var lastIDBeforeLineRule = map[string]int{
 	"USER": 133, "COORD": 60, "AGENT": 56, "CC": 56, "WORKER": 41,
 	"REL": 54, "SEC": 68, "OPS": 42, "PERF": 16, "LIM": 35,
@@ -194,7 +195,7 @@ func lineReferences(s scenario, prefix string) []line {
 	}
 	var found []line
 	for _, l := range s.body {
-		if isComment(l.text) && lineReference.MatchString(l.text) {
+		if isComment(l.text) && (lineReference.MatchString(l.text) || citesLineOfPath(l.text)) {
 			found = append(found, l)
 		}
 	}
