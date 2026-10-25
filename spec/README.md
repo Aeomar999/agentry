@@ -79,7 +79,20 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. Rules 3, 5, 7 and 8 are the reviewer's.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8, are the reviewer's.
+
+## Citations
+
+The check reads every comment line in a scenario's body, from the `Scenario:` line to the next scenario's tags, and splits it into words, with commas, semicolons, colons, full stops, brackets and quotes cut off their ends. A comment line between two scenarios belongs to the one above it.
+
+- A path is a word that starts with one of the repo's top folders and a slash (`cmd/`, `deploy/`, `docs/`, `internal/`, `packaging/`, `spec/`, `tools/`, `ui/`), or is the bare name of a root file (`.gitlab-ci.yml`, `Dockerfile`, `Makefile`, `PLAN.md`, `README.md`, `docker-stack.dev.yml`, `go.mod`, `spec.md`). It is read from the repo root, the folder above `spec/`. A short name such as `systemd.go` or `organisms/TopBar.tsx` is not a path and is not checked: write the whole path.
+- A word with `*`, `?`, `[`, `{` or `<` in it, such as `ui/src/**/*.tsx`, is a glob or a placeholder. It is skipped, not matched.
+- A Go test is a word that starts with `Test` and a capital letter, a digit or an underscore. It belongs to the `_test.go` file named right after it, as in `TestA in internal/x/x_test.go`, or else to the last `_test.go` file cited above it in the same scenario, on the same line or an earlier one. So `internal/x/x_test.go TestA and TestB`, `...; the count: TestC in the same file` and a `TestD` on a later comment line all belong to `internal/x/x_test.go`. A path to a file that is not a Go test, such as `internal/x/x.go`, does not change which file a test belongs to.
+- A path under `ui/` is checked for the file only; a test named in it is not looked up.
+
+In a `@test` scenario, the check fails on a path that does not exist (`cited path internal/x/gone_test.go does not exist`), on a Go test that has no `func TestName(` line at the start of a line in its file (`TestA is not defined in internal/x/x_test.go`), and on a Go test with no `_test.go` file before it. A `@manual` or `@benchmark` scenario may cite what it likes. A passing run prints how many paths and Go tests were checked.
+
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N` in any scenario numbered above the last ID each file had when this rule came in: USER 133, COORD 60, AGENT 56, CC 56, WORKER 41, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers.
 
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 
@@ -88,6 +101,7 @@ spec/functional/agent.feature: 1 scenario
 spec/functional/claude-code.feature: 1 scenario
 ...
 13 files, 13 scenarios: 10 @test, 1 @benchmark, 2 @manual
+cited by @test: 12 paths, 9 Go tests
 ```
 
 A failing run prints the same counts, then each problem as `file:line: message`, and exits 1:
