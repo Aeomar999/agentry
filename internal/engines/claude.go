@@ -26,6 +26,7 @@ const (
 	TranscriptNotSaved  = "transcript not saved"
 	NoUsageInTranscript = "no usage in transcript"
 	NoUsageThisTurn     = "no usage in this turn's part of the transcript"
+	NoUsageDated        = "no usage in the transcript with a time Agentry can read"
 )
 
 var (
@@ -180,7 +181,7 @@ func claudeTokens(transcript string, started time.Time) (Tokens, string) {
 	}
 	defer file.Close()
 	var used Tokens
-	seen, earlier := map[string]bool{}, false
+	seen, earlier, undated := map[string]bool{}, false, false
 	lines := bufio.NewScanner(file)
 	lines.Buffer(make([]byte, 0, 1<<20), 16<<20)
 	for lines.Scan() {
@@ -200,9 +201,10 @@ func claudeTokens(transcript string, started time.Time) (Tokens, string) {
 			continue
 		}
 		// An entry with no timestamp Agentry reads can't be shown to be
-		// this turn's, so it isn't counted once the start is known.
+		// this turn's, so it isn't counted once the start is known: it may
+		// be an earlier turn's, and counting that would count it twice.
 		if at, err := time.Parse(time.RFC3339Nano, entry.Timestamp); !started.IsZero() && (err != nil || at.Before(started)) {
-			earlier = true
+			earlier, undated = earlier || err == nil, undated || err != nil
 			continue
 		}
 		seen[entry.Message.ID] = true
@@ -215,6 +217,8 @@ func claudeTokens(transcript string, started time.Time) (Tokens, string) {
 	switch {
 	case len(seen) > 0:
 		return used, ""
+	case undated: // whether any of it is this turn's can't be told
+		return Tokens{}, NoUsageDated
 	case earlier:
 		return Tokens{}, NoUsageThisTurn
 	}

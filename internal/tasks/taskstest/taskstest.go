@@ -39,6 +39,7 @@ func EveryEvent() []events.Event {
 	log = add(log, you, events.AgentRenamedInTask, "", map[string]any{"name": "engineer", "to": "builder"})
 	log = add(log, worker, events.TurnStarted, "turn-1", map[string]any{"agent": "builder", "hash": "h"})
 	log = add(log, worker, events.PromptAcknowledged, "turn-1", map[string]any{"hash": "h"})
+	log = add(log, worker, events.SessionStarted, "turn-1", map[string]any{"engineSession": "sess-1"})
 	log = add(log, engineer, events.PlanUpdated, "turn-1", map[string]any{"plan": "- [ ] profile"})
 	log = add(log, engineer, events.AgentWaiting, "turn-1", map[string]any{"question": "Which server?"})
 	log = add(log, engineer, events.ActionRequested, "tool-1", map[string]any{"tool": "Bash", "command": "go test"})
@@ -58,7 +59,8 @@ func EveryEvent() []events.Event {
 	log = add(log, worker, events.TurnLimited, "turn-1", map[string]any{"agent": "builder", "error": "rate_limit",
 		"details": "You've hit your session limit", "resetsAt": "2026-10-20T03:00:00Z"})
 	log = add(log, worker, events.TurnResumed, "turn-1", map[string]any{"agent": "builder", "reason": "engine"})
-	log = add(log, worker, events.TurnEnded, "turn-1", map[string]any{"agent": "builder", "report": "Profiled.", "tokens": float64(300)})
+	log = add(log, worker, events.TurnEnded, "turn-1", map[string]any{"agent": "builder", "report": "Profiled.", "tokens": float64(300),
+		"inputTokens": float64(4), "cacheWriteTokens": float64(100), "cacheReadTokens": float64(150), "outputTokens": float64(46)})
 	log = add(log, agentry, events.FilesDelivered, "", map[string]any{"worker": "laptop", "version": "1"})
 	log = add(log, lead, events.FileFetching, "", map[string]any{"machine": "laptop", "path": "/db", "as": "db"})
 	log = add(log, agentry, events.FilesFetched, "", map[string]any{"from": "laptop:/db",

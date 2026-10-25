@@ -43,6 +43,7 @@ type Task struct {
 	Column      string  // "in-progress", "review" or "shipping": the board column you moved it to, until its coordinator next hands it on
 	SentBack    bool    // that move took it from Review or Shipping back to In progress: it needs more work, not checking
 	TokensUsed  int     // by every turn that has ended
+	TokensSplit Split   // the part of TokensUsed whose turns said how it splits; the rest is Unsplit
 	Description string
 	Repo        string
 	MovingTo    string  // a repo you moved the task to while a turn was running: it moves when the turn ends
@@ -203,6 +204,7 @@ type Turn struct {
 	ID            string // also the correlation of its events
 	Agent         string
 	Worker        string // the machine it ran on
+	EngineSession string // the engine's own id for the session, "" until it says or in logs from before it was kept
 	Hash          string // of the prompt line it was started with
 	StartedAt     time.Time
 	LastEventAt   time.Time
@@ -222,7 +224,24 @@ type Turn struct {
 	Shipped       bool      // it ships the work because you moved the task to Shipping: you took the work as it was
 	Tokens        int       // what it used, when the engine said
 	TokensUnknown string    // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
+	Split         Split     // how Tokens splits, zero when the engine didn't say, as in older logs
 }
+
+// Split is how a count of tokens divides: new input, input written to the
+// cache, input read from it, and output. All four count against a budget.
+type Split struct {
+	Input, CacheWrite, CacheRead, Output int
+}
+
+func (s Split) Total() int { return s.Input + s.CacheWrite + s.CacheRead + s.Output }
+
+func (s Split) add(other Split) Split {
+	return Split{s.Input + other.Input, s.CacheWrite + other.CacheWrite, s.CacheRead + other.CacheRead, s.Output + other.Output}
+}
+
+// Unsplit is the part of TokensUsed from turns that didn't say how it
+// splits: those from older workers, and from before the split was kept.
+func (t *Task) Unsplit() int { return t.TokensUsed - t.TokensSplit.Total() }
 
 type Decision string
 

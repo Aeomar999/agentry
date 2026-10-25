@@ -35,11 +35,13 @@ type taskDetail struct {
 	Worktree      *worktree     `json:"worktree"`
 	Trail         []step        `json:"trail"`
 	Turns         []turn        `json:"turnList"`
-	TokensUnknown string        `json:"tokensUnknown"`        // on how many turns the tokens couldn't be counted, and why; "" when every turn was
-	Approvals     []action      `json:"approvals"`            // waiting for you
-	Actions       []action      `json:"actions"`              // its events are read a page at a time, at /api/tasks/{task}/events
-	Archived      bool          `json:"archived,omitempty"`   // read back from its archive: it takes no events until it is reopened
-	ArchivedAt    *time.Time    `json:"archivedAt,omitempty"` // when it was archived
+	TokensUnknown string        `json:"tokensUnknown"`           // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+	TokensSplit   *tokenSplit   `json:"tokensSplit,omitempty"`   // how tokensUsed splits, over the turns that said; absent when none did
+	TokensUnsplit int           `json:"tokensUnsplit,omitempty"` // with a split: the part of tokensUsed from turns that didn't say
+	Approvals     []action      `json:"approvals"`               // waiting for you
+	Actions       []action      `json:"actions"`                 // its events are read a page at a time, at /api/tasks/{task}/events
+	Archived      bool          `json:"archived,omitempty"`      // read back from its archive: it takes no events until it is reopened
+	ArchivedAt    *time.Time    `json:"archivedAt,omitempty"`    // when it was archived
 }
 
 type worktree struct {
@@ -59,21 +61,38 @@ type step struct {
 }
 
 type turn struct {
-	ID            string     `json:"id"`
-	Agent         string     `json:"agent"`
-	Worker        string     `json:"worker"` // the machine it ran on
-	StartedAt     time.Time  `json:"startedAt"`
-	LastEventAt   time.Time  `json:"lastEventAt"` // when it ended, once it has
-	Acknowledged  bool       `json:"acknowledged"`
-	Ended         bool       `json:"ended"`
-	Issue         string     `json:"issue"`
-	Tokens        int        `json:"tokens"`
-	TokensUnknown string     `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
-	Plan          string     `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
-	PlanFrom      string     `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
-	Stopped       bool       `json:"stopped"`                 // you ended it, to tell the coordinator something
-	Limited       string     `json:"limited,omitempty"`       // what the engine said when it stopped at a usage limit
-	ResetsAt      *time.Time `json:"resetsAt,omitempty"`      // when that limit resets, when the engine said
+	ID            string      `json:"id"`
+	Agent         string      `json:"agent"`
+	Worker        string      `json:"worker"` // the machine it ran on
+	StartedAt     time.Time   `json:"startedAt"`
+	LastEventAt   time.Time   `json:"lastEventAt"` // when it ended, once it has
+	Acknowledged  bool        `json:"acknowledged"`
+	Ended         bool        `json:"ended"`
+	Issue         string      `json:"issue"`
+	Tokens        int         `json:"tokens"`
+	TokensUnknown string      `json:"tokensUnknown,omitempty"` // why tokens is 0, when the engine couldn't say
+	Split         *tokenSplit `json:"split,omitempty"`         // how tokens splits, when the engine said
+	EngineSession string      `json:"engineSession,omitempty"` // the engine's own id for the session, when it said
+	Plan          string      `json:"plan"`                    // a Markdown checklist, "" until the agent writes one
+	PlanFrom      string      `json:"planFrom"`                // the turn whose unfinished plan it started on, "" for a fresh one
+	Stopped       bool        `json:"stopped"`                 // you ended it, to tell the coordinator something
+	Limited       string      `json:"limited,omitempty"`       // what the engine said when it stopped at a usage limit
+	ResetsAt      *time.Time  `json:"resetsAt,omitempty"`      // when that limit resets, when the engine said
+}
+
+type tokenSplit struct {
+	Input      int `json:"input"` // new input, not from the cache
+	CacheWrite int `json:"cacheWrite"`
+	CacheRead  int `json:"cacheRead"`
+	Output     int `json:"output"`
+}
+
+// splitOf is a split as the page reads it, nil when there is none.
+func splitOf(s tasks.Split) *tokenSplit {
+	if s == (tasks.Split{}) {
+		return nil
+	}
+	return &tokenSplit{Input: s.Input, CacheWrite: s.CacheWrite, CacheRead: s.CacheRead, Output: s.Output}
 }
 
 type action struct {
@@ -131,6 +150,9 @@ func listOf(items []string) []string {
 func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	detail := taskDetail{taskSummary: tasks.SummaryOf(t, roster), Description: t.Description, FirstTitle: t.FirstTitle, Options: listOf(t.Asked.Options), Page: t.Asked.Page,
 		Coordinator: t.Coordinator, TeamChosen: t.TeamChosen, Summary: t.Summary, MovingTo: t.MovingTo, TokensUnknown: tokensUnknownOf(t)}
+	if detail.TokensSplit = splitOf(t.TokensSplit); detail.TokensSplit != nil {
+		detail.TokensUnsplit = t.Unsplit()
+	}
 	detail.Shared = []sharedFile{}
 	for _, f := range t.SharedFiles() {
 		detail.Shared = append(detail.Shared, sharedFile{Name: f.Name, Size: f.Size, By: f.By, At: f.At.Format(time.RFC3339), From: f.From})
@@ -143,7 +165,8 @@ func detailOf(t *tasks.Task, roster agents.Roster) taskDetail {
 	}
 	for _, tu := range t.Turns {
 		detail.Turns = append(detail.Turns, turn{ID: tu.ID, Agent: tu.Agent, Worker: tu.Worker, StartedAt: tu.StartedAt,
-			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
+			LastEventAt: tu.LastEventAt, Acknowledged: tu.Acknowledged, Ended: tu.Ended, Issue: tu.Issue, Tokens: tu.Tokens, TokensUnknown: tu.TokensUnknown,
+			Split: splitOf(tu.Split), EngineSession: tu.EngineSession, Plan: tu.Plan, PlanFrom: tu.PlanFrom, Stopped: tu.Stopped, Limited: tu.Limited})
 		if resets := tu.ResetsAt; !resets.IsZero() {
 			detail.Turns[len(detail.Turns)-1].ResetsAt = &resets
 		}

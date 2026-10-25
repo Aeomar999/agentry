@@ -345,6 +345,8 @@ func (t *Task) Apply(e events.Event) {
 	case events.PromptAcknowledged:
 		turn := t.Turn(e.Correlation)
 		turn.Acknowledged, turn.Waiting = true, ""
+	case events.SessionStarted:
+		t.Turn(e.Correlation).EngineSession = e.Text("engineSession")
 
 	case events.ActionRequested:
 		turn := t.OpenTurn()
@@ -374,7 +376,9 @@ func (t *Task) Apply(e events.Event) {
 		turn := t.Turn(e.Correlation)
 		turn.Ended, turn.Report, turn.Tokens, turn.TokensUnknown = true, e.Text("report"), e.Number("tokens"), e.Text("tokensUnknown")
 		t.moveRepo()
+		turn.Split = Split{e.Number("inputTokens"), e.Number("cacheWriteTokens"), e.Number("cacheReadTokens"), e.Number("outputTokens")}
 		t.TokensUsed += turn.Tokens
+		t.TokensSplit = t.TokensSplit.add(turn.Split)
 		t.IssuesInARow = 0
 		if turn.Agent == t.Coordinator {
 			// An empty reply is still one to decide on: it has no decision
@@ -471,7 +475,7 @@ func (t *Task) orphaned(e events.Event) bool {
 		return t.OpenTurn() == nil
 	case events.ActionAsked, events.ActionApproved, events.ActionDenied, events.ActionHeld, events.ActionResult:
 		return t.Action(e.Correlation) == nil
-	case events.PromptAcknowledged, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.TurnStopped:
+	case events.PromptAcknowledged, events.SessionStarted, events.PlanUpdated, events.AgentWaiting, events.TurnEnded, events.TurnLimited, events.TurnResumed, events.TurnStopped:
 		return t.Turn(e.Correlation) == nil
 	}
 	return false
