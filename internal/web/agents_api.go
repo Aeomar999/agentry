@@ -473,6 +473,7 @@ type memberView struct {
 	Profile     string `json:"profile"`
 	Color       string `json:"color"`
 	Column      string `json:"column"`
+	Resume      string `json:"resume"`
 }
 
 // yourView is a template you saved, with when and where from, and the
@@ -493,7 +494,7 @@ func viewOf(t agents.Template, userMade bool) templateView {
 	}
 	for _, a := range t.Prompted() {
 		view.Agents = append(view.Agents, memberView{Name: a.Name, Description: a.Description, Coordinates: a.Coordinates,
-			Prompt: a.Prompt, Engine: a.Engine, Model: a.Model, Profile: a.Profile, Color: a.Color, Column: a.Column})
+			Prompt: a.Prompt, Engine: a.Engine, Model: a.Model, Profile: a.Profile, Color: a.Color, Column: a.Column, Resume: a.Resume})
 	}
 	return view
 }
