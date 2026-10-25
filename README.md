@@ -2,6 +2,8 @@
 
 A task board where the workers are AI agents. You describe a task; a coordinator agent hands it from agent to agent (an engineer, a reviewer, a tester, a deployer, or another team's) and reads every report back, until the work is checked and done. You watch it all live, step in when you want, and approve what matters.
 
+Agentry is made by [Agent3 Labs](https://agent3labs.com), which also makes Hawser, a private network between your own machines.
+
 <p align="center">
   <img src="docs/screenshots/tasks-board.png" alt="The Tasks board in Agentry: Backlog, To do, In progress, Review and Done columns of real tasks, each card showing its epic, which agent is working on it, its labels and how many turns it has taken" width="100%">
 </p>
