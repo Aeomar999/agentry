@@ -1,4 +1,4 @@
-import { FocusEventHandler, ReactNode, useState } from "react";
+import { FocusEventHandler, Fragment, ReactNode, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { CircleCheck, EyeOff, FileQuestion, FolderGit2, SquareTerminal } from "lucide-react";
 import { Button } from "@/components/atoms/Button";
@@ -40,11 +40,11 @@ import { RedactText } from "@/components/organisms/RedactText";
 import { EpicBadge, StoryProgress } from "@/components/molecules/StoryProgress";
 import { waitingLine } from "@/lib/epics";
 import { shownId } from "@/lib/shown-id";
-import type { Action, Agent, Erasure, LogEvent, TaskDetail, Turn } from "@/api/types";
+import type { Action, Agent, Erasure, LogEvent, TaskDetail, TokenSplit, Turn } from "@/api/types";
 import { teamOf, teamsOf } from "@/lib/teams";
 import { SHOWS, Show, activityOf, rowFor } from "@/lib/activity";
 import { LOCAL, machineName } from "@/lib/machines";
-import { tokenSplit, tokens } from "@/lib/tokens";
+import { tokenParts, tokenSplit, tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { keepFocusInView } from "@/lib/focus-in-view";
@@ -112,6 +112,21 @@ const EVENT_COLUMNS: Column<LogEvent>[] = [
   },
 ];
 
+// A turn's split, one part per line under its total, so the Tokens
+// column stays narrow.
+function TurnSplit({ split }: { split: TokenSplit }) {
+  return (
+    <dl className="grid grid-cols-[auto_auto] gap-x-2 text-[11px] text-ink-muted">
+      {tokenParts(split).map(([label, value]) => (
+        <Fragment key={label}>
+          <dt className="text-left whitespace-nowrap">{label}</dt>
+          <dd className="font-mono">{value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
+
 const TURN_COLUMNS: Column<Turn>[] = [
   { header: "Turn", className: "w-20", render: (t) => <Mono className="text-ink-muted">{t.id}</Mono> },
   { header: "Agent", className: "w-32", render: (t) => <AgentName name={t.agent} /> },
@@ -127,7 +142,7 @@ const TURN_COLUMNS: Column<Turn>[] = [
       ) : (
         <span className="flex flex-col items-end">
           <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
-          {t.split && <Mono className="text-[11px] whitespace-nowrap text-ink-muted">{tokenSplit(t.split)}</Mono>}
+          {t.split && <TurnSplit split={t.split} />}
         </span>
       ),
   },

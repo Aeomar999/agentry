@@ -8,9 +8,22 @@ export function tokens(n: number): string {
   return String(n);
 }
 
-// The four parts of a count: "in 4 · cache write 12.8k · cache read 40k · out 370".
+// The four parts of a count, each a label and its number: ["in", "4"],
+// ["cache write", "12.8k"], ["cache read", "40k"], ["out", "370"].
+export function tokenParts(s: TokenSplit): [string, string][] {
+  return [
+    ["in", tokens(s.input)],
+    ["cache write", tokens(s.cacheWrite)],
+    ["cache read", tokens(s.cacheRead)],
+    ["out", tokens(s.output)],
+  ];
+}
+
+// The four parts on one line: "in 4 · cache write 12.8k · cache read 40k · out 370".
 export function tokenSplit(s: TokenSplit): string {
-  return `in ${tokens(s.input)} · cache write ${tokens(s.cacheWrite)} · cache read ${tokens(s.cacheRead)} · out ${tokens(s.output)}`;
+  return tokenParts(s)
+    .map(([label, value]) => `${label} ${value}`)
+    .join(" · ");
 }
 
 // "2M", "500k" or "300000" as a number of tokens, or NaN.

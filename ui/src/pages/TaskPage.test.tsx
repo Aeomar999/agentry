@@ -300,7 +300,7 @@ describe("TaskPage tokens", () => {
   };
   const split = { input: 4, cacheWrite: 12800, cacheRead: 40000, output: 370 };
 
-  test("shows each turn's split beside its total, and a turn with none as before", () => {
+  test("shows each turn's split stacked under its total, and a turn with none as before", () => {
     page(
       detail({
         tokensUsed: 54174,
@@ -312,9 +312,17 @@ describe("TaskPage tokens", () => {
       "details",
     );
     const [first, second] = ["turn-1", "turn-2"].map((id) => screen.getByText(id).closest("tr")!);
-    expect(first.textContent).toContain("53.2kin 4 · cache write 12.8k · cache read 40k · out 370");
+    expect(first.textContent).toContain("53.2kin4cache write12.8kcache read40kout370");
+    const parts = [...first.querySelectorAll("dt")].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]);
+    expect(parts).toEqual([
+      ["in", "4"],
+      ["cache write", "12.8k"],
+      ["cache read", "40k"],
+      ["out", "370"],
+    ]);
     expect(second.textContent).toContain("1k");
     expect(second.textContent).not.toContain("cache");
+    expect(second.querySelector("dl")).toBeNull();
   });
 
   test("shows the task's split and what isn't split", () => {
