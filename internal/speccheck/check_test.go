@@ -15,7 +15,7 @@ import (
 const goodScenario = `Feature: Tasks
   What the person at the page does.
 
-  @USER-01 @test
+  @TASK-01 @user @test
   Scenario: A new task goes to the coordinator
     Given a repo with a Software team
     When the user creates a task from the page
@@ -81,34 +81,62 @@ func expectProblems(t *testing.T, got []string, want ...string) {
 
 func TestAScenarioCarriesItsFilesID(t *testing.T) {
 	for name, c := range map[string]struct{ tags, want string }{
-		"no ID":          {"@test", "user.feature:5: no ID tag; this file's scenarios are tagged @USER-nn"},
-		"another prefix": {"@COORD-01 @test", "user.feature:5: ID @COORD-01 does not match this file's prefix @USER-nn"},
-		"one digit":      {"@USER-1 @test", "user.feature:5: no ID tag"},
-		"two IDs":        {"@USER-01 @USER-02 @test", "user.feature:5: 2 ID tags; a scenario has one"},
+		"no ID":          {"@user @test", "tasks-and-board.feature:5: no ID tag; this file's scenarios are tagged @TASK-nn"},
+		"another prefix": {"@HANDOFF-01 @user @test", "tasks-and-board.feature:5: ID @HANDOFF-01 does not match this file's prefix @TASK-nn"},
+		"one digit":      {"@TASK-1 @user @test", "tasks-and-board.feature:5: no ID tag"},
+		"two IDs":        {"@TASK-01 @TASK-02 @user @test", "tasks-and-board.feature:5: 2 ID tags; a scenario has one"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text := strings.Replace(goodScenario, "@USER-01 @test", c.tags, 1)
-			expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}), c.want)
+			text := strings.Replace(goodScenario, "@TASK-01 @user @test", c.tags, 1)
+			expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}), c.want)
 		})
 	}
 }
 
 func TestAScenarioCarriesExactlyOneCheckTag(t *testing.T) {
 	for name, c := range map[string]struct{ tags, want string }{
-		"none": {"@USER-01", "user.feature:5: no check tag; a scenario has exactly one of @test, @benchmark, @manual"},
-		"two":  {"@USER-01 @test @manual", "user.feature:5: more than one check tag (@test, @manual); a scenario has exactly one"},
+		"none": {"@TASK-01 @user", "tasks-and-board.feature:5: no check tag; a scenario has exactly one of @test, @benchmark, @manual"},
+		"two":  {"@TASK-01 @user @test @manual", "tasks-and-board.feature:5: more than one check tag (@test, @manual); a scenario has exactly one"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text := strings.Replace(goodScenario, "@USER-01 @test", c.tags, 1)
-			expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}), c.want)
+			text := strings.Replace(goodScenario, "@TASK-01 @user @test", c.tags, 1)
+			expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}), c.want)
 		})
 	}
 }
 
+func TestAFunctionalScenarioCarriesExactlyOneRoleTag(t *testing.T) {
+	for name, c := range map[string]struct{ tags, want string }{
+		"none":         {"@TASK-01 @test", "tasks-and-board.feature:5: no role tag; a functional scenario has exactly one of @user, @coordinator, @agent, @claude-code, @worker"},
+		"two":          {"@TASK-01 @user @agent @test", "tasks-and-board.feature:5: more than one role tag (@user, @agent); a functional scenario has exactly one"},
+		"@user":        {"@TASK-01 @user @test", ""},
+		"@coordinator": {"@TASK-01 @coordinator @test", ""},
+		"@agent":       {"@TASK-01 @agent @test", ""},
+		"@claude-code": {"@TASK-01 @claude-code @test", ""},
+		"@worker":      {"@TASK-01 @worker @test", ""},
+		"another tag":  {"@TASK-01 @user @test @slow", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := strings.Replace(goodScenario, "@TASK-01 @user @test", c.tags, 1)
+			got := problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text})
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}
+
+func TestANonFunctionalScenarioNeedsNoRoleTag(t *testing.T) {
+	text := strings.NewReplacer("@TASK-01 @user @test", "@LIM-01 @test", "Tasks", "Limits").Replace(goodScenario)
+	expectProblems(t, problemsOf(t, map[string]string{"non-functional/limits.feature": text}))
+}
+
 func TestAnIDIsUsedOnceInTheFolder(t *testing.T) {
 	twice := goodScenario + "\n" + strings.Replace(goodScenario, "Feature: Tasks\n  What the person at the page does.\n\n", "", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": twice}),
-		"user.feature:12: ID @USER-01 is already used at ")
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": twice}),
+		"tasks-and-board.feature:12: ID @TASK-01 is already used at ")
 }
 
 func TestAThenStatesANumberOrAnOutcome(t *testing.T) {
@@ -129,9 +157,9 @@ func TestAThenStatesANumberOrAnOutcome(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			text := strings.Replace(goodScenario, "Then the task is shown in To do", c.then, 1)
-			got := problemsOf(t, map[string]string{"functional/user.feature": text})
+			got := problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text})
 			if c.wrong {
-				expectProblems(t, got, "user.feature:8: Then has no number and no outcome word; the words are not, no, never")
+				expectProblems(t, got, "tasks-and-board.feature:8: Then has no number and no outcome word; the words are not, no, never")
 			} else {
 				expectProblems(t, got)
 			}
@@ -141,32 +169,32 @@ func TestAThenStatesANumberOrAnOutcome(t *testing.T) {
 
 func TestAnAndAfterAThenIsAThen(t *testing.T) {
 	text := strings.Replace(goodScenario, "And its coordinator is asked to decide", "And its coordinator decides", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
-		"user.feature:9: Then has no number and no outcome word")
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
+		"tasks-and-board.feature:9: Then has no number and no outcome word")
 
 	// An And after a Given or When is not a Then, and a When ends the Then.
 	text = strings.Replace(goodScenario, "    When the user creates a task from the page\n",
 		"    And the user is signed in\n    When the user creates a task from the page\n", 1)
 	text = strings.Replace(text, "    # internal/web/api_test.go\n", "    When the user looks again\n    And the page is open\n", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}))
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}))
 }
 
 func TestVagueWordsAreRefused(t *testing.T) {
 	for name, c := range map[string]struct{ old, new, want string }{
-		"in a step":    {"Given a repo with a Software team", "Given the server starts quickly", `user.feature:6: the word "quickly"`},
-		"in the title": {"Scenario: A new task goes to the coordinator", "Scenario: A task is handled Properly", `user.feature:5: the word "properly"`},
-		"in a comment": {"# internal/web/api_test.go", "# checked appropriately", `user.feature:10: the word "appropriately"`},
+		"in a step":    {"Given a repo with a Software team", "Given the server starts quickly", `tasks-and-board.feature:6: the word "quickly"`},
+		"in the title": {"Scenario: A new task goes to the coordinator", "Scenario: A task is handled Properly", `tasks-and-board.feature:5: the word "properly"`},
+		"in a comment": {"# internal/web/api_test.go", "# checked appropriately", `tasks-and-board.feature:10: the word "appropriately"`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			text := strings.Replace(goodScenario, c.old, c.new, 1)
-			expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}), c.want)
+			expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}), c.want)
 		})
 	}
 }
 
 func TestAScenarioOutlineIsRefusedAndNotCounted(t *testing.T) {
 	outline := goodScenario + `
-  @USER-02 @test
+  @TASK-02 @user @test
   Scenario Outline: A task ends up <outcome>
     Given a task
     When the coordinator decides
@@ -176,7 +204,7 @@ func TestAScenarioOutlineIsRefusedAndNotCounted(t *testing.T) {
       | outcome |
       | done    |
 `
-	dir := writeSpec(t, map[string]string{"functional/user.feature": outline})
+	dir := writeSpec(t, map[string]string{"functional/tasks-and-board.feature": outline})
 	result, err := Check(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -187,20 +215,21 @@ func TestAScenarioOutlineIsRefusedAndNotCounted(t *testing.T) {
 	if got := result.Tags[tagTest]; got != 1 {
 		t.Errorf("counted %d @test, want 1: the outline's tags are not counted", got)
 	}
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": outline}),
-		"user.feature:13: Scenario Outline is not used in this spec: write one Scenario per case")
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": outline}),
+		"tasks-and-board.feature:13: Scenario Outline is not used in this spec: write one Scenario per case")
 }
 
 func TestABlankLineBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
-	text := strings.Replace(goodScenario, "@USER-01 @test\n", "@USER-01 @test\n\n", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
-		"user.feature:6: no ID tag; this file's scenarios are tagged @USER-nn; the tags must be on the line directly above Scenario:",
-		"user.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:")
+	text := strings.Replace(goodScenario, "@TASK-01 @user @test\n", "@TASK-01 @user @test\n\n", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
+		"tasks-and-board.feature:6: no ID tag; this file's scenarios are tagged @TASK-nn; the tags must be on the line directly above Scenario:",
+		"tasks-and-board.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:",
+		"tasks-and-board.feature:6: no role tag; a functional scenario has exactly one of @user, @coordinator, @agent, @claude-code, @worker; the tags must be on the line directly above Scenario:")
 
 	// With no tag line above, the hint is not given.
-	text = strings.Replace(goodScenario, "  @USER-01 @test\n", "", 1)
-	got := problemsOf(t, map[string]string{"functional/user.feature": text})
-	expectProblems(t, got, "user.feature:4: no ID tag", "user.feature:4: no check tag")
+	text = strings.Replace(goodScenario, "  @TASK-01 @user @test\n", "", 1)
+	got := problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text})
+	expectProblems(t, got, "tasks-and-board.feature:4: no ID tag", "tasks-and-board.feature:4: no check tag", "tasks-and-board.feature:4: no role tag")
 	for _, p := range got {
 		if strings.Contains(p, "directly above") {
 			t.Errorf("hint given with no tag line above: %s", p)
@@ -209,16 +238,17 @@ func TestABlankLineBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
 }
 
 func TestACommentBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
-	text := strings.Replace(goodScenario, "@USER-01 @test\n", "@USER-01 @test\n  # internal/web/api_test.go\n", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
-		"user.feature:6: no ID tag; this file's scenarios are tagged @USER-nn; the tags must be on the line directly above Scenario:",
-		"user.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:")
+	text := strings.Replace(goodScenario, "@TASK-01 @user @test\n", "@TASK-01 @user @test\n  # internal/web/api_test.go\n", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
+		"tasks-and-board.feature:6: no ID tag; this file's scenarios are tagged @TASK-nn; the tags must be on the line directly above Scenario:",
+		"tasks-and-board.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:",
+		"tasks-and-board.feature:6: no role tag; a functional scenario has exactly one of @user, @coordinator, @agent, @claude-code, @worker; the tags must be on the line directly above Scenario:")
 }
 
 func TestARejectedScenarioIsNotCountedUnderAnyCheckTag(t *testing.T) {
 	text := goodScenario + "\n" + strings.NewReplacer("Feature: Tasks\n  What the person at the page does.\n\n", "",
-		"@USER-01 @test", "@USER-02 @test @manual").Replace(goodScenario)
-	dir := writeSpec(t, map[string]string{"functional/user.feature": text})
+		"@TASK-01 @user @test", "@TASK-02 @user @test @manual").Replace(goodScenario)
+	dir := writeSpec(t, map[string]string{"functional/tasks-and-board.feature": text})
 	result, err := Check(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -243,27 +273,27 @@ func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 		"../README.md":                  "# Agentry\n",
 	}
 	for name, c := range map[string]struct{ tags, comment, want string }{
-		"a path and its tests":       {"@USER-01 @test", "# internal/web/api_test.go TestCreate and TestList", ""},
-		"a missing path":             {"@USER-01 @test", "# internal/web/gone_test.go", "user.feature:10: cited path internal/web/gone_test.go does not exist"},
-		"a renamed test":             {"@USER-01 @test", "# internal/web/api_test.go TestMake", "user.feature:10: TestMake is not defined in internal/web/api_test.go"},
-		"a test with no path":        {"@USER-01 @test", "# the list: TestList", "user.feature:10: TestList is cited with no Go test file before it"},
-		"in the same file":           {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestList in the same file", ""},
-		"gone from the file":         {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestGone in the same file", "user.feature:10: TestGone is not defined in internal/web/api_test.go"},
-		"on the next line":           {"@USER-01 @test", "# internal/web/api_test.go TestCreate\n    # the list: TestGone", "user.feature:11: TestGone is not defined in internal/web/api_test.go"},
-		"a test before its path":     {"@USER-01 @test", "# TestCreate in internal/web/api_test.go", ""},
-		"a non-test file between":    {"@USER-01 @test", "# internal/web/api_test.go TestCreate; the handler: internal/web/api.go\n    # TestList", ""},
-		"a path with a line":         {"@USER-01 @test", "# internal/web/api.go:42 and internal/web/api.go:3-5", ""},
-		"a missing path with a line": {"@USER-01 @test", "# internal/web/gone.go:42", "user.feature:10: cited path internal/web/gone.go does not exist"},
-		"an empty test file":         {"@USER-01 @test", "# internal/web/empty_test.go TestCreate", "user.feature:10: TestCreate is not defined in internal/web/empty_test.go"},
-		"a UI path":                  {"@USER-01 @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
-		"a missing UI path":          {"@USER-01 @test", "# ui/src/Gone.test.tsx", "user.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
-		"a glob":                     {"@USER-01 @test", "# every page: ui/src/**/*.tsx", ""},
-		"a root file":                {"@USER-01 @test", "# README.md, Use it; PLAN.md T-013", "user.feature:10: cited path PLAN.md does not exist"},
-		"a manual scenario":          {"@USER-01 @manual", "# internal/web/gone_test.go TestGone", ""},
+		"a path and its tests":       {"@TASK-01 @user @test", "# internal/web/api_test.go TestCreate and TestList", ""},
+		"a missing path":             {"@TASK-01 @user @test", "# internal/web/gone_test.go", "tasks-and-board.feature:10: cited path internal/web/gone_test.go does not exist"},
+		"a renamed test":             {"@TASK-01 @user @test", "# internal/web/api_test.go TestMake", "tasks-and-board.feature:10: TestMake is not defined in internal/web/api_test.go"},
+		"a test with no path":        {"@TASK-01 @user @test", "# the list: TestList", "tasks-and-board.feature:10: TestList is cited with no Go test file before it"},
+		"in the same file":           {"@TASK-01 @user @test", "# internal/web/api_test.go TestCreate; listing: TestList in the same file", ""},
+		"gone from the file":         {"@TASK-01 @user @test", "# internal/web/api_test.go TestCreate; listing: TestGone in the same file", "tasks-and-board.feature:10: TestGone is not defined in internal/web/api_test.go"},
+		"on the next line":           {"@TASK-01 @user @test", "# internal/web/api_test.go TestCreate\n    # the list: TestGone", "tasks-and-board.feature:11: TestGone is not defined in internal/web/api_test.go"},
+		"a test before its path":     {"@TASK-01 @user @test", "# TestCreate in internal/web/api_test.go", ""},
+		"a non-test file between":    {"@TASK-01 @user @test", "# internal/web/api_test.go TestCreate; the handler: internal/web/api.go\n    # TestList", ""},
+		"a path with a line":         {"@TASK-01 @user @test", "# internal/web/api.go:42 and internal/web/api.go:3-5", ""},
+		"a missing path with a line": {"@TASK-01 @user @test", "# internal/web/gone.go:42", "tasks-and-board.feature:10: cited path internal/web/gone.go does not exist"},
+		"an empty test file":         {"@TASK-01 @user @test", "# internal/web/empty_test.go TestCreate", "tasks-and-board.feature:10: TestCreate is not defined in internal/web/empty_test.go"},
+		"a UI path":                  {"@TASK-01 @user @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
+		"a missing UI path":          {"@TASK-01 @user @test", "# ui/src/Gone.test.tsx", "tasks-and-board.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
+		"a glob":                     {"@TASK-01 @user @test", "# every page: ui/src/**/*.tsx", ""},
+		"a root file":                {"@TASK-01 @user @test", "# README.md, Use it; PLAN.md T-013", "tasks-and-board.feature:10: cited path PLAN.md does not exist"},
+		"a manual scenario":          {"@TASK-01 @user @manual", "# internal/web/gone_test.go TestGone", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)
-			files["functional/user.feature"] = strings.NewReplacer("@USER-01 @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
+			files["functional/tasks-and-board.feature"] = strings.NewReplacer("@TASK-01 @user @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
 			got := problemsOf(t, files)
 			if c.want == "" {
 				expectProblems(t, got)
@@ -276,8 +306,8 @@ func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 
 func TestTheCitationsCheckedAreCounted(t *testing.T) {
 	dir := writeSpec(t, map[string]string{
-		"../" + goodTestFile:      "package web\n\nfunc TestCreate(t *testing.T) {}\n",
-		"functional/user.feature": strings.Replace(goodScenario, "# internal/web/api_test.go", "# internal/web/api_test.go TestCreate and TestGone", 1),
+		"../" + goodTestFile:                 "package web\n\nfunc TestCreate(t *testing.T) {}\n",
+		"functional/tasks-and-board.feature": strings.Replace(goodScenario, "# internal/web/api_test.go", "# internal/web/api_test.go TestCreate and TestGone", 1),
 	})
 	result, err := Check(dir)
 	if err != nil {
@@ -290,21 +320,21 @@ func TestTheCitationsCheckedAreCounted(t *testing.T) {
 
 func TestANewScenarioCitesNoLineNumber(t *testing.T) {
 	for name, c := range map[string]struct{ tags, comment, want string }{
-		"a new ID with line":   {"@USER-134 @test", "# internal/web/api_test.go, line 12", "user.feature:10: a line number goes stale as dev moves; cite a function or a test by name instead"},
-		"a new ID with lines":  {"@USER-134 @test", "# internal/web/api_test.go, lines 12 and 13", "user.feature:10: a line number goes stale"},
-		"a new manual ID":      {"@USER-134 @manual", "# internal/web/api.go line 12", "user.feature:10: a line number goes stale"},
-		"an old ID with line":  {"@USER-133 @test", "# internal/web/api_test.go, line 12", ""},
-		"a new ID with a name": {"@USER-134 @test", "# internal/web/api_test.go, the timeline 5 times", ""},
-		"a capital Line":       {"@USER-134 @test", "# internal/web/api_test.go, Line 12", "user.feature:10: a line number goes stale"},
-		"a new ID with :N":     {"@USER-134 @test", "# internal/web/api_test.go:42", "user.feature:10: a line number goes stale"},
-		"a new ID with :N-M":   {"@USER-134 @test", "# internal/web/api_test.go:3-5;", "user.feature:10: a line number goes stale"},
-		"an old ID with :N":    {"@USER-133 @test", "# internal/web/api_test.go:42", ""},
-		"a time is not a path": {"@USER-134 @test", "# internal/web/api_test.go, at 10:30", ""},
-		"a capital Lines":      {"@USER-134 @test", "# internal/web/api_test.go, Lines 3 to 5", "user.feature:10: a line number goes stale"},
+		"a new ID with line":   {"@TASK-56 @user @test", "# internal/web/api_test.go, line 12", "tasks-and-board.feature:10: a line number goes stale as dev moves; cite a function or a test by name instead"},
+		"a new ID with lines":  {"@TASK-56 @user @test", "# internal/web/api_test.go, lines 12 and 13", "tasks-and-board.feature:10: a line number goes stale"},
+		"a new manual ID":      {"@TASK-56 @user @manual", "# internal/web/api.go line 12", "tasks-and-board.feature:10: a line number goes stale"},
+		"an old ID with line":  {"@TASK-55 @user @test", "# internal/web/api_test.go, line 12", ""},
+		"a new ID with a name": {"@TASK-56 @user @test", "# internal/web/api_test.go, the timeline 5 times", ""},
+		"a capital Line":       {"@TASK-56 @user @test", "# internal/web/api_test.go, Line 12", "tasks-and-board.feature:10: a line number goes stale"},
+		"a new ID with :N":     {"@TASK-56 @user @test", "# internal/web/api_test.go:42", "tasks-and-board.feature:10: a line number goes stale"},
+		"a new ID with :N-M":   {"@TASK-56 @user @test", "# internal/web/api_test.go:3-5;", "tasks-and-board.feature:10: a line number goes stale"},
+		"an old ID with :N":    {"@TASK-55 @user @test", "# internal/web/api_test.go:42", ""},
+		"a time is not a path": {"@TASK-56 @user @test", "# internal/web/api_test.go, at 10:30", ""},
+		"a capital Lines":      {"@TASK-56 @user @test", "# internal/web/api_test.go, Lines 3 to 5", "tasks-and-board.feature:10: a line number goes stale"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text := strings.NewReplacer("@USER-01 @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
-			got := problemsOf(t, map[string]string{"functional/user.feature": text})
+			text := strings.NewReplacer("@TASK-01 @user @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
+			got := problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text})
 			if c.want == "" {
 				expectProblems(t, got)
 			} else {
@@ -315,13 +345,13 @@ func TestANewScenarioCitesNoLineNumber(t *testing.T) {
 }
 
 func TestAStepMaySayLine(t *testing.T) {
-	text := strings.NewReplacer("@USER-01 @test", "@USER-134 @test",
+	text := strings.NewReplacer("@TASK-01 @user @test", "@TASK-56 @user @test",
 		"Then the task is shown in To do", "Then line 1 of the report is the verdict").Replace(goodScenario)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}))
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}))
 
 	text = strings.Replace(text, "# internal/web/api_test.go", "# internal/web/api_test.go, line 1 of the report is the verdict", 1)
-	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
-		"user.feature:10: a line number goes stale")
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
+		"tasks-and-board.feature:10: a line number goes stale")
 }
 
 func TestEveryRootListEntryIsInTheRepo(t *testing.T) {
@@ -340,14 +370,14 @@ func TestACitationUnderAnUnlistedTopFolderFails(t *testing.T) {
 		"../.gitignore":       "bin/\n",
 	}
 	for name, c := range map[string]struct{ comment, want string }{
-		"an unlisted folder":  {"# internal/web/api_test.go; scripts/build.sh", "user.feature:10: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list; add scripts to rootFolders"},
+		"an unlisted folder":  {"# internal/web/api_test.go; scripts/build.sh", "tasks-and-board.feature:10: cited path scripts/build.sh is under scripts/, a top folder rootFolders does not list; add scripts to rootFolders"},
 		"a word with a slash": {"# internal/web/api_test.go, read and/or write", ""},
 		"an ignored folder":   {"# internal/web/api_test.go; built to bin/agentry", ""},
 		"a dot folder":        {"# internal/web/api_test.go; .agentry/files", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			files := maps.Clone(repo)
-			files["functional/user.feature"] = strings.Replace(goodScenario, "# internal/web/api_test.go", c.comment, 1)
+			files["functional/tasks-and-board.feature"] = strings.Replace(goodScenario, "# internal/web/api_test.go", c.comment, 1)
 			got := problemsOf(t, files)
 			if c.want == "" {
 				expectProblems(t, got)
@@ -360,36 +390,36 @@ func TestACitationUnderAnUnlistedTopFolderFails(t *testing.T) {
 
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{
-		"functional/user.feature": goodScenario,
-		"README.md":               "# The spec\n\nPlain prose \u2014 with a dash.\n",
+		"functional/tasks-and-board.feature": goodScenario,
+		"README.md":                          "# The spec\n\nPlain prose \u2014 with a dash.\n",
 	}), "README.md:3: em-dash")
 }
 
 func TestAnUnknownFeatureFileNameFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{"functional/users.feature": goodScenario}),
-		"users.feature:1: unknown feature file name; the known names are agent.feature, claude-code.feature, compatibility.feature")
+		"users.feature:1: unknown feature file name; the known names are agents.feature, approvals-and-questions.feature, claude-code-tools.feature")
 }
 
 func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
 	coordinator := `Feature: The coordinator
 
-  @COORD-01 @manual
+  @HANDOFF-01 @coordinator @manual
   Scenario: A decision hands the task to one agent
     Given a task whose coordinator has decided
     When the loop reads the decision
     Then exactly one agent gets a turn
 
-  @COORD-02 @benchmark
+  @HANDOFF-02 @agent @benchmark
   Scenario: Decisions are read fast
     Given 1000 decisions
     When they are read
     Then it takes under 1 second
 `
 	dir := writeSpec(t, map[string]string{
-		"README.md":                      "# The spec\n",
-		"functional/user.feature":        goodScenario,
-		"functional/coordinator.feature": coordinator,
-		"non-functional/limits.feature":  strings.NewReplacer("USER", "LIM", "Tasks", "Limits").Replace(goodScenario),
+		"README.md":                                   "# The spec\n",
+		"functional/tasks-and-board.feature":          goodScenario,
+		"functional/coordinator-and-handoffs.feature": coordinator,
+		"non-functional/limits.feature":               strings.NewReplacer("TASK", "LIM", " @user", "", "Tasks", "Limits").Replace(goodScenario),
 	})
 	t.Chdir(filepath.Dir(dir))
 	if _, err := Check("nowhere"); err == nil {
@@ -404,8 +434,8 @@ func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
 	}
 	var out bytes.Buffer
 	printCounts(&out, result)
-	want := `spec/functional/coordinator.feature: 2 scenarios
-spec/functional/user.feature: 1 scenario
+	want := `spec/functional/coordinator-and-handoffs.feature: 2 scenarios
+spec/functional/tasks-and-board.feature: 1 scenario
 spec/non-functional/limits.feature: 1 scenario
 3 files, 4 scenarios: 2 @test, 1 @benchmark, 1 @manual
 cited by @test: 2 paths, 0 Go tests

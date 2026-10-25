@@ -1,7 +1,10 @@
-Feature: The coordinator
-  An ordinary agent that reads every report and ends each turn with a decision the loop carries out.
+Feature: The coordinator and its handoffs
+  An ordinary agent that reads every report and ends each turn with a decision the loop carries out:
+  a task's life, briefs, reports, issues, safety stops and limits.
 
-  @COORD-01 @test
+  # ---- A task's life ---------------------------------------------------------
+
+  @HANDOFF-01 @coordinator @test
   Scenario: An assign decision hands the task to one agent
     Given a task whose coordinator has a turn open
     When the coordinator ends its turn with an assign decision that names the engineer and its instructions
@@ -9,9 +12,7 @@ Feature: The coordinator
     And the coordinator's instructions are shown in the engineer's brief
     # README.md, How a task moves; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
-  # --- A task's life
-
-  @COORD-02 @test
+  @HANDOFF-02 @coordinator @test
   Scenario: A new task goes to its coordinator first
     # internal/coordinator/next_test.go TestNext
     Given a task was created for a team, with no turns yet
@@ -19,7 +20,7 @@ Feature: The coordinator
     Then the first turn is the coordinator's, and no other agent has had a turn
     And while an agent's turn is open, no other turn starts on the task
 
-  @COORD-03 @test
+  @HANDOFF-03 @coordinator @test
   Scenario: The coordinator reads the task and the trail before anyone builds
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator's first turn on a task
@@ -27,7 +28,7 @@ Feature: The coordinator
     Then the brief shows its own prompt, the task, the agents it can hand work to, and every step of the trail so far
     # not under test, checked by hand: its prompt says it reads the task, the trail and the code and changes no code: internal/agents/defaults/tech-lead.md lines 1 and 5, internal/agents/defaults/custom/coordinator.md lines 1 and 5
 
-  @COORD-04 @test
+  @HANDOFF-04 @agent @test
   Scenario: The agent's plan for the turn is kept as it last wrote it
     # internal/hooks/handler_test.go TestThePlanFollowsTheFile
     Given a turn whose brief asked for a plan in .agentry/turn-N-plan.md before anything else, as a Markdown checklist
@@ -36,7 +37,7 @@ Feature: The coordinator
     And the plan is kept when the turn ends
     # the plan file name: internal/machines/local.go PlanFile; the brief's wording: internal/coordinator/brief.go plan
 
-  @COORD-05 @test
+  @HANDOFF-05 @coordinator @test
   Scenario: An unfinished plan carries over to the agent's next turn
     # internal/tasks/plan_test.go TestAnUnfinishedPlanCarriesOn
     Given an agent's last turn on the task left a plan with 1 or more steps not ticked
@@ -45,7 +46,7 @@ Feature: The coordinator
     And a plan with every step ticked is not carried over
     # not under test, checked by hand: the plan is already in the new turn's plan file and the brief says which turn it came from: internal/turns/turns.go line 136, internal/coordinator/brief.go lines 452 and 453
 
-  @COORD-06 @test
+  @HANDOFF-06 @coordinator @test
   Scenario: Any decision may retitle the task
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given a task titled "Remove the TODOs"
@@ -53,7 +54,7 @@ Feature: The coordinator
     Then the task's title is the new one and its first title is kept as "Remove the TODOs"
     # not under test, checked by hand: the decision format asks for 1 plain imperative line under 70 characters: internal/coordinator/decision.go DecisionFormat, line 105
 
-  @COORD-07 @test
+  @HANDOFF-07 @coordinator @test
   Scenario: An assign decision hands the task to the named agent
     # internal/coordinator/next_test.go TestNext, for the instructions in the next turn's handoff; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator, for the engineer's turn and its brief
     Given the coordinator's turn ended with {"action": "assign", "agent": "engineer", "instructions": "Remove them."}
@@ -61,7 +62,7 @@ Feature: The coordinator
     Then the next turn is the engineer's, and its brief has those instructions: yes
     # not under test, checked by hand: the step from the coordinator to the engineer is shown in the trail
 
-  @COORD-08 @test
+  @HANDOFF-08 @coordinator @test
   Scenario: An assign to an agent that does not exist is an issue
     # internal/coordinator/next_test.go TestNext; goes back to the coordinator: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     Given the coordinator's turn ended with an assign to "designer", and the roster has no agent of that name
@@ -69,9 +70,39 @@ Feature: The coordinator
     Then no turn starts
     And an issue goes back to the coordinator saying there is no agent by that name
 
-  # --- Briefs and reports
+  # ---- Briefs, reports and messages ------------------------------------------
 
-  @COORD-09 @test
+  @HANDOFF-09 @user @test
+  Scenario: A message to the coordinator stops the turn in progress, and its reply says what it changed
+    # internal/web/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
+    # internal/web/chat_api.go lines 55 to 63
+    Given the engineer's turn is in progress on task-1
+    When the user sends "Use Redis, not memory." in the Coordinator tab
+    Then the engineer's turn is stopped, not failed: 0 issues in a row
+    And the trail ends with exactly 2 steps: the user's message, then a step to the coordinator saying the engineer stopped so it can carry on
+    And the coordinator is the 1 agent next
+    When the coordinator hands the work back saying "Switched to Redis."
+    Then the trail shows "Switched to Redis." to the user, then exactly 1 handoff to the engineer
+    Given no turn is in progress
+    When the user sends "And keep it simple."
+    Then the trail's last step is exactly the message
+
+  @HANDOFF-10 @user @manual
+  Scenario: The chat's field, its status line and the message it refuses
+    # ui/src/components/organisms/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
+    # a blank message: internal/web/chat_api.go lines 27 to 30
+    Given task-5 is open on the Coordinator tab while the engineer works
+    Then the status under the coordinator's name reads exactly "engineer is working on it"
+    And the hint reads exactly "Sending pauses engineer so the coordinator reads it now; engineer's work and plan carry on after."
+    And exactly 3 suggestions are shown: "Where are we?", "What's left before it's done?" and "Wrap up what's done and finish."
+    When the user presses Enter in the field "Message tech-lead"
+    Then the message is sent once, and Shift+Enter adds a line instead of sending
+    When a message of only spaces is sent
+    Then it is refused with 400 "say something"
+    Given the coordinator's turn is in progress
+    Then the status reads exactly "Thinking…" and the hint "Sending makes the coordinator decide again with what you said."
+
+  @HANDOFF-11 @agent @test
   Scenario: An agent starts fresh with only its brief and the repository
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
@@ -79,7 +110,7 @@ Feature: The coordinator
     Then its own prompt, "You are the engineer", and those instructions are shown in its brief
     # not under test, checked by hand: the brief also has the task, where the work is, the shared files and the plan file, and not the coordinator's prompt: internal/coordinator/brief.go
 
-  @COORD-10 @test
+  @HANDOFF-12 @coordinator @test
   Scenario: The brief is a file and the prompt is one line pointing at it
     # internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given a turn is about to start
@@ -89,7 +120,7 @@ Feature: The coordinator
     # the prompt line: internal/turns/turns.go start
     # not under test here, checked by hand: the engine echoes the hash back once it has the prompt: internal/turns/turns.go line 118
 
-  @COORD-11 @test
+  @HANDOFF-13 @coordinator @test
   Scenario: Every agent's report returns to the coordinator
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's turn ended with the report "Removed 3 TODOs and committed."
@@ -97,7 +128,7 @@ Feature: The coordinator
     Then the next turn is the coordinator's, and no other agent's turn starts first
     And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
 
-  @COORD-12 @test
+  @HANDOFF-14 @coordinator @test
   Scenario: The coordinator's reply ends with exactly one JSON decision
     # internal/coordinator/decision_test.go TestParseDecision
     Given a coordinator's reply
@@ -106,7 +137,7 @@ Feature: The coordinator
     And a decision missing what its action needs, such as an assign with no agent, is refused
     # not under test, checked by hand: the action is 1 of these 9: assign, done, ask, transfer, request, wait, fetch, move, split, and a refusal says why: internal/coordinator/decision.go, the Action constants and check
 
-  @COORD-13 @test
+  @HANDOFF-15 @coordinator @test
   Scenario: A reply with no usable decision is an issue
     # internal/coordinator/next_test.go TestNext
     Given the coordinator's turn ended with "I think the engineer." or with no reply at all
@@ -114,9 +145,9 @@ Feature: The coordinator
     Then no agent's turn starts
     And an issue goes back to the coordinator saying the reply had no usable decision
 
-  # --- Issues
+  # ---- Issues ----------------------------------------------------------------
 
-  @COORD-14 @test
+  @HANDOFF-16 @coordinator @test
   Scenario: An issue goes back to the coordinator
     # internal/coordinator/next_test.go TestNext; internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     # the count: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
@@ -126,7 +157,7 @@ Feature: The coordinator
     And the task's count of issues in a row goes up by 1
     # IssuesInARow + 1 on IssueRaised: internal/tasks/apply.go
 
-  @COORD-15 @test
+  @HANDOFF-17 @coordinator @test
   Scenario: A crashed agent is an issue within seconds
     # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace
     Given an open turn whose process has exited
@@ -135,7 +166,7 @@ Feature: The coordinator
     # the words "(crashed or was killed)": internal/watchdog/watchdog.go line 134; the test asserts "process exited"
     # StartGrace = 3 * time.Second: internal/watchdog/watchdog.go DefaultLimits; checked every second: Run
 
-  @COORD-16 @test
+  @HANDOFF-18 @coordinator @test
   Scenario: A silent agent is a stall
     # internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
     Given an open turn with no tool call running and no action waiting for the user
@@ -144,14 +175,14 @@ Feature: The coordinator
     # the words "has been silent for over 10m0s (stalled: a hung network call or a stuck tool)": internal/watchdog/watchdog.go line 150; the test asserts "silent"
     # Silence = 10 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
-  @COORD-17 @test
+  @HANDOFF-19 @coordinator @test
   Scenario: An agent waiting for the user's answer is not stalled
     # internal/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
     Given an open turn with an action the policy asked the user about, not yet decided
     When more than 10 minutes pass with no events
     Then the watchdog raises no issue
 
-  @COORD-18 @test
+  @HANDOFF-20 @coordinator @test
   Scenario: A tool call with no result for too long is an issue
     # internal/watchdog/watchdog_test.go TestAToolOpenTooLong
     Given an approved tool call in an open turn, with no result yet
@@ -159,7 +190,7 @@ Feature: The coordinator
     Then the watchdog raises an issue naming the command: yes
     # Tool = 20 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
-  @COORD-19 @test
+  @HANDOFF-21 @coordinator @test
   Scenario: The same command requested again and again is an issue
     # internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
     Given an open turn
@@ -168,7 +199,7 @@ Feature: The coordinator
     # the words "so it may be stuck in a loop: <command>": internal/watchdog/watchdog.go line 140; the test asserts "5 times in a row"
     # Repeats = 5: internal/watchdog/watchdog.go DefaultLimits
 
-  @COORD-20 @test
+  @HANDOFF-22 @coordinator @test
   Scenario: A denied action is shown to the coordinator under Actions Agentry refused
     # internal/coordinator/resumed_brief_test.go TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals
     Given the policy denied an agent's command, such as git push origin HEAD:dev
@@ -177,7 +208,7 @@ Feature: The coordinator
     # not under test, checked by hand: no issue is raised for the denial
     # the gate writes action.denied, no issue: internal/hooks/handler.go decide; the brief section: internal/coordinator/brief.go refusedActions
 
-  @COORD-21 @test
+  @HANDOFF-23 @coordinator @test
   Scenario: A resumed session that did not start is retried fresh once
     # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce; internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack
     Given an agent's turn went on with its last session, and the process exited before taking the prompt
@@ -188,7 +219,7 @@ Feature: The coordinator
     And the retry still counts as 1 issue towards the issues in a row
     # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
 
-  @COORD-59 @manual
+  @HANDOFF-24 @coordinator @manual
   Scenario: An agent's report of a blocker is a report, not an issue
     Given a task with the default limit of 24 turns, where the coordinator assigns the engineer and the engineer ends its turn with the report "still broken", 12 times over
     When the loop reads the task after those 24 turns
@@ -202,9 +233,51 @@ Feature: The coordinator
     # task.needs_you row has "limit":"turns" and the question "This task has had 24 of its 24 turns without finishing"
     # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/tasks/summary.go atTurnLimit; ui/src/pages/TaskPage.tsx line 386).
 
-  # --- Safety stops
+  # ---- Safety stops and limits -----------------------------------------------
 
-  @COORD-22 @test
+  @HANDOFF-25 @user @test
+  Scenario: Raising the budget or the turn limit while stopped at it is the answer
+    # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
+    # internal/web/api.go lines 222 to 275; internal/tasks/task.go lines 145 to 163, StoppedAt
+    Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
+    When the user sets the budget to 1,000,000
+    Then the reply is exactly {"answered":true,"budget":1000000}
+    And the task is working again and the coordinator read "I raised the budget to 1M tokens. Carry on."
+    When the user makes another such task's budget unlimited
+    Then it carries on with "I made the budget unlimited. Carry on." and a budget of 0
+    Given task-2 stopped at its 2 turns, with 2 had
+    When the user sets the turn limit to 2
+    Then the reply says answered: false, the limit is kept at 2, and the task still needs you
+    When the user sets it to 5
+    Then the task is working again and the coordinator read "I raised the turn limit to 5. Carry on."
+
+  @HANDOFF-26 @user @test
+  Scenario: A limit answers only its own stop, and a done task's limits stay
+    # internal/web/api_test.go TestALimitAnswersOnlyItsOwnStop, TestADoneTasksLimitsStay and TestALimitIsKeptThoughItsAnswerIsRefused
+    Given task-1 stopped at its turn limit, over its budget too
+    When the user raises the budget
+    Then the budget is kept and the task still needs you: the turn stop is not answered
+    When the user raises the turn limit
+    Then the task is working again, no longer waiting
+    Given the coordinator's own question, not a limit's stop
+    When the user changes a limit
+    Then the task still needs you and the question is not answered
+    Given a done epic with a budget of 200,000 and 5 turns
+    When the user changes either limit
+    Then it is refused with 409 "is done" and both limits are kept
+    Given the rules refuse the answer, as the stop was answered first
+    Then the limit is kept with 200 and the reply names the refusal
+
+  @HANDOFF-27 @user @test
+  Scenario: The stop's question names its limit and the numbers it stopped at
+    # internal/web/api_test.go TestQuestionsShowWhichLimitStopped
+    Given task-1 stopped at its 2 turns, task-2 at its budget of 200,000 with 210,000 used, and task-3 asked to copy a file
+    When Questions is read
+    Then task-1's question has kind turns, with exactly 2 of 2 turns
+    And task-2's has kind budget, with exactly 210,000 tokens used of 200,000
+    And task-3's has kind question and no limit, budget 0
+
+  @HANDOFF-28 @coordinator @test
   Scenario: The turn limit asks the user
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with the default limit of 24 turns
@@ -213,7 +286,7 @@ Feature: The coordinator
     And the user is asked, with the words "24 of its 24 turns", and the stop is marked as the "turns" limit
     # DefaultMaxTurns = 24: internal/tasks/task.go; the stop at TurnsSinceAnswer >= MaxTurns: internal/tasks/task.go AtTurnLimit
 
-  @COORD-23 @test
+  @HANDOFF-29 @coordinator @test
   Scenario: Each task has its own limit of turns, set when it is made
     # internal/coordinator/next_test.go TestEachTaskHasItsOwnLimitOfTurns
     Given a task created with maxTurns 4
@@ -222,7 +295,7 @@ Feature: The coordinator
     And a task created before each had its own limit is kept at 24
     # the server's default comes from the -max-turns flag, default coordinator.DefaultMaxTurns: cmd/agentry/serve.go
 
-  @COORD-24 @test
+  @HANDOFF-30 @coordinator @test
   Scenario: A limit of 0 is no limit
     # internal/coordinator/next_test.go TestEachTaskHasItsOwnLimitOfTurns
     Given a task created with maxTurns 0
@@ -231,7 +304,7 @@ Feature: The coordinator
     And a task stopped at its limit, then changed to 0, runs on
     # MaxTurns > 0 is the condition: internal/tasks/task.go AtTurnLimit; "0 for no limit": cmd/agentry/serve.go -max-turns and -budget
 
-  @COORD-25 @test
+  @HANDOFF-31 @coordinator @test
   Scenario: The budget stop asks the user once the task has used it
     # internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
     Given a task with a budget of 100,000 tokens
@@ -242,7 +315,7 @@ Feature: The coordinator
     # AtBudget is Budget > 0 and TokensUsed >= Budget: internal/tasks/task.go; the stop needs TurnsSinceAnswer > 0: internal/coordinator/next.go Next
     # the server's default budget is 5,000,000 tokens, flag -budget: cmd/agentry/serve.go
 
-  @COORD-26 @test
+  @HANDOFF-32 @coordinator @test
   Scenario: 3 issues in a row ask the user
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with 3 issues raised and no turn ending normally between them
@@ -251,7 +324,7 @@ Feature: The coordinator
     And the user is asked "3 issues in a row, the last: the engine is missing. Fix what's wrong and answer, and the coordinator carries on."
     # MaxIssuesRun = 3: internal/coordinator/next.go
 
-  @COORD-27 @test
+  @HANDOFF-33 @user @test
   Scenario: The user's answer lifts the stop
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task stopped at its turn limit
@@ -260,7 +333,7 @@ Feature: The coordinator
     # not under test, checked by hand: the turns since the answer and the issues in a row are both 0
     # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/tasks/apply.go
 
-  @COORD-28 @manual
+  @HANDOFF-34 @coordinator @manual
   Scenario: A turn that ends normally resets the issues in a row
     Given a task with 2 issues in a row
     When an agent's turn ends with a report
@@ -272,37 +345,9 @@ Feature: The coordinator
     # Waiting for you and the Coordinator tab reads Coordinator · asks you, with "3 issues in a row" as the reason
     # (MaxIssuesRun = 3: internal/coordinator/next.go). 2 crashes after the report not asking proves the count was 0.
 
-  # --- Decisions
+  # ---- Decisions -------------------------------------------------------------
 
-  @COORD-29 @test
-  Scenario: An ask decision puts a question to the user, with optional options and a page
-    # internal/coordinator/decision_test.go TestParseDecision; the wait: internal/coordinator/next_test.go TestNext, "wait for your answer" and "your answer goes to the coordinator"
-    Given the coordinator's reply ends with {"action": "ask", "question": "Which layout?", "options": ["Tabs", "One page"], "page": "<svg></svg>"}
-    When the decision is read
-    Then it is an ask with exactly that question, 2 options and the page
-    And once applied, the task waits with the question open and no turn starts until the user answers
-    # the wait while a question is open: internal/coordinator/next.go Next
-
-  @COORD-30 @test
-  Scenario: Only an epic with stories may wait
-    # internal/coordinator/next_test.go TestWhenAnEpicMayWait
-    Given a task that is not an epic, or an epic with no stories yet
-    When its coordinator decides {"action": "wait"}
-    Then the decision is refused as an issue saying only an epic with stories can wait
-    And an epic whose stories are all done is refused too, with "finish it with a summary", until the user has answered once about closing it
-
-  @COORD-31 @test
-  Scenario: A fetch from inside a machine's worktrees comes at once, from anywhere else the user is asked first
-    # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
-    Given the coordinator decides {"action": "fetch", "machine": "local", "path": "<a path>", "as": "notes.txt"}
-    When the path is outside that machine's worktrees
-    Then the user is asked whether to copy it, the first option "Copy it"
-    And the file is not shared before the user answers
-    And a path inside that machine's worktrees is shared with no question asked
-    # not under test, checked by hand: the second option "Don't copy it" (internal/coordinator/files.go line 170), and the file shared once the user answers "Copy it"
-    # CopyFile: internal/coordinator/files.go fetch
-
-  @COORD-32 @test
+  @HANDOFF-35 @coordinator @test
   Scenario: A move decision takes the task to a repo the user named
     # internal/coordinator/repos_test.go TestTheCoordinatorMovesATaskToTheRepoYouNamed
     Given the user named a git address or a folder for the task's work in its description or in what they told the coordinator
@@ -311,7 +356,7 @@ Feature: The coordinator
     And a move to a repo the user did not name is refused as an issue, and the task's repo is kept
     # namedByYou: internal/coordinator/next.go; TestARepoIsNamedOnlyWhole in the same file covers the whole-name match
 
-  @COORD-33 @test
+  @HANDOFF-36 @coordinator @test
   Scenario: A transfer passes the task to another team's coordinator
     # internal/coordinator/teams_test.go TestATaskWithNoTeamChosenGoesToTheRightOne
     Given a task whose team the user did not choose, so the brief says to decide whose work it is
@@ -319,7 +364,7 @@ Feature: The coordinator
     Then the next turn is the Writing team's coordinator's, and the task's coordinator is now exactly that agent
     And "This task is your team's work: It is a blog post." is shown in its brief
 
-  @COORD-34 @test
+  @HANDOFF-37 @coordinator @test
   Scenario: A request opens a task for another team and waits for its summary
     # internal/coordinator/teams_test.go TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer
     Given a task of the Software team, and the Writing team is listed under "Other teams" in the brief
@@ -329,7 +374,7 @@ Feature: The coordinator
     And then the other team's summary is shown in this coordinator's brief as "<that task> is done: <its summary>"
     # not under test, checked by hand: the new task is in the same repo, and the summary is 1 step in the trail
 
-  @COORD-35 @manual
+  @HANDOFF-38 @coordinator @manual
   Scenario: A transfer or request goes only to a team named in the brief
     Given a task of the Software team
     When the coordinator decides a transfer or request to its own team, or to a team that does not exist
@@ -339,7 +384,7 @@ Feature: The coordinator
     # Steps: end a coordinator turn with {"action": "request", "team": "software", "request": "x"} on a Software task and
     # read the issue in the trail; repeat with "team": "nobody"; then chain 3 requests team to team and try a 4th.
 
-  @COORD-36 @test
+  @HANDOFF-39 @coordinator @test
   Scenario: Done is refused until a checker has approved the last change and no checker objects
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's turn changed the work and no checker has looked at it since
@@ -351,7 +396,7 @@ Feature: The coordinator
     And a checker that never looked is not required: the test's team has a reviewer and a tester, and the reviewer's approval alone allows done
     # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/agents/defaults.go, Column Reviews
 
-  @COORD-37 @test
+  @HANDOFF-40 @coordinator @test
   Scenario: A change after a review needs another review
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the reviewer ended a turn with "Verdict: changes needed", and the engineer then changed the work
@@ -360,7 +405,7 @@ Feature: The coordinator
     And once the reviewer's verdict is "approved" on the last change, done is allowed, and a deployer turn after it is not counted as a change, so the approval holds
     # the verdict line: internal/coordinator/checks.go VerdictFormat and verdictOf; a ship turn is not a change: checks.go recordOf
 
-  @COORD-60 @manual
+  @HANDOFF-41 @coordinator @manual
   Scenario: Work the user had shipped from Shipping needs no new check to be done
     Given the engineer changed the work after the last check, and the user moved the task to Shipping
     When the deployer's turn that the move asked for pushes the work, and the coordinator then decides done
@@ -369,186 +414,9 @@ Feature: The coordinator
     # Steps: on a task whose branch was reviewed and then changed, drag it to Shipping; let the deployer's turn push;
     # end the coordinator's next turn with {"action": "done", "summary": "Shipped."} and check the task is Done with no reviewer turn between.
 
-  # --- Epics
+  # ---- What the coordinator cannot do ----------------------------------------
 
-  @COORD-38 @test
-  Scenario: A split turns the task into an epic whose stories wait in the Backlog
-    # internal/coordinator/epics_test.go TestAnEpicRunsItsStoriesAndFinishesWithThem
-    Given an epic with no stories yet, whose brief says to split it before anything else
-    When the coordinator decides a split with 3 stories, 1 of them for the Writing team
-    Then exactly 3 tasks are made, each parked in the user's Backlog with 0 turns
-    And each story is kept at the same budget and limit of turns as the epic
-    And the Writing team's story goes to that team's coordinator once the user starts it, its description and brief saying it is a story of the epic
-    # not under test, checked by hand: the other stories say so too; the test reads the Writing team's story only
-    # a story's limits: internal/tasks/limits.go NewLimits; "parked": "backlog": internal/coordinator/loop.go split
-
-  @COORD-39 @manual
-  Scenario: A split adds 1 to 12 stories
-    Given an epic
-    When the coordinator decides a split with 0 stories, or with 13
-    Then the decision is refused with the reason "a "split" decision needs "stories": 1 to 12 of them"
-    And a split with 12 stories, each with a title and a brief, is allowed
-    # MaxStories = 12: internal/coordinator/decision.go checkStories
-    # Steps: end an epic's coordinator turn with a split of 13 one-line stories and read the issue in the trail;
-    # then with 12 and check 12 stories appear in the Backlog.
-
-  @COORD-40 @test
-  Scenario: A story's after list says which stories it builds on
-    # internal/coordinator/epics_test.go TestASplitStoryBuildsOnAnExistingStoryOrAnEarlierOne; the wait: TestAnEpicRunsItsStoriesAndFinishesWithThem
-    Given a split whose second story has "after": [1], and an epic with an existing story task-N
-    When the stories are made
-    Then the second story's after list names the first story's id, and an "after" naming task-N is kept as that id
-    And a story that builds on others is not started until every one of them is done
-    And a story whose "after" names itself, a story later in the list, or a number outside it, is refused
-    # not under test, checked by hand: the waiting story's branch starts from a dev that has their work, and an "after" naming a task not in this epic is refused
-    # the refusal: internal/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/coordinator/loop.go
-
-  @COORD-41 @test
-  Scenario: A story cannot itself be split
-    # internal/coordinator/epics_test.go TestAStoryCantBeSplitAndAnEpicIsntAssigned
-    Given a story of an epic
-    When its coordinator decides a split
-    Then the decision is refused as an issue saying a story can't be split
-    And a task the user made a story is never split either
-    # not under test, checked by hand: the issue says to put what else the epic needs in its summary, and an assign on an epic is refused as an issue saying its work is done in its stories: internal/coordinator/next.go line 151
-
-  @COORD-42 @test
-  Scenario: The epic's coordinator waits while stories run and asks the user to close it when all are done
-    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone; the wait while stories run, and the question: TestAnEpicRunsItsStoriesAndFinishesWithThem
-    Given an epic whose stories are all running
-    When its coordinator decides {"action": "wait"}
-    Then no turn starts on the epic until a story's summary comes back to it
-    And once every story is done, a done decision asks the user "Close it?" with the option "Close the epic", and the epic is not done until they do
-    And if the user leaves it open, it stays open with no further question until they close it or add a story
-    # CloseEpic: internal/coordinator/epics.go; the question: internal/coordinator/loop.go apply, Finish
-
-  @COORD-43 @test
-  Scenario: Closing a done epic starts one Visionaries follow-up session about it
-    # internal/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
-    Given a team made from the Visionaries template, and the Ideas page setting for sessions on epic close is on
-    When the user answers "Close the epic" on a done epic
-    Then exactly 1 new task is made for that team, titled "Follow-ups after <the epic's title>", with the epic's and each story's summary in its brief
-    And a second pass over the same close makes no second session
-    And the session takes the server's limits, not the epic's
-    # "about" and "close" mark the session: internal/coordinator/followups.go followUp
-
-  @COORD-44 @test
-  Scenario: No follow-up session when turned off, when the epic was dragged to Done, or for a close before the loop started
-    # internal/coordinator/followups_test.go TestNoSessionWhenTheSettingIsOff
-    Given the Ideas page setting for sessions on epic close is off
-    When the user closes a done epic
-    Then no session is made and no note is left on the epic
-    And an epic moved to Done on the board gets no session either
-    And an epic closed before the server's loop started gets no session, only closes after it do
-    # TestAnEpicMovedToDoneGetsNoSession and TestTheLoopFollowsUpOnlyCloseAfterItStarted in the same file; startedAt: internal/coordinator/loop.go NewLoop
-
-  # --- Worktrees and branches
-
-  @COORD-45 @test
-  Scenario: Each task works in its own worktree on branch agentry/<task>
-    # internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
-    Given a repo and a task task-1
-    When Agentry prepares the task's worktree
-    Then the worktree is on branch agentry/task-1, with its base commit kept and the port it was given, 7901
-    # not under test, checked by hand: the base is the repo's current commit; the test checks it is a full commit id
-    And the repo's untracked .env files are copied in, node_modules is linked, and Agentry's own files under .agentry/ never show as changes
-    And a second task's worktree adds the ignore lines exactly once
-
-  @COORD-46 @test
-  Scenario: Each worktree leases a port between 7900 and 7999
-    # internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts; PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
-    Given port 7900 is held by another unfinished task and 7901 has something listening on it
-    When a new task's worktree is prepared
-    Then its port is exactly 7902
-    And a turn starts with the worktree's port in its PORT environment variable: yes
-    # FirstPort = 7900, LastPort = 7999: internal/worktrees/ports.go; PORT: internal/turns/turns.go environment
-
-  @COORD-47 @test
-  Scenario: A finished task's worktree is removed only once its branch is merged into dev
-    # internal/worktrees/worktree_test.go TestRemoveOnlyOnceMerged
-    Given a done task whose branch has commits not yet in dev
-    When Agentry removes its worktree
-    Then the worktree and the branch are kept, so no work is lost
-    And once the branch is in a local dev with no remote, the worktree and the branch are no longer there
-    # not under test, checked by hand: the branch in origin/dev counts as merged too: internal/worktrees/worktree.go lines 209 to 212
-
-  @COORD-48 @test
-  Scenario: The task's work follows its branch to the next machine
-    # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack
-    Given a task's worktree on one machine with 1 commit and 1 file left uncommitted
-    When the next turn's agent runs on another machine
-    Then what was left uncommitted is committed first, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
-    And the worktree it left is no longer on the first machine
-    # not under test, checked by hand: the leftovers are exactly 1 commit
-    # the coordinator's choice of machine: internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
-
-  @COORD-49 @test
-  Scenario: Shared files in .agentry/files follow the task
-    # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
-    Given an agent's turn added a file under .agentry/files in the worktree
-    When the turn ends
-    Then the file is read back and kept with the task, recorded with the agent that left it and its size, 9 bytes
-    # not under test, checked by hand: the time it was left is recorded too (SharedFile.At)
-    And the coordinator's next brief lists it as "out/report.csv (9 bytes, from engineer)"
-    And a file the user shares is in the next agent's .agentry/files when its turn starts, and a file a turn removed is shared no more
-    # a shared file is Name, Hash, Size, By, At, From: internal/tasks/files.go SharedFile
-
-  @COORD-58 @manual
-  Scenario: A story's worktree has its epic's files under .agentry/files/epic, to read
-    Given a story of an epic, and the epic has exactly 1 shared file, brief.md
-    When the story's turn starts
-    Then the story's .agentry/files/epic holds exactly that file, and the brief says changes there aren't kept
-    And a file written under .agentry/files/epic during the turn is not shared when the turn ends
-    # the delivery under epic/: internal/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/sharedfiles/folder.go EpicFolder, Manifest
-    # the folder left out of the manifest: internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/coordinator/brief.go sharedText
-    # Steps: drop a file on an epic's Files tab, start one of its stories, and in the story's worktree read
-    # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Files tab shows no such
-    # file (with no other shared file it says No shared files).
-
-  # --- Sessions
-
-  @COORD-50 @test
-  Scenario: A turn goes on with the agent's last session on the task when it can
-    # internal/tasks/resume_test.go TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine
-    Given the agent's last turn on the task ended with a report, on the same engine and the same machine, with a session id
-    When its next turn on the task starts
-    Then it resumes exactly that session
-    And its brief is the resumed one, with no "## The task" section, shorter than the whole brief
-    And it starts fresh, saying why, when any of these holds: first turn, last turn failed, last turn stopped by the user, work moved to another machine, another engine, no session id, or the session's context is over 150,000 tokens
-    # MaxResumedContext = 150_000: internal/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
-
-  @COORD-51 @test
-  Scenario: A story's first turn can go on with a sibling story's session
-    # internal/tasks/share_test.go TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling and TestASiblingsSessionIsHeldToTheSameRules
-    Given an epic with stories, and the agent has had no turn on this story yet
-    When the agent's first turn on this story starts
-    Then it goes on with the agent's latest ended turn's session on any sibling story, held to the same rules as its own
-    And the brief says this is a new task, with its own worktree and branch, and only this task's trail is shown, from its start
-    And once the agent has had a turn on this story, its own latest session is used, even when a sibling's is newer
-    # the brief: internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask; own first: internal/tasks/share_test.go TestAStorysOwnSessionWinsOverANewerSiblings
-
-  @COORD-52 @test
-  Scenario: A busy session is forked, never resumed in place
-    # internal/turns/share_test.go TestAFirstTurnOnAStoryGoesOnWithASiblingsSessionAndForksItWhenBusy
-    Given a session that another turn is open in, or that an open turn started from
-    When a turn on a sibling story goes on with it
-    Then the turn goes on with a copy of the session, marked forked, and the original is kept by the open turn
-    And 2 stories starting at once from 1 session never both resume it in place: 1 goes on in place and 1 forks
-    # not under test, checked by hand: the one that forks is the later
-    # SessionBusy: internal/tasks/resume.go; the race: internal/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
-
-  @COORD-53 @test
-  Scenario: With session resume off, every turn starts fresh
-    # internal/turns/share_test.go TestResumeOffKeepsEveryStoryFresh
-    Given the server was started with -resume-sessions=false
-    When any turn starts, on a story with sibling sessions or not
-    Then it starts fresh, and the reason is exactly "resume is off"
-    # not under test, checked by hand: the reason is kept on the turn; the test reads the runner's choice
-    # the flag, default true: cmd/agentry/serve.go; ResumeOff: internal/turns/turns.go
-
-  # --- Cannot cases
-
-  @COORD-54 @test
+  @HANDOFF-42 @coordinator @test
   Scenario: The coordinator never edits code
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the coordinator runs under the read-only profile
@@ -560,14 +428,7 @@ Feature: The coordinator
     # tech-lead and every template's coordinator: Profile "read-only", internal/agents/defaults.go and internal/agents/teams.go (the Visionaries' lead is read-mostly)
     # the profile: internal/policy/default.toml, [profiles.read-only], line 198
 
-  @COORD-55 @test
-  Scenario: The gate judges each action by the working agent's own profile
-    # internal/hooks/handler_test.go TestTheGateUsesTheWorkingAgentsProfile
-    Given the engineer, whose profile is developer, is the agent working on the task
-    When it asks to run a command
-    Then the policy is asked with exactly the profile "developer", not the coordinator's
-
-  @COORD-56 @test
+  @HANDOFF-43 @coordinator @test
   Scenario: The coordinator cannot assign the task to itself
     # internal/rules/rules_test.go TestATaskGoesRoundTheCoordinator
     Given a coordinator's turn has ended
@@ -576,7 +437,7 @@ Feature: The coordinator
     And an assignment by any agent other than the coordinator is refused too
     # notToTheCoordinator and byTheCoordinator: internal/rules/task_rules.go
 
-  @COORD-57 @test
+  @HANDOFF-44 @coordinator @test
   Scenario: After the user moves a task to Done, the coordinator's one wrap-up turn can only summarise
     # internal/coordinator/wrapup_test.go TestAWrapUpCantStartMoreWork
     Given the engineer is working and the user moves the task to Done on the board

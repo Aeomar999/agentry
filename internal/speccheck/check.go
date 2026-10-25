@@ -63,6 +63,7 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, path, te
 	scenarios, outlines := parseFeature(path, text)
 	result.Files = append(result.Files, FileCount{Path: path, Scenarios: len(scenarios)})
 	prefix, known := prefixes[filepath.Base(path)]
+	functional := filepath.Base(filepath.Dir(path)) == "functional"
 	if !known {
 		result.Problems = append(result.Problems, Problem{path, 1, "unknown feature file name; the known names are " + knownNames()})
 	}
@@ -77,6 +78,11 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, path, te
 			}
 		}
 		result.Problems = append(result.Problems, scenarioProblems(s, prefix, seen)...)
+		if functional {
+			if message := roleTagProblem(s); message != "" {
+				result.Problems = append(result.Problems, Problem{s.file, s.line, message + tagHint(s)})
+			}
+		}
 		if hasTag(s, tagTest) {
 			result.Problems = append(result.Problems, cites.problems(s)...)
 		}

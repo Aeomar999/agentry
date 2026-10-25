@@ -2,12 +2,12 @@ Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
   # internal/workers, internal/workerlink, internal/workerservice,
-  # internal/machines, internal/turns, internal/worktrees/handoff.go,
-  # internal/sharedfiles, internal/pinned, internal/web/workers_api.go and
-  # their tests. WORKER-01 is the foundation's stub; the scenarios here start
-  # at WORKER-02.
+  # internal/machines, internal/turns, internal/pinned, internal/web/workers_api.go
+  # and their tests.
 
-  @WORKER-01 @test
+  # ---- Joining ---------------------------------------------------------------
+
+  @MACHINE-01 @worker @test
   Scenario: A machine joins once, with a code, and gets its own credential
     Given an install command made on the Workers page, with its join code
     When the machine runs the command and joins
@@ -16,9 +16,7 @@ Feature: Workers
     And the same code is refused for a second machine
     # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
-  # ---- Joining ---------------------------------------------------------------
-
-  @WORKER-02 @test
+  @MACHINE-02 @worker @test
   Scenario: Add worker makes a one-time install command for a machine
     Given the user is signed in on the Workers page
     When they ask to add a worker
@@ -30,7 +28,7 @@ Feature: Workers
     And the agentry program for the machine's system is served with the code: yes
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the commands per address: internal/web/addresses_test.go TestInstallCommands
 
-  @WORKER-03 @test
+  @MACHINE-03 @worker @test
   Scenario: A machine joins with the code and is named after its host
     Given an install command whose code has not been used
     When the machine sends the code with what it knows about itself
@@ -42,7 +40,7 @@ Feature: Workers
     And the Workers page lists the worker, online once it connects: yes
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
-  @WORKER-04 @test
+  @MACHINE-04 @worker @test
   Scenario: A join code works once, for its lifetime, and its join keeps no secret as given
     Given a join code made now
     When a machine joins with it
@@ -58,7 +56,7 @@ Feature: Workers
     Then its credential lets it in: no, and the roster has 0 workers
     # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
-  @WORKER-05 @test
+  @MACHINE-05 @worker @test
   Scenario: The rules on who may join and where agents run
     Given a joined worker and an agent whose Runs on names it and the machine Agentry runs on
     When a machine joins with a code nobody made
@@ -75,7 +73,7 @@ Feature: Workers
     Then it is removed: yes
     # internal/rules/worker_rules_test.go TestWorkerRules
 
-  @WORKER-06 @test
+  @MACHINE-06 @worker @test
   Scenario: Joining over https checks the server's CA before the code is sent
     Given a server served over https with Agentry's own CA
     When the machine runs `agentry worker join` with the CA's fingerprint, the server and a code
@@ -93,7 +91,7 @@ Feature: Workers
     # cmd/agentry/worker_test.go TestJoiningOverHTTPSWithTheRightFingerprintKeepsTheCA, TestAWrongFingerprintIsRefusedBeforeTheCodeIsSent,
     # TestHTTPSWithoutAFingerprintIsRefusedWithIt, TestAServerOverPlainHTTP
 
-  @WORKER-07 @test
+  @MACHINE-07 @worker @test
   Scenario: The install command run again on a joined machine spends no code
     Given a machine that has joined the server, whose credential the server still takes
     When the install command is run on it again
@@ -109,7 +107,7 @@ Feature: Workers
     # not under test, checked by hand: in both moves the worker keeps its credential (cmd/agentry/worker.go line 153); the tests check the saved server and CA only
     # cmd/agentry/worker_test.go TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS, TestJoiningAgainAfterTheCAWasRegenerated
 
-  @WORKER-08 @manual
+  @MACHINE-08 @worker @manual
   Scenario: The install script installs agentry, joins and starts the worker
     Given a machine that reaches the server
     When the user runs the install command there
@@ -127,7 +125,7 @@ Feature: Workers
 
   # ---- The background service ------------------------------------------------
 
-  @WORKER-09 @manual
+  @MACHINE-09 @worker @manual
   Scenario: On Linux the worker is a systemd user service
     Given a Linux machine with a systemd user session
     When the user runs `agentry worker start`
@@ -143,7 +141,7 @@ Feature: Workers
     # 4. Log out and in: it runs, as `loginctl enable-linger` was run for the user where allowed.
     # 5. Run `agentry worker leave`: the unit is disabled and the file removed.
 
-  @WORKER-10 @manual
+  @MACHINE-10 @worker @manual
   Scenario: On macOS the worker is a launchd agent, or a background process over SSH
     Given a Mac
     When the user runs `agentry worker start` in Terminal on the Mac
@@ -156,7 +154,7 @@ Feature: Workers
     # 3. Kill the worker process: launchd starts it again (KeepAlive).
     # 4. Over SSH on the same Mac, run `agentry worker start`: it says macOS sets up login services only from the Mac itself, and runs as a background process.
 
-  @WORKER-11 @test
+  @MACHINE-11 @worker @test
   Scenario: Where the first service cannot start, the second one runs
     Given a machine whose first service cannot start, with a background process as the second
     When the worker is started
@@ -165,7 +163,7 @@ Feature: Workers
     Then the first runs and the background process is stopped, 1 service running
     # internal/workerservice/fallback_test.go TestFallbackStartsTheSecondWhenTheFirstCant
 
-  @WORKER-12 @manual
+  @MACHINE-12 @worker @manual
   Scenario: On Windows the worker is a background process started at logon by Task Scheduler
     Given a Windows machine
     When the user runs `agentry worker start`
@@ -179,7 +177,7 @@ Feature: Workers
     # 4. Sign out and in: the task runs `agentry worker start` again.
     # 5. Run `agentry worker leave`: the task is deleted and the process stopped.
 
-  @WORKER-13 @manual
+  @MACHINE-13 @worker @manual
   Scenario: With neither systemd nor launchd the worker is a plain background process
     Given a machine with neither systemd nor launchd
     When the user runs `agentry worker start`
@@ -192,9 +190,9 @@ Feature: Workers
     # 2. Check `agentry worker status` names the service "background process (not started again after a reboot)".
     # 3. Run `agentry worker stop` and time it: it returns once the process is gone, or says it didn't stop within 5 s.
 
-  # ---- The worker commands ----------------------------------------------------
+  # ---- The worker commands ---------------------------------------------------
 
-  @WORKER-14 @manual
+  @MACHINE-14 @worker @manual
   Scenario: agentry worker start starts the service and waits for the link
     Given a machine that has joined
     When the user runs `agentry worker start`
@@ -209,7 +207,7 @@ Feature: Workers
     # 3. Stop the server and run `agentry worker start` again: within 15 seconds it says it can't reach the server yet and points at the logs.
     # 4. Run `agentry worker start -dir <other folder>` on a machine that never joined: it says to run the command from the Workers page.
 
-  @WORKER-15 @manual
+  @MACHINE-15 @worker @manual
   Scenario: agentry worker status says everything about the worker here
     Given a running worker connected to its server
     When the user runs `agentry worker status`
@@ -222,7 +220,7 @@ Feature: Workers
     # 2. Check the rows: service, link, agentry, engines, missing (only when a tool is missing), running, folder.
     # 3. Put a newer agentry on the server: the agentry row says the server has a newer one, within 5 seconds.
 
-  @WORKER-16 @manual
+  @MACHINE-16 @worker @manual
   Scenario: agentry worker logs shows the worker's log
     Given a worker with a log
     When the user runs `agentry worker logs`
@@ -233,7 +231,7 @@ Feature: Workers
     # 1. Run `agentry worker logs` and count the lines: at most 100, from ~/.agentry-worker/worker.log.
     # 2. Run `agentry worker logs -f` and restart the worker: new lines appear as they are written.
 
-  @WORKER-17 @manual
+  @MACHINE-17 @worker @manual
   Scenario: agentry worker stop and restart
     Given a running worker with 1 agent turn in progress
     When the user runs `agentry worker stop`
@@ -248,7 +246,7 @@ Feature: Workers
     # 3. Run `agentry worker stop` again: "It isn't running."
     # 4. Run `agentry worker restart`: the service stops and starts, and the link comes back.
 
-  @WORKER-18 @test
+  @MACHINE-18 @worker @test
   Scenario: The worker updates itself to the server's agentry
     Given a worker running an older agentry than the server has for its system
     When it asks the server for agentry for its system, saying the hash of its own
@@ -264,7 +262,7 @@ Feature: Workers
     # internal/workerlink/update.go swap: on Windows the old program is moved aside as .old and removed by the next update
     # internal/workerlink/update_test.go TestAWorkerUpdatesToTheServersAgentry
 
-  @WORKER-19 @manual
+  @MACHINE-19 @worker @manual
   Scenario: agentry worker leave takes the machine off the server
     Given a machine that has joined
     When the user runs `agentry worker leave`
@@ -279,7 +277,7 @@ Feature: Workers
     # 3. Check the repos and worktrees folders are still there; join again and run `agentry worker leave -purge`: they are deleted.
     # 4. Remove a worker on the page first, then run `agentry worker leave` on it: it still leaves, as the server answers 401.
 
-  @WORKER-20 @manual
+  @MACHINE-20 @worker @manual
   Scenario: agentry worker run works in the foreground
     Given a machine that has joined, with its service stopped
     When the user runs `agentry worker run`
@@ -290,9 +288,9 @@ Feature: Workers
     # 3. Press Ctrl-C: it stops.
     # 4. Run plain `agentry worker`: it does the same as run.
 
-  # ---- The link ---------------------------------------------------------------
+  # ---- The link --------------------------------------------------------------
 
-  @WORKER-21 @test
+  @MACHINE-21 @worker @test
   Scenario: A worker keeps dialing when its link drops, and says once when the CA changed
     Given a worker whose server shows a certificate its kept CA did not sign
     When the worker runs for 3.5 seconds
@@ -303,7 +301,7 @@ Feature: Workers
     # internal/workerlink/worker.go Run: a link that was up resets the wait to 1 second; a credential the server no longer takes ends the run
     # internal/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
 
-  @WORKER-22 @test
+  @MACHINE-22 @worker @test
   Scenario: A connected worker says hello and what it runs, and the page reads its details
     Given a joined worker that connects with its credential
     When it says hello with its version, engines and missing tools
@@ -318,7 +316,7 @@ Feature: Workers
     # not under test, checked by hand: the server records it offline (internal/workerlink/server.go line 88)
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the link dropping: internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
-  @WORKER-23 @test
+  @MACHINE-23 @worker @test
   Scenario: Over https a worker trusts only Agentry's own CA
     Given a server served over https with Agentry's own CA, and a worker that kept that CA
     When the worker reaches the server
@@ -333,9 +331,33 @@ Feature: Workers
     # internal/pinned/pinned_test.go TestAPinnedClientReachesTheServerItsCAVouchesFor, TestAPinnedClientRefusesAnotherCAEvenOneTheSystemTrusts,
     # TestAPinnedClientRefusesEverythingWhenItsCAIsUnreadable, TestWithNoCAItIsThePlainDefault, TestTheClientKeepsWorkingWhenTheLeafIsIssuedAgain
 
-  # ---- Where a turn runs -------------------------------------------------------
+  @MACHINE-24 @worker @manual
+  Scenario: A machine advertises its system, its tools and its disk
+    Given a worker connected
+    When its details are read
+    # internal/machines/about.go AboutHere
+    Then they give its host, system as its maker names it, kernel, arch, CPU, CPUs, memory in all and free, 3 load averages, boot time, time and zone
+    And the disk in all and free where its worktrees are, 2 numbers
+    # internal/machines/about.go toolsKept
+    And each engine and git, with version and path, read again only after 5 minutes
+    # internal/machines/about.go output: each program asked for its version gets 3 seconds
+    And agentry's version, its path, its folder, the PATH agents get, the tasks running, the worktrees and the copies of repos there, 7 more facts
+    # 1. Open a worker on the Workers page and read its details.
+    # 2. Check the system, kernel, arch, CPU, memory, load, boot time, disk and time with the machine itself.
+    # 3. Install or remove a tool on the worker and read again: the tools change only after 5 minutes.
 
-  @WORKER-24 @test
+  @MACHINE-25 @worker @test
+  Scenario: Without a credential the server takes, a worker reaches nothing
+    Given a worker the user removed on the Workers page
+    When it dials the link with its old credential
+    Then it is refused with status 401: yes
+    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 230), and its open link is dropped at once (line 149)
+    # internal/web/workers_api.go requireWorker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential
+    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
+
+  # ---- Where a turn runs -----------------------------------------------------
+
+  @MACHINE-26 @worker @test
   Scenario: A turn runs where the work is, or on the first online machine the agent may use
     Given 2 workers online, 1 with the agent's engine and 1 without, and 1 worker offline
     When an agent with 0 workers under Runs on is placed
@@ -348,7 +370,7 @@ Feature: Workers
     Then it is placed: no, and the reason names each machine, such as offline or has no engine
     # internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
-  @WORKER-25 @test
+  @MACHINE-27 @worker @test
   Scenario: A coordinator can send an agent to a named machine
     Given a joined worker, offline, that the tester may run on, and the machine Agentry runs on
     When the coordinator's brief is made
@@ -366,7 +388,7 @@ Feature: Workers
     Then the turn runs there, and the trail names that machine: yes
     # internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
 
-  @WORKER-26 @test
+  @MACHINE-28 @worker @test
   Scenario: An agent whose machines are all offline asks the user
     Given an agent whose Runs on names 1 worker, which is offline
     When the coordinator assigns the agent
@@ -374,7 +396,7 @@ Feature: Workers
     # not under test, checked by hand: the question says to bring one of its workers online, or change where it runs, and answer to carry on (internal/coordinator/loop.go line 219)
     # internal/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
 
-  @WORKER-27 @test
+  @MACHINE-29 @worker @test
   Scenario: After a restart, a worker that may be running agents is waited for
     Given Agentry just started, with a worker the log had online before
     When an agent that runs only on that worker is placed
@@ -384,23 +406,7 @@ Feature: Workers
     # not under test, checked by hand: the wait is at most 30 seconds, and a worker never seen is not waited for (internal/machines/fleet.go line 147)
     # internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
-  # ---- Work following the turn ------------------------------------------------
-
-  @WORKER-28 @test
-  Scenario: A task's branch follows the work through the hub and back
-    Given a task's worktree on one machine, with 1 commit and 1 file left uncommitted
-    When the work leaves that machine
-    Then what was uncommitted is committed, the hub gets the branch, and the worktree there is gone: yes
-    # not under test, checked by hand: as 1 commit (internal/worktrees/handoff.go line 19). In internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack the hub is the worktree's own repo;
-    # a worker's hand-off to the hub is asserted in internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
-    When the next machine makes its worktree from the hub's branch
-    Then the uncommitted file is there, the worktree is clean, and its origin is the repo's own remote: yes
-    When that machine's agent changes the file and the work goes back
-    Then the hub's branch has the change, the history has the first commit, and the base moved: no
-    And a branch with 0 new commits sends 0 bundles
-    # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack, TestABranchWithNothingNewBundlesNothing
-
-  @WORKER-29 @test
+  @MACHINE-30 @worker @test
   Scenario: A turn runs on the worker, resuming its session, and its terminal shows on the server
     Given a task whose work started on the machine Agentry runs on, and a worker connected
     When the work moves to the worker over git
@@ -411,48 +417,18 @@ Feature: Workers
     Then a worktree made from the hub has what the agent left: yes
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
-  @WORKER-30 @test
-  Scenario: Work moves only to another machine, between turns
-    Given a task with 0 worktrees yet
-    When a move of its work is recorded
-    Then it is refused: yes
-    Given a task with its worktree on the machine Agentry runs on
-    When a move to that same machine is recorded
-    Then it is refused: yes
-    When a move to a worker is recorded
-    Then it is accepted: yes
-    When a move is recorded while a turn runs
-    Then it is refused: yes
-    # internal/rules/worker_rules_test.go TestWorkMovesOnlyToAnotherMachine
+  @MACHINE-31 @worker @test
+  Scenario: A worker says which engines it has, and agents are placed by them
+    Given a worker that connected saying it has claude at a version
+    When an agent on claude is checked against it
+    Then the worker has claude: yes
+    When an agent on another engine is checked against it
+    Then the worker has that engine: no
+    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
-  @WORKER-31 @test
-  Scenario: A task's shared files follow the work to the next machine
-    Given a task's worktree with files in .agentry/files
-    When the turn ends and the work moves
-    Then the files are sent to the server as blobs by their hash, and the next worktree receives the same files: yes
-    # internal/coordinator/loop.go startOn: the last turn's files are read back where it ran before the work moves
-    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
-    # internal/sharedfiles/blobs_test.go: the same bytes make the same blob, so a file kept by 2 tasks is stored 1 time
-    And a shared file's name may leave .agentry/files: no
-    # internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees, TestNamesStayInsideTheFolder;
-    # the turn's files kept by their hash on the server: internal/coordinator/files_test.go TestSharedFilesFollowTheWork
+  # ---- Going offline ---------------------------------------------------------
 
-  @WORKER-32 @test
-  Scenario: A worker fetches a file into the shared files only from inside its worktrees, unless the user allows
-    Given a worker whose worktrees live in 1 folder, and a file outside it
-    When a coordinator's fetch names the file outside
-    Then it is refused as outside the worker's folder, and 0 files are sent
-    When the fetch names a folder inside the worktrees
-    Then every file in it is sent under the name given, 1 file for 1 file
-    When the user has allowed it
-    Then the file outside is sent: yes
-    # not under test, checked by hand: the user allows it by answering Copy it (internal/coordinator/files.go line 29); files_test checks the question offers it
-    # internal/sharedfiles/sharedfiles_test.go TestFetchAsksOutsideTheBoundary; 0 files before the user allows it:
-    # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
-
-  # ---- A machine going offline mid-task --------------------------------------
-
-  @WORKER-33 @test
+  @MACHINE-32 @worker @test
   Scenario: A worker that goes offline is taken to still run its turn for a while
     Given a worker running a task's turn
     When its link drops
@@ -464,7 +440,7 @@ Feature: Workers
     And a stale link's end removes a newer link: no
     # internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
-  @WORKER-34 @test
+  @MACHINE-33 @worker @test
   Scenario: The user hears that a machine went offline with work on it
     Given a worker online with 1 task on it
     When it goes offline
@@ -473,7 +449,7 @@ Feature: Workers
     # internal/coordinator/loop.go moveWork: when the work's machine is offline and the next agent runs elsewhere, the task asks the user to bring it online and answer
     # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
-  @WORKER-35 @manual
+  @MACHINE-34 @worker @manual
   Scenario: A worker offline longer than its grace stops the task until it is back
     Given an agent's turn running on a worker
     When the worker is offline for more than 30 seconds
@@ -484,74 +460,3 @@ Feature: Workers
     # 3. Within 30 seconds the Workers page shows the worker offline; the turn is not marked crashed yet.
     # 4. Plug it back in within 30 seconds: the worker dials back and the turn goes on.
     # 5. Repeat and leave it offline past 30 seconds: the task asks you, and Claude Code and the page say the machine went offline.
-
-  # ---- What the machine advertises --------------------------------------------
-
-  @WORKER-36 @manual
-  Scenario: A machine advertises its system, its tools and its disk
-    Given a worker connected
-    When its details are read
-    # internal/machines/about.go AboutHere
-    Then they give its host, system as its maker names it, kernel, arch, CPU, CPUs, memory in all and free, 3 load averages, boot time, time and zone
-    And the disk in all and free where its worktrees are, 2 numbers
-    # internal/machines/about.go toolsKept
-    And each engine and git, with version and path, read again only after 5 minutes
-    # internal/machines/about.go output: each program asked for its version gets 3 seconds
-    And agentry's version, its path, its folder, the PATH agents get, the tasks running, the worktrees and the copies of repos there, 7 more facts
-    # 1. Open a worker on the Workers page and read its details.
-    # 2. Check the system, kernel, arch, CPU, memory, load, boot time, disk and time with the machine itself.
-    # 3. Install or remove a tool on the worker and read again: the tools change only after 5 minutes.
-
-  @WORKER-37 @test
-  Scenario: A worker says which engines it has, and agents are placed by them
-    Given a worker that connected saying it has claude at a version
-    When an agent on claude is checked against it
-    Then the worker has claude: yes
-    When an agent on another engine is checked against it
-    Then the worker has that engine: no
-    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
-
-  # ---- What a worker cannot do -----------------------------------------------
-
-  @WORKER-38 @test
-  Scenario: Without a credential the server takes, a worker reaches nothing
-    Given a worker the user removed on the Workers page
-    When it dials the link with its old credential
-    Then it is refused with status 401: yes
-    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 230), and its open link is dropped at once (line 149)
-    # internal/web/workers_api.go requireWorker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential
-    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
-
-  @WORKER-39 @test
-  Scenario: An agent's hook call needs the hook token, and only the working agent passes the gate
-    Given a task with the engineer at work
-    When a hook call arrives with a wrong hook token
-    Then it is refused with status 401
-    When it arrives with the right token
-    Then it is answered with status 200
-    When a gate call names an agent that is not the one working
-    Then the action is denied: yes
-    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken, TestOnlyTheWorkingAgentPassesTheGate
-
-  @WORKER-40 @test
-  Scenario: The gate fails closed when the server cannot answer
-    Given an agent session on a worker whose server is unreachable, slow or broken
-    When the engine's gate hook calls `agentry hook`
-    Then the hook exits 2 within its own deadline, so the action is blocked: yes
-    # internal/turns/turns.go environment: the deadline is 1790 seconds, 10 under the engine's gate timeout of 1800 (internal/engines/engine.go GateTimeoutSeconds)
-    And the server's reply, when it comes, is printed as it is: yes
-    # not under test, checked by hand: its exit code is kept (cmd/agentry/hook.go line 50); the test's reply has exit code 0, the default
-    # cmd/agentry/hook_test.go TestTheHookFailsClosed, TestTheHookPassesTheServersReplyThrough
-
-  @WORKER-41 @test
-  Scenario: An agent on any machine never pushes to main, never force pushes, and every push asks the user
-    Given an agent with the developer profile
-    # internal/policy/default.toml profiles.developer.rules
-    When it runs git push to main, by name or by refspec, with or without -C
-    Then the policy denies it: yes
-    # not under test, checked by hand: master the same (internal/policy/default.toml line 111)
-    When it runs git push with -f or --force, before or after the branch
-    Then the policy denies it: yes
-    # not under test, checked by hand: a + refspec the same (internal/policy/default.toml line 117)
-    # internal/policy/default.toml "every push leaves this machine: you approve it": any other git push asks the user first
-    # internal/policy/default_test.go TestTheDeveloperProfile

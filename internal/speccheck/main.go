@@ -3,9 +3,12 @@
 //
 // It walks every .feature file under the folder and reports a scenario that
 //
-//   - lacks an ID tag with the prefix its file name gives it (@USER-01 in
-//     user.feature), or sits in a file whose name is not in the prefix table;
+//   - lacks an ID tag with the prefix its file name gives it (@TASK-01 in
+//     tasks-and-board.feature), or sits in a file whose name is not in the
+//     prefix table;
 //   - lacks exactly one of @test, @benchmark and @manual;
+//   - sits under functional/ and lacks exactly one of the role tags @user,
+//     @coordinator, @agent, @claude-code and @worker;
 //   - repeats an ID used anywhere else in the folder;
 //   - has a Then line, or an And/But line continuing a Then, with no digit
 //     and no outcome word;

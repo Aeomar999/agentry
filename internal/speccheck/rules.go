@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -11,19 +12,30 @@ import (
 // prefixes gives each feature file, by its base name, the prefix of its
 // scenario IDs. A feature file with any other name is a problem.
 var prefixes = map[string]string{
-	"user.feature":          "USER",
-	"coordinator.feature":   "COORD",
-	"agent.feature":         "AGENT",
-	"claude-code.feature":   "CC",
-	"worker.feature":        "WORKER",
-	"reliability.feature":   "REL",
-	"security.feature":      "SEC",
-	"operations.feature":    "OPS",
-	"performance.feature":   "PERF",
-	"limits.feature":        "LIM",
-	"usability.feature":     "USE",
-	"compatibility.feature": "COMPAT",
-	"observability.feature": "OBS",
+	"tasks-and-board.feature":          "TASK",
+	"epics-and-stories.feature":        "EPIC",
+	"approvals-and-questions.feature":  "APPROVE",
+	"ideas.feature":                    "IDEA",
+	"teams-and-templates.feature":      "TEAM",
+	"policy.feature":                   "POLICY",
+	"sessions.feature":                 "SESSION",
+	"coordinator-and-handoffs.feature": "HANDOFF",
+	"agents.feature":                   "TURN",
+	"worktrees-and-branches.feature":   "TREE",
+	"workers.feature":                  "MACHINE",
+	"shared-files.feature":             "FILES",
+	"sign-in.feature":                  "SIGNIN",
+	"notifications.feature":            "NOTIFY",
+	"settings.feature":                 "SET",
+	"claude-code-tools.feature":        "TOOLS",
+	"reliability.feature":              "REL",
+	"security.feature":                 "SEC",
+	"operations.feature":               "OPS",
+	"performance.feature":              "PERF",
+	"limits.feature":                   "LIM",
+	"usability.feature":                "USE",
+	"compatibility.feature":            "COMPAT",
+	"observability.feature":            "OBS",
 }
 
 // The check tags: every scenario carries exactly one.
@@ -34,6 +46,10 @@ const (
 )
 
 var checkTags = []string{tagTest, tagBenchmark, tagManual}
+
+// roleTags name whose point of view a functional scenario takes: every
+// scenario under functional/ carries exactly one.
+var roleTags = []string{"@user", "@coordinator", "@agent", "@claude-code", "@worker"}
 
 // outcomeWords are the words that make a Then a yes/no outcome when it has
 // no number. Matched as whole words, case-insensitive; a contraction such
@@ -49,7 +65,7 @@ var bannedWords = []string{"quickly", "properly", "appropriately"}
 
 const emDash = "—"
 
-// idOf reads an ID tag such as @USER-01 into its prefix. ok is false for
+// idOf reads an ID tag such as @TASK-01 into its prefix. ok is false for
 // any other tag: no dash, a prefix that is not upper-case letters, or fewer
 // than two digits.
 func idOf(tagName string) (prefix string, ok bool) {
@@ -127,6 +143,24 @@ func checkTagProblem(s scenario) string {
 	return "more than one check tag (" + strings.Join(found, ", ") + "); a scenario has exactly one"
 }
 
+// roleTagProblem says what is wrong with a functional scenario's role
+// tags, or "" when it has exactly one of them.
+func roleTagProblem(s scenario) string {
+	var found []string
+	for _, t := range s.tags {
+		if slices.Contains(roleTags, t.name) {
+			found = append(found, t.name)
+		}
+	}
+	switch len(found) {
+	case 1:
+		return ""
+	case 0:
+		return "no role tag; a functional scenario has exactly one of " + strings.Join(roleTags, ", ")
+	}
+	return "more than one role tag (" + strings.Join(found, ", ") + "); a functional scenario has exactly one"
+}
+
 // hasTag is true when the scenario carries the tag.
 func hasTag(s scenario, name string) bool {
 	for _, t := range s.tags {
@@ -177,9 +211,13 @@ func words(text string) []string {
 // may not cite "line N" or "lines N", in any case, or a path such as
 // x.go:42, in a comment: lines move as dev moves, so it names a function
 // or a test instead. The scenarios at or below the entry are left as they
-// are.
+// are. The functional prefixes came in with the regroup of task-236, which
+// renumbered the scenarios that were there before, so each entry is its
+// file's highest ID then.
 var lastIDBeforeLineRule = map[string]int{
-	"USER": 133, "COORD": 60, "AGENT": 56, "CC": 56, "WORKER": 41,
+	"TASK": 55, "EPIC": 19, "APPROVE": 7, "IDEA": 17, "TEAM": 14, "POLICY": 46,
+	"SESSION": 5, "HANDOFF": 44, "TURN": 17, "TREE": 12, "MACHINE": 34, "FILES": 8,
+	"SIGNIN": 7, "NOTIFY": 3, "SET": 4, "TOOLS": 54,
 	"REL": 54, "SEC": 68, "OPS": 42, "PERF": 16, "LIM": 35,
 	"USE": 29, "COMPAT": 27, "OBS": 34,
 }

@@ -2,19 +2,11 @@ Feature: Agentry from Claude Code
   Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
   # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
   # internal/ideas/tools.go, internal/connections, internal/web/integrations_api.go
-  # and their tests. CC-01 is the foundation's stub; the scenarios here start at CC-02.
+  # and their tests.
 
-  @CC-01 @test
-  Scenario: A task made with create_task is on the board
-    Given Claude Code connected to Agentry and open in a repo
-    When the model calls the create_task tool with a title and a description
-    Then the task is created, in that repo: yes
-    And the new task's id and the link to its page are shown in the tool's answer
-    # README.md, Use it from Claude Code; internal/mcp/server_test.go TestTheBoardAndHandingOverWork
+  # ---- Installing the integration --------------------------------------------
 
-  # ---- Installing the integration -------------------------------------------
-
-  @CC-02 @manual
+  @TOOLS-01 @claude-code @manual
   Scenario: Installing Agentry into Claude Code on the machine Agentry runs on
     Given Claude Code is installed on the machine Agentry runs on
     And the user's Claude Code settings have no status line
@@ -34,7 +26,7 @@ Feature: Agentry from Claude Code
     # 4. Check the statusLine entry runs `agentry statusline`; set one of your own first to see it kept.
     # 5. Run `agentry mcp install` a second time and check no hook is doubled.
 
-  @CC-03 @manual
+  @TOOLS-02 @claude-code @manual
   Scenario: A status line the user already has is kept
     Given the user's Claude Code settings have a status line of their own
     When the user runs the install command for the integration
@@ -44,7 +36,7 @@ Feature: Agentry from Claude Code
     # 2. Run `agentry mcp install`.
     # 3. Read the settings again and check your status line is the one still there.
 
-  @CC-04 @test
+  @TOOLS-03 @claude-code @test
   Scenario: The Integrations page makes an install command for another machine
     Given the user is signed in on the Integrations page
     When they ask for an install command
@@ -55,7 +47,7 @@ Feature: Agentry from Claude Code
     # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage; every address: internal/web/addresses_test.go TestInstallCommands;
     # PowerShell and the wrong code: internal/web/api_test.go TestInstallCommandsForWindows
 
-  @CC-05 @test
+  @TOOLS-04 @claude-code @test
   Scenario: A machine connects its Claude Code with the code, once
     Given an install command whose code has not been used
     When the machine sends the code with its host name, user and system
@@ -67,14 +59,14 @@ Feature: Agentry from Claude Code
     And the Integrations page lists 1 connection, naming the machine, without the credential itself
     # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
-  @CC-06 @test
+  @TOOLS-05 @claude-code @test
   Scenario: Revoke stops a connected machine at once
     Given a machine connected with its own credential
     When the user revokes that connection on the Integrations page
     Then a request to the API with that credential is answered with status 401
     # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
-  @CC-07 @test
+  @TOOLS-06 @claude-code @test
   Scenario: A connected machine's credential cannot issue sign-in codes
     Given a machine connected with its own credential
     When it asks the server for a sign-in code with that credential
@@ -82,7 +74,7 @@ Feature: Agentry from Claude Code
     And the same request with the page's own token is answered with status 200
     # internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes
 
-  @CC-08 @test
+  @TOOLS-07 @claude-code @test
   Scenario: Connecting over https checks the server's CA before the code is sent
     Given a server served over https with Agentry's own CA
     When the machine runs `agentry mcp connect` with the CA's fingerprint, the server and a code
@@ -93,7 +85,7 @@ Feature: Agentry from Claude Code
     Then the code is sent 0 times, and the error names the fingerprint to give
     # cmd/agentry/mcp_test.go TestMCPConnectOverHTTPSKeepsTheCA, TestMCPConnectRefusesAWrongFingerprintBeforeTheCodeIsSent and TestMCPConnectOverHTTPSWithoutAFingerprintSaysWhichToGive
 
-  @CC-09 @test
+  @TOOLS-08 @claude-code @test
   Scenario: A connection whose server's CA changed says to connect again
     Given a machine connected to a server whose CA was regenerated since
     When Claude Code's Agentry calls the server
@@ -104,9 +96,9 @@ Feature: Agentry from Claude Code
     Then the error says it can't reach Agentry, and says the CA changed: no
     # cmd/agentry/mcp_test.go TestAConnectionToAServerWhoseCAChangedSaysToConnectAgain and TestAConnectionToAServerThatIsDownIsNotACAChange
 
-  # ---- Reading the board ----------------------------------------------------
+  # ---- Reading the board -----------------------------------------------------
 
-  @CC-10 @test
+  @TOOLS-09 @claude-code @test
   Scenario: status is the board for this repo
     Given 2 tasks waiting for the user, 1 running, 1 epic with 2 of 2 stories done and 1 task in another repo
     When Claude calls status
@@ -118,7 +110,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the reply has 4 sections, Needs you, Running, Epics and Not started (internal/mcp/tools.go lines 116, 122, 138 and 144),
     # and status with all lists the tasks of every repo (line 110)
 
-  @CC-11 @test
+  @TOOLS-10 @claude-code @test
   Scenario: status shows an epic left open with every story done
     Given an epic whose 3 stories are all done, left open by the user
     When Claude calls status
@@ -126,7 +118,7 @@ Feature: Agentry from Claude Code
     And the epic is in the Needs you section: no
     # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
-  @CC-12 @test
+  @TOOLS-11 @claude-code @test
   Scenario: list_tasks lists every task of this repo with its status and usage
     Given a task with a budget of 5M tokens and 24 turns, 1.2M tokens used and 4 turns since the user last answered
     And a working task in the Shipping column with 7 turns and no limits
@@ -137,7 +129,7 @@ Feature: Agentry from Claude Code
     # internal/mcp/tools.go listTasks: with a status, only tasks with that status are listed
     # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; turns since the user last answered: TestTheTaskSaysItsLimits; the epic and story lines: TestAnswersNameAnEpicAsEpicN
 
-  @CC-13 @test
+  @TOOLS-12 @claude-code @test
   Scenario: show_task is one task in full
     Given a done task whose work was pushed, moved to Done by the user
     When Claude calls show_task for it
@@ -152,7 +144,7 @@ Feature: Agentry from Claude Code
     Then the reply says Tokens unknown on 2 turns, with the server's reason
     # internal/mcp/server_test.go TestTheTaskSaysWhereItsTokensAreUnknown
 
-  @CC-14 @test
+  @TOOLS-13 @claude-code @test
   Scenario: show_task reads an archived task back
     Given a task that was done and archived
     When Claude calls show_task for it
@@ -160,7 +152,7 @@ Feature: Agentry from Claude Code
     And it says Archived on its date, and that it can be changed: no
     # internal/mcp/archived_test.go TestShowTaskReadsAnArchivedTask
 
-  @CC-15 @test
+  @TOOLS-14 @claude-code @test
   Scenario: An erased task cannot be shown, and is left out of the list
     Given 2 tasks, 1 of them erased
     When Claude calls show_task for the erased one
@@ -169,9 +161,17 @@ Feature: Agentry from Claude Code
     Then the erased task is listed: no, and the other task is listed: yes
     # internal/mcp/archived_test.go TestShowTaskSaysATaskWasErased
 
-  # ---- Handing over work ----------------------------------------------------
+  # ---- Handing over work -----------------------------------------------------
 
-  @CC-16 @test
+  @TOOLS-15 @claude-code @test
+  Scenario: A task made with create_task is on the board
+    Given Claude Code connected to Agentry and open in a repo
+    When the model calls the create_task tool with a title and a description
+    Then the task is created, in that repo: yes
+    And the new task's id and the link to its page are shown in the tool's answer
+    # README.md, Use it from Claude Code; internal/mcp/server_test.go TestTheBoardAndHandingOverWork
+
+  @TOOLS-16 @claude-code @test
   Scenario: create_task hands a task to Agentry in this repo
     Given Claude Code runs in a repo Agentry knows
     When Claude calls create_task with a title and a description and nothing else
@@ -182,7 +182,7 @@ Feature: Agentry from Claude Code
     And the reply ends with Waiting for the user (2) when 2 things wait
     # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the note at the end: internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits
 
-  @CC-17 @test
+  @TOOLS-17 @claude-code @test
   Scenario: create_task makes a story of an epic, or an epic with its stories
     Given an open epic shown as epic-3
     When Claude calls create_task with a title and epic epic-3
@@ -195,7 +195,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the reply says its coordinator splits it into stories next (internal/mcp/tools.go line 317)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the replies: TestAnswersNameAnEpicAsEpicN
 
-  @CC-18 @test
+  @TOOLS-18 @claude-code @test
   Scenario: A story that does not exist is not filed, and the epic is still made
     Given 2 tasks and no task-9
     When an epic is created with stories task-1 and task-9
@@ -204,7 +204,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: create_task words it Not filed: (internal/mcp/tools.go line 322)
     # internal/web/api_test.go TestTasksAreFiledUnderEpics: the epic has 2 stories once task-2 is filed too
 
-  @CC-19 @test
+  @TOOLS-19 @claude-code @test
   Scenario: create_task in a repo named by its git address works in a clone
     Given a repo at a git address the server can reach
     When Claude calls create_task with that address as repo
@@ -212,7 +212,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the clone may take 10 minutes (internal/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/mcp/tools.go line 305)
     # internal/web/api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
 
-  @CC-20 @test
+  @TOOLS-20 @claude-code @test
   Scenario: tell_coordinator sends the user's words to a task's coordinator
     Given a task whose coordinator is between turns
     When Claude calls tell_coordinator with the task and the user's words
@@ -221,7 +221,7 @@ Feature: Agentry from Claude Code
     # internal/web/chat_api.go say: with a turn open, the message is recorded and that turn is stopped, so the coordinator reads it at once
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
-  @CC-21 @test
+  @TOOLS-21 @claude-code @test
   Scenario: answer_question relays the user's own answer
     Given a task whose coordinator asked the user a question
     When Claude calls answer_question with the user's answer
@@ -229,7 +229,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the reply says its coordinator carries on (internal/mcp/tools.go line 352), and Claude Code is asked nothing for a plain answer
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
-  @CC-22 @test
+  @TOOLS-22 @claude-code @test
   Scenario: An answer that would close an epic is the user's to approve
     Given an epic left open with every story done, and Claude Code able to ask the user
     When Claude calls answer_question with the answer close the epic, in any letter case, with spaces around it
@@ -238,7 +238,7 @@ Feature: Agentry from Claude Code
     And when the user chooses close, the answer Close the epic is sent 1 time and the reply says the user closed it
     # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
-  @CC-23 @manual
+  @TOOLS-23 @claude-code @manual
   Scenario: Copying a file from outside a machine's worktrees is asked of the user
     Given a task waiting for the user to allow a copy, and Claude Code able to ask the user
     When Claude calls answer_question with the answer Copy it
@@ -253,7 +253,7 @@ Feature: Agentry from Claude Code
     # 3. Check Claude Code itself asks you whether to copy; choose "don't copy" and check nothing was answered.
     # 4. Repeat and choose "copy"; check the task's shared files hold the file.
 
-  @CC-24 @test
+  @TOOLS-24 @claude-code @test
   Scenario: review_approvals asks the user themselves about each waiting action
     Given 1 action waiting for approval, and Claude Code able to ask the user
     When Claude calls review_approvals
@@ -263,7 +263,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the question says why it asks (internal/mcp/tools.go line 508); it goes to the user by elicitation, so the model sees it: no (line 476);
     # when the user chooses approve, 1 approve is posted and the reply says approved by the user (lines 487 and 496)
 
-  @CC-25 @test
+  @TOOLS-25 @claude-code @test
   Scenario: Without elicitation nothing is approved, and the user gets the link
     Given 1 action waiting for approval, and a Claude Code that cannot ask the user
     When Claude calls review_approvals
@@ -273,7 +273,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: deny is posted 0 times too (internal/mcp/tools.go line 471 returns before any post),
     # and with a task that has 0 actions waiting the reply says No action is waiting for approval (line 468)
 
-  @CC-26 @test
+  @TOOLS-26 @claude-code @test
   Scenario: A held approval says when it was held and what approving does now
     Given an action that got no answer in time, so the agent was told no and it was held for the user
     When Claude calls review_approvals and Claude Code asks the user
@@ -283,7 +283,7 @@ Feature: Agentry from Claude Code
     # internal/turns/turns.go environment: the deadline is GateTimeoutSeconds - 10 = 1790 seconds (internal/engines/engine.go GateTimeoutSeconds = 1800)
     # internal/mcp/server_test.go TestAHeldApprovalSaysWhenItWasHeld: the question says once, which is 1 time
 
-  @CC-27 @test
+  @TOOLS-27 @claude-code @test
   Scenario: close_epic is asked of the user themselves
     Given an epic whose coordinator asks to close it, and Claude Code able to ask the user
     When Claude calls close_epic for it
@@ -293,7 +293,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the question holds the coordinator's text (internal/mcp/tools.go line 424); when the user chooses keep open,
     # it is posted 0 times and the reply says to ask the user what else it needs (line 431)
 
-  @CC-28 @test
+  @TOOLS-28 @claude-code @test
   Scenario: close_epic closes an epic the user left open
     Given an epic with all 3 stories done that is not waiting for the user
     When Claude calls close_epic for it and the user chooses close
@@ -301,7 +301,7 @@ Feature: Agentry from Claude Code
     And the answer Close the epic is posted: yes
     # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
-  @CC-29 @test
+  @TOOLS-29 @claude-code @test
   Scenario: close_epic refuses a task that is not ready
     Given a task that is no epic
     When Claude calls close_epic for it
@@ -313,7 +313,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the reply says closing is the user's to approve, and the answer is posted 0 times (internal/mcp/tools.go line 422)
     # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen (task-9); the link: TestAnswersNameAnEpicAsEpicN
 
-  @CC-30 @test
+  @TOOLS-30 @claude-code @test
   Scenario: start takes tasks out of the Backlog
     Given 2 tasks waiting in the user's Backlog
     When Claude calls start with both ids
@@ -322,7 +322,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: each of the 2 is directed to In progress, and the reply says they are on the Tasks board now (internal/mcp/tools.go line 406)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN (the call, for epic-2); the reply: TestAnswersNameAnEpicAsEpicN
 
-  @CC-31 @manual
+  @TOOLS-31 @claude-code @manual
   Scenario: set_priority orders tasks among themselves
     Given 2 tasks with ranks of their own
     When Claude calls set_priority with their ids in the order wanted
@@ -336,7 +336,7 @@ Feature: Agentry from Claude Code
     # the reply reads In this order now: A, B. Then GET /api/tasks and read each task's rank field: A holds -3 and B -1,
     # every other task's rank is as it was, and on the Tasks page A now sits above B in its column.
 
-  @CC-32 @test
+  @TOOLS-32 @claude-code @test
   Scenario: file_under_epic files a task under an epic, moves it, or takes it out
     Given a task and an open epic shown as epic-3
     When Claude calls file_under_epic with the task and epic-3
@@ -346,7 +346,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: the reply says the task is out of its epic (internal/mcp/tools.go line 363)
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
-  @CC-33 @test
+  @TOOLS-33 @claude-code @test
   Scenario: file_under_epic is refused where the rules refuse it
     Given a story and an epic
     When the epic is filed under the story
@@ -356,7 +356,7 @@ Feature: Agentry from Claude Code
     # internal/rules/task_rules.go notAnEpic, inNoEpic, notItself: an epic can't be a story of another, a story is taken out of its epic first, a task can't be a story of itself
     # internal/web/api_test.go TestTasksAreFiledUnderEpics
 
-  @CC-34 @test
+  @TOOLS-34 @claude-code @test
   Scenario: Every tool takes an epic as epic-N and names epics epic-N
     Given an epic the user knows as epic-3
     When Claude calls show_task, tell_coordinator, answer_question, file_under_epic, create_task, set_priority, start, close_epic, attach_file or get_file with epic-3
@@ -364,9 +364,9 @@ Feature: Agentry from Claude Code
     And each reply names the epic epic-3, a story task-N with its epic as epic-N, and links stay task-N
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN and TestAnswersNameAnEpicAsEpicN
 
-  # ---- Shared files ----------------------------------------------------------
+  # ---- Shared files and ideas ------------------------------------------------
 
-  @CC-35 @test
+  @TOOLS-35 @claude-code @test
   Scenario: attach_file shares a file from this machine with a task
     Given a file on the machine Claude Code runs on
     When Claude calls attach_file with the task and the file's path
@@ -376,15 +376,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: a name to share it by is used instead, the reply names the folder its agents find it in, .agentry/files (internal/mcp/files.go line 40),
     # and a folder's path fails, saying it isn't a file and to share a folder's files one by one, with 0 uploads sent (line 29)
 
-  @CC-36 @test
-  Scenario: A shared file's name stays inside the task's folder
-    Given a task
-    When a file is uploaded under a name that leaves the folder, such as one starting with ..
-    Then it is refused with status 400
-    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB; no test sends one that big
-    # internal/web/api_test.go TestYouShareFilesWithATask
-
-  @CC-37 @test
+  @TOOLS-36 @claude-code @test
   Scenario: get_file downloads one of a task's shared files
     Given a task with 1 shared file
     When Claude calls get_file with the task, the file's name and a folder to save in
@@ -393,9 +385,7 @@ Feature: Agentry from Claude Code
     # internal/mcp/files.go getFile: without a place to save, the file goes in the current folder under its own name
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
-  # ---- Ideas ----------------------------------------------------------------
-
-  @CC-38 @test
+  @TOOLS-37 @claude-code @test
   Scenario: list_ideas shows the Visionaries' open ideas for this repo
     Given 1 open idea in this repo and 3 ideas accepted, dismissed or in another repo
     When Claude calls list_ideas
@@ -410,7 +400,7 @@ Feature: Agentry from Claude Code
     Then the tool fails, naming the 4 states there are
     # internal/ideas/tools_test.go TestListIdeasShowsTheOpenOnesUnlessAsked; the unknown state: TestTheArgumentsAreSentAsGiven
 
-  @CC-39 @test
+  @TOOLS-38 @claude-code @test
   Scenario: accept_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls accept_idea for it
@@ -422,7 +412,7 @@ Feature: Agentry from Claude Code
     Then 1 accept is posted with start, and the reply says the task started
     # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea; the feature: TestAnIdeaWithoutSizeOrTask; start: TestAcceptingAnIdeaCanStartItsTask
 
-  @CC-40 @test
+  @TOOLS-39 @claude-code @test
   Scenario: Without elicitation accept_idea and dismiss_idea act on the arguments as the user's decision
     Given an open idea that suggests an epic, and a Claude Code that cannot ask the user
     When Claude calls accept_idea with only its id and a note
@@ -434,7 +424,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: 0 tasks are made; the fake server refuses the kind
     # internal/ideas/tools_test.go TestWithoutElicitationTheArgumentsAreTheDecision; the kind refused: TestTheArgumentsAreSentAsGiven
 
-  @CC-41 @test
+  @TOOLS-40 @claude-code @test
   Scenario: An idea that looks like an open task makes none until the user chooses to anyway
     Given an open idea whose title is close to an open task's, and Claude Code able to ask the user
     # internal/ideas/duplicate.go SameTitleAbove: titles sharing more than 0.5 of their words look alike
@@ -450,15 +440,7 @@ Feature: Agentry from Claude Code
     Then the accept is posted with anyway and the task is made: yes
     # internal/ideas/tools_test.go TestAnIdeaLikeAnOpenTaskIsTheUsersToMakeAnyway; the server's 409: internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
 
-  @CC-42 @test
-  Scenario: Only an open task in the idea's repo counts as the task it looks like
-    Given an idea and tasks with close titles in its repo and in another, some done
-    When the open task it looks like is found
-    Then a done task counts: no, a task in another repo counts: no, and a task in the Backlog counts: yes
-    And of 2 candidates the closest title wins, and on a tie the 1 made first
-    # internal/ideas/duplicate_test.go TestOnlyAnOpenTaskInTheReposCounts
-
-  @CC-43 @test
+  @TOOLS-41 @claude-code @test
   Scenario: dismiss_idea is the user's decision, asked through Claude Code
     Given an open idea, and Claude Code able to ask the user
     When Claude calls dismiss_idea for it
@@ -475,7 +457,7 @@ Feature: Agentry from Claude Code
     Then the tool fails, saying no idea with that id
     # internal/ideas/tools_test.go TestTheUserDecidesOnAnIdea
 
-  @CC-44 @test
+  @TOOLS-42 @claude-code @test
   Scenario: The ideas tools are listed only while the Ideas feature shows
     Given a server whose Ideas feature is neither enabled nor visible
     When a Claude Code session starts
@@ -486,9 +468,9 @@ Feature: Agentry from Claude Code
     And tools/list has all 3 ideas tools: yes
     # internal/ideas/mcp_test.go TestAgentryMCPListsTheIdeasToolsOnlyWhileIdeasShows; no tool and its name, and list_changed 1 time: internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows, for any feature
 
-  # ---- Hearing from Agentry -------------------------------------------------
+  # ---- Hearing from Agentry --------------------------------------------------
 
-  @CC-45 @test
+  @TOOLS-43 @claude-code @test
   Scenario: Every reply ends with what waits for the user
     Given 1 thing waiting for the user in this repo
     When Claude calls any tool but status
@@ -497,7 +479,7 @@ Feature: Agentry from Claude Code
     # internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits (list_tasks)
     # not under test, checked by hand: status gets no note, since the board says it already (internal/mcp/server.go line 116)
 
-  @CC-46 @test
+  @TOOLS-44 @claude-code @test
   Scenario: Each waiting line names its task as the user knows it, and the tool that deals with it
     Given an epic asking to close, a question on an epic and a question on a task waiting
     When the lines waiting for the user are read
@@ -508,7 +490,7 @@ Feature: Agentry from Claude Code
     And the approving answers Close the epic and Copy it are the coordinator's own 2 words: yes
     # internal/waitlist/waitlist_test.go TestALineNamesAnEpicAsEpicN and TestTheApprovingAnswersAreTheCoordinators
 
-  @CC-47 @test
+  @TOOLS-45 @claude-code @test
   Scenario: Open ideas wait for the user as one line
     Given 4 open ideas
     When the lines waiting for the user are read outside a repo
@@ -518,7 +500,7 @@ Feature: Agentry from Claude Code
     And an idea Agentry accepted for the user by their rule is counted: no
     # internal/ideas/waiting_test.go TestOpenIdeasWaitForYou; this repo and (list_ideas): TestOpenIdeasPointAtTheirRepo
 
-  @CC-48 @manual
+  @TOOLS-46 @claude-code @manual
   Scenario: SessionStart and UserPromptSubmit tell Claude what waits for the user
     Given 2 things waiting for the user and the hooks installed
     When a Claude Code session starts, or the user sends a message
@@ -533,7 +515,7 @@ Feature: Agentry from Claude Code
     # 3. Send any message: Claude is told again, and repeats only what it hasn't told you.
     # 4. Stop Agentry and send a message: Claude Code carries on without Agentry.
 
-  @CC-49 @test
+  @TOOLS-47 @claude-code @test
   Scenario: The news a waiter wakes Claude with is only what is new
     Given 1 task done before the waiter started, and a worker online with a task
     When a task finishes, its coordinator tells the user something, and the worker goes offline with that task on it
@@ -543,7 +525,7 @@ Feature: Agentry from Claude Code
     And an epic is named epic-N: yes
     # internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
-  @CC-50 @manual
+  @TOOLS-48 @claude-code @manual
   Scenario: After each reply a waiter wakes Claude when something new waits
     Given the Stop hook installed and a session idle
     When something new waits for the user, a task finishes, a coordinator replies, or a machine goes offline
@@ -560,7 +542,7 @@ Feature: Agentry from Claude Code
     # 4. Send another message and reply; check a second waiter is started: no, while the first lives.
     # 5. Run `agentry wait` in a terminal and make something wait: it prints the same news and returns.
 
-  @CC-51 @manual
+  @TOOLS-49 @claude-code @manual
   Scenario: The computer shows a notification when something new waits
     Given Claude Code running with Agentry and a notifier on the computer
     When something starts waiting for the user, a task finishes, a coordinator replies, a machine goes offline or a new idea comes
@@ -574,7 +556,7 @@ Feature: Agentry from Claude Code
     # 4. Start Claude Code with the server stopped, then start the server: the notifications begin within 15 seconds.
     # 5. Start `agentry mcp --quiet`: no notification shows.
 
-  @CC-52 @manual
+  @TOOLS-50 @claude-code @manual
   Scenario: The status line shows what needs the user and what runs
     Given 1 thing waiting for the user and 3 tasks with an agent working
     When Claude Code draws its status line
@@ -588,7 +570,7 @@ Feature: Agentry from Claude Code
     # 3. Make a second thing wait: it reads "2 need you".
     # 4. Stop Agentry: the line is empty within 2 seconds.
 
-  @CC-53 @manual
+  @TOOLS-51 @claude-code @manual
   Scenario: The board prompt shows the user their board
     Given Agentry installed in Claude Code
     When the user types the board prompt
@@ -597,9 +579,9 @@ Feature: Agentry from Claude Code
     # 1. In Claude Code, type /mcp__agentry__board.
     # 2. Check Claude calls status and then says what needs you, what runs and what is planned, in that order.
 
-  # ---- What the tools refuse ------------------------------------------------
+  # ---- What the tools refuse -------------------------------------------------
 
-  @CC-54 @test
+  @TOOLS-52 @claude-code @test
   Scenario: A hidden feature's tool cannot be called
     Given a feature the server shows: no
     When Claude calls one of its tools
@@ -607,7 +589,7 @@ Feature: Agentry from Claude Code
     # not under test, checked by hand: 0 calls reach the server for it (internal/mcp/server.go line 121 answers before any call)
     # internal/mcp/features_test.go TestAFeatureBringsItsToolsWhenItShows
 
-  @CC-55 @test
+  @TOOLS-53 @claude-code @test
   Scenario: The model cannot approve, close or copy for the user
     Given an approval and an epic asking to close, and a Claude Code that cannot ask the user
     When Claude calls review_approvals, close_epic, or answer_question with Close the epic
@@ -616,7 +598,7 @@ Feature: Agentry from Claude Code
     # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; close_epic: TestAnswersNameAnEpicAsEpicN
     # not under test, checked by hand: deny is posted 0 times too, and each of the 3 replies says the decision is the user's with 1 link (internal/mcp/tools.go lines 422 and 471)
 
-  @CC-56 @manual
+  @TOOLS-54 @claude-code @manual
   Scenario: A wrong id is refused with its name
     Given an id no task, epic or idea has
     When Claude calls show_task, set_priority, close_epic or accept_idea with it

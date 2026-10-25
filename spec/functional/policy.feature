@@ -1,65 +1,122 @@
-Feature: The agents
-  The engineer, reviewer, tester, deployer and the other teams' agents, each in its own worktree and session, every action through the gate.
+Feature: Policy
+  The policy profiles each agent runs under, the gate that judges every action,
+  and the Policy page.
 
-  @AGENT-01 @test
-  Scenario: A push asks the user first
-    Given an agent under the developer profile, in its task's worktree
-    When the agent runs git push origin HEAD:dev
-    Then the user is asked before the push runs
-    And a push to main, or a force push, is denied
-    # PLAN.md T-013, T-033; README.md, The policy; internal/policy/default_test.go
+  # ---- The Policy page -------------------------------------------------------
 
-  # --- Every agent's turn
+  @POLICY-01 @user @test
+  Scenario: The Policy page: the 6 default profiles, who uses which, and what is in force
+    # internal/web/policy_api_test.go TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # the 6 profiles Agentry ships, developer, read-only, read-mostly, network-diagnosis, autonomous and allow-everything: internal/policy/default.toml lines 82, 198, 333, 473, 658 and 683; use_for_everyone as shipped: line 79
+    # the Software team's profiles, tech-lead and reviewer read-only, the rest developer: README.md, The policy, "Profiles"
+    Given a policy file without read-mostly, with use_for_everyone set to allow-everything
+    When the policy is read
+    Then exactly 6 default profiles are listed, read-mostly missing and read-only current, the missing one with the text it would add
+    And read-only is used by exactly 2 agents, reviewer and tech-lead
+    And the reviewer's profile in force reads "read-only, overridden by allow-everything", and the agents list shows each agent's profile in force the same way
 
-  @AGENT-02 @test
-  Scenario: An agent's turn starts from its own prompt and the coordinator's brief
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
-    Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
-    When the engineer's turn starts
-    Then its own prompt, "You are the engineer", and those instructions are shown in its brief
-    # not under test, checked by hand: the brief opens with the prompt, and the prompt is the engineer's own, not the coordinator's: internal/coordinator/brief.go workerBrief
-    # each prompt is embedded from defaults/<name>.md, or defaults/<team folder>/<name>.md for the other teams: internal/agents/defaults.go, teams.go Prompted
+  @POLICY-02 @user @test
+  Scenario: A missing default profile is added from the page, logged with its diff and a backup
+    # internal/web/policy_api_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/policy/live_test.go TestAgentryKeepsItsNewestBackups
+    # the 20 newest backups are kept: internal/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
+    Given a policy file without read-mostly, whose row reads "Your file doesn't have it. Adding it appends the <version> default, under a comment naming the version."
+    When "Add this profile" is sent without the file's hash, or with a stale one
+    Then it is refused with 409 "changed since the page loaded it: try again"
+    When it is sent with the hash the page saw
+    Then the file no longer lacks read-mostly: it comes under "# Added by Agentry <version>, the default profile of that version."
+    And exactly 1 policy event is logged, by you, "added profile read-mostly", with the diff adding [profiles.read-mostly] and the file's text
+    And a backup beside the file holds exactly the file as it was
+    When it is added twice, or a profile Agentry does not ship is added
+    Then the first is refused with 409 "already has" and the second with 404, and no refused change is logged
+    Given 25 changes made by Agentry
+    Then exactly 20 backups are kept, the newest ones
 
-  @AGENT-03 @test
-  Scenario: An agent's turn ends with a report, and every report goes back to the coordinator
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
-    Given the engineer's brief, whose "When you finish" section asks for 1 short report for the coordinator
-    When the engineer ends its turn with the report "Removed 3 TODOs and committed."
-    Then the next turn is the coordinator's, and no other agent's turn starts first
-    And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
-    # not under test, checked by hand: the step is shown once, and the brief tells the agent not to stop to ask questions and to put them in the report: internal/coordinator/brief.go line 394
-    # finish: internal/coordinator/brief.go
+  @POLICY-03 @user @test
+  Scenario: An outdated default is updated; one you changed is never overwritten, only replaced by choice
+    # internal/web/policy_api_test.go TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice
+    # the rows "outdated" and "yours" with "Update to the <version> default", "Keep mine" and "Use the default": ui/src/components/organisms/DefaultProfiles.tsx lines 91 to 113 and 121 to 131
+    Given a policy file from a build before v0.1.0, whose read-only is outdated
+    When the user clicks "Update to the <version> default" on read-only
+    Then the file holds this version's read-only and exactly 1 event, yours, "updated read-only to the <version> default", with its diff
+    Given read-only edited by hand, its row marked "yours": "You changed it, so Agentry won't overwrite it. Yours against the default:"
+    When an update is sent for it
+    Then it is refused with 409 "won't overwrite it" and the file is kept as edited
+    When the user clicks "Use the default"
+    Then the file is exactly as Agentry ships it, and the event reads "replaced your read-only with the <version> default" with the diff
 
-  @AGENT-04 @test
-  Scenario: An agent works only in the task's worktree, on branch agentry/<task>
-    # internal/coordinator/carried_brief_test.go TestABriefFromASiblingsSessionSaysItIsANewTask
-    # the words on repos and folders outside it: internal/coordinator/ideas_test.go TestAVisionariesBriefIsAsItWasBeforeTheHook (testdata/visionaries-brief.md); PORT: internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
-    Given a task task-3 whose worktree is ready on branch agentry/task-3, with port 7903
-    When any agent's turn starts on it
-    Then the brief's "Where the work is" names that worktree and branch, and says never to create or change repos or folders outside it
-    And the worktree's port is in the PORT environment variable of the turn: yes
-    # not under test, checked by hand: the port is task-3's own 7903; the turns test checks PORT=7901 for its own worktree
-    # whereText: internal/coordinator/brief.go; PORT: internal/turns/turns.go environment; the branch: internal/worktrees/worktree_test.go TestCreateSetsTheWorktreeUp
+  @POLICY-04 @user @test
+  Scenario: use_for_everyone: the notice on the Policy and Agents pages, and turning it off
+    # internal/web/policy_api_test.go TestTurningOffUseForEveryoneGivesEachAgentItsOwnProfile and TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47; shown on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # README.md, The policy, "Allow everything, as shipped"
+    Given the policy as shipped, use_for_everyone set to allow-everything
+    When the policy is read
+    Then the reviewer's profile in force reads exactly "read-only, overridden by allow-everything"
+    When the user clicks "Turn it off"
+    Then use_for_everyone is no longer set and the reviewer's profile in force is exactly read-only, not overridden
+    When it is turned off again
+    Then it is refused with 409 "isn't set"
 
-  @AGENT-05 @test
-  Scenario: An agent writes the plan file its brief asks for, and the plan follows the file
-    # internal/hooks/handler_test.go TestThePlanFollowsTheFile
-    Given a brief whose "Your plan" section asks for a Markdown checklist in .agentry/turn-N-plan.md before anything else
-    When the agent writes 2 unticked steps, then ticks both before its turn ends
-    Then the plan kept on the turn is the same as the file's last content, with both steps ticked
-    And an unchanged plan is recorded 0 more times
-    # PlanFile: internal/machines/local.go; the section's words: internal/coordinator/brief.go plan
+  @POLICY-05 @user @test
+  Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
+    # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
+    # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
+    # a verdict no profile rule made has Order 0, no rule place: internal/policy/verdict.go line 28; none of the named tests asserts it
+    # the page's words "as if run in <workspace>" and "But today allow-everything decides for every agent:" are TryPolicyCall.tsx's; the tests assert the reply they are drawn from
+    Given the policy as shipped and the developer profile's panel
+    When the user tries Bash "go test ./..."
+    Then the verdict shown is allow by the rule "stays inside the workspace", with its why
+    And the verdict names the rule's place among the profile's rules, exactly 1 row for the page to mark
+    When the user tries Bash "git push origin feature", Bash "sudo ls", or Read of a private key under .ssh
+    Then the verdicts are ask "every push leaves this machine: you approve it", deny "never sudo" and deny "never touch secrets"
+    And under read-only, Edit of main.go is deny "this agent changes nothing"
+    And each adds that today allow-everything decides, with allow, while use_for_everyone is set; with it off, nothing is added
+    When a call is tried
+    Then nothing is logged and the policy's hash is the same
+    When the profile does not exist, the tool is empty, or the workspace is a relative path
+    Then they are refused with 404, 400 and 400; a tool with no input is judged
 
-  @AGENT-06 @test
-  Scenario: An agent keeps its notes across tasks in .agentry/knowledge.md
-    # internal/hooks/handler_test.go TestWhatTheAgentLearnedIsKept
-    Given the brief's "What you know from earlier tasks" shows the agent's notes and asks it to update .agentry/knowledge.md before it finishes
-    When the engineer's turn ends with "This repo formats with gofmt -s." in that file
-    Then the engineer's knowledge is exactly that text, recorded once, by the engineer
-    # not under test, checked by hand: its next brief shows the same notes under "What you know from earlier tasks": internal/coordinator/brief.go knowledge, line 432
-    # KnowledgeFile: internal/machines/local.go; knowledge: internal/coordinator/brief.go
+  @POLICY-06 @user @test
+  Scenario: History lists every version, newest first, and Revert restores one as a new version after showing its diff
+    # internal/web/policy_api_test.go TestEveryVersionShowsInTheHistoryAndCanBeRestored, TestAVersionShowsWhatRevertingToItWouldChange and TestARevertMayNotTakeAProfileFromItsAgents
+    # the panel "History", who made each version, "refused", "in force", Diff and Revert: ui/src/components/organisms/PolicyHistory.tsx lines 26 to 91 and 135 to 138; the dialog: lines 96 to 129
+    Given 3 versions: one loaded without its text, the first loaded, and use_for_everyone turned off on the page
+    When the history is read
+    Then exactly 3 versions come newest first: "turned off use_for_everyone", "first loaded", "loaded"
+    And only the 2 with their text can be reverted to, and none of them is marked on disk
+    When the user reads what reverting to the first would change
+    Then the diff runs from the version in force to it, turning use_for_everyone back on, and the version names allow-everything where the one in force names no profile
+    And the version in force shows an empty diff
+    When the user reverts to the first
+    Then the file is the same as the first version, and the newest version logged is yours, "reverted to the version of <date>"
+    When a version without its text, position 999, or the version in force is reverted to
+    Then they are refused with 409 "can't be restored", 404, and 409 "in force"
+    When a revert would take read-mostly from the Visionaries
+    Then it is refused with 409 naming the profile and visionary-lead, and the file is kept
 
-  @AGENT-07 @test
+  @POLICY-07 @user @manual
+  Scenario: The Policy page's panels and banners: each profile, the override, the file, a mistake in it and the reload within 2 seconds
+    # ui/src/pages/PolicyPage.tsx lines 47 to 60, the path and the hash; lines 63 to 73, the banners; lines 89 to 93, the file; lines 99 to 161, a profile's panel
+    # the notice: ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47, on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
+    # the file is watched every 2 seconds: cmd/agentry/serve.go line 280; "Profiles agents need": ui/src/components/organisms/MissingProfiles.tsx lines 26 to 48
+    # README.md, The policy
+    Given the Policy page
+    When it is shown
+    Then the header shows the file's path and "file <hash>", the first 8 characters of the hash
+    And the banner "Edit the file to change the policy" is shown, reading "Rules are read top to bottom and the first that matches decides. Save the file and it takes effect within two seconds."
+    And the panel policy.toml, "The file as loaded", shows every line of the file
+    And each profile is a panel marked "used by every agent", "default" or "not in use", with "otherwise <decision>" and a table of its rules: #, Decision, Rule, Why
+    And a profile no agent names reads "No agent has this profile."; under the override the users read "Agents' own profile, overridden for now:"
+    And under use_for_everyone the notice "Every agent uses allow-everything; their own profiles are ignored" is shown with "Turn it off", on the Agents page too
+    And with an agent whose own profile the file lacks, the notice reads "Turning this off denies every call by <agent> until <profile> is back." with "Add it" for a profile Agentry ships
+    When the user saves the file with a mistake
+    Then within 2 seconds the banner "The file has a mistake, so the version before it is still in force" is shown with the mistake, and the version before stays in force
+    Given an agent whose profile the file lacks and Agentry does not ship
+    Then the panel "Profiles agents need" lists it, marked missing, with each agent that uses it
+
+  # ---- Which profile each agent runs under -----------------------------------
+
+  @POLICY-08 @agent @test
   Scenario: Each default agent runs under the profile the code gives it
     # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile; the 5: TestTheDefaultsAreFiveAgentsWithPrompts in the same file
     Given a new install's Software team
@@ -68,7 +125,7 @@ Feature: The agents
     # not under test, checked by hand: exactly 2 of them check work, the reviewer and the tester; the deployer ships it, and the engineer builds it
     # internal/agents/defaults.go; the columns: internal/agents/agent.go Builds, Reviews, Ships
 
-  @AGENT-08 @test
+  @POLICY-09 @agent @test
   Scenario: The other teams' agents run under the profiles their templates give them
     # internal/agents/agents_test.go TestTheVisionariesTeam
     Given the Visionaries and the Networking teams added from their templates
@@ -79,26 +136,7 @@ Feature: The agents
     # not under test, checked by hand: the shipped policy has 6 profiles
     # internal/agents/agents_test.go TestTheNetworkingTeam; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
 
-  @AGENT-56 @manual
-  Scenario: In Writing, Research and Design the coordinator is read-only and the others are developers
-    Given the Writing, Research and Design teams added from their templates
-    When each agent's profile and column are read on the Agents page
-    Then in each of the 3 teams exactly 1 agent coordinates, under read-only, and the 3 others are under developer
-    And exactly 1 agent in each team counts as review: the fact-checker, the critic and the design-critic
-    # the templates: internal/agents/teams.go, writing, research and design
-    # Steps: on the Teams page add Writing, Research and Design from their templates; open each team's agents and
-    # read the profile and the column of each of its 4 agents; compare with teams.go.
-
-  @AGENT-09 @test
-  Scenario: Only the agent working on the task passes the gate
-    # internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate
-    Given the engineer's turn is open on the task
-    When a gate call arrives from the reviewer
-    Then it is denied
-    And the engineer's calls are judged with exactly its own profile, "developer"
-    # TestTheGateUsesTheWorkingAgentsProfile in the same file
-
-  @AGENT-10 @test
+  @POLICY-10 @agent @test
   Scenario: As shipped, every agent allows everything until the user turns that line off
     # internal/policy/default_test.go TestAllowEverything
     Given the shipped policy, with use_for_everyone = "allow-everything"
@@ -108,20 +146,76 @@ Feature: The agents
     And with that line commented out, each agent is judged by its own profile, as every scenario below assumes
     # use_for_everyone: internal/policy/default.toml line 79; the tests load the policy with it commented out: internal/policy/default_test.go loadDefault
 
-  # --- The engineer
+  @POLICY-11 @agent @test
+  Scenario: The tester runs under developer, so it can commit tests
+    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile
+    Given the Software team as shipped
+    When the tester's profile and column are read
+    Then its profile is exactly "developer", the same as the engineer's
+    # not under test, checked by hand: its work counts as review, so its verdict is 1 of the checks a done decision waits for
+    # Column: Reviews on the tester: internal/agents/defaults.go; checks by column: internal/coordinator/checks.go recordOf
 
-  @AGENT-11 @manual
-  Scenario: The engineer changes the code with tests and commits on the branch, and never pushes
-    Given the engineer's brief asks for a change
-    When its turn runs
-    Then its prompt says to write 1 failing test first for a bug and tests for new behaviour, and to run the project's tests, linters and type checks
-    And it says to commit in small working steps with conventional messages, and never to push: the deployer does
-    And its report says what changed and why, each commit, how it was tested with commands and results, and anything left or risky
-    # the prompt: internal/agents/defaults/engineer.md
-    # Steps: start a task that needs a small code change, read the engineer's report and its commits with git log on the task branch;
-    # check that no push happened (the task's Actions list no git push from the engineer).
+  @POLICY-12 @agent @manual
+  Scenario: In Writing, Research and Design the coordinator is read-only and the others are developers
+    Given the Writing, Research and Design teams added from their templates
+    When each agent's profile and column are read on the Agents page
+    Then in each of the 3 teams exactly 1 agent coordinates, under read-only, and the 3 others are under developer
+    And exactly 1 agent in each team counts as review: the fact-checker, the critic and the design-critic
+    # the templates: internal/agents/teams.go, writing, research and design
+    # Steps: on the Teams page add Writing, Research and Design from their templates; open each team's agents and
+    # read the profile and the column of each of its 4 agents; compare with teams.go.
 
-  @AGENT-12 @test
+  # ---- The gate --------------------------------------------------------------
+
+  @POLICY-13 @coordinator @test
+  Scenario: The gate judges each action by the working agent's own profile
+    # internal/hooks/handler_test.go TestTheGateUsesTheWorkingAgentsProfile
+    Given the engineer, whose profile is developer, is the agent working on the task
+    When it asks to run a command
+    Then the policy is asked with exactly the profile "developer", not the coordinator's
+
+  @POLICY-14 @agent @test
+  Scenario: Only the agent working on the task passes the gate
+    # internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate
+    Given the engineer's turn is open on the task
+    When a gate call arrives from the reviewer
+    Then it is denied
+    And the engineer's calls are judged with exactly its own profile, "developer"
+    # TestTheGateUsesTheWorkingAgentsProfile in the same file
+
+  @POLICY-15 @agent @test
+  Scenario: A denial or an ask tells the agent which rule decided
+    # internal/policy/default_test.go TestAVerdictNamesItsRule
+    Given an agent whose profile is "", so the default profile developer applies
+    When it runs git push origin HEAD:dev
+    Then the verdict names the profile developer and the rule "every push leaves this machine: you approve it", with its why
+    # not under test, checked by hand: the agent is told "Agentry: developer: every push leaves this machine: you approve it" (internal/hooks/handler.go line 367)
+    # default_profile = "developer": internal/policy/default.toml line 75; the reason reaches the agent: internal/hooks/handler.go decide
+
+  @POLICY-16 @worker @test
+  Scenario: An agent's hook call needs the hook token, and only the working agent passes the gate
+    Given a task with the engineer at work
+    When a hook call arrives with a wrong hook token
+    Then it is refused with status 401
+    When it arrives with the right token
+    Then it is answered with status 200
+    When a gate call names an agent that is not the one working
+    Then the action is denied: yes
+    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken, TestOnlyTheWorkingAgentPassesTheGate
+
+  @POLICY-17 @worker @test
+  Scenario: The gate fails closed when the server cannot answer
+    Given an agent session on a worker whose server is unreachable, slow or broken
+    When the engine's gate hook calls `agentry hook`
+    Then the hook exits 2 within its own deadline, so the action is blocked: yes
+    # internal/turns/turns.go environment: the deadline is 1790 seconds, 10 under the engine's gate timeout of 1800 (internal/engines/engine.go GateTimeoutSeconds)
+    And the server's reply, when it comes, is printed as it is: yes
+    # not under test, checked by hand: its exit code is kept (cmd/agentry/hook.go line 50); the test's reply has exit code 0, the default
+    # cmd/agentry/hook_test.go TestTheHookFailsClosed, TestTheHookPassesTheServersReplyThrough
+
+  # ---- The developer profile -------------------------------------------------
+
+  @POLICY-18 @agent @test
   Scenario: The developer profile allows what stays inside the workspace
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
@@ -133,7 +227,7 @@ Feature: The agents
     # the rule name, for go test ./...: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/policy/default.toml line 171 and line 158
     # the rules: internal/policy/default.toml lines 151 to 195
 
-  @AGENT-13 @test
+  @POLICY-19 @agent @test
   Scenario: What may reach outside the workspace asks the user
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
@@ -143,7 +237,7 @@ Feature: The agents
     # otherwise = "ask" and unreadable = "ask": internal/policy/default.toml lines 84 to 86; WebFetch: line 146
     # none runs before the answer: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
-  @AGENT-14 @test
+  @POLICY-20 @agent @test
   Scenario: A setting or an upper-case variable before a command asks, a plain toolchain setting does not
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given the engineer under developer
@@ -152,40 +246,19 @@ Feature: The agents
     And GOTOOLCHAIN=local GOPROXY=off go test ./... and git -C . commit -m x are allowed
     # variables: internal/policy/default.toml lines 51 to 57; git's own options are left out before matching: lines 47 to 50
 
-  # --- The reviewer
+  @POLICY-21 @agent @test
+  Scenario: The deployer reads the pushed commit's pipeline without asking
+    # internal/policy/default_test.go TestTheDeveloperReadsAPipeline
+    Given the deployer under developer, after its push
+    When it runs glab ci list --sha <hash> -F json, or gh run list --commit <hash> --json status,conclusion,url
+    Then each is allowed
+    And gh run view 123 -w, glab ci get -p 123 --with-variables, gh run rerun 123 and gh run watch 123 are asked
+    # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/agents/defaults/deployer.md line 9
+    # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/agents/defaults/deployer.md
 
-  @AGENT-15 @manual
-  Scenario: The reviewer reads every change and reports what it finds, and changes nothing
-    Given the reviewer's brief names the task branch's changes
-    When its turn runs
-    Then its prompt says it changes nothing: no edits, no commits
-    And it reads every change with git log and git diff from the base commit, and labels each finding must fix, should fix or nit, with the file and line
-    And its report ends with the must-fix list, then exactly 1 verdict line last
-    # the prompt: internal/agents/defaults/reviewer.md
-    # Steps: on a task with a committed change, let the reviewer take a turn; check its report's last line is a verdict and
-    # that git status in the worktree shows 0 changes from it.
+  # ---- The judging profiles --------------------------------------------------
 
-  @AGENT-16 @test
-  Scenario: The verdict is read from the end of a checker's report
-    # internal/coordinator/checks_test.go TestVerdictOf
-    Given a checking agent's report
-    When Agentry reads its verdict
-    Then "Verdict: approved" and "verdict - approved, with two nits" are approved, and "**Verdict: Changes needed**" and "Verdict: not approved" are changes needed
-    And a report such as "I approved of the naming." has no verdict
-    # not under test, checked by hand: a verdict above the last 5 lines is not read (internal/coordinator/checks.go line 40), and the coordinator is told to ask that agent again for one (line 140)
-    # verdictOf: internal/coordinator/checks.go; the message for no verdict: unchecked in the same file
-    # verdictOf also reads "Verdict: rejected" as changes needed (checks.go, the rejected prefix); TestVerdictOf has no such case
-
-  @AGENT-17 @test
-  Scenario: Every checking agent's brief ends with how to give its verdict
-    # internal/coordinator/resumed_brief_test.go TestAResumedReviewerBriefStillEndsWithTheVerdict; fresh: internal/coordinator/handoff_brief_test.go TestAReReviewsHandoffHasItsEarlierFindingsAndWhatChangedSince
-    Given an agent whose work counts as review, such as the reviewer
-    When its brief is written, fresh or for a resumed session
-    Then the brief ends with exactly the 2 lines it may use, "Verdict: approved" and "Verdict: changes needed", and says to approve only work it would ship as it is
-    # not under test, checked by hand: an agent whose work counts as building gets no verdict section
-    # VerdictFormat: internal/coordinator/checks.go; finish: internal/coordinator/brief.go
-
-  @AGENT-18 @test
+  @POLICY-22 @agent @test
   Scenario: The read-only profile lets the reviewer read and test, keep its notes, and change nothing else
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the reviewer under read-only
@@ -197,159 +270,7 @@ Feature: The agents
     And Read on main.go, git diff c1169f1..HEAD and go test -v ./... && gofmt -l . are allowed
     # [profiles.read-only]: internal/policy/default.toml line 198; "keeps its own notes" line 211; "this agent changes nothing" line 219; "never commits or changes branches" line 322
 
-  # --- The tester
-
-  @AGENT-19 @manual
-  Scenario: The tester runs the tests, adds missing ones and tries the change for real
-    Given the tester's brief gives the coordinator's acceptance criteria
-    When its turn runs
-    Then its prompt says to run every test in the suite, the linters and the build, and record the exact commands and results
-    And to exercise the change as a user would, on the port in PORT, leaving no server running when it finishes
-    And to fill the gaps with tests committed on the task branch, with 0 changes to the code under test, and never to push
-    And its report ends with the failures, each with steps to reproduce, then exactly 1 verdict line last
-    # the prompt: internal/agents/defaults/tester.md
-    # Steps: on a task with a reviewed change, let the tester take a turn; check its commits touch only tests, and its report's
-    # last line is a verdict.
-
-  @AGENT-20 @test
-  Scenario: The tester runs under developer, so it can commit tests
-    # internal/agents/agents_test.go TestEachDefaultAgentHasAProfile
-    Given the Software team as shipped
-    When the tester's profile and column are read
-    Then its profile is exactly "developer", the same as the engineer's
-    # not under test, checked by hand: its work counts as review, so its verdict is 1 of the checks a done decision waits for
-    # Column: Reviews on the tester: internal/agents/defaults.go; checks by column: internal/coordinator/checks.go recordOf
-
-  # --- The deployer
-
-  @AGENT-21 @manual
-  Scenario: The deployer merges the finished branch into dev and pushes it with one exact command
-    Given the deployer's brief says the work was reviewed and tested
-    When its turn runs
-    Then its prompt says to stop and report when the working tree is not clean or the instructions do not say the work was reviewed and tested
-    And to run git fetch origin, then git merge origin/dev into the task branch, and on a conflict git merge --abort and report it, resolving 0 conflicts itself
-    And to run the tests and build once more after the merge, and push only when they pass
-    And the push is exactly git push origin HEAD:dev, as a command of its own, with nothing before it and nothing chained
-    And never to force push, rewrite history, or push to any branch but dev
-    # the prompt: internal/agents/defaults/deployer.md
-    # Steps: ship a reviewed task; check the deployer's Actions show git fetch origin, git merge origin/dev, the tests, then
-    # git push origin HEAD:dev on its own; then move an unreviewed task to the deployer and check its report stops.
-
-  @AGENT-22 @test
-  Scenario: Agentry counts a turn as pushed only by an approved git push that finished
-    # internal/tasks/pushed_test.go TestOnlyAFinishedApprovedPushIsPushed
-    Given a turn's actions
-    When Agentry asks whether the turn pushed the work
-    Then yes only for an action whose command starts with git push, approved, with a result
-    And a denied push, a push with no result yet, and git status each count as no
-    # not under test, checked by hand: a push wrapped in timeout or chained after cd is not seen, which is why the prompt gives the exact command: internal/tasks/task.go line 397
-    # Pushed: internal/tasks/task.go; a done task shows Shipped only then: internal/tasks/summary_test.go TestOnlyATaskWithAFinishedApprovedPushIsPushed
-
-  @AGENT-23 @test
-  Scenario: Every push asks the user
-    # internal/policy/default_test.go TestTheDeveloperProfile
-    Given the deployer under developer
-    When it runs git push origin HEAD:dev, or a bare git push
-    Then each is asked, and the verdict for git push origin HEAD:dev names the rule "every push leaves this machine: you approve it"
-    # the rule named: internal/policy/default_test.go TestAVerdictNamesItsRule; not under test, checked by hand: the same rule for the bare git push
-    And the push runs only once the user approves, and the agent is told "you approved"
-    And the deployer's prompt names no push that the policy would allow without asking
-    # the rule: internal/policy/default.toml line 134; the wait: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
-    # the prompt check: internal/agents/prompts_policy_test.go TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits
-
-  @AGENT-24 @test
-  Scenario: A push the user does not answer is held for them, and the deployer told to carry on
-    # internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; "Don't retry": TestAnAskIsHeldBeforeTheDeadlineTheHookSent in the same file
-    Given the deployer asked to push and the user gave no answer before the hook's deadline
-    When the wait runs out
-    Then the agent is told no, with "the command is held for the user's approval. Don't retry it now"
-    And the action is held and undecided, the task is in Needs you, and 0 hook calls still wait on it
-    And the task's waiting line reads exactly "Waiting for you to approve the push to dev"
-    # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/engines/engine.go;
-    # the server answers 5 seconds before it: internal/hooks/handler.go replyMargin; the line: internal/tasks/waiting_test.go TestAHeldPushNamesItsBranch
-    # the test holds a curl command, which goes through the same hold as any ask
-
-  @AGENT-25 @test
-  Scenario: A late approval lets the same command through once, in the agent's next turn
-    # internal/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce
-    Given a held push the user approved after the turn moved on
-    When the coordinator is handed the command back and hands the deployer its next turn
-    Then exactly that command, from that agent, in that turn, runs once without asking, and git push origin HEAD:main does not use the pass
-    And the same push asked for again after that is asked about again
-    And a policy denial still denies it, another agent's identical request is asked, and a pass not used in that turn is gone
-    # TestAPassDoesntOverrideADenial, TestAPassIsOnlyForTheAgentThatAsked, TestAPassEndsWithTheAgentsNextTurn, TestALateDenialGivesNoPass in the same file;
-    # PassFor: internal/tasks/task.go
-
-  @AGENT-26 @test
-  Scenario: A ship the user chose needs no earlier review, and counts only once the push went through
-    # internal/coordinator/next_test.go TestYourShipTakesTheWorkAsItIs
-    Given the user moved the task to Shipping and the coordinator handed it to the deployer
-    When the deployer's turn starts
-    Then its brief adds "The user chose to ship this as it is, so no earlier review or test is needed", and that failing checks after the merge mean no push
-    And once an approved push finished in that turn, done is allowed with 0 reviews
-    And after a push that was denied, hung, or stopped by failed tests, done is refused with "the work isn't checked yet", and a change after the ship needs checking again
-    # YouChoseToShip: internal/coordinator/brief.go; TestYourShipTellsTheShipperToShipItAsItIs in the same file
-
-  @AGENT-27 @test
-  Scenario: The deployer reads the pushed commit's pipeline without asking
-    # internal/policy/default_test.go TestTheDeveloperReadsAPipeline
-    Given the deployer under developer, after its push
-    When it runs glab ci list --sha <hash> -F json, or gh run list --commit <hash> --json status,conclusion,url
-    Then each is allowed
-    And gh run view 123 -w, glab ci get -p 123 --with-variables, gh run rerun 123 and gh run watch 123 are asked
-    # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/agents/defaults/deployer.md line 9
-    # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/agents/defaults/deployer.md
-
-  # --- The other teams
-
-  @AGENT-28 @manual
-  Scenario: The Writing team researches, drafts, fact-checks and edits a piece
-    Given a task of the Writing team
-    When its agents take their turns
-    Then the editor writes brief.md and does not write the piece itself
-    And the researcher records every fact with its source in research/notes.md, invents 0 sources, and does not write the piece
-    And the writer drafts draft.md with every fact sourced or marked [NEEDS SOURCE: what], and commits it
-    And the fact-checker writes fact-check.md with a verdict per claim, does not rewrite the draft, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/writing/editor.md, researcher.md, writer.md, fact-checker.md
-    # Steps: give the Writing team a short article; read brief.md, research/notes.md, draft.md and fact-check.md on the branch,
-    # and check the fact-checker's report ends with a verdict.
-
-  @AGENT-29 @test
-  Scenario: The Writing team has one coordinator and three agents, the fact-checker checking the work
-    # internal/agents/agents_test.go TestTeamsComeFromTemplatesWithTheirOwnCoordinator
-    Given the Writing team added from its template
-    When the roster is read
-    Then its coordinator is the editor, and it has exactly 3 other agents, the fact-checker last
-    And a task that names no team still goes to the first team's coordinator, tech-lead
-    And added again, the team "Writing 2" has the coordinator editor-2: yes
-    # not under test, checked by hand: nothing the user has is renamed
-    # internal/agents/teams.go AddTeam, MadeFor
-
-  @AGENT-30 @manual
-  Scenario: The Research team frames a question, gathers evidence, analyses it reproducibly and challenges it
-    Given a task of the Research team
-    When its agents take their turns
-    Then the research-lead writes question.md and does not do the research itself
-    And the investigator records sources in sources.md and data in data/ as CSV with a README, and never changes raw data after recording it
-    And the analyst writes scripts in analysis/ that anyone can rerun, with uncertainty on every estimate, and SVG charts in analysis/charts/
-    And the critic reruns the analysis, writes review.md, changes nothing else, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/research/research-lead.md, investigator.md, analyst.md, critic.md
-    # Steps: give the Research team a question answerable from a CSV in the repo; read question.md, sources.md, analysis/ and
-    # review.md on the branch, rerun the scripts, and check the critic's report ends with a verdict.
-
-  @AGENT-31 @manual
-  Scenario: The Design team frames the problem, draws every state, writes the words and critiques it
-    Given a task of the Design team
-    When its agents take their turns
-    Then the product-lead writes spec.md with the problem in 1 sentence and a measure of success, and does not design it itself
-    And the product-designer writes flows.md and SVG wireframes in designs/ for every state, with text contrast at least 4.5:1 and targets at least 44 by 44 pixels
-    And the ux-writer writes the copy deck copy.md, naming every button with a verb and an object
-    And the design-critic reviews against the spec and WCAG 2.2 AA, writes critique.md with a severity per finding, changes nothing else, and ends with exactly 1 verdict line
-    # the prompts: internal/agents/defaults/design/product-lead.md, product-designer.md, ux-writer.md, design-critic.md
-    # Steps: give the Design team a small screen to design; read spec.md, flows.md, designs/, copy.md and critique.md on the
-    # branch, and check the critic's report ends with a verdict.
-
-  @AGENT-32 @test
+  @POLICY-23 @agent @test
   Scenario: The Visionaries read the board and change no code
     # internal/agents/prompts_policy_test.go TestTheVisionariesReadTheBoardAndChangeNothing
     Given each of the 5 Visionaries under read-mostly
@@ -359,18 +280,7 @@ Feature: The agents
     # not under test, checked by hand: every prompt of the team says it changes no code and commits nothing, its report is its work: the first line of each prompt below
     # the prompts: internal/agents/defaults/visionaries/visionary-lead.md, product-strategist.md, user-advocate.md, technologist.md, skeptic.md
 
-  @AGENT-33 @test
-  Scenario: The Visionaries' ideas land in Ideas from the lead's done decision, for the user to decide
-    # internal/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
-    Given the visionary-lead's done decision carries "ideas", each with a title, the problem, the proposal and a size of S, M or L
-    When the loop applies the decision
-    Then each idea is kept once, from that task and about its repo
-    And an idea with an empty title, a size "XL", a kind "story", from a task that does not exist, or from an agent not working on the task is refused
-    And only the user accepts or dismisses an idea, never an agent
-    # IdeasFormat and suggest: internal/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in internal/ideas/ideas_test.go;
-    # the skeptic's verdict closes the session: internal/agents/defaults/visionaries/skeptic.md
-
-  @AGENT-34 @test
+  @POLICY-24 @agent @test
   Scenario: The Networking checkers diagnose without asking, and any live change asks whoever runs it
     # internal/agents/prompts_policy_test.go TestTheNetworkingTeamDiagnosesAndAsksBeforeChanging
     Given network-verifier and network-security under network-diagnosis, and network-engineer under developer
@@ -379,7 +289,7 @@ Feature: The agents
     And ufw allow 443, an ip route add and systemctl restart nginx are asked for every agent of the team
     # "diagnoses the network": internal/policy/default.toml line 544; "changes live network state": line 515; the engineer's are asked by developer's otherwise = "ask", line 84
 
-  @AGENT-35 @test
+  @POLICY-25 @agent @test
   Scenario: The network-diagnosis profile prints no private key and takes no extra option
     # internal/policy/default_test.go TestTheNetworkDiagnosisProfile
     Given a checker under network-diagnosis
@@ -389,21 +299,7 @@ Feature: The agents
     # not under test, checked by hand: the rules, "never prints a private key" or "never touch secrets" for the denials, "network commands take no other options" for ping, and the profile's otherwise = "ask" for ss, since ss is not in that rule
     # the rules: internal/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541; otherwise = "ask": line 475
 
-  @AGENT-36 @manual
-  Scenario: Networking touches nothing live without the user's go-ahead
-    Given a task of the Networking team
-    When its agents take their turns
-    Then the lead's prompt says nothing live changes without the user's explicit go-ahead in this task, which the lead asks for only once the change has the exact commands, the effect, a check, a tested rollback and a way back in
-    And the engineer changes config in the repo and never a live machine's firewall, routes, VPN, DNS records or proxy
-    And the verifier and the security reviewer never change live state and cannot write files, so their evidence is their report, ending with exactly 1 verdict line
-    And the lead's prompt says the shipped policy allows everything, so these rules are the only guard until the user turns that line off
-    # the prompts: internal/agents/defaults/networking/network-lead.md, network-engineer.md, network-verifier.md, network-security.md
-    # Steps: give the Networking team a config change in a repo; check the engineer's commits touch only the repo, that its report
-    # proposes the live change with commands, check and rollback, and that the lead asks the user before any of it runs.
-
-  # --- Under the read-only and read-mostly profiles
-
-  @AGENT-37 @test
+  @POLICY-26 @agent @test
   Scenario: The judging profiles write no file from the shell
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -413,7 +309,7 @@ Feature: The agents
     And go test ./... > /dev/null and a redirect into Claude's scratch folder are allowed
     # the rule: internal/policy/default.toml lines 225, 360 and 503; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
-  @AGENT-38 @test
+  @POLICY-27 @agent @test
   Scenario: The judging profiles run nothing that changes files
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -423,7 +319,7 @@ Feature: The agents
     And cat, head, sed -n '1,5p' main.go, grep -r foo . and find . -name x are allowed
     # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest; cat: TestTheJudgingProfilesFollowCd (cd <scratch> && cat out.txt)
 
-  @AGENT-39 @test
+  @POLICY-28 @agent @test
   Scenario: The judging profiles never commit or change branches
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -433,7 +329,7 @@ Feature: The agents
     And git branch, git branch -a, git branch --show-current, git tag and git config --get user.name are allowed, as listing forms
     # the rule: internal/policy/default.toml lines 322, 463 and 648; the listing forms: lines 311 to 314; they are allowed in TestTheJudgingProfilesStillReadAndTest
 
-  @AGENT-40 @test
+  @POLICY-29 @agent @test
   Scenario: Under the judging profiles, go and the test and lint tools write no files
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -445,7 +341,7 @@ Feature: The agents
     # the rules: internal/policy/default.toml lines 243 and 254; the test and lint flags: TestTheJudgingProfilesCloseWhatTheReviewFound
     # the allowed forms: TestTheJudgingProfilesStillReadAndTest (go test, go vet, gofmt -l, npx eslint); npx jest --ci and pytest: TestTheJudgingProfilesStillRunTheirTests and TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
 
-  @AGENT-41 @test
+  @POLICY-30 @agent @test
   Scenario: Every spelling of a writing flag is denied
     # internal/policy/default_test.go TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -454,7 +350,7 @@ Feature: The agents
     And python3 -m pytest -q -k 'not slow' tests, npx jest --ci and npx vitest run --reporter=verbose are allowed
     # clusters matched one by one: internal/policy/default.toml lines 58 to 60
 
-  @AGENT-42 @test
+  @POLICY-31 @agent @test
   Scenario: The judging profiles run no tests from outside the workspace
     # internal/policy/default_test.go TestTheJudgingProfilesRunNoTestsFromOutside
     Given an agent under read-only, read-mostly or network-diagnosis, and a folder in Claude's scratch place
@@ -465,7 +361,7 @@ Feature: The agents
     And go test ./internal/policy/, npx jest --reporters=default,./tools/r.js and npx vitest run --config vitest.config.ts are allowed from the workspace, and the developer runs these from scratch too
     # the rule: internal/policy/default.toml lines 292, 433 and 618; TestTheJudgingProfilesStillRunTheirTests, TestOnlyTheJudgingProfilesAskAboutRunnersOutside
 
-  @AGENT-43 @test
+  @POLICY-32 @agent @test
   Scenario: The gate follows cd, pushd and popd when it judges a test runner
     # internal/policy/default_test.go TestTheJudgingProfilesFollowCd
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -475,7 +371,7 @@ Feature: The agents
     And cd internal/policy && go test . and (cd <scratch>); go test ./... are allowed
     # a relative path is counted from every folder a cd may have reached: TestARelativePathIsCountedFromWhereCdWent
 
-  @AGENT-44 @test
+  @POLICY-33 @agent @test
   Scenario: A flag that names a command is denied, and sed -n beyond its plain form asks
     # internal/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -487,7 +383,7 @@ Feature: The agents
     # the rules: internal/policy/default.toml lines 274 and 286; the plain sed -n forms: line 307; otherwise = "ask": line 200
     # npx vitest run --execArgv: TestTheJudgingProfilesRunNoTestsFromOutside; the rest: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
-  @AGENT-45 @test
+  @POLICY-34 @agent @test
   Scenario: Every value a variable may hold is judged
     # internal/policy/default_test.go TestEveryValueOfAVariableIsJudged
     Given an agent under read-only, read-mostly or network-diagnosis
@@ -497,7 +393,7 @@ Feature: The agents
     And for f in a b; do cat $f; done is allowed, and under developer for c in status 'push -f origin main'; do git $c; done is denied
     # a variable with several values is matched with each: internal/policy/default.toml lines 55 to 57; too many values: TestAVariableWithTooManyValuesIsUnknown
 
-  @AGENT-46 @test
+  @POLICY-35 @agent @test
   Scenario: Read-mostly also reads the task board
     # internal/policy/default_test.go TestTheReadMostlyProfile
     Given an agent under read-mostly
@@ -508,7 +404,29 @@ Feature: The agents
     And Edit on main.go, Write on ideas.md, git commit -am 'x' and cat .env are denied, and Edit on .agentry/knowledge.md is allowed
     # the rule: internal/policy/default.toml line 421
 
-  @AGENT-47 @test
+  # ---- Rules every agent meets -----------------------------------------------
+
+  @POLICY-36 @agent @test
+  Scenario: A push asks the user first
+    Given an agent under the developer profile, in its task's worktree
+    When the agent runs git push origin HEAD:dev
+    Then the user is asked before the push runs
+    And a push to main, or a force push, is denied
+    # PLAN.md T-013, T-033; README.md, The policy; internal/policy/default_test.go
+
+  @POLICY-37 @agent @test
+  Scenario: Every push asks the user
+    # internal/policy/default_test.go TestTheDeveloperProfile
+    Given the deployer under developer
+    When it runs git push origin HEAD:dev, or a bare git push
+    Then each is asked, and the verdict for git push origin HEAD:dev names the rule "every push leaves this machine: you approve it"
+    # the rule named: internal/policy/default_test.go TestAVerdictNamesItsRule; not under test, checked by hand: the same rule for the bare git push
+    And the push runs only once the user approves, and the agent is told "you approved"
+    And the deployer's prompt names no push that the policy would allow without asking
+    # the rule: internal/policy/default.toml line 134; the wait: internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser;
+    # the prompt check: internal/agents/prompts_policy_test.go TestTheDefaultPromptsOnlyAskForCommandsThePolicyPermits
+
+  @POLICY-38 @agent @test
   Scenario: Agentry's own files are off limits for every profile, and no policy file can change that
     # internal/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits
     Given an agent under any of the 6 profiles, allow-everything included
@@ -517,9 +435,7 @@ Feature: The agents
     And cat ~/.agentry/worktrees/task-1/*.go, ls ~, grep -rn TODO . and go test ./... are not refused as Agentry's own files
     # built in and not in the policy file: internal/policy/default.toml lines 14 to 15; the protected files: the log, the policy, the sign-in token and the TLS folder
 
-  # --- Rules every agent meets
-
-  @AGENT-48 @test
+  @POLICY-39 @agent @test
   Scenario: rm -rf is refused
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -530,7 +446,7 @@ Feature: The agents
     # not under test, checked by hand: the rule "never rm -rf" and every spelling it lists, -rf, -fr, -Rf, -fR, -r -f, -f -r and --recursive --force; under the judging profiles the rule is "runs nothing that changes files", so rm -rf is refused there too; the autonomous and allow-everything profiles have no rule against it
     # "never rm -rf": internal/policy/default.toml line 103; 'rm *' under the judging profiles: lines 234, 369 and 560; TestTheJudgingProfilesWriteNothingFromTheShell
 
-  @AGENT-49 @test
+  @POLICY-40 @agent @test
   Scenario: No agent pushes to a branch named main
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -540,7 +456,7 @@ Feature: The agents
     # not under test, checked by hand: the rule "agents never push to main", which also names master (internal/policy/default.toml line 110); under the judging profiles every git push denied by "never commits or changes branches", and under autonomous every git push asked
     # "agents never push to main": internal/policy/default.toml line 109; the loop: TestEveryValueOfAVariableIsJudged; autonomous: line 670
 
-  @AGENT-50 @test
+  @POLICY-41 @agent @test
   Scenario: No force push
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -549,7 +465,7 @@ Feature: The agents
     # not under test, checked by hand: the rule "never force push", which also matches a + before the ref, and the deployer's prompt saying never to force push or rewrite history (internal/agents/defaults/deployer.md line 10)
     # the rule: internal/policy/default.toml line 115; the prompt: internal/agents/defaults/deployer.md
 
-  @AGENT-51 @test
+  @POLICY-42 @agent @test
   Scenario: The Edit and Write tools work only inside the workspace
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -560,7 +476,7 @@ Feature: The agents
     # not under test, checked by hand: the rule "edits only inside the workspace", and that the judging profiles deny Edit and Write everywhere but .agentry/knowledge.md (internal/policy/default.toml lines 211 to 221)
     # the rule, where = "outside": internal/policy/default.toml line 127; scratch: line 88; MultiEdit and NotebookEdit are in the same rule; the judging profiles: TestTheReadOnlyProfile and TestTheReadMostlyProfile
 
-  @AGENT-52 @test
+  @POLICY-43 @agent @test
   Scenario: Never sudo
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -570,7 +486,7 @@ Feature: The agents
     # not under test, checked by hand: the rule also names su and doas, and is the developer profile's; autonomous has no such rule and allows anything on this machine
     # the rule: internal/policy/default.toml line 97; autonomous otherwise = "allow": line 660
 
-  @AGENT-53 @test
+  @POLICY-44 @agent @test
   Scenario: Never pipe the internet into a shell
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
@@ -580,7 +496,7 @@ Feature: The agents
     # not under test, checked by hand: the rules, "never pipe the internet into a shell", which also names bash, zsh and wget, and "reaches the internet", which asks for WebSearch too (internal/policy/default.toml line 148)
     # the rules: internal/policy/default.toml lines 121 and 146
 
-  @AGENT-54 @test
+  @POLICY-45 @agent @test
   Scenario: Secrets never reach an agent
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer, read-only, read-mostly, network-diagnosis or autonomous
@@ -594,11 +510,15 @@ Feature: The agents
     # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664
     # internal/policy/default_test.go; under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
 
-  @AGENT-55 @test
-  Scenario: A denial or an ask tells the agent which rule decided
-    # internal/policy/default_test.go TestAVerdictNamesItsRule
-    Given an agent whose profile is "", so the default profile developer applies
-    When it runs git push origin HEAD:dev
-    Then the verdict names the profile developer and the rule "every push leaves this machine: you approve it", with its why
-    # not under test, checked by hand: the agent is told "Agentry: developer: every push leaves this machine: you approve it" (internal/hooks/handler.go line 367)
-    # default_profile = "developer": internal/policy/default.toml line 75; the reason reaches the agent: internal/hooks/handler.go decide
+  @POLICY-46 @worker @test
+  Scenario: An agent on any machine never pushes to main, never force pushes, and every push asks the user
+    Given an agent with the developer profile
+    # internal/policy/default.toml profiles.developer.rules
+    When it runs git push to main, by name or by refspec, with or without -C
+    Then the policy denies it: yes
+    # not under test, checked by hand: master the same (internal/policy/default.toml line 111)
+    When it runs git push with -f or --force, before or after the branch
+    Then the policy denies it: yes
+    # not under test, checked by hand: a + refspec the same (internal/policy/default.toml line 117)
+    # internal/policy/default.toml "every push leaves this machine: you approve it": any other git push asks the user first
+    # internal/policy/default_test.go TestTheDeveloperProfile
