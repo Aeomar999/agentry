@@ -46,6 +46,7 @@ class ParseDuration(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 PY
+printf '__pycache__/\n' > $R/.gitignore
 git -C $R init -q -b main
 git -C $R -c user.name=setup -c user.email=setup@example.invalid add -A
 git -C $R -c user.name=setup -c user.email=setup@example.invalid commit -qm initial
