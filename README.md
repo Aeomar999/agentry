@@ -354,6 +354,8 @@ token = "..."
 
 ## Work on it
 
+What Agentry does is written down in [spec/](spec/README.md) as Given, When, Then scenarios: one file for each kind of user, and one for each quality, such as reliability and security. `spec/check` (or `make spec`) checks that every scenario has its ID, its check tag and a result that can be checked; it runs in `make test` and in CI. Agents build from the spec and audit against it.
+
 ```sh
 make test       # go vet, go test, and the UI's type and format checks
 make            # rebuild the UI, then the binary
