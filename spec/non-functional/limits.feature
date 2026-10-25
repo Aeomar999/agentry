@@ -133,7 +133,7 @@ Feature: Limits
     When the flags are parsed
     Then the first archives tasks done for exactly 720h
     And the second archives tasks done for exactly 48h
-    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go
+    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go TestServeParsesArchiveAfter
 
   @LIM-16 @test
   Scenario: With -archive-after=0 nothing is archived
@@ -141,34 +141,35 @@ Feature: Limits
     When the server starts
     Then no task is archived, however long it has been done
     And the log says "archiving is off (-archive-after=0)"
-    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go
+    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go TestServeArchivesOnlyWithArchiveAfter
 
   @LIM-17 @test
   Scenario: A negative -archive-after is refused at start
     Given the user runs agentry serve -archive-after=-1h
     When the flags are parsed
     Then the run exits 2 and says "-archive-after is 0 or above"
-    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go
+    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go TestServeParsesArchiveAfter
 
   @LIM-18 @test
   Scenario: The archiver runs at start and then every hour
     Given tasks done for more and for less than the age, one of them with a turn open, and an epic with a story still in the state
-    When the server starts
+    When the archiver starts
     Then one round runs at once, and one more every 60 minutes
-    And every done task older than the age is archived, in creation order
+    And every done task older than the age is archived
     And the task with an open turn is not archived in that round
     And the epic is not archived while any of its stories is still in the state
     And a task brought back is not archived again until the age has passed since it was brought back
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go
+    # not under test, checked by hand: a round takes the tasks in creation order (internal/archive/archive.go line 148)
+    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories and TestAnUnarchivedTaskWaitsTheAgeAgain; at the server's start: cmd/agentry/serve_test.go TestServeArchivesOnlyWithArchiveAfter
 
   @LIM-19 @test
-  Scenario: A request body is at most 1 MiB
-    Given a route that takes JSON, and a signed webhook route
+  Scenario: A signed webhook's request body is at most 1 MiB
+    Given a signed webhook route
     When a request's body is exactly 1,048,576 bytes, and another's is 1,048,577 bytes
     Then the body of 1,048,576 bytes is accepted
     And the body of 1,048,577 bytes is refused with HTTP 400
-    And the same cap of 1 MiB holds on the webhook route
-    # README.md, Features' settings and secrets; internal/web/features_api_test.go
+    # not under test, checked by hand: a route that takes JSON has the same cap, MaxBody = 1 << 20 (internal/httpapi/httpapi.go lines 23 and 28)
+    # README.md, Features' settings and secrets; internal/web/features_api_test.go TestASignedRouteTakesABodyOfExactlyMaxBody and TestASignedRouteRefusesAnOversizedBody
 
   @LIM-20 @manual
   Scenario: A shared file is at most 2 GiB
@@ -180,22 +181,22 @@ Feature: Limits
     # README.md, Use it; the cap is set in internal/sharedfiles/blobs.go
 
   @LIM-21 @test
-  Scenario: A task's events come 500 a page, at most 2,000
-    Given a task with 3,000 events
-    When the page asks for the task's events with no limit, with ?limit=2000, and with ?limit=2001 or ?limit=0
-    Then the page with no limit gets exactly 500
-    And the page with ?limit=2000 gets exactly 2,000
-    And ?limit=2001 and ?limit=0 are refused with HTTP 400 and "limit is from 1 to 2000"
-    And at most 100 ?type= filters are taken, the 101st refused with HTTP 400
-    # README.md, Use it; internal/web/events_api_test.go
+  Scenario: A task's events page takes a limit of at most 2,000
+    Given a task with events
+    When the page asks for the task's events with ?limit=2000, with ?limit=2001 or ?limit=0, and with 100 or 101 ?type= filters
+    Then ?limit=2000 is answered: yes
+    And ?limit=2001 and ?limit=0 are refused with HTTP 400
+    And 100 ?type= filters are taken, the 101st refused with HTTP 400
+    # not under test, checked by hand: a page with no limit holds at most 500 events (internal/web/events_api.go line 18), and the refusal says "limit is from 1 to 2000" (line 92)
+    # README.md, Use it; internal/web/events_api_test.go TestAnEventPageOfNoTaskOrWithBadBoundsIsRefused
 
   @LIM-22 @test
   Scenario: A live terminal is sized between 20 by 5 and 500 by 200
     Given a task's session with a viewer in control
     When the viewer in control asks for 9999 columns by 1 row
-    Then every viewer sees the session sized at 500 columns by 5 rows
-    And the bounds are 20 to 500 columns and 5 to 200 rows
-    # README.md, Use it; PLAN.md T-018; internal/terminal/terminal_test.go asserts the clamp to 500 by 5; the bounds are internal/terminal/viewers.go
+    Then the other viewer sees the session sized at 500 columns by 5 rows: yes
+    # not under test, checked by hand: the bounds are 20 to 500 columns and 5 to 200 rows (internal/terminal/viewers.go lines 117 and 118)
+    # README.md, Use it; PLAN.md T-018; internal/terminal/terminal_test.go TestAViewerResizesTheSession
 
   @LIM-23 @manual
   Scenario: A viewer too slow for the live terminal is disconnected
@@ -212,7 +213,7 @@ Feature: Limits
     Then its message is at most 3,993 bytes, sealed into a 4,096-byte record
     And a message of 3,994 bytes is refused as too long for a push
     And the push lives 86,400 seconds, 24 hours, at the push service
-    # README.md, Use it; internal/webpush/send_test.go
+    # README.md, Use it; internal/webpush/send_test.go TestAMessageTooLongForAPushIsRefused; the lifetime: TestAPushReachesThePushServiceAndOpensForTheBrowser
 
   @LIM-25 @test
   Scenario: Long text quoted into a brief is cut with a marker
@@ -220,7 +221,7 @@ Feature: Limits
     When it is cut
     Then it ends with " [...]", exactly once
     And text that fits is kept whole, with no marker
-    # README.md, How a task moves; internal/tasks/shorten_test.go
+    # README.md, How a task moves; internal/tasks/shorten_test.go TestShortenCutsBetweenCharacters
 
   @LIM-26 @manual
   Scenario: What a brief quotes is cut at a fixed size
@@ -247,21 +248,23 @@ Feature: Limits
     Given a turn is open and the watchdog ticks every second
     When the watchdog measures the turn
     Then a process not up 3 seconds after the start is an issue
-    And a prompt not echoed after 60 seconds puts the task in Needs you, asked to open its terminal and answer a question on screen such as whether to trust the repository
+    And a prompt not echoed after 60 seconds puts the task in Needs you, on a question that names trusting the repository
     And no event at all for 10 minutes is a stall, unless the turn waits for the user
     And one approved tool call with no result after 20 minutes is an issue
     And the same command requested 5 times in a row is an issue
-    # README.md, How a task moves; PLAN.md T-014; internal/watchdog/watchdog_test.go; internal/watchdog/repeat_test.go
+    # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73), the tests call Check with the clock moved on; the prompt's question says to open the task's terminal (internal/watchdog/watchdog.go lines 116 to 118)
+    # README.md, How a task moves; PLAN.md T-014; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace, TestAPromptThatNeverArrivesWaitsForYou, TestASilentTurnIsAStall, TestWaitingForYouIsNotAStall, TestAToolOpenTooLong and TestTheSameCommandRepeated
 
   @LIM-29 @test
-  Scenario: A worker join code works for an hour
+  Scenario: A worker join code works once, until it expires
     Given the user makes a worker join code
-    When a machine joins with it 59 minutes later, and another tries the same code
-    Then the first machine joins, exactly once
+    When a machine joins with it, and another tries the same code
+    Then the first machine joins: yes
     And the second try is refused as unknown, used or expired
-    And the code works for exactly 1 hour from when it was made
-    And the log keeps only the hash of the code and of the worker's credential
-    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go
+    And the code no longer works once its lifetime has passed: yes
+    And the join's event holds neither the code nor the worker's credential as they are: yes
+    # not under test, checked by hand: the lifetime, InviteLifetime, is 1 hour (internal/workers/workers.go line 28)
+    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode; the refusal's words: internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @LIM-30 @manual
   Scenario: A Claude Code invite works for 15 minutes
@@ -271,21 +274,25 @@ Feature: Limits
     And the invite works for exactly 15 minutes from when it was made
     # README.md, Use it from Claude Code; the lifetime is set in internal/connections/connections.go
 
-  @LIM-31 @test
-  Scenario: A worker is offline after 30 seconds of silence
+  @LIM-31 @manual
+  Scenario: A worker is offline after 20 seconds of silence
+    # internal/workerlink/server.go StatusEvery = 2 seconds, silentFor = 10 * StatusEvery
     Given a worker that reports its status every 2 seconds
-    When it is silent for 30 seconds
-    Then the worker is shown offline
-    And a worker heard from within 30 seconds is shown online
-    # README.md, Add machines; PLAN.md T-022; internal/machines/fleet_test.go
+    When it is silent for 20 seconds
+    Then the server hangs up its link and the worker is shown offline
+    And a worker heard from within 20 seconds is shown online
+    # Steps: on <worker>, run agentry worker run in a terminal and open the server's Workers page: the worker's Status reads online;
+    # pause the worker with kill -STOP <pid>, its pid from pgrep -f "agentry worker run": within about 22 seconds (the link is
+    # checked every 2 seconds) the Status reads offline; kill -CONT <pid> and the Status reads online again once the worker dials back
+    # README.md, Add machines; PLAN.md T-022
 
   @LIM-32 @test
-  Scenario: Each task's worktree gets a dev port from 7900 to 7999
-    Given tasks that get worktrees
-    When a worktree is made
-    Then its PORT is from 7900 to 7999, the lowest free one
-    And 100 ports are the most worktrees that can hold one at once
-    # README.md, Use it; PLAN.md T-038; internal/worktrees/worktree_test.go
+  Scenario: Each task's worktree gets the lowest free dev port from 7900
+    Given tasks that hold dev ports
+    When a port is leased for a new worktree
+    Then its PORT is the lowest from 7900 that no task holds and nothing listens on: yes
+    # not under test, checked by hand: the range ends at 7999, so 100 ports are the most worktrees that can hold one at once (internal/worktrees/ports.go lines 12 and 13)
+    # README.md, Use it; PLAN.md T-038; internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
 
   @LIM-33 @manual
   Scenario: A turn's start and a clone time out
@@ -307,6 +314,7 @@ Feature: Limits
   Scenario: A handoff lists at most 40 touched files by name
     Given a commit under review that touches 41 files, and another that touches 40
     When the coordinator briefs a checking agent with the handoff
-    Then for the 41 files the handoff names none of them: it says "It touches 41 files; list them with git diff --stat <base>..HEAD"
-    And for the 40 files every one is listed by name, exactly 40 lines
-    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/coordinator/brief.go; internal/coordinator/handoff_brief_test.go
+    Then for the 41 files the handoff does not list them one by one: it says "It touches <n> files; list them with `git diff --stat <base>..HEAD`.", n being 41
+    And for the 40 files they are listed one by one, the 40th by name: yes
+    # not under test, checked by hand: each file is one line (internal/coordinator/brief.go line 325)
+    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/coordinator/brief.go; internal/coordinator/handoff_brief_test.go TestAHandoffCapsALongFileList
