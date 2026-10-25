@@ -187,7 +187,7 @@ Feature: Usability
     # PLAN.md T-017; ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; organisms/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
 
   @USE-21 @test
-  Scenario: Tab in the Activity feed scrolls the focused element wholly into view
+  Scenario: Focus moved in a scroller that keeps focus in view is scrolled wholly into view
     Given a scroller that keeps focus in view, whose scroll padding keeps room for a 44 px band at its top and 48 px at its bottom, with links and a button in it and a code block folded to its first lines
     When focus moves to an element under the band, one past the bottom, one already in view, one taller than the room left, and one inside the folded code
     Then the element under the band ends just below it, the one past the bottom just above the padding, and the one already in view moves 0 px
@@ -202,15 +202,14 @@ Feature: Usability
     When its scroller is focused
     Then the scroller is a Tab stop with tabIndex 0, a region named "Activity" through aria-labelledby from the tab's heading, with no aria-label of its own
     And focusing the scroller itself moves it 0 px
-    And every agent chip in the bands is hidden from screen readers, aria-hidden true
-    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490); every agent chip in the bands is aria-hidden (ui/src/components/molecules/Avatar.tsx line 20): the test checks each chip it finds, not that it finds any
     # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 144-159; ui/src/components/organisms/ActivityFeed.test.tsx "makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", "names the scroller by the tab's heading, so the name has one source" and "hides chips from screen readers"
 
   @USE-23 @test
   Scenario: A folded entry keeps only what is visible in the Tab order
     Given a long entry folded to its first lines, with links above and below the cut
     When its Tab order is read, then Show all is pressed, then Show less
-    Then folded, Tab reaches only the links above the cut and then the Show all button
+    Then folded, the Tab order holds only the links above the cut and then the Show all button
     And Show all puts every link back in the Tab order, and Show less takes the ones below the cut out again, each element getting back the tabindex it had
     And the fold never uses the inert attribute
     # README.md, Use it, A task; ui/src/components/molecules/Fold.tsx lines 7, 93, 158; ui/src/components/molecules/Fold.test.tsx "folded, Tab reaches only the links above the cut, then Show all", "Show all opens every link, and Show less only the visible ones again", "keeps the tabindex an element had and gives it back" and "never uses inert" (lines 211-216)

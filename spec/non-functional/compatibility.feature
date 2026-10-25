@@ -58,7 +58,7 @@ Feature: Compatibility
     Then the last 2 requests the sh command sends carrying the code are the script at /worker/install.sh, then the agentry download
     And the 2 requests the PowerShell command sends carrying the code are the script at /worker/install.ps1, then the build for windows
     And with another CA's fingerprint in the command, 0 requests carrying the code are sent by either
-    # not under test, checked by hand: the scripts ask for the machine's own os and arch (internal/web/install.sh line 35, internal/web/install.ps1 line 42); the PowerShell test skips where pwsh or curl.exe is missing
+    # not under test, checked by hand: the scripts ask for the machine's own os and arch (internal/web/install.sh line 35, internal/web/install.ps1 line 42); the PowerShell test skips where pwsh or curl.exe is missing; so CI, in the golang image, never runs it
     # README.md, Add machines; PLAN.md T-022; internal/web/install_https_test.go TestThePinnedInstallCommandsRunInSh and TestThePinnedInstallCommandRunsInPowerShell
 
   @COMPAT-07 @manual
@@ -117,7 +117,7 @@ Feature: Compatibility
     Then the adapters' names and the rules' known engines are the same list, and adapters named claude and codex are found: yes
     And an agent with another engine is refused by the rules: yes
     # not under test, checked by hand: the list is claude and codex alone (internal/rules/agent_rules.go line 15), and the refusal says "unknown engine" (line 92)
-    # README.md, What you need (Codex works too); PLAN.md T-008; internal/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor; internal/rules/rules_test.go TestAgentRules
+    # README.md, What you need (Codex works too); PLAN.md T-008; internal/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor and TestParseHookGivesTheSameSignalsOnBothEngines; internal/rules/rules_test.go TestAgentRules
 
   @COMPAT-13 @test
   Scenario: Claude Code is started in never-ask mode with Agentry's own settings file

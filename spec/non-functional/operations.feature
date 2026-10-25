@@ -66,20 +66,20 @@ Feature: Operations
   # Start Agentry and Stop Agentry
 
   @OPS-05 @test
-  Scenario: Start Agentry prints one signed-in link per address and opens this computer's
+  Scenario: Opening a running server's page prints one signed-in link per address and opens this computer's
     # packaging/files/start-unix.sh and start-windows.cmd run agentry open
     # cmd/agentry/open.go runOpen: a server already running is opened, not started again; startServer writes serve.log and serve.pid in the data folder
     # cmd/agentry/open.go runOpen waits up to 30 seconds, checking every 200 ms, for the new server to answer
     Given a server listening on every interface on port 7901, with a public address set
-    When agentry open finds it running and opens its page
+    When the page is opened for the running server
     Then it prints 1 link for this computer, at localhost, carrying the page's token
     And it prints 1 link for the public address and 1 for each of this machine's network addresses, each carrying the token
     And it opens exactly 1 of them in the browser, this computer's
     And it says the window can be closed and Agentry keeps running: yes
     Given a server listening on this computer only
-    When agentry open finds it running and opens its page
+    When the page is opened for the running server
     Then it prints only this computer's link: yes
-    # not under test, checked by hand: with no server answering, agentry open starts one in the background (cmd/agentry/open.go line 69)
+    # not under test, checked by hand: with no server answering, agentry open starts one in the background (cmd/agentry/open.go line 69); agentry open opens the page this way when it finds a server running (cmd/agentry/open.go line 57)
     # README.md, What Start Agentry does; cmd/agentry/open_test.go TestOpenPagePrintsEveryLink and TestOpenPageOnThisComputerOnly; 1 link per network address: cmd/agentry/serve_test.go TestNetworkURLs
 
   @OPS-06 @test
@@ -167,9 +167,9 @@ Feature: Operations
     And it prints links for network addresses: no, only this computer's
     # The tests give the URL functions an address; none starts serve with its default -addr (cmd/agentry/serve.go line 97): cmd/agentry/serve_test.go TestLocalURL, TestLocalhostURL and TestNetworkURLs
     # Steps:
-    # 1. Run agentry serve with no -addr and read the links it prints: one at localhost on port 7800 and one per network address.
+    # 1. Run agentry serve with no -addr and read what it prints: "Agentry is running. Open http://127.0.0.1:7800/?token=..." and one "From another machine:" line per network address.
     # 2. From <another machine>, open http://<network address>:7800: the page answers.
-    # 3. Stop it, run agentry serve -addr 127.0.0.1:7800: it prints only this computer's link, and <another machine> cannot open the page.
+    # 3. Stop it, run agentry serve -addr 127.0.0.1:7800: it prints only the 127.0.0.1 link, with no "From another machine:" line, and <another machine> cannot open the page.
     # README.md, From the source
 
   @OPS-11 @manual
@@ -323,12 +323,13 @@ Feature: Operations
   @OPS-19 @test
   Scenario: Push notifications need an https public address and a subscription from the browser
     # internal/webpush/webpush.go File = push.json beside the log
-    Given a server with an https -public-url
+    Given a server whose public address is an https address
     When a browser posts its push subscription
-    Then it is answered 200 and kept in push.json, with the VAPID key pair, beside the log and never in it: yes
+    Then it is answered 200 and kept in push.json, with the VAPID key pair, and never in the log: yes
     And it is still there after a restart: yes
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
+    # not under test, checked by hand: serve sets the public address from -public-url (cmd/agentry/serve.go lines 98 and 328) and keeps push.json in the data folder, beside the log (line 207)
     # README.md, From the source; internal/web/push_api_test.go TestAPushSubscriptionSurvivesARestart, TestPushDataStaysOutOfTheLog and TestSubscribingTwiceAndUnsubscribing; push.json and its keys: internal/webpush/webpush_test.go TestASubscriptionAndTheKeysSurviveARestart
 
   @OPS-38 @test
