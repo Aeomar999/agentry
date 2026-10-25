@@ -456,3 +456,544 @@ Feature: The user at the page
     When task-8 is done
     Then task-9 starts exactly once, from dev
     And its card no longer shows the waiting line
+
+  @USER-42 @manual
+  Scenario: A task's page: the header, the facts under it and its 2 buttons
+    # ui/src/pages/TaskPage.tsx lines 282 to 296, the header; lines 360 to 391, the facts
+    # README.md, Use it, "A task"
+    Given task-5 is open, with a worktree and the engineer at work
+    When the page is shown
+    Then the header shows the title, the status badge, the id task-5, the repo and the worktree's branch
+    And exactly 3 header buttons are shown: Workspace, Terminal and "Redact a text"
+    And the facts read Agent, Tokens, "Turns since your answer", Actions, Machine and "Last active", each shown once
+    Given a task with no worktree yet
+    Then the Workspace button is hidden and the header reads "setting up the worktree"
+    Given a task with no agent at work
+    Then the Terminal button is hidden and the Agent fact reads "none"
+
+  @USER-43 @manual
+  Scenario: The tabs, exactly as rendered, and the one an epic adds
+    # ui/src/pages/TaskPage.tsx lines 436 to 449
+    Given task-5 is open with 2 shared files and 4 handoffs
+    When the tabs are shown
+    Then exactly 8 tabs read, in order: Coordinator, Activity, Terminal, Files, Handoffs, Actions, Events, Details
+    And Files carries the count 2 and Handoffs the count 4
+    And the address carries ?tab=<id>, so a link opens the same tab
+    Given the coordinator has asked a question
+    Then the first tab reads exactly "Coordinator · asks you"
+    Given an epic with 3 stories
+    Then a Stories tab with the count 3 is shown first, 9 tabs in all, and it opens by default
+
+  @USER-44 @manual
+  Scenario: The plan down the left follows the agent's plan live
+    # ui/src/components/organisms/PlanRail.tsx lines 10 to 14 and 65 to 137; ui/src/lib/plan.ts readPlan
+    # README.md, Use it, "A task": each agent writes its plan before it starts and ticks it off
+    Given task-5 with no turn yet
+    Then the rail reads "No plan yet. Each agent writes its plan before it starts, and it shows here as it works."
+    Given the coordinator wrote a plan and the engineer is working through a 4 step checklist with 1 step ticked
+    When the rail is shown
+    Then the coordinator's plan is shown under the heading Task, and the engineer's under Agents, with the count "1/4"
+    And the first unticked step wears the pulsing mark "in progress", exactly 1 step at a time
+    When the engineer ticks a step in its plan file
+    Then the count reads "2/4" without a reload
+    When the engineer's turn ends with every step ticked
+    Then the count reads "4/4" and the plan moves under Earlier, greyed
+
+  @USER-45 @test
+  Scenario: The path above the tabs: engineer › reviewer › tester, the coordinator left out
+    # ui/src/components/molecules/HandoffPath.test.tsx "counts an agent's turns in a row in muted ink, not faint" and "hides its chevrons from screen readers"
+    # ui/src/components/molecules/HandoffPath.tsx lines 31 to 37, the stages; lines 74 to 80, done
+    Given turns by the coordinator, the engineer twice in a row, then the reviewer
+    When the path is shown
+    Then the coordinator is not a step: exactly 2 steps are shown, engineer then reviewer
+    And the engineer's step carries the count "×2", for its 2 turns in a row
+    And the chevrons between steps are hidden from screen readers
+    Given the task is done
+    Then the path ends in exactly 1 more step, "done"
+
+  @USER-46 @test
+  Scenario: The tokens and turns under the header, with the pencil
+    # ui/src/pages/TaskPage.test.tsx "can change its budget and max turns while it isn't done" and "shows its tokens and turns, and changes neither"
+    # ui/src/components/organisms/LimitEditor.tsx lines 36 to 52; the lists are @USER-06's, from ui/src/lib/limits.ts lines 26 and 33
+    Given a working task with a budget of 5000 tokens, 1200 used, and 8 max turns
+    When the facts are shown
+    Then the Tokens fact and the "Turns since your answer" fact are shown
+    And a pencil "Change the budget" and a pencil "Change the max turns" are shown, 2 pencils
+    Given the same task done and archived
+    Then the 2 facts are still shown and no pencil is shown
+
+  @USER-47 @test
+  Scenario: A message to the coordinator stops the turn in progress, and its reply says what it changed
+    # internal/web/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
+    # internal/web/chat_api.go lines 55 to 63
+    Given the engineer's turn is in progress on task-1
+    When the user sends "Use Redis, not memory." in the Coordinator tab
+    Then the engineer's turn is stopped, not failed: 0 issues in a row
+    And the trail ends with exactly 2 steps: the user's message, then a step to the coordinator saying the engineer stopped so it can carry on
+    And the coordinator is the 1 agent next
+    When the coordinator hands the work back saying "Switched to Redis."
+    Then the trail shows "Switched to Redis." to the user, then exactly 1 handoff to the engineer
+    Given no turn is in progress
+    When the user sends "And keep it simple."
+    Then the trail's last step is exactly the message
+
+  @USER-48 @manual
+  Scenario: The chat's field, its status line and the message it refuses
+    # ui/src/components/organisms/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
+    # a blank message: internal/web/chat_api.go lines 27 to 30
+    Given task-5 is open on the Coordinator tab while the engineer works
+    Then the status under the coordinator's name reads exactly "engineer is working on it"
+    And the hint reads exactly "Sending pauses engineer so the coordinator reads it now; engineer's work and plan carry on after."
+    And exactly 3 suggestions are shown: "Where are we?", "What's left before it's done?" and "Wrap up what's done and finish."
+    When the user presses Enter in the field "Message tech-lead"
+    Then the message is sent once, and Shift+Enter adds a line instead of sending
+    When a message of only spaces is sent
+    Then it is refused with 400 "say something"
+    Given the coordinator's turn is in progress
+    Then the status reads exactly "Thinking…" and the hint "Sending makes the coordinator decide again with what you said."
+
+  @USER-49 @test
+  Scenario: Activity lists everything that happened, newest first, under bands that name the author
+    # ui/src/components/organisms/ActivityFeed.test.tsx "names every band's author as copy.md says, newest first", "narrows to the turn from its band, and from its continued band" and "narrowed, the band is the turn's heading alone, with no Show only"
+    # ui/src/components/molecules/AuthorBand.tsx lines 12 to 27
+    Given a task with turns by the coordinator, the engineer on another machine and the reviewer, with messages from the user between them
+    When the Activity tab is shown
+    Then the bands read newest first: the reviewer's running turn is the 1 at the top and the user's first message the 1 at the bottom
+    And each turn's band names the agent, its team, the turn and its status, such as "engineer, Software team, turn-2, on <machine>, ended"
+    And a run of the user's rows is banded exactly "you", and Agentry's own rows exactly "Agentry"
+    When the user clicks a turn's band
+    Then only that turn's rows are shown, exactly 1 band, with no "Show only this turn" on it
+
+  @USER-50 @test
+  Scenario: Activity that cannot be read offers Try again
+    # ui/src/components/organisms/ActivityFeed.retry.test.tsx "a failed read, then Try again, then the feed, with focus on it and no other read" and "a retry that fails again shows the alert again; two quick clicks read once"
+    # ui/src/components/organisms/ActivityFeed.tsx lines 546 to 565
+    Given the task's events answer 502 Bad Gateway
+    When the Activity tab is shown
+    Then an alert "Couldn't load the activity" with the server's words and a "Try again" button is shown
+    When the user clicks "Try again" twice at once
+    Then exactly 1 read is made, the alert is hidden and "Loading activity…" is shown
+    And the focus is kept on the feed, not dropped on the page
+    When the read answers
+    Then the rows are shown and the feed is no longer busy
+
+  @USER-51 @test
+  Scenario: Events are read a page at a time, and Load earlier reads the page before
+    # internal/web/events_api_test.go TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
+    # ui/src/components/organisms/ActivityFeed.test.tsx "puts the way to read earlier events under the oldest row, in the scroller"
+    # 500 events in a page, 2000 at most: internal/web/events_api.go lines 18 and 19
+    Given a task with 7 events, a refused proposal among them
+    When a page of 3 is read
+    Then exactly 3 events come back and the page says more: yes
+    When the page before the newest is read with limit 3
+    Then the last 3 events come back, newest included, and more: yes
+    When every event is read
+    Then all 7 come back, the refusal among them, and more: no
+    And on the page the "Load earlier" button is shown under the oldest row, in the scroller, only while more lie before it
+
+  @USER-52 @test
+  Scenario: The live terminal: everyone watches, only the one in control types
+    # internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
+    # the page's words for the seats, Watching, "You have control: typing goes to the session" and "Session ended", and its buttons "Take control" and "Hand back": ui/src/components/organisms/TerminalView.tsx lines 18 to 24 and 108 to 116
+    # the route: internal/web/server.go line 181
+    Given the engineer's session is running and 2 viewers watch its terminal
+    When a viewer types while only watching
+    Then the keys are dropped: 0 of them reach the session
+    When the first viewer clicks "Take control"
+    Then that viewer is the 1 in control, and its keys reach the session
+    When the second viewer asks to take control
+    Then it is refused: exactly 1 viewer has control at a time
+    When the session ends
+    Then every viewer is disconnected
+
+  @USER-53 @test
+  Scenario: Shared files: add one, download it, take it away
+    # internal/web/api_test.go TestYouShareFilesWithATask
+    # internal/web/shared_api.go lines 40 to 91
+    Given task-1 with no shared files
+    When the user shares "data/sales.csv" holding 8 bytes
+    Then the list shows exactly 1 file, "data/sales.csv", size 8, by "you"
+    And the task's detail lists it under shared, 1 file
+    When the user downloads it
+    Then the body is exactly the 8 bytes shared
+    When a file named "../escape" is shared
+    Then it is refused with 400
+    When the user takes "data/sales.csv" away
+    Then the list is empty
+
+  @USER-54 @manual
+  Scenario: The Files tab drops files in, up to 2 GB each, and a story also has its epic's files
+    # ui/src/components/organisms/SharedFiles.tsx lines 105 to 147
+    # 2 GB: internal/sharedfiles/blobs.go lines 22 and 25
+    # a story's epic's files, in epic/: internal/sharedfiles/folder.go line 28, internal/coordinator/files.go line 138
+    Given task-5's Files tab is open with no files
+    Then "No shared files" is shown with "Drop files here to share them with the task's agents. What they leave in .agentry/files shows here too."
+    When the user drops 2 files on the tab
+    Then a toast "Shared 2 with task-5" with "The next agent finds them in .agentry/files." is shown once
+    And each row shows the file, its size, "you" and a Download link and a "Stop sharing it" button
+    When a file over 2 GB is shared
+    Then it is refused with "a shared file is at most 2 GB" and the row is not added
+    Given a story of epic-7, and epic-7 has 1 shared file
+    Then the story's worktree has that file under .agentry/files/epic, to read only
+
+  @USER-55 @test
+  Scenario: Handoffs shows each handoff as a card: who passed it to whom, and the turn it led to
+    # ui/src/components/organisms/HandoffTimeline.test.tsx "draws each step as an article named by who passed it to whom, and when", "says Led to with the facts of an ended turn" and "folds a brief at 8 lines, and reports and your messages at 10"
+    # 8 and 10 lines: ui/src/components/organisms/HandoffTimeline.tsx lines 35 and 36
+    Given a task whose coordinator handed a brief to the engineer, whose turn-4 ended after 48 minutes with 14 actions and 210k tokens
+    When the Handoffs tab is shown
+    Then each step is an article named "<from> to <to>, <time>", newest first
+    And the card's footer reads exactly "Led to turn-4 · engineer · 48m 00s · 14 actions · 210k tokens · Activity" and opens that turn's activity
+    And a brief folds at exactly 8 lines, a report or the user's message at 10, until Show all
+
+  @USER-56 @manual
+  Scenario: Actions and Events list the raw records, newest first, and the empty tabs say so
+    # ui/src/pages/TaskPage.tsx lines 70 to 113, the columns; lines 455 to 536, the tabs
+    Given task-5 with 12 actions, 1 of them waiting for approval
+    When the Actions tab is shown
+    Then exactly 6 columns read Time, Turn, Agent, Tool, Command, Decision, the newest action first
+    And the Actions fact reads 12 with "1 waiting" beside it
+    When the user clicks an action's row
+    Then the Activity tab opens narrowed to its turn with that row picked out, exactly 1 row marked
+    When the Events tab is shown
+    Then exactly 5 columns read #, Time, Type, Actor, Data, the newest event first
+    Given a task with no actions and no handoff yet
+    Then "No actions yet" is shown with "Every tool call an agent makes shows here with the policy's decision."
+    And "No handoffs yet" is shown with "When the coordinator hands the task to an agent, the brief shows here."
+
+  @USER-57 @test
+  Scenario: Details: the id, repo, epic, budget and turns, each with its control while the task is live
+    # ui/src/pages/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
+    # ui/src/pages/TaskPage.tsx lines 540 to 575
+    Given a live task's Details tab
+    Then a Change button is shown on the Repo row and a list named Epic is shown on the Epic row
+    Given a story of task-9
+    Then the header reads "story of epic-9" and the link goes to exactly /tasks/task-9
+    Given an epic
+    Then its id is shown as epic-1 in the header and in Details, 2 times, and never as task-1
+    And the erase dialog is titled "Erase epic-1 for good?"
+
+  @USER-58 @manual
+  Scenario: Change repo moves the task between turns, and the Epic list files it
+    # ui/src/pages/TaskPage.tsx lines 620 to 665, RepoEditor; internal/web/api.go lines 62 to 72
+    # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/web/epics_api.go lines 67 and 73
+    Given a live task's Details tab
+    When the user clicks Change on the Repo row
+    Then a field with the current repo is shown, and "Move the task" is disabled until the path differs
+    When the user enters a path that is not a repository
+    Then the move is refused with 400 and a toast "The task didn't move" is shown
+    When the user enters another repository and clicks "Move the task"
+    Then a toast "The task moved repos" with "Its worktree is made again there before the next turn." is shown once
+    And while a turn is in progress the row reads exactly "moves to <repo> when this turn ends"
+    When the user opens the Epic list
+    Then it lists "No epic" and only the epics not done, each as "epic-N · <title>"
+    When the task is filed under a done epic through the route
+    Then it is refused with 409 "is done; reopen it to add stories"
+
+  @USER-59 @test
+  Scenario: Erase this task asks first, and shows what is left afterwards
+    # ui/src/pages/TaskPage.test.tsx "asks first, saying nothing undoes it and what goes, and erases nothing until you say so" and "once erased, shows the task erased with the time, what may be left, and the note on backups"
+    # ui/src/components/organisms/EraseTask.tsx lines 59 to 83; internal/web/erase_api.go lines 46 to 102
+    Given task-1's Details tab, with "Erase this task" at the bottom
+    When the user clicks "Erase this task…"
+    Then a dialog "Erase task-1 for good?" is shown reading "Nothing undoes this."
+    And it lists what goes: every row of its history, its archive, "the shared files no other task names" and the copies "in its epic and in the task that asked for it"
+    And nothing is erased yet: 0 calls
+    When the user clicks Keep
+    Then the dialog is hidden and nothing is erased
+    When the user types "asked to" in "Why, for the log (optional)" and clicks "Erase for good"
+    Then exactly 1 erasure is sent, with the reason "asked to"
+    And the page reads "task-1 was erased at <time>", lists each warning, and says backups made before then still hold it
+
+  @USER-60 @test
+  Scenario: An epic with stories is not erased, and an erased task is gone from every route
+    # internal/web/erase_test.go TestAnEpicWithStoriesIsntErased and TestTheRoutesOnAnErasedTaskSayItIsGone
+    # ui/src/pages/TaskPage.test.tsx "read again, an erased task shows the server's 410 words, not that there is no such task"
+    # internal/web/erase_api.go lines 110 to 137 and 355 to 361
+    Given epic task-3 with the live story task-2
+    When the user erases task-3
+    Then it is refused with 409 "task-3 has stories (task-2); erase or move them out of the epic first"
+    Given task-2 archived instead
+    Then the refusal adds ", and reopen an archived one (task-2) to move it out"
+    Given both archived, or task-2 moved out or erased
+    Then task-3 is erased
+    When any route of an erased task-2 is called: a move, a limit, its repo, its epic, its files, its labels, an answer, an approval
+    Then each answers 410 "task-2 was erased on <date>", never 404
+    And the page reads exactly those words, not "No task task-2"
+
+  @USER-61 @test
+  Scenario: Redact a text counts first, then redacts, and says what is left
+    # ui/src/components/organisms/RedactText.test.tsx "shows the count first, redacts only once you say yes, then what it did and the note on backups"
+    # ui/src/pages/TaskPage.test.tsx "asks about the text marked on the page, in %s"
+    # internal/web/redact_api.go lines 37 to 68
+    Given the user marked "sk-live-0123456789" on task-1's page
+    When the user clicks "Redact a text" in the header
+    Then a dialog "Redact a text in task-1" is shown and "The text to take out" holds exactly the marked text
+    When the user gives the reason "pasted a key" and asks for the count
+    Then "3 rows of task-1 hold this text." is shown with "Nothing undoes this.", and 0 rows are redacted yet
+    When the user clicks "Redact 3 rows"
+    Then exactly 3 rows are redacted, with the reason "pasted a key"
+    And "Redacted 3 rows of task-1 at <time>." is shown, and backups made before then still hold the text
+
+  @USER-62 @test
+  Scenario: What redacting refuses, and a count gone stale
+    # ui/src/components/organisms/RedactText.test.tsx "shows a refusal in the server's words, and redacts nothing" and "a row written since the count is refused 409, counted again and asked again with the new count"
+    # internal/web/redact_api_test.go TestARedactionWithAStaleCountIsRefused and TestARefusedRedactionWritesNothing
+    Given the text to redact is a number in a row's JSON
+    When the user asks for the count
+    Then "It can't be redacted: <the server's reason>" is shown and 0 rows are redacted
+    Given 1 row held the text when it was counted, and a message holding it arrived since
+    When the user clicks "Redact 1 row"
+    Then the redaction is refused with 409 "2 rows hold this text now, not 1: count them again", and nothing is written
+    And the page counts again and asks again with "Redact 2 rows"
+
+  @USER-63 @test
+  Scenario: Needs you: approve or deny an action the policy held
+    # internal/web/api_test.go TestApproveOnlyWhatWasAsked
+    # the panel "Needs you", reading "engineer asks to run Bash:" with the command, Approve and Deny: ui/src/components/organisms/NeedsYouPanel.tsx lines 77 to 99
+    # the routes: internal/web/server.go lines 121 and 122
+    Given the engineer asked to run "git push origin HEAD:dev" and the policy asked the user
+    When the task is read
+    Then its needsYou reads exactly "Waiting for you to approve the push to dev" and its approvals list exactly 1 action
+    When the user clicks Approve
+    Then the approval is recorded with 200
+    When the same action is denied afterwards
+    Then it is refused with 409 "already approved"
+
+  @USER-64 @test
+  Scenario: An approval nobody answered in time is held, and stays open for the user
+    # internal/web/held_approval_test.go TestATimedOutApprovalStaysOpenUntilYouAnswer
+    # the panel's line "no answer came in time, so engineer was told no and carried on": ui/src/components/organisms/NeedsYouPanel.tsx lines 83 to 88; its toast "Approved: back to the coordinator": line 67
+    Given the engineer's hook gave up waiting for an answer on "git push origin HEAD:dev"
+    When the wait runs out
+    Then the action is held: the agent was told no and carried on, and the task still needs you
+    And Questions lists exactly 1 approval, held, with the full command
+    When the user approves it late
+    Then the action is recorded approved and the coordinator is handed the command back, once
+    And Questions is empty
+
+  @USER-65 @test
+  Scenario: Questions in the dock gathers what waits for the user, oldest first
+    # internal/web/api_test.go TestQuestionsGatherWhatWaitsForYou
+    # Ctrl+J: ui/src/lib/shortcuts.ts line 16; the tab "Questions N": ui/src/components/organisms/TerminalDock.tsx line 57
+    # oldest first: internal/web/questions_api.go line 54; the 5 kinds, labelled Approve, Question, Budget, "Max turns" and Waiting: ui/src/components/organisms/QuestionsPanel.tsx lines 20 to 26
+    Given task-1's coordinator asked "Which layout?" with 2 options and a page, and task-2's policy asks about "git push"
+    When the user presses Ctrl+J and opens Questions
+    Then exactly 2 questions are listed, the older first
+    And the first has kind question, the text "Which layout?", exactly 2 options and the page
+    And the second has kind approval, its action, the command "git push" and the rule "every push asks"
+
+  @USER-66 @manual
+  Scenario: Answering a question with options, and with the page the coordinator made
+    # ui/src/components/organisms/QuestionsPanel.tsx lines 102 to 136; ui/src/components/organisms/NeedsYouPanel.tsx lines 111 to 157
+    # the page's answer is cut at 4000 characters: ui/src/components/molecules/QuestionPage.tsx line 75; its frame 240 px to 75% of the window: line 76; sandbox allow-scripts only: line 86
+    # a limit's stop: ui/src/components/organisms/NeedsYouPanel.tsx lines 208 to 220; its wrap-up answer: line 198
+    Given a question with the options Tabs and "One page", and a page
+    When the user opens it in Questions
+    Then exactly 2 option buttons are shown, the field "Your answer goes to the coordinator", and Answer
+    And "The coordinator made a page for this question." is shown over the page, with Expand
+    When the user clicks an option
+    Then that 1 answer is sent, and a toast "Answer sent to the coordinator" is shown once
+    When the page calls answer("Tabs, with a sidebar")
+    Then the field is filled with it and "The page filled in your answer below. Check it, then send it." is shown; nothing is sent yet
+    And a text over 4000 characters is cut at 4000
+    Given the chat on the task's page
+    Then the question's card is shown reading "Asks you" with "Answer in Questions · it made a page for this", and opens the dock
+    Given a task stopped at its budget or its turn limit
+    Then its question offers exactly 3 choices: "Raise the budget" or "Raise the turn limit", "Make it unlimited" and "Wrap up"
+    When the user clicks "Wrap up"
+    Then exactly 1 answer is sent, "Stop here: wrap the task up with what is done, and say what is left."
+
+  @USER-67 @test
+  Scenario: Raising the budget or the turn limit while stopped at it is the answer
+    # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
+    # internal/web/api.go lines 222 to 275; internal/tasks/task.go lines 145 to 163, StoppedAt
+    Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
+    When the user sets the budget to 1,000,000
+    Then the reply is exactly {"answered":true,"budget":1000000}
+    And the task is working again and the coordinator read "I raised the budget to 1M tokens. Carry on."
+    When the user makes another such task's budget unlimited
+    Then it carries on with "I made the budget unlimited. Carry on." and a budget of 0
+    Given task-2 stopped at its 2 turns, with 2 had
+    When the user sets the turn limit to 2
+    Then the reply says answered: false, the limit is kept at 2, and the task still needs you
+    When the user sets it to 5
+    Then the task is working again and the coordinator read "I raised the turn limit to 5. Carry on."
+
+  @USER-68 @test
+  Scenario: A limit answers only its own stop, and a done task's limits stay
+    # internal/web/api_test.go TestALimitAnswersOnlyItsOwnStop, TestADoneTasksLimitsStay and TestALimitIsKeptThoughItsAnswerIsRefused
+    Given task-1 stopped at its turn limit, over its budget too
+    When the user raises the budget
+    Then the budget is kept and the task still needs you: the turn stop is not answered
+    When the user raises the turn limit
+    Then the task is working again, no longer waiting
+    Given the coordinator's own question, not a limit's stop
+    When the user changes a limit
+    Then the task still needs you and the question is not answered
+    Given a done epic with a budget of 200,000 and 5 turns
+    When the user changes either limit
+    Then it is refused with 409 "is done" and both limits are kept
+    Given the rules refuse the answer, as the stop was answered first
+    Then the limit is kept with 200 and the reply names the refusal
+
+  @USER-69 @test
+  Scenario: The stop's question names its limit and the numbers it stopped at
+    # internal/web/api_test.go TestQuestionsShowWhichLimitStopped
+    Given task-1 stopped at its 2 turns, task-2 at its budget of 200,000 with 210,000 used, and task-3 asked to copy a file
+    When Questions is read
+    Then task-1's question has kind turns, with exactly 2 of 2 turns
+    And task-2's has kind budget, with exactly 210,000 tokens used of 200,000
+    And task-3's has kind question and no limit, and its stoppedAt is empty
+
+  @USER-70 @test
+  Scenario: An epic with every story done asks once, and waits quietly if left open
+    # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
+    # the question with the option "Close the epic": internal/coordinator/loop.go lines 352 to 356
+    Given an epic whose 1 story is done
+    When its coordinator finishes
+    Then the epic asks the user exactly once whether to close it
+    When the user answers "Leave it open, there may be more."
+    Then the epic stays open and working, asked exactly 1 time, with no question waiting
+    And nothing more runs: labelling it starts no turn
+    When the user adds a story and it is done
+    Then the epic hears it and asks again: asked exactly 2 times
+
+  @USER-71 @test
+  Scenario: Close the epic from its page, and one Visionaries session follows
+    # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
+    # internal/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
+    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 417 to 426
+    Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
+    Then the epic is not in Questions
+    When the user clicks "Close the epic"
+    Then the epic is done with its closing summary, and its closing is empty
+    When Claude Code's desk sends "Close the epic" instead
+    Then it is refused with 403 "that is approved on the page"
+    Given a Visionaries team and the setting on
+    When the user closes an epic
+    Then exactly 1 Visionaries session starts, titled "Follow-ups after <epic title>", and a second pass starts no other
+
+  @USER-72 @manual
+  Scenario: A done task's page: what it still allows and what it no longer does
+    # ui/src/pages/TaskPage.tsx lines 410 to 418, the Done banner; line 589, the worktree; lines 500 to 508, the terminal
+    # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/web/chat_api.go lines 36 to 45
+    # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 278
+    Given task-5 is done, moved there by the user
+    When the page is shown
+    Then the banner reads exactly "Done · Moved to Done by you" with the summary, or "Shipped" if an agent pushed its work
+    And the path ends in "done", and the Terminal tab reads "No agent is working on this task"
+    And the Tokens and Turns facts show with no pencil, and Details' Budget and Max turns show with no Change
+    And the Worktree panel reads exactly "Removed when the task was done."
+    And the page offers no Reopen button; only the board's drag off Done, titled "Reopen and send task-5 back for more work?", and the chat reopen it
+    When the user sends a message in the chat, whose hint reads "Sending opens the task again."
+    Then the task is reopened, exactly 1 task.reopened event
+
+  @USER-73 @test
+  Scenario: An archived task's page is read only
+    # ui/src/pages/TaskPage.test.tsx "marks it archived and offers nothing that writes", "keeps its repo and epic as they are" and "shares no files and takes none away"
+    # ui/src/pages/TaskPage.tsx lines 229 and 289; ui/src/components/organisms/CoordinatorChat.tsx lines 188 and 189
+    Given task-1 archived on a date
+    When the page is shown
+    Then the badge "Archived <date>" is shown
+    And "Add labels" is hidden, the field "Message tech-lead" is hidden, and the chat reads "The task is archived: it takes no messages."
+    When the Details tab is shown
+    Then no Change button and no Epic list are shown: the repo and the epic only show
+    When the Files tab is shown
+    Then "Share files" and "Stop sharing it" are hidden
+
+  @USER-74 @test
+  Scenario: An archived task takes no events until it is reopened
+    # internal/web/archived_test.go TestMovingAnArchivedTaskIsRefused
+    # internal/web/archives_test.go TestAnArchivedTaskReadBackStillTakesNoEvents
+    Given task-1 done and archived
+    When its rank, labels, an answer or a move to done is sent
+    Then each is refused with 409 "task-1 is archived: an archived task takes no events"
+    And the task is still archived, not unarchived
+    When a move of a task that does not exist is sent
+    Then it is refused with 404 "no such task task-9"
+
+  @USER-75 @test
+  Scenario: Reopening an archived task unarchives it first
+    # internal/web/unarchive_test.go TestMovingAnArchivedTaskBackToWorkReopensIt and TestSayingSomethingToAnArchivedTaskReopensIt
+    # README.md, Archiving, erasing and redacting, "Reopening it"
+    Given task-2 archived, a story of task-3
+    When the user moves it to In progress or To do on the board
+    Then task-2 is whole again, not done, with its title and its epic kept
+    And its log holds exactly 1 task.unarchived and 1 task.reopened
+    When the user sends "  " to its coordinator
+    Then it is refused with 400 and nothing is written: the task stays archived
+    When the user sends "One more thing."
+    Then its last 2 events are task.unarchived then task.reopened, and the task is reopened
+
+  @USER-76 @manual
+  Scenario: The Workspace page: the git view of the task's worktree
+    # ui/src/pages/WorkspacePage.tsx lines 23 to 29 and 130 to 196; ui/src/components/organisms/SourceControl.tsx lines 8 to 13
+    # files over 2 MB: internal/workspace/workspace.go lines 163 and 185
+    Given task-5 has a worktree with 2 changed files, 1 added file and 3 commits on its branch
+    When the user clicks Workspace on the task's page
+    Then a new tab opens with the id, title, status badge and branch, and the header counts read "M 2" and "A 1"
+    And the sidebar has Changes with the count 3, Commits with the count 3, and Explorer open with every file
+    When the user opens a changed file
+    Then it is shown next to its last committed version, with the views Code and Changes
+    When the user opens a file in a commit
+    Then it is shown next to the version before that commit, the header reading "in <7 characters> <subject>"
+    When the user opens a file over 2 MB
+    Then "Too big to show" is shown; a file that is not text reads "Not a text file"
+    Given a worktree with nothing changed
+    Then the header reads exactly "nothing to commit" and Changes reads "Nothing waiting to be committed."
+
+  @USER-77 @manual
+  Scenario: Markdown and SVG previews in the Workspace
+    # ui/src/components/organisms/WorkspacePreview.tsx line 13, previewable; line 81, the outline; lines 169 to 272, the SVG
+    # zoom from 5% to 1600%: line 183; 3 backdrops: line 231
+    Given a Markdown file with 4 headings and an SVG in the worktree
+    When the user opens the Markdown file
+    Then it is shown as a document, Preview by default, with the images it names read from the workspace
+    And an Outline of its headings is shown beside it, as it has more than 2
+    And a link to another file of the worktree opens that file in the same tab; a link to the web opens in a new tab
+    When the user clicks "Open Preview to the Side"
+    Then the code and the preview are shown side by side, 2 panes
+    When the user opens the SVG
+    Then the drawing is shown fit to the window, with "Zoom in", "Zoom out", "Fit to the window", "Actual size" and exactly 3 backdrops: dark, light, checker
+    And the zoom is kept between 5% and 1600%
+
+  @USER-78 @manual
+  Scenario: The Workspace dock: the coordinator, Claude, the terminal and the agents who worked there
+    # ui/src/pages/WorkspacePage.tsx lines 72 to 89; ui/src/components/organisms/WorkspaceDock.tsx lines 33 to 49 and 89 to 109
+    # the dock's height is kept in this browser, 280 px at first, never under 120: WorkspacePage.tsx lines 75 to 78
+    Given the Workspace of task-5 while the engineer works
+    When the user presses Ctrl+J
+    Then the dock opens on Terminal, with exactly 4 tabs: Coordinator, Claude, Terminal and "Agents N", N the turns so far
+    And the Questions tab is shown only while the coordinator asks the user
+    When the user opens Claude
+    Then a Claude Code session in the worktree is shown and the user is in control at once
+    When the user opens Agents
+    Then each turn is listed, newest first, as its agent, time, tokens and "working now", "ended" or "issue"
+    When the user presses Ctrl+J again
+    Then the dock is hidden, and its height is kept for the next time
+
+  @USER-79 @test
+  Scenario: A link in the chat opens a file in its Workspace preview
+    # ui/src/components/organisms/EntryText.test.tsx "sends a repo path to the Workspace preview", "links a task id the board knows and a SHA of the task's commits, and nothing else" and "draws a javascript: link as its label"
+    # ui/src/lib/links.ts lines 128 to 138, linkInto; ui/src/components/organisms/CoordinatorChat.tsx line 427
+    # README.md, Use it, "Showing work"
+    Given an agent wrote "[the design](docs/design.md)" in a report on task-75
+    When the text is shown
+    Then the link goes to exactly /tasks/task-75/workspace?file=docs%2Fdesign.md&view=preview, in a new tab
+    Given the text names task-21, which the board knows, and 7 characters of one of the task's commits
+    Then task-21 links to /tasks/task-21 and the commit to the Workspace at that commit, exactly 2 links
+    And a word that names no task and no commit, and a javascript: link, are shown as plain text
+
+  @USER-80 @manual
+  Scenario: The Workspace button and the task's Stories tab for an epic
+    # ui/src/pages/TaskPage.tsx line 293, the button; lines 356 to 358, 437 and 477, Stories
+    # the count "1/3", titled "1 of 3 stories done": ui/src/components/molecules/StoryProgress.tsx lines 7 and 12
+    # README.md, Use it, "Epics and stories": file tasks under an epic from the epic's Stories tab
+    Given an epic with 3 stories, 1 done
+    When its page is shown
+    Then the Stories fact reads exactly "1/3", titled "1 of 3 stories done", and the Stories tab, count 3, is open
+    And the Workspace button is hidden while the epic has no worktree
+    Given task-5 with a worktree
+    When the user clicks Workspace
+    Then exactly 1 new browser tab opens at /tasks/task-5/workspace
