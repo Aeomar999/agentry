@@ -377,6 +377,7 @@ func (t *Task) Apply(e events.Event) {
 		turn.Ended, turn.Report, turn.Tokens, turn.TokensUnknown = true, e.Text("report"), e.Number("tokens"), e.Text("tokensUnknown")
 		t.moveRepo()
 		turn.Split = Split{e.Number("inputTokens"), e.Number("cacheWriteTokens"), e.Number("cacheReadTokens"), e.Number("outputTokens")}
+		turn.Context = e.Number("contextTokens")
 		t.TokensUsed += turn.Tokens
 		t.TokensSplit = t.TokensSplit.add(turn.Split)
 		t.IssuesInARow = 0

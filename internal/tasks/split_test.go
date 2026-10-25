@@ -24,7 +24,7 @@ func turnsLog() []events.Event {
 	add(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "engineer", "hash": "h", "worker": "laptop"})
 	add(worker, events.SessionStarted, "turn-1", map[string]any{"engineSession": "4f1c"})
 	add(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "engineer", "report": "Done.", "tokens": float64(53174),
-		"inputTokens": float64(4), "cacheWriteTokens": float64(12800), "cacheReadTokens": float64(40000), "outputTokens": float64(370)})
+		"inputTokens": float64(4), "cacheWriteTokens": float64(12800), "cacheReadTokens": float64(40000), "outputTokens": float64(370), "contextTokens": float64(26801)})
 	add(lead, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "again"})
 	add(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2", "worker": "laptop"})
 	add(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "Done again.", "tokens": float64(1000)})
@@ -42,6 +42,9 @@ func TestATurnKeepsItsEngineSessionAndSplit(t *testing.T) {
 	if want := (Split{Input: 4, CacheWrite: 12800, CacheRead: 40000, Output: 370}); turn.Split != want || turn.Tokens != 53174 {
 		t.Errorf("tokens %d split %+v, want 53174 split %+v", turn.Tokens, turn.Split, want)
 	}
+	if turn.Context != 26801 {
+		t.Errorf("context %d, want its last call's 26801", turn.Context)
+	}
 }
 
 // A turn ended with only the total, as from an older worker or in an old
@@ -49,8 +52,8 @@ func TestATurnKeepsItsEngineSessionAndSplit(t *testing.T) {
 // task's total, which the budget counts, and in none of the four.
 func TestATurnWithOnlyATotalHasNoSplit(t *testing.T) {
 	task := FromEvents(turnsLog())
-	if turn := task.Turn("turn-2"); turn.Tokens != 1000 || turn.Split != (Split{}) || turn.EngineSession != "" {
-		t.Errorf("turn-2: tokens %d, split %+v, session %q", turn.Tokens, turn.Split, turn.EngineSession)
+	if turn := task.Turn("turn-2"); turn.Tokens != 1000 || turn.Split != (Split{}) || turn.EngineSession != "" || turn.Context != 0 {
+		t.Errorf("turn-2: tokens %d, split %+v, session %q, context %d", turn.Tokens, turn.Split, turn.EngineSession, turn.Context)
 	}
 	if task.TokensUsed != 54174 {
 		t.Errorf("used %d, want both turns' 54174", task.TokensUsed)

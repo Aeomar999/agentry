@@ -228,6 +228,7 @@ type Turn struct {
 	Tokens        int       // what it used, when the engine said
 	TokensUnknown string    // why Tokens is 0, when the engine couldn't say; "" in logs from before it was kept
 	Split         Split     // how Tokens splits, zero when the engine didn't say, as in older logs
+	Context       int       // the input of its last call, how big its session had grown; 0 when the engine didn't say, as in older logs
 }
 
 // Split is how a count of tokens divides: new input, input written to the

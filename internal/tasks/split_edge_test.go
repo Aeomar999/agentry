@@ -29,15 +29,15 @@ func oldTurnsLog() []events.Event {
 }
 
 // An old log replays to the same totals: every token is unsplit and no
-// turn has a session.
+// turn has a session or a context size.
 func TestAnOldLogIsAllUnsplit(t *testing.T) {
 	task := FromEvents(oldTurnsLog())
 	if task.TokensUsed != 2500 || task.TokensSplit != (Split{}) || task.Unsplit() != 2500 {
 		t.Errorf("used %d, split %+v, unsplit %d; want 2500, none, 2500", task.TokensUsed, task.TokensSplit, task.Unsplit())
 	}
 	for _, turn := range task.Turns {
-		if turn.Split != (Split{}) || turn.EngineSession != "" {
-			t.Errorf("%s: split %+v, session %q", turn.ID, turn.Split, turn.EngineSession)
+		if turn.Split != (Split{}) || turn.EngineSession != "" || turn.Context != 0 {
+			t.Errorf("%s: split %+v, session %q, context %d", turn.ID, turn.Split, turn.EngineSession, turn.Context)
 		}
 	}
 	if turn := task.Turn("turn-2"); turn.TokensUnknown != "transcript not saved" {
@@ -63,14 +63,14 @@ func TestASessionForNoTurnIsIgnored(t *testing.T) {
 	}
 }
 
-// A snapshot keeps the session and split, so a restart shows the same.
+// A snapshot keeps the session, split and context, so a restart shows the same.
 func TestASavedTaskKeepsItsSessionAndSplit(t *testing.T) {
 	task := FromEvents(turnsLog())
 	restored := Restore(task.Save())
 	if restored.TokensSplit != task.TokensSplit || restored.Unsplit() != task.Unsplit() {
 		t.Errorf("restored split %+v/%d, want %+v/%d", restored.TokensSplit, restored.Unsplit(), task.TokensSplit, task.Unsplit())
 	}
-	if turn := restored.Turn("turn-1"); turn.EngineSession != "4f1c" || turn.Split != task.Turn("turn-1").Split {
-		t.Errorf("restored turn-1: session %q split %+v", turn.EngineSession, turn.Split)
+	if turn := restored.Turn("turn-1"); turn.EngineSession != "4f1c" || turn.Split != task.Turn("turn-1").Split || turn.Context != 26801 {
+		t.Errorf("restored turn-1: session %q split %+v context %d", turn.EngineSession, turn.Split, turn.Context)
 	}
 }
