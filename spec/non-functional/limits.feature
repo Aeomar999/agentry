@@ -63,8 +63,8 @@ Feature: Limits
     When its 24th turn since the user last answered ends without finishing
     Then the coordinator's next move asks the user, not a turn: yes
     And the question says "24 of its 24 turns"
-    And after the user's answer the next move is the coordinator's turn: yes
-    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463)
+    And after the user's answer the next move is a turn: yes
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/tasks/apply.go line 464)
     # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
