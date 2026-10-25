@@ -7,7 +7,7 @@ Feature: Claude Code and Agentry
 
   Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
   internal/ideas/tools.go, internal/connections, internal/web/integrations_api.go
-  and their tests. @CC-01 is the foundation's stub; scenarios start at @CC-02.
+  and their tests. CC-01 is the foundation's stub; the scenarios here start at CC-02.
 
   # ---- Installing the integration -------------------------------------------
 
