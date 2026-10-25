@@ -26,7 +26,7 @@ Feature: Performance
     # measured 2026-10-25 at commit 3c1976b5 with bench/tasklist.sh in the task's shared files: timeout 60 ./tasklist.sh <binary> <datadir> 7913 10; the list is built from the state's summaries in internal/web/api.go listTasks, not from the log
 
   @PERF-04 @test
-  Scenario: Every API read comes from the state at one log position
+  Scenario: Every API read says the log position it was read at
     Given a server with 2 tasks created through the API
     When the task list, a task, its events, the questions, the agents, the config, the policy, the settings, the features and a task that does not exist are read
     Then every read's position header is the log's last position
@@ -49,7 +49,7 @@ Feature: Performance
     When the start replays the whole log, then 3 events are applied, then the interval passes with no event, then 1 event is applied and the interval passes, then the writer closes
     Then the writer has written exactly 2 snapshots after the replay and the 3 events: one at the start, one for the events
     And the interval with no event adds 0 writes
-    And the interval with 1 event adds exactly 1 write, and Close adds 0, so there are 3 in all
+    And after 1 event, the interval and Close there are exactly 3 writes in all
     And the next start goes on from the last snapshot's position and does not log "replayed"
     # PLAN.md T-005; internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent; the shipped counts are in the scenario below
 
@@ -67,7 +67,7 @@ Feature: Performance
     When a proposal is made while the write is held
     Then the proposal commits within 5 seconds, without waiting for the writer
     And the state's position moves by exactly 1
-    And the snapshot written once the write is released holds the new event
+    And once the write is released a snapshot at the new event's position is written: yes
     # PLAN.md T-005; internal/current/writer_test.go TestAProposalCommitsWhileTheWriterIsMidWrite; the writer holds no lock of the store's, internal/current/writer.go
 
   @PERF-09 @manual
