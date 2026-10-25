@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/events"
+	"gitlab.com/dev.chempa/agentry/internal/workers"
 )
 
 // resumable is an engineer's turn its next one resumes: ended, on claude on
@@ -28,8 +29,10 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 		{"another engine", func(*Turn) {}, "codex", "omni", "", "another engine"},
 		{"engine unknown", func(turn *Turn) { turn.Engine = "" }, "claude", "omni", "", "engine unknown"},
 		{"no session id", func(turn *Turn) { turn.EngineSession = "" }, "claude", "omni", "", "no session id"},
-		{"too big", func(turn *Turn) { turn.Split = Split{Input: 2_000, CacheRead: 180_000} }, "claude", "omni", "", "context too big (182k tokens)"},
-		{"unknown split", func(turn *Turn) { turn.Split = Split{} }, "claude", "omni", "s-1", ""},
+		{"moved here", func(*Turn) {}, "claude", workers.Local, "", "the work moved to local"},
+		{"moved here, unnamed", func(*Turn) {}, "claude", "", "", "the work moved to local"},
+		{"too big", func(turn *Turn) { turn.Context = 182_000 }, "claude", "omni", "", "context too big (182k tokens)"},
+		{"unknown context", func(turn *Turn) { turn.Context = 0 }, "claude", "omni", "s-1", ""},
 	} {
 		turn := resumable()
 		c.change(turn)
@@ -40,21 +43,23 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 	}
 }
 
-// The size is the last turn's cache reads plus its new input; cache writes
-// and output don't count.
+// The size is the last turn's context, the input of its last call. Its
+// split sums every call of the turn, so even a big one doesn't count.
 func TestAContextAtTheLimitStillResumes(t *testing.T) {
 	for _, c := range []struct {
-		name   string
-		split  Split
-		resume bool
+		name    string
+		context int
+		split   Split
+		resume  bool
 	}{
-		{"just under", Split{Input: 1_000, CacheRead: MaxResumedContext - 1_001}, true},
-		{"at", Split{Input: 1_000, CacheRead: MaxResumedContext - 1_000}, true},
-		{"just over", Split{Input: 1_000, CacheRead: MaxResumedContext - 999}, false},
-		{"writes and output don't count", Split{CacheRead: MaxResumedContext, CacheWrite: 50_000, Output: 50_000}, true},
+		{"just under", MaxResumedContext - 1, Split{}, true},
+		{"at", MaxResumedContext, Split{}, true},
+		{"just over", MaxResumedContext + 1, Split{}, false},
+		{"a big split, a small context", 40_000, Split{Input: 300, CacheWrite: 60_000, CacheRead: 900_000, Output: 20_000}, true},
+		{"a big split, an unknown context", 0, Split{Input: 300, CacheWrite: 60_000, CacheRead: 900_000, Output: 20_000}, true},
 	} {
 		turn := resumable()
-		turn.Split = c.split
+		turn.Context, turn.Split = c.context, c.split
 		task := &Task{Turns: []*Turn{turn}}
 		if session, fresh := task.SessionToResume("engineer", "claude", "omni"); (session != "") != c.resume {
 			t.Errorf("%s: got %q, fresh because %q; want resume %v", c.name, session, fresh, c.resume)
@@ -115,5 +120,30 @@ func TestTurnStartedReadsItsOptionalFields(t *testing.T) {
 	fresh := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "freshBecause": "first turn"})
 	if turn := fresh.Turn("turn-1"); turn.FromSession != "" || turn.FreshBecause != "first turn" {
 		t.Errorf("a fresh turn keeps why: %+v", turn)
+	}
+}
+
+// A turn logged after the split was kept but before its context was has a
+// big split and no contextTokens: its context is unknown, so it resumes.
+func TestATurnFromBeforeTheContextWasKeptResumes(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+	worker := events.Actor{Kind: events.Worker, ID: "omni"}
+	event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
+		return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-1", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
+	}
+	task := FromEvents([]events.Event{
+		event(you, events.TaskCreated, "", map[string]any{"title": "t", "coordinator": "tech-lead"}),
+		event(lead, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"}),
+		event(worker, events.TurnStarted, "turn-1", map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "freshBecause": "first turn"}),
+		event(worker, events.SessionStarted, "turn-1", map[string]any{"engineSession": "s-1"}),
+		event(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "engineer", "report": "done", "tokens": float64(1_000_400),
+			"inputTokens": float64(400), "cacheWriteTokens": float64(60_000), "cacheReadTokens": float64(920_000), "outputTokens": float64(20_000)}),
+	})
+	if turn := task.Turn("turn-1"); turn.Context != 0 || turn.Split.CacheRead != 920_000 {
+		t.Errorf("context %d, split %+v; want 0 and the split", turn.Context, turn.Split)
+	}
+	if session, fresh := task.SessionToResume("engineer", "claude", "omni"); session != "s-1" {
+		t.Errorf("got %q, fresh because %q; want s-1", session, fresh)
 	}
 }

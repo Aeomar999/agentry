@@ -1,16 +1,26 @@
 package tasks
 
-import "fmt"
+import (
+	"cmp"
+	"fmt"
+
+	"gitlab.com/dev.chempa/agentry/internal/workers"
+)
 
 // MaxResumedContext is the most context, in tokens, a session may carry
 // into a resumed turn: a 200k window less room for the turn's own work.
+// It is measured by the input of the last turn's last call (Turn.Context),
+// not its split, which sums every call of the turn.
 const MaxResumedContext = 150_000
 
 // SessionToResume is the engine session the agent's next turn resumes: the
 // one of its latest turn on this task, when that turn ended on the same
-// engine and machine and reported a session small enough to carry on.
+// engine and machine, and reported a session whose context isn't over
+// MaxResumedContext; a context the engine didn't report still resumes.
 // Otherwise it is "", with a short plain reason for starting fresh.
+// The machine is a worker's name, or "" or workers.Local for this one.
 func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh string) {
+	worker = cmp.Or(worker, workers.Local)
 	last := t.lastTurnOf(agent)
 	switch {
 	case last == nil:
@@ -26,9 +36,9 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 	case last.EngineSession == "":
 		return "", "no session id"
 	}
-	// A zero split is unknown, not small; it still resumes.
-	if size := last.Split.CacheRead + last.Split.Input; size > MaxResumedContext {
-		return "", fmt.Sprintf("context too big (%dk tokens)", size/1000)
+	// A zero context is unknown, not small; it still resumes.
+	if last.Context > MaxResumedContext {
+		return "", fmt.Sprintf("context too big (%dk tokens)", last.Context/1000)
 	}
 	return last.EngineSession, ""
 }
