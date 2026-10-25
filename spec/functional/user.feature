@@ -674,11 +674,11 @@ Feature: The user
   @USER-57 @test
   Scenario: Details: the id, repo, epic, budget and turns, each with its control while the task is live
     # ui/src/pages/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
-    # ui/src/pages/TaskPage.tsx lines 547 to 582
+    # ui/src/pages/TaskPage.tsx lines 547 to 582; the words "story of": line 317, which the test does not assert
     Given a live task's Details tab
     Then a Change button is shown on the Repo row and a list named Epic is shown on the Epic row
     Given a story of task-9
-    Then the header reads "story of epic-9" and the link goes to exactly /tasks/task-9
+    Then the header shows epic-9 and the link goes to exactly /tasks/task-9
     Given an epic
     Then its id is shown as epic-1 in the header and in Details, 2 times, and never as task-1
     And the erase dialog is titled "Erase epic-1 for good?"
@@ -1106,13 +1106,13 @@ Feature: The user
     # internal/ideas/routes_test.go TestAnIdeaLikeAnOpenTaskIsRefusedUntilYouSayAnyway
     # ui/src/features/ideas/IdeaDialogs.test.tsx "shows the open task an idea looks like, and makes another only when you say anyway" and "Cancel leaves the idea open, sending nothing more"
     # the titles share more than half their words, past the filler words: internal/ideas/duplicate.go line 121, SameTitleAbove 0.5
-    # the banner and the buttons: ui/src/features/ideas/IdeaDialogs.tsx lines 76 to 92
+    # the banner "It looks like an open task", its words and the buttons: ui/src/features/ideas/IdeaDialogs.tsx lines 76 to 92; the test asserts the link and the requests, not the words
     Given the idea "Make a ship the user chose actually push, and count it shipped only after the push" accepted as task-2
     And the open idea "Make a ship the user chose push, and count it shipped only when it pushed" in the same repo
     When the user accepts the second
     Then it is refused with 409 "looks like the open task task-2", the body naming task-2, its title and its column backlog
     And nothing is written to the log
-    And the dialog shows the banner "It looks like an open task" with a link to task-2 and reads "Nothing was made. Make another task from the idea anyway, or cancel to leave the idea open."
+    And the dialog shows a link to task-2, and 1 request has been sent
     When the user clicks "Make another anyway"
     Then exactly 1 more request is sent, with anyway true, and task-3 is made in the Backlog
     When the user clicks Cancel instead
@@ -1122,13 +1122,14 @@ Feature: The user
   Scenario: Dismiss puts the idea in the history with your reason
     # internal/ideas/routes_test.go TestYouDismissAnIdea and TestAnUnknownIdeaIsNotFound; internal/ideas/ideas_test.go TestDismissKeepsYourNote
     # the dialog "Dismiss “<title>”" with Reason, Dismiss and Keep, and the toast "Dismissed “<title>”" with "It is in the history.": ui/src/features/ideas/IdeaDialogs.tsx lines 205 to 229
+    # the words "no such idea": internal/ideas/routes.go lines 143 and 152; the test asserts the 404 only
     Given an open idea "Dark mode"
     When the user dismisses it with the note " The OS does it "
     Then the idea is dismissed with exactly the note "The OS does it" and a decidedAt
     When the user accepts it afterwards
     Then it is refused with 409
     When an idea that does not exist, or a task's id, is accepted or dismissed
-    Then each is refused with 404 "no such idea"
+    Then each is refused with 404
 
   @USER-89 @manual
   Scenario: The History panel, and the page with every idea decided
@@ -1214,19 +1215,17 @@ Feature: The user
   Scenario: Ideas shows while a Visionaries team or an idea is there, and the page says what it is otherwise
     # internal/ideas/routes_test.go TestIdeasHiddenWithNoTeamAndNoIdeas, TestIdeasOnWithTheVisionariesTeam, TestIdeasKeptForTheirIdeasWhenTheTeamIsRemoved and TestIdeasBadgeCountsOpenIdeas
     # ui/src/features/ideas/view.test.ts "is off with no ideas and no team, and on with the team", "is on with ideas and no team" and "settles when no template turns Ideas on, on with ideas"
-    # the explainer and the offer: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
+    # internal/ideas/feature_test.go TestIdeasIsOnByTheTeamsTemplate, for the why
+    # not under test, checked by hand: the Ideas page's off view, which shows what Ideas is and only the button "Ask the visionaries", or with no template that turns Ideas on reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
     Given no Visionaries team and no ideas
     When the features are read
     Then ideas is not enabled and not visible, its why "add a team from the Visionaries template, or one of yours based on it, to get ideas"
-    And the Ideas page is in its off view, which shows what Ideas is and only the button "Ask the visionaries"
     When the Visionaries team is added
     Then ideas is enabled and shown: "the Visionaries team suggests ideas"
     When the team is removed while 2 ideas are left
     Then ideas is visible but not enabled: "kept while 2 ideas remain; no team from the Visionaries template or one based on it now"
     Given 4 ideas, 1 accepted and 1 dismissed
     Then the badge is exactly 2
-    Given no template that turns Ideas on
-    Then the page reads "This Agentry has no team template that turns Ideas on, so there is no team to ask." and offers no button
 
   @USER-95 @manual
   Scenario: Ask the visionaries opens New task with the team picked, adding the team first when you have none
@@ -1282,11 +1281,11 @@ Feature: The user
   Scenario: A team whose profile the policy lacks is refused, then added with the profile in one click
     # internal/web/policy_api_test.go TestATeamNeedsItsProfilesInThePolicy
     # ui/src/components/organisms/AddTeam.test.tsx "refused for its profiles, offers them in its own card and adds it with them"
-    # the offer's words: ui/src/components/molecules/MissingProfilesOffer.tsx lines 20 to 29
+    # the offer's words, "The Visionaries team needs the read-mostly profile, which your policy file doesn't have": ui/src/components/molecules/MissingProfilesOffer.tsx lines 20 to 29; the test asserts the card's alert and button, not the words
     Given a policy file without the read-mostly profile
     When the user adds the Visionaries team
     Then it is refused with 409, naming exactly 1 missing profile, read-mostly, and the Policy page, and nothing is proposed
-    And the offer "The Visionaries team needs the read-mostly profile, which your policy file doesn't have" is shown in that card, with "Add the profile and the team"
+    And an offer is shown in that card only, with the button "Add the profile and the team"
     When the user clicks it
     Then exactly 1 more request is sent, with addMissingProfiles and the policy's hash the page saw
     And the policy is changed exactly once, "added profile read-mostly for team Visionaries", and the team is there with its 4 agents under visionary-lead
@@ -1427,16 +1426,16 @@ Feature: The user
   Scenario: What a team does: its coordinator's description, read by other coordinators or taken from its template
     # ui/src/components/organisms/TeamPanel.test.tsx "it shows the coordinator's description and the line other coordinators read, following the team's name", "a team made from a built-in template is read by the template's description, even with a new coordinator" and "on a team with no template, the coordinator's Description says other coordinators read it"
     # internal/web/templates_api_test.go TestYourTemplatesDescriptionDescribesItsCoordinator; internal/agents/user_templates_test.go TestAUserTemplatesDescriptionFillsAnEmptyCoordinators
-    # the field "What this team does" and its hint: ui/src/components/organisms/TeamPanelParts.tsx lines 169 to 176; the heading's "· <description>": ui/src/pages/AgentsPage.tsx lines 169 and 285
+    # the field "What this team does" and its hint: ui/src/components/organisms/TeamPanelParts.tsx lines 169 to 176
+    # not under test, checked by hand: the hint "One line. Other coordinators read it to choose what to send this team.", and the Agents page heading's "· <description>" only for a team whose template has one: ui/src/pages/AgentsPage.tsx lines 169 and 285
     Given the Edit team panel of a team with no template
     When "What this team does" is shown
-    Then it holds exactly the coordinator's description, with the hint "One line. Other coordinators read it to choose what to send this team."
+    Then it holds exactly the coordinator's description
     And the line other coordinators read is shown following the team's name as it is typed
     Given a team made from a built-in template
     Then only the template's description is read, and the coordinator's Description says so
     Given a team added from your template
     Then its coordinator is described by the template's description only when it has none of its own
-    And the Agents page heading shows "· <description>" only for a team whose template has one
 
   @USER-107 @manual
   Scenario: An agent's page and its edit page: the prompt, what it knows, its engine, model, profile and where it runs
