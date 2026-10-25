@@ -360,6 +360,25 @@ describe("TaskPage tokens", () => {
     expect(third.textContent).not.toMatch(/resumed|fresh/);
   });
 
+  test("says which story a turn's session came from, and whether it forked it", () => {
+    page(
+      detail({
+        turnList: [
+          { ...turn, id: "turn-1", tokens: 1000, fromSession: "4f1c-9a2e" },
+          { ...turn, id: "turn-2", tokens: 1000, fromSession: "4f1c-9a2e", forked: true },
+          { ...turn, id: "turn-3", tokens: 1000, fromSession: "4f1c-9a2e", sessionFrom: "task-2" },
+          { ...turn, id: "turn-4", tokens: 1000, fromSession: "4f1c-9a2e", sessionFrom: "task-2", forked: true },
+        ],
+      }),
+      "details",
+    );
+    const rows = ["turn-1", "turn-2", "turn-3", "turn-4"].map((id) => screen.getByText(id).closest("tr")!);
+    const labels = rows.map((row) => within(row).getByTitle("4f1c-9a2e"));
+    expect(labels.map((label) => label.textContent)).toEqual(["resumed", "forked", "resumed from task-2", "forked from task-2"]);
+    expect(within(rows[0]).queryByRole("link")).toBeNull();
+    expect(within(rows[3]).getByRole("link", { name: "task-2" }).getAttribute("href")).toBe("/tasks/task-2");
+  });
+
   test("shows the task's split and what isn't split", () => {
     page(detail({ tokensUsed: 54174, tokensSplit: split, tokensUnsplit: 1000 }));
     expect(screen.getByText("in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split")).toBeTruthy();

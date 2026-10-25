@@ -98,6 +98,8 @@ export interface Turn {
   split?: TokenSplit; // how tokens splits, when the engine said
   engineSession?: string; // the engine's own id for the session, when it said
   fromSession?: string; // the engine session it resumed, absent when it started fresh
+  sessionFrom?: string; // the task whose turn fromSession was, absent when it was this one's or the log didn't say
+  forked?: boolean; // it went on with a copy of fromSession, which another turn was busy in
   freshBecause?: string; // why it started fresh, absent when it resumed or the log didn't say
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
