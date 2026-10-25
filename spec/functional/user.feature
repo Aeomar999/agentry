@@ -10,7 +10,7 @@ Feature: The user
     When the user adds a task from the page, with a description in their own words
     Then the task is shown with the team's coordinator as its coordinator
     And the path its work took shows exactly 1 handoff, from the user to the coordinator
-    # README.md, First steps; internal/web/api_test.go
+    # README.md, First steps; internal/web/api_test.go TestCreateListAndShowATask
 
   @USER-02 @manual
   Scenario: New task opens as a modal from the key n and the New task button
@@ -39,13 +39,14 @@ Feature: The user
   @USER-04 @test
   Scenario: A task needs only a description, and its first line names it
     # internal/web/api_test.go TestATaskNeedsOnlyADescription
-    # 72 characters: internal/web/api.go line 351, titleFrom
+    # 72 characters: internal/web/api.go line 348, titleFrom
+    # the words "describe the task": internal/web/api.go line 127; the test asserts the 400 only
     Given a server with no tasks
     When the user adds a task with the description "Fix the login redirect" followed by a second line, and no title
     Then the task is created with exactly the title "Fix the login redirect"
     And a first line longer than 72 characters is cut at a word and ends in "..."
     When the user adds a task whose description is only spaces
-    Then the task is refused with 400 "describe the task"
+    Then the task is refused with 400
 
   @USER-05 @test
   Scenario: The token budget and turn limit default to the server's, and Unlimited is allowed
@@ -258,11 +259,12 @@ Feature: The user
   @USER-23 @test
   Scenario: A move the route refuses
     # internal/web/api_test.go TestCardsMoveThroughTheStages
+    # the words: internal/web/board_api.go lines 92 and 112; the test asserts the codes only
     Given a task that is done
     When a move to done is sent for it
-    Then the move is refused with 409 "the task is done already"
+    Then the move is refused with 409
     When a move to a column called sideways is sent
-    Then the move is refused with 400 "no column called sideways"
+    Then the move is refused with 400
 
   @USER-24 @test
   Scenario: A done task dragged back to In progress is reopened for more work
@@ -409,7 +411,7 @@ Feature: The user
   @USER-37 @test
   Scenario: A story that builds on another waits until that one is done
     # internal/coordinator/wrapup_test.go TestAStoryAfterAnArchivedTaskStarts
-    # a blocked story gets no turn: internal/coordinator/loop.go line 133
+    # a blocked story gets no turn: internal/coordinator/loop.go line 134
     Given a story that builds on a task not yet done
     When the loop looks at it
     Then the story is counted as blocked and cannot start
@@ -588,6 +590,7 @@ Feature: The user
   Scenario: Events are read a page at a time, and Load earlier reads the page before
     # internal/web/events_api_test.go TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
     # ui/src/components/organisms/ActivityFeed.test.tsx "puts the way to read earlier events under the oldest row, in the scroller"
+    # ui/src/live/event-pages.test.ts "load earlier reads the page before the oldest held, until there is none"; the button is hidden without earlier: ui/src/components/molecules/LoadEarlier.tsx line 12
     # 500 events in a page, 2000 at most: internal/web/events_api.go lines 18 and 19
     Given a task with 7 events, a refused proposal among them
     When a page of 3 is read
