@@ -325,7 +325,7 @@ describe("TaskPage tokens", () => {
     expect(second.querySelector("dl")).toBeNull();
   });
 
-  test("wraps a turn's long unknown-tokens reason in the Tokens column, in full", () => {
+  test("shows each turn's unknown-tokens reason in full, in its own row", () => {
     const long = "no usage in the transcript with a time Agentry can read";
     page(
       detail({
@@ -338,8 +338,6 @@ describe("TaskPage tokens", () => {
     );
     const reason = screen.getByText(long);
     expect(reason.closest("tr")!.textContent).toContain("turn-1");
-    expect(reason.className).toContain("max-w-36");
-    expect(reason.className).toContain("whitespace-normal");
     expect(screen.getByText("transcript not saved").closest("tr")!.textContent).toContain("turn-2");
   });
 

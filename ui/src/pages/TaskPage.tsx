@@ -134,13 +134,13 @@ const TURN_COLUMNS: Column<Turn>[] = [
   { header: "Started", className: "w-24", render: (t) => <Mono className="text-ink-muted">{clockTime(t.startedAt)}</Mono> },
   { header: "Took", className: "w-24", render: (t) => <Mono>{t.ended ? duration(t.startedAt, t.lastEventAt) : "running"}</Mono> },
   // A short reason why tokens are unknown keeps its own width on one line;
-  // a long one wraps at the width the stacked split gives the column.
+  // a long one wraps past about 23 characters, about the stacked split's width.
   {
     header: "Tokens",
     className: "w-20 text-right",
     render: (t) =>
       t.tokensUnknown ? (
-        <Mono className="ml-auto block w-max max-w-36 text-[11px] whitespace-normal text-warning">{t.tokensUnknown}</Mono>
+        <Mono className="ml-auto block w-max max-w-[23ch] text-[11px] whitespace-normal text-warning">{t.tokensUnknown}</Mono>
       ) : (
         <span className="flex flex-col items-end">
           <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
