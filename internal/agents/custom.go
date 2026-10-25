@@ -87,7 +87,7 @@ func checkMember(team string, agent Agent, current Roster, seen map[string]bool)
 	case agent.Color != "" && !slices.Contains(Colors, agent.Color):
 		return agent.Name + "'s colour must be one of " + strings.Join(Colors, ", ") + ", not " + agent.Color
 	case !slices.Contains([]string{ResumeDefault, ResumesSession, StartsFresh}, agent.Resume):
-		return agent.Name + "'s resume must be by its column (\"\"), resume or fresh, not " + agent.Resume
+		return agent.Name + "'s resume setting must be by its column (\"\"), resume or fresh, not " + agent.Resume
 	}
 	return ""
 }
