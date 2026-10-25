@@ -11,9 +11,10 @@ Feature: Workers
   Scenario: A machine joins once, with a code, and gets its own credential
     Given an install command made on the Workers page, with its join code
     When the machine runs the command and joins
-    Then the machine gets a credential of its own, and the log keeps only its hash
+    Then the machine gets a credential of its own, and the log holds it as given: no
+    # not under test, checked by hand: the log keeps the credential's hash (internal/workers/workers.go line 180)
     And the same code is refused for a second machine
-    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go
+    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   # ---- Joining ---------------------------------------------------------------
 
@@ -21,37 +22,41 @@ Feature: Workers
   Scenario: Add worker makes a one-time install command for a machine
     Given the user is signed in on the Workers page
     When they ask to add a worker
-    # internal/workers/workers.go InviteLifetime
-    Then the page gives 1 code that works 1 time, for 1 hour
+    Then the page gives a code, and an install command that fetches the install script with that code: yes
+    # not under test, checked by hand: the code works for 1 hour (internal/workers/workers.go line 28 InviteLifetime; the tests use the constant)
     And 1 install command per address the server has, each fetching the install script with that code
-    And the install script fetched with the code carries the code 1 time
+    And the install script fetched with the code carries the code: yes
     And the script fetched with a wrong code is refused with status 401
     And the agentry program for the machine's system is served with the code: yes
-    # internal/web/workers_test.go
+    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork; the commands per address: internal/web/addresses_test.go TestInstallCommands
 
   @WORKER-03 @test
   Scenario: A machine joins with the code and is named after its host
     Given an install command whose code has not been used
     When the machine sends the code with what it knows about itself
-    Then it gets 1 credential of its own, and its name is its host's name made lowercase letters, digits and dashes
+    Then it gets a credential, and its name is its host's name before the first dot, in lowercase: yes
+    # not under test, checked by hand: other characters become dashes (internal/web/workers_api.go line 198 workerName)
     # internal/web/workers_api.go workerName: at most 28 characters, starting with a letter; freeName adds -2, -3 and so on to a name taken
-    And the same code sent again is refused with status 401, saying the code is unknown, used or expired
+    And the same code sent again is refused, saying the code is unknown, used or expired: yes
+    # not under test, checked by hand: the refusal's status is 401 (internal/web/workers_api.go line 182)
     And the Workers page lists the worker, online once it connects: yes
-    # internal/web/workers_test.go
+    # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @WORKER-04 @test
-  Scenario: A join code works once, for an hour, and only hashes are kept
+  Scenario: A join code works once, for its lifetime, and the log keeps no secret as given
     Given a join code made now
     When a machine joins with it
     Then the code lets a 2nd machine join: no
     And a wrong code lets a machine join: no
     # internal/workers/workers.go InviteLifetime: the code expires 1 hour after it was made
-    And the code 1 hour and 1 second after it was made lets a machine join: no
-    And the log holds the code or the credential as given: no, only their hashes
-    And the credential's hash, as the log keeps it, lets a worker in: no
+    And the code 1 second after its lifetime lets a machine join: no
+    # not under test, checked by hand: the lifetime is 1 hour (internal/workers/workers.go line 28; the test uses the constant)
+    And the log holds the code or the credential as given: no
+    # not under test, checked by hand: the log keeps their hashes (internal/workers/workers.go line 180)
+    And the credential's hash lets a worker in: no
     When the worker is removed
     Then its credential lets it in: no, and the roster has 0 workers
-    # internal/workers/workers_test.go
+    # internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   @WORKER-05 @test
   Scenario: The rules on who may join and where agents run
@@ -61,12 +66,14 @@ Feature: Workers
     When a machine joins under the name local, the name of the machine Agentry runs on
     Then it is refused: yes
     When an agent is given a worker that never joined under Runs on
-    Then it is refused, naming the workers that have joined, 1 line
+    Then it is refused: yes
+    # not under test, checked by hand: the refusal names the workers that have joined (internal/rules/worker_rules.go line 53)
     When the user removes a worker an agent runs on
-    Then it is refused, naming the agent, until the worker is taken off its Runs on: yes
+    Then it is refused: yes
+    # not under test, checked by hand: the refusal names the agent and says to take the worker off its workers first (internal/rules/worker_rules.go line 102)
     When the agent's Runs on is cleared and the worker removed
     Then it is removed: yes
-    # internal/rules/worker_rules_test.go
+    # internal/rules/worker_rules_test.go TestWorkerRules
 
   @WORKER-06 @test
   Scenario: Joining over https checks the server's CA before the code is sent
@@ -83,7 +90,8 @@ Feature: Workers
     Then the join is sent 0 times, as there is no Agentry CA to check
     When the machine joins without one
     Then it joins with 0 CA kept: yes
-    # cmd/agentry/worker_test.go
+    # cmd/agentry/worker_test.go TestJoiningOverHTTPSWithTheRightFingerprintKeepsTheCA, TestAWrongFingerprintIsRefusedBeforeTheCodeIsSent,
+    # TestHTTPSWithoutAFingerprintIsRefusedWithIt, TestAServerOverPlainHTTP
 
   @WORKER-07 @test
   Scenario: The install command run again on a joined machine spends no code
@@ -92,13 +100,14 @@ Feature: Workers
     Then the join is sent 0 times, and the output says the machine has joined already
     Given a machine that joined over plain http, and a server now served over https
     When the install command with the CA's fingerprint is run on it
-    Then the worker moves to the https address and keeps its credential, with 0 joins sent
+    Then the worker moves to the https address and keeps the CA, with 0 joins sent
     Given a worker whose server regenerated its CA
     When the install command is run without the new fingerprint
     Then it is refused, saying the CA was regenerated and to join again with -ca-fingerprint, with 0 joins sent
     When it is run with the new fingerprint
-    Then the worker keeps the new CA and its credential, with 0 joins sent
-    # cmd/agentry/worker_test.go
+    Then the worker keeps the new CA, with 0 joins sent
+    # not under test, checked by hand: in both moves the worker keeps its credential (cmd/agentry/worker.go line 153); the tests check the saved server and CA only
+    # cmd/agentry/worker_test.go TestJoiningAgainWithTheFingerprintMovesAWorkerToHTTPS, TestJoiningAgainAfterTheCAWasRegenerated
 
   @WORKER-08 @manual
   Scenario: The install script installs agentry, joins and starts the worker
@@ -154,7 +163,7 @@ Feature: Workers
     Then the background process runs, and the service's kind names it: yes
     When the first service can start, and the worker is started again
     Then the first runs and the background process is stopped, 1 service running
-    # internal/workerservice/fallback_test.go
+    # internal/workerservice/fallback_test.go TestFallbackStartsTheSecondWhenTheFirstCant
 
   @WORKER-12 @manual
   Scenario: On Windows the worker is a background process started at logon by Task Scheduler
