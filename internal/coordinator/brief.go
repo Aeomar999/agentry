@@ -49,7 +49,8 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 // resumedCoordinatorBrief is the coordinator's brief for a turn that goes on
 // with its last session, whose brief was made from the trail's first seen
 // steps. The machines online and the epic's stories change without a step
-// on the trail, so it has them as they are now.
+// on the trail, so it has them as they are now. Of the task's kind, only
+// the epic it is or is a story of: how to split it was in its first brief.
 func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, f family, machines []machine,
 	shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
 	hooks := hooksFor(list, coordinator, state)
@@ -59,7 +60,7 @@ func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster 
 		"The last step is the newest. Decide what happens next.")
 	coordinatorWork(&b, task, coordinator, shared)
 	machinesSection(&b, task, coordinator, roster, machines)
-	epicSection(&b, task, f)
+	familySection(&b, task, f)
 	hookSections(&b, hooks, state, task)
 	keepYourNotes(&b)
 	yourDecision(&b, task, roster, hooks)

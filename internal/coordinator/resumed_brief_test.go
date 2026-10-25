@@ -102,7 +102,7 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 		}
 	}
 	for _, left := range []string{"## The task", "## The agents you can hand work to", "## Other teams",
-		"One is left in src/b.go.", lead.Prompt} {
+		"One is left in src/b.go.", lead.Prompt, "## If this task is too big"} {
 		if strings.Contains(brief, left) {
 			t.Errorf("the resumed coordinator brief should leave out %q:\n%s", left, brief)
 		}
@@ -130,6 +130,28 @@ func TestAResumedCoordinatorBriefHasTheEpicsStoriesNow(t *testing.T) {
 		if !strings.Contains(brief, want) {
 			t.Errorf("the resumed coordinator brief is missing %q:\n%s", want, brief)
 		}
+	}
+
+	epic.Kind, epic.Worktree = tasks.Epic, task.Worktree
+	brief = resumedCoordinatorBrief(epic, agentNamed(t, roster, "tech-lead"), roster, 0,
+		family{stories: []*tasks.Task{task, later}}, nil, nil, nil, nil)
+	if !strings.Contains(brief, "## This task is an epic") || !strings.Contains(brief, "- task-2 (") {
+		t.Errorf("the resumed brief of an epic has its stories now:\n%s", brief)
+	}
+}
+
+// How to split a task too big is in the coordinator's first brief, while
+// it hasn't chosen the task's kind; a resumed brief doesn't say it again.
+func TestAResumedCoordinatorBriefDoesNotOfferTheSplitAgain(t *testing.T) {
+	roster := defaultRoster()
+	task := fixRound().turn("turn-6", "engineer", "Removed it.").task()
+	lead := agentNamed(t, roster, "tech-lead")
+	const split = "## If this task is too big"
+	if whole := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil); !strings.Contains(whole, split) {
+		t.Fatalf("the whole brief of a task whose kind isn't chosen offers the split:\n%s", whole)
+	}
+	if resumed := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, family{}, nil, nil, nil, nil); strings.Contains(resumed, split) {
+		t.Errorf("the resumed brief offers the split again:\n%s", resumed)
 	}
 }
 

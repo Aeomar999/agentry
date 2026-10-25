@@ -50,16 +50,27 @@ func (l *Loop) familyOf(task *tasks.Task) family {
 // stories stand, a story and its place in its epic, or a story it may split.
 func epicSection(b *strings.Builder, task *tasks.Task, f family) {
 	switch {
-	case task.Kind == tasks.Epic:
-		section(b, "This task is an epic", epicText(task, f))
-	case task.Epic != "" && f.epic != nil:
-		section(b, "This task is a story of an epic", storyText(task, f))
+	case familySection(b, task, f):
 	case !task.KindChosen:
 		section(b, "If this task is too big", "Some tasks are too big for one story: one branch, one round of checks, one "+
 			"summary. If this one is (several features, work for more than one team, or more than a reviewer can read "+
 			"in one sitting), split it into stories with a \"split\" decision instead of starting the work, and it becomes "+
 			"an epic. "+splitGuide)
 	}
+}
+
+// familySection is the epic the task is, or the one it is a story of, if
+// either; it says whether there was one.
+func familySection(b *strings.Builder, task *tasks.Task, f family) bool {
+	switch {
+	case task.Kind == tasks.Epic:
+		section(b, "This task is an epic", epicText(task, f))
+	case task.Epic != "" && f.epic != nil:
+		section(b, "This task is a story of an epic", storyText(task, f))
+	default:
+		return false
+	}
+	return true
 }
 
 const splitGuide = "Each story is a task of its own: its team's coordinator runs it, its work is checked, and its summary " +
