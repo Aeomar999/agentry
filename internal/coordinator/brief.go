@@ -269,6 +269,9 @@ func filesText(files []workspace.File, base string) string {
 	if len(files) > mostFilesListed {
 		return fmt.Sprintf("It touches %s; list them with `git diff --stat %s..HEAD`.", count(len(files), "file"), base)
 	}
+	if len(files) == 0 {
+		return "It touches no files."
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "It touches %s:\n", count(len(files), "file"))
 	for _, f := range files {
