@@ -18,7 +18,7 @@ var (
 	rootFolders = []string{"cmd", "deploy", "docs", "internal", "packaging", "spec", "tools", "ui"}
 	rootFiles   = []string{
 		".dockerignore", ".gitignore", ".gitlab-ci.yml", "Dockerfile", "LICENSE", "Makefile", "NOTICE",
-		"PLAN.md", "README.md", "docker-stack.dev.yml", "go.mod", "go.sum", "spec.md",
+		"README.md", "docker-stack.dev.yml", "go.mod", "go.sum",
 	}
 )
 

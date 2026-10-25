@@ -288,7 +288,7 @@ func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
 		"a UI path":                  {"@TASK-01 @user @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
 		"a missing UI path":          {"@TASK-01 @user @test", "# ui/src/Gone.test.tsx", "tasks-and-board.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
 		"a glob":                     {"@TASK-01 @user @test", "# every page: ui/src/**/*.tsx", ""},
-		"a root file":                {"@TASK-01 @user @test", "# README.md, Use it; PLAN.md T-013", "tasks-and-board.feature:10: cited path PLAN.md does not exist"},
+		"a root file":                {"@TASK-01 @user @test", "# README.md, Use it; NOTICE, the licences", "tasks-and-board.feature:10: cited path NOTICE does not exist"},
 		"a manual scenario":          {"@TASK-01 @user @manual", "# internal/web/gone_test.go TestGone", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
