@@ -252,32 +252,34 @@ Feature: Reliability
     # internal/hooks/orphans.go HoldOrphanedAsks runs at every start
     # cmd/agentry/serve.go serveUntilDone: requests share the server's context, with 2 seconds to shut down
     Given an action the policy asked the user about, with its hook call waiting
-    When the server stops, so the hook call's context ends
+    When the hook call's context ends, as when the server stops
     Then the action is recorded as held: yes
     Given an action asked and never answered in the log, with no hook call waiting, as after the server was killed outright
-    When the server starts
+    When the asks no hook waits for are held, as at every start
     Then the action is held for the user: yes
     And its decision is still undecided, and 0 hooks are waiting on it
-    # internal/hooks/orphans.go; internal/hooks/handler_test.go
+    # not under test, checked by hand: serve holds them before it serves (cmd/agentry/serve.go line 200)
+    # internal/hooks/handler_test.go TestARestartHoldsAsksNoHookIsWaitingFor
 
   @REL-21 @test
-  Scenario: After a start, a worker that was online is waited for 30 seconds before its agent is refused
+  Scenario: After a start, a worker that was online is waited for, not refused at once
     # internal/workerlink/server.go ForgetConnections records every worker offline at start
     # internal/machines/fleet.go OfflineGrace = 30 seconds
     Given a fleet that expects a worker which has not dialed in since the start
     And an agent that may run only on that worker
-    When a turn for the agent is started and the worker connects 300 milliseconds later
-    Then the turn starts on that worker: yes
-    # README.md, Work across machines; internal/machines/fleet_test.go
+    When the fleet is asked where the agent's turn runs and the worker connects 300 milliseconds later
+    Then the fleet gives that worker: yes
+    # not under test, checked by hand: the wait ends after OfflineGrace, 30 seconds (internal/coordinator/loop.go line 204), and the agent is refused then
+    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   @REL-48 @test
   Scenario: An agent whose only worker has never been seen is refused a turn
     # internal/machines/fleet.go: the grace is for a worker that was online, never for one unseen
     Given a fleet whose worker has never dialed in
     And an agent that may run only on that worker
-    When a turn for the agent is started
+    When the fleet is asked where the agent's turn runs
     Then the fleet refuses it with an error: yes
-    # README.md, Work across machines; internal/machines/fleet_test.go
+    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
 
   # Startup replay of the log and the snapshot
 
@@ -292,12 +294,12 @@ Feature: Reliability
     And when it stops, the data folder holds state.snapshot with mode 0600
     When the server starts again
     Then it logs "replayed": no, because the state went on from the snapshot
-    # PLAN.md T-066; cmd/agentry/serve_test.go
+    # PLAN.md T-066; cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart
 
   @REL-23 @test
   Scenario: A snapshot that cannot be trusted is thrown away and the whole log is replayed
     # internal/current/resume.go Restore and Resume; a torn or corrupt file is kept as state.snapshot.bad
-    Given a log of 12 events and a snapshot written at position 12 by build-1
+    Given a log and a snapshot written at position 12 by build-1
     When the snapshot is missing, or written by build-2, or is a folder, or cannot be read
     Then the state resumed from the snapshot: no, and the log says why
     When the snapshot is truncated, or 1 byte of its body is flipped
@@ -306,7 +308,7 @@ Feature: Reliability
     Then the state resumed from the snapshot: no
     When an event after the snapshot breaks a stream the snapshot holds
     Then the whole log is replayed and the stream is broken afterwards: no
-    # PLAN.md T-066; internal/current/snapshot_test.go
+    # PLAN.md T-066; internal/current/snapshot_test.go TestEveryFallbackReplaysTheWholeLogAndSaysWhy
 
   @REL-24 @test
   Scenario: Starting from a snapshot gives the same state as replaying the whole log
@@ -314,23 +316,24 @@ Feature: Reliability
     Given a fixture log, with a story's news among its events
     When a snapshot is written at every position of the log and a state is resumed from each
     Then each resumed state equals the state replayed from the whole log: yes
-    # PLAN.md T-066; internal/current/snapshot_test.go
+    # PLAN.md T-066; internal/current/snapshot_test.go TestASnapshotAtEveryPositionEqualsAReplay
 
   @REL-25 @test
-  Scenario: The snapshot is written after 10,000 events, or after 10 minutes with at least 1 event, and at close
+  Scenario: The snapshot is written after its count of events, or at its interval with at least 1 event, and at close
     # internal/current/writer.go snapshotEvery = 10,000 events, snapshotInterval = 10 minutes
     Given a snapshot writer running beside the state
-    When 10,000 events have been applied since the last snapshot
+    When as many events as its count have been applied since the last snapshot
     Then 1 snapshot is written
-    When 10 minutes pass with at least 1 event applied
+    When its interval passes with at least 1 event applied
     Then 1 snapshot is written
-    When 10 minutes pass with 0 events applied
+    When its interval passes with 0 events applied
     Then 0 snapshots are written
     When the writer closes with events applied since the last snapshot
     Then it writes 1 last snapshot, which the next start goes on from: yes
     When the writer closes with 0 events applied since the last snapshot
     Then it writes 0 snapshots
-    # PLAN.md T-066; internal/current/writer_test.go
+    # not under test, checked by hand: serve's writer counts 10,000 events and waits 10 minutes (internal/current/writer.go lines 17, 18); the test sets 3 events and ticks by hand
+    # PLAN.md T-066; internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent, TestCloseWritesASnapshotTheNextStartGoesOnFrom
 
   @REL-26 @benchmark
   Scenario: Starting from a snapshot is fast however long the log is
@@ -357,11 +360,13 @@ Feature: Reliability
   @REL-27 @test
   Scenario: Tasks done for 30 days are archived unless -archive-after is 0
     # cmd/agentry/serve.go defaultArchiveAfter = 30 days (720h)
-    Given a server started with no -archive-after
-    Then it logs that it archives tasks done for 720h0m0s
+    Given serve's flags with no -archive-after
+    Then the age it archives at is 720h0m0s: yes
+    Given a server started with an age to archive at
+    Then it logs that it archives tasks done for that age: yes
     Given a server started with -archive-after 0
     Then it logs that archiving is off, with no age
-    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go
+    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go TestServeParsesArchiveAfter, TestServeArchivesOnlyWithArchiveAfter
 
   @REL-49 @test
   Scenario: A negative -archive-after is refused at start
@@ -369,24 +374,24 @@ Feature: Reliability
     Given a server started with -archive-after -1h
     When it starts
     Then it refuses to start, saying -archive-after is 0 or above
-    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go
+    # README.md, Archiving, erasing and redacting; cmd/agentry/serve_test.go TestServeParsesArchiveAfter
 
   @REL-28 @test
   Scenario: The archiver runs a round at start and then every hour
     # internal/archive/archive.go roundEvery = 1 hour
     Given an archiver started with the server
     When it starts
-    Then it runs 1 round at once
+    Then it runs a round at once: yes
     When 1 hour passes
-    Then it runs 1 more round
+    Then it runs another round: yes
     When the server closes during a round
     Then the task under way finishes and the rest wait: yes
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go
+    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestTheArchiverRunsAtStartAndThenHourly, TestCloseStopsARoundAfterTheTaskUnderWay
 
   @REL-29 @test
   Scenario: A round archives only tasks done for the age with no turn open, and an epic after its stories
     # internal/archive/archive.go chosen
-    Given a task done 30 days ago and another done 29 days ago
+    Given a task done 30 days ago and another done just under 30 days ago
     When a round runs
     Then 1 task is archived
     Given a task done 30 days ago whose turn is still open
@@ -395,10 +400,10 @@ Feature: Reliability
     Given an epic done 30 days ago with 1 story still in the live log
     When a round runs
     Then the epic is archived: no, and it is archived in a round after the story is
-    Given a task archived, then unarchived 1 day ago and not reopened
+    Given a task archived, then unarchived less than 30 days ago and not reopened
     When a round runs
     Then it is archived: no, because it waits the whole 30 days again from its unarchiving
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go
+    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge, TestATaskWithATurnRunningWaitsForTheRoundAfterItEnds, TestAnEpicWaitsForItsStories, TestAnUnarchivedTaskWaitsTheAgeAgain
 
   @REL-30 @test
   Scenario: Archiving moves a task's rows into one file and leaves a marker with its summary
@@ -406,10 +411,10 @@ Feature: Reliability
     Given a done task with N rows in the live log
     When it is archived
     Then the live log holds 0 of those rows and 1 task.archived marker in their place
-    And the marker names exactly 1 blob, which holds the N rows, and the task's summary
+    And the marker names a blob that holds the N rows, and the task's summary: yes
     When the delete would remove other than N rows
     Then the whole archive is undone, marker and all: yes
-    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go
+    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go TestArchiveMovesTheRowsIntoTheBlob, TestADeleteOfTheWrongCountUndoesTheArchive
 
   @REL-52 @test
   Scenario: A delete of rows no task.archived marker covers is refused by the database
@@ -417,8 +422,8 @@ Feature: Reliability
     Given a live log with a task's rows in it and no task.archived marker for them
     When a statement deletes all of the log's rows, or the row at position 1
     Then each delete is refused by the database as append-only: yes
-    And 0 rows are gone
-    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go
+    # not under test, checked by hand: the trigger aborts the whole statement, so 0 rows are gone (internal/store/store.go line 64)
+    # README.md, Archiving, erasing and redacting; internal/store/archive_test.go TestAStrayDeleteIsRefused
 
   @REL-31 @test
   Scenario: An archived task still opens as it was, and takes no new events
@@ -428,7 +433,7 @@ Feature: Reliability
     Then it reads as before archiving, marked archived with the date: yes
     When its blob is missing
     Then the read fails with an error: yes
-    # README.md, Archiving, erasing and redacting; internal/web/archives_test.go
+    # README.md, Archiving, erasing and redacting; internal/web/archives_test.go TestAnArchivedTaskReadsAsBeforeArchiving, TestAnArchivedTaskWithoutItsBlobFails; no new events: TestAnArchivedTaskReadBackStillTakesNoEvents
 
   @REL-53 @test
   Scenario: An archived task takes no event but task.unarchived
@@ -437,7 +442,7 @@ Feature: Reliability
     When a message is sent to it, or its labels or its rank are set
     Then each request is refused: yes, and none is answered 200
     And the task is still archived in the state: yes
-    # README.md, Archiving, erasing and redacting; internal/web/archives_test.go
+    # README.md, Archiving, erasing and redacting; internal/web/archives_test.go TestAnArchivedTaskReadBackStillTakesNoEvents
 
   @REL-32 @test
   Scenario: Reopening an archived task brings its rows back first
@@ -446,7 +451,7 @@ Feature: Reliability
     When it is moved off Done on the board, or its coordinator is told something
     Then task.unarchived is appended and its rows are back at their own positions: yes
     And it reopens as any done task does: yes
-    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go
+    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go TestMovingAnArchivedTaskBackToWorkReopensIt, TestSayingSomethingToAnArchivedTaskReopensIt; the positions: internal/store/unarchive_test.go TestUnarchivePutsTheRowsBackAsTheyWere
 
   @REL-50 @test
   Scenario: A reopen whose unarchiving is refused writes nothing
@@ -454,7 +459,7 @@ Feature: Reliability
     Given an archived done task whose unarchiving the store refuses
     When it is moved off Done on the board
     Then 0 events are written
-    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go
+    # README.md, Archiving, erasing and redacting; internal/web/unarchive_test.go TestAReopenThatCantUnarchiveWritesNothing
 
   @REL-33 @test
   Scenario: After a round that archived, the space goes back to the disk and a snapshot is asked for
@@ -467,7 +472,7 @@ Feature: Reliability
     Given a log file made before incremental vacuum whose one full VACUUM failed
     When the next round runs
     Then the VACUUM is tried again: yes
-    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go
+    # README.md, Archiving, erasing and redacting; internal/archive/archive_test.go TestOnlyARoundThatArchivedGivesBackSpaceAndSnapshots, TestAFailedVacuumIsTriedAgainAtTheNextRound; the WAL: internal/store/vacuum_test.go TestGiveBackSpaceShrinksTheFileAndTheWAL
 
   @REL-34 @benchmark
   Scenario: An archived task opens in time
