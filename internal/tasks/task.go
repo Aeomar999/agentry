@@ -102,8 +102,9 @@ type Task struct {
 	PendingDecision string // a coordinator's reply, until its decision is applied
 
 	// For the loop's safety stops.
-	TurnsSinceAnswer int // turns since the task started or you last answered
-	IssuesInARow     int // issues with no normal turn end between them
+	TurnsSinceAnswer int    // turns since the task started or you last answered
+	IssuesInARow     int    // issues with no normal turn end between them
+	LastIssue        string // why the latest issue was raised: later steps may follow it in the trail
 }
 
 // DefaultMaxTurns is the limit of turns of a task made before each task had

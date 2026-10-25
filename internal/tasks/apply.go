@@ -429,7 +429,7 @@ func (t *Task) Apply(e events.Event) {
 			turn.Ended, turn.Issue = true, e.Text("reason")
 			t.moveRepo()
 		}
-		t.IssuesInARow++
+		t.IssuesInARow, t.LastIssue = t.IssuesInARow+1, e.Text("reason")
 		if e.Flag("retryFresh") && turn != nil && turn.Handoff.To == turn.Agent {
 			// Its resumed session didn't start, so nothing was done: the
 			// same agent gets the same step again, and the coordinator is

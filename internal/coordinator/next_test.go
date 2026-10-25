@@ -353,6 +353,20 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 	}
 }
 
+// A note you add after the issues goes in the trail after them; asked
+// then, you still read why the latest issue was raised.
+func TestIssuesInARowFollowedByANoteQuoteTheIssue(t *testing.T) {
+	h := started()
+	for range MaxIssuesRun {
+		h = h.add(watchdog, events.IssueRaised, "", map[string]any{"reason": "the engine is missing"})
+	}
+	h = h.add(you, events.TaskDirected, "", map[string]any{"text": "Use the other machine."})
+	move := Next(h.task(), defaultRoster())
+	if move.Kind != AskYou || !strings.Contains(move.Reason, "the last: the engine is missing.") || strings.Contains(move.Reason, "other machine") {
+		t.Errorf("after %d issues and a note: %+v", MaxIssuesRun, move)
+	}
+}
+
 // A failed resume retried fresh keeps the agent's instructions as its
 // handoff; asked after it, you read why it failed, not those instructions.
 func TestIssuesInARowEndingInARetryQuoteTheIssue(t *testing.T) {
