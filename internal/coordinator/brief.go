@@ -48,15 +48,17 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 
 // resumedCoordinatorBrief is the coordinator's brief for a turn that goes on
 // with its last session, whose brief was made from the trail's first seen
-// steps. The machines online and the epic's stories change without a step
-// on the trail, so it has them as they are now. Of the task's kind, only
-// the epic it is or is a story of: how to split it was in its first brief.
-func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, f family, machines []machine,
-	shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
+// steps; or, when from is another story of the epic, with its session
+// there (see goingOn). The machines online and the epic's stories change
+// without a step on the trail, so it has them as they are now. Of the
+// task's kind, only the epic it is or is a story of: how to split it was
+// in its first brief.
+func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, from string, f family,
+	machines []machine, shared []sharedfiles.File, state features.Reader, list []features.Feature) string {
 	hooks := hooksFor(list, coordinator, state)
 	var b strings.Builder
-	resumedHeader(&b, coordinator, task)
-	section(&b, "What has happened since your last turn", cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
+	trailHeading := goingOn(&b, coordinator, task, from)
+	section(&b, trailHeading, cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
 		"The last step is the newest. Decide what happens next.")
 	coordinatorWork(&b, task, coordinator, shared)
 	machinesSection(&b, task, coordinator, roster, machines)
@@ -153,17 +155,19 @@ func workerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, ins
 }
 
 // resumedWorkerBrief is the agent's brief for a turn that goes on with its
-// last session, whose brief was made from the trail's first seen steps. The
-// newest step, the handoff giving these instructions, is left to them.
-func resumedWorkerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, seen int,
+// last session, whose brief was made from the trail's first seen steps; or,
+// when from is another story of the epic, with its session there (see
+// goingOn). The newest step, the handoff giving these instructions, is
+// left to them.
+func resumedWorkerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, seen int, from string,
 	shared []sharedfiles.File) string {
 	steps := since(task.Trail, seen)
 	if last := len(steps) - 1; last >= 0 && steps[last].To == agent.Name {
 		steps = steps[:last]
 	}
 	var b strings.Builder
-	resumedHeader(&b, agent, task)
-	section(&b, "What has happened since your last turn", cmp.Or(trailText(steps, seen), "Nothing but your new instructions."))
+	trailHeading := goingOn(&b, agent, task, from)
+	section(&b, trailHeading, cmp.Or(trailText(steps, seen), "Nothing but your new instructions."))
 	workerWork(&b, task, agent, roster, instructions, shared)
 	keepYourNotes(&b)
 	finish(&b, agent)
@@ -346,6 +350,25 @@ func resumedHeader(b *strings.Builder, agent agents.Agent, task *tasks.Task) {
 	b.WriteString("This turn goes on from your last turn on this task, in the same session. You still have what you knew " +
 		"then: your role, your notes, the task, its earlier trail, the files you read and the work you did. This brief is " +
 		"only what has happened since and what this turn needs.\n\n")
+}
+
+// goingOn begins a resumed brief and is the heading of its trail. A session
+// from another story, from, knows that story's task, worktree and trail,
+// not this one's: so it says this is a new task and what it is, and the
+// trail, from its start (seen is 0), is this task's own.
+func goingOn(b *strings.Builder, agent agents.Agent, task *tasks.Task, from string) (trailHeading string) {
+	if from == "" || from == task.ID {
+		resumedHeader(b, agent, task)
+		return "What has happened since your last turn"
+	}
+	fmt.Fprintf(b, "# Agentry brief: %s, %s, %s, going on from %s\n\n", agent.Name, task.ID, task.NextTurnID(), from)
+	fmt.Fprintf(b, "This turn goes on with your session from %s, another story of the same epic. You still have what you knew "+
+		"there: your role, your notes, and the code you read. But this is a new task, %s, with its own worktree and branch, "+
+		"below. The files you read in that session may differ on this branch, so read them again before you edit them. "+
+		"Nothing of %s's trail or instructions carries over: this brief is what this task is and what has happened on it.\n\n",
+		from, task.ID, from)
+	section(b, "The task", taskText(task))
+	return "What has happened on this task so far"
 }
 
 func section(b *strings.Builder, title, body string) {
