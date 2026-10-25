@@ -70,6 +70,16 @@ Every scenario, with no exceptions:
 
 Scenario Outline and Examples tables are not used; write one scenario per case, so every Then is a plain sentence the checker can read.
 
+## When you change behaviour
+
+Anyone who changes what Agentry does, an agent or a person, keeps this folder true in the same change:
+
+1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next free number under its file's prefix. Something built that `spec/NOT-YET.md` lists comes off that list in the same commit.
+2. Every scenario added or changed follows the rules for every scenario above.
+3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @COORD-61, changed @USER-12`, or says `no behaviour change`.
+4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
+5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
+
 ## Running the check
 
 ```sh
