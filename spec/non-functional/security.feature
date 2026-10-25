@@ -99,6 +99,28 @@ Feature: Security
     # back to "ask" and the same call is ask by that rule. (internal/policy/default_test.go TestTheDeveloperProfile asserts
     # ask only, which otherwise gives too.)
 
+  @SEC-67 @test
+  Scenario: The gate judges only the shell's code: quoted text and a heredoc's body are data
+    # internal/policy/default_test.go TestTheDeveloperProfile
+    Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
+    When it runs git commit -m 'fix: a; b | c && d > e', and cat > greet.go with a heredoc whose body holds "a > b"
+    Then both are allowed: the separators and the redirect inside the quotes, and the heredoc's body, are not read as commands
+    And a heredoc fed into bash, whose body holds rm -r src, is asked: yes
+    And a command substitution inside double quotes, as in git commit -m "$(cat /etc/passwd)", is asked, since it runs
+    And a second command on the next line is judged as a command of its own: ls, then curl on the next line, is asked
+    # README.md, The policy; PLAN.md T-039
+
+  @SEC-68 @test
+  Scenario: A downloaded repo archive stays in its folder and under its size limit
+    # internal/worktrees/repo_test.go TestADownloadedArchiveStaysInItsFolder and TestOnlyWebLinksAreArchives
+    Given a repo named by a link to a .zip or a .tar
+    When the archive holds an entry that climbs out of its folder with ../, git's own files or a link, or is bigger than the limit, or unpacks to more than it
+    Then the entry out of its folder is refused, saying "outside its folder", nothing is written outside, and the failed download leaves nothing behind
+    And .git/config, a file named .GIT and a link are left out of the repo, and the archive's own files are kept
+    And a download bigger than the limit, and one that unpacks to more than it, are each refused
+    And only an http or https link counts as an archive: a file:, ftp: or git address ending in an archive's name is not one
+    # README.md, Use it (Add a task); PLAN.md T-044
+
   @SEC-12 @test
   Scenario: As shipped, every agent allows everything but Agentry's own files
     Given the shipped policy as written, with use_for_everyone set to allow-everything

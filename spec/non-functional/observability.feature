@@ -18,6 +18,16 @@ Feature: Observability
     # not under test, checked by hand: the store runs both checks on every proposal before it writes one (internal/store/store.go lines 341 and 344), and the shape check wants an actor's kind and id (internal/events/catalogue.go line 367), so every event in the log names who wrote it
     # README.md, How it works, How it fits together; PLAN.md T-002; internal/events/catalogue_test.go TestCheckShapeAndWriter
 
+  @OBS-34 @test
+  Scenario: A feature's stream prefix or event type that would collide with the core's or another feature's is refused
+    # internal/events/catalogue_test.go TestNewCatalogueRefusesWhatWouldCollide and TestARegisteredPrefixIsNotATask
+    Given the Ideas feature registered with its stream prefix idea-
+    When another registration takes the prefix idea-, a prefix overlapping another's, a prefix a core stream starts with, a prefix task- starts with or one that starts with task-, a type both in its streams and in tasks', or stream types with no prefix
+    Then each is refused, naming the prefix or the type as taken, the prefix as overlapping task-, or the types as needing a stream prefix
+    And a task type a feature registered is allowed in a task stream and refused in an idea stream, and a catalogue without that registration refuses it: yes
+    And a stream that starts with idea- is not a task stream: yes
+    # PLAN.md T-088; README.md, Ideas (GET /api/features)
+
   @OBS-03 @test
   Scenario: A refused proposal is kept in the log as a rejection, not as the event
     Given a task whose task.created is in the log
@@ -268,6 +278,19 @@ Feature: Observability
     And the task says "Tokens unknown on 1 turn: transcript not saved"; with 3 such turns of 2 reasons it says "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"
     And a task every turn of which was counted says nothing of it, an empty string
     # README.md, Use it, Budgets and turn limits; internal/web/views_test.go TestATurnSaysWhyItsTokensAreUnknown and TestTheTaskSaysWhereItsTokensAreUnknown
+
+  @OBS-33 @test
+  Scenario: Each turn says how its session started: resumed, forked, from which story, or fresh and why
+    # internal/web/split_view_test.go TestATurnSaysWhetherItResumedOnlyWhenKnown
+    Given a task whose turns started fresh as the first turn, resumed its own session, resumed a sibling story's session, and forked a sibling story's session, and one turn from a log that said none of this
+    When the task's detail, as the API sends it, is made
+    Then each turn carries what its log said: freshBecause "first turn"; fromSession; fromSession with sessionFrom "task-1"; and those with forked true
+    And the turn that resumed its own session names no story and no fork, and the turn from the older log carries none of them: yes
+    Given a task's turns that resumed, forked, resumed from task-2 and forked from task-2, one that started fresh because its context was too big, and one whose log said neither
+    When its Details tab is shown
+    Then under each turn's tokens it reads exactly "resumed", "forked", "resumed from task-2" or "forked from task-2", with the session id shown on hover; task-2 links to its page, and a plain "resumed" has no link
+    And the turn that started fresh reads "fresh: " and its reason, and the turn whose log said neither reads nothing of how it started
+    # Agentry task-206, sessions shared across an epic's stories (COORD-51, COORD-52); ui/src/pages/TaskPage.test.tsx "says which story a turn's session came from, and whether it forked it" and "shows under its tokens whether each turn resumed or started fresh, and nothing for a turn that didn't say"
 
   @OBS-29 @test
   Scenario: A worker that connects is listed online, with its details and history

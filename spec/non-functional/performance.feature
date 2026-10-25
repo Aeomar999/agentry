@@ -112,6 +112,26 @@ Feature: Performance
     And it names the new position, exactly 1 past the one waited on
     # PLAN.md T-005; internal/web/api_test.go TestChangesAnswerAsSoonAsTheLogMoves
 
+  @PERF-15 @test
+  Scenario: The page reads each path once per move of the log, however many parts of it show the path
+    # ui/src/live/resource-cache.test.ts "a refresh reads each path once, and the poll's jump to the newest position reads nothing again", "one event reads each shown path once more", "events arriving during a read give one more read, not one each, and none is aborted" and "a failed read shows its error, keeps the last data, and is tried again when the log moves"
+    Given the tasks page as it mounts, where the shell and the page both show the tasks and the agents, and the shell the questions
+    When the page loads, then 1 event arrives, then events 42 to 50 arrive while the read for event 41 is out
+    Then each of the 3 paths is read exactly once on load, and once more for the 1 event
+    And events 42 to 50 give exactly 1 more read once the read for 41 answers, not 1 each, and the read out is not aborted
+    And a failed read shows its error, keeps the last data and is read again when the log moves: yes
+    # not under test, checked by hand: until its first read answers, the tasks list says "Loading the tasks…" instead of showing an empty table (ui/src/pages/TasksPage.tsx line 287)
+    # PLAN.md T-087
+
+  @PERF-16 @test
+  Scenario: Listing ideas reads the state in memory and sends no query to the database
+    # internal/ideas/routes_test.go TestListingIdeasSendsNoQuery
+    Given a server with 2 ideas suggested in 2 repos, 1 of them then dismissed through the API
+    When GET /api/ideas and GET /api/ideas?repo=<the open idea's repo> are read
+    Then the first lists both, newest first, and the second only the open one
+    And the database is sent exactly 0 queries for the 2 reads
+    # PLAN.md T-078; README.md, Ideas
+
   @PERF-14 @manual
   Scenario: A wait for changes with no event ends after 25 seconds
     Given a running server with no agent working and no one at the page, and the log's last position from the position header of any API read

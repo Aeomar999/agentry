@@ -107,6 +107,17 @@ Feature: The user
     When the user adds another task with "A new repo" at the same path
     Then the task is refused with 400
 
+  @USER-132 @test
+  Scenario: A repo named by a link to a .zip or .tar.gz is downloaded and made a repo
+    # internal/worktrees/repo_test.go TestARepoNamedByALinkToAnArchiveIsDownloaded
+    Given a link to a .tar.gz, with a query after its name, whose files sit in one top folder app-1.2
+    When Agentry fetches the repo the link names
+    Then the link counts as an address, and the archive is downloaded into a folder whose name starts with app-1.2-, which is a git repo: yes
+    And the files are at the top of the repo, out of the archive's folder, and every one is committed
+    And a link that answers 404 is refused, saying 404
+    # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 100)
+    # README.md, Use it (Add a task); PLAN.md T-044
+
   @USER-10 @manual
   Scenario: The repo choice on the form asks for a full path
     # "Give the repo's full path, starting with /.": ui/src/components/organisms/NewTaskForm.tsx
@@ -792,6 +803,19 @@ Feature: The user
     Then exactly 2 questions are listed, the older first
     And the first has kind question, the text "Which layout?", exactly 2 options and the page
     And the second has kind approval, its action, the command "git push" and the rule "every push asks"
+
+  @USER-133 @test
+  Scenario: Claude in the dock starts in the page's theme, runs agentry task without asking, and edits nothing
+    # internal/desk/desk_test.go TestTheDeskStartsClaudeWithWhatItNeeds
+    Given the page in the light theme, and the desk not running
+    When the desk starts
+    Then Claude starts in its repo with the desk's prompt, the server's address and the desk token, and the light theme in its settings: yes
+    And it runs in the default permission mode, with Bash(agentry task:*) allowed without asking, and Edit, Write, MultiEdit and NotebookEdit each disallowed
+    And starting it again while it runs restarts Claude: no
+    When the desk is started again in the dark theme
+    Then Claude starts again in the dark theme, resuming its own conversation: yes
+    # not under test, checked by hand: an agent's session starts in the page's theme too (internal/engines/claude.go lines 38 to 46), and a terminal on the page follows the theme as it changes (ui/src/components/organisms/TerminalView.tsx lines 46 to 49)
+    # README.md, Use it, The dock; PLAN.md T-046, T-052
 
   @USER-66 @manual
   Scenario: Answering a question with options, and with the page the coordinator made

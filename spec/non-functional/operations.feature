@@ -154,6 +154,17 @@ Feature: Operations
     And a worker's credential, repos, worktrees and worker.log are kept in .agentry-worker in its home folder
     # README.md, From the source; cmd/agentry/serve.go
 
+  @OPS-42 @test
+  Scenario: A saved features.toml reaches a running feature with no restart, and a removed one is said once
+    # internal/settingsfile/settingsfile_test.go TestAnEditReachesSettingsHandedOutBefore, TestARemovedFileIsSaidOnce, TestAMissingFileIsNoSettings and TestABrokenFileAtTheStartIsNoSettings
+    Given a feature that read its settings from features.toml, which is watched
+    When the file is saved with a new value, then removed, then put back
+    Then the feature reads the new value with no restart, and once the file is removed its secrets are gone: yes
+    And the removal is said exactly once, naming the file and never what it held, and putting it back says the settings file loaded
+    Given no features.toml at start, or one that does not load
+    Then features have no settings, a missing file is not reported, and a broken one is reported as "doesn't load; features have no settings until it is fixed", not as a version staying in force
+    # README.md, Features' settings and secrets
+
   # The address
 
   @OPS-10 @manual
@@ -538,6 +549,16 @@ Feature: Operations
     When the UI is built and committed
     Then the job check runs go vet and go test, with a timeout of 15 minutes
     # README.md, Work on it; .gitlab-ci.yml
+
+  @OPS-41 @test
+  Scenario: A test never starts, finds or stops the sessions of the Agentry running on the machine
+    # internal/sessions/session_test.go TestATestCantUseTheLiveSessions
+    Given go test running with no sessions folder of its own
+    When a test starts a session, or attaches to one
+    Then the start is refused, saying it is the live sessions folder, and the attach is refused: yes
+    And nothing is written to the live sessions folder
+    # not under test, checked by hand: sessionstest gives each test package its own folder and fails a run that leaves a session or process behind (internal/sessions/sessionstest/sessionstest.go)
+    # PLAN.md T-072
 
   # How a release is packaged
 

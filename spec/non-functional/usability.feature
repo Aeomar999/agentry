@@ -9,6 +9,21 @@ Feature: Usability
     And the dock is hidden when the user presses Ctrl+J again
     # README.md, Use it, The dock; PLAN.md T-045
 
+  @USE-28 @manual
+  Scenario: The dock resizes by its top edge between 120 px and the content area's height, and has 2 tabs
+    Given the page open and the dock open
+    When the user drags the dock's top edge up to the top bar, then down as far as it goes, and reloads the page
+    Then the dock never grows over the top bar, and never shrinks under 120 px
+    And after the reload the dock opens at the height it was left at, kept in this browser, and 320 px the first time
+    And its tabs are exactly 2: Questions, with the count of what waits, and Claude; an agent's terminal is on its task's page, in the Terminal tab
+    And opened with Ctrl+J while something waits for the user, the dock opens on Questions, not on the tab it was left on
+    # ui/src/components/templates/AdminShell.tsx lines 40, 41, 61 to 66, 70 to 76 and 90; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
+    # Steps:
+    # 1. Open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
+    # 2. Reload, press Ctrl+J, and read the dock's height and its tabs.
+    # 3. With <a task> waiting for the user, close the dock on the Claude tab and press Ctrl+J: it opens on Questions.
+    # README.md, Use it, The dock; PLAN.md T-045
+
   # --- Contrast of the token file: WCAG 2.1, measured, dark and light ---
   # Every ratio below comes from python3 -I .agentry/files/notes/contrast.py ui/src/styles/globals.css, run on
   # 2026-10-25 at commit 45d8d734: the dark tokens are the @theme block (lines 12-96), the light tokens the first
@@ -238,3 +253,13 @@ Feature: Usability
     Then the html element gets the class light, every token takes its light value, and the browser's theme colour becomes #fafafa from #16181d
     And the choice is kept in localStorage under agentry-theme, so the next visit opens in the same theme, and is posted to POST /api/theme, which accepts only "light" or "dark"
     # PLAN.md T-017, T-052; ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 510-523; no test
+
+  @USE-27 @test
+  Scenario: An agent's chip is its first letter on a tint of its own colour, and you and Agentry are neutral
+    # ui/src/components/molecules/Avatar.test.tsx "draws an agent's letter on a tint of its colour, the letter darker in light" and "draws %s neutral"
+    Given the engineer with the colour teal
+    When its chip is drawn, and the chips for you and for Agentry
+    Then the engineer's chip reads E, its letter and its tint each mixed from the agent colour teal
+    And the chips for you and Agentry read Y and A on the neutral surface, with no agent's colour: yes
+    # not under test, checked by hand: the colour is picked on the agent's edit page from AGENT_COLORS (ui/src/components/molecules/ColorSwatches.tsx line 16)
+    # PLAN.md T-056
