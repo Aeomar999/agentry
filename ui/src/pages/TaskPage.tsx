@@ -132,7 +132,7 @@ function TurnSplit({ split }: { split: TokenSplit }) {
 // It takes no width of its own and wraps within what the split sets, so a
 // long reason never widens the table.
 function TurnStart({ turn }: { turn: Turn }) {
-  const style = "self-stretch text-right text-[11px] whitespace-normal text-ink-muted [contain:inline-size]";
+  const style = "self-stretch text-right text-[11px] whitespace-normal break-words text-ink-muted [contain:inline-size]";
   if (turn.fromSession) {
     return (
       <span className={style} title={turn.fromSession}>
