@@ -204,7 +204,10 @@ type Turn struct {
 	ID            string // also the correlation of its events
 	Agent         string
 	Worker        string // the machine it ran on
+	Engine        string // the engine it ran on, "" when unknown
 	EngineSession string // the engine's own id for the session, "" until it says or in logs from before it was kept
+	FromSession   string // the engine session it resumed, "" when it started fresh
+	FreshBecause  string // why it started fresh, "" when it resumed or in logs from before it was kept
 	Hash          string // of the prompt line it was started with
 	StartedAt     time.Time
 	LastEventAt   time.Time
