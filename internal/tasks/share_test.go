@@ -33,9 +33,9 @@ func TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling(t *testing.T) {
 	running := endedAt(40, "")
 	running.Ended, running.FromSession = false, "s-2" // a sibling's turn in progress, passed over
 	second.Turns = append(second.Turns, running)
-	reviewer := story("task-4", &Turn{Agent: "reviewer", Engine: "claude", Worker: "omni", EngineSession: "r-1", Ended: true, StartedAt: endedAt(30, "").StartedAt})
+	reviewer := story("task-4", &Turn{Agent: "reviewer", Engine: "claude", Worker: "tower", EngineSession: "r-1", Ended: true, StartedAt: endedAt(30, "").StartedAt})
 	next := story("task-5")
-	session, from, fresh := next.SessionToShare([]*Task{first, second, reviewer, next}, "engineer", "claude", "omni")
+	session, from, fresh := next.SessionToShare([]*Task{first, second, reviewer, next}, "engineer", "claude", "tower")
 	if session != "s-2" || from != first {
 		t.Errorf("got %q from %s, fresh because %q; want s-2, the engineer's latest across the stories, from task-2", session, idOf(from), fresh)
 	}
@@ -51,13 +51,13 @@ func TestASiblingsSessionIsHeldToTheSameRules(t *testing.T) {
 		worker string
 		want   string
 	}{
-		{"failed, context 0", func(turn *Turn) { turn.Issue, turn.Context = "the session ended without a report", 0 }, "claude", "omni", "its last turn failed"},
-		{"resume failed", func(turn *Turn) { turn.Issue, turn.FromSession = "its resumed session didn't start", "s-0" }, "claude", "omni", "its resume failed"},
-		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "omni", "its last turn was stopped"},
-		{"another engine", func(*Turn) {}, "codex", "omni", "another engine"},
+		{"failed, context 0", func(turn *Turn) { turn.Issue, turn.Context = "the session ended without a report", 0 }, "claude", "tower", "its last turn failed"},
+		{"resume failed", func(turn *Turn) { turn.Issue, turn.FromSession = "its resumed session didn't start", "s-0" }, "claude", "tower", "its resume failed"},
+		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "tower", "its last turn was stopped"},
+		{"another engine", func(*Turn) {}, "codex", "tower", "another engine"},
 		{"another machine", func(*Turn) {}, "claude", "workstation", "the work moved to workstation"},
-		{"no session id", func(turn *Turn) { turn.EngineSession = "" }, "claude", "omni", "no session id"},
-		{"too big", func(turn *Turn) { turn.Context = MaxResumedContext + 1 }, "claude", "omni", "context too big (151k tokens)"},
+		{"no session id", func(turn *Turn) { turn.EngineSession = "" }, "claude", "tower", "no session id"},
+		{"too big", func(turn *Turn) { turn.Context = MaxResumedContext + 1 }, "claude", "tower", "context too big (151k tokens)"},
 	} {
 		latest := endedAt(20, "s-2")
 		c.change(latest)
@@ -72,19 +72,19 @@ func TestASiblingsSessionIsHeldToTheSameRules(t *testing.T) {
 func TestAStorysOwnSessionWinsOverANewerSiblings(t *testing.T) {
 	own := story("task-5", endedAt(1, "s-own"))
 	stories := []*Task{story("task-2", endedAt(20, "s-2")), own}
-	if session, from, fresh := own.SessionToShare(stories, "engineer", "claude", "omni"); session != "s-own" || from != own {
+	if session, from, fresh := own.SessionToShare(stories, "engineer", "claude", "tower"); session != "s-own" || from != own {
 		t.Errorf("got %q from %s, fresh because %q; want the story's own s-own", session, idOf(from), fresh)
 	}
 
 	own.Turns[0].Stopped = true
-	if session, _, fresh := own.SessionToShare(stories, "engineer", "claude", "omni"); session != "" || fresh != "its last turn was stopped" {
+	if session, _, fresh := own.SessionToShare(stories, "engineer", "claude", "tower"); session != "" || fresh != "its last turn was stopped" {
 		t.Errorf("got %q, fresh because %q; want its own last turn's reason, not a sibling's session", session, fresh)
 	}
 }
 
 func TestATaskThatIsNoStoryHasOnlyItsOwnSession(t *testing.T) {
 	task := &Task{ID: "task-1"}
-	if session, from, fresh := task.SessionToShare(nil, "engineer", "claude", "omni"); session != "" || from != nil || fresh != "first turn" {
+	if session, from, fresh := task.SessionToShare(nil, "engineer", "claude", "tower"); session != "" || from != nil || fresh != "first turn" {
 		t.Errorf("got %q from %s, fresh because %q; want a first turn", session, idOf(from), fresh)
 	}
 }
@@ -93,7 +93,7 @@ func TestATaskThatIsNoStoryHasOnlyItsOwnSession(t *testing.T) {
 // fork's own turn has a new session id but still says where it came from.
 func TestASessionIsBusyWhileATurnIsOpenInItOrFromIt(t *testing.T) {
 	open := func(change func(*Turn)) *Task {
-		turn := &Turn{Agent: "engineer", Engine: "claude", Worker: "omni"}
+		turn := &Turn{Agent: "engineer", Engine: "claude", Worker: "tower"}
 		change(turn)
 		return story("task-9", turn)
 	}
@@ -119,7 +119,7 @@ func TestASessionIsBusyWhileATurnIsOpenInItOrFromIt(t *testing.T) {
 func TestTurnStartedReadsWhereItsSessionCameFrom(t *testing.T) {
 	you := events.Actor{Kind: events.Human, ID: "you"}
 	lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
-	worker := events.Actor{Kind: events.Worker, ID: "omni"}
+	worker := events.Actor{Kind: events.Worker, ID: "tower"}
 	started := func(data map[string]any) *Turn {
 		event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
 			return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-3", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
@@ -130,11 +130,11 @@ func TestTurnStartedReadsWhereItsSessionCameFrom(t *testing.T) {
 			event(worker, events.TurnStarted, "turn-1", data),
 		}).Turn("turn-1")
 	}
-	old := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "fromSession": "s-1"})
+	old := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "tower", "engine": "claude", "fromSession": "s-1"})
 	if old.SessionFrom != "" || old.Forked {
 		t.Errorf("an old turn.started applies empty: from %q, forked %v", old.SessionFrom, old.Forked)
 	}
-	forked := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "omni", "engine": "claude", "fromSession": "s-1", "sessionFrom": "task-2", "forked": true})
+	forked := started(map[string]any{"agent": "engineer", "hash": "h", "worker": "tower", "engine": "claude", "fromSession": "s-1", "sessionFrom": "task-2", "forked": true})
 	if forked.SessionFrom != "task-2" || !forked.Forked || forked.FromSession != "s-1" {
 		t.Errorf("a forked turn from task-2: from %q, forked %v, session %q", forked.SessionFrom, forked.Forked, forked.FromSession)
 	}
@@ -148,12 +148,12 @@ func TestAFailedResumeFromASiblingRetriesFreshNotTheSiblingAgain(t *testing.T) {
 	for _, forked := range []bool{false, true} {
 		you := events.Actor{Kind: events.Human, ID: "you"}
 		lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
-		worker := events.Actor{Kind: events.Worker, ID: "omni"}
+		worker := events.Actor{Kind: events.Worker, ID: "tower"}
 		dog := events.Actor{Kind: events.System, ID: "watchdog"}
 		event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
 			return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-3", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
 		}
-		started := map[string]any{"agent": "engineer", "hash": "h2", "worker": "omni", "engine": "claude", "fromSession": "s-1", "sessionFrom": "task-2"}
+		started := map[string]any{"agent": "engineer", "hash": "h2", "worker": "tower", "engine": "claude", "fromSession": "s-1", "sessionFrom": "task-2"}
 		if forked {
 			started["forked"] = true
 		}
@@ -168,16 +168,16 @@ func TestAFailedResumeFromASiblingRetriesFreshNotTheSiblingAgain(t *testing.T) {
 		if task.Handoff == nil || task.Handoff.To != "engineer" || task.Handoff.Text != "Add the lint." {
 			t.Errorf("forked %v: handoff %+v, want the same step back to the engineer", forked, task.Handoff)
 		}
-		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "omni"); session != "" || fresh != "its resume failed" {
+		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "tower"); session != "" || fresh != "its resume failed" {
 			t.Errorf("forked %v: the retry goes on with %q from %s, fresh because %q; want fresh because its resume failed", forked, session, idOf(from), fresh)
 		}
 
 		log = append(log,
-			event(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h3", "worker": "omni", "engine": "claude", "freshBecause": "its resume failed"}),
+			event(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h3", "worker": "tower", "engine": "claude", "freshBecause": "its resume failed"}),
 			event(worker, events.SessionStarted, "turn-2", map[string]any{"engineSession": "s-3"}),
 			event(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "Added it."}))
 		task = FromEvents(log)
-		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "omni"); session != "s-3" || from != task {
+		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "tower"); session != "s-3" || from != task {
 			t.Errorf("forked %v: after the fresh retry, got %q from %s, fresh because %q; want its own s-3", forked, session, idOf(from), fresh)
 		}
 	}

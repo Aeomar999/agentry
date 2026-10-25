@@ -93,7 +93,7 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 
 	brief := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, "", family{}, twoMachines, nil, nil, nil)
 	for _, want := range []string{"# Agentry brief: tech-lead, task-1, turn-7, going on", "engineer → tech-lead: Removed it.",
-		"6. tech-lead → engineer: Remove the one in src/b.go.", "## Machines\n\n- local (host here", "- omni (host omni, linux), offline\n",
+		"6. tech-lead → engineer: Remove the one in src/b.go.", "## Machines\n\n- local (host here", "- tower (host tower, linux), offline\n",
 		"## Actions Agentry refused", "git push origin HEAD:dev`: agents don't push", "## Before you finish",
 		"## Your decision\n\n" + strings.TrimSpace(DecisionFormat), "worktree, /w/task-1", ".agentry/turn-7-plan.md",
 		"Decide what happens next."} {
@@ -112,7 +112,7 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 // twoMachines is this machine and a worker gone offline, so a coordinator
 // has machines to choose from.
 var twoMachines = []machine{{name: "local", host: "here", os: "this machine, where Agentry runs", online: true},
-	{name: "omni", host: "omni", os: "linux"}}
+	{name: "tower", host: "tower", os: "linux"}}
 
 // A story started from the Backlog leaves no step on the trail, so a
 // resumed coordinator hears of the epic's stories as they are now.
