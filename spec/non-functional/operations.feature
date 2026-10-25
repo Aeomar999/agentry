@@ -130,7 +130,7 @@ Feature: Operations
     # cmd/agentry/serve.go -data default: filepath.Join(home, ".agentry"); cmd/agentry/open.go the same; the launchers pass no -data
     # cmd/agentry/open.go -repo default: filepath.Join(home, "Agentry"), made at the first start
     # cmd/agentry/serve.go: agentry.db, state.snapshot, files, repos, worktrees, ui-token, hook-token, desk-token, helper-token
-    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml; internal/webpush/webpush.go File = push.json
+    # cmd/agentry/policy.go policyFile = policy.toml, settingsFile = features.toml, which is read and not written (internal/settingsfile/settingsfile.go Open, gone); internal/webpush/webpush.go File = push.json
     # internal/tlsca/ca.go Folder = tls; internal/client/client.go ServerFile = server.json
     # cmd/agentry/serve_lock.go serve.lock; cmd/agentry/open.go serve.log and serve.pid
     # internal/sessions/proc_unix.go sessionsDir: the temporary folder, agentry-<uid>; proc_windows.go: the user cache folder, agentry\sessions
@@ -143,7 +143,8 @@ Feature: Operations
     Then the data folder is .agentry in the home folder on Mac, Windows and Linux alike: yes
     And it holds the log agentry.db, the snapshot state.snapshot, and the 3 folders files, repos and worktrees
     And it holds the 4 token files ui-token, hook-token, desk-token and helper-token, which stay the same across restarts
-    And it holds each of policy.toml, features.toml, push.json, server.json, serve.lock, serve.log and serve.pid, and tls only when -https is on
+    And it holds each of policy.toml, push.json, server.json, serve.lock, serve.log and serve.pid, and tls only when -https is on
+    And features.toml in it is read only when the user makes it, and Agentry never writes it
     And new tasks work in the git repo Agentry in the home folder unless they name another: yes
     And the sessions' sockets are kept in the temporary folder agentry-<uid> on Mac and Linux, and in the user cache folder under agentry\sessions on Windows
     And a worker's credential, repos, worktrees and worker.log are kept in .agentry-worker in its home folder
@@ -209,7 +210,15 @@ Feature: Operations
     And the CA lasts 10 years
     And its name constraints are critical and permit localhost, this machine's hostname, hostname.local, loopback and the private ranges 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 and fd00::/8: yes
     And a leaf it signs for a name on the public web verifies: no
-    And a key others may read, a key that is a link, or a half-made CA is refused: yes
+    # README.md, What the CA can sign; internal/tlsca/ca_test.go
+
+  @OPS-36 @test
+  Scenario: A CA key that others may read, a key that is a link, or a half-made CA is refused
+    # internal/tlsca/ca.go readKey: the key must be a regular file that only its owner may read (0600) on Mac and Linux; open: a key or a certificate without the other is an incomplete CA
+    # internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAKeyThatIsALinkIsRefused, TestAHalfMadeOrMismatchedCAIsRefused
+    Given a tls folder holding a key that others may read, a key that is a link, or a CA whose key or certificate is missing
+    When the server starts with -https
+    Then the CA is refused, with what is wrong with it named: yes
     # README.md, What the CA can sign; internal/tlsca/ca_test.go
 
   @OPS-14 @test
@@ -273,18 +282,25 @@ Feature: Operations
     # README.md, Regenerate the CA; cmd/agentry/ca_test.go
 
   @OPS-18 @test
-  Scenario: A worker joins an https server by the CA's fingerprint, and is refused on a wrong one before the code is sent
+  Scenario: A worker joins an https server by the CA's fingerprint
     # cmd/agentry/server_ca.go trustServer; cmd/agentry/worker.go runJoin -ca-fingerprint
     Given a server with -https whose CA has fingerprint F
     When agentry worker join -ca-fingerprint F <server> <code> runs
     Then the worker keeps the CA and joins over https: yes
-    When the fingerprint given is not F
-    Then it is refused and the code is sent: no
-    When the server is https and no fingerprint is given, and the machine does not trust the certificate
-    Then it is refused, saying to use -ca-fingerprint: yes
     Given a worker that joined over plain http before -https was turned on
     When the join command runs again with the fingerprint
     Then the worker is moved to https and keeps its credential, and the code is used: no
+    # README.md, Workers and Claude Code over https; cmd/agentry/worker_test.go
+
+  @OPS-37 @test
+  Scenario: A worker join is refused on a wrong fingerprint, or on none when the machine does not trust the server, before the code is sent
+    # cmd/agentry/server_ca.go trustServer: the CA fetched is checked against the fingerprint before the code is sent; trustedWithoutCA: with no fingerprint the machine's own trust must verify the server
+    # cmd/agentry/worker_test.go TestAWrongFingerprintIsRefusedBeforeTheCodeIsSent, TestHTTPSWithoutAFingerprintIsRefusedWithIt
+    Given a server with -https whose CA has fingerprint F
+    When agentry worker join runs with a fingerprint that is not F
+    Then it is refused and the code is sent: no
+    When agentry worker join runs with no fingerprint, and the machine does not trust the certificate
+    Then it is refused, saying to use -ca-fingerprint and naming F, and the code is sent: no
     # README.md, Workers and Claude Code over https; cmd/agentry/worker_test.go
 
   # Push notifications
@@ -292,15 +308,23 @@ Feature: Operations
   @OPS-19 @test
   Scenario: Push notifications need an https public address and a subscription from the browser
     # internal/webpush/webpush.go File = push.json beside the log
-    # internal/web/push_api.go: 400 when the subscription is malformed
     Given a server with an https -public-url
     When a browser posts its push subscription
     Then it is answered 200 and kept in push.json, with the VAPID key pair, beside the log and never in it: yes
     And it is still there after a restart: yes
-    When a malformed subscription, or one whose endpoint is not https, is posted
-    Then it is answered 400 with a reason: yes
     When the same endpoint subscribes twice and then unsubscribes
     Then 1 subscription is kept, then 0
+    # README.md, From the source; internal/web/push_api_test.go
+
+  @OPS-38 @test
+  Scenario: A malformed push subscription, or one whose endpoint is not https, is refused with 400
+    # internal/webpush/webpush.go Check: no endpoint, an endpoint that is not https, or keys that are not a P-256 key and 16 bytes is ErrMalformed, and nothing changes
+    # internal/web/push_api.go: 400 with the reason when the subscription is malformed
+    # internal/web/push_api_test.go TestAMalformedPushSubscriptionIsABadRequest
+    Given a server with an https -public-url
+    When a malformed subscription, or one whose endpoint is not https, is posted
+    Then it is answered 400 with a reason: yes
+    And 0 subscriptions are kept from it
     # README.md, From the source; internal/web/push_api_test.go
 
   @OPS-33 @test
@@ -324,7 +348,7 @@ Feature: Operations
     Then it is pushed again: yes
     When a device's push service says the subscription is gone
     Then that device is dropped and the other still gets its pushes: yes
-    And a push carries at most 500 characters of the entry's line
+    And a push carries at most 500 bytes of the entry's line, cut on a character boundary and ended with an ellipsis when it is cut
     # README.md, From the source; internal/webpush/sink_test.go
 
   # The workers' background services
@@ -373,10 +397,17 @@ Feature: Operations
     Then the CA is fetched and checked 1 time, and later runs fetch it 0 times, with the fingerprint accepted with or without colons and in either case
     When AGENTRY_CA_FINGERPRINT names another CA
     Then the kept CA is checked again and the server is refused: yes
-    When agentry mcp connect is given a wrong fingerprint
-    Then it refuses before the code is sent: yes
-    When agentry mcp connect is given an https server and no fingerprint, and the machine does not trust the certificate
-    Then it refuses, naming -ca-fingerprint and the fingerprint the server offered: yes
+    # README.md, Workers and Claude Code over https; cmd/agentry/mcp_test.go
+
+  @OPS-39 @test
+  Scenario: agentry mcp connect is refused on a wrong fingerprint, or on none when the machine does not trust the server, before the code is sent
+    # cmd/agentry/mcp.go connectMachine; cmd/agentry/server_ca.go trustServer: the fingerprint is checked before the code is sent, and with none the server's own is fetched to name it
+    # cmd/agentry/mcp_test.go TestMCPConnectRefusesAWrongFingerprintBeforeTheCodeIsSent, TestMCPConnectOverHTTPSWithoutAFingerprintSaysWhichToGive
+    Given a server with -https whose CA has fingerprint F
+    When agentry mcp connect is given a fingerprint that is not F
+    Then it is refused and the code is sent: no
+    When agentry mcp connect is given the https server and no fingerprint, and the machine does not trust the certificate
+    Then it is refused, naming -ca-fingerprint and F, and the code is sent: no
     # README.md, Workers and Claude Code over https; cmd/agentry/mcp_test.go
 
   # Erasing and redacting
@@ -415,14 +446,23 @@ Feature: Operations
     When the redaction is confirmed with that count
     Then those rows read [redacted] in place of the secret, with every other byte as it was: yes
     And the secret is found on the disk, in the log, the WAL or the snapshot: no
-    When the rows that hold the text are not the ones counted
-    Then the redaction is refused with 409 and nothing is written: yes
     Given an archived task that holds the secret
     When it is redacted
     Then it is unarchived, redacted and archived again in a new file, and its old file is deleted: yes
     Given an agent whose knowledge holds the secret in a version
     When the agents are redacted
     Then each version that holds it is written again whole without it, and 0 versions are added
+    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go
+
+  @OPS-40 @test
+  Scenario: A redaction confirmed with a stale count is refused with 409
+    # internal/web/redact_api.go: the rows are counted again as the redaction commits, and a count that no longer holds is answered 409 naming the rows there are now; internal/store/redact.go RedactCounted
+    # internal/web/redact_api_test.go TestARedactionWithAStaleCountIsRefused, TestARedactionOfAnArchivedTaskWithAStaleCountIsRefused
+    Given a redaction previewed with a count, and a row that holds the text written since
+    When it is confirmed with the stale count
+    Then it is refused with 409, naming how many rows hold the text now, and 0 rows are written
+    When it is confirmed with the count as it is now
+    Then the redaction is done: yes
     # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go
 
   @OPS-26 @test
