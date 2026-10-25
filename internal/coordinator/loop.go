@@ -235,14 +235,29 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	if !l.readyForTurn(task, target.Name()) {
 		return // the task's files are on their way: the loop comes back here
 	}
-	shared, _ := l.filesFor(task)
-	brief := workerBrief(task, move.Agent, roster, move.Handoff, shared)
-	if move.Agent.Coordinates {
-		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
-	}
-	if err := l.runner.Start(task, move.Agent, brief, l.runner.SessionToResume(task, move.Agent)); err != nil {
+	session := l.runner.SessionToResume(task, move.Agent)
+	if err := l.runner.Start(task, move.Agent, l.briefFor(task, roster, move, session), session); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
 	}
+}
+
+// briefFor is the brief for the agent's turn in session: the whole of it
+// for a fresh one, or what has changed since for one that goes on with its
+// last session.
+func (l *Loop) briefFor(task *tasks.Task, roster agents.Roster, move Move, session turns.Session) string {
+	shared, _ := l.filesFor(task)
+	agent := move.Agent
+	if session.Resumes() {
+		seen := task.LastTurnOf(agent.Name).Seen
+		if agent.Coordinates {
+			return resumedCoordinatorBrief(task, agent, roster, seen, shared, l.state, l.Features)
+		}
+		return resumedWorkerBrief(task, agent, roster, move.Handoff, seen, shared)
+	}
+	if agent.Coordinates {
+		return coordinatorBrief(task, agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
+	}
+	return workerBrief(task, agent, roster, move.Handoff, shared)
 }
 
 // moveWork takes the task's work from the machine it is on to target: the

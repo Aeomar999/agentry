@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -11,9 +12,13 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 )
 
-// A brief is everything an agent is given for one turn: its own prompt, then
-// what Agentry knows about the task. Each turn is a fresh session, so the
-// brief is all the agent knows besides the repository.
+// A brief is everything an agent is given for one turn. In a fresh session
+// it is all the agent knows besides the repository: its own prompt, then
+// what Agentry knows about the task. A turn that goes on with the agent's
+// last session on the task still has all that, so its brief is what has
+// happened since and what every turn needs anew: its instructions or the
+// decision to make, where the work is and the plan file, which is per turn.
+// Both are made from the same sections.
 
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
@@ -25,9 +30,7 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	header(&b, coordinator, task)
 	knowledge(&b, coordinator)
 	section(&b, "The task", taskText(task))
-	section(&b, "Where the work is", whereText(task))
-	section(&b, "Shared files", sharedText(task, shared, true))
-	plan(&b, task, coordinator.Name, "your plan for the task as a whole: the stages it goes through, which agent does each, and what is done")
+	coordinatorWork(&b, task, coordinator, shared)
 
 	var team strings.Builder
 	for _, agent := range roster.Assignees(coordinator.TeamName()) {
@@ -39,33 +42,75 @@ func coordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.
 	}
 	otherTeams(&b, task, coordinator, roster, basesOf(state))
 	epicSection(&b, task, f)
+	hookSections(&b, hooks, state, task)
+	section(&b, "What has happened so far", trailText(task.Trail, 0)+"The last step is the newest. Decide what happens next.")
+	yourDecision(&b, task, roster, hooks)
+	return b.String()
+}
+
+// resumedCoordinatorBrief is the coordinator's brief for a turn that goes on
+// with its last session, whose brief was made from the trail's first seen
+// steps.
+func resumedCoordinatorBrief(task *tasks.Task, coordinator agents.Agent, roster agents.Roster, seen int, shared []sharedfiles.File,
+	state features.Reader, list []features.Feature) string {
+	hooks := hooksFor(list, coordinator, state)
+	var b strings.Builder
+	resumedHeader(&b, coordinator, task)
+	section(&b, "What has happened since your last turn", cmp.Or(trailText(since(task.Trail, seen), seen), "Nothing new on the trail.\n\n")+
+		"The last step is the newest. Decide what happens next.")
+	coordinatorWork(&b, task, coordinator, shared)
+	hookSections(&b, hooks, state, task)
+	keepYourNotes(&b)
+	yourDecision(&b, task, roster, hooks)
+	return b.String()
+}
+
+// coordinatorWork is where the coordinator's work is and the plan it keeps.
+func coordinatorWork(b *strings.Builder, task *tasks.Task, coordinator agents.Agent, shared []sharedfiles.File) {
+	section(b, "Where the work is", whereText(task))
+	section(b, "Shared files", sharedText(task, shared, true))
+	plan(b, task, coordinator.Name, "your plan for the task as a whole: the stages it goes through, which agent does each, and what is done")
+}
+
+func hookSections(b *strings.Builder, hooks []features.Feature, state features.Reader, task *tasks.Task) {
 	for _, more := range briefSections(hooks, state, task) {
-		section(&b, more.Heading, more.Text)
+		section(b, more.Heading, more.Text)
 	}
+}
 
-	var trail strings.Builder
-	for i, step := range task.Trail {
-		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", i+1, step.From, step.To, tasks.Shorten(step.Text, longestStep))
-	}
-	section(&b, "What has happened so far", trail.String()+"The last step is the newest. Decide what happens next.")
-
+// yourDecision is what the coordinator's brief ends with: the actions Agentry
+// refused, what finishing waits on, and the decision to make.
+func yourDecision(b *strings.Builder, task *tasks.Task, roster agents.Roster, hooks []features.Feature) {
 	if refused := refusedActions(task); refused != "" {
-		section(&b, "Actions Agentry refused", refused)
+		section(b, "Actions Agentry refused", refused)
 	}
 	if task.WrapUp != nil {
-		section(&b, "Wrap up", wrapUpText(task))
-		section(&b, "Your decision", WrapUpFormat)
-		return b.String()
+		section(b, "Wrap up", wrapUpText(task))
+		section(b, "Your decision", WrapUpFormat)
+		return
 	}
-	checks(&b, task, roster)
+	checks(b, task, roster)
 	decision := DecisionFormat
 	for _, hook := range hooks {
 		if hook.Coordinator.Decision != "" {
 			decision += "\n" + hook.Coordinator.Decision
 		}
 	}
-	section(&b, "Your decision", decision)
-	return b.String()
+	section(b, "Your decision", decision)
+}
+
+// trailText numbers the steps, the first being step first+1 of the trail.
+func trailText(steps []tasks.Step, first int) string {
+	var trail strings.Builder
+	for i, step := range steps {
+		fmt.Fprintf(&trail, "%d. %s → %s: %s\n\n", first+i+1, step.From, step.To, tasks.Shorten(step.Text, longestStep))
+	}
+	return trail.String()
+}
+
+// since is the trail after its first seen steps.
+func since(trail []tasks.Step, seen int) []tasks.Step {
+	return trail[min(seen, len(trail)):]
 }
 
 // wrapUpText tells the coordinator the user moved the task themselves, and
@@ -92,20 +137,50 @@ func workerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, ins
 	header(&b, agent, task)
 	knowledge(&b, agent)
 	section(&b, "The task", taskText(task))
+	workerWork(&b, task, agent, roster, instructions, shared)
+	finish(&b, agent)
+	return b.String()
+}
+
+// resumedWorkerBrief is the agent's brief for a turn that goes on with its
+// last session, whose brief was made from the trail's first seen steps. The
+// newest step, the handoff giving these instructions, is left to them.
+func resumedWorkerBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, seen int,
+	shared []sharedfiles.File) string {
+	steps := since(task.Trail, seen)
+	if last := len(steps) - 1; last >= 0 && steps[last].To == agent.Name {
+		steps = steps[:last]
+	}
+	var b strings.Builder
+	resumedHeader(&b, agent, task)
+	section(&b, "What has happened since your last turn", cmp.Or(trailText(steps, seen), "Nothing but your new instructions."))
+	workerWork(&b, task, agent, roster, instructions, shared)
+	keepYourNotes(&b)
+	finish(&b, agent)
+	return b.String()
+}
+
+// workerWork is the agent's instructions, where the work is and the plan
+// it keeps.
+func workerWork(b *strings.Builder, task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, shared []sharedfiles.File) {
 	if agent.Column == agents.Ships && yourShip(task, roster) {
 		instructions += "\n\n" + YouChoseToShip
 	}
-	section(&b, "Your instructions from the coordinator", instructions)
-	section(&b, "Where the work is", whereText(task))
-	section(&b, "Shared files", sharedText(task, shared, false))
-	plan(&b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
-	finish := "End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. " +
+	section(b, "Your instructions from the coordinator", instructions)
+	section(b, "Where the work is", whereText(task))
+	section(b, "Shared files", sharedText(task, shared, false))
+	plan(b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
+}
+
+// finish is how the agent ends its turn: with a report, and a reviewer's
+// verdict last.
+func finish(b *strings.Builder, agent agents.Agent) {
+	text := "End with a short report for the coordinator: what you did, what you found, and anything left or blocking you. " +
 		"The coordinator reads only this report, so make it complete. Don't stop to ask questions: put them in the report."
 	if agent.Column == agents.Reviews {
-		finish += "\n\n" + VerdictFormat
+		text += "\n\n" + VerdictFormat
 	}
-	section(&b, "When you finish", finish)
-	return b.String()
+	section(b, "When you finish", text)
 }
 
 // checks tells the coordinator what finishing the task waits on: its
@@ -129,6 +204,12 @@ func hasCheckers(roster agents.Roster, team string) bool {
 		}
 	}
 	return false
+}
+
+// keepYourNotes reminds an agent going on with its session of the notes its
+// first brief asked it to keep.
+func keepYourNotes(b *strings.Builder) {
+	section(b, "Your notes", "Before you finish, update your notes in "+machines.KnowledgeFile+", as your first brief on this task said.")
 }
 
 // knowledge is the agent's notes from earlier tasks, and how to keep them.
@@ -246,6 +327,15 @@ func routingExamples(roster agents.Roster, bases agents.Bases) string {
 
 func header(b *strings.Builder, agent agents.Agent, task *tasks.Task) {
 	fmt.Fprintf(b, "# Agentry brief: %s, %s, %s\n\n%s\n\n", agent.Name, task.ID, task.NextTurnID(), agent.Prompt)
+}
+
+// resumedHeader tells the agent this turn goes on from its last one on the
+// task, in the same session.
+func resumedHeader(b *strings.Builder, agent agents.Agent, task *tasks.Task) {
+	fmt.Fprintf(b, "# Agentry brief: %s, %s, %s, going on\n\n", agent.Name, task.ID, task.NextTurnID())
+	b.WriteString("This turn goes on from your last turn on this task, in the same session. You still have what you knew " +
+		"then: your role, your notes, the task, its earlier trail, the files you read and the work you did. This brief is " +
+		"only what has happened since and what this turn needs.\n\n")
 }
 
 func section(b *strings.Builder, title, body string) {
