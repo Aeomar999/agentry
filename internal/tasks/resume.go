@@ -27,6 +27,10 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 		return "", "first turn"
 	case !last.Ended:
 		return "", "its last turn hasn't ended"
+	case last.Issue != "":
+		return "", "its last turn failed"
+	case last.Stopped:
+		return "", "its last turn was stopped"
 	case last.Worker != worker:
 		return "", "the work moved to " + worker
 	case last.Engine == "":
@@ -38,7 +42,7 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 	}
 	// A zero context is unknown, not small; it still resumes.
 	if last.Context > MaxResumedContext {
-		return "", fmt.Sprintf("context too big (%dk tokens)", last.Context/1000)
+		return "", fmt.Sprintf("context too big (%dk tokens)", (last.Context+999)/1000)
 	}
 	return last.EngineSession, ""
 }

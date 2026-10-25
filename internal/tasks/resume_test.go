@@ -25,6 +25,8 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 		{"resumes", func(*Turn) {}, "claude", "omni", "s-1", ""},
 		{"first turn", func(turn *Turn) { turn.Agent = "reviewer" }, "claude", "omni", "", "first turn"},
 		{"not ended", func(turn *Turn) { turn.Ended = false }, "claude", "omni", "", "its last turn hasn't ended"},
+		{"failed", func(turn *Turn) { turn.Issue = "the session ended without a report" }, "claude", "omni", "", "its last turn failed"},
+		{"stopped", func(turn *Turn) { turn.Stopped = true }, "claude", "omni", "", "its last turn was stopped"},
 		{"work moved", func(*Turn) {}, "claude", "workstation", "", "the work moved to workstation"},
 		{"another engine", func(*Turn) {}, "codex", "omni", "", "another engine"},
 		{"engine unknown", func(turn *Turn) { turn.Engine = "" }, "claude", "omni", "", "engine unknown"},
@@ -32,6 +34,7 @@ func TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine(t *testin
 		{"moved here", func(*Turn) {}, "claude", workers.Local, "", "the work moved to local"},
 		{"moved here, unnamed", func(*Turn) {}, "claude", "", "", "the work moved to local"},
 		{"too big", func(turn *Turn) { turn.Context = 182_000 }, "claude", "omni", "", "context too big (182k tokens)"},
+		{"just over the limit", func(turn *Turn) { turn.Context = 150_500 }, "claude", "omni", "", "context too big (151k tokens)"},
 		{"unknown context", func(turn *Turn) { turn.Context = 0 }, "claude", "omni", "s-1", ""},
 	} {
 		turn := resumable()
