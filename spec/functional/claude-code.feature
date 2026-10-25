@@ -331,7 +331,7 @@ Feature: Agentry from Claude Code
     And the reply says In this order now, naming the 2 as task-N or epic-N: yes
     # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN calls it, but its fixture already holds the asserted rank
     # (epic-3 at -3, the lower of the 2), so it passes with no reordering; the reply: TestAnswersNameAnEpicAsEpicN
-    # Steps: take 2 tasks A and B and give them ranks with PUT /api/tasks/A/rank {"rank": -1} and
+    # Steps: take 2 tasks A and B of no epic, in the same column, and give them ranks with PUT /api/tasks/A/rank {"rank": -1} and
     # PUT /api/tasks/B/rank {"rank": -3}; call set_priority with {"tasks": ["A", "B"]}, A first though it ranks lower;
     # the reply reads In this order now: A, B. Then GET /api/tasks and read each task's rank field: A holds -3 and B -1,
     # every other task's rank is as it was, and on the Tasks page A now sits above B in its column.
