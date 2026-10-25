@@ -230,7 +230,7 @@ var coreTypes = map[Type]Spec{
 	WorktreeMoved:      {Fields: []string{"worker", "path", "port"}, Writers: []ActorKind{Worker}},
 
 	TaskAssigned:       {Fields: []string{"agent", "instructions"}, Writers: []ActorKind{Agent}},             // "checks": the agent checks work; "ships": it ships work
-	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}}, // "seen": the trail steps its brief was made from; "fromSession": the engine session it goes on with, or "freshBecause": why it starts a new one
+	TurnStarted:        {Fields: []string{"agent", "hash"}, Correlation: true, Writers: []ActorKind{Worker}}, // "seen": the trail steps its brief was made from; "fromSession": the engine session it goes on with, with "sessionFrom": the task whose turn that was when it isn't this one, and "forked": true when it goes on with a copy, or "freshBecause": why it starts a new one
 	PromptAcknowledged: {Fields: []string{"hash"}, Correlation: true, Writers: []ActorKind{Worker}},
 	SessionStarted:     {Fields: []string{"engineSession"}, Correlation: true, Writers: []ActorKind{Worker}},
 

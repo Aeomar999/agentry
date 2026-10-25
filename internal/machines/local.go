@@ -172,7 +172,7 @@ func (l *Local) StartTurn(_ context.Context, t Turn) error {
 
 func (l *Local) session(t Turn) engines.Session {
 	return engines.Session{Worktree: t.Worktree, StateDir: filepath.Join(t.Worktree, StateDir),
-		HookCommand: l.HookCommand, Model: t.Model, Theme: t.Theme, Resume: t.Resume}
+		HookCommand: l.HookCommand, Model: t.Model, Theme: t.Theme, Resume: t.Resume, Fork: t.Fork}
 }
 
 func (l *Local) SharedManifest(_ context.Context, worktree string) ([]sharedfiles.File, error) {

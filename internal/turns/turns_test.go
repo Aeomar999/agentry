@@ -233,8 +233,9 @@ func TestATurnGoesOnWithTheAgentsLastSession(t *testing.T) {
 func TestAResumedSessionKnowsHowMuchOfTheTrailItSaw(t *testing.T) {
 	coordinator := agents.Agent{Name: "tech-lead", Engine: "claude"}
 	last := &tasks.Turn{Agent: "tech-lead", Ended: true, Worker: workers.Local, Engine: "claude", EngineSession: "s-1", Seen: 3}
-	task := &tasks.Task{Worktree: &tasks.Worktree{Worker: workers.Local}, Turns: []*tasks.Turn{last}}
-	if got := NewRunner(nil, nil, here(), Config{}).SessionToResume(task, coordinator); got != (Session{Resume: "s-1", Seen: 3}) {
+	task := &tasks.Task{ID: "task-1", Worktree: &tasks.Worktree{Worker: workers.Local}, Turns: []*tasks.Turn{last}}
+	_, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	if got := NewRunner(nil, state, here(), Config{}).SessionToResume(task, coordinator); got != (Session{Resume: "s-1", From: "task-1", Seen: 3}) {
 		t.Errorf("resumed session %+v, want it to go on with s-1 having seen 3 steps", got)
 	}
 	if got := NewRunner(nil, nil, here(), Config{NoResume: true}).SessionToResume(task, coordinator); got != (Session{Fresh: ResumeOff}) {
@@ -307,4 +308,64 @@ func endTurn(t *testing.T, s *store.Store, turn, agent, session string) {
 		}
 	}
 	sessions.Stop(sessions.SocketFor("task-1"))
+}
+
+// An agent's resume setting decides before any session is looked for: a
+// reviewer starts fresh by default, any agent set to fresh starts fresh,
+// a reviewer set to resume goes on with its session, and -resume-sessions=false
+// still turns resuming off for everyone, with its own reason.
+func TestTheAgentsResumeSettingDecidesBeforeAnySession(t *testing.T) {
+	last := func(agent string) *tasks.Turn {
+		return &tasks.Turn{Agent: agent, Ended: true, Worker: workers.Local, Engine: "claude", EngineSession: "s-1", Seen: 2}
+	}
+	_, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	for _, c := range []struct {
+		name   string
+		agent  agents.Agent
+		config Config
+		want   Session
+	}{
+		{"a reviewer by default", agents.Agent{Name: "reviewer", Engine: "claude", Column: agents.Reviews}, Config{},
+			Session{Fresh: "reviewers start fresh"}},
+		{"an engineer set to fresh", agents.Agent{Name: "engineer", Engine: "claude", Resume: agents.StartsFresh}, Config{},
+			Session{Fresh: "set to start fresh"}},
+		{"a reviewer set to resume", agents.Agent{Name: "reviewer", Engine: "claude", Column: agents.Reviews, Resume: agents.ResumesSession}, Config{},
+			Session{Resume: "s-1", From: "task-1", Seen: 2}},
+		{"an engineer by default", agents.Agent{Name: "engineer", Engine: "claude"}, Config{},
+			Session{Resume: "s-1", From: "task-1", Seen: 2}},
+		{"a reviewer with resume off", agents.Agent{Name: "reviewer", Engine: "claude", Column: agents.Reviews}, Config{NoResume: true},
+			Session{Fresh: ResumeOff}},
+	} {
+		task := &tasks.Task{ID: "task-1", Worktree: &tasks.Worktree{Worker: workers.Local}, Turns: []*tasks.Turn{last(c.agent.Name)}}
+		if got := NewRunner(nil, state, here(), c.config).SessionToResume(task, c.agent); got != c.want {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
+
+// A fresh-by-setting reviewer on a story neither resumes nor forks a
+// sibling story's session, though the same reviewer set to resume would.
+func TestAFreshBySettingReviewerLeavesASiblingsSessionAlone(t *testing.T) {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	anEpic(t, s, 2)
+	worker := events.Actor{Kind: events.Worker, ID: workers.Local}
+	for _, p := range []events.Proposal{
+		{Stream: "task-2", Actor: worker, Type: events.TurnStarted, Correlation: "turn-2",
+			Data: map[string]any{"agent": "reviewer", "engine": "claude", "hash": "h", "worker": workers.Local, "freshBecause": "reviewers start fresh"}},
+		{Stream: "task-2", Actor: worker, Type: events.SessionStarted, Correlation: "turn-2", Data: map[string]any{"engineSession": "s-2"}},
+		{Stream: "task-2", Actor: worker, Type: events.TurnEnded, Correlation: "turn-2", Data: map[string]any{"agent": "reviewer", "report": "approved"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(p.Type, rejection, err)
+		}
+	}
+	reviewer, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("reviewer")
+	runner := NewRunner(s, state, here(), Config{})
+	if session := runner.SessionToResume(storyOf(t, s, "task-3"), reviewer); session != (Session{Fresh: "reviewers start fresh"}) {
+		t.Errorf("the reviewer's first turn on task-3: %+v, want fresh, with task-2's s-2 left alone", session)
+	}
+	reviewer.Resume = agents.ResumesSession
+	if session := runner.SessionToResume(storyOf(t, s, "task-3"), reviewer); session != (Session{Resume: "s-2", From: "task-2"}) {
+		t.Errorf("set to resume: %+v, want to go on with task-2's s-2, which shows it was there to take", session)
+	}
 }

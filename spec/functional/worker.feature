@@ -1,17 +1,19 @@
 Feature: Workers
-  A worker is another machine that runs agents for an Agentry server, so
-  work can go where the tools, the data or the power are. It joins with a
-  one-time code from the Workers page, runs `agentry worker` in the
-  background, dials out to the server (it needs no open port), and a task's
-  branch and shared files follow the work to whichever machine runs the next
-  turn.
+  A machine joined to Agentry so that agents can run on it.
+  # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
+  # internal/workers, internal/workerlink, internal/workerservice,
+  # internal/machines, internal/turns, internal/worktrees/handoff.go,
+  # internal/sharedfiles, internal/pinned, internal/web/workers_api.go and
+  # their tests. WORKER-01 is the foundation's stub; the scenarios here start
+  # at WORKER-02.
 
-  Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
-  internal/workers, internal/workerlink, internal/workerservice,
-  internal/machines, internal/turns, internal/worktrees/handoff.go,
-  internal/sharedfiles, internal/pinned, internal/web/workers_api.go and
-  their tests. WORKER-01 is the foundation's stub; the scenarios here start
-  at WORKER-02.
+  @WORKER-01 @test
+  Scenario: A machine joins once, with a code, and gets its own credential
+    Given an install command made on the Workers page, with its join code
+    When the machine runs the command and joins
+    Then the machine gets a credential of its own, and the log keeps only its hash
+    And the same code is refused for a second machine
+    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go
 
   # ---- Joining ---------------------------------------------------------------
 

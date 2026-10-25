@@ -208,6 +208,8 @@ type Turn struct {
 	Engine        string // the engine it ran on, "" when unknown
 	EngineSession string // the engine's own id for the session, "" until it says or in logs from before it was kept
 	FromSession   string // the engine session it resumed, "" when it started fresh
+	SessionFrom   string // the task whose turn FromSession was, "" when it was this one's or in older logs
+	Forked        bool   // it went on with a copy of FromSession, which another turn was busy in
 	FreshBecause  string // why it started fresh, "" when it resumed or in logs from before it was kept
 	Hash          string // of the prompt line it was started with
 	StartedAt     time.Time

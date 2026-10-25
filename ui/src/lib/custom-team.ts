@@ -2,6 +2,7 @@ import { api, ApiError } from "@/api/client";
 import type { Agent, Policy, TeamTemplate, TemplateAgent } from "@/api/types";
 import { AGENT_COLORS } from "@/live/agent-colors";
 import { shippedProfiles } from "./profiles";
+import { RESUMES, RESUME_TITLES } from "./resume";
 import { missingProfilesOf, teamOf, teamsOf } from "./teams";
 
 // A team you build yourself on the Agents page (docs/design/custom-teams.md):
@@ -22,7 +23,7 @@ export interface TeamDraft {
 }
 
 // The fields of a row a problem can be under.
-export type AgentField = "name" | "prompt" | "color" | "column" | "engine" | "profile";
+export type AgentField = "name" | "prompt" | "color" | "column" | "resume" | "engine" | "profile";
 
 // Where a problem shows: under Team name, under the Agents legend, or under
 // one field of one row.
@@ -78,6 +79,7 @@ export function blankTeam(roster: Agent[]): TeamDraft {
     profile: "",
     color: freeColor(roster.map((agent) => agent.color)) ?? AGENT_COLORS[0],
     column: "",
+    resume: "",
   };
   return { team: "", agents: [coordinator] };
 }
@@ -115,6 +117,7 @@ export function loadTeam(roster: Agent[], team: string): LoadedTeam {
     profile: agent.profile,
     color: agent.color,
     column: agent.column,
+    resume: agent.resume,
   }));
   return { team: found?.team ?? team, agents, version: found?.agents[0]?.teamVersion ?? "" };
 }
@@ -134,6 +137,7 @@ export function newAgent(draft: TeamDraft, engines: string[]): DraftAgent {
     profile: "",
     color: freeColor(draft.agents.map((agent) => agent.color)) ?? "",
     column: "",
+    resume: "",
   };
 }
 
@@ -269,6 +273,7 @@ const AGENT_CHECKS: [AgentField, AgentCheck][] = [
   ["prompt", checkPrompt],
   ["color", checkColor],
   ["column", checkColumn],
+  ["resume", checkResume],
   ["engine", checkEngine],
   ["profile", checkProfile],
 ];
@@ -339,6 +344,15 @@ function checkColumn(agent: DraftAgent): Words | undefined {
   return {
     message: `Its work can't count as ${column}. Pick Building, Review or Shipping.`,
     summary: `${shownName(agent)}: its work can't count as ${column}`,
+  };
+}
+
+function checkResume(agent: DraftAgent): Words | undefined {
+  const resume = agent.resume.trim();
+  if (RESUMES.some((known) => known === resume)) return;
+  return {
+    message: `It can't start each turn ${resume}. Pick ${RESUME_TITLES[""]}, ${RESUME_TITLES.resume} or ${RESUME_TITLES.fresh}.`,
+    summary: `${shownName(agent)}: it can't start each turn ${resume}`,
   };
 }
 
@@ -551,6 +565,7 @@ const trimmed = (agent: DraftAgent) => ({
   profile: agent.profile.trim(),
   color: agent.color.trim(),
   column: agent.column.trim(),
+  resume: agent.resume.trim(),
 });
 
 // offering asks, with policyHash, as addTeam does, for the shipped
@@ -595,6 +610,7 @@ const SHOWN_FIELDS: Record<string, AgentField> = {
   prompt: "prompt",
   color: "color",
   column: "column",
+  resume: "resume",
   engine: "engine",
   profile: "profile",
 };

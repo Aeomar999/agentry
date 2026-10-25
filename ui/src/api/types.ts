@@ -98,6 +98,8 @@ export interface Turn {
   split?: TokenSplit; // how tokens splits, when the engine said
   engineSession?: string; // the engine's own id for the session, when it said
   fromSession?: string; // the engine session it resumed, absent when it started fresh
+  sessionFrom?: string; // the task whose turn fromSession was, absent when it was this one's or the log didn't say
+  forked?: boolean; // it went on with a copy of fromSession, which another turn was busy in
   freshBecause?: string; // why it started fresh, absent when it resumed or the log didn't say
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
@@ -153,6 +155,7 @@ export interface Agent {
   workers: string[]; // the machines it may run on, first online wins; none: the machine Agentry runs on ("local")
   color: string; // one of the agent colours; "" for the next free one
   column: "" | "review" | "ship"; // what its work counts as: building, review (a task is done only once they approve) or shipping
+  resume: "" | "resume" | "fresh"; // how its turns start: by its column (a reviewer fresh, the rest going on with their session), going on, or fresh
   knowledge: string; // what it has learned on earlier tasks; changed apart from its settings
   effective?: EffectiveProfile; // the profile in force; none while the policy isn't loaded
   teamVersion?: string; // its team's as read, which saving the team checks; none on an agent not yet made
@@ -380,7 +383,7 @@ export interface TeamTemplate {
 // An agent of a template, with what a team made from it gets, prompt included.
 export type TemplateAgent = Pick<
   Agent,
-  "name" | "description" | "coordinates" | "prompt" | "engine" | "model" | "profile" | "color" | "column"
+  "name" | "description" | "coordinates" | "prompt" | "engine" | "model" | "profile" | "color" | "column" | "resume"
 >;
 
 export interface CreatedEvent {

@@ -82,5 +82,6 @@ type Turn struct {
 	Plan      string            `json:"plan"`             // a plan carried over from the agent's last turn, written to its plan file; "" for none
 	Prompt    string            `json:"prompt"`           // the one line the engine starts on
 	Resume    string            `json:"resume,omitempty"` // the engine session to go on with; "" starts a fresh one
+	Fork      bool              `json:"fork,omitempty"`   // go on with a copy of Resume, which another turn is busy in
 	Env       map[string]string `json:"env"`              // the session's environment; the machine adds where its hooks post
 }

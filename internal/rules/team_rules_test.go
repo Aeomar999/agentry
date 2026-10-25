@@ -2,6 +2,7 @@ package rules
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -262,4 +263,30 @@ func reasonOf(rejection *events.Rejection) string {
 		return ""
 	}
 	return rejection.Reason
+}
+
+// A team edit's rows carry the resume setting: an unknown value is that
+// row's problem, and a known one lands on the agent.
+func TestATeamEditsResumeSettingIsKnown(t *testing.T) {
+	s, state := openSeededState(t)
+	dataTeam(t, s)
+	odd := dataAsItIs(state)
+	odd.Agents[1].Resume = "sometimes"
+	problems := TeamEditProblems(state, odd.Proposal(you))
+	if len(problems) != 1 || problems[0].Row != 1 || problems[0].Field != "resume" || !strings.HasSuffix(problems[0].Reason, "not sometimes") {
+		t.Errorf("problems = %+v, want the analyst's resume setting", problems)
+	}
+	if _, rejection, err := s.Propose(odd.Proposal(you)); err != nil || rejection == nil {
+		t.Errorf("the edit with resume %q: %v %v, want it refused", odd.Agents[1].Resume, rejection, err)
+	}
+	good := dataAsItIs(state)
+	good.Agents[1].Resume, good.Agents[2].Resume = agents.StartsFresh, agents.ResumesSession
+	if _, rejection, err := s.Propose(good.Proposal(you)); err != nil || rejection != nil {
+		t.Fatalf("the edit with resume fresh and resume: %v %v, want it accepted", rejection, err)
+	}
+	analyst, _ := state.Roster().Get("analyst")
+	charter, _ := state.Roster().Get("charter")
+	if analyst.Resume != agents.StartsFresh || charter.Resume != agents.ResumesSession {
+		t.Errorf("analyst resume %q, charter resume %q; want fresh and resume", analyst.Resume, charter.Resume)
+	}
 }

@@ -47,7 +47,7 @@ func TestAResumedWorkerBriefIsWhatHappenedSinceAndItsInstructions(t *testing.T) 
 	task := fixRound().add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": instructions}).task()
 	engineer := agentNamed(t, roster, "engineer")
 
-	brief := resumedWorkerBrief(task, engineer, roster, instructions, task.LastTurnOf("engineer").Seen, nil)
+	brief := resumedWorkerBrief(task, engineer, roster, instructions, task.LastTurnOf("engineer").Seen, "", nil)
 	for _, want := range []string{"# Agentry brief: engineer, task-1, turn-6, going on", "goes on from your last turn",
 		"## What has happened since your last turn", "One is left in src/b.go.", "3. engineer → tech-lead: Removed 3.",
 		"## Your instructions from the coordinator\n\n" + instructions, "worktree, /w/task-1, on branch agentry/task-1",
@@ -75,7 +75,7 @@ func TestAResumedReviewerBriefStillEndsWithTheVerdict(t *testing.T) {
 		turn("turn-7", "tech-lead", `{"action": "assign", "agent": "reviewer", "instructions": "Review the fix."}`).
 		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "reviewer", "instructions": "Review the fix."}).task()
 
-	brief := resumedWorkerBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review the fix.", task.LastTurnOf("reviewer").Seen, nil)
+	brief := resumedWorkerBrief(task, agentNamed(t, roster, "reviewer"), roster, "Review the fix.", task.LastTurnOf("reviewer").Seen, "", nil)
 	if !strings.HasSuffix(strings.TrimSpace(brief), strings.TrimSpace(VerdictFormat)) {
 		t.Errorf("a reviewer's resumed brief ends with the verdict format:\n%s", brief)
 	}
@@ -91,9 +91,9 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 		turn("turn-6", "engineer", "Removed it.").task()
 	lead := agentNamed(t, roster, "tech-lead")
 
-	brief := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, family{}, twoMachines, nil, nil, nil)
+	brief := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, "", family{}, twoMachines, nil, nil, nil)
 	for _, want := range []string{"# Agentry brief: tech-lead, task-1, turn-7, going on", "engineer → tech-lead: Removed it.",
-		"6. tech-lead → engineer: Remove the one in src/b.go.", "## Machines\n\n- local (host here", "- omni (host omni, linux), offline\n",
+		"6. tech-lead → engineer: Remove the one in src/b.go.", "## Machines\n\n- local (host here", "- tower (host tower, linux), offline\n",
 		"## Actions Agentry refused", "git push origin HEAD:dev`: agents don't push", "## Before you finish",
 		"## Your decision\n\n" + strings.TrimSpace(DecisionFormat), "worktree, /w/task-1", ".agentry/turn-7-plan.md",
 		"Decide what happens next."} {
@@ -112,7 +112,7 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 // twoMachines is this machine and a worker gone offline, so a coordinator
 // has machines to choose from.
 var twoMachines = []machine{{name: "local", host: "here", os: "this machine, where Agentry runs", online: true},
-	{name: "omni", host: "omni", os: "linux"}}
+	{name: "tower", host: "tower", os: "linux"}}
 
 // A story started from the Backlog leaves no step on the trail, so a
 // resumed coordinator hears of the epic's stories as they are now.
@@ -123,7 +123,7 @@ func TestAResumedCoordinatorBriefHasTheEpicsStoriesNow(t *testing.T) {
 	epic := &tasks.Task{ID: "epic-1", Title: "Tidy the code", Description: "No TODOs anywhere.", Coordinator: "tech-lead"}
 	later := &tasks.Task{ID: "task-2", Title: "Lint for TODOs", After: []string{"task-1"}}
 
-	brief := resumedCoordinatorBrief(task, agentNamed(t, roster, "tech-lead"), roster, task.LastTurnOf("tech-lead").Seen,
+	brief := resumedCoordinatorBrief(task, agentNamed(t, roster, "tech-lead"), roster, task.LastTurnOf("tech-lead").Seen, "",
 		family{epic: epic, stories: []*tasks.Task{task, later}}, nil, nil, nil, nil)
 	for _, want := range []string{"## This task is a story of an epic", "The epic, epic-1: Tidy the code",
 		"Later stories build on this one: task-2 (Lint for TODOs)"} {
@@ -133,7 +133,7 @@ func TestAResumedCoordinatorBriefHasTheEpicsStoriesNow(t *testing.T) {
 	}
 
 	epic.Kind, epic.Worktree = tasks.Epic, task.Worktree
-	brief = resumedCoordinatorBrief(epic, agentNamed(t, roster, "tech-lead"), roster, 0,
+	brief = resumedCoordinatorBrief(epic, agentNamed(t, roster, "tech-lead"), roster, 0, "",
 		family{stories: []*tasks.Task{task, later}}, nil, nil, nil, nil)
 	if !strings.Contains(brief, "## This task is an epic") || !strings.Contains(brief, "- task-2 (") {
 		t.Errorf("the resumed brief of an epic has its stories now:\n%s", brief)
@@ -150,7 +150,7 @@ func TestAResumedCoordinatorBriefDoesNotOfferTheSplitAgain(t *testing.T) {
 	if whole := coordinatorBrief(task, lead, roster, family{}, nil, nil, nil, nil); !strings.Contains(whole, split) {
 		t.Fatalf("the whole brief of a task whose kind isn't chosen offers the split:\n%s", whole)
 	}
-	if resumed := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, family{}, nil, nil, nil, nil); strings.Contains(resumed, split) {
+	if resumed := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, "", family{}, nil, nil, nil, nil); strings.Contains(resumed, split) {
 		t.Errorf("the resumed brief offers the split again:\n%s", resumed)
 	}
 }
@@ -162,7 +162,7 @@ func TestAResumedBriefIsShorterThanTheWholeOne(t *testing.T) {
 	task := fixRound().add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": instructions}).task()
 	engineer := agentNamed(t, roster, "engineer")
 	whole := workerBrief(task, engineer, roster, instructions, nil)
-	resumed := resumedWorkerBrief(task, engineer, roster, instructions, task.LastTurnOf("engineer").Seen, nil)
+	resumed := resumedWorkerBrief(task, engineer, roster, instructions, task.LastTurnOf("engineer").Seen, "", nil)
 	t.Logf("engineer's brief for turn-6: whole %d bytes, resumed %d bytes", len(whole), len(resumed))
 	if len(resumed) >= len(whole) {
 		t.Errorf("resumed %d bytes, whole %d", len(resumed), len(whole))

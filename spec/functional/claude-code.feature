@@ -1,13 +1,16 @@
-Feature: Claude Code and Agentry
-  Agentry runs as an MCP server inside Claude Code (`agentry mcp`), so plain
-  `claude` in any repo can hand work to Agentry, read the board, relay what
-  waits for the user, and let the user answer and approve. Claude Code asks
-  the user itself (elicitation) for every decision that is theirs alone, so
-  the model can never approve, close or accept for them.
+Feature: Agentry from Claude Code
+  Plain claude in any repo hands work to Agentry through its MCP tools and hears back from it.
+  # Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
+  # internal/ideas/tools.go, internal/connections, internal/web/integrations_api.go
+  # and their tests. CC-01 is the foundation's stub; the scenarios here start at CC-02.
 
-  Sources: cmd/agentry/mcp.go, cmd/agentry/claudecode.go, internal/mcp,
-  internal/ideas/tools.go, internal/connections, internal/web/integrations_api.go
-  and their tests. CC-01 is the foundation's stub; the scenarios here start at CC-02.
+  @CC-01 @test
+  Scenario: A task made with create_task is on the board
+    Given Claude Code connected to Agentry and open in a repo
+    When the model calls the create_task tool with a title and a description
+    Then exactly 1 task is created, in that repo
+    And the new task's id and the link to its page are shown in the tool's answer
+    # README.md, Use it from Claude Code; internal/mcp/server_test.go
 
   # ---- Installing the integration -------------------------------------------
 

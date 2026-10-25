@@ -179,6 +179,21 @@ func TestLaunchResumesTheSession(t *testing.T) {
 	}
 }
 
+// A forked session launches like a resumed one, into a copy of it: Claude
+// Code with --fork-session, Codex with `codex fork`, which takes resume's
+// flags and arguments (codex-cli 0.163.0).
+func TestLaunchForksTheSession(t *testing.T) {
+	s := engines.Session{StateDir: "/w/.agentry", Model: "haiku", Resume: "535d7c02", Fork: true}
+	for name, want := range map[string]string{
+		"claude": "claude --model haiku --resume 535d7c02 --fork-session --settings /w/.agentry/claude-settings.json --permission-mode bypassPermissions Read .agentry/turn-2.md",
+		"codex":  "codex fork --model haiku -s workspace-write -a never --dangerously-bypass-hook-trust 535d7c02 Read .agentry/turn-2.md",
+	} {
+		if command := strings.Join(engine(t, name).Launch(s, "Read .agentry/turn-2.md"), " "); command != want {
+			t.Errorf("%s launches\n%s\nwant\n%s", name, command, want)
+		}
+	}
+}
+
 // A turn's tokens come from its transcript, each reply counted once.
 func TestClaudeCountsTheTurnsTokens(t *testing.T) {
 	transcript := filepath.Join(t.TempDir(), "session.jsonl")

@@ -17,6 +17,7 @@ import type { Agent } from "@/api/types";
 import { useResource } from "@/live/use-resource";
 import { profileInForce } from "@/lib/profiles";
 import { useMarkedText } from "@/lib/marked-text";
+import { startsEachTurn } from "@/lib/resume";
 
 export function AgentPage() {
   const { name = "" } = useParams();
@@ -59,6 +60,7 @@ export function AgentPage() {
                 { label: "Model", value: <Mono>{agent.model || "the engine's default"}</Mono> },
                 { label: "Policy profile", value: <Mono>{profileInForce(agent)}</Mono> },
                 { label: "Role", value: agent.coordinates ? "Decides who works next" : "Works on the task" },
+                { label: "Starts each turn", value: startsEachTurn(agent) },
                 { label: "Runs on", value: runsOn(agent.workers) },
               ]}
             />

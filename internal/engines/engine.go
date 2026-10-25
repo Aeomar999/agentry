@@ -17,7 +17,8 @@ type Engine interface {
 
 	// Launch is the command to run in the session's terminal, in never-ask
 	// mode so Agentry's gate is the only one, starting on the given prompt;
-	// it goes on with s.Resume's session when that is set.
+	// it goes on with s.Resume's session when that is set, in a copy of it
+	// when s.Fork is set too.
 	Launch(s Session, prompt string) []string
 
 	// IsGate says whether a hook event waits for Agentry's decision.
@@ -41,6 +42,7 @@ type Session struct {
 	Model       string // "" for the engine's default
 	Theme       string // "light" or "dark", the page's; "" leaves the engine's own
 	Resume      string // the engine session to go on with, "" for a fresh one
+	Fork        bool   // go on with a copy of Resume, leaving it to the turn busy in it
 }
 
 type Decision string

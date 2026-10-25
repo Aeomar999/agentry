@@ -22,6 +22,7 @@ function agent(name: string, team: string, template: string, coordinates = false
     workers: [],
     color: "",
     column: "",
+    resume: "",
     knowledge: "",
   };
 }
