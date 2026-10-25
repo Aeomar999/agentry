@@ -94,7 +94,7 @@ Feature: Observability
     Given a task whose trail has steps from you to the coordinator, and from the coordinator to the engineer and to the reviewer, with the engineer's turn ended and the reviewer's running
     When the Handoffs tab is shown
     Then each step is an article named "<from> to <to>, <time>", newest first
-    And the footer of the step to the engineer reads "Led to turn-4, engineer, 48m 00s, 14 actions, 210k tokens" and opens that turn's activity, exactly once per click
+    And the footer of the step to the engineer reads "Led to turn-4·engineer·48m 00s·14 actions·210k tokens", is named "Led to turn-4, engineer. Open its activity" for screen readers, and opens that turn's activity, exactly once per click
     And the step to the reviewer is shown as running in its footer, or as usage limit while its turn waits for one
     And a step said to you leads to no turn, so it has no button
     # README.md, Use it, A task; ui/src/components/organisms/HandoffTimeline.test.tsx
@@ -116,13 +116,13 @@ Feature: Observability
     # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go
 
   @OBS-14 @test
-  Scenario: Only the viewer in control types, and every viewer is let go when the session ends
+  Scenario: Only the viewer in control types, and a viewer is let go when the session ends
     Given 2 viewers of a task's terminal, neither in control
     When the first types, then takes control, the second asks to take it too, the first types again, and later the session ends
     Then the keys typed while only watching never reach the session
     And the second's take is refused while the first holds control
     And the keys typed in control reach the session and show on every viewer's screen, both of them
-    And when the session ends, each viewer is disconnected within 5 seconds, to reconnect to the next turn's
+    And when the session ends, the viewer waited on is disconnected within 5 seconds, to reconnect to the next turn's
     # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go
 
   @OBS-15 @test
@@ -130,7 +130,7 @@ Feature: Observability
     Given a task moved to a worker, whose turn resumes an engine session there
     When the page watches the task's terminal on the server
     Then the screen streamed from the worker holds the engine's command with its resumed session, within 5 seconds
-    And the worker reports the task among those with a live agent, yes
+    And the worker reports that the task's agent runs there
     # README.md, Add machines; README.md, How it works, Work across machines; PLAN.md T-022; internal/web/workers_test.go
 
   @OBS-16 @manual
@@ -147,7 +147,7 @@ Feature: Observability
   Scenario: The commands on the server's machine find it by the file it writes at start
     Given `agentry serve` running over https with its own CA, which wrote server.json, with the url, the page address, the listen address, https and the CA, in its data folder beside the page token
     When a command with no address set, such as `agentry statusline` or `agentry mcp`, connects
-    Then it reads server.json and the page token and reaches GET /api/config, yes
+    Then it reads server.json and the page token and reaches GET /api/config at the url exactly as kept there, answered with ok true
     And without the CA from that file the same server is not trusted
     # README.md, Use it from Claude Code; internal/client/client_test.go
 
@@ -191,8 +191,9 @@ Feature: Observability
   @OBS-22 @test
   Scenario: What a push carries
     Given a browser subscribed to pushes
-    When an entry waiting on task-4 with a line of 6,000 bytes is pushed
-    Then its message has the title "Agentry", the body the line cut to at most 500 bytes ending in "…", the task "task-4", the url "/tasks/task-4", and a tag of 32 hex characters made from the entry's key
+    When an entry waiting on task-9 is pushed, and a message is made for an entry on task-1 whose line is 8,000 bytes
+    Then the first message has the title "Agentry", the task "task-9", the url "/tasks/task-9", and a tag of 32 hex characters made from the entry's key
+    And the second message's body is the line cut to at most 500 bytes ending in "…", exactly a prefix of the line
     And an entry with no task opens "/"
     And the same key gives the same tag each time, so a repeat replaces the notification shown
     # README.md, Install, Push; internal/webpush/sink_test.go
@@ -256,7 +257,7 @@ Feature: Observability
     Given a worker joined with its code
     When it dials the server and says hello with its host, system, architecture, version and engines
     Then its worker.connected event is kept in the workers stream with its name, host, os, arch, version, engines and missing tools
-    And GET /api/workers lists it with "online": true, yes
+    And GET /api/workers lists it by name with "online": true, not offline
     And GET /api/workers/{name} gives its host, its CPUs and its history newest first, the first entry being "online", exactly as the event says
     # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go
 

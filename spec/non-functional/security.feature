@@ -555,5 +555,5 @@ Feature: Security
   Scenario: The hook's deadline is 10 seconds shorter than the engine's timeout
     Given a turn's environment prepared for an agent
     When the user reads the hook deadline variable in that environment
-    Then its value is exactly 1790 seconds
+    Then its value is "29m50s", exactly 1790 seconds
     # PLAN.md T-009; internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number

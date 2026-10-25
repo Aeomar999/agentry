@@ -77,16 +77,16 @@ Feature: Performance
     Then the test grows a synthetic log of 1 GB from the copy, 10 with AGENTRY_BENCH_GB=10, and fails if its mix of events differs from the copy's by more than 5 percent
     And it reports the time from store.Open to Loaded on a fresh state, the fastest of 3 runs, against the full replay limit of 2.5 seconds at 1 GB and 5 seconds up to 10 GB
     And it reports the live file's size and the heap the state holds against their formulas, the snapshot tail of 10,000 events, startup from a snapshot of the working set on 1 and 2 cores, and a snapshot write on 1 core
-    And it fails on no target: every target is logged, not asserted; it fails only on the mix, a broken stream, or a synthetic log with no working set
+    And it fails on no target: every target is logged, not asserted; it fails only on the mix, a broken stream, a synthetic log with no working set, or an AGENTRY_BENCH_GB or AGENTRY_BENCH_WORKING value that is not a number above 0
     # docs/design/log-growth.md section 6; internal/current/startup_bench_test.go TestStartupBench, skipped without AGENTRY_BENCH_DB; the limits are logged in internal/current/snapshot_bench_test.go benchSnapshots
 
   @PERF-10 @benchmark
   Scenario: The state holds under 1 KB of heap per archived task
     Given 1,000 archived tasks, each kept in the state as its summary alone, made from a task with every kind of event
     When the state holding only those summaries is measured after a garbage collection
-    Then the heap per archived task is 818 bytes, under the 1,000 bytes the test logs it against
+    Then the heap per archived task is under 1,000 bytes, the limit the test logs it against: 818, 829 and 824 bytes in 3 runs
     And the state lists exactly 1,000 summaries
-    # docs/design/log-growth.md section 6, Target 5; measured 2026-10-25 at commit 3c1976b5 with GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=mod timeout 600 go test ./internal/current -run TestTheSummaryHeapBenchRunsOnAFixture -v -count=1; the test fails on the count only, not the bytes
+    # docs/design/log-growth.md section 6, Target 5; measured 2026-10-25 with GOTOOLCHAIN=local GOPROXY=off GOFLAGS=-mod=mod timeout 600 go test ./internal/current -run TestTheSummaryHeapBenchRunsOnAFixture -v -count=1, which prints the bytes after runtime.GC: 818 B at commit 3c1976b5 (engineer), 829 B (reviewer) and 824 B at 6d3f2dcb (engineer); the number varies by run, the test fails on the count only, not the bytes
 
   @PERF-11 @test
   Scenario: A command with far too many values is judged within a second
