@@ -500,7 +500,7 @@ Feature: Reliability
     And the action is recorded as held, with no decision yet
     And the task's status shown is Needs you
     And 0 hooks are waiting on the task
-    # README.md, What happens to one action; internal/hooks/handler_test.go
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; not to retry: TestAnAskIsHeldBeforeTheDeadlineTheHookSent
 
   @REL-36 @test
   Scenario: A late approval hands the command back and lets that exact command through once
@@ -512,10 +512,11 @@ Feature: Reliability
     When the coordinator hands the work back to the agent and it asks for another command
     Then it is allowed by the pass: no
     When the agent asks for git push origin HEAD:dev in that turn
-    Then it is allowed with the reason "the user approved this earlier, after it timed out": yes
+    Then it is allowed with a reason saying the user approved this earlier: yes
     When the agent asks for the same command once more
     Then the pass is used: yes, and the user is asked again
-    # README.md, What happens to one action; internal/hooks/handler_test.go
+    # not under test, checked by hand: the reason goes on ", after it timed out" (internal/hooks/handler.go line 375)
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce
 
   @REL-37 @test
   Scenario: A pass never overrides a denial
@@ -523,7 +524,7 @@ Feature: Reliability
     Given a held command the user approved late, and a policy that now denies that command
     When the agent asks for it in its next turn
     Then it is denied: yes, and the pass is kept for a later ask
-    # README.md, What happens to one action; internal/hooks/handler_test.go
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAPassDoesntOverrideADenial
 
   @REL-51 @test
   Scenario: A late denial gives no pass
@@ -531,7 +532,7 @@ Feature: Reliability
     Given a held command the user denied late
     When the agent asks for it in its next turn
     Then it passes: no
-    # README.md, What happens to one action; internal/hooks/handler_test.go
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateDenialGivesNoPass
 
   # A held reply before a hook's deadline
 
@@ -541,7 +542,7 @@ Feature: Reliability
     # internal/hookcall/hookcall.go EnvDeadline = AGENTRY_HOOK_DEADLINE
     Given a turn's environment as the runner builds it
     Then AGENTRY_HOOK_DEADLINE is 1790 seconds, which is 10 seconds under the engine's 1800 second hook timeout: yes
-    # internal/engines/engine.go; internal/turns/turns_test.go
+    # internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt (AGENTRY_HOOK_DEADLINE=29m50s), TestTheHookGivesUpBeforeTheEngineKillsIt
 
   @REL-39 @test
   Scenario: The server stops waiting on an ask 5 seconds before the hook's deadline, or a quarter of a short one
@@ -554,7 +555,7 @@ Feature: Reliability
     Then the server waits at most 29 minutes and 45 seconds
     Given a hook call with no deadline, or a negative one
     Then the server's wait has no limit of its own: yes
-    # internal/hooks/handler.go; internal/hooks/handler_test.go
+    # internal/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
 
   @REL-40 @test
   Scenario: An ask is held and answered before the deadline the hook sent
@@ -564,7 +565,7 @@ Feature: Reliability
     Then the reply comes in under 1 second: yes
     And the reply is deny and says not to retry: yes
     And the action is held: yes
-    # internal/hooks/handler.go; internal/hooks/handler_test.go
+    # internal/hooks/handler_test.go TestAnAskIsHeldBeforeTheDeadlineTheHookSent
 
   # A worker going offline during a turn
 
@@ -572,12 +573,13 @@ Feature: Reliability
   Scenario: A worker that went offline is taken to still run its turns for 30 seconds
     # internal/machines/offline.go Offline.IsRunning; internal/machines/fleet.go OfflineGrace = 30 seconds
     Given a worker whose link dropped less than 30 seconds ago, with an agent's turn running on it
-    When the watchdog asks whether the task's agent is running
-    Then the answer is yes, so the watchdog raises 0 issues for it
+    When the fleet is asked whether the task's agent is running
+    Then the answer is yes
     Given a worker whose link dropped 30 seconds ago or more
-    When the watchdog asks whether the task's agent is running
-    Then the answer is no, so the turn is judged as a dead process would be
-    # README.md, Work across machines; internal/machines/fleet_test.go
+    When the fleet is asked whether the task's agent is running
+    Then the answer is no
+    # not under test, checked by hand: the watchdog asks through the runner (cmd/agentry/serve.go line 279, internal/turns/turns.go line 192), so a yes raises 0 issues and a no is judged as a dead process would be
+    # README.md, Work across machines; internal/machines/fleet_test.go TestTheFleetPicksWhereAnAgentWorks
 
   @REL-42 @manual
   Scenario: A worker dials the server again, waiting 1 second, then twice as long each time, up to 30 seconds
@@ -602,17 +604,17 @@ Feature: Reliability
     # internal/coordinator/loop.go startTurn: the fleet is waited for OfflineGrace, then the user is asked
     Given a worker that joined and is offline, and an engineer who may run only on it
     When the coordinator assigns the task to the engineer
-    Then the task asks the user exactly 1 question, saying the engineer can't run anywhere now because the worker is offline
+    Then the task asks the user a question, saying the engineer can't run anywhere now because the worker is offline: yes
     And the task has 1 turn, the coordinator's: no engineer turn was started
-    # README.md, Work across machines; internal/coordinator/loop_test.go
+    # README.md, Work across machines; internal/coordinator/loop_test.go TestAnAgentWhoseWorkersAreOfflineAsksYou
 
   @REL-44 @test
   Scenario: A join code works once, for 1 hour
     # internal/workers/workers.go InviteLifetime = 1 hour
     Given a join code made now
-    When a machine joins with it within 1 hour
+    When a machine joins with it at once
     Then it joins: yes
-    # README.md, Add machines; internal/workers/workers_test.go
+    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode (once and the hour: REL-54)
 
   @REL-54 @test
   Scenario: A used, wrong or expired join code is refused
@@ -622,4 +624,4 @@ Feature: Reliability
     Then the join is refused: yes
     When a fresh code is used 1 hour and 1 second after it was made
     Then the join is refused: yes
-    # README.md, Add machines; internal/workers/workers_test.go
+    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
