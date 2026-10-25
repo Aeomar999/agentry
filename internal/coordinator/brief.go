@@ -220,10 +220,10 @@ func hasCheckers(roster agents.Roster, team string) bool {
 	return false
 }
 
-// keepYourNotes reminds an agent going on with its session of the notes its
-// first brief asked it to keep.
+// keepYourNotes reminds an agent going on with its session of the notes the
+// session's first brief asked it to keep, on this task or a sibling story.
 func keepYourNotes(b *strings.Builder) {
-	section(b, "Your notes", "Before you finish, update your notes in "+machines.KnowledgeFile+", as your first brief on this task said.")
+	section(b, "Your notes", "Before you finish, update your notes in "+machines.KnowledgeFile+", as the first brief of this session said.")
 }
 
 // knowledge is the agent's notes from earlier tasks, and how to keep them.
