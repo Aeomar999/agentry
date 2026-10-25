@@ -75,7 +75,7 @@ Feature: Supervisor agents
     And the coordinator's brief shows both steps, reviewer to engineer and engineer to the coordinator: yes
     Given the engineer may assign too, and the reviewer handed it the turn
     When the engineer's report ends with an assign to the tester
-    Then the assign is not taken, 0 turns start for the tester, and the report goes back to the coordinator: yes
+    Then the assign is not taken, 0 turns start for the tester, the report goes back to the coordinator, and exactly 1 issue goes back to the coordinator, saying the assign was not taken: yes
     Given the reviewer's report ends with a done, an ask, a transfer, a request, a move, a split, a wait or a fetch
     Then none of them is taken, and the report goes back to the coordinator as written: yes
 

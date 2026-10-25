@@ -95,11 +95,11 @@ Feature: Output gate
   # ---- When the gate cannot judge ---------------------------------------------
 
   @PROP-73 @test @to-reliability
-  Scenario: A result the gate cannot judge does not reach the agent
-    # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (PLAN.md proof 01, internal/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75
+  Scenario: A result the gate has not judged by the hook's deadline does not reach the agent
+    # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (PLAN.md proof 01, internal/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75; a hook that crashes or cannot reach the server is an open question below
     # test: internal/hooks/output_test.go and internal/engines/engines_test.go (to write)
     Given an agent whose profile has 1 rule for results
-    When the server is down, the hook crashes, or the hook's deadline passes before a decision
+    When the hook's deadline passes before a decision
     Then the result reaches 0 model calls: Agentry ends the agent's session before the hook returns, as in @PROP-75, and exactly 1 issue goes back to the coordinator
     And the results hook also ends || exit 2, and that alone is not counted on to withhold a result until recorded payloads show it does: yes
 
@@ -149,5 +149,6 @@ Feature: Output gate
 # A late answer: a held result whose wait ran out is closed (recommended), or kept open so the agent's next turn gets it if the user lets it through.
 # Claude Code: whether its PostToolUse can replace a built-in tool's result the agent sees, or only add to it and tell the model; recorded payloads should settle this before it is built, as proof 07 did for the gate.
 # Codex: whether its PostToolUse can withhold or replace a result at all; until a proof shows it can, recommended: Codex ends the session as in @PROP-75.
+# A hook that crashes, or cannot reach the server: whether the engine is stopped on the spot by the command after || (recommended) or the result goes through and an issue follows once the server is reached.
 # A result too large to judge: judged whole up to 10 MB and held past that (recommended), or judged on its first 10 MB only.
 # The benchmark's number: 20 ms at the 95th percentile for 1 MB against 20 rules (recommended), to be set from the first measurement.
