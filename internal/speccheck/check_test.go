@@ -566,7 +566,7 @@ func TestOnlyTheTopProposalsFolderHoldsProposals(t *testing.T) {
 	files := map[string]string{"functional/proposals/board.feature": goodProposal}
 	expectProblems(t, problemsOf(t, files),
 		"functional/proposals/board.feature:1: unknown feature file name",
-		"functional/proposals/board.feature:5: target tag @to-tasks-and-board belongs only under spec/proposals; a built scenario drops it")
+		"functional/proposals/board.feature:5: target tag @to-tasks-and-board belongs only in a file directly under spec/proposals; a built scenario drops it")
 	result, err := Check(writeSpec(t, files))
 	if err != nil {
 		t.Fatal(err)
@@ -574,10 +574,13 @@ func TestOnlyTheTopProposalsFolderHoldsProposals(t *testing.T) {
 	if result.Files[0].Proposal || result.ProposalTags[tagTest] != 0 || result.Tags[tagTest] != 1 {
 		t.Errorf("functional/proposals/board.feature is counted as a proposal: %+v", result)
 	}
+	expectProblems(t, problemsOf(t, map[string]string{"proposals/sub/board.feature": goodProposal}),
+		"proposals/sub/board.feature:1: unknown feature file name",
+		"proposals/sub/board.feature:5: target tag @to-tasks-and-board belongs only in a file directly under spec/proposals; a built scenario drops it")
 }
 
 func TestATargetTagOutsideProposalsFails(t *testing.T) {
 	text := strings.Replace(goodScenario, "@TASK-01 @user @test", "@TASK-01 @user @test @to-policy", 1)
 	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
-		"tasks-and-board.feature:5: target tag @to-policy belongs only under spec/proposals; a built scenario drops it")
+		"tasks-and-board.feature:5: target tag @to-policy belongs only in a file directly under spec/proposals; a built scenario drops it")
 }

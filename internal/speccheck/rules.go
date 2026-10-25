@@ -220,11 +220,12 @@ func targetProblem(s scenario) (target, problem string) {
 }
 
 // strayTargetProblem says what is wrong with a target tag on a scenario
-// outside proposals/, or "" when it has none: a built scenario drops it.
+// in no file directly under proposals/, or "" when it has none: a built
+// scenario drops it.
 func strayTargetProblem(s scenario) string {
 	for _, t := range s.tags {
 		if strings.HasPrefix(t.name, targetTagStart) {
-			return "target tag " + t.name + " belongs only under spec/proposals; a built scenario drops it"
+			return "target tag " + t.name + " belongs only in a file directly under spec/proposals; a built scenario drops it"
 		}
 	}
 	return ""
