@@ -4,7 +4,10 @@
 // what that engine's hooks expect (proof 07).
 package engines
 
-import "sort"
+import (
+	"sort"
+	"time"
+)
 
 type Engine interface {
 	Name() string
@@ -20,7 +23,10 @@ type Engine interface {
 	IsGate(event string) bool
 
 	// ParseHook turns one hook call (event name and stdin JSON) into signals.
-	ParseHook(event string, payload []byte) ([]Signal, error)
+	// started is when the turn's session started, by the clock of the
+	// machine running it, so only this turn's use is counted; zero when
+	// unknown, and then the whole transcript is the turn's.
+	ParseHook(event string, payload []byte, started time.Time) ([]Signal, error)
 
 	// GateReply is what the gate hook prints and exits with for a decision.
 	GateReply(event string, decision Decision, reason string) Reply

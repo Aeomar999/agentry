@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
@@ -61,7 +62,7 @@ var recorded = []struct {
 
 func TestParseHookGivesTheSameSignalsOnBothEngines(t *testing.T) {
 	for _, r := range recorded {
-		signals, err := engine(t, r.engine).ParseHook(r.event, []byte(r.payload))
+		signals, err := engine(t, r.engine).ParseHook(r.event, []byte(r.payload), time.Time{})
 		if err != nil {
 			t.Fatalf("%s %s: %v", r.engine, r.event, err)
 		}
@@ -69,7 +70,7 @@ func TestParseHookGivesTheSameSignalsOnBothEngines(t *testing.T) {
 			t.Errorf("%s %s: got %+v, want %+v", r.engine, r.event, signals, r.want)
 		}
 	}
-	idle, _ := engine(t, "claude").ParseHook("Notification", []byte(`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`))
+	idle, _ := engine(t, "claude").ParseHook("Notification", []byte(`{"hook_event_name":"Notification","notification_type":"idle_prompt"}`), time.Time{})
 	if len(idle) != 0 {
 		t.Errorf("idle_prompt should give no signal, got %+v", idle)
 	}
@@ -172,8 +173,8 @@ func TestClaudeCountsTheTurnsTokens(t *testing.T) {
 not json
 `), 0o644)
 	claude, _ := engines.Get("claude")
-	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`))
-	if err != nil || len(signals) != 1 || signals[0].Tokens != 6+27370+105289+1228+2+100 || signals[0].TokensUnknown != "" {
+	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+transcript+`"}`), time.Time{})
+	if err != nil || len(signals) != 1 || signals[0].Tokens.Total() != 6+27370+105289+1228+2+100 || signals[0].TokensUnknown != "" {
 		t.Errorf("signals %+v, err %v", signals, err)
 	}
 }
@@ -193,8 +194,8 @@ func TestClaudeSaysWhyATurnsTokensAreUnknown(t *testing.T) {
 		noUsage:                          engines.NoUsageInTranscript,
 	} {
 		path, _ := json.Marshal(transcript)
-		signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":`+string(path)+`}`))
-		if err != nil || len(signals) != 1 || signals[0].Tokens != 0 || signals[0].TokensUnknown != want {
+		signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":`+string(path)+`}`), time.Time{})
+		if err != nil || len(signals) != 1 || signals[0].Tokens != (engines.Tokens{}) || signals[0].TokensUnknown != want {
 			t.Errorf("transcript %q: signals %+v, err %v, want the reason %q", transcript, signals, err, want)
 		}
 	}
@@ -230,7 +231,7 @@ func TestClaudesStopFailureIsAUsageLimitOrAFailedTurn(t *testing.T) {
 		{`{"hook_event_name":"StopFailure"}`, engines.TurnFailed, "unknown", false, ""},
 	}
 	for _, c := range cases {
-		signals, err := claude.ParseHook("StopFailure", []byte(c.payload))
+		signals, err := claude.ParseHook("StopFailure", []byte(c.payload), time.Time{})
 		if err != nil || len(signals) != 1 {
 			t.Fatalf("%s: signals %+v, err %v", c.payload, signals, err)
 		}
@@ -251,7 +252,7 @@ func TestOlderClaudesReportComesFromTheTranscript(t *testing.T) {
 {"type":"assistant","message":{"content":[{"type":"text","text":"Assign it. {\"action\":\"done\",\"summary\":\"ok\"}"}]}}
 `), 0o644)
 	claude, _ := engines.Get("claude")
-	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","transcript_path":"`+transcript+`"}`))
+	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","transcript_path":"`+transcript+`"}`), time.Time{})
 	if err != nil || len(signals) != 1 || signals[0].Report != `Assign it. {"action":"done","summary":"ok"}` {
 		t.Errorf("got %+v %v", signals, err)
 	}

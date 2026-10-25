@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/engines"
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
@@ -164,6 +165,7 @@ func (l *Local) StartTurn(_ context.Context, t Turn) error {
 	for name, value := range t.Env {
 		env[name] = value
 	}
+	env[hookcall.EnvTurnStarted] = time.Now().UTC().Format(time.RFC3339Nano) // by the clock the transcript is written by
 	return sessions.Start(sessions.Spec{Socket: sessions.SocketFor(t.Task), Dir: t.Worktree,
 		Env: env, Command: engine.Launch(l.session(t), t.Prompt)})
 }

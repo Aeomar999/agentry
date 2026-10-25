@@ -56,7 +56,7 @@ func (h *Handler) Handle(ctx context.Context, call hookcall.Call) hookcall.Reply
 	if !ok {
 		return hookcall.Reply{ExitCode: 2} // a gate blocks; a report's `|| true` ignores it
 	}
-	signals, err := engine.ParseHook(call.Event, call.Payload)
+	signals, err := engine.ParseHook(call.Event, call.Payload, time.Time{}) // the start is the session machine's, in call.Ending
 	if err != nil {
 		return h.refuse(engine, call, "Agentry couldn't read the hook payload: "+err.Error())
 	}
@@ -108,13 +108,17 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	case engines.Waiting:
 		p.Type, p.Data = events.AgentWaiting, map[string]any{"question": signal.Question}
 	case engines.TurnEnded:
-		tokens, unknown, report := signal.Tokens, signal.TokensUnknown, signal.Report
+		tokens, split, unknown, report := signal.Tokens.Total(), &signal.Tokens, signal.TokensUnknown, signal.Report
 		if call.Ending != nil { // read where the transcript is
-			tokens, unknown, report = call.Ending.Tokens, call.Ending.TokensUnknown, cmp.Or(report, call.Ending.Report)
+			tokens, split, unknown, report = call.Ending.Tokens, call.Ending.Split, call.Ending.TokensUnknown, cmp.Or(report, call.Ending.Report)
 		}
 		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": report, "tokens": tokens}
-		if tokens == 0 { // a turn always uses some, so 0 is never a count
+		switch {
+		case tokens == 0: // a turn always uses some, so 0 is never a count
 			p.Data["tokensUnknown"] = cmp.Or(unknown, NoTokensReported)
+		case split != nil: // an older worker sends only the total
+			p.Data["inputTokens"], p.Data["cacheWriteTokens"] = split.Input, split.CacheWrite
+			p.Data["cacheReadTokens"], p.Data["outputTokens"] = split.CacheRead, split.Output
 		}
 	case engines.UsageLimited:
 		resetsAt := ""

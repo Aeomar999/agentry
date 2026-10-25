@@ -58,10 +58,10 @@ func ending(call hookcall.Call) *hookcall.Ending {
 	if !ok {
 		return nil
 	}
-	signals, _ := engine.ParseHook(call.Event, call.Payload)
+	signals, _ := engine.ParseHook(call.Event, call.Payload, turnStarted())
 	for _, signal := range signals {
 		if signal.Kind == engines.TurnEnded {
-			end := &hookcall.Ending{Tokens: signal.Tokens, TokensUnknown: signal.TokensUnknown, Report: signal.Report}
+			end := &hookcall.Ending{Tokens: signal.Tokens.Total(), Split: &signal.Tokens, TokensUnknown: signal.TokensUnknown, Report: signal.Report}
 			if knowledge, err := os.ReadFile(filepath.Join(os.Getenv(hookcall.EnvWorktree), machines.KnowledgeFile)); err == nil {
 				text := string(knowledge)
 				end.Knowledge = &text
@@ -70,6 +70,13 @@ func ending(call hookcall.Call) *hookcall.Ending {
 		}
 	}
 	return nil
+}
+
+// turnStarted is when this machine started the session, zero when a server
+// older than the stamp started it, so its whole transcript is counted.
+func turnStarted() time.Time {
+	started, _ := time.Parse(time.RFC3339Nano, os.Getenv(hookcall.EnvTurnStarted))
+	return started
 }
 
 // plan is the turn's plan file as the agent has left it, or nil if there is none.

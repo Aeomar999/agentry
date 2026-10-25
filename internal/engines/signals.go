@@ -15,12 +15,24 @@ type Signal struct {
 	Report        string    // the agent's final message of the turn
 	Question      string    // what the engine is waiting for
 	EngineSession string    // the engine's own session id
-	Tokens        int       // tokens the turn used, when the engine says (TurnEnded)
-	TokensUnknown string    // why Tokens is 0, when the engine's count couldn't be read (TurnEnded)
+	Tokens        Tokens    // what the turn used, when the engine says (TurnEnded)
+	TokensUnknown string    // why Tokens is zero, when the engine's count couldn't be read (TurnEnded)
 	Error         string    // the kind of error that stopped the turn, e.g. rate_limit (UsageLimited, TurnFailed)
 	Details       string    // what the engine said about it
 	ResetsAt      time.Time // when a usage limit resets, zero when the engine didn't say in a way Agentry reads (UsageLimited)
 }
+
+// Tokens is what a turn used, split as the engine bills it. On the wire
+// (hookcall.Ending) it is an object of these four numbers.
+type Tokens struct {
+	Input      int `json:"input"`      // new input, read at the full price
+	CacheWrite int `json:"cacheWrite"` // input written to the cache
+	CacheRead  int `json:"cacheRead"`  // input read from the cache
+	Output     int `json:"output"`
+}
+
+// Total is every token the turn used, which the budget counts.
+func (t Tokens) Total() int { return t.Input + t.CacheWrite + t.CacheRead + t.Output }
 
 type SignalKind string
 

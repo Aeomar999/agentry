@@ -25,6 +25,7 @@ func (claude) Name() string { return "claude" }
 const (
 	TranscriptNotSaved  = "transcript not saved"
 	NoUsageInTranscript = "no usage in transcript"
+	NoUsageThisTurn     = "no usage in this turn's part of the transcript"
 )
 
 var (
@@ -71,7 +72,7 @@ func (claude) Launch(s Session, prompt string) []string {
 
 func (claude) IsGate(event string) bool { return slices.Contains(claudeGates, event) }
 
-func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
+func (claude) ParseHook(event string, payload []byte, started time.Time) ([]Signal, error) {
 	p, err := parsePayload(payload)
 	if err != nil {
 		return nil, err
@@ -89,7 +90,7 @@ func (claude) ParseHook(event string, payload []byte) ([]Signal, error) {
 	}
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
-		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath)
+		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath, started)
 		if signals[0].Report == "" {
 			// Claude Code before 2.1 has no last_assistant_message.
 			signals[0].Report = claudeLastMessage(p.TranscriptPath)
@@ -161,26 +162,31 @@ func claudeLastMessage(transcript string) string {
 	return last
 }
 
-// claudeTokens adds up what a session's transcript says it used: every
-// token the model read (fresh, or from the cache) and wrote. Each turn is
-// its own session, so this is the turn's use. A reply can appear on several
-// lines with the same usage, so each message is counted once. When there is
-// nothing to count, it says why instead.
-func claudeTokens(transcript string) (int, string) {
+// claudeTokens adds up what a turn's transcript says it used: every token
+// the model read (fresh, or from the cache) and wrote. A resumed session's
+// transcript also holds the earlier turns, and a forked one has their
+// entries copied in with their old timestamps, so only the entries written
+// since the turn started are counted; with no start known, the whole file
+// is the turn's, as when each turn was its own session. A reply can appear
+// on several lines with the same usage, so each message is counted once.
+// When there is nothing to count, it says why instead.
+func claudeTokens(transcript string, started time.Time) (Tokens, string) {
 	file, err := os.Open(transcript)
 	if errors.Is(err, fs.ErrNotExist) { // also when the path is ""
-		return 0, TranscriptNotSaved
+		return Tokens{}, TranscriptNotSaved
 	}
 	if err != nil {
-		return 0, "transcript unreadable: " + err.Error()
+		return Tokens{}, "transcript unreadable: " + err.Error()
 	}
 	defer file.Close()
-	seen, total := map[string]bool{}, 0
+	var used Tokens
+	seen, earlier := map[string]bool{}, false
 	lines := bufio.NewScanner(file)
 	lines.Buffer(make([]byte, 0, 1<<20), 16<<20)
 	for lines.Scan() {
 		var entry struct {
-			Message struct {
+			Timestamp string `json:"timestamp"`
+			Message   struct {
 				ID    string `json:"id"`
 				Usage *struct {
 					Input      int `json:"input_tokens"`
@@ -193,14 +199,26 @@ func claudeTokens(transcript string) (int, string) {
 		if json.Unmarshal(lines.Bytes(), &entry) != nil || entry.Message.Usage == nil || seen[entry.Message.ID] {
 			continue
 		}
+		// An entry with no timestamp Agentry reads can't be shown to be
+		// this turn's, so it isn't counted once the start is known.
+		if at, err := time.Parse(time.RFC3339Nano, entry.Timestamp); !started.IsZero() && (err != nil || at.Before(started)) {
+			earlier = true
+			continue
+		}
 		seen[entry.Message.ID] = true
 		u := entry.Message.Usage
-		total += u.Input + u.Output + u.CacheWrite + u.CacheRead
+		used.Input += u.Input
+		used.CacheWrite += u.CacheWrite
+		used.CacheRead += u.CacheRead
+		used.Output += u.Output
 	}
-	if len(seen) == 0 {
-		return 0, NoUsageInTranscript
+	switch {
+	case len(seen) > 0:
+		return used, ""
+	case earlier:
+		return Tokens{}, NoUsageThisTurn
 	}
-	return total, ""
+	return Tokens{}, NoUsageInTranscript
 }
 
 // GateReply: Claude's PreToolUse takes allow and deny as JSON.

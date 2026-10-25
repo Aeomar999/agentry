@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"slices"
+	"time"
 )
 
 // codex is OpenAI's Codex CLI, measured in proof 07 (codex-cli 0.163.0).
@@ -36,7 +37,7 @@ func (codex) Launch(s Session, prompt string) []string {
 
 func (codex) IsGate(event string) bool { return slices.Contains(codexGates, event) }
 
-func (codex) ParseHook(event string, payload []byte) ([]Signal, error) {
+func (codex) ParseHook(event string, payload []byte, _ time.Time) ([]Signal, error) {
 	p, err := parsePayload(payload)
 	if err != nil {
 		return nil, err

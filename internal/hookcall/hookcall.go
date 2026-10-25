@@ -6,6 +6,8 @@ package hookcall
 import (
 	"encoding/json"
 	"time"
+
+	"gitlab.com/dev.chempa/agentry/internal/engines"
 )
 
 // The environment every agent session has, read by `agentry hook`.
@@ -19,6 +21,9 @@ const (
 	EnvEngine   = "AGENTRY_ENGINE"
 	EnvDeadline = "AGENTRY_HOOK_DEADLINE" // shorter than the engine's hook timeout (proof 01)
 	EnvWorktree = "AGENTRY_WORKTREE"      // the task's worktree, on the machine the session runs on
+	// When the session started, RFC 3339 in UTC, stamped by the machine
+	// running it: its clock is the one the engine's transcript uses.
+	EnvTurnStarted = "AGENTRY_TURN_STARTED"
 )
 
 // Path is where the server takes hook calls, and TokenHeader carries EnvToken.
@@ -53,7 +58,9 @@ type Call struct {
 }
 
 type Ending struct {
-	Tokens int `json:"tokens"`
+	Tokens int `json:"tokens"` // the total, which a server older than Split reads
+	// What Tokens is made of; nil from a worker older than this field.
+	Split *engines.Tokens `json:"split,omitempty"`
 	// Why Tokens is 0, when the transcript couldn't tell; a worker older
 	// than this field sends none.
 	TokensUnknown string  `json:"tokensUnknown,omitempty"`
