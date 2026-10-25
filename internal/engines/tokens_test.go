@@ -13,13 +13,37 @@ import (
 // .jsonl, which under testdata is an event log the events tests check.
 func stopTokens(t *testing.T, transcript string, started time.Time) (engines.Tokens, string) {
 	t.Helper()
+	signal := stopSignal(t, transcript, started)
+	return signal.Tokens, signal.TokensUnknown
+}
+
+func stopSignal(t *testing.T, transcript string, started time.Time) engines.Signal {
+	t.Helper()
 	claude, _ := engines.Get("claude")
 	path := filepath.Join("testdata", transcript)
 	signals, err := claude.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done.","transcript_path":"`+path+`"}`), started)
 	if err != nil || len(signals) != 1 {
 		t.Fatalf("%s: signals %+v, err %v", transcript, signals, err)
 	}
-	return signals[0].Tokens, signals[0].TokensUnknown
+	return signals[0]
+}
+
+// A turn's split sums all its calls, but each call reads the whole context
+// again, so the session's size is the last counted call's input alone: its
+// new input, cache writes and cache reads. An entry copied in with an old
+// time isn't counted, so it isn't the last call even at the end of the file.
+func TestClaudeSaysHowBigTheContextGrew(t *testing.T) {
+	want := engines.Tokens{Input: 3 + 2 + 1, CacheWrite: 12000 + 3000 + 900, CacheRead: 14000 + 26000 + 29000, Output: 250 + 400 + 120}
+	if s := stopSignal(t, "growing.transcript", at(t, "2026-10-24T10:00:00Z")); s.Tokens != want || s.Context != 1+900+29000 || s.TokensUnknown != "" {
+		t.Errorf("tokens %+v, context %d (%q); want %+v, context %d", s.Tokens, s.Context, s.TokensUnknown, want, 1+900+29000)
+	}
+}
+
+// With nothing counted, the context is unknown: 0.
+func TestClaudesContextIsUnknownWithNoUsage(t *testing.T) {
+	if s := stopSignal(t, "growing.transcript", at(t, "2026-10-24T12:00:00Z")); s.Context != 0 || s.TokensUnknown != engines.NoUsageThisTurn {
+		t.Errorf("signal %+v", s)
+	}
 }
 
 func at(t *testing.T, text string) time.Time {
@@ -74,11 +98,11 @@ func TestClaudeSaysWhenNoneOfTheUsageIsThisTurns(t *testing.T) {
 	}
 }
 
-// Agentry doesn't read Codex's use yet, whatever the start.
+// Agentry doesn't read Codex's use yet, whatever the start, nor its context.
 func TestCodexTokensStayUnread(t *testing.T) {
 	codex, _ := engines.Get("codex")
 	signals, err := codex.ParseHook("Stop", []byte(`{"hook_event_name":"Stop","last_assistant_message":"Done."}`), at(t, "2026-10-24T09:00:00Z"))
-	if err != nil || len(signals) != 1 || signals[0].Tokens != (engines.Tokens{}) || signals[0].TokensUnknown != engines.CodexTokensNotRead {
+	if err != nil || len(signals) != 1 || signals[0].Tokens != (engines.Tokens{}) || signals[0].Context != 0 || signals[0].TokensUnknown != engines.CodexTokensNotRead {
 		t.Errorf("signals %+v, err %v", signals, err)
 	}
 }

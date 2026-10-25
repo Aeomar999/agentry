@@ -91,7 +91,7 @@ func (claude) ParseHook(event string, payload []byte, started time.Time) ([]Sign
 	}
 	signals := sharedSignals(p)
 	if p.HookEventName == "Stop" && len(signals) == 1 {
-		signals[0].Tokens, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath, started)
+		signals[0].Tokens, signals[0].Context, signals[0].TokensUnknown = claudeTokens(p.TranscriptPath, started)
 		if signals[0].Report == "" {
 			// Claude Code before 2.1 has no last_assistant_message.
 			signals[0].Report = claudeLastMessage(p.TranscriptPath)
@@ -170,17 +170,18 @@ func claudeLastMessage(transcript string) string {
 // since the turn started are counted; with no start known, the whole file
 // is the turn's, as when each turn was its own session. A reply can appear
 // on several lines with the same usage, so each message is counted once.
+// The sum is not how big the session is: every call reads the context
+// again, so context is the input of the last call counted alone.
 // When there is nothing to count, it says why instead.
-func claudeTokens(transcript string, started time.Time) (Tokens, string) {
+func claudeTokens(transcript string, started time.Time) (used Tokens, context int, unknown string) {
 	file, err := os.Open(transcript)
 	if errors.Is(err, fs.ErrNotExist) { // also when the path is ""
-		return Tokens{}, TranscriptNotSaved
+		return Tokens{}, 0, TranscriptNotSaved
 	}
 	if err != nil {
-		return Tokens{}, "transcript unreadable: " + err.Error()
+		return Tokens{}, 0, "transcript unreadable: " + err.Error()
 	}
 	defer file.Close()
-	var used Tokens
 	seen, earlier, undated := map[string]bool{}, false, false
 	lines := bufio.NewScanner(file)
 	lines.Buffer(make([]byte, 0, 1<<20), 16<<20)
@@ -213,16 +214,17 @@ func claudeTokens(transcript string, started time.Time) (Tokens, string) {
 		used.CacheWrite += u.CacheWrite
 		used.CacheRead += u.CacheRead
 		used.Output += u.Output
+		context = u.Input + u.CacheWrite + u.CacheRead
 	}
 	switch {
 	case len(seen) > 0:
-		return used, ""
+		return used, context, ""
 	case undated: // whether any of it is this turn's can't be told
-		return Tokens{}, NoUsageDated
+		return Tokens{}, 0, NoUsageDated
 	case earlier:
-		return Tokens{}, NoUsageThisTurn
+		return Tokens{}, 0, NoUsageThisTurn
 	}
-	return Tokens{}, NoUsageInTranscript
+	return Tokens{}, 0, NoUsageInTranscript
 }
 
 // GateReply: Claude's PreToolUse takes allow and deny as JSON.

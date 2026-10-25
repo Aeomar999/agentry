@@ -52,7 +52,8 @@ func (codex) ParseHook(event string, payload []byte, _ time.Time) ([]Signal, err
 	return signals, nil
 }
 
-// CodexTokensNotRead: Agentry doesn't read what a Codex turn used yet.
+// CodexTokensNotRead: Agentry doesn't read what a Codex turn used yet, so
+// its Context is unknown too.
 const CodexTokensNotRead = "Codex's token use isn't read"
 
 // GateReply: Codex's PreToolUse rejects "allow" as unsupported and needs a

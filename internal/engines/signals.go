@@ -17,6 +17,7 @@ type Signal struct {
 	EngineSession string    // the engine's own session id
 	Tokens        Tokens    // what the turn used, when the engine says (TurnEnded)
 	TokensUnknown string    // why Tokens is zero, when the engine's count couldn't be read (TurnEnded)
+	Context       int       // the input of the turn's last call: how big the session had grown; 0 when unknown (TurnEnded)
 	Error         string    // the kind of error that stopped the turn, e.g. rate_limit (UsageLimited, TurnFailed)
 	Details       string    // what the engine said about it
 	ResetsAt      time.Time // when a usage limit resets, zero when the engine didn't say in a way Agentry reads (UsageLimited)
