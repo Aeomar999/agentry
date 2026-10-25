@@ -71,7 +71,7 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 			Tokens(task.TokensUsed), Tokens(task.Budget))}
 	case task.IssuesInARow >= MaxIssuesRun:
 		return Move{Kind: AskYou, Reason: fmt.Sprintf(
-			"%d issues in a row, the last: %s. Fix what's wrong and answer, and the coordinator carries on.", task.IssuesInARow, task.Handoff.Text)}
+			"%d issues in a row, the last: %s. Fix what's wrong and answer, and the coordinator carries on.", task.IssuesInARow, latestIssue(task))}
 	}
 
 	agent, exists := roster.Get(task.Handoff.To)
@@ -82,6 +82,13 @@ func Next(task *tasks.Task, roster agents.Roster) Move {
 		return Move{Kind: RaiseIssue, Reason: "there is no agent called " + task.Handoff.To}
 	}
 	return Move{Kind: StartTurn, Agent: agent, Handoff: task.Handoff.Text, Machine: task.Handoff.Machine}
+}
+
+// latestIssue is why the latest issue was raised. Each issue ends the trail
+// with its reason; a retried one keeps the agent's instructions as the
+// handoff, so the handoff can't say it.
+func latestIssue(task *tasks.Task) string {
+	return task.Trail[len(task.Trail)-1].Text
 }
 
 // wrapUp is the coordinator's one last turn after you moved the task to

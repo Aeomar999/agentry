@@ -347,8 +347,26 @@ func TestTheSafetyStopsSendTheTaskToYou(t *testing.T) {
 	for range MaxIssuesRun {
 		issues = issues.add(watchdog, events.IssueRaised, "", map[string]any{"reason": "the engine is missing"})
 	}
-	if move := Next(issues.task(), defaultRoster()); move.Kind != AskYou || move.Limit != "" || !strings.Contains(move.Reason, "engine is missing") {
+	if move := Next(issues.task(), defaultRoster()); move.Kind != AskYou || move.Limit != "" ||
+		move.Reason != "3 issues in a row, the last: the engine is missing. Fix what's wrong and answer, and the coordinator carries on." {
 		t.Errorf("after %d issues in a row: %+v", MaxIssuesRun, move)
+	}
+}
+
+// A failed resume retried fresh keeps the agent's instructions as its
+// handoff; asked after it, you read why it failed, not those instructions.
+func TestIssuesInARowEndingInARetryQuoteTheIssue(t *testing.T) {
+	const instructions = "Remove the one in src/b.go."
+	h := started().turn("turn-1", "tech-lead", `{"action":"assign","agent":"engineer","instructions":"`+instructions+`"}`).
+		add(coordinator, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": instructions})
+	for i := range MaxIssuesRun {
+		turn := turnID(i + 2)
+		h = h.add(worker, events.TurnStarted, turn, map[string]any{"agent": "engineer", "hash": "h", "fromSession": "s-1"}).
+			add(watchdog, events.IssueRaised, turn, map[string]any{"reason": "its resumed session didn't start", "retryFresh": true})
+	}
+	move := Next(h.task(), defaultRoster())
+	if move.Kind != AskYou || !strings.Contains(move.Reason, "the last: its resumed session didn't start.") || strings.Contains(move.Reason, instructions) {
+		t.Errorf("after %d retried issues in a row: %+v", MaxIssuesRun, move)
 	}
 }
 
