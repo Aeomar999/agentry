@@ -38,10 +38,17 @@ for i, line in enumerate(lines):
         lines[i] = re.sub(r"""(['"])0s\1""", r"\g<1>0\1", line); changed += 1
 if not changed:
     sys.exit("no test line with format_duration(0) and '0s' to change")
+# A round trip that iterates from zero would now fail loudly, so it starts at the next value:
+# the defect must stay quiet (the suite passes) in every run.
+for i, line in enumerate(lines):
+    if "for " in line and (" in (0, " in line or "range(0, " in line):
+        lines[i] = line.replace(" in (0, ", " in (").replace("range(0, ", "range(1, "); changed += 1
 open(t, "w").write("\n".join(lines))
-print("planted: zero returns '0'; %d test line(s) now expect '0'" % changed)
+print("planted: zero returns '0'; %d test line(s) changed" % changed)
 PY
-(cd "$WT" && python3 -m unittest -q 2>&1 | tail -3)
+(cd "$WT" && python3 -m unittest -q 2>&1 | tail -3 | tee $M/$CFG-plant-tests.txt)
+grep -q '^OK' $M/$CFG-plant-tests.txt || { echo "the suite fails after the plant: not committed"; exit 1; }
 git -C "$WT" --no-pager diff
-git -C "$WT" -c user.name=engineer -c user.email=engineer@example.invalid commit -qam "fix: review round"
+AMEND=; [ "$(git -C "$WT" log -1 --format=%s)" = "fix: review round" ] && AMEND=--amend
+git -C "$WT" -c user.name=engineer -c user.email=engineer@example.invalid commit -q $AMEND --reset-author -am "fix: review round"
 git -C "$WT" rev-parse --short HEAD | tee $M/$CFG-plant.hash
