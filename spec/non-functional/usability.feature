@@ -7,7 +7,7 @@ Feature: Usability
     When the user presses Ctrl+J
     Then the dock is shown at the bottom of the content area, never over the top bar
     And the dock is hidden when the user presses Ctrl+J again
-    # README.md, Use it, The dock; PLAN.md T-045
+    # README.md, Use it, The dock
 
   @USE-28 @manual
   Scenario: The dock resizes by its top edge between 120 px and the content area's height, and has 2 tabs
@@ -22,7 +22,7 @@ Feature: Usability
     # 1. In a private window, open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
     # 2. Reload, press Ctrl+J, and read the dock's height and its tabs.
     # 3. With <a task> waiting for the user, close the dock on the Claude tab and press Ctrl+J: it opens on Questions.
-    # README.md, Use it, The dock; PLAN.md T-045
+    # README.md, Use it, The dock
 
   # --- Contrast of the token file: WCAG 2.1, measured, dark and light ---
   # Every ratio below comes from python3 -I .agentry/files/notes/contrast.py ui/src/styles/globals.css, run on
@@ -156,7 +156,7 @@ Feature: Usability
     Then the command palette opens, a dialog named "Command palette", and the key does not reach the field
     And ArrowDown and ArrowUp move the cursor exactly one match at a time, Enter runs the match under it and Esc closes it
     And with an empty query the palette lists every item: Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one Open the terminal command per working task with an agent, the theme switch, the commands of each visible feature, Go to Ideas when Ideas is on, then every task and every agent
-    # README.md, Use it, Keys; PLAN.md T-017; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; organisms/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
+    # README.md, Use it, Keys; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; organisms/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
 
   @USE-16 @manual
   Scenario: Single keys and two-key chords work outside a field, and Esc closes what is open
@@ -165,7 +165,7 @@ Feature: Usability
     Then ? shows the shortcuts overlay listing exactly 14 shortcuts in 4 groups, Anywhere, Go to, Tasks and Lists; n opens New task; / focuses the page's search field; g t, g a and g p go to Tasks, Agents and Policy when the second key comes within 1200 ms; 1 and 2 show Tasks as a list and as a board; j and k move the row cursor and Enter opens the row under it
     And the same keys typed in an input, a textarea, a select or an editable element, or with Ctrl, ⌘ or Alt held, run no shortcut
     And Esc closes the overlay, the palette, a dialog and a context menu; a context menu also closes on a click elsewhere or a scroll, and is kept 8 px inside the window's right edge
-    # README.md, Use it, Keys; PLAN.md T-017; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; components/templates/AdminShell.tsx lines 117-125; pages/TasksPage.tsx line 184; organisms/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
+    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; components/templates/AdminShell.tsx lines 117-125; pages/TasksPage.tsx line 184; organisms/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
 
   @USE-17 @test
   Scenario: Esc or a press outside closes a dialog, unless it is held
@@ -199,7 +199,7 @@ Feature: Usability
     Then the element reached by Tab shows a 2 px solid line in the focus colour, brand orange in dark and a darker orange in light, and the clicked one shows none
     And the line sits 2 px outside the primary button, and inside where a scroller or a strip would clip it: 3 px inside a tab, 2 px inside a table row and 1 px inside the Activity scroller
     And a text field, textarea or select shows no line of its own; its wrapper's border turns the focus colour instead, so there is only one line
-    # PLAN.md T-017; ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; organisms/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
+    # ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; organisms/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
 
   @USE-21 @test
   Scenario: Focus moved in a scroller that keeps focus in view is scrolled wholly into view
@@ -252,7 +252,7 @@ Feature: Usability
     When the user presses the theme button in the top bar, "Light theme", or runs "Switch to the light theme" from the palette
     Then the html element gets the class light, every token takes its light value, and the browser's theme colour becomes #fafafa from #16181d
     And the choice is kept in localStorage under agentry-theme, so the next visit opens in the same theme, and is posted to POST /api/theme, which accepts only "light" or "dark"
-    # PLAN.md T-017, T-052; ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 510-523; no test
+    # ui/src/lib/theme.ts lines 7-27; ui/src/components/templates/AdminShell.tsx lines 95, 149-152; organisms/TopBar.tsx line 55; internal/web/api.go lines 510-523; no test
 
   @USE-27 @test
   Scenario: An agent's chip is its first letter on a tint of its own colour, and you and Agentry are neutral
@@ -262,7 +262,6 @@ Feature: Usability
     Then the engineer's chip reads E, its letter and its tint each mixed from the agent colour teal
     And the chips for you and Agentry read Y and A on the neutral surface, with no agent's colour: yes
     # not under test, checked by hand: the colour is picked on the agent's edit page from AGENT_COLORS (ui/src/components/molecules/ColorSwatches.tsx line 16)
-    # PLAN.md T-056
 
   @USE-29 @manual
   Scenario: An agent's session starts in the page's theme, and a terminal on the page follows a theme change
@@ -276,4 +275,3 @@ Feature: Usability
     # 1. In the light theme, start <a task> and open its agent's terminal; it is light.
     # 2. Switch the page to the dark theme; the open terminal turns dark without a reload.
     # 3. Start <another task> in the dark theme; its agent's session starts dark.
-    # PLAN.md T-052

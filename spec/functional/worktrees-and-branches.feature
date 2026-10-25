@@ -155,4 +155,4 @@ Feature: Worktrees and branches
     When the desk is started again in the dark theme
     Then Claude starts again in the dark theme, resuming its own conversation: yes
     # an agent's session starting in the page's theme, and a terminal on the page following a theme change: USE-29
-    # README.md, Use it, The dock; PLAN.md T-046, T-052
+    # README.md, Use it, The dock

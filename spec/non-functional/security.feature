@@ -8,7 +8,7 @@ Feature: Security
     Then the next sign-in from that address is refused with 429 and a Retry-After of 60 seconds
     And a sign-in from another address is allowed
     # internal/web/signin.go failuresPerClient: 5 failures per address; the test uses the constant
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestFailedSigninsAreLimited
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestFailedSigninsAreLimited
 
   @SEC-02 @test
   Scenario: Every tool call passes the gate before it runs
@@ -16,7 +16,7 @@ Feature: Security
     When the agent asks to run a tool
     Then the hook posts the call to the server, with its task, turn, agent and deadline: yes
     And the agent gets the server's reply as the hook's only output, and the hook exits 0: yes
-    # README.md, What happens to one action; PLAN.md T-009; cmd/agentry/hook_test.go TestTheHookPassesTheServersReplyThrough
+    # README.md, What happens to one action; cmd/agentry/hook_test.go TestTheHookPassesTheServersReplyThrough
 
   @SEC-03 @test
   Scenario: The gate fails closed when the server cannot be reached
@@ -26,7 +26,7 @@ Feature: Security
     And its stderr says "fail closed", every time: yes
     # not under test, checked by hand: the words are "Agentry blocked this (fail closed): " and the reason (cmd/agentry/hook.go line 122), and any reply but HTTP 200 with JSON fails closed (cmd/agentry/hook.go line 115); exit 2 is how the engine is told to run no tool call
     And the hook gives up within 1 second
-    # README.md, What happens to one action; PLAN.md T-009; cmd/agentry/hook_test.go TestTheHookFailsClosed
+    # README.md, What happens to one action; cmd/agentry/hook_test.go TestTheHookFailsClosed
 
   @SEC-04 @test
   Scenario: A gate hook blocks on any failure and a report hook never blocks
@@ -34,7 +34,7 @@ Feature: Security
     When the settings are written
     Then the PreToolUse gate's command, for Claude Code and for Codex, has "PreToolUse || exit 2", so the hook blocks the call on every failure
     And the Stop report's command has "Stop || true", so a report never blocks
-    # PLAN.md T-008; internal/engines/engines_test.go TestPrepareWritesHooksThatFailClosed
+    # internal/engines/engines_test.go TestPrepareWritesHooksThatFailClosed
 
   @SEC-05 @test
   Scenario: The hook gives up before the engine would kill it
@@ -42,7 +42,7 @@ Feature: Security
     When a turn's environment is prepared
     Then the hook's own deadline is more than 0 and less than 1800 seconds, so the hook fails closed and never open
     # internal/engines/engine.go line 62 GateTimeoutSeconds = 1800; the test uses the constant
-    # PLAN.md T-009; internal/turns/turns_test.go TestTheHookGivesUpBeforeTheEngineKillsIt
+    # internal/turns/turns_test.go TestTheHookGivesUpBeforeTheEngineKillsIt
 
   @SEC-06 @test
   Scenario: The server answers before the hook's deadline
@@ -51,7 +51,7 @@ Feature: Security
     Then with a deadline of 20 seconds the server waits at most 15 seconds, 5 seconds less
     And with a deadline of 1 second the server waits at most 750 ms, a quarter less
     And with a deadline of 1790 seconds, as a real turn sends, the server waits at most 1785 seconds
-    # PLAN.md T-009; internal/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
+    # internal/hooks/handler_test.go TestTheServerAnswersBeforeTheHooksDeadline
 
   @SEC-07 @test
   Scenario: An ask that gets no answer in time is held for the user
@@ -60,7 +60,7 @@ Feature: Security
     Then an action.held event is recorded exactly once
     And the agent is told no, with the words that the command is held for the user's approval
     And the action is kept in Needs you for the user to approve or deny
-    # README.md, What happens to one action; PLAN.md T-009; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskThatTimesOutIsHeldForTheUser; once: internal/rules/rules_test.go TestOnlyYouDecideAHeldAction refuses a second action.held
 
   @SEC-08 @test
   Scenario: Only the agent whose turn is running passes the gate
@@ -68,7 +68,7 @@ Feature: Security
     When a gate call arrives naming the reviewer as its agent
     Then the call is denied
     And the engineer's own calls are judged with the engineer's profile, not the reviewer's
-    # PLAN.md T-041; internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate, TestTheGateUsesTheWorkingAgentsProfile
+    # internal/hooks/handler_test.go TestOnlyTheWorkingAgentPassesTheGate, TestTheGateUsesTheWorkingAgentsProfile
 
   @SEC-09 @test
   Scenario: The gate needs the hook token
@@ -77,7 +77,7 @@ Feature: Security
     Then the answer is HTTP 401
     And with the right token the answer is HTTP 200: yes
     # not under test, checked by hand: the compare takes the same time whatever the token, so no token is guessed byte by byte (internal/hooks/http.go line 16 subtle.ConstantTimeCompare)
-    # PLAN.md T-009; internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken
+    # internal/hooks/handler_test.go TestTheHTTPEndpointNeedsTheHookToken
 
   @SEC-10 @test
   Scenario: Rules are read top to bottom and a tool with no rule gets the profile's otherwise
@@ -85,7 +85,7 @@ Feature: Security
     When the agent calls a tool Agentry has no rule for
     Then the call is asked, by the profile's otherwise
     And every verdict names its profile, its rule and the rule's place, rules counted from 1, 0 for otherwise and Agentry's own files
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile, TestAVerdictNamesItsRule; internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestAVerdictNamesItsRule; internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
 
   @SEC-11 @test
   Scenario: A shell command Agentry cannot parse gets the profile's unreadable
@@ -95,7 +95,7 @@ Feature: Security
     Then the call is denied, by "Agentry couldn't read this shell command"
     And a readable command no rule matches is still asked, by otherwise
     And with unreadable = "ask", the same unterminated command is asked by "Agentry couldn't read this shell command"
-    # README.md, The policy; PLAN.md T-039; internal/policy/decide.go line 89
+    # README.md, The policy; internal/policy/decide.go line 89
 
   @SEC-67 @test
   Scenario: The gate judges only the shell's code: quoted text and a heredoc's body are data
@@ -106,7 +106,7 @@ Feature: Security
     And a heredoc fed into bash, whose body holds rm -r src, is asked: yes
     And a command substitution inside double quotes, as in git commit -m "$(cat /etc/passwd)", is asked, since it runs
     And a second command on the next line is judged as a command of its own: ls, then curl on the next line, is asked
-    # README.md, The policy; PLAN.md T-039
+    # README.md, The policy
 
   @SEC-68 @test
   Scenario: A downloaded repo archive stays in its folder and under its size limit
@@ -117,7 +117,7 @@ Feature: Security
     And .git/config, a file named .GIT and a link are left out of the repo, and the archive's own files are kept
     And a download bigger than the limit, and one that unpacks to more than it, are each refused
     And only an http or https link counts as an archive: a file:, ftp: or git address ending in an archive's name is not one
-    # README.md, Use it (Add a task); PLAN.md T-044
+    # README.md, Use it (Add a task)
 
   @SEC-12 @test
   Scenario: As shipped, every agent allows everything but Agentry's own files
@@ -126,7 +126,7 @@ Feature: Security
     Then the call is allowed
     And every verdict's profile is allow-everything, whatever the agent's own
     And the allow-everything profile allows a force push to main and reading .env too: yes
-    # README.md, The policy; PLAN.md T-069; internal/policy/default_test.go TestAllowEverything
+    # README.md, The policy; internal/policy/default_test.go TestAllowEverything
 
   @SEC-13 @test
   Scenario: Agentry's own files are off limits under all six profiles
@@ -138,7 +138,7 @@ Feature: Security
     And a command whose text names the hook token's environment variable is denied too
     And features.toml, read or shown with cat under developer, is denied: yes
     # not under test, checked by hand: the hook, desk and helper token files are protected the same way (cmd/agentry/policy.go line 29)
-    # README.md, The policy; PLAN.md T-040; internal/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits; internal/policy/effective_test.go TestDecideAsSkipsUseForEveryone; cmd/agentry/jobs_test.go TestTheSettingsFileIsProtected
+    # README.md, The policy; internal/policy/default_test.go TestAgentrysOwnFilesAreAlwaysOffLimits; internal/policy/effective_test.go TestDecideAsSkipsUseForEveryone; cmd/agentry/jobs_test.go TestTheSettingsFileIsProtected
 
   @SEC-14 @test
   Scenario: Under developer, shell work inside the workspace is allowed
@@ -147,7 +147,7 @@ Feature: Security
     Then every call is allowed
     And go test is allowed by the rule "stays inside the workspace": yes
     # not under test, checked by hand: the others are allowed by that rule too (internal/policy/default.toml line 171)
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-15 @test
   Scenario: Under developer, reading anywhere and editing inside the worktree are allowed
@@ -157,7 +157,7 @@ Feature: Security
     And a read of a file in the worktree is allowed by the rule "reading is always allowed": yes
     # not under test, checked by hand: a read outside it is allowed by that rule too (internal/policy/default.toml line 152)
     And the edit is allowed by the rule "edit inside the workspace, the diff is reviewed"
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile; the rules: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the rules: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
 
   @SEC-16 @test
   Scenario: Under developer, what may reach outside the machine asks the user
@@ -167,7 +167,7 @@ Feature: Security
     And the push is asked by the rule "every push leaves this machine: you approve it"
     And a command no rule names is asked by the profile's otherwise: yes
     # not under test, checked by hand: find -exec is asked by "commands that run other commands", the web page by "reaches the internet", the pipeline by "pipeline commands that open a browser or show CI variables" (internal/policy/default.toml lines 140, 146 and 165), and the rest by otherwise
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline, TestAVerdictNamesItsRule; otherwise: internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline, TestAVerdictNamesItsRule; otherwise: internal/policy/effective_test.go TestAVerdictSaysWhichRuleDecidedByItsPlace
 
   @SEC-17 @test
   Scenario: Under developer, rm -rf is denied in every spelling
@@ -175,7 +175,7 @@ Feature: Security
     When it runs rm -rf alone, or hidden in a chain after another command
     Then the call is denied
     # not under test, checked by hand: the rule is "never rm -rf", whose 7 spellings are listed in internal/policy/default.toml line 103
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile asserts the 2 forms
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile asserts the 2 forms
 
   @SEC-18 @test
   Scenario: Under developer, a push to main is denied
@@ -183,7 +183,7 @@ Feature: Security
     When it pushes to main by branch name, by refspec, through git -C, or hidden in a shell variable's later value
     Then the call is denied
     # not under test, checked by hand: the rule is "agents never push to main", and it names master too (internal/policy/default.toml line 109); the test's shell loop also force pushes, so "never force push" would deny it too
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile; the variable: TestEveryValueOfAVariableIsJudged
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the variable: TestEveryValueOfAVariableIsJudged
 
   @SEC-19 @test
   Scenario: Under developer, force pushes, sudo and piping the internet into a shell are denied
@@ -192,7 +192,7 @@ Feature: Security
     Then every call is denied
     And sudo is denied by the rule "never sudo"
     # not under test, checked by hand: the force push is denied by "never force push" and the download by "never pipe the internet into a shell" (internal/policy/default.toml lines 115 and 121)
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-20 @test
   Scenario: Under developer, secrets are denied
@@ -201,7 +201,7 @@ Feature: Security
     Then every call is denied
     And the key under ~/.ssh is denied by the rule "never touch secrets": yes
     # not under test, checked by hand: .env is denied by that rule too (internal/policy/default.toml line 91)
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-21 @test
   Scenario: Under developer, a write outside the worktree is denied
@@ -209,7 +209,7 @@ Feature: Security
     When it writes a file under /etc, or a file reached by a .. path that leaves the worktree
     Then every call is denied
     # not under test, checked by hand: the rule is "edits only inside the workspace" (internal/policy/default.toml line 127)
-    # README.md, The policy; PLAN.md T-013; internal/policy/default_test.go TestTheDeveloperProfile
+    # README.md, The policy; internal/policy/default_test.go TestTheDeveloperProfile
 
   @SEC-22 @test
   Scenario: Under read-only, the agent reads, runs the tests and keeps its own notes
@@ -217,7 +217,7 @@ Feature: Security
     When it reads a file, runs go test and gofmt -l, or edits its own knowledge file in the worktree
     Then every call is allowed
     # not under test, checked by hand: the tests are allowed by the rule "reads and runs the tests" and the knowledge file by "keeps its own notes" (internal/policy/default.toml lines 298 and 211)
-    # README.md, The policy; PLAN.md T-041; internal/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
+    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile; the profiles: internal/agents/agents_test.go TestEachDefaultAgentHasAProfile, TestTheVisionariesTeam, TestTheNetworkingTeam
 
   @SEC-23 @test
   Scenario: Under read-only, every change is denied
@@ -226,7 +226,7 @@ Feature: Security
     Then every call is denied
     And the edit is denied by the rule "this agent changes nothing"
     # not under test, checked by hand: the commit and the push are denied by "never commits or changes branches", the redirect by "writes no files from the shell", tee, sort -o, find -delete and gofmt -w by "runs nothing that changes files", and eslint --fix and jest --coverage by "test and lint tools write no files" (internal/policy/default.toml lines 322, 225, 231 and 254)
-    # README.md, The policy; PLAN.md T-041; internal/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-24 @test
   Scenario: Under read-only, read-mostly and network-diagnosis, a flag that names a program to run is denied
@@ -234,7 +234,7 @@ Feature: Security
     When it runs git grep -O, rg --pre or sort --compress-program
     Then every call is denied
     # not under test, checked by hand: the rule is "runs no command a flag names" (internal/policy/default.toml lines 274, 409 and 600)
-    # README.md, The policy; PLAN.md T-086; internal/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
+    # README.md, The policy; internal/policy/default_test.go TestTheJudgingProfilesCloseWhatTheReviewFound
 
   @SEC-25 @test
   Scenario: Under read-mostly, the Visionaries read the task board
@@ -242,7 +242,7 @@ Feature: Security
     When it calls the board's status, list_tasks or show_task tool
     Then every call is allowed
     # not under test, checked by hand: each is allowed by the rule "reads the task board" (internal/policy/default.toml line 421)
-    # README.md, Ideas; PLAN.md T-041; internal/policy/default_test.go TestTheReadMostlyProfile
+    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile
 
   @SEC-26 @test
   Scenario: Under read-mostly, changing the board asks the user
@@ -250,14 +250,14 @@ Feature: Security
     When it calls create_task, answer_question or start
     Then every call is asked
     # not under test, checked by hand: each is asked by the profile's otherwise, which is ask (internal/policy/default.toml line 335)
-    # README.md, Ideas; PLAN.md T-041; internal/policy/default_test.go TestTheReadMostlyProfile
+    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile
 
   @SEC-27 @test
   Scenario: Under read-mostly, files and secrets are denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the read-mostly profile
     When it edits a file, commits, redirects into a file, or reads .env
     Then every call is denied
-    # README.md, Ideas; PLAN.md T-041; internal/policy/default_test.go TestTheReadMostlyProfile; the redirect: TestTheJudgingProfilesWriteNothingFromTheShell
+    # README.md, Ideas; internal/policy/default_test.go TestTheReadMostlyProfile; the redirect: TestTheJudgingProfilesWriteNothingFromTheShell
 
   @SEC-28 @test
   Scenario: Under network-diagnosis, the fixed read forms run
@@ -314,7 +314,7 @@ Feature: Security
     Then the task is shown in Needs you
     And the command does not run until the user answers
     # not under test, checked by hand: one action.asked event is recorded, with the verdict's profile, rule and why (internal/hooks/handler.go lines 352 and 393)
-    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-35 @test
   Scenario: The user's approval lets the asked command run
@@ -323,7 +323,7 @@ Feature: Security
     Then the agent is told "you approved": yes
     # not under test, checked by hand: the words are "Agentry: you approved: " and the user's reason (internal/hooks/handler.go line 412)
     And the command is allowed
-    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-36 @manual
   Scenario: The user's denial stops the asked command
@@ -331,7 +331,7 @@ Feature: Security
     When the user opens Needs you, writes a reason and denies the action
     Then the agent's terminal shows "Agentry: you denied: " followed by the user's reason, exactly once
     And the command does not run, so the branch is not pushed
-    # README.md, What happens to one action; PLAN.md T-013; the text is internal/hooks/handler.go's reply on action.denied; no test asserts it while the hook waits
+    # README.md, What happens to one action; the text is internal/hooks/handler.go's reply on action.denied; no test asserts it while the hook waits
 
   @SEC-37 @test
   Scenario: A late approval lets the same command through once, for the agent that asked
@@ -350,7 +350,7 @@ Feature: Security
     Then the file is refused with a message that names the unknown word
     And the policy before it stays in force, with no rule changed
     And the same broken file is reported exactly once, not on every watch
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne; the reasons: TestABadPolicyIsRefusedWithTheReason
+    # README.md, The policy; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne; the reasons: TestABadPolicyIsRefusedWithTheReason
 
   @SEC-39 @test
   Scenario: A fixed policy file takes over from a refused one
@@ -358,7 +358,7 @@ Feature: Security
     When the file is saved with the mistake fixed
     Then the fixed policy is loaded: yes
     And no refusal is shown any more
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
+    # README.md, The policy; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
 
   @SEC-40 @test
   Scenario: A broken policy file at start is refused
@@ -367,7 +367,7 @@ Feature: Security
     Then opening the policy fails: yes
     And its error names the file, the line and the newest backup to copy back, exactly one
     # not under test, checked by hand: serve returns that error before it serves (cmd/agentry/serve.go lines 203 to 206)
-    # README.md, The policy; PLAN.md T-075; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
+    # README.md, The policy; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
 
   @SEC-41 @manual
   Scenario: A saved policy change takes effect within two seconds
@@ -375,7 +375,7 @@ Feature: Security
     When the user saves a valid change to policy.toml and waits 2 seconds
     Then the Policy page shows the new version within 2 seconds
     And the next gate call is judged by the new version, not the old
-    # README.md, The policy; PLAN.md T-042; the watch interval is set to 2 s in cmd/agentry/serve.go
+    # README.md, The policy; the watch interval is set to 2 s in cmd/agentry/serve.go
 
   @SEC-42 @test
   Scenario: Agentry backs the policy up before it changes it, and keeps the newest 20
@@ -384,7 +384,7 @@ Feature: Security
     Then a copy of the file as it was is kept beside it, named by its time
     And at most 20 backups are kept, the newest
     # internal/policy/live.go line 57 keepBackups = 20; the test uses the constant
-    # README.md, The policy; PLAN.md T-069; internal/policy/live_test.go TestAChangeIsWrittenBackedUpAndPutInForce, TestAgentryKeepsItsNewestBackups
+    # README.md, The policy; internal/policy/live_test.go TestAChangeIsWrittenBackedUpAndPutInForce, TestAgentryKeepsItsNewestBackups
 
   @SEC-43 @test
   Scenario: Every policy version is in the log and can be restored
@@ -393,7 +393,7 @@ Feature: Security
     Then every version loaded is listed with who made it, and a change made on the page with its diff: yes
     And every file refused is listed with its reason
     And only a version whose text the log holds can be reverted
-    # README.md, The policy; PLAN.md T-069; internal/policy/log_test.go TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText
+    # README.md, The policy; internal/policy/log_test.go TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText
 
   @SEC-44 @manual
   Scenario: Four tokens are made once and kept across restarts
@@ -411,7 +411,7 @@ Feature: Security
     Given the server has a page token
     When a request carries it as a Bearer header, as ?token= in the address, or in the cookie the printed link set
     Then the API answers HTTP 200 each way
-    # README.md, Signing in the installed app, or another device; PLAN.md T-006; internal/web/api_test.go TestTheAPINeedsTheUIToken for ?token= and the cookie; the Bearer header is how every test there calls the API (call)
+    # README.md, Signing in the installed app, or another device; internal/web/api_test.go TestTheAPINeedsTheUIToken for ?token= and the cookie; the Bearer header is how every test there calls the API (call)
 
   @SEC-46 @test
   Scenario: The hook token does not open the API
@@ -420,7 +420,7 @@ Feature: Security
     When a request carries the hook token as a Bearer header, or no token at all
     Then the API answers HTTP 401
     And an agent can never approve its own request
-    # README.md, What happens to one action; PLAN.md T-009
+    # README.md, What happens to one action
 
   @SEC-47 @test
   Scenario: The desk token opens tasks
@@ -428,7 +428,7 @@ Feature: Security
     When it lists, creates or shows a task
     Then every call is allowed
     # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 99 to 101)
-    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
+    # README.md, Use it; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
 
   @SEC-48 @test
   Scenario: The desk token opens nothing more
@@ -436,7 +436,7 @@ Feature: Security
     When it approves or denies an action, or reads the policy or the changes
     Then the answer is HTTP 401 every time
     And closing an epic with it is refused with HTTP 403: yes
-    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks; the epic: TestYouCloseAnEpic
+    # README.md, Use it; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks; the epic: TestYouCloseAnEpic
 
   @SEC-49 @test
   Scenario: The helper token sends a task's messages
@@ -460,7 +460,7 @@ Feature: Security
     When that credential asks for a sign-in code
     Then the answer is HTTP 401
     And the real page token asking the same gets a code: yes
-    # README.md, Use it from Claude Code; PLAN.md T-063; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes
+    # README.md, Use it from Claude Code; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes
 
   @SEC-52 @test
   Scenario: The sign-in cookie lasts a year and is HttpOnly
@@ -471,7 +471,7 @@ Feature: Security
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestASigninCodeSignsInOnce, TestThePastedTokenSignsIn; cmd/agentry/https_test.go TestTheCookieIsSecureOverTLS; internal/web/api_test.go TestServesTheAppFilesWithoutTheToken
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestASigninCodeSignsInOnce, TestThePastedTokenSignsIn; cmd/agentry/https_test.go TestTheCookieIsSecureOverTLS; internal/web/api_test.go TestServesTheAppFilesWithoutTheToken
 
   @SEC-53 @test
   Scenario: A sign-in code is 8 characters and signs another device in
@@ -479,7 +479,7 @@ Feature: Security
     When the code is shown and another device types it in lower case, with spaces around the dash
     Then the code has exactly 8 characters from a 31-character alphabet with no 0, O, 1, I or L, shown as 4-4
     And the other device gets the page token and the cookie, and the cookie alone opens the API: yes
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes for the shape, TestASigninCodeSignsInOnce
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes for the shape, TestASigninCodeSignsInOnce
 
   @SEC-54 @test
   Scenario: A sign-in code works once and for 5 minutes
@@ -488,7 +488,7 @@ Feature: Security
     Then the answer is HTTP 401
     And a code 1 second short of 5 minutes still signs in: yes
     # not under test, checked by hand: the codes are kept in memory only, never in the log (internal/web/signin.go line 46)
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestASigninCodeExpires, TestASigninCodeSignsInOnce
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestASigninCodeExpires, TestASigninCodeSignsInOnce
 
   @SEC-55 @test
   Scenario: At most 20 codes are live at once
@@ -497,7 +497,7 @@ Feature: Security
     Then the oldest code no longer works
     And the next oldest and the newest codes still work: yes
     # internal/web/signin.go line 28 maxLiveCodes = 20; the test uses the constant
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestIssuingPastTheCapDropsTheOldestCode
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestIssuingPastTheCapDropsTheOldestCode
 
   @SEC-56 @test
   Scenario: Wrong codes from every address together are limited too
@@ -507,7 +507,7 @@ Feature: Security
     And the page token still signs in past that cap, so the printed link works: yes
     And a code 1 minute later signs in again: yes
     # not under test, checked by hand: wrong tokens do not count toward the cap of 30 (internal/web/signin.go lines 33 and 138)
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestFailedSigninsAreLimited
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestFailedSigninsAreLimited
 
   @SEC-57 @test
   Scenario: Guesses sent at once do not all get checked
@@ -516,7 +516,7 @@ Feature: Security
     Then 5 are refused with 401 and the other 45 with 429, because each attempt counts as failed before it is checked
     And the lock-out has ended 1 minute later, when the next try is checked, not refused: yes
     And a successful sign-in does not count, so after 6 sign-ins and 4 wrong codes a right code still signs in: yes
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestFailedSigninsSentAtOnceAreLimited, TestFailedSigninsAreLimited, TestSigningInDoesNotCountAsAFailure
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestFailedSigninsSentAtOnceAreLimited, TestFailedSigninsAreLimited, TestSigningInDoesNotCountAsAFailure
 
   @SEC-58 @test
   Scenario: Signing out clears this device's cookie
@@ -524,7 +524,7 @@ Feature: Security
     When the user signs out
     Then the cookie is cleared, empty with a MaxAge below 0 and path /: yes
     # not under test, checked by hand: the page keeps no stored token (ui/src/api/client.ts lines 150 and 151), and sign out only clears the cookie, so the server's page token is not rotated and other devices stay signed in (internal/web/signin.go line 251)
-    # README.md, Signing in the installed app, or another device; PLAN.md T-063; internal/web/signin_test.go TestSigningOutClearsTheCookie
+    # README.md, Signing in the installed app, or another device; internal/web/signin_test.go TestSigningOutClearsTheCookie
 
   @SEC-59 @test
   Scenario: A feature's secret reaches its job and never the log
@@ -590,11 +590,11 @@ Feature: Security
     Given Agentry prepares an engine's hook settings for a task
     When the user opens the written settings file and finds the PreToolUse hook
     Then its timeout is exactly 1800 seconds
-    # PLAN.md T-008; internal/engines/engine.go GateTimeoutSeconds, written by internal/engines/hook_config.go gateHook; no test asserts the number
+    # internal/engines/engine.go GateTimeoutSeconds, written by internal/engines/hook_config.go gateHook; no test asserts the number
 
   @SEC-66 @manual
   Scenario: The hook's deadline is 10 seconds shorter than the engine's timeout
     Given a turn's environment prepared for an agent
     When the user reads the hook deadline variable in that environment
     Then its value is "29m50s", exactly 1790 seconds
-    # PLAN.md T-009; internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number
+    # internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number

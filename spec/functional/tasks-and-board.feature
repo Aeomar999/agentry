@@ -156,7 +156,7 @@ Feature: Tasks and the board
     And the files are at the top of the repo, out of the archive's folder, and main.go is committed: yes
     And a link that answers 404 is refused, saying 404
     # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 100)
-    # README.md, Use it (Add a task); PLAN.md T-044
+    # README.md, Use it (Add a task)
 
   # ---- The board and its columns ---------------------------------------------
 

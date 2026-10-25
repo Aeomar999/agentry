@@ -8,7 +8,7 @@ Feature: Operations
     Then the new file is refused and the policy before it is kept in force: yes
     And GET /api/policy gives what is wrong with the file: yes
     # not under test, checked by hand: serve reads the file again every 2 seconds (cmd/agentry/serve.go line 280), and the Policy page shows the problem (ui/src/pages/PolicyPage.tsx line 63)
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne, internal/web/api_test.go TestThePolicyShowsWithItsProblem
+    # README.md, The policy; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne, internal/web/api_test.go TestThePolicyShowsWithItsProblem
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. Addresses are written as placeholders: the server's
@@ -558,7 +558,6 @@ Feature: Operations
     Then the start is refused, saying it is the live sessions folder, and the attach is refused: yes
     And nothing is written to the live sessions folder
     # not under test, checked by hand: sessionstest gives each test package its own folder and fails a run that leaves a session or process behind (internal/sessions/sessionstest/sessionstest.go)
-    # PLAN.md T-072
 
   # How a release is packaged
 

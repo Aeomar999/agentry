@@ -7,7 +7,7 @@ Feature: Performance
     When 1,200 events are written
     Then the writes take 0.07 seconds, as measured on 2026-10-16
     And the reader then reads all 1,200 back, in order
-    # PLAN.md T-005; go test ./internal/store -run Reader
+    # go test ./internal/store -run Reader
 
   @PERF-02 @benchmark
   Scenario: A fresh server answers its page within 0.1 second of starting
@@ -32,7 +32,7 @@ Feature: Performance
     Then every read's position header is the log's last position
     And a POST and the page carry no position header
     And the position is taken before the read, so an event written during the read is not in the position it reports
-    # PLAN.md T-005; internal/web/api_test.go TestAPIReadsSayThePositionTheyWereReadAt and TestThePositionIsTakenBeforeTheRead
+    # internal/web/api_test.go TestAPIReadsSayThePositionTheyWereReadAt and TestThePositionIsTakenBeforeTheRead
 
   @PERF-05 @test
   Scenario: A restart goes on from the snapshot instead of replaying the log
@@ -41,7 +41,7 @@ Feature: Performance
     Then the first start logs "there is no snapshot", so the whole log is replayed, and the leftover file is not there afterwards
     And the snapshot state.snapshot is in the data dir with mode 0600 after the first stop
     And the second start does not log "replayed": it goes on from the snapshot
-    # PLAN.md T-005; cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart; internal/current/resume.go Restore logs the fallbacks
+    # cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart; internal/current/resume.go Restore logs the fallbacks
 
   @PERF-06 @test
   Scenario: A snapshot is written after enough events, or after the interval with at least one
@@ -51,7 +51,7 @@ Feature: Performance
     And the interval with no event adds 0 writes
     And after 1 event, the interval and Close there are exactly 3 writes in all
     And the next start goes on from the last snapshot's position and does not log "replayed"
-    # PLAN.md T-005; internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent; the shipped counts are in the scenario below
+    # internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent; the shipped counts are in the scenario below
 
   @PERF-07 @manual
   Scenario: The shipped snapshot writer writes every 10,000 events or every 10 minutes
@@ -59,7 +59,7 @@ Feature: Performance
     When 10,000 events are applied since the last snapshot, or 10 minutes pass with at least 1 event applied in them
     Then the snapshot file's modification time moves exactly once for that run of events or that interval
     And 10 minutes with 0 events applied moves it 0 times
-    # PLAN.md T-005; internal/current/writer.go snapshotEvery = 10_000 and snapshotInterval = 10 minutes; no test asserts the shipped numbers, writer_test.go sets its own
+    # internal/current/writer.go snapshotEvery = 10_000 and snapshotInterval = 10 minutes; no test asserts the shipped numbers, writer_test.go sets its own
 
   @PERF-08 @test
   Scenario: A proposal is not held up by a snapshot write under way
@@ -68,7 +68,7 @@ Feature: Performance
     Then the proposal commits within 5 seconds, without waiting for the writer
     And the state's position moves by exactly 1
     And once the write is released a snapshot at the new event's position is written: yes
-    # PLAN.md T-005; internal/current/writer_test.go TestAProposalCommitsWhileTheWriterIsMidWrite; the writer holds no lock of the store's, internal/current/writer.go
+    # internal/current/writer_test.go TestAProposalCommitsWhileTheWriterIsMidWrite; the writer holds no lock of the store's, internal/current/writer.go
 
   @PERF-09 @manual
   Scenario: Startup on a real log is measured by the user with the startup benchmark
@@ -110,7 +110,7 @@ Feature: Performance
     When an event is written 100 ms later
     Then the answer comes within 5 seconds
     And it names the new position, exactly 1 past the one waited on
-    # PLAN.md T-005; internal/web/api_test.go TestChangesAnswerAsSoonAsTheLogMoves
+    # internal/web/api_test.go TestChangesAnswerAsSoonAsTheLogMoves
 
   @PERF-15 @test
   Scenario: The page's resource cache reads each path once per move of the log, however many watchers share the path
@@ -121,7 +121,6 @@ Feature: Performance
     And events 42 to 50 give exactly 1 more read once the read for 41 answers, not 1 each, and the read out is not aborted
     And a failed read shows its error, keeps the last data and is read again when the log moves: yes
     # not under test, checked by hand: until its first read answers, the tasks list says "Loading the tasks…" instead of showing an empty table (ui/src/pages/TasksPage.tsx line 287)
-    # PLAN.md T-087
 
   @PERF-16 @test
   Scenario: Listing ideas reads the state in memory and sends no query to the database
@@ -130,7 +129,7 @@ Feature: Performance
     When GET /api/ideas and GET /api/ideas?repo=<the open idea's repo> are read
     Then the first lists both, newest first, and the second only the open one
     And the database is sent exactly 0 queries for the 2 reads
-    # PLAN.md T-078; README.md, Ideas
+    # README.md, Ideas
 
   @PERF-14 @manual
   Scenario: A wait for changes with no event ends after 25 seconds

@@ -7,7 +7,7 @@ Feature: Observability
     When the task is read from the log
     Then the task's tokens used are exactly the sum of the 2 turns' tokens
     # not under test, checked by hand: the sum is shown on the task's page (ui/src/pages/TaskPage.tsx line 373), in the list (ui/src/pages/TasksPage.tsx line 116) and on its card (ui/src/components/molecules/TaskCard.tsx line 78)
-    # PLAN.md T-051; README.md, Use it, Budgets and turn limits; internal/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
+    # README.md, Use it, Budgets and turn limits; internal/tasks/split_test.go TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-02 @test
   Scenario: The catalogue refuses a proposal of the wrong shape or from the wrong writer
@@ -16,7 +16,7 @@ Feature: Observability
     Then the first 5 are refused with the check "shape", and the last with the check "who"
     And a task.created with its title, repo and coordinator from a human is not refused: yes
     # not under test, checked by hand: the store runs both checks on every proposal before it writes one (internal/store/store.go lines 341 and 344), and the shape check wants an actor's kind and id (internal/events/catalogue.go line 367), so every event in the log names who wrote it
-    # README.md, How it works, How it fits together; PLAN.md T-002; internal/events/catalogue_test.go TestCheckShapeAndWriter
+    # README.md, How it works, How it fits together; internal/events/catalogue_test.go TestCheckShapeAndWriter
 
   @OBS-34 @test
   Scenario: A feature's stream prefix or event type that would collide with the core's or another feature's is refused
@@ -26,7 +26,7 @@ Feature: Observability
     Then each is refused, naming the prefix or the type as taken, the prefix as overlapping task-, or the types as needing a stream prefix
     And a task type a feature registered is allowed in a task stream and refused in an idea stream, and a catalogue without that registration refuses it: yes
     And a stream that starts with idea- is not a task stream: yes
-    # PLAN.md T-088; README.md, Ideas (GET /api/features)
+    # README.md, Ideas (GET /api/features)
 
   @OBS-03 @test
   Scenario: A refused proposal is kept in the log as a rejection, not as the event
@@ -36,7 +36,7 @@ Feature: Observability
     And each refusal is written to the log as a proposal.rejected event, the first saying who sent it and the reason "task already exists": yes
     And the task's stream of accepted events still holds exactly 1
     # not under test, checked by hand: a rejection is in the task's stream, by system:validator, with the type and the check (internal/store/store.go lines 397 and 399)
-    # README.md, How it works, What happens to one action; PLAN.md T-003; internal/store/store_test.go TestProposeAppendsOrRecordsTheRejection
+    # README.md, How it works, What happens to one action; internal/store/store_test.go TestProposeAppendsOrRecordsTheRejection
 
   @OBS-04 @test
   Scenario: Every event type has a schema file its events validate against
@@ -46,7 +46,7 @@ Feature: Observability
     And each bad event is refused with a problem that names the field: "actor.id: want at least 1 characters", "data.agent: required field missing", "position: want an integer" and "at: want a date-time"
     And the unknown type "task.exploded" has no spec and no schema file
     # not under test, checked by hand: there are 81 files, one per type (ls internal/events/schemas); the store checks proposals with the catalogue (internal/store/store.go lines 341 and 344), and only tests call Validate (internal/events/validate.go line 20)
-    # PLAN.md T-036; internal/events/validate_test.go TestAnEventValidatesAgainstItsSchema, TestAnEventValidatesAgainstSchemasOwnOutput and TestEveryCommittedSchemaChecksAnEvent
+    # internal/events/validate_test.go TestAnEventValidatesAgainstItsSchema, TestAnEventValidatesAgainstSchemasOwnOutput and TestEveryCommittedSchemaChecksAnEvent
 
   @OBS-05 @test
   Scenario: A task's events API is its whole record, in order, rejections included
@@ -123,7 +123,7 @@ Feature: Observability
     Then the first holds "1. you → tech-lead: Remove the TODOs"
     And the one after the engineer's turn holds "engineer → tech-lead: Removed 3 TODOs and committed."
     # not under test, checked by hand: the trail is under the section "What has happened so far", every step numbered as "N. from → to: text" (internal/coordinator/brief.go lines 50 and 124)
-    # README.md, How it works, How a task moves; PLAN.md T-032; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
+    # README.md, How it works, How a task moves; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
   @OBS-13 @test
   Scenario: A viewer of the live terminal gets the screen so far, then the live output
@@ -134,7 +134,7 @@ Feature: Observability
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
     # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 181)
-    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
+    # README.md, Use it, A task; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test
   Scenario: Only the viewer in control types, and a viewer is let go when the session ends
@@ -144,7 +144,7 @@ Feature: Observability
     And the second's take is refused while the first holds control
     And the keys typed in control reach the session and show on every viewer's screen, both of them
     And when the session ends, the viewer waited on is disconnected within 5 seconds, to reconnect to the next turn's
-    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
+    # README.md, Use it, A task; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
 
   @OBS-15 @test
   Scenario: A turn running on a worker streams its terminal to the server
@@ -152,7 +152,7 @@ Feature: Observability
     When a viewer watches the task's terminal through the server's terminal hub
     Then the screen streamed from the worker holds the engine's command with its resumed session, within 5 seconds
     And asked whether the task's agent runs there, the worker answers yes
-    # README.md, Add machines; README.md, How it works, Work across machines; PLAN.md T-022; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
+    # README.md, Add machines; README.md, How it works, Work across machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-16 @manual
   Scenario: The status line says what needs you and what runs
@@ -199,7 +199,7 @@ Feature: Observability
     Then before, the list is empty, "[]"
     And after, it holds exactly 3 entries in order: the approval "task-2: Waiting for you to approve a push (review_approvals)", the question "epic-1: tech-lead asks: Which layout?", then the feature's own line
     And each entry carries its key, its task, its kind, "needs you" or the feature's, and its line
-    # README.md, Use it from Claude Code; PLAN.md T-053; internal/web/waiting_api_test.go TestWaitingIsTheCoreThenEachFeature
+    # README.md, Use it from Claude Code; internal/web/waiting_api_test.go TestWaitingIsTheCoreThenEachFeature
 
   @OBS-21 @test
   Scenario: A push goes once to every subscribed browser for each thing that newly waits
@@ -249,7 +249,7 @@ Feature: Observability
     And with no start stamp, as from an older worker, the whole transcript is counted
     And when every entry is older than the start, the tokens are 0 with the reason NoUsageThisTurn; a missing transcript gives TranscriptNotSaved; a Codex turn gives CodexTokensNotRead
     # not under test, checked by hand: the reasons read "no usage in this turn's part of the transcript", "transcript not saved" (internal/engines/claude.go lines 28 and 26) and "Codex's token use isn't read" (internal/engines/codex.go line 69)
-    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/engines/tokens_test.go TestClaudeCountsOnlyThisTurnsTokens, TestClaudeCountsTheWholeTranscriptWithNoStart, TestClaudeSaysWhenNoneOfTheUsageIsThisTurns and TestCodexTokensStayUnread; internal/engines/engines_test.go for TranscriptNotSaved
+    # README.md, Use it, Budgets and turn limits; internal/engines/tokens_test.go TestClaudeCountsOnlyThisTurnsTokens, TestClaudeCountsTheWholeTranscriptWithNoStart, TestClaudeSaysWhenNoneOfTheUsageIsThisTurns and TestCodexTokensStayUnread; internal/engines/engines_test.go for TranscriptNotSaved
 
   @OBS-26 @test
   Scenario: Each turn keeps its token split and its engine session from turn.ended
@@ -258,7 +258,7 @@ Feature: Observability
     Then turn-1's split is exactly 4, 12,800, 40,000 and 370, its context 26,801, and its engine session the one session.started named
     And turn-2 has no split, no session and a context of 0: nothing is made up
     And the task's split is turn-1's and its unsplit tokens are exactly 1,000
-    # PLAN.md T-051; internal/tasks/split_test.go TestATurnKeepsItsEngineSessionAndSplit and TestATurnWithOnlyATotalHasNoSplit
+    # internal/tasks/split_test.go TestATurnKeepsItsEngineSessionAndSplit and TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-27 @test
   Scenario: The task page shows each turn's split under its total
@@ -299,7 +299,7 @@ Feature: Observability
     Then GET /api/workers lists it by name with "online": true: yes
     And GET /api/workers/{name} gives a host, a count of CPUs above 0, and a history whose first entry is "online"
     # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/workers/workers.go lines 186 to 188, written at internal/workerlink/server.go line 80), and the history is newest first (internal/web/workers_api.go line 108)
-    # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
+    # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-30 @test
   Scenario: A worker that cannot trust the server logs each failed dial and the way back in, once

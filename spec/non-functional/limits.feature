@@ -8,7 +8,7 @@ Feature: Limits
     Then the coordinator's next move asks the user, not a turn, the question saying 110k tokens of its 100k budget: yes
     And after the user's answer the next move is the coordinator's turn: yes
     # not under test, checked by hand: the question goes on "Raise the budget to go on, or tell the coordinator to wrap up." (internal/coordinator/next.go line 70), and after that one turn the budget asks again, as it waits for a turn since the answer (line 67)
-    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
+    # README.md, Use it, Budgets and turn limits; internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
 
   @LIM-02 @manual
   Scenario: A new task's budget is 5,000,000 tokens unless the flags say otherwise
@@ -16,7 +16,7 @@ Feature: Limits
     When the user runs agentry serve -h and then creates a task from the page without a budget
     Then the help shows -budget with the default 5000000 and says 0 is no limit
     And the task's Details show a budget of 5,000,000 tokens
-    # README.md, Use it; PLAN.md T-051; the flag is set in cmd/agentry/serve.go
+    # README.md, Use it; the flag is set in cmd/agentry/serve.go
 
   @LIM-03 @manual
   Scenario: A negative -budget or -max-turns flag is refused at start
@@ -24,7 +24,7 @@ Feature: Limits
     When the flags are parsed
     Then each run exits 2 and says "-budget and -max-turns are 0 or above, 0 for no limit"
     And no server runs
-    # README.md, Use it; PLAN.md T-064; the check is in cmd/agentry/serve.go
+    # README.md, Use it; the check is in cmd/agentry/serve.go
 
   @LIM-04 @test
   Scenario: On the API and the MCP tool, 0 takes the default and -1 is no limit
@@ -37,7 +37,7 @@ Feature: Limits
     And the config endpoint shows a budget of 5,000,000 and 2 turns
     And the MCP tool's create_task with no limits sends budget 0 and maxTurns 0 to the API: yes
     # not under test, checked by hand: the MCP tool sends a budget or maxTurns of -1 to the API as given (internal/mcp/tools.go line 308)
-    # README.md, Use it from Claude Code; PLAN.md T-064; internal/web/api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
+    # README.md, Use it from Claude Code; internal/web/api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
 
   @LIM-05 @test
   Scenario: A task that comes from another takes that task's limits
@@ -47,7 +47,7 @@ Feature: Limits
     And the one from the unlimited task has no budget and no turn limit
     And the one from no task takes the defaults, 5,000,000 tokens and 24 turns
     And with unlimited defaults, the one from no task has no budget and no turn limit
-    # README.md, Use it; PLAN.md T-080; internal/tasks/limits_test.go TestANewTaskTakesItsSourcesLimitsElseTheDefaults
+    # README.md, Use it; internal/tasks/limits_test.go TestANewTaskTakesItsSourcesLimitsElseTheDefaults
 
   @LIM-06 @test
   Scenario: Raising the budget on the page answers the budget stop
@@ -55,7 +55,7 @@ Feature: Limits
     When the user raises the budget above what the task has used, or sets it to no limit
     Then the raised task is answered with "I raised the budget to <N> tokens. Carry on.", N being the new budget, and is working again: yes
     And the unlimited task is answered with "I made the budget unlimited. Carry on." and is working again: yes
-    # README.md, Use it; PLAN.md T-064; internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn
+    # README.md, Use it; internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn
 
   @LIM-07 @test
   Scenario: A task has 24 turns without the user's answer before it asks
@@ -65,7 +65,7 @@ Feature: Limits
     And the question says "24 of its 24 turns"
     And after the user's answer the next move is a turn: yes
     # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463); the answer hands the task to the coordinator (internal/tasks/apply.go line 464)
-    # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
+    # README.md, Use it; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
   Scenario: A negative budget or turn limit is refused by the rules
@@ -74,7 +74,7 @@ Feature: Limits
     Then the budget event is refused: yes
     And the turn limit event is refused: yes
     # not under test, checked by hand: the refusals say "a budget is a number of tokens, or 0 for no limit" and "a limit of turns is a number of turns, or 0 for no limit" (internal/rules/task_rules.go lines 135 and 143)
-    # README.md, Use it; PLAN.md T-064; internal/rules/rules_test.go TestBudgetsAndLimitsOfTurns
+    # README.md, Use it; internal/rules/rules_test.go TestBudgetsAndLimitsOfTurns
 
   @LIM-09 @test
   Scenario: The most tasks running at once is a setting from 0 to 100
@@ -99,7 +99,7 @@ Feature: Limits
     And waiting tasks are admitted in priority order, the newer task first on a tie, never the older
     And only tasks on the board with a turn open take a slot, so a wrap-up turn takes none
     And when one running task ends its turn exactly 1 waiting task is started
-    # README.md, Use it; PLAN.md T-038; internal/coordinator/slots_test.go TestOnlyTasksInProgressTakeASlot, TestSlotsGoInYourPriorityOrder, TestATieOfRankAdmitsTheNewerTask, TestALimitUnderWhatRunsQueuesEveryOneWaiting and TestTheLoopRunsNoMoreTasksThanTheLimit
+    # README.md, Use it; internal/coordinator/slots_test.go TestOnlyTasksInProgressTakeASlot, TestSlotsGoInYourPriorityOrder, TestATieOfRankAdmitsTheNewerTask, TestALimitUnderWhatRunsQueuesEveryOneWaiting and TestTheLoopRunsNoMoreTasksThanTheLimit
 
   @LIM-12 @manual
   Scenario: A team may ask another team at most 3 requests deep
@@ -107,7 +107,7 @@ Feature: Limits
     When the user asks the task's coordinator in its chat to request work from the other team
     Then the decision is refused with "this task is already 3 requests deep; do the work in this team, or ask the user"
     And the refusal is shown in the task's Activity
-    # README.md, Use it; PLAN.md T-061; the depth is set in internal/coordinator/next.go
+    # README.md, Use it; the depth is set in internal/coordinator/next.go
 
   @LIM-13 @manual
   Scenario: One split adds 1 to 12 stories
@@ -115,7 +115,7 @@ Feature: Limits
     When the user asks the coordinator in its chat to split the epic into 13 one-line stories, and then into 12
     Then the split of 13 is refused with 'a "split" decision needs "stories": 1 to 12 of them', shown in Activity
     And the split of 12 files exactly 12 stories in the Backlog
-    # README.md, Use it; PLAN.md T-061; the cap is set in internal/coordinator/decision.go
+    # README.md, Use it; the cap is set in internal/coordinator/decision.go
 
   @LIM-14 @test
   Scenario: Three issues in a row stop the task
@@ -125,7 +125,7 @@ Feature: Limits
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
     # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/tasks/apply.go lines 386 and 463)
-    # README.md, How a task moves; PLAN.md T-032; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
+    # README.md, How a task moves; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
 
   @LIM-15 @test
   Scenario: Done tasks are archived after 30 days unless the flag says otherwise
@@ -196,7 +196,7 @@ Feature: Limits
     When the viewer in control asks for 9999 columns by 1 row
     Then the other viewer sees the session sized at 500 columns by 5 rows: yes
     # not under test, checked by hand: the bounds are 20 to 500 columns and 5 to 200 rows (internal/terminal/viewers.go lines 117 and 118)
-    # README.md, Use it; PLAN.md T-018; internal/terminal/terminal_test.go TestAViewerResizesTheSession
+    # README.md, Use it; internal/terminal/terminal_test.go TestAViewerResizesTheSession
 
   @LIM-23 @manual
   Scenario: A viewer too slow for the live terminal is disconnected
@@ -204,7 +204,7 @@ Feature: Limits
     When 4,096 output chunks queue for it unread, or 16 state messages
     Then that viewer is disconnected, exactly once
     And the session and the other viewers are not affected, so the page's terminal keeps streaming
-    # README.md, Use it; PLAN.md T-018; the backlog sizes are set in internal/terminal/viewers.go
+    # README.md, Use it; the backlog sizes are set in internal/terminal/viewers.go
 
   @LIM-24 @test
   Scenario: A push notification fits one 4,096-byte record
@@ -241,7 +241,7 @@ Feature: Limits
     Then the 13 labels are refused with "at most 12 labels"
     And the label of 33 characters is refused
     And an empty label, or one with spaces around it, is refused
-    # README.md, Use it; PLAN.md T-050; the caps are set in internal/rules/task_rules.go
+    # README.md, Use it; the caps are set in internal/rules/task_rules.go
 
   @LIM-28 @test
   Scenario: The watchdog's limits on a turn
@@ -253,7 +253,7 @@ Feature: Limits
     And one approved tool call with no result after 20 minutes is an issue
     And the same command requested 5 times in a row is an issue
     # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73), the tests call Check with the clock moved on; the prompt's question says to open the task's terminal (internal/watchdog/watchdog.go lines 116 to 118)
-    # README.md, How a task moves; PLAN.md T-014; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace, TestAPromptThatNeverArrivesWaitsForYou, TestASilentTurnIsAStall, TestWaitingForYouIsNotAStall, TestAToolOpenTooLong and TestTheSameCommandRepeated
+    # README.md, How a task moves; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace, TestAPromptThatNeverArrivesWaitsForYou, TestASilentTurnIsAStall, TestWaitingForYouIsNotAStall, TestAToolOpenTooLong and TestTheSameCommandRepeated
 
   @LIM-29 @test
   Scenario: A worker join code works once, until it expires
@@ -264,7 +264,7 @@ Feature: Limits
     And the code no longer works once its lifetime has passed: yes
     And the join's event holds neither the code nor the worker's credential as they are: yes
     # not under test, checked by hand: the lifetime, InviteLifetime, is 1 hour (internal/workers/workers.go line 28)
-    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode; the refusal's words: internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
+    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode; the refusal's words: internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @LIM-30 @manual
   Scenario: A Claude Code invite works for 15 minutes
@@ -284,7 +284,7 @@ Feature: Limits
     # Steps: on <worker>, run agentry worker run in a terminal and open the server's Workers page: the worker's Status reads online;
     # pause the worker with kill -STOP <pid>, its pid from pgrep -f "agentry worker run": within about 22 seconds (the link is
     # checked every 2 seconds) the Status reads offline; kill -CONT <pid> and the Status reads online again once the worker dials back
-    # README.md, Add machines; PLAN.md T-022
+    # README.md, Add machines
 
   @LIM-32 @test
   Scenario: Each task's worktree gets the lowest free dev port from 7900
@@ -292,7 +292,7 @@ Feature: Limits
     When a port is leased for a new worktree
     Then its PORT is the lowest from 7900 that no task holds and nothing listens on: yes
     # not under test, checked by hand: the range ends at 7999, so 100 ports are the most worktrees that can hold one at once (internal/worktrees/ports.go lines 12 and 13)
-    # README.md, Use it; PLAN.md T-038; internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
+    # README.md, Use it; internal/worktrees/worktree_test.go TestLeasePortSkipsTakenAndBusyPorts
 
   @LIM-33 @manual
   Scenario: A turn's start and a clone time out

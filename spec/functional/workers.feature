@@ -14,7 +14,7 @@ Feature: Workers
     Then the machine gets a credential of its own, and the log holds it as given: no
     # not under test, checked by hand: the log keeps the credential's hash (internal/workers/workers.go line 180)
     And the same code is refused for a second machine
-    # README.md, Add machines; PLAN.md T-022; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
+    # README.md, Add machines; internal/workers/workers_test.go TestAMachineJoinsOnceWithItsCode
 
   @MACHINE-02 @worker @test
   Scenario: Add worker makes a one-time install command for a machine

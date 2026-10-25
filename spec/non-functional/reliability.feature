@@ -8,7 +8,7 @@ Feature: Reliability
     Then the watchdog raises an issue saying the process exited, and stops the session: yes
     And no turn is left open, so the coordinator gets the issue: yes
     # not under test, checked by hand: the watchdog checks once a second (internal/watchdog/watchdog.go line 73); the test calls Check with the clock moved on
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   # Every number below comes from the code; the comment on each names its
   # file and constant. The watchdog checks every task with an open turn
@@ -28,7 +28,7 @@ Feature: Reliability
     And it raises an issue saying the agent's process exited: yes
     And the open turn has ended, so the task goes back to its coordinator: yes
     # not under test, checked by hand: the issue goes on "(crashed or was killed)" (internal/watchdog/watchdog.go line 134)
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace; the coordinator gets it: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
 
   @REL-03 @test
   Scenario: A turn with no event for 10 minutes is a stall
@@ -38,7 +38,7 @@ Feature: Reliability
     When 11 minutes have passed since that event
     Then the watchdog raises an issue saying the agent has been silent: yes
     # not under test, checked by hand: the issue says "for over 10m0s" (internal/watchdog/watchdog.go line 150), and raising it stops the session (line 268)
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
+    # internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
 
   @REL-04 @test
   Scenario: A turn waiting for the user is not a stall
@@ -47,7 +47,7 @@ Feature: Reliability
     And the user has not answered
     When 1 hour has passed with no event on the turn
     Then the watchdog raises 0 issues, because a held action waits for the user, not the agent
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
+    # internal/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
 
   @REL-05 @test
   Scenario: An approved tool call with no result for 20 minutes is an issue
@@ -58,7 +58,7 @@ Feature: Reliability
     When 21 minutes have passed since the call was requested
     Then the watchdog raises an issue naming the command, npm test: yes
     # not under test, checked by hand: the issue says the tool call has run for over 20m0s with no result (internal/watchdog/watchdog.go line 144)
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestAToolOpenTooLong
+    # internal/watchdog/watchdog_test.go TestAToolOpenTooLong
 
   @REL-06 @test
   Scenario: The same command requested 5 times in a row is a loop
@@ -67,7 +67,7 @@ Feature: Reliability
     When the watchdog checks the turn
     Then it raises an issue saying the same command was requested 5 times in a row: yes
     # not under test, checked by hand: the issue names the command (internal/watchdog/watchdog.go line 140), and raising it stops the session (line 268)
-    # PLAN.md T-014; internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
+    # internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
 
   @REL-07 @test
   Scenario: Different commands with the same description are not a loop
@@ -78,7 +78,7 @@ Feature: Reliability
     Given a turn with 5 calls whose commands Agentry could not read
     When the watchdog counts the repeats
     Then the count is 0, because an unreadable command says nothing about a loop
-    # PLAN.md T-014; internal/watchdog/repeat_test.go TestDifferentSearchesAreNotALoop
+    # internal/watchdog/repeat_test.go TestDifferentSearchesAreNotALoop
 
   @REL-08 @test
   Scenario: A prompt not acknowledged within 60 seconds asks the user to open the terminal
@@ -206,7 +206,7 @@ Feature: Reliability
     And its screen still holds the program's last output: yes
     And the session reports the program as running: no
     And a viewer attached to it is told the program died within 5 seconds: yes
-    # PLAN.md T-011; internal/sessions/session_test.go TestASessionRunsWithItsEnvironmentAndShowsACrash; the size: TestASessionResizesAndSnapshots; the host outlives the process that started it: TestAHostEndsWithTheTestsThatStartedIt
+    # internal/sessions/session_test.go TestASessionRunsWithItsEnvironmentAndShowsACrash; the size: TestASessionResizesAndSnapshots; the host outlives the process that started it: TestAHostEndsWithTheTestsThatStartedIt
 
   @REL-18 @manual
   Scenario: Stop Agentry stops the server and the running sessions carry on
@@ -296,7 +296,7 @@ Feature: Reliability
     And when it stops, the data folder holds state.snapshot with mode 0600
     When the server starts again
     Then it logs "replayed": no, because the state went on from the snapshot
-    # PLAN.md T-066; cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart
+    # cmd/agentry/serve_test.go TestServeKeepsTheSnapshotAcrossARestart
 
   @REL-23 @test
   Scenario: A snapshot that cannot be trusted is thrown away and the whole log is replayed
@@ -310,7 +310,7 @@ Feature: Reliability
     Then the state resumed from the snapshot: no
     When an event after the snapshot breaks a stream the snapshot holds
     Then the whole log is replayed and the stream is broken afterwards: no
-    # PLAN.md T-066; internal/current/snapshot_test.go TestEveryFallbackReplaysTheWholeLogAndSaysWhy
+    # internal/current/snapshot_test.go TestEveryFallbackReplaysTheWholeLogAndSaysWhy
 
   @REL-24 @test
   Scenario: Starting from a snapshot gives the same state as replaying the whole log
@@ -318,7 +318,7 @@ Feature: Reliability
     Given a fixture log, with a story's news among its events
     When a snapshot is written at every position of the log and a state is resumed from each
     Then each resumed state equals the state replayed from the whole log: yes
-    # PLAN.md T-066; internal/current/snapshot_test.go TestASnapshotAtEveryPositionEqualsAReplay
+    # internal/current/snapshot_test.go TestASnapshotAtEveryPositionEqualsAReplay
 
   @REL-25 @test
   Scenario: The snapshot is written after its count of events, or at its interval with at least 1 event, and at close
@@ -335,7 +335,7 @@ Feature: Reliability
     When the writer closes with 0 events applied since the last snapshot
     Then it writes 0 snapshots
     # not under test, checked by hand: serve's writer counts 10,000 events and waits 10 minutes (internal/current/writer.go lines 17, 18); the test sets 3 events and ticks by hand
-    # PLAN.md T-066; internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent, TestCloseWritesASnapshotTheNextStartGoesOnFrom
+    # internal/current/writer_test.go TestTheWriterWritesAfterEnoughEventsOrTimeWithAnEvent, TestCloseWritesASnapshotTheNextStartGoesOnFrom
 
   @REL-26 @benchmark
   Scenario: Starting from a snapshot is fast however long the log is
@@ -355,7 +355,7 @@ Feature: Reliability
     # in docs/design/log-growth.md, section "Measured in build step 2: gob".
     # The limits are the constants in internal/current/snapshot_bench_test.go; TestTheSnapshotBenchRunsOnASmallLog
     # runs the same measurement on a small log in every go test run.
-    # PLAN.md T-066; internal/current/startup_bench_test.go
+    # internal/current/startup_bench_test.go
 
   # Bounded disk use and archiving
 

@@ -412,7 +412,7 @@ Feature: Policy
     When the agent runs git push origin HEAD:dev
     Then the user is asked before the push runs
     And a push to main, or a force push, is denied
-    # PLAN.md T-013, T-033; README.md, The policy; internal/policy/default_test.go
+    # README.md, The policy; internal/policy/default_test.go
 
   @POLICY-37 @agent @test
   Scenario: Every push asks the user
