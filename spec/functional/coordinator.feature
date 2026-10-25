@@ -119,7 +119,7 @@ Feature: The coordinator
   @COORD-14 @test
   Scenario: An issue goes back to the coordinator
     # internal/coordinator/next_test.go TestNext; internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
-    # the count: TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
+    # the count: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
     Given the watchdog raised an issue "the agent's process exited" on a task
     When the loop reads the task
     Then the next turn is the coordinator's and its handoff is exactly the issue's reason

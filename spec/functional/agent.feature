@@ -367,7 +367,7 @@ Feature: The agents
     Then each idea is kept once, from that task and about its repo
     And an idea with an empty title, a size "XL", a kind "story", from a task that does not exist, or from an agent not working on the task is refused
     And only the user accepts or dismisses an idea, never an agent
-    # IdeasFormat and suggest: internal/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in the same file;
+    # IdeasFormat and suggest: internal/ideas/coordinator.go; the user decides: TestOnlyYouAcceptOrDismiss in internal/ideas/ideas_test.go;
     # the skeptic's verdict closes the session: internal/agents/defaults/visionaries/skeptic.md
 
   @AGENT-34 @test
@@ -592,7 +592,7 @@ Feature: The agents
     And cd && cat .netrc is denied too, the relative path counted from where cd went
     And under allow-everything cat .env is allowed
     # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664
-    # under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
+    # internal/policy/default_test.go; under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
 
   @AGENT-55 @test
   Scenario: A denial or an ask tells the agent which rule decided
