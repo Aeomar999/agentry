@@ -20,7 +20,7 @@ Feature: Compatibility
     And each is named agentry-<version>-<label>.zip, with the version from git describe, or dev when git gives none
     And every build is made with CGO_ENABLED=0, so no C compiler and no cross toolchain is needed, whatever the machine is
     And without the built page the command is refused with "run it from the repo's root, with the page built (make ui)"
-    # README.md, From the source (make package); PLAN.md T-062; packaging/main.go lines 25-32, 55-57, 66-67, 77; Makefile lines 20-21; no test
+    # README.md, From the source (make package); PLAN.md T-062; packaging/main.go lines 25-32, 55-57, 66-67, 77; Makefile lines 17 (WORKER_PLATFORMS) and 20-22; no test
 
   @COMPAT-03 @manual
   Scenario: Each zip holds this system's agentry, the five others' and Start and Stop Agentry
@@ -55,8 +55,8 @@ Feature: Compatibility
   Scenario: The install command runs in sh on macOS and Linux and in PowerShell on Windows
     Given a server with its own CA, and a join code from the Workers page
     When the sh command is run in sh with curl, and the PowerShell command in pwsh with curl.exe
-    Then the sh command sends exactly 2 requests carrying the code: the script at /worker/install.sh, then the agentry build for the machine's own os and arch
-    And the PowerShell command sends exactly 2 requests carrying the code: the script at /worker/install.ps1, then the build for windows and the machine's arch
+    Then the last 2 requests the sh command sends carrying the code are the script at /worker/install.sh, then the agentry build for the machine's own os and arch
+    And the last 2 requests the PowerShell command sends carrying the code are the script at /worker/install.ps1, then the build for windows and the machine's arch
     And with another CA's fingerprint in the command, 0 requests carrying the code are sent by either
     # README.md, Add machines; PLAN.md T-022; internal/web/install_https_test.go
 
@@ -134,10 +134,10 @@ Feature: Compatibility
     # README.md, What you need (Codex works too); PLAN.md T-008, T-028 (registering hook trust is not built); internal/engines/engines_test.go
 
   @COMPAT-15 @test
-  Scenario: Both engines give the same signals from their hooks
-    Given 12 hook payloads recorded from Claude Code 2.1.301 and Codex 0.163.0: session start, prompt, tool call, tool done, permission request, notification and stop
+  Scenario: Both engines give Agentry's signals from their hooks
+    Given 12 hook payloads recorded from Claude Code 2.1.301 and Codex 0.163.0: 7 from Claude Code (session start, prompt, 2 tool calls, tool done, notification and stop) and 5 from Codex (session start, prompt, tool call, permission request and stop)
     When each is parsed by its engine's adapter
-    Then each payload gives exactly the signal expected of it, the same kinds from both engines: session started, prompt received, action requested, action finished, waiting, turn ended
+    Then each payload gives exactly the signal expected of it: 6 kinds from Claude Code (session started, prompt received, action requested, action finished, waiting, turn ended) and 4 from Codex (session started, prompt received, action requested, turn ended)
     And in both engines' configurations PreToolUse is a gate whose command ends in "|| exit 2", and Stop a report whose command ends in "|| true"
     # PLAN.md T-008, proof 07; internal/engines/engines_test.go
 

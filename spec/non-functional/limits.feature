@@ -242,7 +242,7 @@ Feature: Limits
     Given a turn is open and the watchdog ticks every second
     When the watchdog measures the turn
     Then a process not up 3 seconds after the start is an issue
-    And a prompt not echoed after 60 seconds puts the task in Needs you with "hasn't received its prompt after 1m0s", so the user opens its terminal
+    And a prompt not echoed after 60 seconds puts the task in Needs you, asked to open its terminal and answer a question on screen such as whether to trust the repository
     And no event at all for 10 minutes is a stall, unless the turn waits for the user
     And one approved tool call with no result after 20 minutes is an issue
     And the same command requested 5 times in a row is an issue
@@ -297,3 +297,11 @@ Feature: Limits
     Then the server closes the connection after 10 seconds
     And the server has no other read, write or idle timeout
     # README.md, Use it; the timeout is set in cmd/agentry/serve.go
+
+  @LIM-35 @test
+  Scenario: A handoff lists at most 40 touched files by name
+    Given a commit under review that touches 41 files, and another that touches 40
+    When the coordinator briefs a checking agent with the handoff
+    Then for the 41 files the handoff names none of them: it says "It touches 41 files; list them with git diff --stat <base>..HEAD"
+    And for the 40 files every one is listed by name, exactly 40 lines
+    # README.md, How it works, How a task moves; the cap is mostFilesListed in internal/coordinator/brief.go; internal/coordinator/handoff_brief_test.go

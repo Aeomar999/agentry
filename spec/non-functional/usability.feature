@@ -38,7 +38,7 @@ Feature: Usability
     When its contrast is computed
     Then on surface-3 in dark it is 4.24, below 4.5:1 and above 3:1
     And on surface-2 and surface-3 in light it is 4.28 and 3.84, both below 4.5:1 and above 3:1
-    And ink-muted is used 215 times in ui/src outside tests, 82 at 12 px and 47 at 11 px, so on those 3 surfaces it reads only as large text would
+    And ink-muted is used 215 times in ui/src outside tests, so on those 3 surfaces it reads only as large text would
     # ui/src/styles/globals.css lines 18, 27, 102-103, 110; measured as the heading above says; the uses counted with grep -o text-ink-muted over ui/src/**/*.tsx outside tests
 
   @USE-05 @benchmark
@@ -113,13 +113,13 @@ Feature: Usability
     And under 1024 px the task's Plan rail is a band at most 256 px tall above the content, and at 1024 px a 320 px column beside it
     And under 1024 px the Details tab is 1 column of panels, and at 1024 px 2
     And in the Activity tab the time column is 56 px wide under 640 px, 104 px from 640 px and 120 px from 768 px
-    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/pages/TasksPage.tsx lines 109-120; pages/TaskPage.tsx lines 423-426, 539; organisms/ActivityFeed.tsx line 63; no test
+    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/pages/TasksPage.tsx lines 109-120; pages/TaskPage.tsx lines 430-433, 546; organisms/ActivityFeed.tsx line 63; no test
 
   @USE-13 @test
   Scenario: On a phone a turn's band shows its duration in place of its facts
     Given a task's Activity with a turn that ended after 5 minutes and spent 41k tokens
     When the turn's band is shown
-    Then the band holds the turn's id, the machine it ran on, its state "ended" and "41k tokens", each in a span shown only at 768 px and wider
+    Then the band holds the turn's id, the machine it ran on and "41k tokens", each in a span shown only at 768 px and wider, and its state "ended" in a badge shown at every width
     And the duration "5m 00s" is in a span shown only under 768 px, so a phone sees the duration and a wider screen sees the facts
     # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 286-292; ui/src/components/organisms/ActivityFeed.test.tsx
 
@@ -129,7 +129,7 @@ Feature: Usability
     When the task page shows the Turns table at 375 px wide
     Then the reason breaks onto more lines under the turn's tokens, in 11 px muted ink, and the table is not widened
     And the page does not scroll sideways
-    # README.md, Use it, A task; ui/src/pages/TaskPage.tsx lines 130-135 (break-words, contain inline-size), 167; commit 0701ba9c; no test
+    # README.md, Use it, A task; ui/src/pages/TaskPage.tsx lines 136 (break-words, contain inline-size), 174; commit 0701ba9c; no test
 
   # --- Keys and focus ---
 
@@ -139,8 +139,8 @@ Feature: Usability
     When the user presses Ctrl+K, or ⌘ K on a Mac
     Then the command palette opens, a dialog named "Command palette", and the key does not reach the field
     And ArrowDown and ArrowUp move the cursor exactly one match at a time, Enter runs the match under it and Esc closes it
-    And the palette lists Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one terminal command per working task with an agent, and the theme switch, exactly those
-    # README.md, Use it, Keys; PLAN.md T-017; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-160; organisms/CommandPalette.tsx lines 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
+    And with an empty query the palette lists every item: Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one Open the terminal command per working task with an agent, the theme switch, the commands of each visible feature, Go to Ideas when Ideas is on, then every task and every agent
+    # README.md, Use it, Keys; PLAN.md T-017; ui/src/components/templates/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; organisms/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
 
   @USE-16 @manual
   Scenario: Single keys and two-key chords work outside a field, and Esc closes what is open
@@ -180,7 +180,7 @@ Feature: Usability
     Given the page open in either theme
     When the user moves focus with Tab to a button, a tab, a table row and a link, then clicks one of them with the mouse
     Then the element reached by Tab shows a 2 px solid line in the focus colour, brand orange in dark and a darker orange in light, and the clicked one shows none
-    And the line sits 2 px outside the primary button and 3 px outside a tab, and inside where a scroller would clip it: 2 px inside a table row and 1 px inside the Activity scroller
+    And the line sits 2 px outside the primary button, and inside where a scroller or a strip would clip it: 3 px inside a tab, 2 px inside a table row and 1 px inside the Activity scroller
     And a text field, textarea or select shows no line of its own; its wrapper's border turns the focus colour instead, so there is only one line
     # PLAN.md T-017; ui/src/styles/globals.css lines 62-64, 121, 186-199; ui/src/components/atoms/Button.tsx line 15; molecules/ResourceTable.tsx line 99; molecules/Tabs.tsx line 24; organisms/ActivityFeed.tsx line 159; atoms/Input.tsx line 9; no test
 
@@ -191,7 +191,7 @@ Feature: Usability
     Then the element under the band ends just below it, the one past the bottom just above the padding, and the one already in view moves 0 px
     And the element taller than the room is brought only up to the band, and inside the folded code only the lines above the cut count as what must be in view
     And a click that focuses an element scrolls 0 px
-    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/components/organisms/ActivityFeed.tsx lines 148, 159; ui/src/pages/TaskPage.tsx line 457; ui/src/lib/focus-in-view.test.tsx
+    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/components/organisms/ActivityFeed.tsx lines 148, 159; ui/src/pages/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx
 
   @USE-22 @test
   Scenario: The Activity scroller is a Tab stop named by its heading
@@ -209,7 +209,7 @@ Feature: Usability
     Then folded, Tab reaches only the links above the cut and then the Show all button
     And Show all puts every link back in the Tab order, and Show less takes the ones below the cut out again, each element getting back the tabindex it had
     And the fold never uses the inert attribute
-    # README.md, Use it, A task; ui/src/components/molecules/Fold.tsx lines 7, 93, 158; ui/src/components/molecules/Fold.test.tsx
+    # README.md, Use it, A task; ui/src/components/molecules/Fold.tsx lines 7, 93, 158; ui/src/components/molecules/Fold.test.tsx (never uses inert, lines 211-216)
 
   # --- Words, motion and theme ---
 
