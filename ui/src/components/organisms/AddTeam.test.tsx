@@ -31,6 +31,7 @@ const template = (team: string, given: Partial<TeamTemplate> = {}): TeamTemplate
       profile: "read-only",
       color: "orange",
       column: "",
+      resume: "",
     },
   ],
   ...given,

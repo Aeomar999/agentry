@@ -64,6 +64,7 @@ function agent(name: string, team: string, given: Partial<Agent> = {}): Agent {
     workers: [],
     color: "",
     column: "",
+    resume: "",
     knowledge: "",
     ...given,
   };
@@ -81,6 +82,7 @@ const member = (name: string, given: Partial<TemplateAgent> = {}): TemplateAgent
   profile: "",
   color: "",
   column: "",
+  resume: "",
   ...given,
 });
 
@@ -197,6 +199,7 @@ describe("New team: Blank", () => {
               profile: "",
               color: "blue",
               column: "",
+              resume: "",
             },
           ],
         },
@@ -947,11 +950,11 @@ const DOCS = [
 
 // What saving the Docs team sends for a row: its name then (was), and now.
 const sentRow = (was: string, given: Partial<Agent> = {}) => {
-  const { name, description, coordinates, prompt, engine, model, profile, color, column } = {
+  const { name, description, coordinates, prompt, engine, model, profile, color, column, resume } = {
     ...DOCS.find((a) => a.name === was)!,
     ...given,
   };
-  return { was, name, description, coordinates, prompt, engine, model, profile, color, column };
+  return { was, name, description, coordinates, prompt, engine, model, profile, color, column, resume };
 };
 
 const sheet = () => screen.getByRole("dialog");
@@ -1168,7 +1171,7 @@ describe("Edit team: changing it", () => {
           agents: [
             sentRow("editor", { description: "Leads." }),
             sentRow("writer", { name: "drafter" }),
-            { was: "", ...critic, profile: "", color: "teal", column: "" },
+            { was: "", ...critic, profile: "", color: "teal", column: "", resume: "" },
           ],
         },
       ],

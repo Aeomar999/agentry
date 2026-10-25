@@ -75,6 +75,7 @@ function agent(name: string, team = "", coordinates = false): Agent {
     workers: [],
     color: "",
     column: "",
+    resume: "",
     knowledge: "",
   };
 }
@@ -92,6 +93,7 @@ function row(key: string, given: Partial<DraftAgent> = {}): DraftAgent {
     profile: "",
     color: "",
     column: "",
+    resume: "",
     ...given,
   };
 }
@@ -143,6 +145,7 @@ const template: TeamTemplate = {
       profile: "read-mostly",
       color: "violet",
       column: "",
+      resume: "",
     },
     {
       name: "writer",
@@ -154,6 +157,7 @@ const template: TeamTemplate = {
       profile: "research-only",
       color: "teal",
       column: "review",
+      resume: "",
     },
   ],
 };
@@ -550,6 +554,7 @@ describe("addCustomTeam", () => {
         profile: "",
         color: "blue",
         column: "",
+        resume: "",
       },
     ],
   };
@@ -603,6 +608,7 @@ describe("loadTeam", () => {
         profile: "",
         color: "",
         column: "",
+        resume: "",
       },
       {
         name: "writer",
@@ -614,6 +620,7 @@ describe("loadTeam", () => {
         profile: "read-mostly",
         color: "teal",
         column: "review",
+        resume: "",
       },
     ]);
     expect(new Set(loaded.agents.map((agent) => agent.key)).size).toBe(2);
@@ -647,6 +654,7 @@ const sentAgent = (was: string, name: string, coordinates = false) => ({
   profile: "",
   color: "",
   column: "",
+  resume: "",
 });
 
 describe("editCustomTeam", () => {
