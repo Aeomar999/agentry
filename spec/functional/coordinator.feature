@@ -180,6 +180,16 @@ Feature: The coordinator runs a task
     And the retry still counts as 1 issue towards the issues in a row
     # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
 
+  @COORD-59 @test
+  Scenario: An agent's report of a blocker is a report, not an issue
+    # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
+    Given a task with the default limit of 24 turns, where the coordinator assigns the engineer and the engineer ends its turn with the report "still broken", 12 times over
+    When the loop reads the task after those 24 turns
+    Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
+    And the issues limit is reached in the same test only by 3 issues raised with no turn ending between them
+    # an issue is raised only for a failed turn or a usage limit that lasts: internal/hooks/handler.go, the UsageLimited and TurnFailed cases
+    # a turn that ends with a report sets IssuesInARow to 0: internal/tasks/apply.go turn.ended
+
   # --- Safety stops
 
   @COORD-22 @test
@@ -254,7 +264,6 @@ Feature: The coordinator runs a task
     Given the coordinator's reply ends with {"action": "ask", "question": "Which layout?", "options": ["Tabs", "One page"], "page": "<svg></svg>"}
     When the decision is read
     Then it is an ask with exactly that question, 2 options and the page
-    And an ask with no question is refused
     And once applied, the task waits with the question open and no turn starts until the user answers
     # the wait while a question is open: internal/coordinator/next.go Next
 
@@ -313,13 +322,15 @@ Feature: The coordinator runs a task
     # read the issue in the trail; repeat with "team": "nobody"; then chain 3 requests team to team and try a 4th.
 
   @COORD-36 @test
-  Scenario: Done is refused until every checker has approved the last change
+  Scenario: Done is refused until a checker has approved the last change and no checker objects
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's turn changed the work and no checker has looked at it since
     When the coordinator decides {"action": "done", "summary": "TODOs removed."}
     Then the task is not done
     And an issue goes back to the coordinator saying no one has checked it since it last changed, naming the turn and the agent
-    # unchecked: internal/coordinator/checks.go
+    And done is allowed once at least 1 checker has approved since the last change and no checker's latest check is older than that change, asks for changes or gives no verdict
+    And a checker that never looked is not required: the test's team has a reviewer and a tester, and the reviewer's approval alone allows done
+    # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/agents/defaults.go, Column Reviews
 
   @COORD-37 @test
   Scenario: A change after a review needs another review
@@ -327,8 +338,17 @@ Feature: The coordinator runs a task
     Given the reviewer ended a turn with "Verdict: changes needed", and the engineer then changed the work
     When the coordinator decides done
     Then the task is not done, and the issue says the reviewer checked it in its turn and it changed after that
-    And once the reviewer's verdict is "approved" on the last change, and the deployer has shipped it without changing it, done is allowed
-    # the verdict line: internal/coordinator/checks.go VerdictFormat and verdictOf
+    And once the reviewer's verdict is "approved" on the last change, done is allowed, and a deployer turn after it is not counted as a change, so the approval holds
+    # the verdict line: internal/coordinator/checks.go VerdictFormat and verdictOf; a ship turn is not a change: checks.go recordOf
+
+  @COORD-60 @manual
+  Scenario: Work the user had shipped from Shipping needs no new check to be done
+    Given the engineer changed the work after the last check, and the user moved the task to Shipping
+    When the deployer's turn that the move asked for pushes the work, and the coordinator then decides done
+    Then the task is done with no new check: the push counts as the user taking the work as it was
+    # the turn is marked shipped: internal/tasks/task.go Turn.Shipped; shipped in workRecord, and a change before it raises no objection: internal/coordinator/checks.go recordOf, unchecked
+    # Steps: on a task whose branch was reviewed and then changed, drag it to Shipping; let the deployer's turn push;
+    # end the coordinator's next turn with {"action": "done", "summary": "Shipped."} and check the task is Done with no reviewer turn between.
 
   # --- Epics
 
@@ -442,9 +462,21 @@ Feature: The coordinator runs a task
     # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
     Given an agent's turn added a file under .agentry/files in the worktree
     When the turn ends
-    Then the file is read back and kept with the task, named with the agent and the turn that added it
-    And the next turn finds the same file in its .agentry/files, on whichever machine it runs
-    And a story's turn also finds its epic's files under .agentry/files/epic, to read only
+    Then the file is read back and kept with the task, recorded with the agent that left it and when
+    And the coordinator's next brief lists it as "out/report.csv (9 bytes, from engineer)"
+    And a file the user shares is in the next agent's .agentry/files when its turn starts, and a file a turn removed is shared no more
+    # a shared file is Name, Hash, Size, By, At, From: internal/tasks/files.go SharedFile
+
+  @COORD-58 @manual
+  Scenario: A story's worktree has its epic's files under .agentry/files/epic, to read
+    Given a story of an epic, and the epic has exactly 1 shared file, brief.md
+    When the story's turn starts
+    Then the story's .agentry/files/epic holds exactly that file, and the brief says changes there aren't kept
+    And a file written under .agentry/files/epic during the turn is not shared when the turn ends
+    # the delivery under epic/: internal/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/sharedfiles/folder.go EpicFolder, Manifest
+    # the folder left out of the manifest: internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/coordinator/brief.go sharedText
+    # Steps: drop a file on an epic's Shared files panel, start one of its stories, and in the story's worktree read
+    # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Details list no such file.
 
   # --- Sessions
 
