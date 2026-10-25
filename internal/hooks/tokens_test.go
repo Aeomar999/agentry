@@ -49,3 +49,16 @@ func TestATurnKeepsItsTokensSplit(t *testing.T) {
 		}
 	}
 }
+
+// The turn's context, the input of its last call, rides along when the
+// hook knows it. Unknown, from Codex or an older worker, it is left out.
+func TestATurnKeepsHowBigItsContextGrew(t *testing.T) {
+	split := engines.Tokens{Input: 7, CacheWrite: 2700, CacheRead: 83700, Output: 400}
+	data := turnEnded(t, &hookcall.Ending{Tokens: split.Total(), Split: &split, Context: 43502})
+	if fmt.Sprint(data["contextTokens"]) != "43502" {
+		t.Errorf("contextTokens %v, want 43502 (data %v)", data["contextTokens"], data)
+	}
+	if unknown := turnEnded(t, &hookcall.Ending{Tokens: split.Total(), Split: &split}); unknown["contextTokens"] != nil {
+		t.Errorf("an unknown context is left out: %v", unknown)
+	}
+}

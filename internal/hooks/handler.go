@@ -108,9 +108,9 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 	case engines.Waiting:
 		p.Type, p.Data = events.AgentWaiting, map[string]any{"question": signal.Question}
 	case engines.TurnEnded:
-		tokens, split, unknown, report := signal.Tokens.Total(), &signal.Tokens, signal.TokensUnknown, signal.Report
+		tokens, split, unknown, context, report := signal.Tokens.Total(), &signal.Tokens, signal.TokensUnknown, signal.Context, signal.Report
 		if call.Ending != nil { // read where the transcript is
-			tokens, split, unknown, report = call.Ending.Tokens, call.Ending.Split, call.Ending.TokensUnknown, cmp.Or(report, call.Ending.Report)
+			tokens, split, unknown, context, report = call.Ending.Tokens, call.Ending.Split, call.Ending.TokensUnknown, call.Ending.Context, cmp.Or(report, call.Ending.Report)
 		}
 		p.Type, p.Data = events.TurnEnded, map[string]any{"agent": call.Agent, "report": report, "tokens": tokens}
 		switch {
@@ -119,6 +119,9 @@ func (h *Handler) report(call hookcall.Call, signal engines.Signal) {
 		case split != nil: // an older worker sends only the total
 			p.Data["inputTokens"], p.Data["cacheWriteTokens"] = split.Input, split.CacheWrite
 			p.Data["cacheReadTokens"], p.Data["outputTokens"] = split.CacheRead, split.Output
+		}
+		if context > 0 { // unknown, from Codex or an older worker
+			p.Data["contextTokens"] = context
 		}
 	case engines.UsageLimited:
 		resetsAt := ""

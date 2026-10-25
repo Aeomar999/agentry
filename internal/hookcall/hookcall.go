@@ -63,9 +63,12 @@ type Ending struct {
 	Split *engines.Tokens `json:"split,omitempty"`
 	// Why Tokens is 0, when the transcript couldn't tell; a worker older
 	// than this field sends none.
-	TokensUnknown string  `json:"tokensUnknown,omitempty"`
-	Report        string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
-	Knowledge     *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
+	TokensUnknown string `json:"tokensUnknown,omitempty"`
+	// The input of the turn's last call, how big its session had grown;
+	// 0 when unknown, and from a worker older than this field.
+	Context   int     `json:"context,omitempty"`
+	Report    string  `json:"report"`              // the agent's final message, when the engine read it from the transcript
+	Knowledge *string `json:"knowledge,omitempty"` // nil when the file couldn't be read
 }
 
 // Reply is what the hook prints and exits with.

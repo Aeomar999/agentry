@@ -29,6 +29,9 @@ func TestTheHookCountsFromTheTurnsStart(t *testing.T) {
 	if *end.Split != want || end.Tokens != want.Total() || end.TokensUnknown != "" {
 		t.Errorf("ending %+v, split %+v, want %+v", end, *end.Split, want)
 	}
+	if end.Context != 2+600+42900 { // the turn's last call
+		t.Errorf("context %d, want the last call's input", end.Context)
+	}
 }
 
 // With no stamp, from a server older than it, the whole transcript counts.

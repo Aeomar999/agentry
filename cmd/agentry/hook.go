@@ -61,7 +61,7 @@ func ending(call hookcall.Call) *hookcall.Ending {
 	signals, _ := engine.ParseHook(call.Event, call.Payload, turnStarted())
 	for _, signal := range signals {
 		if signal.Kind == engines.TurnEnded {
-			end := &hookcall.Ending{Tokens: signal.Tokens.Total(), Split: &signal.Tokens, TokensUnknown: signal.TokensUnknown, Report: signal.Report}
+			end := &hookcall.Ending{Tokens: signal.Tokens.Total(), Split: &signal.Tokens, TokensUnknown: signal.TokensUnknown, Context: signal.Context, Report: signal.Report}
 			if knowledge, err := os.ReadFile(filepath.Join(os.Getenv(hookcall.EnvWorktree), machines.KnowledgeFile)); err == nil {
 				text := string(knowledge)
 				end.Knowledge = &text
