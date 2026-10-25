@@ -291,18 +291,19 @@ Feature: Security
   Scenario: An asked action puts the task in Needs you
     Given the policy says ask for the agent's command
     When the gate judges it
-    Then exactly one action.asked event is recorded, with the verdict's profile, rule and why
-    And the task is shown in Needs you
+    Then the task is shown in Needs you
     And the command does not run until the user answers
-    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go
+    # not under test, checked by hand: one action.asked event is recorded, with the verdict's profile, rule and why (internal/hooks/handler.go lines 352 and 393)
+    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-35 @test
   Scenario: The user's approval lets the asked command run
     Given an asked action waiting in Needs you while the hook waits
     When the user approves it
-    Then the agent is told "Agentry: you approved: " followed by the user's reason, exactly once
+    Then the agent is told "you approved": yes
+    # not under test, checked by hand: the words are "Agentry: you approved: " and the user's reason (internal/hooks/handler.go line 412)
     And the command is allowed
-    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go
+    # README.md, What happens to one action; PLAN.md T-013; internal/hooks/handler_test.go TestAnAskedActionWaitsForTheUser
 
   @SEC-36 @manual
   Scenario: The user's denial stops the asked command
@@ -320,7 +321,7 @@ Feature: Security
     And the same command from another agent is not passed
     And the pass ends with the agent's next turn, so a later call is judged again, not passed
     And a pass never overrides a denial
-    # README.md, What happens to one action; internal/hooks/handler_test.go
+    # README.md, What happens to one action; internal/hooks/handler_test.go TestALateApprovalLetsTheSameCommandThroughOnce, TestAPassIsOnlyForTheAgentThatAsked, TestAPassEndsWithTheAgentsNextTurn, TestAPassDoesntOverrideADenial
 
   @SEC-38 @test
   Scenario: A broken policy file never replaces a working one
@@ -329,15 +330,15 @@ Feature: Security
     Then the file is refused with a message that names the unknown word
     And the policy before it stays in force, with no rule changed
     And the same broken file is reported exactly once, not on every watch
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go
+    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne; the reasons: TestABadPolicyIsRefusedWithTheReason
 
   @SEC-39 @test
   Scenario: A fixed policy file takes over from a refused one
     Given a refused policy.toml and the policy before it still in force
     When the file is saved with the mistake fixed
-    Then the fixed policy is in force, with every rule read from the file
+    Then the fixed policy is loaded: yes
     And no refusal is shown any more
-    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go
+    # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
 
   @SEC-40 @test
   Scenario: A broken policy file at start stops the server
@@ -345,7 +346,7 @@ Feature: Security
     When agentry serve starts
     Then the server does not start
     And its error names the file, the line and the newest backup to copy back, exactly one
-    # README.md, The policy; PLAN.md T-075; internal/policy/file_test.go
+    # README.md, The policy; PLAN.md T-075; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
 
   @SEC-41 @manual
   Scenario: A saved policy change takes effect within two seconds
@@ -361,16 +362,17 @@ Feature: Security
     When Agentry writes the file
     Then a copy of the file as it was is kept beside it, named by its time
     And at most 20 backups are kept, the newest
-    # README.md, The policy; PLAN.md T-069; internal/policy/live_test.go
+    # internal/policy/live.go line 57 keepBackups = 20; the test uses the constant
+    # README.md, The policy; PLAN.md T-069; internal/policy/live_test.go TestAChangeIsWrittenBackedUpAndPutInForce, TestAgentryKeepsItsNewestBackups
 
   @SEC-43 @test
   Scenario: Every policy version is in the log and can be restored
     Given a policy that has been loaded, changed on the page and edited on disk
     When the user opens the policy's history
-    Then every version loaded is listed with who made it and a diff
+    Then every version loaded is listed with who made it, and a change made on the page with its diff: yes
     And every file refused is listed with its reason
     And only a version whose text the log holds can be reverted
-    # README.md, The policy; PLAN.md T-069; internal/policy/log_test.go
+    # README.md, The policy; PLAN.md T-069; internal/policy/log_test.go TestHistoryShowsEveryVersionAndRestoresOnlyThoseWithText
 
   @SEC-44 @manual
   Scenario: Four tokens are made once and kept across restarts
@@ -388,43 +390,50 @@ Feature: Security
     Given the server has a page token
     When a request carries it as a Bearer header, as ?token= in the address, or in the cookie the printed link set
     Then the API answers HTTP 200 each way
-    # README.md, Signing in the installed app, or another device; PLAN.md T-006; internal/web/api_test.go
+    # README.md, Signing in the installed app, or another device; PLAN.md T-006; internal/web/api_test.go TestTheAPINeedsTheUIToken for ?token= and the cookie; the Bearer header is how every test there calls the API (call)
 
-  @SEC-46 @test
+  @SEC-46 @manual
   Scenario: The hook token does not open the API
     Given the server has a page token and a hook token
     When a request carries the hook token as a Bearer header, or no token at all
     Then the API answers HTTP 401
     And an agent can never approve its own request
-    # README.md, What happens to one action; PLAN.md T-009; internal/web/api_test.go
+    # README.md, What happens to one action; PLAN.md T-009; internal/web/api_test.go TestTheAPINeedsTheUIToken refuses no token and the made-up "hook-token", but its server has no hook token, so it proves only that a wrong token is refused
+    # Steps: start agentry serve and run curl --cacert <data dir>/tls/ca.crt -H "Authorization: Bearer $(cat <data dir>/hook-token)" <agentry address>/api/tasks:
+    # 401. The same with no header: 401; with <data dir>/ui-token: 200. Then POST to <agentry address>/api/tasks/<task>/actions/<action>/approve
+    # with the hook token, for an action waiting in Needs you: 401, and the action still waits.
 
   @SEC-47 @test
   Scenario: The desk token opens tasks
     Given the desk's Claude session holds the desk token
-    When it lists, creates or shows a task, reads a task's events, answers a question or files a task under an epic
+    When it lists, creates or shows a task
     Then every call is allowed
-    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go
+    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 99 to 101)
+    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
 
   @SEC-48 @test
   Scenario: The desk token opens nothing more
     Given the desk's Claude session holds the desk token
-    When it approves or denies an action, closes an epic, or reads the policy or the changes
+    When it approves or denies an action, or reads the policy or the changes
     Then the answer is HTTP 401 every time
-    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go
+    And closing an epic with it is refused with HTTP 403: yes
+    # README.md, Use it; PLAN.md T-046; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks; the epic: TestYouCloseAnEpic
 
   @SEC-49 @test
-  Scenario: The helper token sends one task's messages
+  Scenario: The helper token sends a task's messages
     Given the Claude session in a task's Workspace holds the helper token
-    When it posts a message to its own task's claude/message route
+    When it posts a message to a task's claude/message route
     Then the message is allowed
-    # README.md, Use it; internal/web/claude_api_test.go
+    And it reaches the task as the user's, marked as sent through Claude: yes
+    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 120)
+    # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse
 
   @SEC-50 @test
   Scenario: The helper token opens no other route
     Given the Claude session in a task's Workspace holds the helper token
-    When it calls any other route, such as answer or the tasks list
+    When it calls another route: a task's message or answer route, creating a task, or a policy route
     Then the answer is HTTP 401
-    # README.md, Use it; internal/web/api_test.go
+    # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse; the policy: internal/web/policy_api_test.go TestOnlyTheUITokenChangesThePolicy
 
   @SEC-51 @test
   Scenario: Only the real page token issues sign-in codes
