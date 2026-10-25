@@ -139,3 +139,46 @@ func TestTurnStartedReadsWhereItsSessionCameFrom(t *testing.T) {
 		t.Errorf("a forked turn from task-2: from %q, forked %v, session %q", forked.SessionFrom, forked.Forked, forked.FromSession)
 	}
 }
+
+// A story's first turn went on with task-2's s-1, in place or forked, and
+// its process exited before it took its prompt. The retry is that story's
+// own failed turn's, so it starts fresh and doesn't go back to task-2's
+// session; the fresh turn's own session is then the one to go on with.
+func TestAFailedResumeFromASiblingRetriesFreshNotTheSiblingAgain(t *testing.T) {
+	for _, forked := range []bool{false, true} {
+		you := events.Actor{Kind: events.Human, ID: "you"}
+		lead := events.Actor{Kind: events.Agent, ID: "tech-lead"}
+		worker := events.Actor{Kind: events.Worker, ID: "omni"}
+		dog := events.Actor{Kind: events.System, ID: "watchdog"}
+		event := func(actor events.Actor, kind events.Type, correlation string, data map[string]any) events.Event {
+			return events.Event{At: time.Now(), Proposal: events.Proposal{Stream: "task-3", Actor: actor, Type: kind, Correlation: correlation, Data: data}}
+		}
+		started := map[string]any{"agent": "engineer", "hash": "h2", "worker": "omni", "engine": "claude", "fromSession": "s-1", "sessionFrom": "task-2"}
+		if forked {
+			started["forked"] = true
+		}
+		log := []events.Event{
+			event(you, events.TaskCreated, "", map[string]any{"title": "t", "coordinator": "tech-lead", "epic": "epic-1"}),
+			event(lead, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "Add the lint."}),
+			event(worker, events.TurnStarted, "turn-1", started),
+			event(dog, events.IssueRaised, "", map[string]any{"reason": "engineer's session didn't start", "retryFresh": true}),
+		}
+		sibling := story("task-2", endedAt(1, "s-1"))
+		task := FromEvents(log)
+		if task.Handoff == nil || task.Handoff.To != "engineer" || task.Handoff.Text != "Add the lint." {
+			t.Errorf("forked %v: handoff %+v, want the same step back to the engineer", forked, task.Handoff)
+		}
+		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "omni"); session != "" || fresh != "its resume failed" {
+			t.Errorf("forked %v: the retry goes on with %q from %s, fresh because %q; want fresh because its resume failed", forked, session, idOf(from), fresh)
+		}
+
+		log = append(log,
+			event(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h3", "worker": "omni", "engine": "claude", "freshBecause": "its resume failed"}),
+			event(worker, events.SessionStarted, "turn-2", map[string]any{"engineSession": "s-3"}),
+			event(worker, events.TurnEnded, "turn-2", map[string]any{"agent": "engineer", "report": "Added it."}))
+		task = FromEvents(log)
+		if session, from, fresh := task.SessionToShare([]*Task{sibling, task}, "engineer", "claude", "omni"); session != "s-3" || from != task {
+			t.Errorf("forked %v: after the fresh retry, got %q from %s, fresh because %q; want its own s-3", forked, session, idOf(from), fresh)
+		}
+	}
+}
