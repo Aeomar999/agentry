@@ -8,9 +8,9 @@ Feature: Agentry from Claude Code
   Scenario: A task made with create_task is on the board
     Given Claude Code connected to Agentry and open in a repo
     When the model calls the create_task tool with a title and a description
-    Then exactly 1 task is created, in that repo
+    Then the task is created, in that repo: yes
     And the new task's id and the link to its page are shown in the tool's answer
-    # README.md, Use it from Claude Code; internal/mcp/server_test.go
+    # README.md, Use it from Claude Code; internal/mcp/server_test.go TestTheBoardAndHandingOverWork
 
   # ---- Installing the integration -------------------------------------------
 
@@ -48,30 +48,31 @@ Feature: Agentry from Claude Code
   Scenario: The Integrations page makes an install command for another machine
     Given the user is signed in on the Integrations page
     When they ask for an install command
-    # internal/connections/connections.go InviteLifetime
-    Then the command carries a one-time code that works for 15 minutes
-    And there is 1 command for a terminal (sh) and 1 for PowerShell (Windows) per address the server has
-    And the install script fetched with the code carries that code 1 time and runs `agentry mcp connect`
-    And the script fetched with a wrong code is refused with status 401
-    # internal/web/api_test.go
+    Then the command carries a code, and each address the server has gets a command for a terminal (sh) and one for PowerShell (Windows)
+    # not under test, checked by hand: the code works for 15 minutes (internal/connections/connections.go line 21, InviteLifetime)
+    And the install script fetched with the code carries that code and runs `agentry mcp connect`: yes
+    And a script fetched with a wrong code is refused with status 401
+    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage; every address: internal/web/addresses_test.go TestInstallCommands;
+    # PowerShell and the wrong code: internal/web/api_test.go TestInstallCommandsForWindows
 
   @CC-05 @test
   Scenario: A machine connects its Claude Code with the code, once
     Given an install command whose code has not been used
     When the machine sends the code with its host name, user and system
-    Then it gets 1 credential of its own, and the log keeps only the credential's hash
+    Then it gets a credential of its own: yes
+    # not under test, checked by hand: the log keeps only the credential's hash (internal/connections/connections.go line 7)
     And the same code sent a second time is refused with status 409
     And the script fetched with the used code is refused with status 401
     And a request to the API with the credential is answered with status 200
     And the Integrations page lists 1 connection, naming the machine, without the credential itself
-    # internal/web/api_test.go
+    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
   @CC-06 @test
   Scenario: Revoke stops a connected machine at once
     Given a machine connected with its own credential
     When the user revokes that connection on the Integrations page
     Then a request to the API with that credential is answered with status 401
-    # internal/web/api_test.go
+    # internal/web/api_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
 
   @CC-07 @test
   Scenario: A connected machine's credential cannot issue sign-in codes
@@ -79,7 +80,7 @@ Feature: Agentry from Claude Code
     When it asks the server for a sign-in code with that credential
     Then the request is refused with status 401
     And the same request with the page's own token is answered with status 200
-    # internal/web/signin_test.go
+    # internal/web/signin_test.go TestOnlyTheUITokenIssuesSigninCodes
 
   @CC-08 @test
   Scenario: Connecting over https checks the server's CA before the code is sent
@@ -90,18 +91,18 @@ Feature: Agentry from Claude Code
     Then the code is sent 0 times, no connection is saved, and the error says the server isn't trusted
     When the machine runs it over https with no fingerprint
     Then the code is sent 0 times, and the error names the fingerprint to give
-    # cmd/agentry/mcp_test.go
+    # cmd/agentry/mcp_test.go TestMCPConnectOverHTTPSKeepsTheCA, TestMCPConnectRefusesAWrongFingerprintBeforeTheCodeIsSent and TestMCPConnectOverHTTPSWithoutAFingerprintSaysWhichToGive
 
   @CC-09 @test
   Scenario: A connection whose server's CA changed says to connect again
     Given a machine connected to a server whose CA was regenerated since
     When Claude Code's Agentry calls the server
-    Then the call fails, and the error says the CA was regenerated or this is another server, 1 time
+    Then the call fails, and the error says the CA was regenerated or this is another server: yes
     And it names the connect command to run again, with a new fingerprint and a code from the Integrations page, 1 time
     Given a connected server that is down instead
     When Claude Code's Agentry calls it
     Then the error says it can't reach Agentry, and says the CA changed: no
-    # cmd/agentry/mcp_test.go
+    # cmd/agentry/mcp_test.go TestAConnectionToAServerWhoseCAChangedSaysToConnectAgain and TestAConnectionToAServerThatIsDownIsNotACAChange
 
   # ---- Reading the board ----------------------------------------------------
 
@@ -109,14 +110,13 @@ Feature: Agentry from Claude Code
   Scenario: status is the board for this repo
     Given 2 tasks waiting for the user, 1 running, 1 epic with 2 of 2 stories done and 1 task in another repo
     When Claude calls status
-    Then the reply has 4 sections: Needs you, Running, Epics and Not started
-    And the Needs you section lists 2 lines, each naming the tool that deals with it
+    Then both waiting lines are in it, each naming the tool that deals with it: yes
     And a running task's line says who is working, its board column and its usage, such as 0 tokens (no limit) and 7 turns (no limit)
     And the epic's line says 2 of 2 stories done
     And the other repo's task is on the board: no
-    When Claude calls status with all
-    Then tasks of every repo are listed: yes
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; (close_epic) on the epic's line: TestAnswersNameAnEpicAsEpicN
+    # not under test, checked by hand: the reply has 4 sections, Needs you, Running, Epics and Not started (internal/mcp/tools.go lines 116, 122, 138 and 144),
+    # and status with all lists the tasks of every repo (line 110)
 
   @CC-11 @test
   Scenario: status shows an epic left open with every story done
@@ -124,7 +124,7 @@ Feature: Agentry from Claude Code
     When Claude calls status
     Then the Epics section says all 3 stories done, open until the user closes it (close_epic)
     And the epic is in the Needs you section: no
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
   @CC-12 @test
   Scenario: list_tasks lists every task of this repo with its status and usage
@@ -135,20 +135,22 @@ Feature: Agentry from Claude Code
     And the second task's line reads working, Shipping, 0 tokens (no limit) and 7 turns (no limit)
     And an epic's line counts its stories done, such as 2 of 2, and a story's line names its epic as epic-N
     # internal/mcp/tools.go listTasks: with a status, only tasks with that status are listed
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; turns since the user last answered: TestTheTaskSaysItsLimits; the epic and story lines: TestAnswersNameAnEpicAsEpicN
 
   @CC-13 @test
   Scenario: show_task is one task in full
     Given a done task whose work was pushed, moved to Done by the user
     When Claude calls show_task for it
-    Then the reply reads its title, status shipped, its board column Done, its coordinator, its repo and 1 link to its page
+    Then the reply reads its title, status shipped and its board column Done, and gives a link to its page: yes
+    # not under test, checked by hand: the same line names its coordinator and its repo (internal/mcp/tools.go line 206)
     And it says Moved to Done by you: yes
     And it says what the task used of its budget and turns, such as 0 tokens (no limit)
+    # internal/mcp/server_test.go TestTheTaskSaysItShipped; the title and the link: TestAnswersNameAnEpicAsEpicN; the usage: TestTheTaskSaysItsLimits
     # internal/mcp/tools.go showTask: at most the last 8 steps of the trail are listed
     Given a task on 2 of whose turns the tokens could not be counted
     When Claude calls show_task for it
     Then the reply says Tokens unknown on 2 turns, with the server's reason
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestTheTaskSaysWhereItsTokensAreUnknown
 
   @CC-14 @test
   Scenario: show_task reads an archived task back
@@ -156,7 +158,7 @@ Feature: Agentry from Claude Code
     When Claude calls show_task for it
     Then the reply has its title, status done and its description as before it was archived: yes
     And it says Archived on its date, and that it can be changed: no
-    # internal/mcp/archived_test.go
+    # internal/mcp/archived_test.go TestShowTaskReadsAnArchivedTask
 
   @CC-15 @test
   Scenario: An erased task cannot be shown, and is left out of the list
@@ -165,7 +167,7 @@ Feature: Agentry from Claude Code
     Then the tool fails, saying the task was erased, with 1 date
     When Claude calls list_tasks with all
     Then the erased task is listed: no, and the other task is listed: yes
-    # internal/mcp/archived_test.go
+    # internal/mcp/archived_test.go TestShowTaskSaysATaskWasErased
 
   # ---- Handing over work ----------------------------------------------------
 
@@ -173,39 +175,42 @@ Feature: Agentry from Claude Code
   Scenario: create_task hands a task to Agentry in this repo
     Given Claude Code runs in a repo Agentry knows
     When Claude calls create_task with a title and a description and nothing else
-    Then 1 task is made in this repo, with budget 0 and maxTurns 0 sent, which the server reads as its defaults
+    Then a task is made in this repo, with budget 0 and maxTurns 0 sent, which the server reads as its defaults
     # internal/web/api.go createTask: 0 takes the server's default, -1 is no limit (internal/mcp/tools.go createTask)
-    And the reply names the new task as task-N, gives 1 link to its page and says its coordinator reads it next
+    And the reply names the new task as task-N and gives a link to its page: yes
+    # not under test, checked by hand: the reply says its coordinator reads it next (internal/mcp/tools.go line 319)
     And the reply ends with Waiting for the user (2) when 2 things wait
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the note at the end: internal/mcp/features_test.go TestRepliesEndWithWhatTheServerSaysWaits
 
   @CC-17 @test
   Scenario: create_task makes a story of an epic, or an epic with its stories
     Given an open epic shown as epic-3
     When Claude calls create_task with a title and epic epic-3
-    Then the server is sent epic task-3 and no repo, so the story works where its epic does
-    And the reply names the new task-N and says it waits in the user's Backlog until they start it: yes
+    Then the server is sent epic task-3: yes
+    And the reply names the new task-N: yes
+    # not under test, checked by hand: no repo is sent, so the story works where its epic does (internal/mcp/tools.go line 298), and the reply says it waits in the user's Backlog until they start it (line 315)
     When Claude calls create_task with kind epic and stories task-1 and epic-9
     Then the server is sent stories task-1 and task-9, each as task-N
-    And the reply names the new epic as epic-N and says its coordinator splits it into stories next: yes
-    # internal/mcp/server_test.go
+    And the reply names the new epic as epic-N: yes
+    # not under test, checked by hand: the reply says its coordinator splits it into stories next (internal/mcp/tools.go line 317)
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the replies: TestAnswersNameAnEpicAsEpicN
 
   @CC-18 @test
   Scenario: A story that does not exist is not filed, and the epic is still made
     Given 2 tasks and no task-9
     When an epic is created with stories task-1 and task-9
     Then the epic is made with 1 story, task-1
-    And the reply says Not filed: task-9: no task task-9
-    # internal/web/api_test.go
+    And the answer says task-9: no task task-9: yes
+    # not under test, checked by hand: create_task words it Not filed: (internal/mcp/tools.go line 322)
+    # internal/web/api_test.go TestTasksAreFiledUnderEpics: the epic has 2 stories once task-2 is filed too
 
   @CC-19 @test
   Scenario: create_task in a repo named by its git address works in a clone
     Given a repo at a git address the server can reach
     When Claude calls create_task with that address as repo
-    # internal/worktrees/repo.go CloneTimeout; internal/mcp/tools.go createTask adds 1 minute for the request
-    Then the server clones the repo before the task is made, allowing 10 minutes for the clone
-    And the task works in the clone: yes
-    # internal/web/api_test.go
+    Then the server clones the repo, and the task works in the clone: yes
+    # not under test, checked by hand: the clone may take 10 minutes (internal/worktrees/repo.go line 66, CloneTimeout), and create_task allows 1 minute more (internal/mcp/tools.go line 305)
+    # internal/web/api_test.go TestATaskInARepoNamedByItsAddressWorksInAClone: the task is made through the API, not create_task
 
   @CC-20 @test
   Scenario: tell_coordinator sends the user's words to a task's coordinator
