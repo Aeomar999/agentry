@@ -62,6 +62,7 @@ type serveOptions struct {
 	maxTurns  int    // turns a new task may have without your answer before it asks you; 0 is no limit
 	publicURL string // the address people open; "" for the address listened on
 	https     bool   // serve TLS with Agentry's own CA, on the same port as plain HTTP
+	resume    bool   // an agent's next turn on a task goes on with its last session when it can
 
 	archiveAfter time.Duration // how long a task is done before it is archived; 0 never archives
 }
@@ -100,6 +101,7 @@ func parseServe(args []string, stderr io.Writer) (serveOptions, bool) {
 	flags.StringVar(&options.dataDir, "data", filepath.Join(home, ".agentry"), "where Agentry keeps its log and the worktrees")
 	flags.IntVar(&options.budget, "budget", 5_000_000, "the tokens a new task may use before it asks you; 0 for no limit")
 	flags.IntVar(&options.maxTurns, "max-turns", coordinator.DefaultMaxTurns, "the turns a new task may have without your answer before it asks you; 0 for no limit")
+	flags.BoolVar(&options.resume, "resume-sessions", true, "an agent's next turn on a task goes on with its last session when it can; false starts every turn fresh")
 	flags.DurationVar(&options.archiveAfter, "archive-after", defaultArchiveAfter, "archive tasks done for this long, 30 days by default; 0 never archives. An archived task still opens, and reopening it brings it back")
 	if flags.Parse(args) != nil {
 		return options, false
@@ -266,7 +268,7 @@ func serve(ctx context.Context, o serveOptions, stdout io.Writer) error {
 		logs[f.Name] = features.Checked(f, features.Registration(f), log)
 	}
 
-	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme})
+	runner := turns.NewRunner(log, state, fleet, turns.Config{HookToken: hookToken, Theme: currentTheme, NoResume: !o.resume})
 	loop := coordinator.NewLoop(log, state, runner, fleet)
 	loop.Clones = clones
 	loop.Defaults = tasks.Limits{Budget: o.budget, MaxTurns: o.maxTurns}

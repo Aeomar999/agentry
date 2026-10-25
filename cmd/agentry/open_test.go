@@ -66,7 +66,7 @@ func TestOpenPageOnThisComputerOnly(t *testing.T) {
 	}
 }
 
-// open hands serve -https, -budget, -max-turns and -archive-after only
+// open hands serve -https, -budget, -max-turns, -resume-sessions and -archive-after only
 // when given, so serve's own defaults hold otherwise.
 func TestOpenPassesItsServeFlagsOn(t *testing.T) {
 	var passed [][]string
@@ -86,12 +86,13 @@ func TestOpenPassesItsServeFlagsOn(t *testing.T) {
 		{"-budget", "2000000"},
 		{"-archive-after", "48h"},
 		{"-archive-after=0"},
+		{"-resume-sessions=false"},
 		{},
 	} {
 		var out bytes.Buffer
 		runOpen(append([]string{"-data", t.TempDir(), "-repo", t.TempDir(), "-port", "7905"}, args...), nil, &out, &out)
 	}
-	want := [][]string{{"-budget=0", "-https=true", "-max-turns=0"}, {"-budget=2000000"}, {"-archive-after=48h0m0s"}, {"-archive-after=0s"}, nil}
+	want := [][]string{{"-budget=0", "-https=true", "-max-turns=0"}, {"-budget=2000000"}, {"-archive-after=48h0m0s"}, {"-archive-after=0s"}, {"-resume-sessions=false"}, nil}
 	if !slices.EqualFunc(passed, want, slices.Equal) {
 		t.Errorf("passed %q, want %q", passed, want)
 	}

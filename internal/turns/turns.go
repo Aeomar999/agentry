@@ -1,5 +1,6 @@
 // Package turns starts and stops agent turns. A turn is one agent working
-// once: a fresh engine session in the task's worktree, started from a brief.
+// once in the task's worktree, started from a brief: in a fresh engine
+// session, or going on with the agent's last one when the task allows it.
 package turns
 
 import (
@@ -23,7 +24,11 @@ import (
 type Config struct {
 	HookToken string        // lets a session's hooks post to the server
 	Theme     func() string // the page's theme now; nil leaves the engine's own
+	NoResume  bool          // start every turn fresh, never going on with a session
 }
+
+// ResumeOff is why a turn starts fresh when Config.NoResume is set.
+const ResumeOff = "resume is off"
 
 // Runner starts turns on the machine the task's work is on.
 type Runner struct {
@@ -67,6 +72,8 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 		Env: r.environment(task, id, agent)}
 	plan, planFrom := task.PlanToContinue(agent.Name) // its unfinished plan, to continue or replace
 	turn.Plan = plan
+	resumed, fresh := r.sessionToResume(task, agent, machine.Name())
+	turn.Resume = resumed
 	turn.Prompt = "Read " + turn.BriefFile + " and do what it says."
 	if r.config.Theme != nil {
 		turn.Theme = r.config.Theme()
@@ -78,9 +85,15 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 		return err
 	}
 	// Recorded before the session starts, so its first hook call finds the turn open.
+	data := map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
+		"worker": machine.Name(), "planFrom": planFrom, "seen": len(task.Trail)}
+	if resumed != "" {
+		data["fromSession"] = resumed
+	} else {
+		data["freshBecause"] = fresh
+	}
 	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
-		Correlation: id, Data: map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
-			"worker": machine.Name(), "planFrom": planFrom, "seen": len(task.Trail)}})
+		Correlation: id, Data: data})
 	if err != nil {
 		return err
 	}
@@ -88,6 +101,15 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 		return rejection
 	}
 	return machine.StartTurn(ctx, turn)
+}
+
+// sessionToResume is the engine session the agent's turn goes on with on
+// machine, or "" and why it starts fresh.
+func (r *Runner) sessionToResume(task *tasks.Task, agent agents.Agent, machine string) (session, fresh string) {
+	if r.config.NoResume {
+		return "", ResumeOff
+	}
+	return task.SessionToResume(agent.Name, agent.Engine, machine)
 }
 
 // Stop ends the task's session, wherever it runs. The turn itself ends by its own event.
