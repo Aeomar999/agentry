@@ -77,7 +77,7 @@ func savedFrom(roster Roster, bases Bases, team, name, id, description string, b
 		if a.TeamName() == team {
 			members = append(members, Agent{Name: a.Name, Description: a.Description, Prompt: a.Prompt,
 				Engine: a.Engine, Model: a.Model, Profile: a.Profile, Coordinates: a.Coordinates,
-				Color: a.Color, Column: a.Column})
+				Color: a.Color, Column: a.Column, Resume: a.Resume})
 		}
 	}
 	if len(members) == 0 {

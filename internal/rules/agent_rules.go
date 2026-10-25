@@ -18,8 +18,8 @@ var KnownEngines = []string{"claude", "codex"}
 type rosterRule func(roster agents.Roster, p events.Proposal) string
 
 var rosterRules = map[events.Type]rosterRule{
-	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, oneCoordinatorPerTeam),
-	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, oneCoordinatorPerTeam, keepsACoordinator),
+	events.AgentCreated:    allOf(nameIsNew, nameIsValid, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, resumeIsKnown, oneCoordinatorPerTeam),
+	events.AgentChanged:    allOf(agentExists, engineIsKnown, hasPrompt, colorIsKnown, columnIsKnown, resumeIsKnown, oneCoordinatorPerTeam, keepsACoordinator),
 	events.AgentRemoved:    allOf(agentExists, removalKeepsACoordinator),
 	events.AgentLearned:    allOf(agentExists, onlyItsOwnKnowledge, patchFits),
 	events.AgentRenamed:    allOf(agentExists, newNameIsFree),
@@ -163,6 +163,15 @@ func columnIsKnown(_ agents.Roster, p events.Proposal) string {
 	case agents.Builds, agents.Reviews, agents.Ships:
 	default:
 		return `an agent's work counts as building (""), review ("review") or shipping ("ship"), not ` + column
+	}
+	return ""
+}
+
+func resumeIsKnown(_ agents.Roster, p events.Proposal) string {
+	switch resume := p.Text("resume"); resume {
+	case agents.ResumeDefault, agents.ResumesSession, agents.StartsFresh:
+	default:
+		return `an agent goes on with its session ("resume"), starts fresh ("fresh") or goes by its column (""), not ` + resume
 	}
 	return ""
 }

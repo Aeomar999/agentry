@@ -68,11 +68,15 @@ type Session struct {
 func (s Session) Resumes() bool { return s.Resume != "" }
 
 // SessionToResume is how the agent's next turn on the task starts, on the
-// machine the task's work is on: by tasks.SessionToShare, across the
-// stories of the task's epic.
+// machine the task's work is on: fresh when resuming is off or the agent's
+// setting says so, else by tasks.SessionToShare, across the stories of the
+// task's epic.
 func (r *Runner) SessionToResume(task *tasks.Task, agent agents.Agent) Session {
 	if r.config.NoResume {
 		return Session{Fresh: ResumeOff}
+	}
+	if reason := agent.FreshBecause(); reason != "" {
+		return Session{Fresh: reason} // never its own session, nor a sibling story's
 	}
 	resume, from, fresh := task.SessionToShare(r.storiesBeside(task), agent.Name, agent.Engine, r.fleet.Of(task.Worktree.Worker).Name())
 	if resume == "" {

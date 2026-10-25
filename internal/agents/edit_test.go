@@ -293,3 +293,35 @@ func TestRemovalsForgetANameATeamEditGivesAgain(t *testing.T) {
 		t.Errorf("removals = %v, want %v", removals, want)
 	}
 }
+
+// A team edit sets or clears an agent's resume setting like its other
+// fields, and a kept agent's version changes with it.
+func TestATeamEditCarriesTheResumeSetting(t *testing.T) {
+	roster := Roster{
+		{Name: "data-lead", Coordinates: true, Team: "Data", Engine: "claude", Prompt: "Lead."},
+		{Name: "checker", Team: "Data", Engine: "claude", Prompt: "Check.", Column: Reviews},
+	}
+	before := roster.TeamVersion("Data")
+	if checker, _ := roster.Get("checker"); checker.Edited().Resume != ResumeDefault || checker.ResumesSessions() {
+		t.Fatalf("checker before the edit: %+v, want a reviewer that starts fresh", checker.Edited())
+	}
+	edit := TeamEdit{Team: "Data", To: "Data", Agents: []EditedAgent{
+		{Was: "data-lead", Name: "data-lead", Coordinates: true, Engine: "claude", Prompt: "Lead."},
+		{Was: "checker", Name: "checker", Engine: "claude", Prompt: "Check.", Column: Reviews, Resume: ResumesSession},
+		{Name: "builder", Engine: "claude", Prompt: "Build.", Resume: StartsFresh},
+	}}
+	roster = roster.Next(events.Event{Proposal: edit.Proposal(you)})
+	checker, _ := roster.Get("checker")
+	builder, _ := roster.Get("builder")
+	if checker.Resume != ResumesSession || !checker.ResumesSessions() || builder.Resume != StartsFresh || builder.ResumesSessions() {
+		t.Errorf("checker resume %q, builder resume %q; want the checker resuming and the builder fresh", checker.Resume, builder.Resume)
+	}
+	if roster.TeamVersion("Data") == before {
+		t.Error("the team's version didn't change with the setting")
+	}
+	rows := EditTeam(roster, "Data", "Data", []EditedAgent{{Name: "data-lead", Coordinates: true, Engine: "claude", Prompt: "Lead."},
+		{Name: "checker", Engine: "claude", Prompt: "Check.", Column: Reviews, Resume: " fresh "}})
+	if rows.Agents[1].Resume != StartsFresh {
+		t.Errorf("the panel's row reads resume %q, want it trimmed to %q", rows.Agents[1].Resume, StartsFresh)
+	}
+}

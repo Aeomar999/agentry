@@ -983,3 +983,28 @@ func TestNothingGoesIntoAForeignStream(t *testing.T) {
 		t.Errorf("with ideas registered, idea-3 is refused as foreign: %v", rejection)
 	}
 }
+
+// An agent's resume setting is unset, "resume" or "fresh", on creating and
+// on changing it; anything else is refused in plain words.
+func TestAnAgentsResumeSettingIsKnown(t *testing.T) {
+	s := openSeeded(t)
+	want := `an agent goes on with its session ("resume"), starts fresh ("fresh") or goes by its column (""), not sometimes`
+	odd := agents.Agent{Name: "checker", Engine: "claude", Prompt: "Check.", Column: agents.Reviews, Resume: "sometimes"}
+	if _, rejection, err := s.Propose(odd.Proposal(you, false)); err != nil || rejection == nil || rejection.Reason != want {
+		t.Errorf("creating with resume %q: %v %v, want refused: %s", odd.Resume, rejection, err, want)
+	}
+	for _, resume := range []string{agents.ResumeDefault, agents.ResumesSession, agents.StartsFresh} {
+		checker := agents.Agent{Name: "checker-" + cmp.Or(resume, "unset"), Engine: "claude", Prompt: "Check.", Column: agents.Reviews, Resume: resume}
+		if _, rejection, err := s.Propose(checker.Proposal(you, false)); err != nil || rejection != nil {
+			t.Errorf("creating with resume %q: %v %v, want it accepted", resume, rejection, err)
+		}
+		checker.Resume = agents.StartsFresh
+		if _, rejection, err := s.Propose(checker.Proposal(you, true)); err != nil || rejection != nil {
+			t.Errorf("changing %s to fresh: %v %v, want it accepted", checker.Name, rejection, err)
+		}
+		checker.Resume = "later"
+		if _, rejection, err := s.Propose(checker.Proposal(you, true)); err != nil || rejection == nil || !strings.HasSuffix(rejection.Reason, "not later") {
+			t.Errorf("changing %s to resume %q: %v %v, want it refused", checker.Name, checker.Resume, rejection, err)
+		}
+	}
+}

@@ -477,3 +477,65 @@ func TestATeamRenamedMovesEveryAgent(t *testing.T) {
 		t.Errorf("teams = %s, want Platform,Analytics", teams)
 	}
 }
+
+// An agent's resume setting rides its events; an event from before it was
+// a setting reads as unset, so old logs load unchanged.
+func TestTheResumeSettingRoundTripsAndOldEventsHaveNone(t *testing.T) {
+	you := events.Actor{Kind: events.Human, ID: "you"}
+	checker := Agent{Name: "checker", Engine: "claude", Prompt: "Check.", Column: Reviews, Resume: ResumesSession}
+	p := checker.Proposal(you, false)
+	if p.Text("resume") != ResumesSession {
+		t.Errorf("the event carries resume %q, want %q", p.Text("resume"), ResumesSession)
+	}
+	if got, _ := FromEvents(append(seeded(), asEvent(p))).Get("checker"); got.Resume != ResumesSession {
+		t.Errorf("read back: resume %q, want %q", got.Resume, ResumesSession)
+	}
+	delete(p.Data, "resume")
+	if got, _ := FromEvents(append(seeded(), asEvent(p))).Get("checker"); got.Resume != ResumeDefault || got.ResumesSessions() {
+		t.Errorf("from an old event: resume %q, resumes %v; want unset, a reviewer that starts fresh", got.Resume, got.ResumesSessions())
+	}
+}
+
+// Unset, the setting goes by the agent's column; set, it says. The reason
+// is what the Turns table shows for a turn that starts fresh by it.
+func TestWhoResumesSessionsAndWhyNot(t *testing.T) {
+	for _, c := range []struct {
+		agent   Agent
+		resumes bool
+		because string
+	}{
+		{Agent{Name: "engineer"}, true, ""},
+		{Agent{Name: "deployer", Column: Ships}, true, ""},
+		{Agent{Name: "reviewer", Column: Reviews}, false, "reviewers start fresh"},
+		{Agent{Name: "reviewer", Column: Reviews, Resume: ResumesSession}, true, ""},
+		{Agent{Name: "engineer", Resume: StartsFresh}, false, "set to start fresh"},
+		{Agent{Name: "reviewer", Column: Reviews, Resume: StartsFresh}, false, "set to start fresh"},
+	} {
+		if c.agent.ResumesSessions() != c.resumes || c.agent.FreshBecause() != c.because {
+			t.Errorf("%s (column %q, resume %q): resumes %v because %q; want %v, %q",
+				c.agent.Name, c.agent.Column, c.agent.Resume, c.agent.ResumesSessions(), c.agent.FreshBecause(), c.resumes, c.because)
+		}
+	}
+}
+
+// The built-in templates leave the setting unset, so every agent that
+// reviews starts fresh and every other goes on with its session.
+func TestEveryBuiltInReviewerStartsFreshAndTheRestResume(t *testing.T) {
+	reviewers := 0
+	for _, template := range Templates {
+		for _, agent := range template.Prompted() {
+			if agent.Resume != ResumeDefault {
+				t.Errorf("%s's %s sets resume %q, want it unset", template.ID, agent.Name, agent.Resume)
+			}
+			if reviews := agent.Column == Reviews; agent.ResumesSessions() == reviews {
+				t.Errorf("%s's %s reviews %v and resumes %v", template.ID, agent.Name, reviews, agent.ResumesSessions())
+			}
+			if agent.Column == Reviews {
+				reviewers++
+			}
+		}
+	}
+	if reviewers < 5 {
+		t.Errorf("only %d reviewing agents across the templates; the reviewer, tester, fact-checker, critic and design-critic at least", reviewers)
+	}
+}

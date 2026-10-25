@@ -1,0 +1,171 @@
+# Glossary
+
+Every noun Agentry uses, one line each, in the words README.md and the page use. Where a word means two things, both are given. Where a term's meaning lives only in the code, the package is named in brackets. The scenarios in the feature files use these words without explaining them.
+
+- **action**: one tool call an agent makes, a command, a file edit or a page fetch, which passes the gate before it runs; the Actions tab shows every one with the policy's decision.
+- **Actions tab**: the task page's list of every tool call an agent made, with the policy's decision for each.
+- **activity**: everything that happened on a task, newest first, grouped under bands that say who wrote it; the Activity tab of the task page.
+- **agent**: who can be handed work: a name, a prompt, an engine, a model, a policy profile, a colour, what its work counts as and the machines it may run on; agents are events in the log, not code, so the user adds and changes them on the Agents page.
+- **Agents page**: where teams and their agents are added, edited and removed, as a list or an org chart.
+- **allow**: the policy's decision that lets an action run.
+- **allow-everything**: the shipped profile that lets every agent run anything; the default policy.toml sets it as `use_for_everyone`.
+- **approval**: the user's answer to an action the policy asked about; it shows in Questions, in Claude Code when connected, and on the task's page as Needs you.
+- **archive**: one gzipped file in the data folder's `files` that holds a done task's rows once they have left the live log, with a marker and its summary kept in their place; archiving is undone by reopening the task.
+- **ask**: the policy's decision that holds an action for the user's approval or denial; the action waits up to 30 minutes, then the agent is told no and the action stays in Needs you.
+- **auto-accept**: a setting, off until the user turns it on, under which Agentry accepts for the user each idea the auto-accept rule counts as agreed, and with "and start them" starts its task too.
+- **auto-accept rule**: which ideas count as agreed: Everyone backed it (`everyoneBacked`, the default) or Nobody doubted it (`nobodyDoubted`); a duplicate is never accepted under either.
+- **Backlog**: the board column, shown when the user asks, where new stories and tasks the user parks wait until the user starts or moves them.
+- **base commit**: the commit a task's branch started from, recorded when its worktree is made; the Workspace marks files changed since it.
+- **board**: the Tasks page as columns, To do, In progress, Review, Shipping and Done, with the Backlog when asked; key `2`, and `1` for the list.
+- **branch**: a task's git branch, `agentry/<task>`, which carries its work through the repo on the server to whichever machine runs the next turn.
+- **brief**: what an agent is given at the start of a turn: its prompt, what it knows from earlier tasks, the task, the coordinator's instructions and where the work is, written to a file in the worktree that one typed line points at.
+- **budget**: the tokens a task may use before it stops and asks the user to raise it or wrap up; the server's `-budget` (5M by default) or the task's own, changed at any time or made unlimited.
+- **building**: what an agent's work counts as when it changes the code, as the engineer's does; the other two are review and shipping.
+- **CA**: Agentry's own certificate authority, made at the first start with `-https`, which the user trusts once on each device; it is name constrained to localhost, the machine's hostname and the private address ranges, and its key never leaves the server.
+- **check**: one of the four judgements an action passes before it runs: the hook, the log, the built-in protection and the agent's profile; also what a reviewer, tester, critic or network checker does, ending its report with a verdict.
+- **checker**: an agent whose work counts as review: the reviewer, the tester, the fact-checker, the critics and the network checkers, each ending its report with a verdict.
+- **Claude**: the Claude Code session Agentry runs for the user in the dock's Claude tab, in the default repo, which drafts tasks and answers coordinators' questions but can approve nothing; also, in the Workspace, the user's own Claude Code session in the task's worktree.
+- **Claude Code**: the engine the agents run in by default, and the tool the user can drive Agentry from, in any repo, through `agentry mcp`.
+- **close**: finishing an epic, which only the user does: with Close the epic on its page, `close_epic` in Claude Code, or by telling its coordinator, which asks the user to approve; a close starts one Visionaries follow-up session while that setting is on.
+- **code**: a one-time code: the sign-in code a signed-in device shows for another device, the join code in a worker's install command, or the install code in a Claude Code command; each works once and only its hash is kept.
+- **column**: one of the board's stages: Backlog, To do, In progress, Review, Shipping and Done; an agent's column says where its work shows, and dragging a card to a column is final at once.
+- **connection**: a machine whose Claude Code has Agentry's tools, connected from the Integrations page with its own credential; Revoke stops it at once (internal/connections).
+- **constraint**: how Agentry is built and must stay built, with how it is checked; the constraints are in spec/constraints.md.
+- **coordinator**: an ordinary agent, one per team, that reads a task, names it, hands each step to one of its team's agents, reads every report and issue, and ends each turn with a decision; it never starts anyone itself.
+- **Coordinator tab**: the chat with a task's coordinator on its page; what the user sends stops the turn in progress so the coordinator reads it at once.
+- **credential**: what a worker or a connected machine proves itself with after joining with a code; the machine keeps it and the log holds only its hash.
+- **critic**: a checker on the Research team, and the design-critic on the Design team, whose report ends with a verdict (internal/agents/defaults).
+- **data folder**: `.agentry` in the user's home folder, or where `-data` points: the log, the settings, the tokens, the CA and the tasks' worktrees.
+- **decision**: what a coordinator's reply ends with, in a fixed format the loop parses: hand the task to an agent, ask the user, move it, or say it is done; also the policy's decision on one action, allow, ask or deny (internal/coordinator).
+- **default repo**: the repo new tasks work in unless the task names another: `-repo`, or the git repo `Agentry` in the user's home folder, made on first start.
+- **deny**: the policy's decision that refuses an action; a denied action never runs and a denial stays a denial.
+- **deployer**: the Software team's agent whose work counts as shipping: it merges `origin/dev`, runs the tests and build, pushes `HEAD:dev` when the user approves the push, and reports the pushed commit's pipeline once.
+- **desk**: the Claude Code session Agentry runs for the user in the dock's Claude tab; it has its own token and can create, read and answer tasks, never approve (internal/desk).
+- **Details tab**: the task page's tab with its repo, epic, budget, turn limit, Change repo and Erase this task.
+- **developer**: the shipped profile of the engineer, tester and deployer: writes inside the worktree allowed, reaching outside asks, dangerous commands denied, every push asks.
+- **dismiss**: dropping an idea with a note; the next Visionaries session in that repo is told, so it is not suggested again.
+- **dock**: the panel at the bottom of the page, `Ctrl+J` or Terminal in the status bar, with the Questions, Claude and Terminal tabs; a task's Workspace has its own dock.
+- **Done**: the board column of finished tasks, keeping the last 7 days; dragging a card there finishes the task as it is after one wrap-up turn.
+- **engine**: the agent CLI an agent runs in, `claude` or `codex`; set per agent, and the rest of Agentry never knows which it is (internal/engines).
+- **engineer**: the Software team's agent whose work counts as building: it changes the code on the task branch and commits it, never pushes.
+- **epic**: a goal too big for one story, which its coordinator splits into stories, each a task of its own; shown as epic-N, closed only by the user once its stories are done.
+- **erase**: deleting every row of a task, from its archive too, and the copies of its words other tasks keep; the log keeps who erased it, when and why, never what it held, and nothing undoes it.
+- **event**: one thing that happened, written to the log by the piece it happened in and read by the others; every step of every task is one, and the Events tab of a task's page lists its own.
+- **Events tab**: the task page's list of every event in the task's stream.
+- **feature**: a part of Agentry that can be on or off, such as Ideas, with its own events, routes, settings and secrets; `GET /api/features` says which are enabled and visible, and the Settings page lists those that are off (internal/features).
+- **features.toml**: the settings file beside policy.toml: one table per feature, of strings, with its secrets in a table under it; watched, and never in the log.
+- **files**: a task's shared files, on the Files tab, where the user drops files in, downloads them and takes them away.
+- **fingerprint**: the CA's, printed after the https links and by `agentry ca`, which the user checks on the trust page and the install commands check before sending a code.
+- **follow-up**: the Visionaries session that one close of an epic starts, about what the epic delivered and what it makes possible; its ideas show on the Ideas page linked to the epic.
+- **gate**: where every action an agent takes goes before it runs: the engine's hook posts it to the server, the policy judges it, and anything short of a clear yes blocks it, the server being down included.
+- **handoff**: one pass of a task between the coordinator and an agent, a brief one way and a report back; the Handoffs tab shows each as a card.
+- **Handoffs tab**: the task page's list of every brief and report between the coordinator and its agents.
+- **held**: a task parked in To do or the Backlog until the user moves it on, its status on the page; also an ask the hook gave up waiting on, kept for the user after the turn moved on (internal/tasks).
+- **helper**: the user's own Claude Code session beside a task, in its worktree on the machine the work is on; it changes no files and sends the coordinator a change only when the user asks, with `agentry send` (internal/machines).
+- **hook**: `agentry hook`, which the engine calls before each action and at each signal; it posts to the server with the hook token and exits 2 on any failure, so a killed or slow hook blocks.
+- **idea**: a feature a Visionaries session suggests for a repo: the problem, the proposal, why now, a size, the risks and which agents backed or doubted it; the user accepts it as a task or an epic, or dismisses it.
+- **Ideas page**: where open ideas are grouped by the session that suggested them, with Accept, Dismiss, Ask the visionaries, the auto-accept settings and the History of ideas decided.
+- **In progress**: the board column of tasks an agent is building; dragging a card there makes the coordinator hand it to an agent that builds or checks.
+- **installed app**: Agentry installed from the page's Install app button as an app with its own window; browsers install only from `http://localhost` or https.
+- **Integrations page**: where the user makes the install command that connects Claude Code on a machine, and sees and revokes the machines connected.
+- **issue**: what sends a task back to its coordinator short of a report: a denied action, a crash, a stall, a tool open too long, a repeated command, or a blocker the agent reports; 3 in a row stop the task for the user.
+- **knowledge**: the notes an agent keeps across tasks, part of every brief as "What you know from earlier tasks", written to `.agentry/knowledge.md` at the start of a turn and read back at its end; the user reads and edits it in the agent's Knowledge panel.
+- **label**: a word on a task, up to 12 of them, lowercase, shown as chips that filter the Tasks page with a click.
+- **list**: the Tasks page as rows, key `1`, which keeps every task and drags to set priority.
+- **live terminal**: the working agent's terminal shown live in the browser, on the task's Terminal tab and in the dock; Take control lets the user type into it.
+- **log**: the one append-only event log, in SQLite in the data folder, that every piece of Agentry writes to and reads from; the only state.
+- **loop**: what carries out each coordinator decision: it reads the log by position and does the one move the decision gives, a worktree, a turn, an issue or a question for the user (internal/coordinator).
+- **machine**: where agents work: the machine Agentry runs on, called This machine on the Workers page, or a worker that has joined.
+- **marker**: the row the log keeps where an archived or erased task's rows were, with the archived task's summary.
+- **model**: the engine's model an agent uses, set on the agent with the engine's short names.
+- **Needs you**: a task's status while it waits for the user: an action asked, a question from its coordinator, a stop at its budget or turn limit, or an agent stuck on a prompt; the status line counts them.
+- **network-diagnosis**: the shipped profile of the Networking team's two checkers: read-only, plus a fixed set of network reads, while every live change asks.
+- **New task**: the modal over any page, key `n`, where the user describes a task in their own words, with an optional title, team, kind, labels, files, budget, turn limit and repo.
+- **notification**: what Claude Code shows on the user's computer when something needs them, and what a browser subscribed under Notifications on this device receives as a push.
+- **org chart**: the Agents page's view of each team as its lead above the agents it hands work to.
+- **page**: Agentry's UI in the browser, an admin console with Tasks, Plan and Ideas, then Agents, Workers, Integrations, Policy and Settings in the sidebar, everything updating live.
+- **pass**: a late approval of a held ask: that exact command goes through once without asking again, if the agent that asked runs it in its next turn and the policy still asks rather than denies (internal/hooks).
+- **path**: the steps a task's work took from agent to agent, `engineer › reviewer › tester`, shown above the task page's tabs; each step is a stage.
+- **plan**: an agent's checklist for its turn, written before it starts and ticked off as it works, shown down the left of the task page; also the Plan page.
+- **Plan page**: where work is shaped before it runs: each epic a column of its stories, one more for tasks of no epic, with Start on each story and Start the ready ones on each epic.
+- **policy**: what agents may do, in `~/.agentry/policy.toml`, written on first start from the shipped default and reloaded within two seconds of a save; a file with a mistake is refused and the one before it stays in force.
+- **Policy page**: where the profiles, their rules, `use_for_everyone`, the agents on each profile, newer shipped profiles, Try a call and the History of every version are shown.
+- **port**: 7800 or the next free one for the page; each task's worktree leases one from 7900 to 7999, given to the agent as `PORT`.
+- **position**: an event's place in the log; every API read says the position it was read at, and readers follow the log by it.
+- **priority**: the user's order of tasks, set by dragging a card up or down its column or a row in the list; a new task starts first, and the board and the list both sort by it.
+- **profile**: a named list of rules in policy.toml that one or more agents follow: read-only, read-mostly, developer, network-diagnosis, autonomous or allow-everything, or one the user writes.
+- **prompt**: an agent's standing instructions, given at the start of every turn and edited on its page; also the question an engine itself shows in the terminal, which the watchdog flags as waiting for the user when no one answers it.
+- **proposal**: an event offered to the store, which runs the checks and appends it, or appends a rejection in its place (internal/store).
+- **push**: a browser notification from Agentry, subscribed under Notifications on this device and needing an https public URL; also the git push the deployer runs, which always asks.
+- **question**: what a coordinator asks the user, with options or a page of its own, shown in Questions and in Claude Code; the task waits in Needs you until the user answers.
+- **Questions**: the dock's first tab, everything waiting for the user from every task, oldest first: approvals, coordinators' questions, budget and turn-limit stops, and agents stuck on a prompt.
+- **queued**: a started task waiting for a slot while as many tasks as `maxRunningTasks` allows have a turn open; it takes one as it frees, in priority order.
+- **rank**: a task's place in the user's priority order, a number between its neighbours so two never tie (internal/tasks).
+- **reader**: what follows the log from a position at its own pace, each with its own cursor; a slow reader never holds up a writer (internal/store).
+- **read model**: the in-memory state of every stream, built from the log at every start and changed only as each event commits, so it can never disagree with what happened; every read of the page goes to it (internal/current).
+- **read-mostly**: the Visionaries' shipped profile: read-only, plus reading the task board.
+- **read-only**: the shipped profile of the reviewer and coordinator: reading, `go vet` and the tests, no file changes from the shell.
+- **redact**: replacing one text with `[redacted]` in every row that holds it, on a task's page, an agent's page or everywhere under Privacy in Settings; the log records who, when, why and which rows, never the text, and nothing undoes it.
+- **rejection**: the event the store writes in place of a proposal a check refused (internal/store).
+- **release**: a GitHub release made from a tag on dev, with one zip per kind of computer from `make package`.
+- **repo**: the git repository a task works in: the default repo, a folder on the machine, a git address Agentry clones into `~/.agentry/repos`, a `.zip` or `.tar.gz` link, or a new repo Agentry makes.
+- **report**: an agent's final message at the end of a turn, which goes back to the coordinator; the brief asks for what changed, how it was tested and what is left.
+- **review**: what an agent's work counts as when it checks the work, as the reviewer's and tester's do; a task with such an agent shows in the Review column.
+- **Review**: the board column of tasks being checked; dragging a card there asks the coordinator to have the work checked again.
+- **reviewer**: the Software team's checker that reads the change and ends its report with a verdict.
+- **rule**: one line of a profile, read top to bottom, the first match deciding allow, ask or deny; it matches tools, commands, paths, where and redirects, and has a `why` the page shows.
+- **scenario**: one behaviour in a feature file, in Given, When, Then form, tagged with an ID and one check tag; the rules are in spec/README.md.
+- **schedule**: a feature whose streams make a task at a set time, daily, on weekdays or on some days, in a time zone; on dev it registers its events and nothing on the page uses it yet (internal/schedules, docs/design/schedules.md).
+- **secret**: a value in a feature's secrets table in features.toml, such as a git host's token; it never reaches the log, the snapshot, the page or the API, and no agent may read the file.
+- **session**: one agent's terminal session, kept by a small host process so it runs on when Agentry restarts, which the page watches live; also a Visionaries session, the task whose ideas come out of it.
+- **settings**: the user's choices for how Agentry works, kept in the log's settings stream and changed from the Ideas page or `PUT /api/settings`: the follow-up sessions, auto-accept, its rule and the most tasks running at once.
+- **Settings page**: the features that are off and how to turn them on, and Redact a text everywhere under Privacy.
+- **shared files**: what agents and the user hand each other that is not in git: the folder `.agentry/files` in a worktree, filled before each turn and read back after, each file kept once on the server by its hash, up to 2 GB.
+- **shipped**: a done task whose work an agent pushed as a plain, approved `git push` that went through; its card says Shipped instead of Done.
+- **shipping**: what an agent's work counts as when it ships the work, as the deployer's does.
+- **Shipping**: the board column that means ship it now: the coordinator hands the task to an agent of its team that ships work, which still runs the tests and build first.
+- **sign-in code**: a code such as `ABCD-EFGH`, with a QR code, that a signed-in device shows under Sign in another device; it works once, for 5 minutes, and wrong codes are limited to five a minute from one address.
+- **slot**: one of the `maxRunningTasks` turns that may be open at once; a task holds one while any agent has a turn open on it.
+- **snapshot**: the read model written to a file so a start reads it and applies only the events after it; a cache, thrown away whenever it might disagree with the log (internal/current).
+- **spec**: this folder: Agentry's behaviour today as scenarios, with this glossary and the constraints; `spec/check` and `make spec` check it.
+- **stage**: one step of a task's path, the agent that had it and how many turns it took; the board's columns are the stages of the work.
+- **status**: the one word the page shows for a task: working, needs you, done or held (internal/tasks).
+- **status bar**: the bar at the bottom of the page, with Terminal to open the dock and how many tasks wait for the user.
+- **status line**: Claude Code's line showing `agentry · 1 needs you · 3 running` on a machine connected from the Integrations page.
+- **store**: the package that keeps the log: it runs every proposal's checks under one lock, appends it, and writes the archive, erase and redact markers (internal/store).
+- **story**: a task of one goal, on one branch, checked before it is done; a story cannot be split, so an epic has only one level of them.
+- **stream**: the events of one thing, a task, an idea, a schedule, or the agents, templates, workers, policy or settings, named by its ID; the read model keeps the state of each (internal/events).
+- **summary**: what a coordinator writes when a task is done, kept with the task and sent back to its epic or to the task that asked for it.
+- **Take control**: the live terminal's button that lets the one viewer in control type into the agent's session, and hand it back.
+- **task**: what the user describes in their own words and a coordinator hands from agent to agent until the work is checked and done; shown as task-N, worked in its own worktree on its own branch.
+- **task page**: a task's own page: its plan, its path, and the Coordinator, Activity, Terminal, Files, Handoffs, Actions, Events and Details tabs, with Workspace, Redact a text and the budget and turn meters under the header.
+- **Tasks page**: the list or board of every task, filtered by label and text, with New task.
+- **team**: a coordinator and the agents it hands work to; Agentry starts with Software, and Add a team adds Writing, Research, Design, Visionaries or Networking, or one built from a template.
+- **template**: a team's shape saved to add again: each agent's prompt and settings and which one coordinates, not knowledge or where they run; built in or the user's own, exported and imported as `.json`.
+- **Terminal tab**: the task page's live terminal of the agent at work.
+- **tester**: the Software team's checker that runs the tests and ends its report with a verdict.
+- **theme**: dark or light, switched in the top bar; every colour comes from one token file, and each Claude session starts in the page's theme.
+- **To do**: the board column that parks a task: a turn in progress stops after a short wrap-up, and nothing runs until the user moves it on.
+- **token**: the unit a budget counts, every token the model read and wrote, cache reads included, shown per turn and per task; also a sign-in token, below.
+- **token, desk**: the desk's token, which creates, reads and answers tasks and nothing else, never approvals (internal/desk).
+- **token, helper**: the token of the user's Claude sessions in tasks' Workspaces, which sends the messages the user asks them to and nothing else (internal/web).
+- **token, hook**: the token `agentry hook` posts hook calls with, and nothing else; denied to every agent (internal/hookcall).
+- **token, UI**: the page's token, printed in the link `agentry serve` prints, which signs a browser in and opens the page and the API; the agents never get it.
+- **top bar**: the bar at the top of the page, with the theme, Install app and the person button's menu: Sign in another device, Notifications on this device and Sign out.
+- **trail**: the handoffs of a task in order, as the page shows them and as the coordinator's brief lists them (internal/tasks).
+- **trust page**: `/trust/` on the server, reached over plain http before a device trusts the CA, with the fingerprint, the CA to download and the steps for each system.
+- **turn**: one agent working once in the task's worktree, from a brief to a report, in a fresh engine session or going on with its last one; each turn's tokens, status and time show on the page.
+- **turns**: a task's turn limit: the turns it may have without the user's answer before it stops and asks for guidance, `-max-turns` (24 by default) or the task's own, changed at any time or made unlimited; turn limit means the same.
+- **usage limit**: the engine account's limit, at which a turn stops and waits; Agentry records when it resets and the turn goes on once it does (internal/engines, internal/hooks).
+- **use_for_everyone**: the policy.toml line that puts every agent under one profile, ignoring its own; the shipped default sets it to allow-everything, and the Policy and Agents pages say so while it is set.
+- **user**: the person at the page, or in Claude Code: the one who adds tasks, answers, approves and closes epics.
+- **verdict**: how a checker's report ends, `Verdict: approved` or `Verdict: changes needed`; every checker must approve the last change before the coordinator may finish.
+- **Visionaries**: the team that talks over what to build next and suggests features as ideas, changing no code; its profile is read-mostly.
+- **Visionary**: an agent of a team made from the Visionaries template, each a viewpoint that backs or doubts an idea.
+- **watchdog**: what catches agents that go quiet, on a clock: a dead session, silence, a tool open too long or a repeated command, each an issue sent back to the coordinator, and a prompt never acknowledged, which waits for the user.
+- **worker**: a machine, besides the one Agentry runs on, that has joined so agents can run on it; it dials out to the server, runs as a background service and keeps its own credential.
+- **Workers page**: where Add worker gives the install command for each system, and each machine shows with its status, whether work runs there and since when.
+- **working**: a task's status while an agent has a turn open on it.
+- **Workspace**: a task's worktree as an editor's git view, from the Workspace button on the task page: what is not committed, the branch's commits, every file with its git status, previews of Markdown and SVG, and a dock with the Coordinator chat, Claude and the agent's Terminal; PLAN.md T-055 first called it Peek.
+- **worktree**: a task's own git worktree of its repo, on branch `agentry/<task>` with its own leased port, where every turn runs; it is removed once its branch is merged into dev.
+- **wrap-up turn**: the coordinator's one last turn after the user moves a task to Done, To do or the Backlog, to write its summary and tidy up; it never waits for a slot.
