@@ -16,7 +16,6 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/glossary.md` | every noun Agentry uses, one line each |
 | `spec/constraints.md` | how Agentry is built and must stay built, with how each constraint is checked |
 | `spec/NOT-YET.md` | behaviour left out of this baseline because it is not built on dev |
-| `spec/ID-MAP.md` | the old functional IDs and the new ones they became in task-236 |
 | `spec/functional/tasks-and-board.feature` | adding a task, the board and its columns, a task's page, running limits, search, the keys and the archive |
 | `spec/functional/epics-and-stories.feature` | epics, their stories, Plan and closing an epic |
 | `spec/functional/approvals-and-questions.feature` | actions the policy held for the user, and the questions coordinators ask |
@@ -73,7 +72,7 @@ Every scenario is tagged with an ID: the prefix of its file, a dash and a number
 | `compatibility.feature` | `@COMPAT-nn` |
 | `observability.feature` | `@OBS-nn` |
 
-An ID is never renumbered or reused once it is published. The functional IDs were renumbered once, in task-236, when the files were regrouped by feature (old to new in `spec/ID-MAP.md`); the rule holds for every change after it. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check.
+An ID is never renumbered or reused once it is published. The functional IDs were renumbered once, when the files were regrouped from one file per role into one file per feature; the rule holds for every change after it. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check.
 
 ## Role tags
 
@@ -129,7 +128,7 @@ The check reads every comment line in a scenario's body, from the `Scenario:` li
 
 In a `@test` scenario, the check fails on a path that does not exist (`cited path internal/x/gone_test.go does not exist`), on a Go test that has no `func TestName(` line at the start of a line in its file (`TestA is not defined in internal/x/x_test.go`), and on a Go test with no `_test.go` file before it. A `@manual` or `@benchmark` scenario may cite what it likes. A passing run prints how many paths and Go tests were checked.
 
-Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped in task-236: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped by feature: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 

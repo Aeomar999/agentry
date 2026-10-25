@@ -211,7 +211,7 @@ func words(text string) []string {
 // may not cite "line N" or "lines N", in any case, or a path such as
 // x.go:42, in a comment: lines move as dev moves, so it names a function
 // or a test instead. The scenarios at or below the entry are left as they
-// are. The functional prefixes came in with the regroup of task-236, which
+// are. The functional prefixes came in when the files were regrouped by feature, which
 // renumbered the scenarios that were there before, so each entry is its
 // file's highest ID then.
 var lastIDBeforeLineRule = map[string]int{
