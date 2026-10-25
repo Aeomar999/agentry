@@ -60,6 +60,8 @@ export interface TaskDetail extends TaskSummary {
   trail: Step[] | null;
   turnList: Turn[] | null;
   tokensUnknown: string; // on how many turns the tokens couldn't be counted, and why; "" when every turn was
+  tokensSplit?: TokenSplit; // how tokensUsed splits, over the turns that said; absent when none did
+  tokensUnsplit?: number; // with a split: the part of tokensUsed from turns that didn't say
   approvals: Action[] | null;
   actions: Action[] | null;
   archived?: boolean; // read back from its archive: it takes no events until it is reopened
@@ -93,11 +95,22 @@ export interface Turn {
   issue: string;
   tokens: number;
   tokensUnknown?: string; // why tokens is 0, when the engine couldn't say
+  split?: TokenSplit; // how tokens splits, when the engine said
+  engineSession?: string; // the engine's own id for the session, when it said
   plan: string; // a Markdown checklist, "" until the agent writes one
   planFrom: string; // the turn whose unfinished plan it started on, "" for a fresh one
   stopped: boolean; // you ended it, to tell the coordinator something
   limited?: string; // what the engine said when it stopped at a usage limit
   resetsAt?: string; // when that limit resets, when the engine said
+}
+
+// What a count of tokens was: new input, input written to the cache, input
+// read from it, and output. All four count against the budget.
+export interface TokenSplit {
+  input: number;
+  cacheWrite: number;
+  cacheRead: number;
+  output: number;
 }
 
 export interface Action {

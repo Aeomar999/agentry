@@ -284,3 +284,46 @@ describe("TaskPage redacting a text", () => {
     expect((screen.getByLabelText("The text to take out") as HTMLTextAreaElement).value).toBe("");
   });
 });
+
+describe("TaskPage tokens", () => {
+  const turn = {
+    agent: "engineer",
+    worker: "local",
+    startedAt: "2026-10-24T09:00:00Z",
+    lastEventAt: "2026-10-24T09:10:00Z",
+    acknowledged: true,
+    ended: true,
+    issue: "",
+    plan: "",
+    planFrom: "",
+    stopped: false,
+  };
+  const split = { input: 4, cacheWrite: 12800, cacheRead: 40000, output: 370 };
+
+  test("shows each turn's split beside its total, and a turn with none as before", () => {
+    page(
+      detail({
+        tokensUsed: 54174,
+        turnList: [
+          { ...turn, id: "turn-1", tokens: 53174, split },
+          { ...turn, id: "turn-2", tokens: 1000 },
+        ],
+      }),
+      "details",
+    );
+    const [first, second] = ["turn-1", "turn-2"].map((id) => screen.getByText(id).closest("tr")!);
+    expect(first.textContent).toContain("53.2kin 4 · cache write 12.8k · cache read 40k · out 370");
+    expect(second.textContent).toContain("1k");
+    expect(second.textContent).not.toContain("cache");
+  });
+
+  test("shows the task's split and what isn't split", () => {
+    page(detail({ tokensUsed: 54174, tokensSplit: split, tokensUnsplit: 1000 }));
+    expect(screen.getByText("in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split")).toBeTruthy();
+  });
+
+  test("shows no split for a task with none", () => {
+    page(detail({ tokensUsed: 1000 }));
+    expect(screen.queryByText(/cache read/)).toBeNull();
+  });
+});

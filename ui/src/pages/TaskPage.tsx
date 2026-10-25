@@ -44,7 +44,7 @@ import type { Action, Agent, Erasure, LogEvent, TaskDetail, Turn } from "@/api/t
 import { teamOf, teamsOf } from "@/lib/teams";
 import { SHOWS, Show, activityOf, rowFor } from "@/lib/activity";
 import { LOCAL, machineName } from "@/lib/machines";
-import { tokens } from "@/lib/tokens";
+import { tokenSplit, tokens } from "@/lib/tokens";
 import { clockTime, dateTime, duration, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import { keepFocusInView } from "@/lib/focus-in-view";
@@ -125,7 +125,10 @@ const TURN_COLUMNS: Column<Turn>[] = [
       t.tokensUnknown ? (
         <Mono className="whitespace-nowrap text-warning">{t.tokensUnknown}</Mono>
       ) : (
-        <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
+        <span className="flex flex-col items-end">
+          <Mono>{t.tokens > 0 ? tokens(t.tokens) : ""}</Mono>
+          {t.split && <Mono className="text-[11px] whitespace-nowrap text-ink-muted">{tokenSplit(t.split)}</Mono>}
+        </span>
       ),
   },
   {
@@ -324,6 +327,12 @@ export function TaskPage() {
           <LimitEditor task={task} kind="budget" compact onChanged={reload}>
             <span className="flex flex-col gap-1">
               <TokenMeter used={task.tokensUsed} budget={task.budget} />
+              {task.tokensSplit && (
+                <Mono className="text-[11px] leading-4 text-ink-muted">
+                  {tokenSplit(task.tokensSplit)}
+                  {task.tokensUnsplit ? ` · ${tokens(task.tokensUnsplit)} not split` : ""}
+                </Mono>
+              )}
               {task.tokensUnknown && <span className="text-[11px] leading-4 text-warning">{task.tokensUnknown}</span>}
             </span>
           </LimitEditor>
