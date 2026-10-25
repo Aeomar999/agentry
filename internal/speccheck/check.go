@@ -52,7 +52,7 @@ func Check(folder string) (Result, error) {
 		}
 		result.Problems = append(result.Problems, emDashes(path, string(text))...)
 		if filepath.Ext(path) == ".feature" {
-			checkFeature(&result, seen, cites, path, string(text))
+			checkFeature(&result, seen, cites, folder, path, string(text))
 		}
 		return nil
 	})
@@ -61,14 +61,15 @@ func Check(folder string) (Result, error) {
 }
 
 // checkFeature counts one feature file's scenarios and adds what is wrong
-// with them to the result. A file under proposals/ holds features agreed
-// and not built: any name is allowed there, its IDs are @PROP-nn, each
-// scenario names its target file, and a @test scenario's citations are not
-// looked up, since its test may not exist yet.
-func checkFeature(result *Result, seen map[string]string, cites *citer, path, text string) {
+// with them to the result. A file directly under the folder's proposals/
+// holds features agreed and not built: any name is allowed there, its IDs
+// are @PROP-nn, each scenario names its target file, and a @test
+// scenario's citations are not looked up, since its test may not exist
+// yet. A target tag anywhere else is a problem.
+func checkFeature(result *Result, seen map[string]string, cites *citer, folder, path, text string) {
 	scenarios, outlines := parseFeature(path, text)
-	folder := filepath.Base(filepath.Dir(path))
-	proposal := folder == "proposals"
+	rel, _ := filepath.Rel(folder, path)
+	proposal := filepath.Dir(rel) == "proposals"
 	result.Files = append(result.Files, FileCount{Path: path, Scenarios: len(scenarios), Proposal: proposal})
 	prefix, known := prefixes[filepath.Base(path)]
 	tags := result.Tags
@@ -101,9 +102,14 @@ func checkFeature(result *Result, seen map[string]string, cites *citer, path, te
 			if message != "" {
 				at(message)
 			}
-		case folder == "functional":
-			if message := roleTagProblem(s); message != "" {
+		default:
+			if message := strayTargetProblem(s); message != "" {
 				at(message)
+			}
+			if filepath.Base(filepath.Dir(path)) == "functional" {
+				if message := roleTagProblem(s); message != "" {
+					at(message)
+				}
 			}
 		}
 		if hasTag(s, tagTest) && !proposal {

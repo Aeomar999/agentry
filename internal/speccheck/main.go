@@ -19,14 +19,15 @@
 //   - is numbered above its prefix's entry in lastIDBeforeLineRule and
 //     cites "line N" or "lines N".
 //
-// A file under proposals/ holds a feature that is agreed and not built. Any
-// file name is allowed there, and its scenarios follow the rules above with
-// these changes: the ID tag is @PROP-nn; each scenario has exactly one
-// target tag, @to-<stem> naming a file of the prefix table without
-// .feature, or @to-new-<stem> for a file that does not exist yet; the role
-// tag rule is the target's (exactly one for a functional file, none needed
-// for a non-functional one, one or none for a new one); and a @test
-// scenario's citations are not looked up, as its test may not exist yet.
+// A file directly under the folder's proposals/ holds a feature that is
+// agreed and not built. Any file name is allowed there, and its scenarios
+// follow the rules above with these changes: the ID tag is @PROP-nn; each
+// scenario has exactly one target tag, @to-<stem> naming a file of the
+// prefix table without .feature, or @to-new-<stem> for a file that does not
+// exist yet; the role tag rule is the target's (exactly one for a
+// functional file, none for a non-functional one, one or none for a new
+// one); and a @test scenario's citations are not looked up, as its test may
+// not exist yet. A target tag on a scenario outside proposals/ is reported.
 //
 // Cited paths are read from the folder's parent, the repo root. A Scenario
 // Outline is reported and not counted: this spec writes one Scenario per

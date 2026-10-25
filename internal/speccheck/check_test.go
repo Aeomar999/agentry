@@ -477,7 +477,9 @@ func TestAProposalCarriesItsTargetsRoleTag(t *testing.T) {
 	for name, c := range map[string]struct{ tags, want string }{
 		"functional, none":        {"@PROP-01 @test @to-policy", "proposals/board.feature:5: no role tag; a functional scenario has exactly one of @user, @coordinator, @agent, @claude-code, @worker (@to-policy is a functional file)"},
 		"functional, two":         {"@PROP-01 @user @agent @test @to-policy", "proposals/board.feature:5: more than one role tag (@user, @agent); a functional scenario has exactly one (@to-policy is a functional file)"},
-		"non-functional, one":     {"@PROP-01 @user @test @to-security", ""},
+		"non-functional, one":     {"@PROP-01 @user @test @to-security", "proposals/board.feature:5: role tag @user on a proposal for a non-functional file; a non-functional scenario carries none (@to-security is a non-functional file)"},
+		"non-functional, two":     {"@PROP-01 @user @agent @test @to-security", "proposals/board.feature:5: role tags @user, @agent on a proposal for a non-functional file; a non-functional scenario carries none"},
+		"non-functional, none":    {"@PROP-01 @test @to-security", ""},
 		"a new file, two":         {"@PROP-01 @user @agent @test @to-new-output-gate", "proposals/board.feature:5: more than one role tag (@user, @agent); a proposal for a new file has one or none"},
 		"an unknown target, none": {"@PROP-01 @test @to-billing", "proposals/board.feature:5: unknown target @to-billing"},
 	} {
@@ -556,4 +558,26 @@ cited by @test: 1 path, 0 Go tests
 	if out.String() != want {
 		t.Errorf("counts:\n%s\nwant:\n%s", out.String(), want)
 	}
+}
+
+func TestOnlyTheTopProposalsFolderHoldsProposals(t *testing.T) {
+	// A folder named proposals under functional/ is not the proposals folder:
+	// its file is judged by its name, as any other, and counted in the baseline.
+	files := map[string]string{"functional/proposals/board.feature": goodProposal}
+	expectProblems(t, problemsOf(t, files),
+		"functional/proposals/board.feature:1: unknown feature file name",
+		"functional/proposals/board.feature:5: target tag @to-tasks-and-board belongs only under spec/proposals; a built scenario drops it")
+	result, err := Check(writeSpec(t, files))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Files[0].Proposal || result.ProposalTags[tagTest] != 0 || result.Tags[tagTest] != 1 {
+		t.Errorf("functional/proposals/board.feature is counted as a proposal: %+v", result)
+	}
+}
+
+func TestATargetTagOutsideProposalsFails(t *testing.T) {
+	text := strings.Replace(goodScenario, "@TASK-01 @user @test", "@TASK-01 @user @test @to-policy", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/tasks-and-board.feature": text}),
+		"tasks-and-board.feature:5: target tag @to-policy belongs only under spec/proposals; a built scenario drops it")
 }

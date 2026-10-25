@@ -58,6 +58,7 @@ const targetTagStart = "@to-"
 // lower-case words joined by dashes.
 var newStem = regexp.MustCompile(`^new-[a-z]+(-[a-z]+)*$`)
 
+// joined is one table holding every entry of the tables.
 func joined(tables ...map[string]string) map[string]string {
 	all := map[string]string{}
 	for _, table := range tables {
@@ -218,15 +219,27 @@ func targetProblem(s scenario) (target, problem string) {
 	return stem, ""
 }
 
+// strayTargetProblem says what is wrong with a target tag on a scenario
+// outside proposals/, or "" when it has none: a built scenario drops it.
+func strayTargetProblem(s scenario) string {
+	for _, t := range s.tags {
+		if strings.HasPrefix(t.name, targetTagStart) {
+			return "target tag " + t.name + " belongs only under spec/proposals; a built scenario drops it"
+		}
+	}
+	return ""
+}
+
 func targetHint() string {
 	return "the known stems are " + knownStems() + ", or new-<stem> in lower-case words joined by dashes for a file that does not exist yet"
 }
 
 // proposalRoleProblem applies the role tag rule of a proposal's target: a
 // proposal aimed at a functional file needs exactly one role tag, as a
-// scenario in that file would; one aimed at a non-functional file follows
-// that file's rule and needs none; one aimed at a new file may carry one or
-// none, since whether that file is functional is decided when it is made.
+// scenario in that file would; one aimed at a non-functional file carries
+// none, as the scenarios there carry none; one aimed at a new file may carry
+// one or none, since whether that file is functional is decided when it is
+// made.
 func proposalRoleProblem(s scenario, target string) string {
 	if _, functional := functionalPrefixes[target+".feature"]; functional {
 		if message := roleTagProblem(s); message != "" {
@@ -234,10 +247,15 @@ func proposalRoleProblem(s scenario, target string) string {
 		}
 		return ""
 	}
-	if !strings.HasPrefix(target, "new-") {
-		return ""
+	found := roleTagsOf(s)
+	if _, nonFunctional := nonFunctionalPrefixes[target+".feature"]; nonFunctional && len(found) > 0 {
+		noun := "role tag"
+		if len(found) > 1 {
+			noun = "role tags"
+		}
+		return noun + " " + strings.Join(found, ", ") + " on a proposal for a non-functional file; a non-functional scenario carries none (" + targetTagStart + target + " is a non-functional file)"
 	}
-	if found := roleTagsOf(s); len(found) > 1 {
+	if strings.HasPrefix(target, "new-") && len(found) > 1 {
 		return "more than one role tag (" + strings.Join(found, ", ") + "); a proposal for a new file has one or none"
 	}
 	return ""

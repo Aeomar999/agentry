@@ -118,9 +118,9 @@ Every proposal scenario follows the rules for every scenario, with these tags:
 - An ID `@PROP-nn`, numbered from 01 across the whole folder, not per file. A PROP ID is never reused, even after its proposal is built and its file deleted.
 - One target tag, the feature file the scenario moves to when it is built: `@to-<stem>`, the name of a file in the ID table without `.feature`, such as `@to-policy` or `@to-security`, or `@to-new-<stem>` for a file that does not exist yet, such as `@to-new-output-gate`, in lower-case words joined by dashes.
 - The check tag it is meant to have once built. A `@test` proposal may name a test that does not exist yet.
-- The role tag rule of its target: exactly one role tag for a functional file, none needed for a non-functional one, and one or none for a new file, whose kind is decided when it is made.
+- The role tag rule of its target: exactly one role tag for a functional file, none for a non-functional one, and one or none for a new file, whose kind is decided when it is made.
 
-When a proposal is built, its scenarios move to their `@to-` files in the same change, each taking the next free ID there and a real check tag. A `@test` scenario must then cite a test that exists. A `@to-new-` target means creating that file and adding it, with its prefix, to the ID table and to the checker. The proposal file is deleted in the same change, so the folder only ever holds what is agreed and not built.
+When a proposal is built, its scenarios move to their `@to-` files in the same change, each taking the next free ID there and a real check tag, and dropping its `@to-` tag. A `@test` scenario must then cite a test that exists. A `@to-new-` target means creating that file and adding it, with its prefix, to the ID table and to the checker. The proposal file is deleted in the same change, so the folder only ever holds what is agreed and not built.
 
 ## Running the check
 
@@ -131,7 +131,7 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, exactly one role tag in a functional file, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's. Under `spec/proposals` it checks the same rules, with a `@PROP-nn` ID in place of the file's prefix, exactly one `@to-` tag naming a file in the ID table or a `new-` stem, and the target's role tag rule, as above in Proposals; it does not look up a proposal's citations.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, exactly one role tag in a functional file, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's. Under `spec/proposals` it checks the same rules, with a `@PROP-nn` ID in place of the file's prefix, exactly one `@to-` tag naming a file in the ID table or a `new-` stem, and the target's role tag rule, as above in Proposals; it does not look up a proposal's citations. A `@to-` tag on a scenario outside `spec/proposals` fails: a built scenario drops it. Only the `proposals` folder directly under `spec/` holds proposals.
 
 ## Citations
 
