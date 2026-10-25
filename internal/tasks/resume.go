@@ -26,13 +26,13 @@ func (t *Task) SessionToResume(agent, engine, worker string) (session, fresh str
 }
 
 // SessionToShare is the engine session the agent's next turn on the task
-// goes on with, and the task whose turn it was: its own latest turn on the
-// task, by SessionToResume, or on its first turn here, its latest ended
-// turn on any other of stories, the epic's stories, by the same rules. A
-// sibling's open turn is passed over: it has no session to go on with yet,
-// and the one it started from is busy, so it is forked. A story's own
-// session wins, even when a sibling's turn is newer. With no session, from
-// is nil and fresh says why.
+// goes on with, and the task whose turn it was. stories are the stories of
+// the task's epic. Once the agent has had a turn on this task, its latest
+// one here decides, as in SessionToResume, even when a sibling's turn is
+// newer. On its first turn here, its latest ended turn on another story
+// decides, by the same rules. A sibling's open turn is passed over: it
+// has no session to go on with yet, and the one it started from is busy,
+// so it is forked. With no session, from is nil and fresh says why.
 func (t *Task) SessionToShare(stories []*Task, agent, engine, worker string) (session string, from *Task, fresh string) {
 	from, last := t, t.LastTurnOf(agent)
 	if last == nil {
