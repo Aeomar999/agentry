@@ -46,9 +46,9 @@ for i, line in enumerate(lines):
 open(t, "w").write("\n".join(lines))
 print("planted: zero returns '0'; %d test line(s) changed" % changed)
 PY
-(cd "$WT" && python3 -m unittest -q 2>&1 | tail -3 | tee $M/$CFG-plant-tests.txt)
+(cd "$WT" && python3 -m unittest -q 2>&1) | tail -3 | tee $M/$CFG-plant-tests.txt
 grep -q '^OK' $M/$CFG-plant-tests.txt || { echo "the suite fails after the plant: not committed"; exit 1; }
 git -C "$WT" --no-pager diff
-AMEND=; [ "$(git -C "$WT" log -1 --format=%s)" = "fix: review round" ] && AMEND=--amend
-git -C "$WT" -c user.name=engineer -c user.email=engineer@example.invalid commit -q $AMEND --reset-author -am "fix: review round"
+AMEND=; [ "$(git -C "$WT" log -1 --format=%s)" = "fix: review round" ] && AMEND="--amend --reset-author"
+git -C "$WT" -c user.name=engineer -c user.email=engineer@example.invalid commit -q $AMEND -am "fix: review round"
 git -C "$WT" rev-parse --short HEAD | tee $M/$CFG-plant.hash
