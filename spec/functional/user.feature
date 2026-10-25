@@ -1536,14 +1536,15 @@ Feature: The user
     # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
     # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
     # a verdict no profile rule made has Order 0, no rule place: internal/policy/verdict.go line 28; none of the named tests asserts it
+    # the page's words "as if run in <workspace>" and "But today allow-everything decides for every agent:" are TryPolicyCall.tsx's; the tests assert the reply they are drawn from
     Given the policy as shipped and the developer profile's panel
     When the user tries Bash "go test ./..."
-    Then the verdict shown is allow by the rule "stays inside the workspace", with its why, "as if run in <workspace>"
+    Then the verdict shown is allow by the rule "stays inside the workspace", with its why
     And the verdict names the rule's place among the profile's rules, exactly 1 row for the page to mark
     When the user tries Bash "git push origin feature", Bash "sudo ls", or Read of a private key under .ssh
     Then the verdicts are ask "every push leaves this machine: you approve it", deny "never sudo" and deny "never touch secrets"
     And under read-only, Edit of main.go is deny "this agent changes nothing"
-    And each adds "But today allow-everything decides for every agent:" with allow, while use_for_everyone is set; with it off, no such line
+    And each adds that today allow-everything decides, with allow, while use_for_everyone is set; with it off, nothing is added
     When a call is tried
     Then nothing is logged and the policy's hash is the same
     When the profile does not exist, the tool is empty, or the workspace is a relative path
@@ -1590,11 +1591,11 @@ Feature: The user
   @USER-116 @test
   Scenario: The Settings page lists the features that are off, with the way to turn each on, and what the log holds that this build skipped
     # ui/src/pages/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
-    # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67
+    # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67; the heading "Features that are off" is not asserted
     # the why is the server's sentence, internal/ideas/feature.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
     Given a fresh install, with no Visionaries team
     When the Settings page is shown
-    Then "Features that are off" lists exactly 1 feature, Ideas, with "add a team from the Visionaries template, or one of yours based on it, to get ideas" and the button "Ask the visionaries"
+    Then the features that are off are exactly 1, Ideas, with the server's why and the button "Ask the visionaries"
     And "Every feature is on." is not shown
     Given Ideas on
     Then Ideas is not listed, no button is shown, and "Every feature is on." is shown
@@ -1636,7 +1637,7 @@ Feature: The user
   @USER-119 @test
   Scenario: Wrong codes are limited: 5 a minute from one address, 30 a minute from everyone
     # internal/web/signin_test.go TestFailedSigninsAreLimited, TestFailedSigninsSentAtOnceAreLimited, TestSigningInDoesNotCountAsAFailure and TestThePastedTokenSignsIn
-    # 5 failures a minute per client, 30 failed codes a minute in all: internal/web/signin.go lines 30 to 35; the refusals' words: lines 37 and 38
+    # 5 failures a minute per client, 30 failed codes a minute in all: internal/web/signin.go lines 30 to 35; the refusals' words: lines 37 and 38, and "send a code or the token": line 226; the tests assert the codes, not the words
     Given a live code
     When one address sends 5 wrong codes within a minute
     Then its next try, with a good code or the token, is refused with 429 and Retry-After 60
@@ -1647,7 +1648,7 @@ Feature: The user
     Then exactly 5 are refused with 401 and 45 with 429
     And a sign-in that succeeds never counts as a failure
     When a wrong token is sent, or neither a code nor a token
-    Then they are refused with 401 "wrong token: paste the link `agentry serve` printed" and 400 "send a code or the token"
+    Then they are refused with 401 and 400
     And behind an https proxy the cookie is Secure, yes
 
   @USER-120 @manual
@@ -1741,13 +1742,14 @@ Feature: The user
     # internal/web/push_api_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
     # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"
     # "Notifications weren't allowed." when the browser refuses permission, in the banner "Couldn't change notifications": ui/src/lib/push.ts line 43; ui/src/components/organisms/NotifyDeviceDialog.tsx line 45
-    Given push available and this browser not subscribed
-    When the user clicks "Notify me on this device" and allows notifications
-    Then the browser's subscription is sent once and the dialog reads "This device is notified when something waits for you." with "Stop notifying this device"
+    # not under test, checked by hand: clicking "Notify me on this device" and allowing notifications subscribes the browser, and the dialog then offers "Stop notifying this device"
+    Given push available and this browser holding a subscription made with the server's key
+    When the dialog opens
+    Then the browser's subscription is sent once and the dialog reads "This device is notified when something waits for you."
     When the same endpoint is sent twice
     Then exactly 1 subscription is kept
-    When the user clicks "Stop notifying this device"
-    Then the subscription is removed, 0 subscribed, and removing it again is 404
+    When the subscription is removed
+    Then 0 are subscribed, and removing it again is 404
     When a subscription with no endpoint, an http endpoint or no keys is sent
     Then each is refused with 400 and none is kept
     Given a subscription this browser made with another server's key
