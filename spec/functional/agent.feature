@@ -74,7 +74,7 @@ Feature: The agents
     Then all 5 Visionaries are under read-mostly, and only the skeptic's work counts as review
     And network-lead is under read-only, network-engineer under developer, network-verifier and network-security under network-diagnosis, the last 2 counting as review
     And every profile a template names is 1 of the 6 in the shipped policy
-    # TestTheNetworkingTeam in the same file; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
+    # internal/agents/agents_test.go TestTheNetworkingTeam; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
 
   @AGENT-56 @manual
   Scenario: In Writing, Research and Design the coordinator is read-only and the others are developers
@@ -103,7 +103,7 @@ Feature: The agents
     Then each is allowed, judged by the profile "allow-everything"
     And an edit of Agentry's own policy file is still denied
     And with that line commented out, each agent is judged by its own profile, as every scenario below assumes
-    # use_for_everyone: internal/policy/default.toml line 79; the tests load the policy with it commented out: default_test.go loadDefault
+    # use_for_everyone: internal/policy/default.toml line 79; the tests load the policy with it commented out: internal/policy/default_test.go loadDefault
 
   # --- The engineer
 

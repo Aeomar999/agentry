@@ -509,7 +509,7 @@ Feature: The user
   Scenario: The path above the tabs: engineer › reviewer › tester, the coordinator left out
     # ui/src/components/molecules/HandoffPath.test.tsx "counts an agent's turns in a row in muted ink, not faint" and "hides its chevrons from screen readers"
     # ui/src/components/molecules/HandoffPath.tsx lines 31 to 37, the stages; lines 74 to 80, done
-    # the 2 steps and the done step are proven through the chevron count alone: 2 chevrons for 3 steps, HandoffPath.test.tsx line 14
+    # the 2 steps and the done step are proven through the chevron count alone: 2 chevrons for 3 steps, ui/src/components/molecules/HandoffPath.test.tsx line 14
     Given turns by the coordinator, the engineer twice in a row, then the reviewer
     When the path is shown
     Then the coordinator is not a step: exactly 2 steps are shown, engineer then reviewer
