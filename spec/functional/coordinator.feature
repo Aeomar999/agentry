@@ -140,7 +140,8 @@ Feature: The coordinator
     # internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
     Given an open turn with no tool call running and no action waiting for the user
     When the turn has had no events for more than 10 minutes
-    Then the watchdog raises exactly 1 issue saying the agent has been silent for over 10 minutes
+    Then the watchdog raises an issue saying the agent has been silent: yes
+    # the words "has been silent for over 10m0s (stalled: a hung network call or a stuck tool)": internal/watchdog/watchdog.go line 150; the test asserts "silent"
     # Silence = 10 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
   @COORD-17 @test
@@ -155,7 +156,7 @@ Feature: The coordinator
     # internal/watchdog/watchdog_test.go TestAToolOpenTooLong
     Given an approved tool call in an open turn, with no result yet
     When it has run for more than 20 minutes
-    Then the watchdog raises exactly 1 issue naming the command
+    Then the watchdog raises an issue naming the command: yes
     # Tool = 20 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
   @COORD-19 @test
@@ -163,7 +164,8 @@ Feature: The coordinator
     # internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
     Given an open turn
     When the agent requests the same command 5 times in a row
-    Then the watchdog raises exactly 1 issue saying the agent may be stuck in a loop, naming the command
+    Then the watchdog raises an issue saying the command came 5 times in a row
+    # the words "so it may be stuck in a loop: <command>": internal/watchdog/watchdog.go line 140; the test asserts "5 times in a row"
     # Repeats = 5: internal/watchdog/watchdog.go DefaultLimits
 
   @COORD-20 @test
@@ -172,7 +174,7 @@ Feature: The coordinator
     Given the policy denied an agent's command, such as git push origin HEAD:dev
     When the coordinator's next brief is written
     Then the command and the reason are shown under "Actions Agentry refused"
-    And no issue is raised for the denial
+    # not under test, checked by hand: no issue is raised for the denial
     # the gate writes action.denied, no issue: internal/hooks/handler.go decide; the brief section: internal/coordinator/brief.go refusedActions
 
   @COORD-21 @test
@@ -180,9 +182,9 @@ Feature: The coordinator
     # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce
     Given an agent's turn went on with its last session, and the process exited before taking the prompt
     When the watchdog sees it after the 3 second grace
-    Then it raises exactly 1 issue saying the session didn't start, and the same agent gets the same step again, fresh
-    And the coordinator is only told, with no turn of its own
-    And the retry still counts as 1 issue towards the issues in a row
+    Then it raises an issue saying the resumed session didn't start, and the same agent gets the same step again, fresh
+    And the coordinator has no turn of its own before the retry
+    # not under test, checked by hand: the coordinator is told, and the retry counts as 1 issue towards the issues in a row
     # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
 
   @COORD-59 @test
@@ -190,7 +192,8 @@ Feature: The coordinator
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with the default limit of 24 turns, where the coordinator assigns the engineer and the engineer ends its turn with the report "still broken", 12 times over
     When the loop reads the task after those 24 turns
-    Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
+    Then the stop is the "turns" limit, with the words "24 of its 24 turns", not the issues limit
+    # not under test, checked by hand: the 12 reports raised 0 issues; the test writes the reports to the log, it does not run the hook that raises issues
     And the issues limit is reached in the same test only by 3 issues raised with no turn ending between them
     # an issue is raised only for a failed turn or a usage limit that lasts: internal/hooks/handler.go, the UsageLimited and TurnFailed cases
     # a turn that ends with a report sets IssuesInARow to 0: internal/tasks/apply.go turn.ended
@@ -231,7 +234,7 @@ Feature: The coordinator
     When its ended turns have used 110,000 tokens, and 1 or more turns have run since the user last answered
     Then no turn starts
     And the user is asked, with the words "110k tokens of its 100k budget", and the stop is marked as the "budget" limit
-    And after the user answers, exactly 1 more turn runs, the coordinator's, so it can wrap up
+    And after the user answers, the stop is no longer marked and the next turn is the coordinator's, so it can wrap up
     # AtBudget is Budget > 0 and TokensUsed >= Budget: internal/tasks/task.go; the stop needs TurnsSinceAnswer > 0: internal/coordinator/next.go Next
     # the server's default budget is 5,000,000 tokens, flag -budget: cmd/agentry/serve.go
 
@@ -249,7 +252,8 @@ Feature: The coordinator
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task stopped at its turn limit
     When the user answers
-    Then the turns since the answer and the issues in a row are both 0, and the next turn starts
+    Then the next turn starts, no longer stopped by the limit
+    # not under test, checked by hand: the turns since the answer and the issues in a row are both 0
     # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/tasks/apply.go
 
   @COORD-28 @manual
@@ -268,7 +272,7 @@ Feature: The coordinator
 
   @COORD-29 @test
   Scenario: An ask decision puts a question to the user, with optional options and a page
-    # internal/coordinator/decision_test.go TestParseDecision
+    # internal/coordinator/decision_test.go TestParseDecision; the wait: internal/coordinator/next_test.go TestNext, "wait for your answer" and "your answer goes to the coordinator"
     Given the coordinator's reply ends with {"action": "ask", "question": "Which layout?", "options": ["Tabs", "One page"], "page": "<svg></svg>"}
     When the decision is read
     Then it is an ask with exactly that question, 2 options and the page
@@ -288,9 +292,10 @@ Feature: The coordinator
     # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
     Given the coordinator decides {"action": "fetch", "machine": "local", "path": "<a path>", "as": "notes.txt"}
     When the path is outside that machine's worktrees
-    Then the user is asked whether to copy it, with the options "Copy it" and "Don't copy it"
-    And the file is shared only once the user answers "Copy it"
+    Then the user is asked whether to copy it, the first option "Copy it"
+    And the file is not shared before the user answers
     And a path inside that machine's worktrees is shared with no question asked
+    # not under test, checked by hand: the second option "Don't copy it" (internal/coordinator/files.go line 170), and the file shared once the user answers "Copy it"
     # CopyFile: internal/coordinator/files.go fetch
 
   @COORD-32 @test
