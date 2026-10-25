@@ -325,6 +325,24 @@ describe("TaskPage tokens", () => {
     expect(second.querySelector("dl")).toBeNull();
   });
 
+  test("wraps a turn's long unknown-tokens reason in the Tokens column, in full", () => {
+    const long = "no usage in the transcript with a time Agentry can read";
+    page(
+      detail({
+        turnList: [
+          { ...turn, id: "turn-1", tokens: 0, tokensUnknown: long },
+          { ...turn, id: "turn-2", tokens: 0, tokensUnknown: "transcript not saved" },
+        ],
+      }),
+      "details",
+    );
+    const reason = screen.getByText(long);
+    expect(reason.closest("tr")!.textContent).toContain("turn-1");
+    expect(reason.className).toContain("max-w-36");
+    expect(reason.className).toContain("whitespace-normal");
+    expect(screen.getByText("transcript not saved").closest("tr")!.textContent).toContain("turn-2");
+  });
+
   test("shows the task's split and what isn't split", () => {
     page(detail({ tokensUsed: 54174, tokensSplit: split, tokensUnsplit: 1000 }));
     expect(screen.getByText("in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split")).toBeTruthy();
