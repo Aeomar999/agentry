@@ -127,8 +127,10 @@ Feature: The agents
     Given the engineer under developer
     When it runs ls -la, npm test, git add -A && git commit -m 'remove TODO', echo hi > notes.md, mkdir -p src/refunds && touch src/refunds/index.ts, rm notes.md, or git fetch origin && git merge origin/dev
     Then each is allowed
-    And Edit on src/billing.ts in the workspace is allowed, and Read is allowed anywhere
-    # not under test, checked by hand: the rules that allow them, "stays inside the workspace" (internal/policy/default.toml line 171) and "edit inside the workspace, the diff is reviewed" (line 158)
+    And Edit on src/billing.ts in the workspace is allowed by "edit inside the workspace, the diff is reviewed", and Read is allowed anywhere
+    # the rule name, for Edit on main.go in the workspace: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
+    And go test ./... is allowed by "stays inside the workspace"
+    # the rule name, for go test ./...: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/policy/default.toml line 171 and line 158
     # the rules: internal/policy/default.toml lines 151 to 195
 
   @AGENT-13 @test
@@ -164,7 +166,7 @@ Feature: The agents
     # that git status in the worktree shows 0 changes from it.
 
   @AGENT-16 @test
-  Scenario: The verdict is read from the last 5 lines of a checker's report
+  Scenario: The verdict is read from the end of a checker's report
     # internal/coordinator/checks_test.go TestVerdictOf
     Given a checking agent's report
     When Agentry reads its verdict
@@ -188,9 +190,10 @@ Feature: The agents
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the reviewer under read-only
     When it calls Edit on main.go, or runs git commit -am 'x' or git push origin HEAD:dev
-    Then each is denied
+    Then each is denied, and Edit on main.go is denied by "this agent changes nothing"
+    # the rule name: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
     And Edit on .agentry/knowledge.md in the workspace is allowed, and Write on the same file in another folder is denied
-    # not under test, checked by hand: the rules, "this agent changes nothing", "never commits or changes branches" and "keeps its own notes", at the lines below
+    # not under test, checked by hand: the rules "never commits or changes branches" and "keeps its own notes", at the lines below
     And Read on main.go, git diff c1169f1..HEAD and go test -v ./... && gofmt -l . are allowed
     # [profiles.read-only]: internal/policy/default.toml line 198; "keeps its own notes" line 211; "this agent changes nothing" line 219; "never commits or changes branches" line 322
 
@@ -264,6 +267,7 @@ Feature: The agents
     And the task's waiting line reads exactly "Waiting for you to approve the push to dev"
     # the hook's deadline is 1790 seconds, GateTimeoutSeconds 1800 less 10: internal/turns/turns.go environment, internal/engines/engine.go;
     # the server answers 5 seconds before it: internal/hooks/handler.go replyMargin; the line: internal/tasks/waiting_test.go TestAHeldPushNamesItsBranch
+    # the test holds curl example.com, which goes through the same hold as any ask
 
   @AGENT-25 @test
   Scenario: A late approval lets the same command through once, in the agent's next turn
@@ -417,7 +421,7 @@ Feature: The agents
     Then each is denied
     # not under test, checked by hand: the rule that denies them, "runs nothing that changes files"
     And cat, head, sed -n '1,5p' main.go, grep -r foo . and find . -name x are allowed
-    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest
+    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest; cat: TestTheJudgingProfilesFollowCd (cd <scratch> && cat out.txt)
 
   @AGENT-39 @test
   Scenario: The judging profiles never commit or change branches
@@ -561,8 +565,9 @@ Feature: The agents
     # internal/policy/default_test.go TestTheDeveloperProfile
     Given an agent under developer
     When it runs sudo apt install x
-    Then it is denied
-    # not under test, checked by hand: the rule "never sudo", which also names su and doas, is the developer profile's; autonomous has no such rule and allows anything on this machine
+    Then it is denied, and sudo ls is denied by "never sudo"
+    # the rule name, for sudo ls: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: the rule also names su and doas, and is the developer profile's; autonomous has no such rule and allows anything on this machine
     # the rule: internal/policy/default.toml line 97; autonomous otherwise = "allow": line 660
 
   @AGENT-53 @test
@@ -581,7 +586,9 @@ Feature: The agents
     Given an agent under developer, read-only, read-mostly, network-diagnosis or autonomous
     When it runs cat .env or cat ~/.ssh/id_rsa, or calls Read on .env in the workspace or on an ssh key
     Then each is denied under developer, and cat .env is denied under read-mostly and autonomous too
-    # not under test, checked by hand: the same under read-only and network-diagnosis, by the rule "never touch secrets", the first rule of each of those 5 profiles
+    And under developer, Read on an ssh key is denied by "never touch secrets"
+    # the rule name: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # not under test, checked by hand: the same under read-only and network-diagnosis, and that "never touch secrets", the first rule of each of those 5 profiles, is the rule that decides under the other 4
     And cd && cat .netrc is denied too, the relative path counted from where cd went
     And under allow-everything cat .env is allowed
     # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664
