@@ -70,6 +70,16 @@ Every scenario, with no exceptions:
 
 Scenario Outline and Examples tables are not used; write one scenario per case, so every Then is a plain sentence the checker can read.
 
+## When you change behaviour
+
+Anyone who changes what Agentry does, an agent or a person, keeps this folder true in the same change:
+
+1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next number after the highest one in its file, never a gap a removed scenario left. Something built that `spec/NOT-YET.md` lists comes off that list in the same commit.
+2. Every scenario added or changed follows the rules for every scenario above.
+3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @COORD-61, changed @USER-12`, or says `no behaviour change`.
+4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
+5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
+
 ## Running the check
 
 ```sh
@@ -79,7 +89,7 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8, are the reviewer's.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's.
 
 ## Citations
 
@@ -97,11 +107,11 @@ Line numbers go stale as dev moves, so a new scenario cites a function or a test
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 
 ```
-spec/functional/agent.feature: 1 scenario
-spec/functional/claude-code.feature: 1 scenario
+spec/functional/agent.feature: 56 scenarios
+spec/functional/claude-code.feature: 56 scenarios
 ...
-13 files, 13 scenarios: 10 @test, 1 @benchmark, 2 @manual
-cited by @test: 12 paths, 9 Go tests
+13 files, 651 scenarios: 485 @test, 16 @benchmark, 150 @manual
+cited by @test: 1498 paths, 813 Go tests
 ```
 
 A failing run prints the same counts, then each problem as `file:line: message`, and exits 1:

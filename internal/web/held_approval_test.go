@@ -60,6 +60,53 @@ func TestTheHookHearsItsRequestIsHeldBeforeItsDeadline(t *testing.T) {
 	stillOpenUntilYouApprove(t, server, s, push)
 }
 
+// The hook token opens only the hook endpoint: on the API it is refused like
+// no token at all, so an agent can't approve its own request.
+func TestTheHookTokenDoesNotOpenTheAPI(t *testing.T) {
+	server, s := serverWithEngineerAtWork(t)
+	if err := giveUpOn(server, "toolu_1", "git push origin HEAD:dev"); err == nil {
+		t.Fatal("the hook should have given up waiting")
+	}
+	waitFor(t, "the action to be held", func() (bool, bool) {
+		stream, _ := s.Stream("task-1")
+		return true, tasks.FromEvents(stream).Action("toolu_1").Held
+	})
+
+	for _, auth := range []string{"", "Bearer " + hookToken} {
+		if code := statusWith(t, server, "GET", "/api/tasks", auth); code != http.StatusUnauthorized {
+			t.Errorf("listing tasks with %q: HTTP %d, want 401", auth, code)
+		}
+	}
+	if code := statusWith(t, server, "GET", "/api/tasks", "Bearer "+token); code != http.StatusOK {
+		t.Fatalf("listing tasks with the UI token: HTTP %d, want 200", code)
+	}
+
+	approve := "/api/tasks/task-1/actions/toolu_1/approve"
+	if code := statusWith(t, server, "POST", approve, "Bearer "+hookToken); code != http.StatusUnauthorized {
+		t.Errorf("approving with the hook token: HTTP %d, want 401", code)
+	}
+	stream, _ := s.Stream("task-1")
+	if action := tasks.FromEvents(stream).Action("toolu_1"); action.Decision != tasks.Undecided || !action.Held {
+		t.Errorf("the action should still wait for you: %+v", action)
+	}
+}
+
+// statusWith sends a request with the reason "fine" and the Authorization header auth
+// ("" for none), and gives the HTTP status it got.
+func statusWith(t *testing.T, server *httptest.Server, method, path, auth string) int {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader(`{"reason":"fine"}`))
+	if auth != "" {
+		request.Header.Set("Authorization", auth)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	return response.StatusCode
+}
+
 // stillOpenUntilYouApprove checks that the action asking for command, which
 // the hook stopped waiting on, is held: Questions lists it, the task needs
 // you, and approving it late on the page's route records it and hands the
