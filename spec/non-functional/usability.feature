@@ -263,3 +263,17 @@ Feature: Usability
     And the chips for you and Agentry read Y and A on the neutral surface, with no agent's colour: yes
     # not under test, checked by hand: the colour is picked on the agent's edit page from AGENT_COLORS (ui/src/components/molecules/ColorSwatches.tsx line 16)
     # PLAN.md T-056
+
+  @USE-29 @manual
+  Scenario: An agent's session starts in the page's theme, and a terminal on the page follows a theme change
+    # the session starts in the page's theme: internal/engines/claude.go lines 45-46 write the theme into the session's settings
+    # the terminal follows a theme change: ui/src/components/organisms/TerminalView.tsx lines 46-49 watch the html element's class
+    Given the page in the light theme
+    When the user starts a task, switches the page to the dark theme, and starts another task
+    Then the first agent's terminal opens light, and turns dark at the switch without a reload: yes
+    And the second agent's session starts dark: yes
+    # Steps:
+    # 1. In the light theme, start <a task> and open its agent's terminal; it is light.
+    # 2. Switch the page to the dark theme; the open terminal turns dark without a reload.
+    # 3. Start <another task> in the dark theme; its agent's session starts dark.
+    # PLAN.md T-052

@@ -108,12 +108,12 @@ Feature: The user
     Then the task is refused with 400
 
   @USER-132 @test
-  Scenario: A repo named by a link to a .zip or .tar.gz is downloaded and made a repo
+  Scenario: A repo named by a link to a .tar.gz is downloaded and made a repo
     # internal/worktrees/repo_test.go TestARepoNamedByALinkToAnArchiveIsDownloaded
     Given a link to a .tar.gz, with a query after its name, whose files sit in one top folder app-1.2
     When Agentry fetches the repo the link names
     Then the link counts as an address, and the archive is downloaded into a folder whose name starts with app-1.2-, which is a git repo: yes
-    And the files are at the top of the repo, out of the archive's folder, and every one is committed
+    And the files are at the top of the repo, out of the archive's folder, and main.go is committed: yes
     And a link that answers 404 is refused, saying 404
     # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 100)
     # README.md, Use it (Add a task); PLAN.md T-044
@@ -814,7 +814,7 @@ Feature: The user
     And starting it again while it runs restarts Claude: no
     When the desk is started again in the dark theme
     Then Claude starts again in the dark theme, resuming its own conversation: yes
-    # not under test, checked by hand: an agent's session starts in the page's theme too (internal/engines/claude.go lines 38 to 46), and a terminal on the page follows the theme as it changes (ui/src/components/organisms/TerminalView.tsx lines 46 to 49)
+    # an agent's session starting in the page's theme, and a terminal on the page following a theme change: USE-29
     # README.md, Use it, The dock; PLAN.md T-046, T-052
 
   @USER-66 @manual
