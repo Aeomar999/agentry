@@ -216,7 +216,7 @@ func words(text string) []string {
 // file's highest ID then.
 var lastIDBeforeLineRule = map[string]int{
 	"TASK": 55, "EPIC": 19, "APPROVE": 7, "IDEA": 17, "TEAM": 14, "POLICY": 46,
-	"SESSION": 5, "HANDOFF": 44, "TURN": 17, "TREE": 12, "MACHINE": 34, "FILES": 8,
+	"SESSION": 5, "HANDOFF": 42, "TURN": 19, "TREE": 12, "MACHINE": 34, "FILES": 8,
 	"SIGNIN": 7, "NOTIFY": 3, "SET": 4, "TOOLS": 54,
 	"REL": 54, "SEC": 68, "OPS": 42, "PERF": 16, "LIM": 35,
 	"USE": 29, "COMPAT": 27, "OBS": 34,

@@ -28,16 +28,7 @@ Feature: The coordinator and its handoffs
     Then the brief shows its own prompt, the task, the agents it can hand work to, and every step of the trail so far
     # not under test, checked by hand: its prompt says it reads the task, the trail and the code and changes no code: internal/agents/defaults/tech-lead.md lines 1 and 5, internal/agents/defaults/custom/coordinator.md lines 1 and 5
 
-  @HANDOFF-04 @agent @test
-  Scenario: The agent's plan for the turn is kept as it last wrote it
-    # internal/hooks/handler_test.go TestThePlanFollowsTheFile
-    Given a turn whose brief asked for a plan in .agentry/turn-N-plan.md before anything else, as a Markdown checklist
-    When the agent writes the file and then ticks steps in it
-    Then the plan kept on the turn is the same as the file's last content
-    And the plan is kept when the turn ends
-    # the plan file name: internal/machines/local.go PlanFile; the brief's wording: internal/coordinator/brief.go plan
-
-  @HANDOFF-05 @coordinator @test
+  @HANDOFF-04 @coordinator @test
   Scenario: An unfinished plan carries over to the agent's next turn
     # internal/tasks/plan_test.go TestAnUnfinishedPlanCarriesOn
     Given an agent's last turn on the task left a plan with 1 or more steps not ticked
@@ -46,7 +37,7 @@ Feature: The coordinator and its handoffs
     And a plan with every step ticked is not carried over
     # not under test, checked by hand: the plan is already in the new turn's plan file and the brief says which turn it came from: internal/turns/turns.go line 136, internal/coordinator/brief.go lines 452 and 453
 
-  @HANDOFF-06 @coordinator @test
+  @HANDOFF-05 @coordinator @test
   Scenario: Any decision may retitle the task
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given a task titled "Remove the TODOs"
@@ -54,7 +45,7 @@ Feature: The coordinator and its handoffs
     Then the task's title is the new one and its first title is kept as "Remove the TODOs"
     # not under test, checked by hand: the decision format asks for 1 plain imperative line under 70 characters: internal/coordinator/decision.go DecisionFormat, line 105
 
-  @HANDOFF-07 @coordinator @test
+  @HANDOFF-06 @coordinator @test
   Scenario: An assign decision hands the task to the named agent
     # internal/coordinator/next_test.go TestNext, for the instructions in the next turn's handoff; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator, for the engineer's turn and its brief
     Given the coordinator's turn ended with {"action": "assign", "agent": "engineer", "instructions": "Remove them."}
@@ -62,7 +53,7 @@ Feature: The coordinator and its handoffs
     Then the next turn is the engineer's, and its brief has those instructions: yes
     # not under test, checked by hand: the step from the coordinator to the engineer is shown in the trail
 
-  @HANDOFF-08 @coordinator @test
+  @HANDOFF-07 @coordinator @test
   Scenario: An assign to an agent that does not exist is an issue
     # internal/coordinator/next_test.go TestNext; goes back to the coordinator: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     Given the coordinator's turn ended with an assign to "designer", and the roster has no agent of that name
@@ -72,7 +63,7 @@ Feature: The coordinator and its handoffs
 
   # ---- Briefs, reports and messages ------------------------------------------
 
-  @HANDOFF-09 @user @test
+  @HANDOFF-08 @user @test
   Scenario: A message to the coordinator stops the turn in progress, and its reply says what it changed
     # internal/web/chat_api_test.go TestAMessageStopsTheTurnForTheCoordinator and TestTheCoordinatorsReplyComesBeforeItsDecision
     # internal/web/chat_api.go lines 55 to 63
@@ -87,7 +78,7 @@ Feature: The coordinator and its handoffs
     When the user sends "And keep it simple."
     Then the trail's last step is exactly the message
 
-  @HANDOFF-10 @user @manual
+  @HANDOFF-09 @user @manual
   Scenario: The chat's field, its status line and the message it refuses
     # ui/src/components/organisms/CoordinatorChat.tsx lines 107 to 124, the status and the hint; line 37, the 3 suggestions
     # a blank message: internal/web/chat_api.go lines 27 to 30
@@ -102,15 +93,7 @@ Feature: The coordinator and its handoffs
     Given the coordinator's turn is in progress
     Then the status reads exactly "Thinking…" and the hint "Sending makes the coordinator decide again with what you said."
 
-  @HANDOFF-11 @agent @test
-  Scenario: An agent starts fresh with only its brief and the repository
-    # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
-    Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
-    When the engineer's turn starts in a fresh session
-    Then its own prompt, "You are the engineer", and those instructions are shown in its brief
-    # not under test, checked by hand: the brief also has the task, where the work is, the shared files and the plan file, and not the coordinator's prompt: internal/coordinator/brief.go
-
-  @HANDOFF-12 @coordinator @test
+  @HANDOFF-10 @coordinator @test
   Scenario: The brief is a file and the prompt is one line pointing at it
     # internal/turns/turns_test.go TestStartRunsTheAgentOnAOneLinePrompt
     Given a turn is about to start
@@ -120,7 +103,7 @@ Feature: The coordinator and its handoffs
     # the prompt line: internal/turns/turns.go start
     # not under test here, checked by hand: the engine echoes the hash back once it has the prompt: internal/turns/turns.go line 118
 
-  @HANDOFF-13 @coordinator @test
+  @HANDOFF-11 @coordinator @test
   Scenario: Every agent's report returns to the coordinator
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's turn ended with the report "Removed 3 TODOs and committed."
@@ -128,7 +111,7 @@ Feature: The coordinator and its handoffs
     Then the next turn is the coordinator's, and no other agent's turn starts first
     And the report is shown in the coordinator's brief as the step "engineer → tech-lead: Removed 3 TODOs and committed."
 
-  @HANDOFF-14 @coordinator @test
+  @HANDOFF-12 @coordinator @test
   Scenario: The coordinator's reply ends with exactly one JSON decision
     # internal/coordinator/decision_test.go TestParseDecision
     Given a coordinator's reply
@@ -137,7 +120,7 @@ Feature: The coordinator and its handoffs
     And a decision missing what its action needs, such as an assign with no agent, is refused
     # not under test, checked by hand: the action is 1 of these 9: assign, done, ask, transfer, request, wait, fetch, move, split, and a refusal says why: internal/coordinator/decision.go, the Action constants and check
 
-  @HANDOFF-15 @coordinator @test
+  @HANDOFF-13 @coordinator @test
   Scenario: A reply with no usable decision is an issue
     # internal/coordinator/next_test.go TestNext
     Given the coordinator's turn ended with "I think the engineer." or with no reply at all
@@ -147,7 +130,7 @@ Feature: The coordinator and its handoffs
 
   # ---- Issues ----------------------------------------------------------------
 
-  @HANDOFF-16 @coordinator @test
+  @HANDOFF-14 @coordinator @test
   Scenario: An issue goes back to the coordinator
     # internal/coordinator/next_test.go TestNext; internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     # the count: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
@@ -157,7 +140,7 @@ Feature: The coordinator and its handoffs
     And the task's count of issues in a row goes up by 1
     # IssuesInARow + 1 on IssueRaised: internal/tasks/apply.go
 
-  @HANDOFF-17 @coordinator @test
+  @HANDOFF-15 @coordinator @test
   Scenario: A crashed agent is an issue within seconds
     # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace
     Given an open turn whose process has exited
@@ -166,7 +149,7 @@ Feature: The coordinator and its handoffs
     # the words "(crashed or was killed)": internal/watchdog/watchdog.go line 134; the test asserts "process exited"
     # StartGrace = 3 * time.Second: internal/watchdog/watchdog.go DefaultLimits; checked every second: Run
 
-  @HANDOFF-18 @coordinator @test
+  @HANDOFF-16 @coordinator @test
   Scenario: A silent agent is a stall
     # internal/watchdog/watchdog_test.go TestASilentTurnIsAStall
     Given an open turn with no tool call running and no action waiting for the user
@@ -175,14 +158,14 @@ Feature: The coordinator and its handoffs
     # the words "has been silent for over 10m0s (stalled: a hung network call or a stuck tool)": internal/watchdog/watchdog.go line 150; the test asserts "silent"
     # Silence = 10 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
-  @HANDOFF-19 @coordinator @test
+  @HANDOFF-17 @coordinator @test
   Scenario: An agent waiting for the user's answer is not stalled
     # internal/watchdog/watchdog_test.go TestWaitingForYouIsNotAStall
     Given an open turn with an action the policy asked the user about, not yet decided
     When more than 10 minutes pass with no events
     Then the watchdog raises no issue
 
-  @HANDOFF-20 @coordinator @test
+  @HANDOFF-18 @coordinator @test
   Scenario: A tool call with no result for too long is an issue
     # internal/watchdog/watchdog_test.go TestAToolOpenTooLong
     Given an approved tool call in an open turn, with no result yet
@@ -190,7 +173,7 @@ Feature: The coordinator and its handoffs
     Then the watchdog raises an issue naming the command: yes
     # Tool = 20 * time.Minute: internal/watchdog/watchdog.go DefaultLimits
 
-  @HANDOFF-21 @coordinator @test
+  @HANDOFF-19 @coordinator @test
   Scenario: The same command requested again and again is an issue
     # internal/watchdog/watchdog_test.go TestTheSameCommandRepeated
     Given an open turn
@@ -199,7 +182,7 @@ Feature: The coordinator and its handoffs
     # the words "so it may be stuck in a loop: <command>": internal/watchdog/watchdog.go line 140; the test asserts "5 times in a row"
     # Repeats = 5: internal/watchdog/watchdog.go DefaultLimits
 
-  @HANDOFF-22 @coordinator @test
+  @HANDOFF-20 @coordinator @test
   Scenario: A denied action is shown to the coordinator under Actions Agentry refused
     # internal/coordinator/resumed_brief_test.go TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals
     Given the policy denied an agent's command, such as git push origin HEAD:dev
@@ -208,7 +191,7 @@ Feature: The coordinator and its handoffs
     # not under test, checked by hand: no issue is raised for the denial
     # the gate writes action.denied, no issue: internal/hooks/handler.go decide; the brief section: internal/coordinator/brief.go refusedActions
 
-  @HANDOFF-23 @coordinator @test
+  @HANDOFF-21 @coordinator @test
   Scenario: A resumed session that did not start is retried fresh once
     # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce; internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack
     Given an agent's turn went on with its last session, and the process exited before taking the prompt
@@ -219,7 +202,7 @@ Feature: The coordinator and its handoffs
     And the retry still counts as 1 issue towards the issues in a row
     # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
 
-  @HANDOFF-24 @coordinator @manual
+  @HANDOFF-22 @coordinator @manual
   Scenario: An agent's report of a blocker is a report, not an issue
     Given a task with the default limit of 24 turns, where the coordinator assigns the engineer and the engineer ends its turn with the report "still broken", 12 times over
     When the loop reads the task after those 24 turns
@@ -235,7 +218,7 @@ Feature: The coordinator and its handoffs
 
   # ---- Safety stops and limits -----------------------------------------------
 
-  @HANDOFF-25 @user @test
+  @HANDOFF-23 @user @test
   Scenario: Raising the budget or the turn limit while stopped at it is the answer
     # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
     # internal/web/api.go lines 222 to 275; internal/tasks/task.go lines 145 to 163, StoppedAt
@@ -251,7 +234,7 @@ Feature: The coordinator and its handoffs
     When the user sets it to 5
     Then the task is working again and the coordinator read "I raised the turn limit to 5. Carry on."
 
-  @HANDOFF-26 @user @test
+  @HANDOFF-24 @user @test
   Scenario: A limit answers only its own stop, and a done task's limits stay
     # internal/web/api_test.go TestALimitAnswersOnlyItsOwnStop, TestADoneTasksLimitsStay and TestALimitIsKeptThoughItsAnswerIsRefused
     Given task-1 stopped at its turn limit, over its budget too
@@ -268,7 +251,7 @@ Feature: The coordinator and its handoffs
     Given the rules refuse the answer, as the stop was answered first
     Then the limit is kept with 200 and the reply names the refusal
 
-  @HANDOFF-27 @user @test
+  @HANDOFF-25 @user @test
   Scenario: The stop's question names its limit and the numbers it stopped at
     # internal/web/api_test.go TestQuestionsShowWhichLimitStopped
     Given task-1 stopped at its 2 turns, task-2 at its budget of 200,000 with 210,000 used, and task-3 asked to copy a file
@@ -277,7 +260,7 @@ Feature: The coordinator and its handoffs
     And task-2's has kind budget, with exactly 210,000 tokens used of 200,000
     And task-3's has kind question and no limit, budget 0
 
-  @HANDOFF-28 @coordinator @test
+  @HANDOFF-26 @coordinator @test
   Scenario: The turn limit asks the user
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with the default limit of 24 turns
@@ -286,7 +269,7 @@ Feature: The coordinator and its handoffs
     And the user is asked, with the words "24 of its 24 turns", and the stop is marked as the "turns" limit
     # DefaultMaxTurns = 24: internal/tasks/task.go; the stop at TurnsSinceAnswer >= MaxTurns: internal/tasks/task.go AtTurnLimit
 
-  @HANDOFF-29 @coordinator @test
+  @HANDOFF-27 @coordinator @test
   Scenario: Each task has its own limit of turns, set when it is made
     # internal/coordinator/next_test.go TestEachTaskHasItsOwnLimitOfTurns
     Given a task created with maxTurns 4
@@ -295,7 +278,7 @@ Feature: The coordinator and its handoffs
     And a task created before each had its own limit is kept at 24
     # the server's default comes from the -max-turns flag, default coordinator.DefaultMaxTurns: cmd/agentry/serve.go
 
-  @HANDOFF-30 @coordinator @test
+  @HANDOFF-28 @coordinator @test
   Scenario: A limit of 0 is no limit
     # internal/coordinator/next_test.go TestEachTaskHasItsOwnLimitOfTurns
     Given a task created with maxTurns 0
@@ -304,7 +287,7 @@ Feature: The coordinator and its handoffs
     And a task stopped at its limit, then changed to 0, runs on
     # MaxTurns > 0 is the condition: internal/tasks/task.go AtTurnLimit; "0 for no limit": cmd/agentry/serve.go -max-turns and -budget
 
-  @HANDOFF-31 @coordinator @test
+  @HANDOFF-29 @coordinator @test
   Scenario: The budget stop asks the user once the task has used it
     # internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
     Given a task with a budget of 100,000 tokens
@@ -315,7 +298,7 @@ Feature: The coordinator and its handoffs
     # AtBudget is Budget > 0 and TokensUsed >= Budget: internal/tasks/task.go; the stop needs TurnsSinceAnswer > 0: internal/coordinator/next.go Next
     # the server's default budget is 5,000,000 tokens, flag -budget: cmd/agentry/serve.go
 
-  @HANDOFF-32 @coordinator @test
+  @HANDOFF-30 @coordinator @test
   Scenario: 3 issues in a row ask the user
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with 3 issues raised and no turn ending normally between them
@@ -324,7 +307,7 @@ Feature: The coordinator and its handoffs
     And the user is asked "3 issues in a row, the last: the engine is missing. Fix what's wrong and answer, and the coordinator carries on."
     # MaxIssuesRun = 3: internal/coordinator/next.go
 
-  @HANDOFF-33 @user @test
+  @HANDOFF-31 @user @test
   Scenario: The user's answer lifts the stop
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task stopped at its turn limit
@@ -333,7 +316,7 @@ Feature: The coordinator and its handoffs
     # not under test, checked by hand: the turns since the answer and the issues in a row are both 0
     # task.answered sets TurnsSinceAnswer and IssuesInARow to 0: internal/tasks/apply.go
 
-  @HANDOFF-34 @coordinator @manual
+  @HANDOFF-32 @coordinator @manual
   Scenario: A turn that ends normally resets the issues in a row
     Given a task with 2 issues in a row
     When an agent's turn ends with a report
@@ -347,7 +330,7 @@ Feature: The coordinator and its handoffs
 
   # ---- Decisions -------------------------------------------------------------
 
-  @HANDOFF-35 @coordinator @test
+  @HANDOFF-33 @coordinator @test
   Scenario: A move decision takes the task to a repo the user named
     # internal/coordinator/repos_test.go TestTheCoordinatorMovesATaskToTheRepoYouNamed
     Given the user named a git address or a folder for the task's work in its description or in what they told the coordinator
@@ -356,7 +339,7 @@ Feature: The coordinator and its handoffs
     And a move to a repo the user did not name is refused as an issue, and the task's repo is kept
     # namedByYou: internal/coordinator/next.go; TestARepoIsNamedOnlyWhole in the same file covers the whole-name match
 
-  @HANDOFF-36 @coordinator @test
+  @HANDOFF-34 @coordinator @test
   Scenario: A transfer passes the task to another team's coordinator
     # internal/coordinator/teams_test.go TestATaskWithNoTeamChosenGoesToTheRightOne
     Given a task whose team the user did not choose, so the brief says to decide whose work it is
@@ -364,7 +347,7 @@ Feature: The coordinator and its handoffs
     Then the next turn is the Writing team's coordinator's, and the task's coordinator is now exactly that agent
     And "This task is your team's work: It is a blog post." is shown in its brief
 
-  @HANDOFF-37 @coordinator @test
+  @HANDOFF-35 @coordinator @test
   Scenario: A request opens a task for another team and waits for its summary
     # internal/coordinator/teams_test.go TestACoordinatorAsksAnotherTeamAndCarriesOnWithTheAnswer
     Given a task of the Software team, and the Writing team is listed under "Other teams" in the brief
@@ -374,7 +357,7 @@ Feature: The coordinator and its handoffs
     And then the other team's summary is shown in this coordinator's brief as "<that task> is done: <its summary>"
     # not under test, checked by hand: the new task is in the same repo, and the summary is 1 step in the trail
 
-  @HANDOFF-38 @coordinator @manual
+  @HANDOFF-36 @coordinator @manual
   Scenario: A transfer or request goes only to a team named in the brief
     Given a task of the Software team
     When the coordinator decides a transfer or request to its own team, or to a team that does not exist
@@ -384,7 +367,7 @@ Feature: The coordinator and its handoffs
     # Steps: end a coordinator turn with {"action": "request", "team": "software", "request": "x"} on a Software task and
     # read the issue in the trail; repeat with "team": "nobody"; then chain 3 requests team to team and try a 4th.
 
-  @HANDOFF-39 @coordinator @test
+  @HANDOFF-37 @coordinator @test
   Scenario: Done is refused until a checker has approved the last change and no checker objects
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the engineer's turn changed the work and no checker has looked at it since
@@ -396,7 +379,7 @@ Feature: The coordinator and its handoffs
     And a checker that never looked is not required: the test's team has a reviewer and a tester, and the reviewer's approval alone allows done
     # unchecked: internal/coordinator/checks.go; the team's checkers, reviewer and tester: internal/agents/defaults.go, Column Reviews
 
-  @HANDOFF-40 @coordinator @test
+  @HANDOFF-38 @coordinator @test
   Scenario: A change after a review needs another review
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the reviewer ended a turn with "Verdict: changes needed", and the engineer then changed the work
@@ -405,7 +388,7 @@ Feature: The coordinator and its handoffs
     And once the reviewer's verdict is "approved" on the last change, done is allowed, and a deployer turn after it is not counted as a change, so the approval holds
     # the verdict line: internal/coordinator/checks.go VerdictFormat and verdictOf; a ship turn is not a change: checks.go recordOf
 
-  @HANDOFF-41 @coordinator @manual
+  @HANDOFF-39 @coordinator @manual
   Scenario: Work the user had shipped from Shipping needs no new check to be done
     Given the engineer changed the work after the last check, and the user moved the task to Shipping
     When the deployer's turn that the move asked for pushes the work, and the coordinator then decides done
@@ -416,7 +399,7 @@ Feature: The coordinator and its handoffs
 
   # ---- What the coordinator cannot do ----------------------------------------
 
-  @HANDOFF-42 @coordinator @test
+  @HANDOFF-40 @coordinator @test
   Scenario: The coordinator never edits code
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the coordinator runs under the read-only profile
@@ -428,7 +411,7 @@ Feature: The coordinator and its handoffs
     # tech-lead and every template's coordinator: Profile "read-only", internal/agents/defaults.go and internal/agents/teams.go (the Visionaries' lead is read-mostly)
     # the profile: internal/policy/default.toml, [profiles.read-only], line 198
 
-  @HANDOFF-43 @coordinator @test
+  @HANDOFF-41 @coordinator @test
   Scenario: The coordinator cannot assign the task to itself
     # internal/rules/rules_test.go TestATaskGoesRoundTheCoordinator
     Given a coordinator's turn has ended
@@ -437,7 +420,7 @@ Feature: The coordinator and its handoffs
     And an assignment by any agent other than the coordinator is refused too
     # notToTheCoordinator and byTheCoordinator: internal/rules/task_rules.go
 
-  @HANDOFF-44 @coordinator @test
+  @HANDOFF-42 @coordinator @test
   Scenario: After the user moves a task to Done, the coordinator's one wrap-up turn can only summarise
     # internal/coordinator/wrapup_test.go TestAWrapUpCantStartMoreWork
     Given the engineer is working and the user moves the task to Done on the board

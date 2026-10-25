@@ -103,7 +103,7 @@ Anyone who changes what Agentry does, an agent or a person, keeps this folder tr
 
 1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next number after the highest one in its file, never a gap a removed scenario left. Something built that `spec/NOT-YET.md` lists comes off that list in the same commit.
 2. Every scenario added or changed follows the rules for every scenario above.
-3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @HANDOFF-45, changed @TASK-12`, or says `no behaviour change`.
+3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @HANDOFF-43, changed @TASK-12`, or says `no behaviour change`.
 4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
 5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
 
@@ -129,12 +129,12 @@ The check reads every comment line in a scenario's body, from the `Scenario:` li
 
 In a `@test` scenario, the check fails on a path that does not exist (`cited path internal/x/gone_test.go does not exist`), on a Go test that has no `func TestName(` line at the start of a line in its file (`TestA is not defined in internal/x/x_test.go`), and on a Go test with no `_test.go` file before it. A `@manual` or `@benchmark` scenario may cite what it likes. A passing run prints how many paths and Go tests were checked.
 
-Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped in task-236: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 44, TURN 17, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped in task-236: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 42, TURN 19, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 
 ```
-spec/functional/agents.feature: 17 scenarios
+spec/functional/agents.feature: 19 scenarios
 spec/functional/approvals-and-questions.feature: 7 scenarios
 ...
 24 files, 651 scenarios: 485 @test, 16 @benchmark, 150 @manual
