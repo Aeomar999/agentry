@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -125,6 +127,16 @@ func checkTagProblem(s scenario) string {
 	return "more than one check tag (" + strings.Join(found, ", ") + "); a scenario has exactly one"
 }
 
+// hasTag is true when the scenario carries the tag.
+func hasTag(s scenario, name string) bool {
+	for _, t := range s.tags {
+		if t.name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // hasOutcome is true when a Then line states a number or a yes/no outcome.
 func hasOutcome(text string) bool {
 	if strings.ContainsFunc(text, unicode.IsDigit) {
@@ -158,4 +170,44 @@ func words(text string) []string {
 	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
 		return !unicode.IsLetter(r) && r != '\''
 	})
+}
+
+// lastIDBeforeLineRule is each prefix's highest ID when the rule against
+// line references came in. A scenario numbered above its prefix's entry
+// may not cite "line N" or "lines N": lines move as dev moves, so it names
+// a function or a test instead. The scenarios at or below the entry are
+// left as they are.
+var lastIDBeforeLineRule = map[string]int{
+	"USER": 133, "COORD": 60, "AGENT": 56, "CC": 56, "WORKER": 41,
+	"REL": 54, "SEC": 68, "OPS": 42, "PERF": 16, "LIM": 35,
+	"USE": 29, "COMPAT": 27, "OBS": 34,
+}
+
+var lineReference = regexp.MustCompile(`\blines? [0-9]`)
+
+// lineReferences finds the lines of a scenario that cite a line number,
+// when the scenario is newer than the rule against them.
+func lineReferences(s scenario, prefix string) []line {
+	if !newerThanLineRule(s, prefix) {
+		return nil
+	}
+	var found []line
+	for _, l := range append([]line{{s.line, s.title}}, s.body...) {
+		if lineReference.MatchString(l.text) {
+			found = append(found, l)
+		}
+	}
+	return found
+}
+
+// newerThanLineRule is true when the scenario's one ID with its file's
+// prefix is numbered above that prefix's entry in lastIDBeforeLineRule.
+func newerThanLineRule(s scenario, prefix string) bool {
+	last, known := lastIDBeforeLineRule[prefix]
+	if !known || idProblem(s, prefix) != "" {
+		return false
+	}
+	_, digits, _ := strings.Cut(idTags(s)[0].name, "-")
+	number, err := strconv.Atoi(digits)
+	return err == nil && number > last
 }

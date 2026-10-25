@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,11 +23,20 @@ const goodScenario = `Feature: Tasks
     # internal/web/api_test.go
 `
 
-// writeSpec writes the files into a spec folder under a fresh temp folder
-// and gives back that spec folder.
+// goodTestFile is the test file goodScenario cites, in the repo root.
+const goodTestFile = "internal/web/api_test.go"
+
+// writeSpec writes the files into a spec folder under a fresh temp folder,
+// the repo root, and gives back that spec folder. A name starting with ../
+// is a file of the repo outside the spec folder. goodTestFile is written
+// too, unless the files give it.
 func writeSpec(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "spec")
+	if _, given := files["../"+goodTestFile]; !given {
+		files = maps.Clone(files)
+		files["../"+goodTestFile] = "package web\n"
+	}
 	for name, text := range files {
 		path := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -223,6 +233,76 @@ func TestARejectedScenarioIsNotCountedUnderAnyCheckTag(t *testing.T) {
 	}
 }
 
+func TestATestScenarioCitesPathsAndTestsThatExist(t *testing.T) {
+	repo := map[string]string{
+		"../" + goodTestFile:       "package web\n\nfunc TestCreate(t *testing.T) {}\n\nfunc TestList(t *testing.T) {}\n",
+		"../internal/web/api.go":   "package web\n",
+		"../ui/src/Badge.test.tsx": "",
+		"../README.md":             "# Agentry\n",
+	}
+	for name, c := range map[string]struct{ tags, comment, want string }{
+		"a path and its tests":    {"@USER-01 @test", "# internal/web/api_test.go TestCreate and TestList", ""},
+		"a missing path":          {"@USER-01 @test", "# internal/web/gone_test.go", "user.feature:10: cited path internal/web/gone_test.go does not exist"},
+		"a renamed test":          {"@USER-01 @test", "# internal/web/api_test.go TestMake", "user.feature:10: TestMake is not defined in internal/web/api_test.go"},
+		"a test with no path":     {"@USER-01 @test", "# the list: TestList", "user.feature:10: TestList is cited with no Go test file before it"},
+		"in the same file":        {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestList in the same file", ""},
+		"gone from the file":      {"@USER-01 @test", "# internal/web/api_test.go TestCreate; listing: TestGone in the same file", "user.feature:10: TestGone is not defined in internal/web/api_test.go"},
+		"on the next line":        {"@USER-01 @test", "# internal/web/api_test.go TestCreate\n    # the list: TestGone", "user.feature:11: TestGone is not defined in internal/web/api_test.go"},
+		"a test before its path":  {"@USER-01 @test", "# TestCreate in internal/web/api_test.go", ""},
+		"a non-test file between": {"@USER-01 @test", "# internal/web/api_test.go TestCreate; the handler: internal/web/api.go\n    # TestList", ""},
+		"a UI path":               {"@USER-01 @test", "# ui/src/Badge.test.tsx, the badge's colour", ""},
+		"a missing UI path":       {"@USER-01 @test", "# ui/src/Gone.test.tsx", "user.feature:10: cited path ui/src/Gone.test.tsx does not exist"},
+		"a glob":                  {"@USER-01 @test", "# every page: ui/src/**/*.tsx", ""},
+		"a root file":             {"@USER-01 @test", "# README.md, Use it; PLAN.md T-013", "user.feature:10: cited path PLAN.md does not exist"},
+		"a manual scenario":       {"@USER-01 @manual", "# internal/web/gone_test.go TestGone", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			files := maps.Clone(repo)
+			files["functional/user.feature"] = strings.NewReplacer("@USER-01 @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
+			got := problemsOf(t, files)
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}
+
+func TestTheCitationsCheckedAreCounted(t *testing.T) {
+	dir := writeSpec(t, map[string]string{
+		"../" + goodTestFile:      "package web\n\nfunc TestCreate(t *testing.T) {}\n",
+		"functional/user.feature": strings.Replace(goodScenario, "# internal/web/api_test.go", "# internal/web/api_test.go TestCreate and TestGone", 1),
+	})
+	result, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Paths != 1 || result.Tests != 2 {
+		t.Errorf("counted %d paths and %d Go tests, want 1 and 2", result.Paths, result.Tests)
+	}
+}
+
+func TestANewScenarioCitesNoLineNumber(t *testing.T) {
+	for name, c := range map[string]struct{ tags, comment, want string }{
+		"a new ID with line":   {"@USER-134 @test", "# internal/web/api_test.go, line 12", "user.feature:10: a line number goes stale as dev moves; cite a function or a test by name instead"},
+		"a new ID with lines":  {"@USER-134 @test", "# internal/web/api_test.go, lines 12 and 13", "user.feature:10: a line number goes stale"},
+		"a new manual ID":      {"@USER-134 @manual", "# internal/web/api.go line 12", "user.feature:10: a line number goes stale"},
+		"an old ID with line":  {"@USER-133 @test", "# internal/web/api_test.go, line 12", ""},
+		"a new ID with a name": {"@USER-134 @test", "# internal/web/api_test.go, the timeline 5 times", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			text := strings.NewReplacer("@USER-01 @test", c.tags, "# internal/web/api_test.go", c.comment).Replace(goodScenario)
+			got := problemsOf(t, map[string]string{"functional/user.feature": text})
+			if c.want == "" {
+				expectProblems(t, got)
+			} else {
+				expectProblems(t, got, c.want)
+			}
+		})
+	}
+}
+
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{
 		"functional/user.feature": goodScenario,
@@ -273,6 +353,7 @@ func TestAGoodSpecPassesAndIsCounted(t *testing.T) {
 spec/functional/user.feature: 1 scenario
 spec/non-functional/limits.feature: 1 scenario
 3 files, 4 scenarios: 2 @test, 1 @benchmark, 1 @manual
+cited by @test: 2 paths, 0 Go tests
 `
 	if out.String() != want {
 		t.Errorf("counts:\n%s\nwant:\n%s", out.String(), want)

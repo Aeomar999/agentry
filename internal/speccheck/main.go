@@ -9,13 +9,19 @@
 //   - repeats an ID used anywhere else in the folder;
 //   - has a Then line, or an And/But line continuing a Then, with no digit
 //     and no outcome word;
-//   - uses the words quickly, properly or appropriately.
+//   - uses the words quickly, properly or appropriately;
+//   - is tagged @test and cites, in a comment line, a repo path that does
+//     not exist, or a Go test that is not defined in the test file cited
+//     with it;
+//   - is numbered above its prefix's entry in lastIDBeforeLineRule and
+//     cites "line N" or "lines N".
 //
-// A Scenario Outline is reported and not counted: this spec writes one
-// Scenario per case. The checker also reports an em-dash anywhere in any
-// file under the folder. Problems are printed as file:line: message; the
-// scenarios per file and the totals per check tag are printed either way;
-// the exit code is 1 on any problem.
+// Cited paths are read from the folder's parent, the repo root. A Scenario
+// Outline is reported and not counted: this spec writes one Scenario per
+// case. The checker also reports an em-dash anywhere in any file under the
+// folder. Problems are printed as file:line: message; the scenarios per
+// file, the totals per check tag and how many cited paths and Go tests were
+// checked are printed either way; the exit code is 1 on any problem.
 package main
 
 import (
@@ -52,6 +58,8 @@ func printCounts(w io.Writer, result Result) {
 	fmt.Fprintf(w, "%s, %s: %d @test, %d @benchmark, %d @manual\n",
 		plural(len(result.Files), "file"), plural(scenarios, "scenario"),
 		result.Tags[tagTest], result.Tags[tagBenchmark], result.Tags[tagManual])
+	fmt.Fprintf(w, "cited by @test: %s, %s\n",
+		plural(result.Paths, "path"), plural(result.Tests, "Go test"))
 }
 
 func printProblems(w io.Writer, problems []Problem) {
