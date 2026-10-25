@@ -168,7 +168,7 @@ Feature: Security
   @SEC-19 @test
   Scenario: Under developer, force pushes, sudo and piping the internet into a shell are denied
     Given the shipped policy with use_for_everyone turned off, and an agent with the developer profile
-    When it force pushes to any branch, runs sudo, or pipes a download into sh
+    When it force pushes, as to dev, runs sudo, or pipes a download into sh
     Then every call is denied
     And sudo is denied by the rule "never sudo"
     # not under test, checked by hand: the force push is denied by "never force push" and the download by "never pipe the internet into a shell" (internal/policy/default.toml lines 115 and 121)
@@ -341,11 +341,12 @@ Feature: Security
     # README.md, The policy; PLAN.md T-042; internal/policy/file_test.go TestLiveReloadsAValidFileAndKeepsThePolicyOverABrokenOne
 
   @SEC-40 @test
-  Scenario: A broken policy file at start stops the server
+  Scenario: A broken policy file at start is refused
     Given a policy.toml that does not load
     When agentry serve starts
-    Then the server does not start
+    Then opening the policy fails: yes
     And its error names the file, the line and the newest backup to copy back, exactly one
+    # not under test, checked by hand: serve returns that error before it starts (cmd/agentry/serve.go lines 203 to 206)
     # README.md, The policy; PLAN.md T-075; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
 
   @SEC-41 @manual
@@ -522,10 +523,11 @@ Feature: Security
   Scenario: A broken settings file is refused without quoting it
     Given a working features.toml in force
     When the file is saved with a mistake on one line
-    Then the file is refused and the version before stays in force, with no setting changed
+    Then the file is refused and the version before stays in force, its secret as it was: yes
     And the error names the file and the line, never what the line holds
     And a table header that is not a feature name is not named in the error
     And each feature reads only its own table
+    # not under test, checked by hand: no other setting changes either
     # README.md, Features' settings and secrets; internal/settingsfile/settingsfile_test.go TestABrokenFileKeepsTheLastGoodVersionAndIsNotQuoted, TestAHeaderThatIsntAFeatureNameIsNotLogged, TestAFeatureReadsOnlyItsOwnTable
 
   @SEC-61 @test
