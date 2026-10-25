@@ -11,7 +11,7 @@ Feature: Policy rules from the page
 
   @PROP-01 @user @test @to-policy
   Scenario: A rule added from a profile's panel is written with its why and logged
-    # PLAN.md T-043; builds on @POLICY-02 and the locked write path of T-069 (internal/policy/live.go Live.Change)
+    # builds on @POLICY-02 and the policy's one locked write path (internal/policy/live.go Live.Change)
     # test: internal/web/policy_api_test.go (to write)
     Given the developer profile's panel, its rules as loaded, and the hash the page saw
     When the user adds the rule "never curl to a pipe" as rule 3, decision deny, runs_any "curl * | sh", why "A script from the internet never runs unread."
@@ -22,7 +22,7 @@ Feature: Policy rules from the page
 
   @PROP-02 @user @test @to-policy
   Scenario: A rule changed from the page changes only its own lines
-    # PLAN.md T-043; the edits Agentry makes touch nothing outside the part they change (internal/policy/edit.go)
+    # the edits Agentry makes touch nothing outside the part they change (internal/policy/edit.go)
     # test: internal/policy/edit_test.go (to write)
     Given a policy file with comments between its rules and 6 profiles
     When the user changes the decision of developer's rule "never sudo" from deny to ask and its why
@@ -32,7 +32,7 @@ Feature: Policy rules from the page
 
   @PROP-03 @user @test @to-policy
   Scenario: A rule moved up or down changes which rule decides
-    # PLAN.md T-043; "Rules are read top to bottom and the first that matches decides" (@POLICY-07)
+    # "Rules are read top to bottom and the first that matches decides" (@POLICY-07)
     # test: internal/web/policy_api_test.go (to write)
     Given a profile whose rule 2 allows runs_any "go test *" and whose rule 5 asks for runs_any "go test ./build/*"
     When the user moves rule 5 above rule 2
@@ -42,7 +42,7 @@ Feature: Policy rules from the page
 
   @PROP-04 @user @test @to-policy
   Scenario: A rule removed from the page can be restored from the history
-    # PLAN.md T-043; Revert restores a version as a new version (@POLICY-06)
+    # Revert restores a version as a new version (@POLICY-06)
     # test: internal/web/policy_api_test.go (to write)
     Given a profile with 8 rules
     When the user removes its rule "never force push"
@@ -53,7 +53,7 @@ Feature: Policy rules from the page
 
   @PROP-05 @user @test @to-policy
   Scenario: A rule without its why, or one that would not load, is refused and nothing is written
-    # PLAN.md T-043, "keeping each rule's why"; the checks a file must pass to load: internal/policy/file.go
+    # the old build plan, "keeping each rule's why"; the checks a file must pass to load: internal/policy/file.go
     # a change that would not load is a policy.Refusal, which applyPolicy answers with 409 (internal/web/policy_api.go); a missing why and a repeated name are checks the page makes before the edit, so they get 400
     # test: internal/web/policy_api_test.go (to write)
     Given the developer profile's panel
@@ -67,7 +67,7 @@ Feature: Policy rules from the page
 
   @PROP-06 @user @test @to-policy
   Scenario: Changing a rule of a default profile makes it yours
-    # PLAN.md T-043; the rows "outdated" and "yours" of @POLICY-03 (internal/policy/edit.go ErrProfileEdited)
+    # the rows "outdated" and "yours" of @POLICY-03 (internal/policy/edit.go ErrProfileEdited)
     # test: internal/web/policy_api_test.go (to write)
     Given read-only as Agentry ships it, marked current
     When the user changes the why of one of its rules from the page
@@ -78,7 +78,7 @@ Feature: Policy rules from the page
 
   @PROP-07 @test @to-security
   Scenario: Only the page token changes a rule
-    # PLAN.md T-043; the other policy changes take the page token only (internal/web/policy_api_test.go TestOnlyTheUITokenChangesThePolicy, @SEC-48, @SEC-50)
+    # the other policy changes take the page token only (internal/web/policy_api_test.go TestOnlyTheUITokenChangesThePolicy, @SEC-48, @SEC-50)
     # test: internal/web/policy_api_test.go (to write)
     Given the server has a page token, a hook token, a desk token and a helper token
     When a rule is added, changed, moved or removed with the hook, desk or helper token, or with no token
@@ -87,7 +87,7 @@ Feature: Policy rules from the page
 
   @PROP-08 @test @to-security
   Scenario: A rule added from the page cannot open Agentry's own files
-    # PLAN.md T-043; Agentry's own files are off limits for every profile, and no policy file can change that (@POLICY-38)
+    # Agentry's own files are off limits for every profile, and no policy file can change that (@POLICY-38)
     # test: internal/policy/default_test.go (to write)
     Given the user adds to developer, as rule 1, an allow rule for every path under the data folder
     When an agent under developer reads the sign-in token or edits policy.toml
@@ -95,7 +95,7 @@ Feature: Policy rules from the page
 
   @PROP-09 @test @to-reliability
   Scenario: A rule change made against an older version, or while the file does not load, is refused
-    # PLAN.md T-043; Live.Change refuses a stale version with ErrStale and a file that does not load (internal/policy/live.go)
+    # Live.Change refuses a stale version with ErrStale and a file that does not load (internal/policy/live.go)
     # test: internal/policy/live_test.go (to write)
     Given the page loaded the version with hash A, and the file was then saved by hand as version B
     When a rule change is sent with hash A
@@ -106,7 +106,7 @@ Feature: Policy rules from the page
 
   @PROP-10 @test @to-reliability
   Scenario: A rule change to a policy file that is a link is refused, and the policy in force is kept
-    # PLAN.md T-043; WriteFile refuses a symbolic link before it backs anything up (internal/policy/write.go)
+    # WriteFile refuses a symbolic link before it backs anything up (internal/policy/write.go)
     # test: internal/web/policy_api_test.go (to write)
     Given a policy.toml that is a symbolic link to a file elsewhere
     When a rule is added from the page
@@ -117,7 +117,7 @@ Feature: Policy rules from the page
 
   @PROP-11 @manual @to-usability
   Scenario: Each profile's rules table offers Add, Edit, Move and Remove, and the form asks for the why
-    # PLAN.md T-043; the table of a profile's rules, #, Decision, Rule, Why (@POLICY-07); a form with unsaved changes asks before it closes, as the team panels do (@USE-19)
+    # the table of a profile's rules, #, Decision, Rule, Why (@POLICY-07); a form with unsaved changes asks before it closes, as the team panels do (@USE-19)
     Given the Policy page with the developer profile's panel open
     When the user clicks Add rule
     Then a form is shown with Name, Decision, each field a rule may match on, and Why, and Save is not allowed while Why is empty
@@ -128,7 +128,7 @@ Feature: Policy rules from the page
     And Remove asks once, naming the rule, before it removes it: yes
 
 # Open questions
-# Whether the page also changes a profile's own why, otherwise and unreadable, or only its rules as T-043 says (recommended: only the rules).
+# Whether the page also changes a profile's own why, otherwise and unreadable, or only its rules, as the old build plan said (recommended: only the rules).
 # Whether a why is required in policy.toml too, so a hand-written rule without one is refused, or only on the page (recommended: only on the page, so no file that loads today stops loading).
 # Whether a repeated rule name in a profile is refused only on the page, or in the file too (recommended: only on the page, as a verdict names its rule).
 # Whether the page's own checks, a missing why and a repeated name, answer 400 (recommended, as they are not a policy that would not load) or 409 as every refused policy edit does today.

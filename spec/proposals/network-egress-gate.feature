@@ -15,7 +15,7 @@ Feature: Network egress gate
 
   @PROP-78 @agent @test @to-policy
   Scenario: An agent's session is started with Agentry's proxy as its way out
-    # PLAN.md T-030 "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/turns/turns.go environment, internal/sessions/session.go Env)
+    # the old build plan, "agent traffic through an Agentry proxy"; a turn's environment is set by Agentry (internal/turns/turns.go environment, internal/sessions/session.go Env)
     # test: internal/turns/turns_test.go (to write)
     Given an agent whose profile has a network allowlist
     When its turn starts
@@ -26,7 +26,7 @@ Feature: Network egress gate
 
   @PROP-79 @agent @test @to-policy
   Scenario: A connection to an allowlisted host passes without asking
-    # PLAN.md T-030 "allowlisted hosts pass"; the allowlist is part of the profile in policy.toml, as its rules are (internal/policy)
+    # the old build plan, "allowlisted hosts pass"; the allowlist is part of the profile in policy.toml, as its rules are (internal/policy)
     # test: internal/policy/network_test.go and internal/egress/proxy_test.go (to write)
     Given the developer profile with an allowlisted host, written as a pattern that covers its subdomains
     When the engineer's go mod download opens 3 connections to that host and 1 to a subdomain of it
@@ -35,7 +35,7 @@ Feature: Network egress gate
 
   @PROP-80 @agent @test @to-policy
   Scenario: A connection to a host not on the list is asked about, and waits for the user
-    # PLAN.md T-030 "unknown hosts go to Needs you"; an ask waits up to the gate's wait, 30 minutes: @APPROVE-01, @APPROVE-02
+    # the old build plan, "unknown hosts go to Needs you"; an ask waits up to the gate's wait, 30 minutes: @APPROVE-01, @APPROVE-02
     # test: internal/egress/proxy_test.go and internal/web/api_test.go (to write)
     Given the autonomous profile, and a script whose shell command the profile allows
     When the script opens a connection to a host not on the list
@@ -78,7 +78,7 @@ Feature: Network egress gate
 
   @PROP-84 @test @to-security
   Scenario: Where the system allows it, a program that ignores the proxy cannot reach out
-    # PLAN.md T-030 "OS-level block so the proxy is the only way out"
+    # the old build plan, "OS-level block so the proxy is the only way out"
     # test: internal/egress/block_test.go (to write), on a system where the block is built
     Given an agent whose profile has a network allowlist, on a machine whose system supports the block
     When a program in its session opens a connection to an allowlisted host directly, ignoring the proxy settings
@@ -99,7 +99,7 @@ Feature: Network egress gate
 
   @PROP-86 @test @to-security
   Scenario: Under autonomous, a script that reaches out is asked about, though its command is allowed
-    # PLAN.md T-029 and T-030 "Needed for T-029 to be trustworthy"; builds on @SEC-31 and @SEC-32 (internal/policy/default_test.go TestTheAutonomousProfile)
+    # the old build plan says the egress gate is needed for the autonomous profile to be trustworthy; builds on @SEC-31 and @SEC-32 (internal/policy/default_test.go TestTheAutonomousProfile)
     # test: internal/policy/default_test.go and internal/egress/proxy_test.go (to write)
     Given the shipped policy with use_for_everyone turned off, an agent with the autonomous profile, and the block in force on its machine
     When it runs python deploy.py, which the profile allows, and the script opens a connection to a host not on the list

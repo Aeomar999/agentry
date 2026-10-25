@@ -16,7 +16,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-30 @user @test @to-settings
   Scenario: While git is off, the Settings page says how to turn it on, and never takes the token
-    # PLAN.md T-019; docs/design/t-019-shipping.md sections 7 and 9; builds on @SET-01 (internal/features/features.go Manifest) and features.toml (internal/features/settings.go Settings)
+    # docs/design/t-019-shipping.md sections 7 and 9; builds on @SET-01 (internal/features/features.go Manifest) and features.toml (internal/features/settings.go Settings)
     # test: ui/src/pages/SettingsPage.test.tsx and internal/githost/feature_test.go (to write)
     Given a features.toml with no git table
     When the Settings page is shown
@@ -246,7 +246,7 @@ Feature: Shipping through GitHub, and email
 
   @PROP-49 @user @test @to-notifications
   Scenario: With email on, each thing that newly waits is sent once to the user's address
-    # PLAN.md T-019 "notification and email extensions"; the same list and the same once-only rule as Web Push: @NOTIFY-03 (internal/webpush/sink.go Sink, which reads the server's waiting list)
+    # the old build plan, "notification and email extensions"; the same list and the same once-only rule as Web Push: @NOTIFY-03 (internal/webpush/sink.go Sink, which reads the server's waiting list)
     # test: internal/email/sink_test.go (to write), with a fake mail server
     Given email on, and an approval already waiting when the server starts
     When the server starts

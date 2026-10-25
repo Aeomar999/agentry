@@ -13,7 +13,7 @@ Feature: Supervisor agents
 
   @PROP-53 @user @test @to-teams-and-templates
   Scenario: An agent is allowed to assign from its form or the team panel, and is off until the user turns it on
-    # PLAN.md T-021 "an ordinary agent with permission to propose ticket.assigned"; the agent form's fields: @TEAM-13 (ui/src/components/organisms/AgentForm.tsx); the team panel: @TEAM-05 (ui/src/components/organisms/TeamPanel.tsx)
+    # the old build plan, "an ordinary agent with permission to propose ticket.assigned"; the agent form's fields: @TEAM-13 (ui/src/components/organisms/AgentForm.tsx); the team panel: @TEAM-05 (ui/src/components/organisms/TeamPanel.tsx)
     # test: ui/src/components/organisms/AgentForm.test.tsx, ui/src/components/organisms/TeamPanel.test.tsx and internal/web/api_test.go (to write)
     Given the Software team, with no agent allowed to assign
     When the user edits the reviewer and turns on "May assign the task"
@@ -66,7 +66,7 @@ Feature: Supervisor agents
 
   @PROP-58 @coordinator @test @to-coordinator-and-handoffs
   Scenario: The coordinator stays the one deciding: every report after a supervisor's assign goes back to it
-    # @HANDOFF-11: every agent's report returns to the coordinator; PLAN.md T-021 "supervisor is just an agent"
+    # @HANDOFF-11: every agent's report returns to the coordinator; docs/decisions.md, 2026-10-16, "supervisor is just an agent"
     # the rule: a supervisor's assign is taken only on a turn the coordinator handed it; on a turn another supervisor handed it, its assign is not taken and the report goes back to the coordinator
     # test: internal/coordinator/loop_test.go (to write)
     Given the reviewer assigned the task to the engineer
@@ -143,7 +143,7 @@ Feature: Supervisor agents
 # Open questions
 # How a supervisor assigns: the same JSON assign decision at the end of its report as a coordinator's (recommended), or an MCP tool in its session, or a file in its worktree.
 # Where the next report goes: back to the coordinator (recommended, so the coordinator stays the one deciding), or back to the supervisor that assigned the task.
-# What a supervisor may decide: assign only (recommended, as PLAN.md T-021 names ticket.assigned alone), or done too, once every checker approved.
+# What a supervisor may decide: assign only (recommended, as the old build plan named ticket.assigned alone), or done too, once every checker approved.
 # Whose agents: its own team's only (recommended, as for the coordinator), or another team's named in its brief, as a transfer is.
 # The field's name: "May assign the task" in the form and assigns in the roster (recommended), or a role such as "Supervises" beside "Its work counts as".
 # Chained assigns: a supervisor's assign is taken only on a turn the coordinator handed it (recommended), or taken on any turn, supervisors handing the task to each other held back only by the turn limit.

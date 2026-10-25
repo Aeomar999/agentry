@@ -11,7 +11,7 @@ Feature: Review from the command line
 
   @PROP-12 @user @test @to-worktrees-and-branches
   Scenario: agentry review shows the diff of a task's worktree against its base
-    # PLAN.md T-015; the Workspace's git view reads the same changes and commits (@TREE-07)
+    # the Workspace's git view reads the same changes and commits (@TREE-07)
     # test: cmd/agentry/review_test.go (to write)
     Given task-5 has a worktree with 2 changed files, 1 added file and 3 commits on its branch agentry/task-5
     When the user runs agentry review task-5
@@ -22,7 +22,7 @@ Feature: Review from the command line
 
   @PROP-13 @user @test @to-worktrees-and-branches
   Scenario: A task whose worktree is on a worker is shown the same
-    # PLAN.md T-015; a turn runs on the machine its agent may run on, and the Workspace reads it there (@MACHINE-30)
+    # a turn runs on the machine its agent may run on, and the Workspace reads it there (@MACHINE-30)
     # test: cmd/agentry/review_test.go (to write)
     Given task-7's worktree is on a joined worker, which is online
     When the user runs agentry review task-7 on the machine Agentry runs on
@@ -32,7 +32,7 @@ Feature: Review from the command line
 
   @PROP-14 @user @test @to-worktrees-and-branches
   Scenario: Nothing to review, a removed worktree and an unknown task each say so
-    # PLAN.md T-015; a finished task's worktree is removed once its branch is merged into dev (@TREE-03)
+    # a finished task's worktree is removed once its branch is merged into dev (@TREE-03)
     # test: cmd/agentry/review_test.go (to write)
     Given a task whose worktree has nothing changed and no commits since its base
     When the user runs agentry review on it
@@ -46,7 +46,7 @@ Feature: Review from the command line
 
   @PROP-15 @user @test @to-tasks-and-board
   Scenario: agentry review approve ships the task, as Shipping on the board does
-    # PLAN.md T-015; the move to Shipping (@TASK-20, internal/web/board_api.go)
+    # the move to Shipping (@TASK-20, internal/web/board_api.go)
     # test: cmd/agentry/review_test.go and internal/web/api_test.go (to write)
     Given task-5 of the Software team in Review
     When the user runs agentry review approve task-5
@@ -58,7 +58,7 @@ Feature: Review from the command line
 
   @PROP-16 @user @test @to-tasks-and-board
   Scenario: agentry review send-back sends the task back with the user's note, as In progress on the board does
-    # PLAN.md T-015; a move back to In progress from Review with a note (@TASK-19, @TASK-23, internal/web/board_api.go sentBack)
+    # a move back to In progress from Review with a note (@TASK-19, @TASK-23, internal/web/board_api.go sentBack)
     # test: cmd/agentry/review_test.go (to write)
     Given task-5 in Review
     When the user runs agentry review send-back task-5 "The redirect breaks sign-out."
@@ -69,7 +69,7 @@ Feature: Review from the command line
 
   @PROP-17 @user @test @to-tasks-and-board
   Scenario: agentry review discard finishes the task after asking once, and keeps its branch
-    # PLAN.md T-015; Done finishes the task at once with one last turn for the coordinator (@TASK-17); a branch not merged keeps its worktree (@TREE-03)
+    # Done finishes the task at once with one last turn for the coordinator (@TASK-17); a branch not merged keeps its worktree (@TREE-03)
     # test: cmd/agentry/review_test.go (to write)
     Given task-5 in Review with a turn in progress
     When the user runs agentry review discard task-5
@@ -84,7 +84,7 @@ Feature: Review from the command line
 
   @PROP-18 @test @to-security
   Scenario: Only the user's own credential reviews; the desk token cannot
-    # PLAN.md T-015; the desk token opens tasks and nothing more (@SEC-47, @SEC-48); the dock's Claude runs agentry task without asking (@TREE-12)
+    # the desk token opens tasks and nothing more (@SEC-47, @SEC-48); the dock's Claude runs agentry task without asking (@TREE-12)
     # test: internal/web/api_test.go (to write)
     Given the desk's Claude session, which holds the desk token and runs agentry task without asking
     When it runs agentry review, approve, send-back or discard with the desk token
@@ -95,7 +95,7 @@ Feature: Review from the command line
 
   @PROP-19 @test @to-security
   Scenario: No agent reviews its own work from the command line
-    # PLAN.md T-015; an agent can never approve its own request (@SEC-46); Agentry's own files are off limits for every profile (@POLICY-38)
+    # an agent can never approve its own request (@SEC-46); Agentry's own files are off limits for every profile (@POLICY-38)
     # the command rule for agentry review is new: today's rule for Agentry's own files matches paths, and agentry review names none
     # test: internal/policy/default_test.go (to write)
     Given an agent under any of the 6 profiles, allow-everything included
@@ -107,7 +107,7 @@ Feature: Review from the command line
 
   @PROP-20 @test @to-reliability
   Scenario: A server that cannot be reached, or a move it refuses, changes nothing
-    # PLAN.md T-015; a move the route refuses (@TASK-22)
+    # a move the route refuses (@TASK-22)
     # test: cmd/agentry/review_test.go (to write)
     Given Agentry is not running
     When the user runs agentry review approve task-5
@@ -118,7 +118,7 @@ Feature: Review from the command line
 
   @PROP-21 @test @to-limits
   Scenario: A file over 2 MB is named in the diff, not printed
-    # PLAN.md T-015; the Workspace shows "Too big to show" for a file over 2 MB (@TREE-07, internal/workspace/workspace.go)
+    # the Workspace shows "Too big to show" for a file over 2 MB (@TREE-07, internal/workspace/workspace.go)
     # test: cmd/agentry/review_test.go (to write)
     Given a worktree with a changed text file of 3 MB and a changed image
     When the user runs agentry review on the task
@@ -127,7 +127,7 @@ Feature: Review from the command line
 
   @PROP-22 @manual @to-usability
   Scenario: agentry review explains itself
-    # PLAN.md T-015; agentry with no command lists its commands (cmd/agentry/main.go printUsage)
+    # agentry with no command lists its commands (cmd/agentry/main.go printUsage)
     Given a terminal on the machine Agentry runs on
     When the user runs agentry with no command, and then agentry review with no task
     Then the first lists review among the commands, with exactly 1 line saying what it does
