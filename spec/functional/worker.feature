@@ -43,7 +43,7 @@ Feature: Workers
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @WORKER-04 @test
-  Scenario: A join code works once, for its lifetime, and the log keeps no secret as given
+  Scenario: A join code works once, for its lifetime, and its join keeps no secret as given
     Given a join code made now
     When a machine joins with it
     Then the code lets a 2nd machine join: no
@@ -51,8 +51,8 @@ Feature: Workers
     # internal/workers/workers.go InviteLifetime: the code expires 1 hour after it was made
     And the code 1 second after its lifetime lets a machine join: no
     # not under test, checked by hand: the lifetime is 1 hour (internal/workers/workers.go line 28; the test uses the constant)
-    And the log holds the code or the credential as given: no
-    # not under test, checked by hand: the log keeps their hashes (internal/workers/workers.go line 180)
+    And the join's entry in the log holds the code or the credential as given: no
+    # not under test, checked by hand: the log keeps their hashes (internal/workers/workers.go line 180); the invite's entry keeps only the code's hash (internal/workers/workers.go line 162)
     And the credential's hash lets a worker in: no
     When the worker is removed
     Then its credential lets it in: no, and the roster has 0 workers
