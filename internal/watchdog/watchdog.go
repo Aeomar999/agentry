@@ -95,6 +95,11 @@ func (w *Watchdog) Check(now time.Time) {
 }
 
 func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) {
+	if w.resumeFailed(now, task, turn) {
+		w.raiseIssue(task.ID, map[string]any{"retryFresh": true, "reason": fmt.Sprintf(
+			"%s's resumed session didn't start (its process exited before taking the prompt); starting it fresh", turn.Agent)})
+		return
+	}
 	if problem := w.findProblem(now, task, turn); problem != "" {
 		w.raise(task.ID, problem)
 		return
@@ -108,6 +113,14 @@ func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) 
 			"%s hasn't received its prompt after %s. It may be showing a question on screen, such as whether to trust "+
 				"this repository: open its terminal and answer it.", turn.Agent, w.limits.Acknowledge)})
 	}
+}
+
+// resumeFailed says whether a turn that went on with the agent's last
+// session ended before it took its prompt: the engine couldn't resume it,
+// such as a session it no longer has. One that took its prompt and then
+// exited crashed, which findProblem tells.
+func (w *Watchdog) resumeFailed(now time.Time, task *tasks.Task, turn *tasks.Turn) bool {
+	return turn.FromSession != "" && !turn.Acknowledged && now.Sub(turn.StartedAt) > w.limits.StartGrace && !w.isRunning(task.ID)
 }
 
 // findProblem returns what is wrong with an open turn, or "".
@@ -242,8 +255,13 @@ func repeatedCommand(task *tasks.Task, turn *tasks.Turn) (string, int) {
 
 // raise ends the task's session and its turn as an issue.
 func (w *Watchdog) raise(task, reason string) {
+	w.raiseIssue(task, map[string]any{"reason": reason})
+}
+
+// raiseIssue ends the task's session and raises the issue in data.
+func (w *Watchdog) raiseIssue(task string, data map[string]any) {
 	w.stop(task)
-	w.propose(task, events.IssueRaised, "", map[string]any{"reason": reason})
+	w.propose(task, events.IssueRaised, "", data)
 }
 
 // propose says whether the event was recorded.

@@ -128,6 +128,53 @@ func TestACrashIsFlaggedAfterTheGrace(t *testing.T) {
 	}
 }
 
+// A turn that went on with the agent's session but whose process exited
+// before it took its prompt couldn't resume: its issue asks for the same
+// work again in a fresh session. A fresh turn's exit, or one after the
+// prompt, is a crash as before.
+func TestAResumeThatDidNotStartIsRetriedFresh(t *testing.T) {
+	for _, c := range []struct {
+		name         string
+		fromSession  string
+		acknowledged bool
+		retry        bool
+	}{
+		{"resumed, never took its prompt", "s-1", false, true},
+		{"fresh", "", false, false},
+		{"resumed, took its prompt", "s-1", true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorld(t)
+			w.propose(worker, events.TurnEnded, "turn-1", map[string]any{"agent": "tech-lead", "report": "r"})
+			w.propose(events.Actor{Kind: events.Agent, ID: "tech-lead"}, events.TaskAssigned, "", map[string]any{"agent": "engineer", "instructions": "go"})
+			w.propose(worker, events.TurnStarted, "turn-2", map[string]any{"agent": "engineer", "hash": "h2", "fromSession": c.fromSession})
+			if c.acknowledged {
+				w.propose(worker, events.PromptAcknowledged, "turn-2", map[string]any{"hash": "h2"})
+			}
+			w.alive = false
+			if issue := w.after(time.Second); issue != "" {
+				t.Errorf("within the start grace the process may not be up yet: %q", issue)
+			}
+			issue := w.after(4 * time.Second)
+			if !w.stopped || w.task().OpenTurn() != nil {
+				t.Errorf("stopped %v, open turn %v: the issue should end the session and the turn", w.stopped, w.task().OpenTurn())
+			}
+			stream, _ := w.store.Stream("task-1")
+			raised := stream[len(stream)-1]
+			if retry := raised.Flag("retryFresh"); raised.Type != events.IssueRaised || retry != c.retry {
+				t.Fatalf("last event %s with retryFresh %v, want issue.raised with %v", raised.Type, retry, c.retry)
+			}
+			want := "process exited in turn-2"
+			if c.retry {
+				want = "engineer's resumed session didn't start"
+			}
+			if !strings.Contains(issue, want) {
+				t.Errorf("issue %q, want it to say %q", issue, want)
+			}
+		})
+	}
+}
+
 // An archived task is done and held as its summary alone, so the watchdog
 // skips it as it skips a done task, though its process is gone.
 func TestAnArchivedTaskIsLeftAlone(t *testing.T) {

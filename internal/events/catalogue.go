@@ -246,7 +246,7 @@ var coreTypes = map[Type]Spec{
 	TurnEnded:    {Fields: []string{"agent", "report"}, Correlation: true, Writers: []ActorKind{Worker}},                       // "tokens" is the total, or 0 with "tokensUnknown"; with a total, a newer worker adds "inputTokens", "cacheWriteTokens", "cacheReadTokens" and "outputTokens", and "contextTokens" when it knows the last call's input
 	TurnLimited:  {Fields: []string{"agent", "error", "details", "resetsAt"}, Correlation: true, Writers: []ActorKind{Worker}}, // "resetsAt" "" when the engine didn't say
 	TurnResumed:  {Fields: []string{"agent", "reason"}, Correlation: true, Writers: []ActorKind{Worker, System}},               // "reason" "reset" or "engine"
-	IssueRaised:  {Fields: []string{"reason"}, Writers: []ActorKind{Worker, System}},
+	IssueRaised:  {Fields: []string{"reason"}, Writers: []ActorKind{Worker, System}},                                           // the watchdog's "retryFresh" true: a resumed session didn't start, so its agent gets the same work again in a fresh one
 	TurnStopped:  {Correlation: true, Writers: []ActorKind{Human}},
 
 	TaskNeedsYou: {Fields: []string{"question"}, Writers: []ActorKind{Agent, System}}, // Agentry's: "limit" says which stopped the task
