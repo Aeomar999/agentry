@@ -65,7 +65,7 @@ What it holds:
 | Field | Meaning | Example |
 |---|---|---|
 | `title` | the task's title | "Continue Portside" |
-| `description` | the task's description, what the coordinator reads | "Pick the next story from PLAN.md and do it." |
+| `description` | the task's description, what the coordinator reads | "Pick the next story from the backlog and do it." |
 | `repo` | the repo the task works in, as a new task takes it | `/home/you/portside` |
 | `team` | whose coordinator gets the task; `""` for the first team | "Software" |
 | `every` | `day`, `weekdays` or `week` | `weekdays` |
@@ -87,7 +87,7 @@ read as a schedule it can't compute and so never fires; see decision 1.
 
 What a schedule is not: it is not a recurring epic, and it does not carry
 state from one run to the next. Each run is a fresh task; continuity lives
-where it already lives, in the repo (a `PLAN.md`, the git history) and in
+where it already lives, in the repo (its `spec/` and `docs/`, the git history) and in
 the agents' knowledge files.
 
 ## 2. Streams and event types

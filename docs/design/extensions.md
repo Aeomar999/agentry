@@ -69,8 +69,9 @@ it shows on an install with no Visionaries team and no ideas. The pattern
 behind it is larger. A team can bring a capability with it, and more teams
 will. The user's principle for extensions, from the decisions behind this
 project, is that "extensions read events, write proposals and add rules.
-They are not read-only." PLAN.md names three that fit: T-019 (GitHub
-extension: open the PR after `review.approved`; notifications and email),
+They are not read-only." The old build plan (now in git history) named three
+that fit: T-019 (GitHub extension: open the PR after `review.approved`;
+notifications and email),
 T-024 (senior approval: route some requests to someone other than the
 ticket owner) and T-036 (a JSON Schema per event type, which "matters once
 extensions write events").
@@ -1294,8 +1295,8 @@ What changed in this document because of them:
   the first guard on a core type.
 - Whether to close tasks 41 to 43 as duplicates of 38 and 39 now, or leave
   them for the duplicate check (story 22). That is the tech lead's call.
-- The principle is not written in the repo. A proposed line for PLAN.md's
-  decisions: "Extensions are compiled-in features that read events, write
+- The principle is not written in the repo. A proposed line for
+  [docs/decisions.md](../decisions.md): "Extensions are compiled-in features that read events, write
   proposals and add rules through `internal/features`. They are not
   read-only, and they never write past the rules. Turning one off never
   deletes or hides its data, and a log replays whether or not its code is

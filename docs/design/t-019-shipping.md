@@ -10,7 +10,7 @@ build stories and your decisions.
 
 ## In short
 
-PLAN.md's T-019 is "open the PR after `review.approved`". Today, a task's
+The old build plan's T-019 item is "open the PR after `review.approved`". Today, a task's
 work leaves Agentry when the deployer merges the task branch into dev and
 pushes (`internal/agents/defaults/deployer.md`). Nothing records the
 pipeline that push starts, beyond one line in the deployer's report, and
@@ -1172,6 +1172,6 @@ Your answers to the open questions:
    request: `git.refused` waits for you, and the tab's "Try again"
    (`git.retry`) has the job try again (section 4).
 
-PLAN.md's T-019 row also names notification and email extensions. They are
+The build plan's T-019 item also named notification and email extensions. They are
 out of this note: the waiting entry reaches Claude Code now, and Web Push
 (extensions phase 3) once it lands.
