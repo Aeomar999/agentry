@@ -342,8 +342,8 @@ Feature: Workers
     When the coordinator names a machine that does not exist
     Then the coordinator hears there is no machine by that name, with the machines listed
     When the coordinator names a machine that is offline, by its host's name
-    # internal/machines/fleet.go OfflineGrace: an offline machine is waited for 30 seconds before it is given up
-    Then the host's name is taken as that machine, and the coordinator hears the turn couldn't start where it chose, as the machine is offline, after the 30 second wait
+    # internal/machines/fleet.go WaitOn refuses at once; the 30 second OfflineGrace wait applies only to a worker that went offline within the last 30 seconds or is expected back after a restart, covered by internal/machines/fleet_test.go TestTheFleetWaitsForAWorkerComingBack
+    Then the host's name is taken as that machine, the turn starts: no, and the coordinator hears at once that it couldn't start where it chose, as the machine is offline
     When the coordinator names a machine the agent may use, in any letter case
     Then the turn runs there, 1 turn, and the trail names that machine
 

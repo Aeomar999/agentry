@@ -126,10 +126,10 @@ Feature: Claude Code and Agentry
   @CC-12 @test
   # internal/mcp/server_test.go
   Scenario: list_tasks lists every task of this repo with its status and usage
-    Given a task with a budget of 5M tokens and 24 turns, 1.2M tokens and 4 turns used
+    Given a task with a budget of 5M tokens and 24 turns, 1.2M tokens used and 4 turns since the user last answered
     And a working task in the Shipping column with 7 turns and no limits
     When Claude calls list_tasks
-    Then the first task's line reads needs you, 1.2M of 5M tokens and 4 of 24 turns
+    Then the first task's line reads needs you, 1.2M of 5M tokens and 4 of 24 turns since the user last answered
     And the second task's line reads working, Shipping, 0 tokens (no limit) and 7 turns (no limit)
     And an epic's line counts its stories done, such as 2 of 2, and a story's line names its epic as epic-N
     # internal/mcp/tools.go listTasks: with a status, only tasks with that status are listed
@@ -224,7 +224,7 @@ Feature: Claude Code and Agentry
   # internal/mcp/server_test.go
   Scenario: An answer that would close an epic is the user's to approve
     Given an epic left open with every story done, and Claude Code able to ask the user
-    When Claude calls answer_question with the answer close the epic, in any case or spacing
+    When Claude calls answer_question with the answer close the epic, in any letter case, with spaces around it
     Then Claude Code asks the user 1 time whether to close the epic
     And when the user chooses keep open, the answer Close the epic is sent 0 times and the reply says the user kept it open
     And when the user chooses close, the answer Close the epic is sent 1 time and the reply says the user closed it
@@ -552,7 +552,7 @@ Feature: Claude Code and Agentry
 
   @CC-52 @manual
   # 1. Install the integration; have 1 thing waiting and 3 tasks with an agent working.
-  # 2. Look under Claude Code's prompt: "agentry · 1 needs you · 3 running", the first part in yellow.
+  # 2. Look under Claude Code's prompt: "agentry · 1 needs you · 3 running", the needs-you part in yellow.
   # 3. Make a second thing wait: it reads "2 need you".
   # 4. Stop Agentry: the line is empty within 2 seconds.
   Scenario: The status line shows what needs the user and what runs
