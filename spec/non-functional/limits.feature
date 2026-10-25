@@ -5,9 +5,10 @@ Feature: Limits
   Scenario: A task stops at its token budget
     Given a task with a token budget of 100k tokens
     When its turns have used 110k tokens
-    Then no new turn starts, and the user is asked to raise the budget or wrap up
-    And after the user's answer the coordinator gets exactly 1 turn
-    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/coordinator/next_test.go
+    Then no new turn starts, and the user is asked, the question saying 110k tokens of its 100k budget: yes
+    And after the user's answer the coordinator gets the next turn: yes
+    # not under test, checked by hand: the question goes on "Raise the budget to go on, or tell the coordinator to wrap up." (internal/coordinator/next.go line 70), and after that one turn the budget asks again, as it waits for a turn since the answer (line 67)
+    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/coordinator/next_test.go TestTheBudgetSendsTheTaskToYou
 
   @LIM-02 @manual
   Scenario: A new task's budget is 5,000,000 tokens unless the flags say otherwise
@@ -34,7 +35,9 @@ Feature: Limits
     And the third task has no budget and no turn limit
     And a task created with maxTurns -5 is refused with HTTP 409
     And the config endpoint shows a budget of 5,000,000 and 2 turns
-    # README.md, Use it from Claude Code; PLAN.md T-064; internal/web/api_test.go
+    And the MCP tool's create_task with no limits sends budget 0 and maxTurns 0 to the API: yes
+    # not under test, checked by hand: the MCP tool sends a budget or maxTurns of -1 to the API as given (internal/mcp/tools.go line 308)
+    # README.md, Use it from Claude Code; PLAN.md T-064; internal/web/api_test.go TestANewTaskHasItsLimits; the MCP tool: internal/mcp/server_test.go TestTheBoardAndHandingOverWork
 
   @LIM-05 @test
   Scenario: A task that comes from another takes that task's limits
@@ -44,39 +47,41 @@ Feature: Limits
     And the one from the unlimited task has no budget and no turn limit
     And the one from no task takes the defaults, 5,000,000 tokens and 24 turns
     And with unlimited defaults, the one from no task has no budget and no turn limit
-    # README.md, Use it; PLAN.md T-080; internal/tasks/limits_test.go
+    # README.md, Use it; PLAN.md T-080; internal/tasks/limits_test.go TestANewTaskTakesItsSourcesLimitsElseTheDefaults
 
   @LIM-06 @test
   Scenario: Raising the budget on the page answers the budget stop
     Given a task stopped at its budget
     When the user raises the budget above what the task has used, or sets it to no limit
-    Then the raised task is answered exactly once, with "I raised the budget to N tokens. Carry on.", N being the new budget
-    And the unlimited task is answered exactly once, with "I made the budget unlimited. Carry on."
-    # README.md, Use it; PLAN.md T-064; internal/web/api_test.go
+    Then the raised task is answered with "I raised the budget to <N> tokens. Carry on.", N being the new budget, and is working again: yes
+    And the unlimited task is answered with "I made the budget unlimited. Carry on." and is working again: yes
+    # README.md, Use it; PLAN.md T-064; internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn
 
   @LIM-07 @test
   Scenario: A task has 24 turns without the user's answer before it asks
     Given a task created with the default turn limit
     When its 24th turn since the user last answered ends without finishing
-    Then the task is shown in Needs you
-    And the question is "This task has had 24 of its 24 turns without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on."
-    And after the user's answer the count of turns since the answer is 0 and the coordinator carries on
-    # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go
+    Then the coordinator loop asks the user instead of starting a turn: yes
+    And the question says "24 of its 24 turns"
+    And after the user's answer the coordinator carries on: yes
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); the question goes on " without finishing. Raise the limit, or answer with any guidance, and the coordinator carries on." (internal/coordinator/next.go line 65); the answer sets the count of turns since it to 0 (internal/tasks/apply.go line 463)
+    # README.md, Use it; PLAN.md T-064; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
 
   @LIM-08 @test
   Scenario: A negative budget or turn limit is refused by the rules
     Given a task on the board
     When an event sets its budget to -1, and another sets its turn limit to -3
-    Then the budget event is refused with "a budget is a number of tokens, or 0 for no limit"
-    And the turn limit event is refused with "a limit of turns is a number of turns, or 0 for no limit"
-    # README.md, Use it; PLAN.md T-064; internal/rules/rules_test.go
+    Then the budget event is refused: yes
+    And the turn limit event is refused: yes
+    # not under test, checked by hand: the refusals say "a budget is a number of tokens, or 0 for no limit" and "a limit of turns is a number of turns, or 0 for no limit" (internal/rules/task_rules.go lines 135 and 143)
+    # README.md, Use it; PLAN.md T-064; internal/rules/rules_test.go TestBudgetsAndLimitsOfTurns
 
   @LIM-09 @test
   Scenario: The most tasks running at once is a setting from 0 to 100
     Given the setting maxRunningTasks, 0 by default, which is no limit
     When the user sets it to 2 and then to 100
     Then the settings answer with maxRunningTasks 2, then 100, the highest allowed
-    # README.md, Use it; internal/web/settings_api_test.go
+    # README.md, Use it; internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce; the default: TestYouTurnTheVisionariesAfterAnEpicOffAndOn
 
   @LIM-10 @test
   Scenario: A most-tasks setting out of range is refused
@@ -84,7 +89,7 @@ Feature: Limits
     When the user sets it to -1, 101, 1.5, "3", true or null
     Then each is refused with HTTP 400
     And the setting stays 2
-    # README.md, Use it; internal/web/settings_api_test.go
+    # README.md, Use it; internal/web/settings_api_test.go TestYouSetTheMostTasksRunningAtOnce
 
   @LIM-11 @test
   Scenario: Tasks over the limit wait in the user's priority order
@@ -94,7 +99,7 @@ Feature: Limits
     And waiting tasks are admitted in priority order, the newer task first on a tie, never the older
     And only tasks on the board with a turn open take a slot, so a wrap-up turn takes none
     And when one running task ends its turn exactly 1 waiting task is started
-    # README.md, Use it; PLAN.md T-038; internal/coordinator/slots_test.go
+    # README.md, Use it; PLAN.md T-038; internal/coordinator/slots_test.go TestOnlyTasksInProgressTakeASlot, TestSlotsGoInYourPriorityOrder, TestATieOfRankAdmitsTheNewerTask, TestALimitUnderWhatRunsQueuesEveryOneWaiting and TestTheLoopRunsNoMoreTasksThanTheLimit
 
   @LIM-12 @manual
   Scenario: A team may ask another team at most 3 requests deep
@@ -116,11 +121,11 @@ Feature: Limits
   Scenario: Three issues in a row stop the task
     Given a task whose last 2 turns ended in an issue, with no turn ending normally in between
     When a 3rd issue is raised
-    Then the task is shown in Needs you
+    Then the coordinator loop asks the user instead of starting a turn: yes
     And the question is "3 issues in a row, the last: " followed by the issue's reason and ". Fix what's wrong and answer, and the coordinator carries on."
     And a retry still counts as an issue, so retries are bounded at 3
-    And after a turn that ends normally, or the user's answer, the count of issues in a row is 0
-    # README.md, How a task moves; PLAN.md T-032; internal/coordinator/next_test.go; internal/tasks/retry_fresh_test.go for the retry
+    # not under test, checked by hand: the loop records the ask as task.needs_you, shown in Needs you (internal/coordinator/loop.go line 325); a turn that ends normally, or the user's answer, sets the count of issues in a row to 0 (internal/tasks/apply.go lines 386 and 463)
+    # README.md, How a task moves; PLAN.md T-032; internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou; the retry: internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack and internal/coordinator/next_test.go TestIssuesInARowEndingInARetryQuoteTheIssue
 
   @LIM-15 @test
   Scenario: Done tasks are archived after 30 days unless the flag says otherwise
