@@ -1,0 +1,25 @@
+# The proofs
+
+Before the main build, seven proofs were run: throwaway experiments, each answering one question about Claude Code, tmux, SQLite, git worktrees or the engines, kept outside this repository. Their findings were rewritten into Agentry's code, never imported. This table is every finding the build depends on, and where it is used now: the package that does it and the spec scenarios that state it.
+
+| Proof | Finding | Used in now |
+|---|---|---|
+| 01 claude-hooks | The gate is `PreToolUse`; the hook has its own deadline (`AGENTRY_HOOK_DEADLINE`) shorter than the engine's timeout, and ends `\|\| exit 2`, so a killed or crashed hook blocks | internal/hookcall, internal/engines (hook_config.go); @SEC-03, @SEC-05, @SEC-66, @REL-38 |
+| 01 claude-hooks | Reporting hooks end `\|\| true` and never exit 2 (exit 2 on `UserPromptSubmit` blocks the prompt) | internal/engines (hook_config.go); @SEC-04 |
+| 01 claude-hooks | Rules judge the effect, not the tool: refused Edit, Claude used `sed -i`. Developer default: inside the worktree allowed, reaching outside asks, dangerous denied | internal/policy; @SEC-14, @SEC-15, @SEC-21 |
+| 02 prompt-delivery | `UserPromptSubmit` carries the exact text, so its hash proves delivery | internal/hooks (`prompt.acknowledged` carries the hash), internal/watchdog; @REL-08 |
+| 02 prompt-delivery | Never paste: one line pointing at a file. Pastes get wrapped, tabs change, `send-keys` stops under 16 KB; a leading `/` or `!` runs as a command, `!` past the gate | internal/turns (the prompt is "Read <brief> and do what it says."); @HANDOFF-10, @TURN-03 |
+| 03 watchdog-signals | `Stop` ends a turn (under 1 s) and carries `last_assistant_message`, the agent's report | internal/engines (claude.go, signals.go); @TURN-04, @HANDOFF-11 |
+| 03 watchdog-signals | `Notification` with `permission_prompt` (about 6 s) or `idle_prompt` (about 60 s) | internal/engines (claude.go), internal/watchdog; @HANDOFF-17, @REL-04 |
+| 03 watchdog-signals | A crash fires no hook: only `#{pane_dead}` with `remain-on-exit` shows it | internal/sessions (the session host stays with the last screen when the command exits; tmux is no longer used), internal/watchdog; @REL-01, @REL-02, @REL-17, @HANDOFF-15 |
+| 03 watchdog-signals | Network stalls and stuck tools need timeouts; the screen keeps animating, so "screen unchanged" detects nothing. Loop detection compares the command, not its description | internal/watchdog; @REL-03, @REL-05, @REL-06, @REL-07, @HANDOFF-16 |
+| 04 terminal-view | One `tmux -C` client per session fanned out over a websocket to xterm.js 5.5.0; input dropped from watchers; one controller at a time; survives a 1.4 MB burst | internal/terminal (one watch per session on Agentry's own session host, not tmux), internal/sessions, ui (xterm.js 5.5.0); @SESSION-05, @OBS-13, @OBS-14, @LIM-23 |
+| 04 terminal-view | A stale tmux socket after a kill makes the next server die: remove it first | internal/sessions (a dead host's socket is removed before a new one starts); no scenario |
+| Folder trust check, 2026-10-16 | Claude in a new folder stops at "do you trust this folder". A git worktree inherits its main repo's trust, so a repo opened with Claude once needs nothing. Once trusted, the prompt on the command line fires `UserPromptSubmit` and `Stop` | internal/engines (claude_trust.go marks each worktree trusted before the session), internal/watchdog; @COMPAT-16, @REL-08 |
+| 05 event-store | SQLite append-only by triggers, one writer, every write through `propose()` (shape, who, order, policy); a race on one task accepts exactly one | internal/store, internal/events, internal/rules; @OBS-02, @OBS-03, @REL-52 |
+| 05 event-store | `action.asked` is the only route to Needs you, or the board flickers | internal/hooks, internal/tasks; @SEC-34, @APPROVE-01 |
+| 05 event-store | Readers pull by position with their own cursor; a pushed slow reader stalls writes | internal/store (Reader); @PERF-01, @PERF-04 |
+| 06 worktree-lifecycle | A leased port per task (shared port: 2 of 3 tests hit another agent's server); copy `.env`; hard-link deps (about 10 ms against 0.4 s for an install) | internal/worktrees; @TREE-02, @LIM-32 |
+| 06 worktree-lifecycle | Git refuses one branch in two worktrees. Removal: confirm merged, `remove --force` (setup leaves untracked files), delete the branch, `git worktree prune` | internal/worktrees; @TREE-01, @TREE-03 |
+| 07 engine-adapters | One adapter interface (Prepare, Launch, ParseHook, GateReply, plus IsGate) and its recorded-payload tests. Deliver waits for follow-ups; Support and InstructionsFile wait until something reads them | internal/engines (engine.go: the five methods; Deliver, Support and InstructionsFile were never added); @COMPAT-12, @COMPAT-15 |
+| 07 engine-adapters | Codex: same hook events and fields in `.codex/hooks.json`; `PreToolUse` can only deny and needs a reason; allow goes through `PermissionRequest`; no `Notification`, so `PermissionRequest` is the waiting signal | internal/engines (codex.go); @COMPAT-14, @COMPAT-15 |
