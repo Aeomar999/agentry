@@ -17,6 +17,7 @@ import { useResource } from "@/live/use-resource";
 import { useToast } from "./Toasts";
 import { effectiveProfile } from "@/lib/profiles";
 import { LOCAL, machineName } from "@/lib/machines";
+import { byItsWork, RESUME_TITLES } from "@/lib/resume";
 
 // Add an agent, or change one. A new name renames it: it keeps its prompt,
 // settings and knowledge, and the tasks that name it go on with the new
@@ -39,7 +40,17 @@ const BLANK: Agent = {
   workers: [],
   color: "",
   column: "",
+  resume: "",
   knowledge: "",
+};
+
+// What each way of starting a turn means, under the Starts each turn field.
+const RESUME_HINTS: Record<Agent["resume"], string> = {
+  "": "A reviewer starts fresh and gets a compact handoff of the change; every other agent goes on with its own session from its last turn, which costs fewer tokens.",
+  resume:
+    "Goes on with its own session from its last turn on the task, which costs fewer tokens, and is told what happened since. Its first turn on a task is fresh: a reviewer then gets a compact handoff of the change.",
+  fresh:
+    "Starts a new session every turn, briefed from scratch. A reviewer gets a compact handoff of the change instead of the whole trail.",
 };
 
 export function AgentForm({ agent }: { agent?: Agent }) {
@@ -165,6 +176,17 @@ export function AgentForm({ agent }: { agent?: Agent }) {
                 <option value="">Building</option>
                 <option value="review">Review</option>
                 <option value="ship">Shipping</option>
+              </Select>
+            </Field>
+            <Field
+              label="Starts each turn"
+              htmlFor="agent-resume"
+              hint={draft.resume === "" ? `${byItsWork(draft)} ${RESUME_HINTS[""]}` : RESUME_HINTS[draft.resume]}
+            >
+              <Select id="agent-resume" value={draft.resume} onChange={(e) => set({ resume: e.target.value as Agent["resume"] })}>
+                <option value="">{RESUME_TITLES[""]}</option>
+                <option value="resume">{RESUME_TITLES.resume}</option>
+                <option value="fresh">{RESUME_TITLES.fresh}</option>
               </Select>
             </Field>
             <Checkbox

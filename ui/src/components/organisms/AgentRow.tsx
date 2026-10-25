@@ -21,6 +21,7 @@ import {
   shownName,
 } from "@/lib/custom-team";
 import { shippedProfiles } from "@/lib/profiles";
+import { byItsWork, RESUME_TITLES } from "@/lib/resume";
 import { cn } from "@/lib/cn";
 
 // One agent of the team panel (docs/design/custom-teams.md): a header that
@@ -67,6 +68,12 @@ const COLUMN_HINTS: Record<string, string> = {
   "": "Checked by the team's reviewers. Its tasks show in In progress.",
   review: "Its approval is needed to finish. Its tasks show in Review.",
   ship: "Ships checked work, such as deploying. Its tasks show in Shipping.",
+};
+
+// Under Starts each turn when it is set; By its work says what it comes to.
+const RESUME_HINTS: Record<"resume" | "fresh", string> = {
+  resume: "Goes on with its own session from its last turn on the task, which costs fewer tokens.",
+  fresh: "Starts a new session every turn; a reviewer gets a compact handoff of the change.",
 };
 
 export function AgentRow(props: AgentRowProps) {
@@ -278,25 +285,45 @@ function AgentFields({ agent, problems, profileMissing, engines, policy, saving,
         >
           <ColorSwatches value={agent.color} labelledBy={id("color")} disabled={saving} onChange={(color) => onChange({ color })} />
         </Field>
-        <Field
-          label="Its work counts as"
-          htmlFor={id("column")}
-          error={errorOf("column")}
-          hint={agent.coordinates ? "Not used: a coordinator hands the work out." : COLUMN_HINTS[agent.column]}
-        >
-          <Select
-            id={id("column")}
-            value={agent.coordinates ? "" : agent.column}
-            disabled={agent.coordinates}
-            aria-disabled={saving || undefined}
-            onChange={choose((column) => ({ column: column as DraftAgent["column"] }))}
-            {...invalid("column")}
+        <div className="flex flex-col gap-4">
+          <Field
+            label="Its work counts as"
+            htmlFor={id("column")}
+            error={errorOf("column")}
+            hint={agent.coordinates ? "Not used: a coordinator hands the work out." : COLUMN_HINTS[agent.column]}
           >
-            <option value="">Building</option>
-            <option value="review">Review</option>
-            <option value="ship">Shipping</option>
-          </Select>
-        </Field>
+            <Select
+              id={id("column")}
+              value={agent.coordinates ? "" : agent.column}
+              disabled={agent.coordinates}
+              aria-disabled={saving || undefined}
+              onChange={choose((column) => ({ column: column as DraftAgent["column"] }))}
+              {...invalid("column")}
+            >
+              <option value="">Building</option>
+              <option value="review">Review</option>
+              <option value="ship">Shipping</option>
+            </Select>
+          </Field>
+          <Field
+            label="Starts each turn"
+            htmlFor={id("resume")}
+            error={errorOf("resume")}
+            hint={agent.resume === "" ? byItsWork(agent) : RESUME_HINTS[agent.resume]}
+          >
+            <Select
+              id={id("resume")}
+              value={agent.resume}
+              aria-disabled={saving || undefined}
+              onChange={choose((resume) => ({ resume: resume as DraftAgent["resume"] }))}
+              {...invalid("resume")}
+            >
+              <option value="">{RESUME_TITLES[""]}</option>
+              <option value="resume">{RESUME_TITLES.resume}</option>
+              <option value="fresh">{RESUME_TITLES.fresh}</option>
+            </Select>
+          </Field>
+        </div>
 
         <div className="flex flex-col gap-4">
           <Field label="Engine" htmlFor={id("engine")} error={errorOf("engine")}>

@@ -45,6 +45,10 @@ type Agent struct {
 	// Template is the ID of the team template the agent was made from, ""
 	// for one you made yourself. Editing the agent keeps it.
 	Template string `json:"template"`
+	// Resume says whether its turns go on with an earlier session: "" (by
+	// its column: reviewers start fresh, the rest resume), ResumesSession
+	// or StartsFresh. Agents from before it was a setting have "".
+	Resume string `json:"resume"`
 
 	// Knowledge is what the agent has learned as it works, in its own words
 	// and yours; part of every brief. Changed only by agent.learned, so
@@ -76,6 +80,33 @@ const (
 	Ships   = "ship"
 )
 
+// Whether an agent's turns go on with an earlier session of its own or a
+// sibling story's. A reviewer resumes nothing unless set to: it checks the
+// work with fresh eyes, from a handoff, never from the trail it saw before.
+const (
+	ResumeDefault  = ""       // by its column: a Reviews agent starts fresh, every other resumes
+	ResumesSession = "resume" // goes on with its last session
+	StartsFresh    = "fresh"  // every turn starts a new session
+)
+
+// ResumesSessions says whether the agent's turns may go on with an earlier
+// session: not when its FreshBecause says why they start fresh.
+func (a Agent) ResumesSessions() bool {
+	return a.FreshBecause() == ""
+}
+
+// FreshBecause is why the agent's turns start fresh by its setting, as the
+// Turns table shows it; "" when they may resume.
+func (a Agent) FreshBecause() string {
+	switch {
+	case a.Resume == StartsFresh:
+		return "set to start fresh"
+	case a.Resume == ResumeDefault && a.Column == Reviews:
+		return "reviewers start fresh"
+	}
+	return ""
+}
+
 // Colors an agent can have. The page has a shade of each for both themes.
 var Colors = []string{"blue", "violet", "teal", "green", "amber", "orange", "red", "pink", "slate"}
 
@@ -88,7 +119,7 @@ func (a Agent) Proposal(by events.Actor, changed bool) events.Proposal {
 	return events.Proposal{Stream: events.AgentsStream, Actor: by, Type: kind, Data: map[string]any{
 		"name": a.Name, "description": a.Description, "prompt": a.Prompt,
 		"engine": a.Engine, "model": a.Model, "profile": a.Profile, "coordinates": a.Coordinates,
-		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team, "template": a.Template,
+		"workers": a.workers(), "color": a.Color, "column": a.Column, "team": a.Team, "template": a.Template, "resume": a.Resume,
 	}}
 }
 
@@ -118,7 +149,8 @@ func (a Agent) workers() []string {
 func fromEvent(e events.Event) Agent {
 	return Agent{Name: e.Text("name"), Description: e.Text("description"), Prompt: e.Text("prompt"),
 		Engine: e.Text("engine"), Model: e.Text("model"), Profile: e.Text("profile"), Coordinates: e.Flag("coordinates"),
-		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), Template: e.Text("template"), untouched: e.Actor.Kind == events.System}
+		Workers: e.List("workers"), Color: e.Text("color"), Column: e.Text("column"), Team: e.Text("team"), Template: e.Text("template"),
+		Resume: e.Text("resume"), untouched: e.Actor.Kind == events.System}
 }
 
 // templateBefore is the template of agent, read from an event written

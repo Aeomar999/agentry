@@ -1,11 +1,13 @@
-Feature: An agent's turn, and what it cannot do
+Feature: The agents
+  The engineer, reviewer, tester, deployer and the other teams' agents, each in its own worktree and session, every action through the gate.
 
-  Every agent other than the coordinator works one turn at a time: it starts
-  from its own prompt and the coordinator's brief, works in the task's
-  worktree, and ends with a report that goes back to the coordinator. The
-  gate judges each of its actions by its own policy profile.
-  (internal/agents/defaults.go, teams.go; internal/coordinator/brief.go workerBrief;
-  internal/policy/default.toml, How a call is decided)
+  @AGENT-01 @test
+  Scenario: A push asks the user first
+    Given an agent under the developer profile, in its task's worktree
+    When the agent runs git push origin HEAD:dev
+    Then the user is asked before the push runs
+    And a push to main, or a force push, is denied
+    # PLAN.md T-013, T-033; README.md, The policy; internal/policy/default_test.go
 
   # --- Every agent's turn
 

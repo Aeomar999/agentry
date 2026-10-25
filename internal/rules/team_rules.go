@@ -86,7 +86,7 @@ func TeamEditProblems(state State, p events.Proposal) []TeamProblem {
 var asAnEditedAgent = []struct {
 	field string
 	rule  rosterRule
-}{{"name", nameIsValid}, {"engine", engineIsKnown}, {"prompt", hasPrompt}, {"color", colorIsKnown}, {"column", columnIsKnown}}
+}{{"name", nameIsValid}, {"engine", engineIsKnown}, {"prompt", hasPrompt}, {"color", colorIsKnown}, {"column", columnIsKnown}, {"resume", resumeIsKnown}}
 
 // rowProblems are the problems of each agent of the edit: its fields, the
 // agent it was, and its name against the team's other agents and every
@@ -95,7 +95,7 @@ func rowProblems(roster agents.Roster, edit agents.TeamEdit) []TeamProblem {
 	var problems []TeamProblem
 	names, was := map[string]bool{}, map[string]bool{}
 	for row, e := range edit.Agents {
-		p := events.Proposal{Data: map[string]any{"name": e.Name, "engine": e.Engine, "prompt": e.Prompt, "color": e.Color, "column": e.Column}}
+		p := events.Proposal{Data: map[string]any{"name": e.Name, "engine": e.Engine, "prompt": e.Prompt, "color": e.Color, "column": e.Column, "resume": e.Resume}}
 		for _, check := range asAnEditedAgent {
 			if reason := check.rule(roster, p); reason != "" {
 				problems = append(problems, TeamProblem{Row: row, Field: check.field, Reason: reason})
