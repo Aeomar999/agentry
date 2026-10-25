@@ -473,8 +473,9 @@ Feature: The coordinator
     # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack
     Given a task's worktree on one machine with 1 commit and 1 file left uncommitted
     When the next turn's agent runs on another machine
-    Then what was left uncommitted is committed first, as exactly 1 commit, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
-    And each worktree exists on exactly 1 machine at a time
+    Then what was left uncommitted is committed first, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
+    And the worktree it left is no longer on the first machine
+    # not under test, checked by hand: the leftovers are exactly 1 commit
     # the coordinator's choice of machine: internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
 
   @COORD-49 @test
@@ -482,7 +483,8 @@ Feature: The coordinator
     # internal/coordinator/files_test.go TestSharedFilesFollowTheWork
     Given an agent's turn added a file under .agentry/files in the worktree
     When the turn ends
-    Then the file is read back and kept with the task, recorded with the agent that left it and when
+    Then the file is read back and kept with the task, recorded with the agent that left it and its size, 9 bytes
+    # not under test, checked by hand: the time it was left is recorded too (SharedFile.At)
     And the coordinator's next brief lists it as "out/report.csv (9 bytes, from engineer)"
     And a file the user shares is in the next agent's .agentry/files when its turn starts, and a file a turn removed is shared no more
     # a shared file is Name, Hash, Size, By, At, From: internal/tasks/files.go SharedFile
@@ -506,13 +508,14 @@ Feature: The coordinator
     # internal/tasks/resume_test.go TestATurnResumesOnlyTheSameAgentsSessionOnTheSameEngineAndMachine
     Given the agent's last turn on the task ended with a report, on the same engine and the same machine, with a session id
     When its next turn on the task starts
-    Then it resumes exactly that session, and its brief is only what has happened since
+    Then it resumes exactly that session
+    And its brief is the resumed one, with no "## The task" section, shorter than the whole brief
     And it starts fresh, saying why, when any of these holds: first turn, last turn failed, last turn stopped by the user, work moved to another machine, another engine, no session id, or the session's context is over 150,000 tokens
-    # MaxResumedContext = 150_000: internal/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne
+    # MaxResumedContext = 150_000: internal/tasks/resume.go; the shorter brief: internal/coordinator/resumed_brief_test.go TestAResumedBriefIsShorterThanTheWholeOne and TestTheLoopBriefsATurnAsItStarts
 
   @COORD-51 @test
   Scenario: A story's first turn can go on with a sibling story's session
-    # internal/tasks/share_test.go TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling
+    # internal/tasks/share_test.go TestAFirstTurnOnAStoryGoesOnWithTheLatestSessionOfASibling and TestASiblingsSessionIsHeldToTheSameRules
     Given an epic with stories, and the agent has had no turn on this story yet
     When the agent's first turn on this story starts
     Then it goes on with the agent's latest ended turn's session on any sibling story, held to the same rules as its own
@@ -526,7 +529,8 @@ Feature: The coordinator
     Given a session that another turn is open in, or that an open turn started from
     When a turn on a sibling story goes on with it
     Then the turn goes on with a copy of the session, marked forked, and the original is kept by the open turn
-    And 2 stories starting at once from 1 session never both resume it in place: the later one forks
+    And 2 stories starting at once from 1 session never both resume it in place: 1 goes on in place and 1 forks
+    # not under test, checked by hand: the one that forks is the later
     # SessionBusy: internal/tasks/resume.go; the race: internal/turns/share_test.go TestTwoStoriesStartingAtOnceFromOneSessionNeverBothResumeIt
 
   @COORD-53 @test
@@ -534,7 +538,8 @@ Feature: The coordinator
     # internal/turns/share_test.go TestResumeOffKeepsEveryStoryFresh
     Given the server was started with -resume-sessions=false
     When any turn starts, on a story with sibling sessions or not
-    Then it starts fresh, and the reason kept on the turn is exactly "resume is off"
+    Then it starts fresh, and the reason is exactly "resume is off"
+    # not under test, checked by hand: the reason is kept on the turn; the test reads the runner's choice
     # the flag, default true: cmd/agentry/serve.go; ResumeOff: internal/turns/turns.go
 
   # --- Cannot cases
@@ -544,7 +549,8 @@ Feature: The coordinator
     # internal/policy/default_test.go TestTheReadOnlyProfile
     Given the coordinator runs under the read-only profile
     When it calls the Edit tool on main.go in the workspace, or runs git commit -am 'x', or git push origin HEAD:dev
-    Then each is denied by the rule "this agent changes nothing" or the rule for its command
+    Then each is denied
+    # not under test, checked by hand: the rule that denies it, "this agent changes nothing" or the rule for its command: internal/policy/default.toml line 219
     And reading a file, git diff, and go test ./... are allowed
     And writing its own notes in .agentry/knowledge.md is allowed
     # tech-lead and every template's coordinator: Profile "read-only", internal/agents/defaults.go and internal/agents/teams.go (the Visionaries' lead is read-mostly)
@@ -571,6 +577,7 @@ Feature: The coordinator
     # internal/coordinator/wrapup_test.go TestAWrapUpCantStartMoreWork
     Given the engineer is working and the user moves the task to Done on the board
     When the coordinator's wrap-up turn ends with an assign to the engineer
-    Then the task stays done, with the summary "Moved.", and the trail says the coordinator decided "assign" and only its summary is kept
+    Then the task stays done, with the summary "Moved.", and the trail says the coordinator decided "assign": yes
+    # not under test, checked by hand: the trail's words that only its summary is kept
     And an assignment proposed after that is refused with "the user moved this task to Done; it stays done"
     And no more turns run on the task
