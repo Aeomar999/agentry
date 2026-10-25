@@ -55,10 +55,11 @@ Feature: Compatibility
   Scenario: The install command runs in sh on macOS and Linux and in PowerShell on Windows
     Given a server with its own CA, and a join code from the Workers page
     When the sh command is run in sh with curl, and the PowerShell command in pwsh with curl.exe
-    Then the last 2 requests the sh command sends carrying the code are the script at /worker/install.sh, then the agentry build for the machine's own os and arch
-    And the last 2 requests the PowerShell command sends carrying the code are the script at /worker/install.ps1, then the build for windows and the machine's arch
+    Then the last 2 requests the sh command sends carrying the code are the script at /worker/install.sh, then the agentry download
+    And the 2 requests the PowerShell command sends carrying the code are the script at /worker/install.ps1, then the build for windows
     And with another CA's fingerprint in the command, 0 requests carrying the code are sent by either
-    # README.md, Add machines; PLAN.md T-022; internal/web/install_https_test.go
+    # not under test, checked by hand: the scripts ask for the machine's own os and arch (internal/web/install.sh line 35, internal/web/install.ps1 line 42); the PowerShell test skips where pwsh or curl.exe is missing
+    # README.md, Add machines; PLAN.md T-022; internal/web/install_https_test.go TestThePinnedInstallCommandsRunInSh and TestThePinnedInstallCommandRunsInPowerShell
 
   @COMPAT-07 @manual
   Scenario: Where the worker's agentry goes on each system
@@ -75,8 +76,9 @@ Feature: Compatibility
     Given a server whose binary has no agentry-<os>-<arch> builds beside it
     When the install script asks for /worker/agentry with a working code and the server's own os and arch
     Then the answer is 200 with the server's own binary
-    And with a code that is unknown, used or expired the install script itself is refused with 401, so no build is sent
-    # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go
+    And with an unknown code the install script itself is refused with 401
+    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 262 and 272)
+    # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @COMPAT-09 @manual
   Scenario: A machine of another kind gets the build beside the server, or none
@@ -109,29 +111,33 @@ Feature: Compatibility
   # --- Engines: Claude Code and Codex ---
 
   @COMPAT-12 @test
-  Scenario: Exactly two engines, Claude Code and Codex
+  Scenario: The rules know the engines there are adapters for, Claude Code and Codex
     Given the engine adapters compiled into agentry and the rules that check an agent's engine
     When the adapters' names and the rules' known engines are compared, and an agent names another engine
-    Then the names are exactly claude and codex, the same list in both
-    And an agent with any other engine is refused by the rules as an unknown engine
-    # README.md, What you need (Codex works too); PLAN.md T-008; internal/engines/engines_test.go; internal/rules/rules_test.go
+    Then the adapters' names and the rules' known engines are the same list, and adapters named claude and codex are found: yes
+    And an agent with another engine is refused by the rules: yes
+    # not under test, checked by hand: the list is claude and codex alone (internal/rules/agent_rules.go line 15), and the refusal says "unknown engine" (line 92)
+    # README.md, What you need (Codex works too); PLAN.md T-008; internal/engines/engines_test.go TestTheRulesKnowExactlyTheEnginesThereAreAdaptersFor; internal/rules/rules_test.go TestAgentRules
 
   @COMPAT-13 @test
   Scenario: Claude Code is started in never-ask mode with Agentry's own settings file
     Given an agent whose engine is claude, with a model and a prompt, fresh or resuming a session
-    When Agentry prepares and launches the turn
-    Then the command is exactly claude --model <model> [--resume <session>] --settings <worktree>/.agentry/claude-settings.json --permission-mode bypassPermissions <prompt>, the prompt last
-    And the settings file is valid JSON holding the hooks, tui "default", spinnerTipsEnabled false and the env CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1, so the session never stops to offer or ask
-    # README.md, What you need; PLAN.md T-008; internal/engines/engines_test.go
+    When the claude adapter prepares and launches the turn
+    Then a resumed session's command is exactly claude --model <model> --resume <session> --settings <worktree>/.agentry/claude-settings.json --permission-mode bypassPermissions <prompt>
+    And a fresh session's command holds --model <model> and --permission-mode bypassPermissions, resumes nothing and ends with the prompt: yes
+    And the settings file is valid JSON holding the hooks, tui "default", spinnerTipsEnabled false and the env CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1
+    # README.md, What you need; PLAN.md T-008; internal/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession, TestPrepareWritesHooksThatFailClosed and TestClaudeSettingsKeepItUnattended
 
   @COMPAT-14 @test
   Scenario: Codex is started in never-ask mode with its hooks in the worktree
     Given an agent whose engine is codex, with a model and a prompt, fresh or resuming a session
-    When Agentry prepares and launches the turn
-    Then the command is exactly codex [resume] --model <model> -s workspace-write -a never --dangerously-bypass-hook-trust [<session>] <prompt>, the prompt last
+    When the codex adapter prepares and launches the turn
+    Then a resumed session's command is exactly codex resume --model <model> -s workspace-write -a never --dangerously-bypass-hook-trust <session> <prompt>
+    And a fresh session's command holds --model <model> and -a never, resumes nothing and ends with the prompt: yes
     And the hooks are written to <worktree>/.codex/hooks.json as valid JSON, with the gate hook ending in "|| exit 2" and the report hook in "|| true"
-    And a Codex turn's tokens are not counted: the turn says "Codex's token use isn't read"
-    # README.md, What you need (Codex works too); PLAN.md T-008, T-028 (registering hook trust is not built); internal/engines/engines_test.go
+    And a Codex turn's tokens are not counted, with CodexTokensNotRead as the reason: yes
+    # not under test, checked by hand: the reason reads "Codex's token use isn't read" (internal/engines/codex.go line 69); the test compares with the constant itself
+    # README.md, What you need (Codex works too); PLAN.md T-008, T-028 (registering hook trust is not built); internal/engines/engines_test.go TestLaunchIsNeverAskWithThePrompt, TestLaunchResumesTheSession and TestPrepareWritesHooksThatFailClosed; internal/engines/tokens_test.go TestCodexTokensStayUnread
 
   @COMPAT-15 @test
   Scenario: Both engines give Agentry's signals from their hooks
@@ -139,16 +145,17 @@ Feature: Compatibility
     When each is parsed by its engine's adapter
     Then each payload gives exactly the signal expected of it: 6 kinds from Claude Code (session started, prompt received, action requested, action finished, waiting, turn ended) and 4 from Codex (session started, prompt received, action requested, turn ended)
     And in both engines' configurations PreToolUse is a gate whose command ends in "|| exit 2", and Stop a report whose command ends in "|| true"
-    # PLAN.md T-008, proof 07; internal/engines/engines_test.go
+    # PLAN.md T-008, proof 07; internal/engines/engines_test.go TestParseHookGivesTheSameSignalsOnBothEngines and TestPrepareWritesHooksThatFailClosed
 
   @COMPAT-16 @test
   Scenario: Claude Code's trust question is answered before the session, in both path forms on Windows
-    Given Claude Code's config file, ~/.claude.json or the one in CLAUDE_CONFIG_DIR, with other projects in it
-    When Agentry prepares a Claude turn in a new worktree
-    Then the worktree is marked hasTrustDialogAccepted in the config, so the session never stops at "Do you trust this folder?"
-    And every other project and setting in the file is kept, and the file's mode stays 0600
-    And on Windows the folder is marked under 2 keys, with backslashes and with forward slashes, since Claude Code writes either; elsewhere under exactly 1
-    # PLAN.md T-008; internal/engines/engines_test.go; internal/engines/claude_test.go
+    Given Claude Code's config file in CLAUDE_CONFIG_DIR, with another project and a setting in it
+    When the claude adapter prepares a turn in a new worktree
+    Then the worktree is marked hasTrustDialogAccepted in the config: yes
+    And the other project and the setting are kept, and the file's mode stays 0600
+    And on Windows a folder has 2 keys, the second with forward slashes, since Claude Code writes either; elsewhere exactly 1
+    # not under test, checked by hand: with no CLAUDE_CONFIG_DIR the file is ~/.claude.json (internal/engines/claude_trust.go line 23); the folder is marked under each key (line 48), so the session never stops at "Do you trust this folder?"; CI runs the Unix half of the key test only
+    # PLAN.md T-008; internal/engines/engines_test.go TestPrepareTrustsTheWorktree; internal/engines/claude_test.go TestAWindowsFolderIsTrustedBothWays
 
   @COMPAT-17 @manual
   Scenario: Engine versions are read and shown, and no minimum is required
@@ -162,11 +169,12 @@ Feature: Compatibility
   @COMPAT-18 @test
   Scenario: A session started from inside Claude Code or Codex drops only the parent's markers
     Given agentry open run from a Claude Code or Codex session, so its environment carries that session's markers
-    When Agentry starts, and later starts an agent's session
-    Then the markers that tie a process to a running session are removed: CLAUDECODE, CLAUDE_CODE_CHILD_SESSION, CODEX_SANDBOX, the other listed names, and every CLAUDE_CODE_MESSAGING_ name
-    And the user's own engine configuration is kept: CLAUDE_CONFIG_DIR, CLAUDE_CODE_USE_BEDROCK, CODEX_HOME and the API keys
+    When Agentry starts and drops them
+    Then the markers that tie a process to a running session are removed: CLAUDECODE, CLAUDE_CODE_CHILD_SESSION, CLAUDE_CODE_MESSAGING_TOKEN and CODEX_SANDBOX: yes
+    And the user's own engine configuration is kept: CLAUDE_CONFIG_DIR, CLAUDE_CODE_USE_BEDROCK, CODEX_HOME and ANTHROPIC_API_KEY: yes
     And a second pass removes 0 more
-    # README.md, From the source (agentry open); internal/engines/inherited_test.go
+    # not under test, checked by hand: the other listed names and every CLAUDE_CODE_MESSAGING_ name go alike (internal/engines/inherited.go line 45), and an agent's session is started without them (internal/sessions/host.go line 335)
+    # README.md, From the source (agentry open); internal/engines/inherited_test.go TestOnlyParentSessionMarkersAreDropped; cmd/agentry/serve_test.go TestStartingDropsAParentSessionAndSaysWhat
 
   @COMPAT-19 @manual
   Scenario: On Windows an engine installed as a .cmd launcher runs through cmd.exe
@@ -181,19 +189,19 @@ Feature: Compatibility
 
   @COMPAT-20 @test
   Scenario: The app installs only from a secure page
-    Given the page opened over plain http at a network address, and over http://localhost or https with a certificate the device trusts
+    Given a page that is not a secure context, as over plain http at a network address, and one that is, as at http://localhost or https with a certificate the device trusts
     When the page registers its service worker and waits for the browser's install offer
-    Then on the plain http page the install state is "insecure", whatever the service worker did, and it is not offered
+    Then on the plain http page the install state is "insecure", whatever the service worker did: yes
     And on the secure page with the worker registered and no offer yet the state is "unavailable"
-    And the 5 states are exactly installed, ready, insecure, refused and unavailable
-    # README.md, What Start Agentry does (As an app); packaging/files/README.txt lines 16-19; ui/src/lib/install.test.ts; ui/src/lib/install.ts line 17
+    # not under test, checked by hand: the insecure page is not offered the install, and the states are installed, ready, insecure, refused and unavailable (ui/src/lib/install.ts line 17)
+    # README.md, What Start Agentry does (As an app); packaging/files/README.txt lines 16-19; ui/src/lib/install.test.ts "is insecure on a plain http page, whatever the service worker did" and "is unavailable on a secure page with a service worker and no offer yet"
 
   @COMPAT-21 @test
   Scenario: A browser that refuses the service worker gets no install offer
     Given a secure page whose service worker registration the browser rejects, as with a certificate the device does not trust, or in Firefox's private window or Brave, which refuse one on any page
     When the registration fails
     Then the install state is "refused", not "unavailable", so the page can say why there is no offer
-    # README.md, HTTPS and installing the app on other devices; ui/src/lib/install.ts lines 5-9, 29-34; ui/src/lib/install.test.ts
+    # README.md, HTTPS and installing the app on other devices; ui/src/lib/install.ts lines 5-9, 29-34; ui/src/lib/install.test.ts "is refused on a secure page whose service worker the browser refused"
 
   @COMPAT-22 @manual
   Scenario: The Install app button offers, explains or hides itself by the state
@@ -234,19 +242,19 @@ Feature: Compatibility
   Scenario: The CA is handed out in the form each kind of device installs
     Given agentry serve runs with -https
     When any device, over plain http or https and with no token, asks for /trust/ca.crt, /trust/ca.pem and /trust/agentry.mobileconfig
-    Then ca.crt is the certificate in DER, the file the README's Android, macOS and Windows steps install, and ca.pem the same certificate in PEM, the file its Linux step installs, both 200
+    Then ca.crt is the certificate in DER, and ca.pem the same certificate in PEM, both 200
     And agentry.mobileconfig is an iOS configuration profile, content type application/x-apple-aspen-config, with exactly 1 payload holding the CA, PayloadType com.apple.security.root, the same bytes when downloaded again, and identifiers another CA's profile never shares
-    And the README gives the trust steps per device: Android, iPhone and iPad in Safari, macOS, Windows, Linux, and Firefox on every system
-    # README.md, Trust a device once; cmd/agentry/https_test.go; cmd/agentry/trust_test.go
+    # not under test, checked by hand: the README's Android, macOS and Windows steps install ca.crt and its Linux step ca.pem, and it gives the trust steps per device: Android, iPhone and iPad in Safari, macOS, Windows, Linux, and Firefox on every system (README.md, Trust a device once)
+    # README.md, Trust a device once; cmd/agentry/https_test.go TestTheCACertificateIsServedToAnyone; cmd/agentry/trust_test.go TestTheIOSProfile
 
   @COMPAT-26 @test
-  Scenario: The CA key's permissions are checked on macOS and Linux, and a linked key is refused everywhere
+  Scenario: The CA key's permissions are checked on macOS and Linux, and a linked key is refused
     Given the CA folder tls in Agentry's data folder
-    When Agentry opens the CA on macOS or Linux, and on Windows
-    Then on macOS and Linux a key readable by others is refused with "chmod 600", and a folder open to others is set back to 0700 once
-    And on every system a key that is a symbolic link is refused, found with O_NOFOLLOW on macOS and Linux and with Lstat on Windows, which has no O_NOFOLLOW
-    And on Windows, which keeps no Unix permissions, the code makes no permission check and the 2 permission tests skip themselves
-    # README.md, What the CA can sign (0600 on macOS and Linux); internal/tlsca/ca_test.go; internal/tlsca/ca.go lines 120, 332-334; internal/tlsca/key_unix.go; internal/tlsca/key_windows.go
+    When Agentry opens the CA on macOS or Linux
+    Then a key readable by others is refused with "chmod 600", and a folder open to others is set back to 0700
+    And a key that is a symbolic link is refused: yes
+    # not under test, checked by hand: the link is found with O_NOFOLLOW on macOS and Linux (internal/tlsca/key_unix.go line 14) and with Lstat on Windows, which has no O_NOFOLLOW (internal/tlsca/key_windows.go line 13); on Windows, which keeps no Unix permissions, the code makes no permission check (internal/tlsca/ca.go lines 120 and 332) and the 2 permission tests skip themselves
+    # README.md, What the CA can sign (0600 on macOS and Linux); internal/tlsca/ca_test.go TestAKeyOthersMayReadIsRefused, TestAFolderOpenToOthersIsClosed and TestAKeyThatIsALinkIsRefused
 
   @COMPAT-27 @manual
   Scenario: A worker on Windows is updated by moving the old agentry aside
