@@ -199,8 +199,8 @@ Feature: The coordinator
     # the stop on "turns" alone: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, which writes the reports to the log and runs no hook
     # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
     # the report "still broken", 12 times over. Open the task's Events tab: no issue.raised row, and the last
-    # task.needs_you row has "limit": "turns" and the question "This task has had 24 of its 24 turns without finishing"
-    # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/tasks/summary.go atTurnLimit).
+    # task.needs_you row has "limit":"turns" and the question "This task has had 24 of its 24 turns without finishing"
+    # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/tasks/summary.go atTurnLimit; ui/src/pages/TaskPage.tsx line 386).
 
   # --- Safety stops
 
