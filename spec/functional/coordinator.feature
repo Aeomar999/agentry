@@ -257,7 +257,10 @@ Feature: The coordinator
     Then the issues in a row are 0, and 3 more issues are needed before the user is asked
     # turn.ended sets IssuesInARow to 0: internal/tasks/apply.go
     # Steps: on a task, let 2 turns crash (kill the agent's process), then let 1 turn end with a report;
-    # read the task's JSON from the API and check IssuesInARow is 0.
+    # let 2 more turns crash: the task stays in its column, the Tasks page does not list it under Needs you
+    # and its page does not say Waiting for you; a 3rd crash in a row lists it under Needs you, its page says
+    # Waiting for you and the Coordinator tab reads Coordinator · asks you, with "3 issues in a row" as the reason
+    # (MaxIssuesRun = 3: internal/coordinator/next.go). 2 crashes after the report not asking proves the count was 0.
 
   # --- Decisions
 
@@ -478,8 +481,9 @@ Feature: The coordinator
     And a file written under .agentry/files/epic during the turn is not shared when the turn ends
     # the delivery under epic/: internal/coordinator/files.go filesFor; the folder, left out of what a turn shares: internal/sharedfiles/folder.go EpicFolder, Manifest
     # the folder left out of the manifest: internal/sharedfiles/sharedfiles_test.go TestFilesGoRoundBetweenWorktrees; the brief's words: internal/coordinator/brief.go sharedText
-    # Steps: drop a file on an epic's Shared files panel, start one of its stories, and in the story's worktree read
-    # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Details list no such file.
+    # Steps: drop a file on an epic's Files tab, start one of its stories, and in the story's worktree read
+    # .agentry/files/epic/<the file>; write a new file beside it and end the turn; the story's Files tab shows no such
+    # file (with no other shared file it says No shared files).
 
   # --- Sessions
 
