@@ -5,9 +5,9 @@ Feature: The coordinator
   Scenario: An assign decision hands the task to one agent
     Given a task whose coordinator has a turn open
     When the coordinator ends its turn with an assign decision that names the engineer and its instructions
-    Then the loop starts exactly 1 turn, the engineer's
+    Then the next turn, turn-2, is the engineer's
     And the coordinator's instructions are shown in the engineer's brief
-    # README.md, How a task moves; internal/coordinator/loop_test.go
+    # README.md, How a task moves; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
   # --- A task's life
 
@@ -25,8 +25,7 @@ Feature: The coordinator
     Given the coordinator's first turn on a task
     When its brief is written
     Then the brief shows its own prompt, the task, the agents it can hand work to, and every step of the trail so far
-    And its prompt says it reads the task, the trail and the code and changes no code
-    # the prompt: internal/agents/defaults/tech-lead.md and internal/agents/defaults/custom/coordinator.md
+    # not under test, checked by hand: its prompt says it reads the task, the trail and the code and changes no code: internal/agents/defaults/tech-lead.md lines 1 and 5, internal/agents/defaults/custom/coordinator.md lines 1 and 5
 
   @COORD-04 @test
   Scenario: The agent's plan for the turn is kept as it last wrote it
@@ -42,8 +41,9 @@ Feature: The coordinator
     # internal/tasks/plan_test.go TestAnUnfinishedPlanCarriesOn
     Given an agent's last turn on the task left a plan with 1 or more steps not ticked
     When the agent's next turn on the task starts
-    Then that plan is already in the new turn's plan file, kept as it was, and the brief says which turn it came from
+    Then that plan is the one the next turn carries on, kept as it was, with the turn it came from
     And a plan with every step ticked is not carried over
+    # not under test, checked by hand: the plan is already in the new turn's plan file and the brief says which turn it came from: internal/turns/turns.go line 136, internal/coordinator/brief.go lines 452 and 453
 
   @COORD-06 @test
   Scenario: Any decision may retitle the task
@@ -51,16 +51,15 @@ Feature: The coordinator
     Given a task titled "Remove the TODOs"
     When the coordinator's assign decision also carries "title": "Remove the TODO comments in src/"
     Then the task's title is the new one and its first title is kept as "Remove the TODOs"
-    And the decision format asks for 1 plain imperative line under 70 characters
-    # 70 characters: internal/coordinator/decision.go DecisionFormat
+    # not under test, checked by hand: the decision format asks for 1 plain imperative line under 70 characters: internal/coordinator/decision.go DecisionFormat, line 105
 
   @COORD-07 @test
   Scenario: An assign decision hands the task to the named agent
-    # internal/coordinator/next_test.go TestNext
+    # internal/coordinator/next_test.go TestNext, for the instructions in the next turn's handoff; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator, for the engineer's turn and its brief
     Given the coordinator's turn ended with {"action": "assign", "agent": "engineer", "instructions": "Remove them."}
     When the loop applies the decision
-    Then the next turn is the engineer's, started on exactly those instructions
-    And the step from the coordinator to the engineer is shown in the trail
+    Then the next turn is the engineer's, and its brief has those instructions: yes
+    # not under test, checked by hand: the step from the coordinator to the engineer is shown in the trail
 
   @COORD-08 @test
   Scenario: An assign to an agent that does not exist is an issue
@@ -77,8 +76,8 @@ Feature: The coordinator
     # internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
     Given the coordinator assigned the engineer with the instructions "Remove every TODO in src/."
     When the engineer's turn starts in a fresh session
-    Then its own prompt, the task, exactly those instructions, where the work is, the shared files and the plan file are shown in its brief
-    And the brief's prompt is the engineer's own, not the coordinator's
+    Then its own prompt, "You are the engineer", and those instructions are shown in its brief
+    # not under test, checked by hand: the brief also has the task, where the work is, the shared files and the plan file, and not the coordinator's prompt: internal/coordinator/brief.go
 
   @COORD-10 @test
   Scenario: The brief is a file and the prompt is one line pointing at it
@@ -86,8 +85,9 @@ Feature: The coordinator
     Given a turn is about to start
     When Agentry starts the agent's session
     Then the brief is written to .agentry/turn-N.md and the prompt is exactly 1 line: "Read .agentry/turn-N.md and do what it says."
-    And the turn records the hash of that line, which the engine echoes back once it has the prompt
+    And the turn records the hash of that line: yes
     # the prompt line: internal/turns/turns.go start
+    # not under test here, checked by hand: the engine echoes the hash back once it has the prompt: internal/turns/turns.go line 118
 
   @COORD-11 @test
   Scenario: Every agent's report returns to the coordinator
@@ -102,9 +102,9 @@ Feature: The coordinator
     # internal/coordinator/decision_test.go TestParseDecision
     Given a coordinator's reply
     When Agentry reads the JSON object at its end
-    Then the action is exactly 1 of these 9: assign, done, ask, transfer, request, wait, fetch, move, split
-    And a decision missing what its action needs, such as an assign with no agent, is refused with the reason
-    # the 9 actions: internal/coordinator/decision.go, the Action constants and check
+    Then an assign, a done and an ask are read with their fields, and an unknown action such as "deploy" is refused
+    And a decision missing what its action needs, such as an assign with no agent, is refused
+    # not under test, checked by hand: the action is 1 of these 9: assign, done, ask, transfer, request, wait, fetch, move, split, and a refusal says why: internal/coordinator/decision.go, the Action constants and check
 
   @COORD-13 @test
   Scenario: A reply with no usable decision is an issue
@@ -118,11 +118,12 @@ Feature: The coordinator
 
   @COORD-14 @test
   Scenario: An issue goes back to the coordinator
-    # internal/coordinator/next_test.go TestNext
+    # internal/coordinator/next_test.go TestNext; the count: TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
     Given the watchdog raised an issue "the agent's process exited" on a task
     When the loop reads the task
-    Then the next turn is the coordinator's and its handoff is exactly the issue's reason
+    Then the next move starts a turn whose handoff has the issue's reason: yes
     And the task's count of issues in a row goes up by 1
+    # not under test, checked by hand: the turn is the coordinator's and the handoff is the reason word for word
     # IssuesInARow + 1 on IssueRaised: internal/tasks/apply.go
 
   @COORD-15 @test
@@ -130,7 +131,8 @@ Feature: The coordinator
     # internal/watchdog/watchdog_test.go TestACrashIsFlaggedAfterTheGrace
     Given an open turn whose process has exited
     When more than 3 seconds have passed since the turn started
-    Then the watchdog raises exactly 1 issue saying the agent's process exited (crashed or was killed)
+    Then the watchdog raises an issue saying the agent's process exited: yes
+    # the words "(crashed or was killed)": internal/watchdog/watchdog.go line 134; the test asserts "process exited"
     # StartGrace = 3 * time.Second: internal/watchdog/watchdog.go DefaultLimits; checked every second: Run
 
   @COORD-16 @test
