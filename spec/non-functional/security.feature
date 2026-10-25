@@ -346,7 +346,7 @@ Feature: Security
     When agentry serve starts
     Then opening the policy fails: yes
     And its error names the file, the line and the newest backup to copy back, exactly one
-    # not under test, checked by hand: serve returns that error before it starts (cmd/agentry/serve.go lines 203 to 206)
+    # not under test, checked by hand: serve returns that error before it serves (cmd/agentry/serve.go lines 203 to 206)
     # README.md, The policy; PLAN.md T-075; internal/policy/file_test.go TestABrokenFileStopsTheFirstStart, TestABrokenFileAtStartNamesTheLineAndTheNewestBackup
 
   @SEC-41 @manual
