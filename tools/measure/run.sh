@@ -24,6 +24,8 @@ finish)
   tools/measure/wait.sh $CFG $ID none || true
   tools/measure/api.sh $CFG GET /api/tasks/$ID > $M/$CFG-task.json
   tools/measure/api.sh $CFG GET "/api/tasks/$ID/events?limit=2000" > $M/$CFG-events.json
-  echo "saved $M/$CFG-task.json and $M/$CFG-events.json";;
+  echo "saved $M/$CFG-task.json and $M/$CFG-events.json"
+  # The next run's task is task-1 again, so its branch in the scratch repo is renamed out of the way.
+  git -C $M/scratch-repo branch -m agentry/$ID measure/$CFG-$ID && echo "branch kept as measure/$CFG-$ID";;
 *) echo "unknown step $STEP"; exit 2;;
 esac
