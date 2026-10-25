@@ -114,13 +114,15 @@ Feature: Observability
     # README.md, How it works, How a task moves; PLAN.md T-032; internal/coordinator/loop_test.go TestTheLoopTakesATaskRoundTheCoordinator
 
   @OBS-13 @test
-  Scenario: A viewer of the live terminal gets the size, the screen so far, then the live output
+  Scenario: A viewer of the live terminal gets the screen so far, then the live output
     Given a task whose agent's session printed "agent-ready" before anyone watched
-    When 2 viewers connect to GET /api/tasks/{task}/terminal
-    Then each first gets the session's state, with the number of viewers, who is in control and which viewer they are, then the screen so far, holding "agent-ready", then every byte the session prints from then on
-    And both see the state say 2 viewers
+    When 2 viewers connect to the task's terminal
+    Then each gets the screen so far, holding "agent-ready": yes
+    And both get the session's state saying 2 viewers: yes
+    And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 181)
+    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test
   Scenario: Only the viewer in control types, and a viewer is let go when the session ends
@@ -130,15 +132,15 @@ Feature: Observability
     And the second's take is refused while the first holds control
     And the keys typed in control reach the session and show on every viewer's screen, both of them
     And when the session ends, the viewer waited on is disconnected within 5 seconds, to reconnect to the next turn's
-    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go
+    # README.md, Use it, A task; PLAN.md T-018; internal/terminal/terminal_test.go TestOnlyTheViewerInControlCanType
 
   @OBS-15 @test
-  Scenario: A turn running on a worker shows its terminal on the server's page
+  Scenario: A turn running on a worker streams its terminal to the server
     Given a task moved to a worker, whose turn resumes an engine session there
-    When the page watches the task's terminal on the server
+    When a viewer watches the task's terminal through the server's terminal hub
     Then the screen streamed from the worker holds the engine's command with its resumed session, within 5 seconds
     And asked whether the task's agent runs there, the worker answers yes
-    # README.md, Add machines; README.md, How it works, Work across machines; PLAN.md T-022; internal/web/workers_test.go
+    # README.md, Add machines; README.md, How it works, Work across machines; PLAN.md T-022; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-16 @manual
   Scenario: The status line says what needs you and what runs
@@ -151,20 +153,22 @@ Feature: Observability
     # README.md, Use it from Claude Code; the words are cmd/agentry/mcp.go runStatusLine; no test runs it
 
   @OBS-17 @test
-  Scenario: The commands on the server's machine find it by the file it writes at start
-    Given `agentry serve` running over https with its own CA, which wrote server.json, with the url, the page address, the listen address, https and the CA, in its data folder beside the page token
-    When a command with no address set, such as `agentry statusline` or `agentry mcp`, connects
-    Then it reads server.json and the page token and reaches GET /api/config at the url exactly as kept there, answered with ok true
+  Scenario: The client on the server's machine reaches it through server.json and its CA
+    Given a data folder where client.Save wrote server.json with an https url and the server's own CA, beside the page token
+    When client.Local reads that folder and calls GET /api/config
+    Then the call reaches the server at the url kept there, with the page token, answered with ok true: yes
     And without the CA from that file the same server is not trusted
-    # README.md, Use it from Claude Code; internal/client/client_test.go
+    # not under test, checked by hand: agentry serve writes server.json at start, with the listen address too (cmd/agentry/serve.go line 334), and agentry statusline and agentry mcp, with no address or connection set, fall back to client.Local (cmd/agentry/mcp.go line 106)
+    # README.md, Use it from Claude Code; internal/client/client_test.go TestLocalReachesAnHTTPSServerWithTheCAItSaved
 
   @OBS-18 @test
-  Scenario: Claude Code hears only what is new since it connected
-    Given Claude Code's Agentry tools started while 1 task was done already, and a worker online with a task on it
+  Scenario: Agentry's news for Claude Code is only what is new since it started
+    Given the news read once while 1 task was done already, and a worker online with a task on it
     When an epic finishes with a summary, its coordinator tells you something, and the worker goes offline
-    Then the news is 3 lines: "done: epic-2 is done: Snake. The game runs.", "said: epic-2 (Snake): tech-lead says: Moved it to the desktop." and "offline: the machine <name> went offline; epic-2 waits until it is back"
+    Then the news holds the lines "done: epic-2 is done: Snake. The game runs.", "said: epic-2 (Snake): tech-lead says: Moved it to the desktop." and "offline: the machine <name> went offline; epic-2 waits until it is back"
     And the task done before is not in the news
-    # README.md, Use it from Claude Code; internal/mcp/waiting_test.go
+    # not under test, checked by hand: Claude Code's notifications and agentry wait take their news from WaitForNew (internal/mcp/notify.go line 28, cmd/agentry/claudecode.go line 103)
+    # README.md, Use it from Claude Code; internal/mcp/waiting_test.go TestTheNewsIsWhatIsNew
 
   @OBS-19 @manual
   Scenario: A desktop notification when something new waits, and the same news from agentry wait
@@ -183,7 +187,7 @@ Feature: Observability
     Then before, the list is empty, "[]"
     And after, it holds exactly 3 entries in order: the approval "task-2: Waiting for you to approve a push (review_approvals)", the question "epic-1: tech-lead asks: Which layout?", then the feature's own line
     And each entry carries its key, its task, its kind, "needs you" or the feature's, and its line
-    # README.md, Use it from Claude Code; PLAN.md T-053; internal/web/waiting_api_test.go
+    # README.md, Use it from Claude Code; PLAN.md T-053; internal/web/waiting_api_test.go TestWaitingIsTheCoreThenEachFeature
 
   @OBS-21 @test
   Scenario: A push goes once to every subscribed browser for each thing that newly waits
@@ -193,17 +197,18 @@ Feature: Observability
     And the question is pushed exactly once to each of the 2 browsers, and the second check pushes nothing
     And 2 new entries at once are 2 pushes, and an entry that leaves and comes back is pushed again
     And a browser whose push fails does not stop the others from getting theirs
-    # README.md, Install, Push; internal/webpush/sink_test.go
+    # README.md, Install, Push; internal/webpush/sink_test.go TestWhatWaitsAtStartIsNotPushed, TestANewEntryIsPushedOnceToEachDevice, TestTwoNewEntriesAreTwoPushes, TestAnEntryThatLeavesAndComesBackIsNewAgain and TestADeviceThatFailsDoesNotStopTheOthers
 
   @OBS-22 @test
   Scenario: What a push carries
     Given a browser subscribed to pushes
     When an entry waiting on task-9 is pushed, and a message is made for an entry on task-1 whose line is 8,000 bytes
-    Then the first message has the title "Agentry", the task "task-9", the url "/tasks/task-9", and a tag of 32 hex characters made from the entry's key
+    Then the first message has the title "Agentry", the task "task-9", the url "/tasks/task-9", and a tag of 32 characters made from the entry's key
     And the second message's body is the line cut to at most 500 bytes ending in "…", exactly a prefix of the line
     And an entry with no task opens "/"
-    And the same key gives the same tag each time, so a repeat replaces the notification shown
-    # README.md, Install, Push; internal/webpush/sink_test.go
+    And the same key gives the same tag each time: yes
+    # not under test, checked by hand: the service worker shows a push under its tag (ui/public/sw.js line 38), so a repeat replaces the notification shown
+    # README.md, Install, Push; internal/webpush/sink_test.go TestAnEntryWithALongKeyIsStillPushed, TestALongLineIsCutToFitAPush, TestTwoNewEntriesAreTwoPushes and TestATagIsShortAndTheSameForTheSameKey
 
   @OBS-23 @test
   Scenario: A browser the push service no longer knows is dropped
@@ -211,7 +216,7 @@ Feature: Observability
     When the push service answers 404 or 410 for the first browser's push
     Then that subscription is removed from the store and from push.json, and the second is kept
     And the sink goes on: the second browser gets every push after, and the dropped browser none
-    # README.md, Install, Push; internal/webpush/send_test.go
+    # README.md, Install, Push; internal/webpush/send_test.go TestASubscriptionThePushServiceNoLongerHasIsRemoved; the sink: internal/webpush/sink_test.go TestAGoneDeviceIsDroppedAndTheOthersStillGetTheirs
 
   @OBS-24 @test
   Scenario: Push is offered only at an https public address, and keeps its data out of the log
@@ -220,7 +225,7 @@ Feature: Observability
     Then push is available only at the https one, and only there is the public key given
     And the other two say why, "Start Agentry with -public-url https://" or "-public-url is http://...", and the subscription is refused with that reason
     And subscribing and unsubscribing write 0 events, and no event holds a subscription's address
-    # README.md, Install, Push; internal/web/push_api_test.go
+    # README.md, Install, Push; internal/web/push_api_test.go TestPushNeedsAnHTTPSPublicURL and TestPushDataStaysOutOfTheLog
 
   @OBS-25 @test
   Scenario: A turn's tokens are counted from the engine's transcript, this turn's part only
@@ -229,8 +234,9 @@ Feature: Observability
     Then only the entries at or after the start are counted, each message id once, in 4 parts: input, cache write, cache read and output
     And a turn's total is the 4 summed: 4 + 12,800 + 40,000 + 370 = 53,174
     And with no start stamp, as from an older worker, the whole transcript is counted
-    And when every entry is older than the start, the tokens are 0 with the reason "no usage in this turn's part of the transcript"; a missing transcript gives "transcript not saved"; a Codex turn gives "Codex's token use isn't read"
-    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/engines/tokens_test.go; internal/engines/engines_test.go for "transcript not saved"
+    And when every entry is older than the start, the tokens are 0 with the reason NoUsageThisTurn; a missing transcript gives TranscriptNotSaved; a Codex turn gives CodexTokensNotRead
+    # not under test, checked by hand: the reasons read "no usage in this turn's part of the transcript", "transcript not saved" (internal/engines/claude.go lines 28 and 26) and "Codex's token use isn't read" (internal/engines/codex.go line 69)
+    # README.md, Use it, Budgets and turn limits; PLAN.md T-051; internal/engines/tokens_test.go TestClaudeCountsOnlyThisTurnsTokens, TestClaudeCountsTheWholeTranscriptWithNoStart, TestClaudeSaysWhenNoneOfTheUsageIsThisTurns and TestCodexTokensStayUnread; internal/engines/engines_test.go for TranscriptNotSaved
 
   @OBS-26 @test
   Scenario: Each turn keeps its token split and its engine session from turn.ended
@@ -239,7 +245,7 @@ Feature: Observability
     Then turn-1's split is exactly 4, 12,800, 40,000 and 370, its context 26,801, and its engine session the one session.started named
     And turn-2 has no split, no session and a context of 0: nothing is made up
     And the task's split is turn-1's and its unsplit tokens are exactly 1,000
-    # PLAN.md T-051; internal/tasks/split_test.go
+    # PLAN.md T-051; internal/tasks/split_test.go TestATurnKeepsItsEngineSessionAndSplit and TestATurnWithOnlyATotalHasNoSplit
 
   @OBS-27 @test
   Scenario: The task page shows each turn's split under its total
@@ -247,34 +253,36 @@ Feature: Observability
     When its Details tab is shown
     Then turn-1's row shows "53.2k" with "in 4", "cache write 12.8k", "cache read 40k" and "out 370" under it, exactly 4 parts
     And turn-2's row shows "1k" and no parts
-    And the task's line under its header is shown as "in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split"
-    # README.md, Use it, Budgets and turn limits; ui/src/pages/TaskPage.test.tsx
+    And the task page shows "in 4 · cache write 12.8k · cache read 40k · out 370 · 1k not split"
+    # not under test, checked by hand: that line is in the Tokens fact under the header (ui/src/pages/TaskPage.tsx line 376)
+    # README.md, Use it, Budgets and turn limits; ui/src/pages/TaskPage.test.tsx "shows each turn's split stacked under its total, and a turn with none as before" and "shows the task's split and what isn't split"
 
   @OBS-28 @test
   Scenario: A turn whose tokens could not be counted says why
     Given a task with turn-1 ended with its tokens unknown for "transcript not saved" and turn-2 counted at 1,234
-    When the task is read from the API
+    When the task's detail, as the API sends it, is made
     Then turn-1 carries tokens 0 and tokensUnknown "transcript not saved", and turn-2 carries no reason
     And the task says "Tokens unknown on 1 turn: transcript not saved"; with 3 such turns of 2 reasons it says "Tokens unknown on 3 turns: transcript not saved (2), no tokens reported (1)"
     And a task every turn of which was counted says nothing of it, an empty string
-    # README.md, Use it, Budgets and turn limits; internal/web/views_test.go
+    # README.md, Use it, Budgets and turn limits; internal/web/views_test.go TestATurnSaysWhyItsTokensAreUnknown and TestTheTaskSaysWhereItsTokensAreUnknown
 
   @OBS-29 @test
-  Scenario: A worker that connects is recorded, listed online and keeps its history
+  Scenario: A worker that connects is listed online, with its details and history
     Given a worker joined with its code
-    When it dials the server and says hello with its host, system, architecture, version and engines
-    Then its worker.connected event is kept in the workers stream with its name, host, os, arch, version, engines and missing tools
-    And GET /api/workers lists it by name with "online": true, not offline
-    And GET /api/workers/{name} gives its host, its CPUs and its history newest first, the first entry being "online", exactly as the event says
-    # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go
+    When it dials the server and says hello with its host and engines
+    Then GET /api/workers lists it by name with "online": true: yes
+    And GET /api/workers/{name} gives a host, a count of CPUs above 0, and a history whose first entry is "online"
+    # not under test, checked by hand: the hello is kept as a worker.connected event in the workers stream with its name, host, os, arch, version, engines and missing tools (internal/workers/workers.go lines 186 to 188, written at internal/workerlink/server.go line 80), and the history is newest first (internal/web/workers_api.go line 108)
+    # README.md, Add machines; PLAN.md T-022; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @OBS-30 @test
   Scenario: A worker that cannot trust the server logs each failed dial and the way back in, once
     Given a worker whose server now shows a certificate from another CA
     When it runs for 3.5 seconds
-    Then it dials at 0, 1 and 3 seconds, the wait doubling, and logs "link down (...); dialing again in" the wait each time
+    Then it logs a line starting "link down" for each failed dial, 2 or more
     And it logs how to join again, with `agentry worker join -ca-fingerprint`, exactly once
-    # README.md, HTTPS and installing the app, Regenerate the CA; internal/workerlink/worker_test.go
+    # not under test, checked by hand: it dials at 0, 1 and 3 seconds as the wait doubles, and the line goes on "; dialing again in" the wait (internal/workerlink/worker.go lines 82 and 88)
+    # README.md, HTTPS and installing the app, Regenerate the CA; internal/workerlink/worker_test.go TestAWorkerWhoseCAChangedSaysOnceHowToJoinAgain
 
   @OBS-31 @manual
   Scenario: What a worker's log says
