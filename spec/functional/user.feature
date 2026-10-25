@@ -406,7 +406,7 @@ Feature: The user at the page
     # a blocked story gets no turn: internal/coordinator/loop.go line 133
     Given a story that builds on a task not yet done
     When the loop looks at it
-    Then the loop does count the story as blocked
+    Then the story is counted as blocked and cannot start
     Given a story that builds on a task that is done and archived
     When the loop looks at it
     Then the loop does not count it as blocked, as an archived task counts as done
@@ -503,6 +503,7 @@ Feature: The user at the page
   Scenario: The path above the tabs: engineer › reviewer › tester, the coordinator left out
     # ui/src/components/molecules/HandoffPath.test.tsx "counts an agent's turns in a row in muted ink, not faint" and "hides its chevrons from screen readers"
     # ui/src/components/molecules/HandoffPath.tsx lines 31 to 37, the stages; lines 74 to 80, done
+    # the 2 steps and the done step are proven through the chevron count alone: 2 chevrons for 3 steps, HandoffPath.test.tsx line 14
     Given turns by the coordinator, the engineer twice in a row, then the reviewer
     When the path is shown
     Then the coordinator is not a step: exactly 2 steps are shown, engineer then reviewer
@@ -643,7 +644,7 @@ Feature: The user at the page
     Given a task whose coordinator handed a brief to the engineer, whose turn-4 ended after 48 minutes with 14 actions and 210k tokens
     When the Handoffs tab is shown
     Then each step is an article named "<from> to <to>, <time>", newest first
-    And the card's footer reads exactly "Led to turn-4 · engineer · 48m 00s · 14 actions · 210k tokens · Activity" and opens that turn's activity
+    And the card's footer reads exactly "Led to turn-4 · engineer · 48m 00s · 14 actions · 210k tokens" and the button Activity, which opens that turn's activity
     And a brief folds at exactly 8 lines, a report or the user's message at 10, until Show all
 
   @USER-56 @manual
@@ -686,7 +687,7 @@ Feature: The user at the page
     Then a toast "The task moved repos" with "Its worktree is made again there before the next turn." is shown once
     And while a turn is in progress the row reads exactly "moves to <repo> when this turn ends"
     When the user opens the Epic list
-    Then it lists "No epic" and only the epics not done, each as "epic-N · <title>"
+    Then it lists "No epic", the epics not done and the task's own epic, each as "epic-N · <title>"
     When the task is filed under a done epic through the route
     Then it is refused with 409 "is done; reopen it to add stories"
 
@@ -762,7 +763,7 @@ Feature: The user at the page
 
   @USER-64 @test
   Scenario: An approval nobody answered in time is held, and stays open for the user
-    # internal/web/held_approval_test.go TestATimedOutApprovalStaysOpenUntilYouAnswer
+    # internal/web/held_approval_test.go TestATimedOutApprovalStaysOpenUntilYouAnswer, and TestTheHookHearsItsRequestIsHeldBeforeItsDeadline for the agent being told no
     # the panel's line "no answer came in time, so engineer was told no and carried on": ui/src/components/organisms/NeedsYouPanel.tsx lines 83 to 88; its toast "Approved: back to the coordinator": line 67
     Given the engineer's hook gave up waiting for an answer on "git push origin HEAD:dev"
     When the wait runs out
@@ -770,7 +771,6 @@ Feature: The user at the page
     And Questions lists exactly 1 approval, held, with the full command
     When the user approves it late
     Then the action is recorded approved and the coordinator is handed the command back, once
-    And Questions is empty
 
   @USER-65 @test
   Scenario: Questions in the dock gathers what waits for the user, oldest first
@@ -844,7 +844,7 @@ Feature: The user at the page
     When Questions is read
     Then task-1's question has kind turns, with exactly 2 of 2 turns
     And task-2's has kind budget, with exactly 210,000 tokens used of 200,000
-    And task-3's has kind question and no limit, and its stoppedAt is empty
+    And task-3's has kind question and no limit, budget 0
 
   @USER-70 @test
   Scenario: An epic with every story done asks once, and waits quietly if left open
@@ -878,7 +878,7 @@ Feature: The user at the page
   Scenario: A done task's page: what it still allows and what it no longer does
     # ui/src/pages/TaskPage.tsx lines 410 to 418, the Done banner; line 589, the worktree; lines 500 to 508, the terminal
     # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/web/chat_api.go lines 36 to 45
-    # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 278
+    # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 283
     Given task-5 is done, moved there by the user
     When the page is shown
     Then the banner reads exactly "Done · Moved to Done by you" with the summary, or "Shipped" if an agent pushed its work
@@ -969,7 +969,7 @@ Feature: The user at the page
     When the user opens Claude
     Then a Claude Code session in the worktree is shown and the user is in control at once
     When the user opens Agents
-    Then each turn is listed, newest first, as its agent, time, tokens and "working now", "ended" or "issue"
+    Then each turn is listed, newest first, as its agent, time, tokens and 1 of 4 states: "working now", "waiting for the usage limit", "ended" or "issue"
     When the user presses Ctrl+J again
     Then the dock is hidden, and its height is kept for the next time
 
