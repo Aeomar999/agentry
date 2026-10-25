@@ -105,10 +105,10 @@ Current state, from the reviewer's grep run on 2026-10-25 over `ui/src` for `box
 Checked by: the reviewer, on every UI change, running from the repo root
 
 ```sh
-grep -rnE 'box-shadow|text-shadow|drop-shadow|shadow-|border-left|border-l-' ui/src --include='*.tsx' --include='*.ts' --include='*.css'
+grep -rnE 'box-shadow|text-shadow|drop-shadow|shadow-|border-left|border-l-' ui/src --include='*.tsx' --include='*.ts' --include='*.css' --exclude='*.test.tsx' --exclude='*.test.ts'
 ```
 
-and expecting only the two divider-coloured left borders above; and reading that a changed component uses token classes and variables, never a colour, radius or font of its own.
+and expecting only the two divider-coloured left borders above (the test files are left out: a test may name a forbidden class to assert it is absent); and reading that a changed component uses token classes and variables, never a colour, radius or font of its own.
 
 ## 6. WCAG AA contrast for text and controls
 
