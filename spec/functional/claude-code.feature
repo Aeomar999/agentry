@@ -216,17 +216,18 @@ Feature: Agentry from Claude Code
   Scenario: tell_coordinator sends the user's words to a task's coordinator
     Given a task whose coordinator is between turns
     When Claude calls tell_coordinator with the task and the user's words
-    Then 1 message is posted to the task, and the reply says it was sent to task-N's coordinator, which reads it now
+    Then the message is posted to the task, and the reply says it was sent to task-N's coordinator: yes
+    # not under test, checked by hand: the reply says the coordinator reads it now (internal/mcp/tools.go line 334)
     # internal/web/chat_api.go say: with a turn open, the message is recorded and that turn is stopped, so the coordinator reads it at once
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @CC-21 @test
   Scenario: answer_question relays the user's own answer
     Given a task whose coordinator asked the user a question
     When Claude calls answer_question with the user's answer
-    Then 1 answer is posted to the task as given, and the reply says the task is answered and its coordinator carries on
-    And Claude Code is asked anything: no
-    # internal/mcp/server_test.go
+    Then the answer is posted to the task as given, and the reply says the task is answered: yes
+    # not under test, checked by hand: the reply says its coordinator carries on (internal/mcp/tools.go line 352), and Claude Code is asked nothing for a plain answer
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @CC-22 @test
   Scenario: An answer that would close an epic is the user's to approve
@@ -235,7 +236,7 @@ Feature: Agentry from Claude Code
     Then Claude Code asks the user 1 time whether to close the epic
     And when the user chooses keep open, the answer Close the epic is sent 0 times and the reply says the user kept it open
     And when the user chooses close, the answer Close the epic is sent 1 time and the reply says the user closed it
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
   @CC-23 @manual
   Scenario: Copying a file from outside a machine's worktrees is asked of the user
@@ -256,21 +257,21 @@ Feature: Agentry from Claude Code
   Scenario: review_approvals asks the user themselves about each waiting action
     Given 1 action waiting for approval, and Claude Code able to ask the user
     When Claude calls review_approvals
-    Then Claude Code asks the user 1 time, naming the agent, the task, the tool and the command, and why it asks
-    And the model sees the question before the tool replies: no
-    And when the user chooses deny with a reason, 1 deny is posted with that reason and the reply says denied by the user
-    And when the user chooses approve, 1 approve is posted and the reply says approved by the user
-    # internal/mcp/server_test.go
+    Then Claude Code asks the user 1 time, naming the agent, the task, the tool and the command
+    And when the user chooses deny with a reason, the deny is posted with that reason and the reply says denied by the user
+    # internal/mcp/server_test.go TestApprovalsAreAskedOfTheUser; the tool and the command: TestAHeldApprovalSaysWhenItWasHeld
+    # not under test, checked by hand: the question says why it asks (internal/mcp/tools.go line 508); it goes to the user by elicitation, so the model sees it: no (line 476);
+    # when the user chooses approve, 1 approve is posted and the reply says approved by the user (lines 487 and 496)
 
   @CC-25 @test
   Scenario: Without elicitation nothing is approved, and the user gets the link
     Given 1 action waiting for approval, and a Claude Code that cannot ask the user
     When Claude calls review_approvals
-    Then the reply says 1 action waits for the user's approval, which is theirs to give, with 1 link to the page
-    And approve or deny is posted 0 times
-    When Claude calls review_approvals with a task that has 0 actions waiting
-    Then the reply says no action is waiting for approval
-    # internal/mcp/server_test.go
+    Then the reply says 1 action waits for the user's approval, which is theirs to give, with a link to the page
+    And approve is posted 0 times
+    # internal/mcp/server_test.go TestTheBoardAndHandingOverWork; the count: TestAnswersNameAnEpicAsEpicN
+    # not under test, checked by hand: deny is posted 0 times too (internal/mcp/tools.go line 471 returns before any post),
+    # and with a task that has 0 actions waiting the reply says No action is waiting for approval (line 468)
 
   @CC-26 @test
   Scenario: A held approval says when it was held and what approving does now
@@ -280,69 +281,75 @@ Feature: Agentry from Claude Code
     And it says the agent may run this exact command 1 time in its next turn if the user approves
     # internal/hooks/handler.go replyMargin: the server stops waiting 5 seconds before the hook's deadline
     # internal/turns/turns.go environment: the deadline is GateTimeoutSeconds - 10 = 1790 seconds (internal/engines/engine.go GateTimeoutSeconds = 1800)
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestAHeldApprovalSaysWhenItWasHeld: the question says once, which is 1 time
 
   @CC-27 @test
   Scenario: close_epic is asked of the user themselves
     Given an epic whose coordinator asks to close it, and Claude Code able to ask the user
     When Claude calls close_epic for it
-    Then Claude Code asks the user 1 time: Close epic-N, its title, with the coordinator's text
-    And when the user chooses close, the answer Close the epic is posted 1 time and the reply says the user closed epic-N
-    And when the user chooses keep open, it is posted 0 times and the reply says to ask the user what else it needs
-    # internal/mcp/server_test.go
+    Then Claude Code asks the user 1 time: Close epic-N, its title
+    And when the user chooses close, the answer Close the epic is posted and the reply says the user closed epic-N: yes
+    # internal/mcp/server_test.go TestApprovalsAreAskedOfTheUser
+    # not under test, checked by hand: the question holds the coordinator's text (internal/mcp/tools.go line 424); when the user chooses keep open,
+    # it is posted 0 times and the reply says to ask the user what else it needs (line 431)
 
   @CC-28 @test
   Scenario: close_epic closes an epic the user left open
     Given an epic with all 3 stories done that is not waiting for the user
     When Claude calls close_epic for it and the user chooses close
     Then the user is shown the epic's summary before deciding: yes
-    And the answer Close the epic is posted 1 time
-    # internal/mcp/server_test.go
+    And the answer Close the epic is posted: yes
+    # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen
 
   @CC-29 @test
   Scenario: close_epic refuses a task that is not ready
-    Given a task that is no epic, or an epic with stories still going
+    Given a task that is no epic
     When Claude calls close_epic for it
-    Then the tool fails, saying it isn't ready to close because not every story of it is done, and 0 answers are posted
+    Then the tool fails, saying it isn't ready to close: yes
+    # not under test, checked by hand: an epic with stories still going fails the same way, the error says not every story of it is done, and 0 answers are posted (internal/mcp/tools.go line 419)
     Given an epic ready to close, and a Claude Code that cannot ask the user
     When Claude calls close_epic for it
-    Then the reply says closing is the user's to approve, with 1 link to the epic's page, and the answer is posted 0 times
-    # internal/mcp/server_test.go
+    Then the reply gives a link to the epic's page: yes
+    # not under test, checked by hand: the reply says closing is the user's to approve, and the answer is posted 0 times (internal/mcp/tools.go line 422)
+    # internal/mcp/server_test.go TestYouCloseAnEpicYouLeftOpen (task-9); the link: TestAnswersNameAnEpicAsEpicN
 
   @CC-30 @test
   Scenario: start takes tasks out of the Backlog
     Given 2 tasks waiting in the user's Backlog
     When Claude calls start with both ids
-    Then each task is directed to In progress, 2 calls in all
-    And the reply names the 2 as started, epics as epic-N, and says they are on the Tasks board now
-    # internal/mcp/server_test.go
+    Then each task is directed to In progress: yes
+    And the reply names the 2 as started, epics as epic-N: yes
+    # not under test, checked by hand: the reply says they are on the Tasks board now (internal/mcp/tools.go line 406)
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN (the call, for epic-2); the reply: TestAnswersNameAnEpicAsEpicN
 
   @CC-31 @test
   Scenario: set_priority orders tasks among themselves
     Given 2 tasks with ranks of their own
     When Claude calls set_priority with their ids in the order wanted
-    Then the 2 tasks get the 2 ranks they held between them, first first, and no other task moves
-    And the reply says In this order now, naming the 2 as task-N or epic-N
-    # internal/mcp/server_test.go
+    Then the first task named is sent the lowest of the 2 ranks they held between them: yes
+    # not under test, checked by hand: the second gets the other rank, and no other task moves (internal/mcp/tools.go lines 387 to 392)
+    And the reply says In this order now, naming the 2 as task-N or epic-N: yes
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @CC-32 @test
   Scenario: file_under_epic files a task under an epic, moves it, or takes it out
     Given a task and an open epic shown as epic-3
     When Claude calls file_under_epic with the task and epic-3
-    Then the server is sent epic task-3, and the reply says the task is a story of epic-3
+    Then the server is sent epic task-3, and the reply says the task is a story of epic-3: yes
     When Claude calls file_under_epic with the task and an empty epic
-    Then the server is sent an empty epic, 1 call, and the reply says the task is out of its epic
-    # internal/mcp/server_test.go
+    Then the server is sent an empty epic: yes
+    # not under test, checked by hand: the reply says the task is out of its epic (internal/mcp/tools.go line 363)
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   @CC-33 @test
   Scenario: file_under_epic is refused where the rules refuse it
     Given a story and an epic
     When the epic is filed under the story
     Then it is refused with status 409, saying the story isn't an epic
-    And the epic's stories change: no
+    # not under test, checked by hand: the epic's stories are kept as they were
     # internal/web/epics_api.go: an epic id no task has is refused with no task <id>; a done epic with <id> is done; reopen it to add stories
     # internal/rules/task_rules.go notAnEpic, inNoEpic, notItself: an epic can't be a story of another, a story is taken out of its epic first, a task can't be a story of itself
-    # internal/web/api_test.go
+    # internal/web/api_test.go TestTasksAreFiledUnderEpics
 
   @CC-34 @test
   Scenario: Every tool takes an epic as epic-N and names epics epic-N
@@ -350,35 +357,36 @@ Feature: Agentry from Claude Code
     When Claude calls show_task, tell_coordinator, answer_question, file_under_epic, create_task, set_priority, start, close_epic, attach_file or get_file with epic-3
     Then each asks the API for task-3, and sends epic- to the API 0 times
     And each reply names the epic epic-3, a story task-N with its epic as epic-N, and links stay task-N
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN and TestAnswersNameAnEpicAsEpicN
 
   # ---- Shared files ----------------------------------------------------------
 
   @CC-35 @test
   Scenario: attach_file shares a file from this machine with a task
     Given a file on the machine Claude Code runs on
-    When Claude calls attach_file with the task, the file's path and a name to share it by
-    Then the file is uploaded to the task's shared files under that name, 1 upload
-    And the reply says it was shared with task-N as that name, and names 1 folder its agents find it in: .agentry/files
-    When Claude calls attach_file with a folder's path
-    Then the tool fails, saying it isn't a file and to share a folder's files 1 by 1, and 0 uploads are sent
-    # internal/mcp/server_test.go
+    When Claude calls attach_file with the task and the file's path
+    Then the file is uploaded to the task's shared files: yes
+    And the reply says it was shared with task-N, as the file's own name: yes
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
+    # not under test, checked by hand: a name to share it by is used instead, the reply names the folder its agents find it in, .agentry/files (internal/mcp/files.go line 40),
+    # and a folder's path fails, saying it isn't a file and to share a folder's files one by one, with 0 uploads sent (line 29)
 
   @CC-36 @test
-  Scenario: A shared file's name stays inside the task's folder, and its size is limited
+  Scenario: A shared file's name stays inside the task's folder
     Given a task
     When a file is uploaded under a name that leaves the folder, such as one starting with ..
     Then it is refused with status 400
-    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB
-    # internal/web/api_test.go
+    # internal/sharedfiles/blobs.go MaxSize: a shared file is at most 2 GB; no test sends one that big
+    # internal/web/api_test.go TestYouShareFilesWithATask
 
   @CC-37 @test
   Scenario: get_file downloads one of a task's shared files
     Given a task with 1 shared file
     When Claude calls get_file with the task, the file's name and a folder to save in
-    Then 1 file is saved in that folder under its own name, and the reply says Saved, from task-N, the path and its size in bytes
+    Then the file is asked for, and the reply says Saved, the file's name and from task-N: yes
+    # not under test, checked by hand: the file is in that folder under its own name, and the reply gives its path and its size in bytes (internal/mcp/files.go line 69)
     # internal/mcp/files.go getFile: without a place to save, the file goes in the current folder under its own name
-    # internal/mcp/server_test.go
+    # internal/mcp/server_test.go TestToolsTakeAnEpicAsEpicN; the reply: TestAnswersNameAnEpicAsEpicN
 
   # ---- Ideas ----------------------------------------------------------------
 
