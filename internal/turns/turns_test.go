@@ -67,7 +67,7 @@ func TestStartRunsTheAgentOnAOneLinePrompt(t *testing.T) {
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 
 	runner := NewRunner(s, state, here(), Config{HookToken: "secret"})
-	if err := runner.Start(task, coordinator, "# Brief\nDecide who works next."); err != nil {
+	if err := runner.Start(task, coordinator, "# Brief\nDecide who works next.", runner.SessionToResume(task, coordinator)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,7 +117,7 @@ func TestTheHookGivesUpBeforeTheEngineKillsIt(t *testing.T) {
 func TestAnEngineWithNoAdapterIsRefused(t *testing.T) {
 	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
 	task := taskWithWorktree(t, s, "task-1")
-	err := NewRunner(s, state, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief")
+	err := NewRunner(s, state, here(), Config{}).Start(task, agents.Agent{Name: "x", Engine: "gpt-cli"}, "brief", Session{Fresh: "first turn"})
 	if err == nil || !strings.Contains(err.Error(), "no adapter") {
 		t.Errorf("got %v", err)
 	}
@@ -152,7 +152,7 @@ func TestTypeLineSendsALineToTheSession(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 	runner := NewRunner(s, state, here(), Config{})
-	if err := runner.Start(task, coordinator, "brief"); err != nil {
+	if err := runner.Start(task, coordinator, "brief", runner.SessionToResume(task, coordinator)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,7 +198,7 @@ func TestATurnGoesOnWithTheAgentsLastSession(t *testing.T) {
 			coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 			runner := NewRunner(s, state, here(), c.config)
 
-			if err := runner.Start(task, coordinator, "brief"); err != nil {
+			if err := runner.Start(task, coordinator, "brief", runner.SessionToResume(task, coordinator)); err != nil {
 				t.Fatal(err)
 			}
 			if first := launched(t, record); strings.Contains(first, "--resume") {
@@ -210,7 +210,8 @@ func TestATurnGoesOnWithTheAgentsLastSession(t *testing.T) {
 			}
 			endTurn(t, s, "turn-1", "tech-lead", "s-1")
 
-			if err := runner.Start(tasks.FromEvents(mustStream(t, s, task.ID)), coordinator, "brief"); err != nil {
+			ended := tasks.FromEvents(mustStream(t, s, task.ID))
+			if err := runner.Start(ended, coordinator, "brief", runner.SessionToResume(ended, coordinator)); err != nil {
 				t.Fatal(err)
 			}
 			second := tasks.FromEvents(mustStream(t, s, task.ID)).Turn("turn-2")
@@ -237,7 +238,7 @@ func TestTwoTurnsOfATaskNeverResumeTheSameSessionAtOnce(t *testing.T) {
 	defer sessions.Stop(sessions.SocketFor(task.ID))
 	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
 	runner := NewRunner(s, state, here(), Config{})
-	if err := runner.Start(task, coordinator, "brief"); err != nil {
+	if err := runner.Start(task, coordinator, "brief", runner.SessionToResume(task, coordinator)); err != nil {
 		t.Fatal(err)
 	}
 	launched(t, record)
@@ -245,10 +246,10 @@ func TestTwoTurnsOfATaskNeverResumeTheSameSessionAtOnce(t *testing.T) {
 
 	// Both starts see the task as it was after turn 1, so both would resume s-1.
 	ended := tasks.FromEvents(mustStream(t, s, task.ID))
-	if err := runner.Start(ended, coordinator, "brief"); err != nil {
+	if err := runner.Start(ended, coordinator, "brief", runner.SessionToResume(ended, coordinator)); err != nil {
 		t.Fatal(err)
 	}
-	if err := runner.Start(ended, coordinator, "brief"); err == nil {
+	if err := runner.Start(ended, coordinator, "brief", runner.SessionToResume(ended, coordinator)); err == nil {
 		t.Error("a second start while a turn is open should be refused")
 	}
 	// The refused start raises an issue, which cuts turn-2 short too; what

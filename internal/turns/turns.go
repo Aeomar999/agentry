@@ -45,23 +45,44 @@ func NewRunner(s *store.Store, state *current.State, fleet *machines.Fleet, conf
 // startTimeout is how long a machine has to set a turn up and start it.
 const startTimeout = 2 * time.Minute
 
+// A Session is how a turn starts: going on with the agent's last engine
+// session, or fresh, and why. SessionToResume decides it, before the brief
+// is made, so the brief and the launch always agree.
+type Session struct {
+	Resume string // the engine session to go on with, "" for a fresh one
+	Fresh  string // why it starts fresh, "" when it resumes
+}
+
+// Resumes says whether the turn goes on with a session.
+func (s Session) Resumes() bool { return s.Resume != "" }
+
+// SessionToResume is how the agent's next turn on the task starts, on the
+// machine the task's work is on.
+func (r *Runner) SessionToResume(task *tasks.Task, agent agents.Agent) Session {
+	if r.config.NoResume {
+		return Session{Fresh: ResumeOff}
+	}
+	resume, fresh := task.SessionToResume(agent.Name, agent.Engine, r.fleet.Of(task.Worktree.Worker).Name())
+	return Session{Resume: resume, Fresh: fresh}
+}
+
 // Start begins the task's next turn: the agent works from brief, made from
-// task as it is. If it can't, it raises an issue, so the coordinator hears
-// about it.
+// task as it is, in session. If it can't, it raises an issue, so the
+// coordinator hears about it.
 //
 // The brief goes in a file and the prompt is one line pointing at it, never
 // the brief itself: a pasted prompt gets wrapped and cut at 16 KB, and a
 // leading "!" runs as a shell command past the gate (proof 02). The line's
 // hash, echoed back by UserPromptSubmit, proves the agent got it.
-func (r *Runner) Start(task *tasks.Task, agent agents.Agent, brief string) error {
-	err := r.start(task, agent, brief)
+func (r *Runner) Start(task *tasks.Task, agent agents.Agent, brief string, session Session) error {
+	err := r.start(task, agent, brief, session)
 	if err != nil {
 		r.raiseIssue(task.ID, "the "+agent.Name+" turn didn't start: "+err.Error())
 	}
 	return err
 }
 
-func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error {
+func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string, session Session) error {
 	if _, ok := engines.Get(agent.Engine); !ok {
 		return fmt.Errorf("%s uses engine %q, which has no adapter", agent.Name, agent.Engine)
 	}
@@ -69,11 +90,9 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	id := task.NextTurnID()
 	turn := machines.Turn{Task: task.ID, ID: id, Worktree: task.Worktree.Path, Engine: agent.Engine, Model: agent.Model,
 		Brief: brief, BriefFile: filepath.Join(machines.StateDir, id+".md"), Knowledge: agent.Knowledge,
-		Env: r.environment(task, id, agent)}
+		Env: r.environment(task, id, agent), Resume: session.Resume}
 	plan, planFrom := task.PlanToContinue(agent.Name) // its unfinished plan, to continue or replace
 	turn.Plan = plan
-	resumed, fresh := r.sessionToResume(task, agent, machine.Name())
-	turn.Resume = resumed
 	turn.Prompt = "Read " + turn.BriefFile + " and do what it says."
 	if r.config.Theme != nil {
 		turn.Theme = r.config.Theme()
@@ -87,10 +106,10 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 	// Recorded before the session starts, so its first hook call finds the turn open.
 	data := map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
 		"worker": machine.Name(), "planFrom": planFrom, "seen": len(task.Trail)}
-	if resumed != "" {
-		data["fromSession"] = resumed
+	if session.Resumes() {
+		data["fromSession"] = session.Resume
 	} else {
-		data["freshBecause"] = fresh
+		data["freshBecause"] = session.Fresh
 	}
 	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
 		Correlation: id, Data: data})
@@ -101,15 +120,6 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string) error
 		return rejection
 	}
 	return machine.StartTurn(ctx, turn)
-}
-
-// sessionToResume is the engine session the agent's turn goes on with on
-// machine, or "" and why it starts fresh.
-func (r *Runner) sessionToResume(task *tasks.Task, agent agents.Agent, machine string) (session, fresh string) {
-	if r.config.NoResume {
-		return "", ResumeOff
-	}
-	return task.SessionToResume(agent.Name, agent.Engine, machine)
 }
 
 // Stop ends the task's session, wherever it runs. The turn itself ends by its own event.

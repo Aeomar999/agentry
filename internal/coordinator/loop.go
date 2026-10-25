@@ -240,7 +240,7 @@ func (l *Loop) startOn(task *tasks.Task, roster agents.Roster, move Move, target
 	if move.Agent.Coordinates {
 		brief = coordinatorBrief(task, move.Agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)
 	}
-	if err := l.runner.Start(task, move.Agent, brief); err != nil {
+	if err := l.runner.Start(task, move.Agent, brief, l.runner.SessionToResume(task, move.Agent)); err != nil {
 		slog.Error("coordinator loop: starting a turn", "task", task.ID, "agent", move.Agent.Name, "err", err)
 	}
 }
