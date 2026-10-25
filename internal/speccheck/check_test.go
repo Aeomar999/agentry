@@ -204,6 +204,25 @@ func TestACommentBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
 		"user.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:")
 }
 
+func TestARejectedScenarioIsNotCountedUnderAnyCheckTag(t *testing.T) {
+	text := goodScenario + "\n" + strings.NewReplacer("Feature: Tasks\n  What the person at the page does.\n\n", "",
+		"@USER-01 @test", "@USER-02 @test @manual").Replace(goodScenario)
+	dir := writeSpec(t, map[string]string{"functional/user.feature": text})
+	result, err := Check(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Problems) == 0 {
+		t.Error("a scenario with two check tags gives no problem, so the run would not fail")
+	}
+	if got := result.Files[0].Scenarios; got != 2 {
+		t.Errorf("counted %d scenarios, want 2", got)
+	}
+	if test, manual := result.Tags[tagTest], result.Tags[tagManual]; test != 1 || manual != 0 {
+		t.Errorf("counted %d @test and %d @manual, want 1 and 0: the rejected scenario counts under neither", test, manual)
+	}
+}
+
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{
 		"functional/user.feature": goodScenario,

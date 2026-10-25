@@ -65,8 +65,11 @@ func checkFeature(result *Result, seen map[string]string, path, text string) {
 		result.Problems = append(result.Problems, Problem{path, l.number, "Scenario Outline is not used in this spec: write one Scenario per case"})
 	}
 	for _, s := range scenarios {
-		for _, t := range s.tags {
-			result.Tags[t.name]++
+		// A scenario rejected for its check tags counts under none of them.
+		if checkTagProblem(s) == "" {
+			for _, t := range s.tags {
+				result.Tags[t.name]++
+			}
 		}
 		result.Problems = append(result.Problems, scenarioProblems(s, prefix, seen)...)
 	}
