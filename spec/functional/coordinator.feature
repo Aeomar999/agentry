@@ -63,7 +63,7 @@ Feature: The coordinator
 
   @COORD-08 @test
   Scenario: An assign to an agent that does not exist is an issue
-    # internal/coordinator/next_test.go TestNext
+    # internal/coordinator/next_test.go TestNext; goes back to the coordinator: internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
     Given the coordinator's turn ended with an assign to "designer", and the roster has no agent of that name
     When the loop reads the decision
     Then no turn starts
@@ -118,12 +118,12 @@ Feature: The coordinator
 
   @COORD-14 @test
   Scenario: An issue goes back to the coordinator
-    # internal/coordinator/next_test.go TestNext; the count: TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
+    # internal/coordinator/next_test.go TestNext; internal/tasks/retry_fresh_test.go TestAPlainIssueStillGoesToTheCoordinator
+    # the count: TestTheSafetyStopsSendTheTaskToYou, where 3 issues raised read "3 issues in a row"
     Given the watchdog raised an issue "the agent's process exited" on a task
     When the loop reads the task
-    Then the next move starts a turn whose handoff has the issue's reason: yes
+    Then the next turn is the coordinator's and its handoff is exactly the issue's reason
     And the task's count of issues in a row goes up by 1
-    # not under test, checked by hand: the turn is the coordinator's and the handoff is the reason word for word
     # IssuesInARow + 1 on IssueRaised: internal/tasks/apply.go
 
   @COORD-15 @test
@@ -169,7 +169,7 @@ Feature: The coordinator
     # Repeats = 5: internal/watchdog/watchdog.go DefaultLimits
 
   @COORD-20 @test
-  Scenario: A denied action is shown to the coordinator, not raised as an issue
+  Scenario: A denied action is shown to the coordinator under Actions Agentry refused
     # internal/coordinator/resumed_brief_test.go TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals
     Given the policy denied an agent's command, such as git push origin HEAD:dev
     When the coordinator's next brief is written
@@ -179,24 +179,28 @@ Feature: The coordinator
 
   @COORD-21 @test
   Scenario: A resumed session that did not start is retried fresh once
-    # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce
+    # internal/coordinator/retry_fresh_test.go TestAFailedResumeIsRetriedFreshOnce; internal/tasks/retry_fresh_test.go TestARetryFreshIssueHandsTheSameStepBack
     Given an agent's turn went on with its last session, and the process exited before taking the prompt
     When the watchdog sees it after the 3 second grace
     Then it raises an issue saying the resumed session didn't start, and the same agent gets the same step again, fresh
     And the coordinator has no turn of its own before the retry
-    # not under test, checked by hand: the coordinator is told, and the retry counts as 1 issue towards the issues in a row
+    And the coordinator is only told
+    And the retry still counts as 1 issue towards the issues in a row
     # retryFresh: internal/watchdog/watchdog.go checkTurn; the same step handed back: internal/tasks/apply.go IssueRaised
 
-  @COORD-59 @test
+  @COORD-59 @manual
   Scenario: An agent's report of a blocker is a report, not an issue
-    # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task with the default limit of 24 turns, where the coordinator assigns the engineer and the engineer ends its turn with the report "still broken", 12 times over
     When the loop reads the task after those 24 turns
-    Then the stop is the "turns" limit, with the words "24 of its 24 turns", not the issues limit
-    # not under test, checked by hand: the 12 reports raised 0 issues; the test writes the reports to the log, it does not run the hook that raises issues
-    And the issues limit is reached in the same test only by 3 issues raised with no turn ending between them
+    Then the 12 reports raised 0 issues, and the stop is the "turns" limit, with the words "24 of its 24 turns"
+    And the issues limit is reached only by 3 issues raised with no turn ending between them
     # an issue is raised only for a failed turn or a usage limit that lasts: internal/hooks/handler.go, the UsageLimited and TurnFailed cases
     # a turn that ends with a report sets IssuesInARow to 0: internal/tasks/apply.go turn.ended
+    # the stop on "turns" alone: internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou, which writes the reports to the log and runs no hook
+    # Steps: on a task with Max turns 24, have the coordinator assign the engineer and the engineer end each turn with
+    # the report "still broken", 12 times over. Open the task's Events tab: no issue.raised row, and the last
+    # task.needs_you row has "limit": "turns" and the question "This task has had 24 of its 24 turns without finishing"
+    # (internal/coordinator/next.go). The page says Waiting for you and Turns since your answer reads "24 of 24 turns", in red (internal/tasks/summary.go atTurnLimit).
 
   # --- Safety stops
 
@@ -248,7 +252,7 @@ Feature: The coordinator
     # MaxIssuesRun = 3: internal/coordinator/next.go
 
   @COORD-27 @test
-  Scenario: The user's answer resets the counts
+  Scenario: The user's answer lifts the stop
     # internal/coordinator/next_test.go TestTheSafetyStopsSendTheTaskToYou
     Given a task stopped at its turn limit
     When the user answers
@@ -400,7 +404,7 @@ Feature: The coordinator
     # the refusal: internal/coordinator/epics_test.go TestASplitStoryAfterAStoryNotBeforeItIsRefused; blocked: internal/coordinator/loop.go
 
   @COORD-41 @test
-  Scenario: A story cannot itself be split, and an epic is not assigned
+  Scenario: A story cannot itself be split
     # internal/coordinator/epics_test.go TestAStoryCantBeSplitAndAnEpicIsntAssigned
     Given a story of an epic
     When its coordinator decides a split
