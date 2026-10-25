@@ -233,8 +233,9 @@ func TestATurnGoesOnWithTheAgentsLastSession(t *testing.T) {
 func TestAResumedSessionKnowsHowMuchOfTheTrailItSaw(t *testing.T) {
 	coordinator := agents.Agent{Name: "tech-lead", Engine: "claude"}
 	last := &tasks.Turn{Agent: "tech-lead", Ended: true, Worker: workers.Local, Engine: "claude", EngineSession: "s-1", Seen: 3}
-	task := &tasks.Task{Worktree: &tasks.Worktree{Worker: workers.Local}, Turns: []*tasks.Turn{last}}
-	if got := NewRunner(nil, nil, here(), Config{}).SessionToResume(task, coordinator); got != (Session{Resume: "s-1", Seen: 3}) {
+	task := &tasks.Task{ID: "task-1", Worktree: &tasks.Worktree{Worker: workers.Local}, Turns: []*tasks.Turn{last}}
+	_, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	if got := NewRunner(nil, state, here(), Config{}).SessionToResume(task, coordinator); got != (Session{Resume: "s-1", From: "task-1", Seen: 3}) {
 		t.Errorf("resumed session %+v, want it to go on with s-1 having seen 3 steps", got)
 	}
 	if got := NewRunner(nil, nil, here(), Config{NoResume: true}).SessionToResume(task, coordinator); got != (Session{Fresh: ResumeOff}) {

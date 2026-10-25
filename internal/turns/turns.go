@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
@@ -36,6 +37,11 @@ type Runner struct {
 	state  *current.State // the tasks, for where their work is
 	fleet  *machines.Fleet
 	config Config
+
+	// starting is held from a turn's last look at whether its session is
+	// busy until its turn.started is in, so two turns starting at once
+	// never both go on with one session in place.
+	starting sync.Mutex
 }
 
 func NewRunner(s *store.Store, state *current.State, fleet *machines.Fleet, config Config) *Runner {
@@ -46,28 +52,56 @@ func NewRunner(s *store.Store, state *current.State, fleet *machines.Fleet, conf
 const startTimeout = 2 * time.Minute
 
 // A Session is how a turn starts: going on with the agent's last engine
-// session, or fresh, and why. SessionToResume decides it, before the brief
-// is made, so the brief and the launch always agree.
+// session, here or on a sibling story, or fresh, and why. SessionToResume
+// decides it, before the brief is made, so the brief and the launch always
+// agree; a fork goes on from the same point as a resume, so Start may
+// still turn one into the other.
 type Session struct {
 	Resume string // the engine session to go on with, "" for a fresh one
+	From   string // the task whose turn Resume was
+	Fork   bool   // go on with a copy of Resume, since another turn is busy in it
 	Fresh  string // why it starts fresh, "" when it resumes
-	Seen   int    // how much of the trail the resumed session's last brief saw
+	Seen   int    // how much of this task's trail the resumed session's last brief saw, 0 for another task's
 }
 
 // Resumes says whether the turn goes on with a session.
 func (s Session) Resumes() bool { return s.Resume != "" }
 
 // SessionToResume is how the agent's next turn on the task starts, on the
-// machine the task's work is on.
+// machine the task's work is on: by tasks.SessionToShare, across the
+// stories of the task's epic.
 func (r *Runner) SessionToResume(task *tasks.Task, agent agents.Agent) Session {
 	if r.config.NoResume {
 		return Session{Fresh: ResumeOff}
 	}
-	resume, fresh := task.SessionToResume(agent.Name, agent.Engine, r.fleet.Of(task.Worktree.Worker).Name())
+	resume, from, fresh := task.SessionToShare(r.storiesBeside(task), agent.Name, agent.Engine, r.fleet.Of(task.Worktree.Worker).Name())
 	if resume == "" {
 		return Session{Fresh: fresh}
 	}
-	return Session{Resume: resume, Seen: task.LastTurnOf(agent.Name).Seen}
+	session := Session{Resume: resume, From: from.ID, Fork: tasks.SessionBusy(resume, r.state.Tasks())}
+	if from == task {
+		session.Seen = task.LastTurnOf(agent.Name).Seen
+	}
+	return session
+}
+
+// storiesBeside is every story of the task's epic, the task among them;
+// none when it isn't a story. One that can't be read is left out.
+func (r *Runner) storiesBeside(task *tasks.Task) []*tasks.Task {
+	if task.Epic == "" {
+		return nil
+	}
+	epic, err := r.state.Task(task.Epic)
+	if err != nil || epic == nil {
+		return nil
+	}
+	var stories []*tasks.Task
+	for _, id := range epic.Stories {
+		if story, err := r.state.Task(id); err == nil && story != nil {
+			stories = append(stories, story)
+		}
+	}
+	return stories
 }
 
 // Start begins the task's next turn: the agent works from brief, made from
@@ -107,23 +141,44 @@ func (r *Runner) start(task *tasks.Task, agent agents.Agent, brief string, sessi
 	if err := machine.PrepareTurn(ctx, turn); err != nil {
 		return err
 	}
-	// Recorded before the session starts, so its first hook call finds the turn open.
-	data := map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": events.Hash(turn.Prompt),
-		"worker": machine.Name(), "planFrom": planFrom, "seen": len(task.Trail)}
+	if err := r.recordStart(task, agent, id, machine.Name(), events.Hash(turn.Prompt), planFrom, &session); err != nil {
+		return err
+	}
+	turn.Fork = session.Fork
+	return machine.StartTurn(ctx, turn)
+}
+
+// recordStart records turn.started, before the session starts, so its first
+// hook call finds the turn open. A session that has become busy since
+// SessionToResume looked is forked: the check and the record are one step
+// under r.starting, so of two turns starting from one session, the later
+// sees the earlier open and forks.
+func (r *Runner) recordStart(task *tasks.Task, agent agents.Agent, turn, worker, hash, planFrom string, session *Session) error {
+	r.starting.Lock()
+	defer r.starting.Unlock()
+	data := map[string]any{"agent": agent.Name, "engine": agent.Engine, "hash": hash,
+		"worker": worker, "planFrom": planFrom, "seen": len(task.Trail)}
 	if session.Resumes() {
+		session.Fork = session.Fork || tasks.SessionBusy(session.Resume, r.state.Tasks())
 		data["fromSession"] = session.Resume
+		if session.From != task.ID {
+			data["sessionFrom"] = session.From
+		}
+		if session.Fork {
+			data["forked"] = true
+		}
 	} else {
 		data["freshBecause"] = session.Fresh
 	}
-	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(machine.Name()), Type: events.TurnStarted,
-		Correlation: id, Data: data})
+	_, rejection, err := r.store.Propose(events.Proposal{Stream: task.ID, Actor: workerOf(worker), Type: events.TurnStarted,
+		Correlation: turn, Data: data})
 	if err != nil {
 		return err
 	}
 	if rejection != nil {
 		return rejection
 	}
-	return machine.StartTurn(ctx, turn)
+	return nil
 }
 
 // Stop ends the task's session, wherever it runs. The turn itself ends by its own event.
