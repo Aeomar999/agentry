@@ -8,6 +8,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/turns"
 )
 
@@ -48,7 +49,7 @@ func TestAResumedWorkerBriefIsWhatHappenedSinceAndItsInstructions(t *testing.T) 
 
 	brief := resumedWorkerBrief(task, engineer, roster, instructions, task.LastTurnOf("engineer").Seen, nil)
 	for _, want := range []string{"# Agentry brief: engineer, task-1, turn-6, going on", "goes on from your last turn",
-		"## What has happened since your last turn", "One is left in src/b.go.", "engineer → tech-lead: Removed 3.",
+		"## What has happened since your last turn", "One is left in src/b.go.", "3. engineer → tech-lead: Removed 3.",
 		"## Your instructions from the coordinator\n\n" + instructions, "worktree, /w/task-1, on branch agentry/task-1",
 		"## Shared files", ".agentry/turn-6-plan.md", "update your notes in .agentry/knowledge.md", "## When you finish"} {
 		if !strings.Contains(brief, want) {
@@ -90,8 +91,9 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 		turn("turn-6", "engineer", "Removed it.").task()
 	lead := agentNamed(t, roster, "tech-lead")
 
-	brief := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, nil, nil, nil)
+	brief := resumedCoordinatorBrief(task, lead, roster, task.LastTurnOf("tech-lead").Seen, family{}, twoMachines, nil, nil, nil)
 	for _, want := range []string{"# Agentry brief: tech-lead, task-1, turn-7, going on", "engineer → tech-lead: Removed it.",
+		"6. tech-lead → engineer: Remove the one in src/b.go.", "## Machines\n\n- local (host here", "- omni (host omni, linux), offline\n",
 		"## Actions Agentry refused", "git push origin HEAD:dev`: agents don't push", "## Before you finish",
 		"## Your decision\n\n" + strings.TrimSpace(DecisionFormat), "worktree, /w/task-1", ".agentry/turn-7-plan.md",
 		"Decide what happens next."} {
@@ -99,10 +101,34 @@ func TestAResumedCoordinatorBriefKeepsTheDecisionChecksAndRefusals(t *testing.T)
 			t.Errorf("the resumed coordinator brief is missing %q:\n%s", want, brief)
 		}
 	}
-	for _, left := range []string{"## The task", "## The agents you can hand work to", "## Other teams", "## Machines",
+	for _, left := range []string{"## The task", "## The agents you can hand work to", "## Other teams",
 		"One is left in src/b.go.", lead.Prompt} {
 		if strings.Contains(brief, left) {
 			t.Errorf("the resumed coordinator brief should leave out %q:\n%s", left, brief)
+		}
+	}
+}
+
+// twoMachines is this machine and a worker gone offline, so a coordinator
+// has machines to choose from.
+var twoMachines = []machine{{name: "local", host: "here", os: "this machine, where Agentry runs", online: true},
+	{name: "omni", host: "omni", os: "linux"}}
+
+// A story started from the Backlog leaves no step on the trail, so a
+// resumed coordinator hears of the epic's stories as they are now.
+func TestAResumedCoordinatorBriefHasTheEpicsStoriesNow(t *testing.T) {
+	roster := defaultRoster()
+	task := fixRound().turn("turn-6", "engineer", "Removed it.").task()
+	task.Epic = "epic-1"
+	epic := &tasks.Task{ID: "epic-1", Title: "Tidy the code", Description: "No TODOs anywhere.", Coordinator: "tech-lead"}
+	later := &tasks.Task{ID: "task-2", Title: "Lint for TODOs", After: []string{"task-1"}}
+
+	brief := resumedCoordinatorBrief(task, agentNamed(t, roster, "tech-lead"), roster, task.LastTurnOf("tech-lead").Seen,
+		family{epic: epic, stories: []*tasks.Task{task, later}}, nil, nil, nil, nil)
+	for _, want := range []string{"## This task is a story of an epic", "The epic, epic-1: Tidy the code",
+		"Later stories build on this one: task-2 (Lint for TODOs)"} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("the resumed coordinator brief is missing %q:\n%s", want, brief)
 		}
 	}
 }
