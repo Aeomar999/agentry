@@ -1715,7 +1715,7 @@ Feature: The user
     # README.md, HTTPS and installing the app on other devices, "Trust a device once"
     Given the server serving -https with its own CA, reachable at 2 network addresses and localhost
     When a sign-in code is issued
-    Then each address carries exactly 1 trust page, at /trust/ over plain http at that address, with the CA's fingerprint
+    Then each address carries a trust page at /trust/ with the CA's fingerprint, over plain http where the address has a port and over https where it has none
     And the page cuts the fingerprint to its first 8 pairs, the rest behind an ellipsis
     Given a public address behind a proxy doing TLS
     Then that address carries no trust page, and the others still do
