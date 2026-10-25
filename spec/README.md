@@ -15,7 +15,6 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/README.md` | this file: the layout, the rules and how to run the check |
 | `spec/glossary.md` | every noun Agentry uses, one line each |
 | `spec/constraints.md` | how Agentry is built and must stay built, with how each constraint is checked |
-| `spec/NOT-YET.md` | behaviour left out of this baseline because it is not built on dev |
 | `spec/functional/tasks-and-board.feature` | adding a task, the board and its columns, a task's page, running limits, search, the keys and the archive |
 | `spec/functional/epics-and-stories.feature` | epics, their stories, Plan and closing an epic |
 | `spec/functional/approvals-and-questions.feature` | actions the policy held for the user, and the questions coordinators ask |
