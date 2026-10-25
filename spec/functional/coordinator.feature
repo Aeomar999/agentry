@@ -456,7 +456,7 @@ Feature: The coordinator
     # internal/worktrees/handoff_test.go TestWorkMovesThroughTheHubAndBack
     Given a task's worktree on one machine with 1 commit and 1 file left uncommitted
     When the next turn's agent runs on another machine
-    Then what was left uncommitted is committed first, the branch goes to the repo Agentry runs from, and the other machine makes its worktree from that branch
+    Then what was left uncommitted is committed first, as exactly 1 commit, the branch goes to the repo Agentry runs from, and the other machine's worktree made from that branch is clean, with 0 changes showing
     And each worktree exists on exactly 1 machine at a time
     # the coordinator's choice of machine: internal/coordinator/machines_test.go TestTheCoordinatorChoosesTheMachine
 

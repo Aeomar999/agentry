@@ -73,9 +73,18 @@ Feature: The agents
     When the roster is read
     Then all 5 Visionaries are under read-mostly, and only the skeptic's work counts as review
     And network-lead is under read-only, network-engineer under developer, network-verifier and network-security under network-diagnosis, the last 2 counting as review
-    And in Writing, Research and Design the coordinator is under read-only and the 3 others under developer, with the fact-checker, the critic and the design-critic counting as review
     And every profile a template names is 1 of the 6 in the shipped policy
     # TestTheNetworkingTeam in the same file; the profiles: internal/agents/teams.go; internal/agents/prompts_policy_test.go TestEveryTemplateProfileIsInTheShippedPolicy
+
+  @AGENT-56 @manual
+  Scenario: In Writing, Research and Design the coordinator is read-only and the others are developers
+    Given the Writing, Research and Design teams added from their templates
+    When each agent's profile and column are read on the Agents page
+    Then in each of the 3 teams exactly 1 agent coordinates, under read-only, and the 3 others are under developer
+    And exactly 1 agent in each team counts as review: the fact-checker, the critic and the design-critic
+    # the templates: internal/agents/teams.go, writing, research and design
+    # Steps: on the Teams page add Writing, Research and Design from their templates; open each team's agents and
+    # read the profile and the column of each of its 4 agents; compare with teams.go.
 
   @AGENT-09 @test
   Scenario: Only the agent working on the task passes the gate
@@ -154,9 +163,10 @@ Feature: The agents
     # internal/coordinator/checks_test.go TestVerdictOf
     Given a checking agent's report
     When Agentry reads its verdict
-    Then "Verdict: approved" and "verdict - approved, with two nits" are approved, and "**Verdict: Changes needed**", "Verdict: not approved" and "Verdict: rejected" are changes needed
+    Then "Verdict: approved" and "verdict - approved, with two nits" are approved, and "**Verdict: Changes needed**" and "Verdict: not approved" are changes needed
     And a report with no verdict in its last 5 lines, such as "I approved of the naming.", has no verdict, and the coordinator is told to ask that agent again for one
     # verdictOf: internal/coordinator/checks.go; the message for no verdict: unchecked in the same file
+    # verdictOf also reads "Verdict: rejected" as changes needed (checks.go, the rejected prefix); TestVerdictOf has no such case
 
   @AGENT-17 @test
   Scenario: Every checking agent's brief ends with how to give its verdict
@@ -362,8 +372,8 @@ Feature: The agents
     Given a checker under network-diagnosis
     When it runs wg show wg0 dump, sudo wg show wg0 dump, wg show wg0 private-key, wg genkey, or reads a WireGuard config, acme.json or a privkey.pem
     Then each is denied, by "never prints a private key" or "never touch secrets"
-    And ping -c 1 -W 1 --extra <host> and ss -tlnp --extra are asked, by "network commands take no other options"
-    # the rules: internal/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541
+    And ping -c 1 -W 1 --extra <host> is asked by "network commands take no other options", and ss -tlnp --extra is asked by the profile's otherwise = "ask", since ss is not in that rule
+    # the rules: internal/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541; otherwise = "ask": line 475
 
   @AGENT-36 @manual
   Scenario: Networking touches nothing live without the user's go-ahead
@@ -383,7 +393,7 @@ Feature: The agents
   Scenario: The judging profiles write no file from the shell
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
-    When it runs echo hi > notes.md, echo hi >> notes.md, cat > notes.md <<'EOF', echo hi | tee notes.md, go test ./... | tee out.txt, or echo hi > /tmp/notes.md
+    When it runs echo hi > notes.md, echo hi >> notes.md, cat > notes.md <<'EOF', go test ./... &> out.txt, or echo hi > /tmp/notes.md
     Then each is denied by "writes no files from the shell"
     And go test ./... > /dev/null and a redirect into Claude's scratch folder are allowed
     # the rule: internal/policy/default.toml lines 225, 360 and 503; the allowed forms: TestTheJudgingProfilesStillReadAndTest
@@ -392,10 +402,10 @@ Feature: The agents
   Scenario: The judging profiles run nothing that changes files
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
-    When it runs sed -i 's/a/b/' main.go, sed --in-place 's/a/b/' main.go, perl -pi -e 's/a/b/' main.go, rm main.go, mv a.go b.go, cp a.go b.go, touch new.go, mkdir -p docs, chmod +x test.sh, ln -s a b, sort -o out.txt in.txt, find . -name '*.log' -delete, or git log --output=log.txt
+    When it runs sed -i 's/a/b/' main.go, sed --in-place 's/a/b/' main.go, perl -pi -e 's/a/b/' main.go, rm main.go, mv a.go b.go, cp a.go b.go, touch new.go, mkdir -p docs, chmod +x test.sh, ln -s a b, sort -o out.txt in.txt, find . -name '*.log' -delete, git log --output=log.txt, echo hi | tee notes.md, go test ./... | tee out.txt, or gofmt -w .
     Then each is denied by "runs nothing that changes files"
     And cat, head, sed -n '1,5p' main.go, grep -r foo . and find . -name x are allowed
-    # the rule: internal/policy/default.toml lines 231, 366 and 557
+    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound
 
   @AGENT-39 @test
   Scenario: The judging profiles never commit or change branches
@@ -410,10 +420,12 @@ Feature: The agents
   Scenario: Under the judging profiles, go and the test and lint tools write no files
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
-    When it runs go build ./..., go install ./cmd/agentry, go test -c ./internal/policy, go test -coverprofile=c.out ./..., go test -mod=mod ./..., go vet -vettool=./x ./..., gofmt -w ., npx eslint --fix ., npx vitest run -u, npx jest --coverage, pytest --junitxml=report.xml, or cargo clippy --fix
-    Then each is denied, by "go writes no files" or "test and lint tools write no files"
+    When it runs go build ./..., go install ./cmd/agentry, go test -c ./internal/policy, go test -coverprofile=c.out ./..., go test -mod=mod ./..., or go vet -vettool=./x ./...
+    Then each is denied by "go writes no files"
+    And npx eslint --fix ., npx vitest run -u, npx jest --coverage, pytest --junitxml=report.xml and cargo clippy --fix are denied by "test and lint tools write no files"
     And go test ./..., go test -count=1 -cover -run TestX -v ./internal/policy, go vet ./..., gofmt -l ., npx eslint ., npx jest --ci and pytest are allowed
-    # the rules: internal/policy/default.toml lines 243 and 254; the allowed forms: TestTheJudgingProfilesStillReadAndTest, TestTheJudgingProfilesCloseWhatTheReviewFound
+    # the rules: internal/policy/default.toml lines 243 and 254; the test and lint flags: TestTheJudgingProfilesCloseWhatTheReviewFound
+    # the allowed forms: TestTheJudgingProfilesStillReadAndTest (go test, go vet, gofmt -l, npx eslint); npx jest --ci and pytest: TestTheJudgingProfilesStillRunTheirTests and TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
 
   @AGENT-41 @test
   Scenario: Every spelling of a writing flag is denied
@@ -450,9 +462,11 @@ Feature: The agents
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs git grep -O'touch x' foo, rg --pre ./x.sh foo, sort --compress-program=./x.sh in.txt, or npx vitest run --execArgv=<node options>
     Then each is denied by "runs no command a flag names"
-    And sed -n 'w out' f, sed -n '1e touch x' f, uniq in.txt out.txt and npx tsc are asked
+    And sed -n 1p f -e 'w out' and npx tsc --noEmit -p . --init are asked by "beyond their plain forms, these ask"
+    And sed -n 'w out' f, sed -n '1e touch x' f, uniq in.txt out.txt and npx tsc match no rule, so each is asked by the profile's otherwise = "ask"
     And sed -n '1,5p' main.go, sed -n 12p main.go and npx tsc --noEmit are allowed
-    # the rules: internal/policy/default.toml lines 274 and 286; the plain sed -n forms: line 307
+    # the rules: internal/policy/default.toml lines 274 and 286; the plain sed -n forms: line 307; otherwise = "ask": line 200
+    # npx vitest run --execArgv: TestTheJudgingProfilesRunNoTestsFromOutside; the rest: TestTheJudgingProfilesCloseWhatTheReviewFound
 
   @AGENT-45 @test
   Scenario: Every value a variable may hold is judged
@@ -549,7 +563,8 @@ Feature: The agents
     Then each is denied by "never touch secrets", the first rule of each of those 5 profiles
     And cd && cat .netrc is denied too, the relative path counted from where cd went
     And under allow-everything cat .env is allowed
-    # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664; TestARelativePathIsCountedFromWhereCdWent; TestAllowEverything
+    # the rule: internal/policy/default.toml lines 91, 205, 340, 480 and 664
+    # under developer: TestTheDeveloperProfile; cd && cat .netrc under all 5: TestARelativePathIsCountedFromWhereCdWent; cat .env under read-mostly: TestTheReadMostlyProfile; TestAllowEverything
 
   @AGENT-55 @test
   Scenario: A denial or an ask tells the agent which rule decided
