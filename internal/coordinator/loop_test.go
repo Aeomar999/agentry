@@ -232,9 +232,14 @@ func readBrief(t *testing.T, task *tasks.Task, turn string) string {
 
 // newLoop is a loop with this machine only, its worktrees in root.
 func newLoop(s *store.Store, state *current.State, root string) *Loop {
+	return newLoopWith(s, state, root, turns.Config{})
+}
+
+// newLoopWith is newLoop with its runner's config.
+func newLoopWith(s *store.Store, state *current.State, root string, config turns.Config) *Loop {
 	fleet := machines.NewFleet(&machines.Local{Label: workers.Local, ServerURL: "http://x", HookCommand: "agentry hook", WorktreeRoot: root,
 		Blobs: sharedfiles.Disk{Dir: filepath.Join(root, ".files")}})
-	loop := NewLoop(s, state, turns.NewRunner(s, state, fleet, turns.Config{}), fleet)
+	loop := NewLoop(s, state, turns.NewRunner(s, state, fleet, config), fleet)
 	loop.Features = []features.Feature{ideas.Feature()}
 	loop.Logs = map[string]features.Proposer{ideas.Name: features.Checked(ideas.Feature(), features.Registration(ideas.Feature()), s)}
 	return loop
