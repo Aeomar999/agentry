@@ -116,12 +116,13 @@ Feature: Usability
     # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/pages/TasksPage.tsx lines 109-120; pages/TaskPage.tsx lines 430-433, 546; organisms/ActivityFeed.tsx line 63; no test
 
   @USE-13 @test
-  Scenario: On a phone a turn's band shows its duration in place of its facts
-    Given a task's Activity with a turn that ended after 5 minutes and spent 41k tokens
+  Scenario: A turn's band holds its facts, and its duration for a phone
+    Given the Activity feed with a turn that ended after 5 minutes and spent 41k tokens
     When the turn's band is shown
-    Then the band holds the turn's id, the machine it ran on and "41k tokens", each in a span shown only at 768 px and wider, and its state "ended" in a badge shown at every width
-    And the duration "5m 00s" is in a span shown only under 768 px, so a phone sees the duration and a wider screen sees the facts
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 286-292; ui/src/components/organisms/ActivityFeed.test.tsx
+    Then the band holds the turn's id, the machine it ran on, "41k tokens" and its state "ended"
+    And the duration "5m 00s" is in a span shown only under 768 px
+    # not under test, checked by hand: the id, the machine and the tokens are in spans shown only at 768 px and wider, and the state in a badge shown at every width, so a phone sees the duration and a wider screen the facts (ui/src/components/organisms/ActivityFeed.tsx lines 286-292)
+    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 286-292; ui/src/components/organisms/ActivityFeed.test.tsx "puts the turn's facts in the band: badge, tokens, and the duration for a phone"
 
   @USE-14 @manual
   Scenario: A long word in a turn's start reason wraps instead of widening the table
@@ -153,11 +154,12 @@ Feature: Usability
 
   @USE-17 @test
   Scenario: Esc or a press outside closes a dialog, unless it is held
-    Given a dialog open, a box with role dialog named by its title, over a dark scrim
+    Given a dialog open, a box with role dialog over a scrim
     When the user presses the mouse inside it, presses Esc, then presses the mouse on the scrim
     Then the press inside closes nothing, and Esc and the press on the scrim close it, exactly 2 closes
     And while the dialog is held, neither Esc nor a press on the scrim closes it, 0 closes; once let go both close it again
-    # ui/src/components/molecules/Dialog.tsx lines 24-28, 33-37; ui/src/components/molecules/Dialog.test.tsx
+    # not under test, checked by hand: the box is named by its title and the scrim is dark (ui/src/components/molecules/Dialog.tsx lines 32 and 37)
+    # ui/src/components/molecules/Dialog.tsx lines 24-28, 33-37; ui/src/components/molecules/Dialog.test.tsx "Esc or a mousedown outside closes it; one inside doesn't" and "held, neither Esc nor a mousedown outside closes it, and once let go both do again"
 
   @USE-18 @test
   Scenario: A dialog with a request running stays open on Esc until the request ends
@@ -165,15 +167,15 @@ Feature: Usability
     When the user presses Esc or clicks outside it
     Then the dialog stays open while the request runs, and once it ends Esc and a click outside each close it
     And once an add has succeeded and closed it, the dialog opened again is closed by Esc and by a click outside, not held
-    # README.md, Use it, Teams; ui/src/pages/AgentsPage.test.tsx
+    # README.md, Use it, Teams; ui/src/pages/AgentsPage.test.tsx "while ${request} runs, Esc and a click outside leave it open; once it ends, both close it" (an add, a delete, an import) and "once an add succeeds and closes it, Esc and a click outside close it when it opens again"
 
   @USE-19 @test
   Scenario: Closing a team panel with changes asks first and gives focus back
     Given the team panel open with an unsaved change, focus in the team name field
     When the user presses Esc, or presses Close, or presses Cancel
-    Then the panel asks first, and focus moves to its "Keep editing" button; the "Create team" button is hidden while it asks
+    Then the panel asks first: yes; on Esc and on Cancel focus moves to its "Keep editing" button, and on Esc the "Create team" button is hidden while it asks
     And Esc again, or Keep editing, puts focus back exactly where it was: the name field, the Close button or the Cancel button
-    # README.md, Use it, Teams; ui/src/components/organisms/TeamPanel.test.tsx
+    # README.md, Use it, Teams; ui/src/components/organisms/TeamPanel.test.tsx "Esc, Close and Cancel with changes ask first; Esc again or Keep editing puts focus back" and "Cancel with changes asks to discard them, counting them; Keep editing stays, Discard closes"
 
   @USE-20 @manual
   Scenario: Focus moved by the keyboard shows one 2 px line, a click shows none
@@ -186,30 +188,32 @@ Feature: Usability
 
   @USE-21 @test
   Scenario: Tab in the Activity feed scrolls the focused element wholly into view
-    Given the Activity feed, a scroller whose scroll padding keeps a stuck band at its top and, on a phone, padding at its bottom, with links and buttons in its rows and a code block folded to its first lines
-    When Tab moves focus to an element under the band, one past the bottom, one already in view, one taller than the room left, and one inside the folded code
+    Given a scroller that keeps focus in view, whose scroll padding keeps room for a 44 px band at its top and 48 px at its bottom, with links and a button in it and a code block folded to its first lines
+    When focus moves to an element under the band, one past the bottom, one already in view, one taller than the room left, and one inside the folded code
     Then the element under the band ends just below it, the one past the bottom just above the padding, and the one already in view moves 0 px
     And the element taller than the room is brought only up to the band, and inside the folded code only the lines above the cut count as what must be in view
     And a click that focuses an element scrolls 0 px
-    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/components/organisms/ActivityFeed.tsx lines 148, 159; ui/src/pages/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx
+    # not under test, checked by hand: the Activity feed's scroller keeps focus in view this way, with that padding (ui/src/components/organisms/ActivityFeed.tsx lines 148 and 159)
+    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/components/organisms/ActivityFeed.tsx lines 148, 159; ui/src/pages/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx "scrolls an element under the band down to just below it", "scrolls an element past the bottom up to just above the padding", "leaves an element already in view", "brings an element taller than the room only up to the band", "leaves an element whose lines shown above a fold's cut are in view", "scrolls only far enough to show the lines above a fold's cut" and "doesn't scroll for a click"
 
   @USE-22 @test
   Scenario: The Activity scroller is a Tab stop named by its heading
-    Given a task's Activity tab
-    When the user tabs into the feed
+    Given the Activity feed
+    When its scroller is focused
     Then the scroller is a Tab stop with tabIndex 0, a region named "Activity" through aria-labelledby from the tab's heading, with no aria-label of its own
     And focusing the scroller itself moves it 0 px
     And every agent chip in the bands is hidden from screen readers, aria-hidden true
-    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 144-159; ui/src/components/organisms/ActivityFeed.test.tsx
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/pages/TaskPage.tsx line 490)
+    # README.md, Use it, A task; ui/src/components/organisms/ActivityFeed.tsx lines 144-159; ui/src/components/organisms/ActivityFeed.test.tsx "makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", "names the scroller by the tab's heading, so the name has one source" and "hides chips from screen readers"
 
   @USE-23 @test
   Scenario: A folded entry keeps only what is visible in the Tab order
     Given a long entry folded to its first lines, with links above and below the cut
-    When the user tabs through it, presses Show all, then Show less
+    When its Tab order is read, then Show all is pressed, then Show less
     Then folded, Tab reaches only the links above the cut and then the Show all button
     And Show all puts every link back in the Tab order, and Show less takes the ones below the cut out again, each element getting back the tabindex it had
     And the fold never uses the inert attribute
-    # README.md, Use it, A task; ui/src/components/molecules/Fold.tsx lines 7, 93, 158; ui/src/components/molecules/Fold.test.tsx (never uses inert, lines 211-216)
+    # README.md, Use it, A task; ui/src/components/molecules/Fold.tsx lines 7, 93, 158; ui/src/components/molecules/Fold.test.tsx "folded, Tab reaches only the links above the cut, then Show all", "Show all opens every link, and Show less only the visible ones again", "keeps the tabindex an element had and gives it back" and "never uses inert" (lines 211-216)
 
   # --- Words, motion and theme ---
 
