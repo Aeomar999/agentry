@@ -20,6 +20,7 @@ Feature: The user at the page
 
   @USER-03 @manual
   Scenario: New epic and New story open from Plan and from their addresses
+    # the dialog's title: ui/src/components/organisms/NewTaskDialog.tsx line 28; the buttons: ui/src/components/organisms/NewTaskForm.tsx lines 262 and 343
     Given the Plan page is open with the epic epic-7 in it
     When the user clicks New epic in the page header
     Then a dialog titled "New epic" is shown with ?new=epic in the address
@@ -330,7 +331,7 @@ Feature: The user at the page
   @USER-31 @test
   Scenario: Search finds a task by its id, title, repo, agent or label, and shows epics as epic-N
     # ui/src/pages/TasksPage.test.tsx
-    # what the search matches: ui/src/pages/TasksPage.tsx line 210
+    # what the search matches: ui/src/pages/TasksPage.tsx line 211
     Given the list with the epic task-21, its story task-22 and the task task-30
     Then the ids shown are exactly epic-21, task-22 and task-30
     When the user types "epic-21" in "Filter tasks"
@@ -340,16 +341,16 @@ Feature: The user at the page
 
   @USER-32 @manual
   Scenario: Filtering by a label or an epic, and the empty result
-    # ui/src/pages/TasksPage.tsx pickLabel, pickEpic and EmptyState
+    # ui/src/pages/TasksPage.tsx pickLabel, pickEpic and EmptyState; the chips: lines 262 and 263
     # the 7 filters: ui/src/pages/TasksPage.tsx line 46, FILTERS
     Given the list with 1 task labelled bug and 1 without, and the key / to reach the search
     Then the chips are shown in the order All, Needs you, Working, Review, Shipping, Held, Done, each with its count
     When the user clicks the bug chip on a row
-    Then only the labelled task is shown, the address carries ?label=bug, and a chip "label: bug ×" is shown
+    Then only the labelled task is shown, the address carries ?label=bug, and a chip "label: bug  ×" is shown
     When the user clicks that chip
     Then the filter is removed and both tasks are shown
     When the user clicks an epic's name on a Backlog card
-    Then only that epic and its stories are shown, with a chip "epic: <title> ×"
+    Then only that epic and its stories are shown, with a chip "epic: <title>  ×"
     When no task matches the filters
     Then "No task matches" and "Try another filter." are shown
     Given no tasks at all
@@ -405,20 +406,24 @@ Feature: The user at the page
     # a blocked story gets no turn: internal/coordinator/loop.go line 133
     Given a story that builds on a task not yet done
     When the loop looks at it
-    Then the loop counts the story as blocked, so it does not get a turn
+    Then the loop does count the story as blocked
     Given a story that builds on a task that is done and archived
     When the loop looks at it
     Then the loop does not count it as blocked, as an archived task counts as done
 
   @USER-38 @manual
-  Scenario: A waiting story says what it waits for
-    # ui/src/lib/epics.ts waitingLine
-    Given epic-7 with task-8 not started and task-9 that builds on task-8
+  Scenario: A waiting story says what it waits for, and stays parked when that is done
+    # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
+    # a parked story gets no turn: internal/coordinator/next.go line 55
+    # what blocks it empties when task-8 is done: internal/web/views.go lines 131 to 141
+    # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
+    Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
     When the Plan page is shown
     Then task-9's card reads "Starts when task-8 is done"
     And the epic's header counts only task-8: "Start the ready ones · 1"
     When task-8 is done
-    Then task-9 starts and its card no longer shows the waiting line
+    Then task-9 stays in the Backlog, its card reads "Not started" and shows Start
+    And the epic's header reads "Start the ready ones · 1", counting task-9 now
 
   @USER-39 @test
   Scenario: The running line counts the queued first
@@ -439,3 +444,15 @@ Feature: The user at the page
     And the header line reads "Queued: 1 · 1 of 1 running"
     When the running task's turn ends and the queued one starts
     Then the badge is no longer shown on it
+
+  @USER-41 @manual
+  Scenario: A story started before the one it builds on waits, then starts once
+    # a blocked story gets no worktree: internal/coordinator/loop.go line 133
+    # the epic wakes its stories without a worktree: internal/coordinator/loop.go lines 509 to 518
+    Given epic-7 with task-8 not done and task-9 that builds on task-8
+    When the user clicks Start on task-9 while task-8 is not done
+    Then task-9 is shown on the Tasks board and gets no worktree
+    And its card still reads "Starts when task-8 is done"
+    When task-8 is done
+    Then task-9 starts exactly once, from dev
+    And its card no longer shows the waiting line
