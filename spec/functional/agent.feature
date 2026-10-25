@@ -293,7 +293,7 @@ Feature: The agents
     When it runs glab ci list --sha <hash> -F json, or gh run list --commit <hash> --json status,conclusion,url
     Then each is allowed
     And gh run view 123 -w, glab ci get -p 123 --with-variables, gh run rerun 123 and gh run watch 123 are asked
-    And the prompt says to report the pipeline once, with 0 waiting or polling
+    # not under test, checked by hand: the prompt says to report the pipeline once, with 0 waiting or polling: internal/agents/defaults/deployer.md line 9
     # the rules: internal/policy/default.toml lines 164 to 168 and 192 to 193; the prompt: internal/agents/defaults/deployer.md
 
   # --- The other teams
@@ -317,7 +317,8 @@ Feature: The agents
     When the roster is read
     Then its coordinator is the editor, and it has exactly 3 other agents, the fact-checker last
     And a task that names no team still goes to the first team's coordinator, tech-lead
-    And added again, the team is "Writing 2" with the coordinator editor-2, and nothing the user has is renamed
+    And added again, the team "Writing 2" has the coordinator editor-2: yes
+    # not under test, checked by hand: nothing the user has is renamed
     # internal/agents/teams.go AddTeam, MadeFor
 
   @AGENT-30 @manual
@@ -351,12 +352,12 @@ Feature: The agents
     When it calls the board tools list_tasks or show_task, or runs git log --oneline -30
     Then each is allowed
     And create_task is asked, and Edit on main.go, Write on ideas.md and git commit -am 'ideas' are denied
-    And every prompt of the team says it changes no code and commits nothing: its report is its work
+    # not under test, checked by hand: every prompt of the team says it changes no code and commits nothing, its report is its work: the first line of each prompt below
     # the prompts: internal/agents/defaults/visionaries/visionary-lead.md, product-strategist.md, user-advocate.md, technologist.md, skeptic.md
 
   @AGENT-33 @test
   Scenario: The Visionaries' ideas land in Ideas from the lead's done decision, for the user to decide
-    # internal/ideas/ideas_test.go TestASuggestionComesFromATask
+    # internal/ideas/ideas_test.go TestASuggestionComesFromATask; the done decision: internal/coordinator/ideas_test.go TestAVisionariesDoneKeepsItsIdeas; once: TestADoneNamingOneTitleTwiceKeepsOneIdea in the same file
     Given the visionary-lead's done decision carries "ideas", each with a title, the problem, the proposal and a size of S, M or L
     When the loop applies the decision
     Then each idea is kept once, from that task and about its repo
@@ -379,8 +380,9 @@ Feature: The agents
     # internal/policy/default_test.go TestTheNetworkDiagnosisProfile
     Given a checker under network-diagnosis
     When it runs wg show wg0 dump, sudo wg show wg0 dump, wg show wg0 private-key, wg genkey, or reads a WireGuard config, acme.json or a privkey.pem
-    Then each is denied, by "never prints a private key" or "never touch secrets"
-    And ping -c 1 -W 1 --extra <host> is asked by "network commands take no other options", and ss -tlnp --extra is asked by the profile's otherwise = "ask", since ss is not in that rule
+    Then each is denied
+    And ping -c 1 -W 1 --extra <host> and ss -tlnp --extra are asked
+    # not under test, checked by hand: the rules, "never prints a private key" or "never touch secrets" for the denials, "network commands take no other options" for ping, and the profile's otherwise = "ask" for ss, since ss is not in that rule
     # the rules: internal/policy/default.toml lines 480 to 486, 509 to 512 and 532 to 541; otherwise = "ask": line 475
 
   @AGENT-36 @manual
@@ -402,7 +404,8 @@ Feature: The agents
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs echo hi > notes.md, echo hi >> notes.md, cat > notes.md <<'EOF', go test ./... &> out.txt, or echo hi > /tmp/notes.md
-    Then each is denied by "writes no files from the shell"
+    Then each is denied
+    # not under test, checked by hand: the rule that denies them, "writes no files from the shell"
     And go test ./... > /dev/null and a redirect into Claude's scratch folder are allowed
     # the rule: internal/policy/default.toml lines 225, 360 and 503; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
@@ -411,26 +414,29 @@ Feature: The agents
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs sed -i 's/a/b/' main.go, sed --in-place 's/a/b/' main.go, perl -pi -e 's/a/b/' main.go, rm main.go, mv a.go b.go, cp a.go b.go, touch new.go, mkdir -p docs, chmod +x test.sh, ln -s a b, sort -o out.txt in.txt, find . -name '*.log' -delete, git log --output=log.txt, echo hi | tee notes.md, go test ./... | tee out.txt, or gofmt -w .
-    Then each is denied by "runs nothing that changes files"
+    Then each is denied
+    # not under test, checked by hand: the rule that denies them, "runs nothing that changes files"
     And cat, head, sed -n '1,5p' main.go, grep -r foo . and find . -name x are allowed
-    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound
+    # the rule, with tee and gofmt -w in it: internal/policy/default.toml lines 231, 366 and 557; gofmt -w: TestTheJudgingProfilesCloseWhatTheReviewFound; the allowed forms: TestTheJudgingProfilesStillReadAndTest
 
   @AGENT-39 @test
   Scenario: The judging profiles never commit or change branches
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs git commit -m x, git add -A && git commit -m x, git -c user.name=x commit -m x, git -C . commit -m x, git push origin HEAD:dev, git add -A, git reset --hard HEAD~1, git checkout -- main.go, git stash, git merge origin/dev, git rebase dev, git tag v1, git worktree add ../x, git config user.name x, git branch -D old, or git branch new
-    Then each is denied by "never commits or changes branches"
+    Then each is denied
+    # not under test, checked by hand: the rule that denies them, "never commits or changes branches"
     And git branch, git branch -a, git branch --show-current, git tag and git config --get user.name are allowed, as listing forms
-    # the rule: internal/policy/default.toml lines 322, 463 and 648; the listing forms: lines 311 to 314
+    # the rule: internal/policy/default.toml lines 322, 463 and 648; the listing forms: lines 311 to 314; they are allowed in TestTheJudgingProfilesStillReadAndTest
 
   @AGENT-40 @test
   Scenario: Under the judging profiles, go and the test and lint tools write no files
     # internal/policy/default_test.go TestTheJudgingProfilesWriteNothingFromTheShell
     Given an agent under read-only, read-mostly or network-diagnosis
     When it runs go build ./..., go install ./cmd/agentry, go test -c ./internal/policy, go test -coverprofile=c.out ./..., go test -mod=mod ./..., or go vet -vettool=./x ./...
-    Then each is denied by "go writes no files"
-    And npx eslint --fix ., npx vitest run -u, npx jest --coverage, pytest --junitxml=report.xml and cargo clippy --fix are denied by "test and lint tools write no files"
+    Then each is denied
+    And npx eslint --fix ., npx vitest run -u, npx jest --coverage, pytest --junitxml=report.xml and cargo clippy --fix are denied
+    # not under test, checked by hand: the rules, "go writes no files" and "test and lint tools write no files"
     And go test ./..., go test -count=1 -cover -run TestX -v ./internal/policy, go vet ./..., gofmt -l ., npx eslint ., npx jest --ci and pytest are allowed
     # the rules: internal/policy/default.toml lines 243 and 254; the test and lint flags: TestTheJudgingProfilesCloseWhatTheReviewFound
     # the allowed forms: TestTheJudgingProfilesStillReadAndTest (go test, go vet, gofmt -l, npx eslint); npx jest --ci and pytest: TestTheJudgingProfilesStillRunTheirTests and TestTheJudgingProfilesDenyEverySpellingOfAWritingFlag
@@ -449,7 +455,8 @@ Feature: The agents
     # internal/policy/default_test.go TestTheJudgingProfilesRunNoTestsFromOutside
     Given an agent under read-only, read-mostly or network-diagnosis, and a folder in Claude's scratch place
     When it runs go test <scratch>/..., cd <scratch> && npm test, pytest <scratch>, npx jest --reporters <scratch>/r.js, npx vitest run --config <scratch>/v.ts, or cargo test --manifest-path <scratch>/Cargo.toml
-    Then each is asked, by "runs no tests from outside the workspace"
+    Then each is asked
+    # not under test, checked by hand: the rule that asks, "runs no tests from outside the workspace"
     And npx jest --config <scratch>/j.js and npx vitest run --execArgv=<node options> are denied
     And go test ./internal/policy/, npx jest --reporters=default,./tools/r.js and npx vitest run --config vitest.config.ts are allowed from the workspace, and the developer runs these from scratch too
     # the rule: internal/policy/default.toml lines 292, 433 and 618; TestTheJudgingProfilesStillRunTheirTests, TestOnlyTheJudgingProfilesAskAboutRunnersOutside
