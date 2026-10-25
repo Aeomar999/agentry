@@ -72,7 +72,7 @@ Feature: Reliability
   @REL-07 @test
   Scenario: Different commands with the same description are not a loop
     # internal/watchdog/watchdog.go repeatedCommand compares the tool and the command, never the description
-    Given a turn with 5 WebSearch calls whose commands all differ
+    Given a turn with 5 WebSearch calls whose commands all differ, and the same, empty, description
     When the watchdog counts the repeats
     Then the count is 1
     Given a turn with 5 calls whose commands Agentry could not read
@@ -168,7 +168,8 @@ Feature: Reliability
     # internal/hooks/handler.go: a tool call after the retry means the retry worked
     Given a turn retried by the watchdog when its limit reset, which made a tool call after the retry
     When its engine reports the usage limit again
-    Then the turn is kept open and limited, to be waited out as the first limit was
+    Then the turn is kept open and limited, with its retry cleared: yes
+    # not under test, checked by hand: the watchdog waits out any limited turn (internal/watchdog/watchdog.go lines 111 and 160)
     # internal/hooks/handler_test.go TestALimitAfterWorkSinceTheRetryIsWaitedOut
 
   @REL-15 @test
@@ -183,14 +184,15 @@ Feature: Reliability
     # internal/watchdog/watchdog_test.go TestARefusedResumeTypesNothingAndStallsAfterTheReset
 
   @REL-16 @test
-  Scenario: A tool open across a usage limit is timed from the resume, not from its start
+  Scenario: A tool open across a usage limit is found open too long from the resume, not from its start
     # internal/watchdog/watchdog.go toolClock, DefaultLimits.Tool = 20 minutes
     Given a turn with 1 approved tool call open when its engine hit the usage limit
     And the turn was resumed when the limit reset
     When 20 minutes have passed since the tool call was requested but fewer than 20 minutes since the resume
-    Then the watchdog raises 0 issues for the tool
+    Then the watchdog finds no problem with the tool: yes
     When more than 20 minutes have passed since the resume
-    Then the watchdog raises an issue naming the tool call: yes
+    Then the watchdog finds the tool call open too long: yes
+    # not under test, checked by hand: Check raises what findProblem finds (internal/watchdog/watchdog.go line 107)
     # internal/watchdog/watchdog_test.go TestAToolOpenAtALimitIsTimedFromTheResume
 
   # A stop and start keeping sessions
