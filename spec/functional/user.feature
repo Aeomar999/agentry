@@ -423,7 +423,7 @@ Feature: The user
   Scenario: A waiting story says what it waits for, and stays parked when that is done
     # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
     # a parked story gets no turn: internal/coordinator/next.go line 55
-    # what blocks it empties when task-8 is done: internal/web/views.go lines 131 to 141
+    # what blocks it empties when task-8 is done: internal/web/views.go lines 133 to 143
     # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
     Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
     When the Plan page is shown
@@ -455,8 +455,8 @@ Feature: The user
 
   @USER-41 @manual
   Scenario: A story started before the one it builds on waits, then starts once
-    # a blocked story gets no worktree: internal/coordinator/loop.go line 133
-    # the epic wakes its stories without a worktree: internal/coordinator/loop.go lines 509 to 518
+    # a blocked story gets no worktree: internal/coordinator/loop.go line 134
+    # the epic wakes its stories without a worktree: internal/coordinator/loop.go lines 532 to 541
     Given epic-7 with task-8 not done and task-9 that builds on task-8
     When the user clicks Start on task-9 while task-8 is not done
     Then task-9 is shown on the Tasks board and gets no worktree
@@ -467,7 +467,7 @@ Feature: The user
 
   @USER-42 @manual
   Scenario: A task's page: the header, the facts under it and its 2 buttons
-    # ui/src/pages/TaskPage.tsx lines 282 to 296, the header; lines 360 to 391, the facts
+    # ui/src/pages/TaskPage.tsx lines 289 to 303, the header; lines 367 to 398, the facts
     # README.md, Use it, "A task"
     Given task-5 is open, with a worktree and the engineer at work
     When the page is shown
@@ -481,7 +481,7 @@ Feature: The user
 
   @USER-43 @manual
   Scenario: The tabs, exactly as rendered, and the one an epic adds
-    # ui/src/pages/TaskPage.tsx lines 436 to 449
+    # ui/src/pages/TaskPage.tsx lines 443 to 456
     Given task-5 is open with 2 shared files and 4 handoffs
     When the tabs are shown
     Then exactly 8 tabs read, in order: Coordinator, Activity, Terminal, Files, Handoffs, Actions, Events, Details
@@ -658,7 +658,7 @@ Feature: The user
 
   @USER-56 @manual
   Scenario: Actions and Events list the raw records, newest first, and the empty tabs say so
-    # ui/src/pages/TaskPage.tsx lines 70 to 113, the columns; lines 455 to 536, the tabs
+    # ui/src/pages/TaskPage.tsx lines 70 to 113, the columns; lines 462 to 543, the tabs
     Given task-5 with 12 actions, 1 of them waiting for approval
     When the Actions tab is shown
     Then exactly 6 columns read Time, Turn, Agent, Tool, Command, Decision, the newest action first
@@ -674,7 +674,7 @@ Feature: The user
   @USER-57 @test
   Scenario: Details: the id, repo, epic, budget and turns, each with its control while the task is live
     # ui/src/pages/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
-    # ui/src/pages/TaskPage.tsx lines 540 to 575
+    # ui/src/pages/TaskPage.tsx lines 547 to 582
     Given a live task's Details tab
     Then a Change button is shown on the Repo row and a list named Epic is shown on the Epic row
     Given a story of task-9
@@ -685,7 +685,7 @@ Feature: The user
 
   @USER-58 @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
-    # ui/src/pages/TaskPage.tsx lines 620 to 665, RepoEditor; internal/web/api.go lines 62 to 72
+    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/web/api.go lines 62 to 72
     # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/web/epics_api.go lines 67 and 73
     Given a live task's Details tab
     When the user clicks Change on the Repo row
@@ -858,7 +858,7 @@ Feature: The user
   @USER-70 @test
   Scenario: An epic with every story done asks once, and waits quietly if left open
     # internal/coordinator/epics_test.go TestAnEpicStaysOpenWithEveryStoryDone
-    # the question with the option "Close the epic": internal/coordinator/loop.go lines 352 to 356
+    # the question with the option "Close the epic": internal/coordinator/loop.go lines 375 to 378
     Given an epic whose 1 story is done
     When its coordinator finishes
     Then the epic asks the user exactly once whether to close it
@@ -873,19 +873,20 @@ Feature: The user
     # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
     # internal/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
     # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 417 to 426
+    # the words "that is approved on the page": internal/web/api.go line 420; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
     Then the epic is not in Questions
     When the user clicks "Close the epic"
     Then the epic is done with its closing summary, and its closing is empty
     When Claude Code's desk sends "Close the epic" instead
-    Then it is refused with 403 "that is approved on the page"
+    Then it is refused with 403
     Given a Visionaries team and the setting on
     When the user closes an epic
     Then exactly 1 Visionaries session starts, titled "Follow-ups after <epic title>", and a second pass starts no other
 
   @USER-72 @manual
   Scenario: A done task's page: what it still allows and what it no longer does
-    # ui/src/pages/TaskPage.tsx lines 410 to 418, the Done banner; line 589, the worktree; lines 500 to 508, the terminal
+    # ui/src/pages/TaskPage.tsx lines 417 to 425, the Done banner; line 596, the worktree; lines 507 to 515, the terminal
     # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/components/organisms/CoordinatorChat.tsx line 119; internal/web/chat_api.go lines 36 to 45
     # no Reopen on the page: ui/src/pages/TaskPage.tsx has none; the board's dialog: ui/src/components/organisms/TaskBoard.tsx line 283
     Given task-5 is done, moved there by the user
@@ -901,7 +902,7 @@ Feature: The user
   @USER-73 @test
   Scenario: An archived task's page is read only
     # ui/src/pages/TaskPage.test.tsx "marks it archived and offers nothing that writes", "keeps its repo and epic as they are" and "shares no files and takes none away"
-    # ui/src/pages/TaskPage.tsx lines 229 and 289; ui/src/components/organisms/CoordinatorChat.tsx lines 188 and 189
+    # ui/src/pages/TaskPage.tsx lines 236 and 296; ui/src/components/organisms/CoordinatorChat.tsx lines 188 and 189
     Given task-1 archived on a date
     When the page is shown
     Then the badge "Archived <date>" is shown
@@ -996,7 +997,7 @@ Feature: The user
 
   @USER-80 @manual
   Scenario: The Workspace button and the task's Stories tab for an epic
-    # ui/src/pages/TaskPage.tsx line 293, the button; lines 356 to 358, 437 and 477, Stories
+    # ui/src/pages/TaskPage.tsx line 300, the button; lines 363 to 365, 444 and 484, Stories
     # the count "1/3", titled "1 of 3 stories done": ui/src/components/molecules/StoryProgress.tsx lines 7 and 12
     # README.md, Use it, "Epics and stories": file tasks under an epic from the epic's Stories tab
     Given an epic with 3 stories, 1 done
