@@ -4,7 +4,7 @@ This folder is the specification of Agentry as it is today: what it does, for wh
 
 ## How to read it
 
-Each feature file is a list of scenarios in Given, When, Then form. A scenario names one behaviour: the Given states the conditions or the load, the When is what happens, and every Then is something a person or a program can check, with a number or a yes/no outcome. Read the functional files to learn what Agentry does for each kind of user, and the non-functional files to learn how it holds up: how it fails, what it refuses, what it costs and how it is run.
+Each feature file is a list of scenarios in Given, When, Then form. A scenario names one behaviour: the Given states the conditions or the load, the When is what happens, and every Then is something a person or a program can check, with a number or a yes/no outcome. Read the functional files to learn what Agentry does, one feature to a file, and the non-functional files to learn how it holds up: how it fails, what it refuses, what it costs and how it is run.
 
 The glossary gives each noun Agentry uses its one meaning, so the scenarios can use them without explaining them. The constraints say how Agentry is built and must stay built, and how each constraint is checked.
 
@@ -16,11 +16,23 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/glossary.md` | every noun Agentry uses, one line each |
 | `spec/constraints.md` | how Agentry is built and must stay built, with how each constraint is checked |
 | `spec/NOT-YET.md` | behaviour left out of this baseline because it is not built on dev |
-| `spec/functional/user.feature` | the user: the person at the page |
-| `spec/functional/coordinator.feature` | the coordinator: the agent that reads each report and decides the next step |
-| `spec/functional/agent.feature` | the agents that do the work: engineer, reviewer, tester, deployer and the other teams' agents |
-| `spec/functional/claude-code.feature` | Agentry used from Claude Code, through its MCP tools |
-| `spec/functional/worker.feature` | a machine joined as a worker, where agents run |
+| `spec/ID-MAP.md` | the old functional IDs and the new ones they became in task-236 |
+| `spec/functional/tasks-and-board.feature` | adding a task, the board and its columns, a task's page, running limits, search, the keys and the archive |
+| `spec/functional/epics-and-stories.feature` | epics, their stories, Plan and closing an epic |
+| `spec/functional/approvals-and-questions.feature` | actions the policy held for the user, and the questions coordinators ask |
+| `spec/functional/ideas.feature` | the Visionaries' ideas and how the user accepts or dismisses them |
+| `spec/functional/teams-and-templates.feature` | teams, teams of the user's own, templates and each agent's page |
+| `spec/functional/policy.feature` | the policy profiles, the gate's rules and the Policy page |
+| `spec/functional/sessions.feature` | going on with a session, fresh sessions, forks and the live terminal |
+| `spec/functional/coordinator-and-handoffs.feature` | the coordinator: a task's life, briefs, reports, issues, decisions, safety stops and limits |
+| `spec/functional/agents.feature` | each agent's turn: engineer, reviewer, tester, deployer and the other teams' agents |
+| `spec/functional/worktrees-and-branches.feature` | each task's worktree and branch, and the Workspace page |
+| `spec/functional/workers.feature` | a machine joined as a worker: joining, the service, its commands, the link, where a turn runs, going offline |
+| `spec/functional/shared-files.feature` | the files shared with a task, and how they follow it |
+| `spec/functional/sign-in.feature` | sign-in codes, devices and installing the app |
+| `spec/functional/notifications.feature` | pushes to the user's devices |
+| `spec/functional/settings.feature` | the Settings page and redacting a text |
+| `spec/functional/claude-code-tools.feature` | Agentry used from Claude Code: the install, the MCP tools and the status line |
 | `spec/non-functional/reliability.feature` | what happens when a turn, a process or a machine fails |
 | `spec/non-functional/security.feature` | sign-in, credentials, the gate and what no agent may do |
 | `spec/non-functional/operations.feature` | running Agentry: the policy file, the settings, the log and its upkeep |
@@ -36,11 +48,22 @@ Every scenario is tagged with an ID: the prefix of its file, a dash and a number
 
 | File | ID |
 | --- | --- |
-| `user.feature` | `@USER-nn` |
-| `coordinator.feature` | `@COORD-nn` |
-| `agent.feature` | `@AGENT-nn` |
-| `claude-code.feature` | `@CC-nn` |
-| `worker.feature` | `@WORKER-nn` |
+| `tasks-and-board.feature` | `@TASK-nn` |
+| `epics-and-stories.feature` | `@EPIC-nn` |
+| `approvals-and-questions.feature` | `@APPROVE-nn` |
+| `ideas.feature` | `@IDEA-nn` |
+| `teams-and-templates.feature` | `@TEAM-nn` |
+| `policy.feature` | `@POLICY-nn` |
+| `sessions.feature` | `@SESSION-nn` |
+| `coordinator-and-handoffs.feature` | `@HANDOFF-nn` |
+| `agents.feature` | `@TURN-nn` |
+| `worktrees-and-branches.feature` | `@TREE-nn` |
+| `workers.feature` | `@MACHINE-nn` |
+| `shared-files.feature` | `@FILES-nn` |
+| `sign-in.feature` | `@SIGNIN-nn` |
+| `notifications.feature` | `@NOTIFY-nn` |
+| `settings.feature` | `@SET-nn` |
+| `claude-code-tools.feature` | `@TOOLS-nn` |
 | `reliability.feature` | `@REL-nn` |
 | `security.feature` | `@SEC-nn` |
 | `operations.feature` | `@OPS-nn` |
@@ -50,7 +73,11 @@ Every scenario is tagged with an ID: the prefix of its file, a dash and a number
 | `compatibility.feature` | `@COMPAT-nn` |
 | `observability.feature` | `@OBS-nn` |
 
-An ID is never renumbered or reused once it is published. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check.
+An ID is never renumbered or reused once it is published. The functional IDs were renumbered once, in task-236, when the files were regrouped by feature (old to new in `spec/ID-MAP.md`); the rule holds for every change after it. A new scenario takes the next number in its file. A scenario that is removed leaves a gap; nothing moves up to fill it. A feature file with a name outside this table is refused by the check.
+
+## Role tags
+
+Every functional scenario carries exactly one role tag, straight after its ID: `@user`, `@coordinator`, `@agent`, `@claude-code` or `@worker`, the role whose point of view it takes. A non-functional scenario carries none.
 
 ## The rules for every scenario
 
@@ -76,7 +103,7 @@ Anyone who changes what Agentry does, an agent or a person, keeps this folder tr
 
 1. A change to behaviour updates or adds its scenarios in `spec/` in the same commit. A behaviour that is removed removes its scenario, and its ID is never reused. A new scenario takes the next number after the highest one in its file, never a gap a removed scenario left. Something built that `spec/NOT-YET.md` lists comes off that list in the same commit.
 2. Every scenario added or changed follows the rules for every scenario above.
-3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @COORD-61, changed @USER-12`, or says `no behaviour change`.
+3. The summary or report of the change names the scenario IDs it added, changed or removed, such as `added @HANDOFF-45, changed @TASK-12`, or says `no behaviour change`.
 4. A reviewer counts a behaviour change with no matching change in `spec/` as a finding.
 5. A tester runs `spec/check` (or `make spec`) and the tests that the touched `@test` scenarios name. The tester walks the touched `@manual` scenarios where it can, and reports each one it could not walk as `not walked`, with its ID.
 
@@ -89,7 +116,7 @@ make spec         # the same, from the repo root
 
 `spec/check` runs `go run ./internal/speccheck` from the repo root; it needs Go and nothing else, as the CI image has. An optional argument names another folder to check, relative to the repo root.
 
-It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's.
+It walks every `.feature` file under `spec/` and checks each scenario against rules 1, 2, 4 and 6: the ID tag and its prefix, exactly one check tag, exactly one role tag in a functional file, no ID used twice anywhere in the folder, a number or an outcome word in every Then, and none of the three words. It refuses a Scenario Outline and does not count it. It also fails on an em-dash anywhere under `spec/`, in any file, this one included. For rule 7 it checks the citations of each `@test` scenario, as below; the rest of rule 7, and rules 3, 5 and 8 of the rules for every scenario, are the reviewer's.
 
 ## Citations
 
@@ -102,22 +129,22 @@ The check reads every comment line in a scenario's body, from the `Scenario:` li
 
 In a `@test` scenario, the check fails on a path that does not exist (`cited path internal/x/gone_test.go does not exist`), on a Go test that has no `func TestName(` line at the start of a line in its file (`TestA is not defined in internal/x/x_test.go`), and on a Go test with no `_test.go` file before it. A `@manual` or `@benchmark` scenario may cite what it likes. A passing run prints how many paths and Go tests were checked.
 
-Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in: USER 133, COORD 60, AGENT 56, CC 56, WORKER 41, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
+Line numbers go stale as dev moves, so a new scenario cites a function or a test by name instead. The check fails on `line N` or `lines N`, in any case, or on a path with a line number after it such as `internal/x/x.go:42` or `internal/x/x.go:3-5`, in a comment line of any scenario numbered above the last ID each file had when this rule came in, or, for a functional file, when the files were regrouped in task-236: TASK 55, EPIC 19, APPROVE 7, IDEA 17, TEAM 14, POLICY 46, SESSION 5, HANDOFF 44, TURN 17, TREE 12, MACHINE 34, FILES 8, SIGNIN 7, NOTIFY 3, SET 4, TOOLS 54, REL 54, SEC 68, OPS 42, PERF 16, LIM 35, USE 29, COMPAT 27 and OBS 34. These numbers are fixed, in `lastIDBeforeLineRule` in `internal/speccheck/rules.go`, and the scenarios at or below them keep their line numbers. A step is not a citation, so a Then such as "line 1 of the report is the verdict" passes.
 
 A passing run prints the scenarios per file and the totals per check tag, and exits 0:
 
 ```
-spec/functional/agent.feature: 56 scenarios
-spec/functional/claude-code.feature: 56 scenarios
+spec/functional/agents.feature: 17 scenarios
+spec/functional/approvals-and-questions.feature: 7 scenarios
 ...
-13 files, 651 scenarios: 485 @test, 16 @benchmark, 150 @manual
+24 files, 651 scenarios: 485 @test, 16 @benchmark, 150 @manual
 cited by @test: 1498 paths, 813 Go tests
 ```
 
 A failing run prints the same counts, then each problem as `file:line: message`, and exits 1:
 
 ```
-spec/functional/user.feature:8: Then has no number and no outcome word; the words are not, no, never, ...
+spec/functional/tasks-and-board.feature:8: Then has no number and no outcome word; the words are not, no, never, ...
 spec/README.md:3: em-dash; write a comma, a colon or a full stop
 spec/check: 2 problems
 exit status 1
