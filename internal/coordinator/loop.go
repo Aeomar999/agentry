@@ -248,11 +248,10 @@ func (l *Loop) briefFor(task *tasks.Task, roster agents.Roster, move Move, sessi
 	shared, _ := l.filesFor(task)
 	agent := move.Agent
 	if session.Resumes() {
-		seen := task.LastTurnOf(agent.Name).Seen
 		if agent.Coordinates {
-			return resumedCoordinatorBrief(task, agent, roster, seen, shared, l.state, l.Features)
+			return resumedCoordinatorBrief(task, agent, roster, session.Seen, shared, l.state, l.Features)
 		}
-		return resumedWorkerBrief(task, agent, roster, move.Handoff, seen, shared)
+		return resumedWorkerBrief(task, agent, roster, move.Handoff, session.Seen, shared)
 	}
 	if agent.Coordinates {
 		return coordinatorBrief(task, agent, roster, l.familyOf(task), l.machines(), shared, l.state, l.Features)

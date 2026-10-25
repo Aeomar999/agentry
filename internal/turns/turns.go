@@ -51,6 +51,7 @@ const startTimeout = 2 * time.Minute
 type Session struct {
 	Resume string // the engine session to go on with, "" for a fresh one
 	Fresh  string // why it starts fresh, "" when it resumes
+	Seen   int    // how much of the trail the resumed session's last brief saw
 }
 
 // Resumes says whether the turn goes on with a session.
@@ -63,7 +64,10 @@ func (r *Runner) SessionToResume(task *tasks.Task, agent agents.Agent) Session {
 		return Session{Fresh: ResumeOff}
 	}
 	resume, fresh := task.SessionToResume(agent.Name, agent.Engine, r.fleet.Of(task.Worktree.Worker).Name())
-	return Session{Resume: resume, Fresh: fresh}
+	if resume == "" {
+		return Session{Fresh: fresh}
+	}
+	return Session{Resume: resume, Seen: task.LastTurnOf(agent.Name).Seen}
 }
 
 // Start begins the task's next turn: the agent works from brief, made from
