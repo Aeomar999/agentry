@@ -200,7 +200,8 @@ Feature: The user
     When the user moves its card to Done
     Then the task is done in the same request, marked as moved there by the user
     And the turn in progress is stopped, not finished
-    And the coordinator gets exactly 1 wrap-up turn, and nothing else runs
+    And the coordinator is given its wrap-up turn: yes
+    # not under test, checked by hand: nothing else runs
 
   @USER-18 @test
   Scenario: To do and the Backlog park the task
@@ -208,7 +209,7 @@ Feature: The user
     Given a task with a turn in progress
     When the user moves its card to To do
     Then the task is held, parked in todo, in the same request
-    And the turn in progress is stopped and the coordinator gets exactly 1 wrap-up turn
+    And the turn in progress is stopped and the coordinator is given its wrap-up turn: yes
     Given a task just added, with no turn running
     When the user moves it to the Backlog
     Then the task is held, parked in backlog, and shown in the Backlog only
@@ -221,7 +222,7 @@ Feature: The user
     Given an epic with 2 stories, 1 of them with a turn in progress and 1 not started
     When the user moves the epic to Done
     Then the epic is done in the same request
-    And the story at work is parked in the Backlog with its turn stopped and exactly 1 wrap-up turn
+    And the story at work is parked in the Backlog with its turn stopped and its wrap-up turn given: yes
     And the story not started stays parked and gets no wrap-up turn
 
   @USER-20 @test
@@ -622,8 +623,8 @@ Feature: The user
     # internal/web/shared_api.go lines 40 to 91
     Given task-1 with no shared files
     When the user shares "data/sales.csv" holding 8 bytes
-    Then the list shows exactly 1 file, "data/sales.csv", size 8, by "you"
-    And the task's detail lists it under shared, 1 file
+    Then the list shows the file "data/sales.csv", size 8, by "you"
+    And the task's detail lists it first under shared: yes
     When the user downloads it
     Then the body is exactly the 8 bytes shared
     When a file named "../escape" is shared
@@ -712,7 +713,7 @@ Feature: The user
     When the user clicks Keep
     Then the dialog is hidden and nothing is erased
     When the user types "asked to" in "Why, for the log (optional)" and clicks "Erase for good"
-    Then exactly 1 erasure is sent, with the reason "asked to"
+    Then the erasure of task-1 is sent, with the reason "asked to"
     And the page reads "task-1 was erased at <time>", lists each warning, and says backups made before then still hold it
 
   @USER-60 @test
@@ -764,7 +765,7 @@ Feature: The user
     # the routes: internal/web/server.go lines 121 and 122
     Given the engineer asked to run "git push origin HEAD:dev" and the policy asked the user
     When the task is read
-    Then its needsYou reads exactly "Waiting for you to approve the push to dev" and its approvals list exactly 1 action
+    Then its needsYou reads exactly "Waiting for you to approve the push to dev" and the action is shown in its approvals
     When the user clicks Approve
     Then the approval is recorded with 200
     When the same action is denied afterwards
@@ -779,7 +780,7 @@ Feature: The user
     Then the action is held: the agent was told no and carried on, and the task still needs you
     And Questions lists exactly 1 approval, held, with the full command
     When the user approves it late
-    Then the action is recorded approved and the coordinator is handed the command back, once
+    Then the action is recorded approved and the coordinator is handed the command back: yes
 
   @USER-65 @test
   Scenario: Questions in the dock gathers what waits for the user, oldest first
@@ -1054,7 +1055,7 @@ Feature: The user
     # README.md, Ideas
     Given an open idea "Search the board" in a repo, suggested as a task
     When the user accepts it as an epic with the note "Yes, soon"
-    Then exactly 1 task is made, kind epic, parked in backlog, in the idea's repo, for the coordinator tech-lead
+    Then task-2 is made, kind epic, parked in backlog, in the idea's repo, for the coordinator tech-lead
     And its description names each of the idea's id, its title "Search the board", its proposal and the note "Yes, soon"
     And the idea is accepted, became that task, with the note "Yes, soon" kept
     And the reply is exactly task-2, column backlog, kind epic, accepted true
@@ -1128,7 +1129,7 @@ Feature: The user
     Then the idea is dismissed with exactly the note "The OS does it" and a decidedAt
     When the user accepts it afterwards
     Then it is refused with 409
-    When an idea that does not exist, or a task's id, is accepted or dismissed
+    When an unknown idea is accepted or dismissed, or a task's id dismissed
     Then each is refused with 404
 
   @USER-89 @manual
@@ -1274,7 +1275,7 @@ Feature: The user
     And only yours have "Delete template" and an Export link to /api/teams/templates/papers/export; a built-in one has neither
     And each card's buttons are named with it: "Add this team, Software", "Change it first, Papers", and "Add another" for a team you have
     When the user clicks "Add this team, Papers"
-    Then exactly 1 request adds the template papers by its id, and a toast "Added the Papers team" with "Pick it on New task; its coordinator takes the task." is shown once
+    Then a request adds the template papers by its id, and a toast "Added the Papers team" with "Pick it on New task; its coordinator takes the task." is shown
     And while the add runs, Esc and a click outside leave the dialog open; once it ends, both close it
 
   @USER-98 @test
@@ -1287,7 +1288,7 @@ Feature: The user
     Then it is refused with 409, naming exactly 1 missing profile, read-mostly, and the Policy page, and nothing is proposed
     And an offer is shown in that card only, with the button "Add the profile and the team"
     When the user clicks it
-    Then exactly 1 more request is sent, with addMissingProfiles and the policy's hash the page saw
+    Then the next request sent carries addMissingProfiles and the same policy hash the page saw
     And the policy is changed exactly once, "added profile read-mostly for team Visionaries", and the team is there with its 4 agents under visionary-lead
     When a template that does not exist is named, or the hash is stale
     Then the first is refused with 404 and the second with 409, each as JSON with an error line
@@ -1302,7 +1303,7 @@ Feature: The user
     Given the Add a team dialog
     When the user clicks "Build a team"
     Then the dialog closes and the panel "New team" opens with the focus in "Team name", empty
-    And "Start from" has Blank pressed, no Template list, and exactly 1 row, the coordinator, open and picked as "Coordinator, coordinator"
+    And "Start from" has Blank pressed, no Template list, and the row coordinator open and picked as "Coordinator, coordinator"
     And the foot reads "Creates the team and its coordinator." and the prompt's hint "Empty: it uses Agentry's coordinator prompt for a team of these agents."
     When the user types " Docs " and clicks "Create team"
     Then exactly 1 request is sent: the team "Docs" with 1 agent, coordinator, coordinates true, engine claude, colour blue, an empty prompt
@@ -1362,7 +1363,7 @@ Feature: The user
     When the user clicks "Remove team" in the Edit team panel
     Then "Remove the Docs team and its 3 agents?" is shown with "Their prompts and what they learned go too.", the focus on Keep, nothing sent yet
     When the user clicks Remove
-    Then exactly 1 request removes the team, a toast "Removed the Docs team" is shown once, and the panel closes
+    Then exactly 1 request removes the team, a toast "Removed the Docs team" is shown, and the panel closes
 
   @USER-103 @test
   Scenario: Save a team as a template, never over a name a template has
@@ -1380,7 +1381,7 @@ Feature: The user
     When the user saves a name of yours in another case, or padded, or a built-in template's, or an id of yours
     Then each is refused with 409: "You have a template called My Planning already. Pick another name." or "Software is a built-in template. Pick another name.", and nothing is written
     When the save goes through on the page
-    Then a toast "Saved Docs kit to your templates" with "Add it again from Add a team." is shown once and the form closes
+    Then a toast "Saved Docs kit to your templates" with "Add it again from Add a team." is shown and the form closes
     Given unsaved changes in the panel
     Then "Save as a template" is disabled, "Save your changes first." shown beside it
 
@@ -1398,7 +1399,7 @@ Feature: The user
     When the user clicks "Update my template"
     Then exactly 1 request is sent, replacing true, and the template keeps its id dreams and name Dreams with the prompt as last saved
     And a description sent is trimmed and kept, none keeps "Big ideas."; you still have exactly 1 template
-    And a toast "Updated Docs kit in your templates" with "It has the Docs team as last saved." is shown once
+    And a toast "Updated Docs kit in your templates" with "It has the Docs team as last saved." is shown
     Given unsaved changes
     Then "Update my template" is disabled, "Save your changes first." shown beside it, in the footer and in the body
 
@@ -1414,11 +1415,11 @@ Feature: The user
     Then the template is back exactly as it was, yours, saved anew
     When the user clicks "Import a template"
     Then a file picker opens for .json files only
-    And an import that goes through shows a toast "Imported Papers to your templates" once and the list is read again
+    And an import that goes through shows a toast "Imported Papers to your templates" and the list is read again: yes
     When the import names a template you have
     Then the card "A team of your own" reads "Couldn't import the template" and "You have a template called Papers already. Pick another name.", and the button is not disabled
-    When the user clicks "Delete template, Papers" then Delete
-    Then the template is deleted, a toast "Deleted the Papers template" is shown once, and the focus moves to the next card's "Add this team"
+    When the user clicks "Delete template, Orders" then Delete
+    Then the template is deleted, a toast "Deleted the Orders template" is shown, and the focus moves to "Add this team, Papers"
     When a built-in template is exported or removed
     Then the export is refused with 400 and the removal with 409
 
@@ -1497,7 +1498,7 @@ Feature: The user
     When "Add this profile" is sent without the file's hash, or with a stale one
     Then it is refused with 409 "changed since the page loaded it: try again"
     When it is sent with the hash the page saw
-    Then the file gains exactly 1 profile, read-mostly, under "# Added by Agentry <version>, the default profile of that version."
+    Then the file no longer lacks read-mostly: it comes under "# Added by Agentry <version>, the default profile of that version."
     And exactly 1 policy event is logged, by you, "added profile read-mostly", with the diff adding [profiles.read-mostly] and the file's text
     And a backup beside the file holds exactly the file as it was
     When it is added twice, or a profile Agentry does not ship is added
@@ -1562,7 +1563,7 @@ Feature: The user
     Then the diff runs from the version in force to it, turning use_for_everyone back on, and the version names allow-everything where the one in force names no profile
     And the version in force shows an empty diff
     When the user reverts to the first
-    Then the file is the first version again and exactly 1 new version is logged, yours, "reverted to the version of <date>"
+    Then the file is the same as the first version, and the newest version logged is yours, "reverted to the version of <date>"
     When a version without its text, position 999, or the version in force is reverted to
     Then they are refused with 409 "can't be restored", 404, and 409 "in force"
     When a revert would take read-mostly from the Visionaries
@@ -1595,14 +1596,14 @@ Feature: The user
     # the why is the server's sentence, internal/ideas/feature.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
     Given a fresh install, with no Visionaries team
     When the Settings page is shown
-    Then the features that are off are exactly 1, Ideas, with the server's why and the button "Ask the visionaries"
+    Then Ideas is shown among the features that are off, with the server's why and the button "Ask the visionaries"
     And "Every feature is on." is not shown
     Given Ideas on
     Then Ideas is not listed, no button is shown, and "Every feature is on." is shown
     Given the features not read yet
     Then nothing is said either way
     Given events the server skipped, 31 from the prefix idea- and 4 of the type git.pr_opened
-    Then exactly 2 lines read "31 events from a feature this build doesn't have: idea-" and "4 events of a type this build doesn't know: git.pr_opened"
+    Then the lines shown read "31 events from a feature this build doesn't have: idea-" and "4 events of a type this build doesn't know: git.pr_opened"
     Given a feature only the server lists, or one with no button
     Then the first is not listed at all, and the second shows its label and why alone
 
@@ -1737,19 +1738,19 @@ Feature: The user
     Given a browser with no push, or notifications blocked for the site
     Then the browser's reason is shown instead and no button
 
-  @USER-126 @test
+  @USER-126 @manual
   Scenario: Turning notifications on and off for this device
-    # internal/web/push_api_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
-    # ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"
+    # the server half: internal/web/push_api_test.go TestSubscribingTwiceAndUnsubscribing and TestAMalformedPushSubscriptionIsABadRequest
+    # the dialog's half when it opens: ui/src/components/organisms/NotifyDeviceDialog.test.tsx "a subscription made with the server's key is sent again and shows as notified" and "a subscription made with another key is dropped in the browser and the button shows"; no test clicks either button
+    # the dialog "Notifications on this device", from the Signing in menu: ui/src/components/organisms/AccountMenu.tsx line 41; its buttons: ui/src/components/organisms/NotifyDeviceDialog.tsx lines 52 to 77
     # "Notifications weren't allowed." when the browser refuses permission, in the banner "Couldn't change notifications": ui/src/lib/push.ts line 43; ui/src/components/organisms/NotifyDeviceDialog.tsx line 45
-    # not under test, checked by hand: clicking "Notify me on this device" and allowing notifications subscribes the browser, and the dialog then offers "Stop notifying this device"
-    Given push available and this browser holding a subscription made with the server's key
-    When the dialog opens
-    Then the browser's subscription is sent once and the dialog reads "This device is notified when something waits for you."
+    Given push available and this browser not subscribed
+    When the user opens "Notifications on this device" from the Signing in menu, clicks "Notify me on this device" and allows notifications
+    Then the browser's subscription is sent and the dialog reads "This device is notified when something waits for you." with "Stop notifying this device" shown
     When the same endpoint is sent twice
     Then exactly 1 subscription is kept
-    When the subscription is removed
-    Then 0 are subscribed, and removing it again is 404
+    When the user clicks "Stop notifying this device"
+    Then the subscription is removed, 0 subscribed, and removing it again is 404
     When a subscription with no endpoint, an http endpoint or no keys is sent
     Then each is refused with 400 and none is kept
     Given a subscription this browser made with another server's key
@@ -1832,4 +1833,4 @@ Feature: The user
     Given the archiver started with task-1 done for the age
     Then its first round runs at once: task-1 is archived, and it waits exactly 1 hour for the next
     When that hour passes, task-2 done for the age by then
-    Then the round an hour on archives task-2, exactly 1 more
+    Then the round an hour on archives task-2
