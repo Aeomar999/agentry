@@ -122,8 +122,8 @@ func (w *Watchdog) checkTurn(now time.Time, task *tasks.Task, turn *tasks.Turn) 
 // resumeFailed says whether a turn that went on with the agent's last
 // session, or a fork of it, here or from a sibling story, ended before it
 // took its prompt: the engine couldn't resume it, such as a session it no
-// longer has. One that took its prompt and then
-// exited crashed, which findProblem tells.
+// longer has. One that took its prompt and then exited crashed, which
+// findProblem tells.
 func (w *Watchdog) resumeFailed(now time.Time, task *tasks.Task, turn *tasks.Turn) bool {
 	return turn.FromSession != "" && !turn.Acknowledged && now.Sub(turn.StartedAt) > w.limits.StartGrace && !w.isRunning(task.ID)
 }
