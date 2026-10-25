@@ -326,6 +326,9 @@ func (t *Task) Apply(e events.Event) {
 	case events.TurnStarted:
 		t.Turns = append(t.Turns, &Turn{ID: e.Correlation, Agent: e.Text("agent"), Worker: cmp.Or(e.Text("worker"), workers.Local), Hash: e.Text("hash"),
 			Engine: e.Text("engine"), FromSession: e.Text("fromSession"), FreshBecause: e.Text("freshBecause"), PlanFrom: e.Text("planFrom"), Seen: seenBy(e, len(t.Trail)), StartedAt: e.At, LastEventAt: e.At, Shipped: t.Handoff != nil && t.Handoff.Ships && t.Handoff.To == e.Text("agent")})
+		if t.Handoff != nil {
+			t.Turns[len(t.Turns)-1].Handoff = *t.Handoff
+		}
 		t.Handoff = nil
 		t.TurnsSinceAnswer++
 		coordinates, unheard := e.Text("agent") == t.Coordinator, false
@@ -421,11 +424,21 @@ func (t *Task) Apply(e events.Event) {
 
 	case events.IssueRaised:
 		t.Fetching = nil // a fetch that failed is told as an issue
-		if turn := t.OpenTurn(); turn != nil {
+		turn := t.OpenTurn()
+		if turn != nil {
 			turn.Ended, turn.Issue = true, e.Text("reason")
 			t.moveRepo()
 		}
 		t.IssuesInARow++
+		if e.Flag("retryFresh") && turn != nil && turn.Handoff.To == turn.Agent {
+			// Its resumed session didn't start, so nothing was done: the
+			// same agent gets the same step again, and the coordinator is
+			// only told. It still counts as an issue, so retries are bounded.
+			t.Trail = append(t.Trail, Step{At: e.At, From: Agentry, To: t.Coordinator, Text: e.Text("reason")})
+			again := turn.Handoff
+			t.PendingDecision, t.Handoff = "", &again
+			break
+		}
 		t.step(e, Agentry, t.Coordinator, e.Text("reason"))
 
 	case events.TurnStopped:

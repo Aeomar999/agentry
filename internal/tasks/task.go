@@ -216,6 +216,7 @@ type Turn struct {
 	Plan          string // the agent's plan for the turn, a Markdown checklist, as it last wrote it
 	PlanFrom      string // the turn whose unfinished plan this turn started with, "" for a fresh one
 	Seen          int    // how many steps of the trail its brief was made from
+	Handoff       Step   // the step to it that it started on, given again when its resumed session didn't start
 	Ended         bool
 	Report        string    // the agent's final message
 	Issue         string    // why the turn was cut short, if it was
