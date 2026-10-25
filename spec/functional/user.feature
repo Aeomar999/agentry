@@ -1042,7 +1042,7 @@ Feature: The user
     And exactly 4 parts are shown in order, "Problem", "Proposal", "Why now" and "Risks", a part with no text hidden
     And "Backed by" lists exactly 2 agents and "Doubted by" exactly 1; with nobody it reads "no one"
     And the line "Not auto-accepted: doubted by skeptic" is shown
-    And the foot shows Accept, Dismiss, "follows up epic-7" and "from task-12", each a link to the task
+    And the foot shows 2 buttons, Accept and Dismiss, then "follows up epic-7" and "from task-12", in which only epic-7 and task-12 are links, each to that task
 
   @USER-84 @test
   Scenario: Accept makes a task or an epic in the idea's repo, in your Backlog, with your note
@@ -1213,7 +1213,7 @@ Feature: The user
     # the explainer and the offer: ui/src/features/ideas/IdeasPage.tsx lines 155 to 167; ui/src/features/ideas/AskVisionaries.tsx lines 10 to 24
     Given no Visionaries team and no ideas
     When the features are read
-    Then ideas is not enabled and not visible, its why "add a team from the Visionaries template to get ideas"
+    Then ideas is not enabled and not visible, its why "add a team from the Visionaries template, or one of yours based on it, to get ideas"
     And the Ideas page is in its off view, which shows what Ideas is and only the button "Ask the visionaries"
     When the Visionaries team is added
     Then ideas is enabled and shown: "the Visionaries team suggests ideas"
@@ -1303,14 +1303,14 @@ Feature: The user
     And the foot reads "Creates the team and its coordinator." and the prompt's hint "Empty: it uses Agentry's coordinator prompt for a team of these agents."
     When the user types " Docs " and clicks "Create team"
     Then exactly 1 request is sent: the team "Docs" with 1 agent, coordinator, coordinates true, engine claude, colour blue, an empty prompt
-    And the server gives an empty prompt its default: the coordinator's starts "You are the coordinator", an agent's names it as "one of the agents of the <team> team" and ends "Your job: <its description>"
+    And the server gives an empty prompt its default: the coordinator's starts "You are the coordinator", an agent's names it as "one of the agents of the <team> team" and its first line ends "Your job: <its description>."
     And a prompt the user wrote is kept as written
 
   @USER-100 @test
   Scenario: What a team of your own is refused for, every problem at once
     # internal/agents/custom_test.go TestACustomTeamIsRefused
     # ui/src/components/organisms/TeamPanel.test.tsx "an empty team name is in the summary, which takes focus, and under the field" and "every problem at once: team, agents and each row's fields"
-    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 53
+    # an agent's name: lowercase letters, digits and dashes, starting with a letter, at most 31 long: internal/agents/agent.go lines 18 to 22; the page's limit: ui/src/lib/custom-team.ts line 54
     Given the New team panel
     When the user clicks "Create team" with no name
     Then nothing is sent, the summary reads "Couldn't create the team: 1 thing to fix" and takes the focus, and "Give the team a name." is shown under the field
@@ -1326,7 +1326,7 @@ Feature: The user
   @USER-101 @test
   Scenario: Edit a team: saved whole in one request, its tasks following, with the profiles it needs
     # internal/web/team_edit_api_test.go TestATeamIsSavedWholeInOneRequest and TestATeamEditNeedsItsProfilesInThePolicy
-    # the panel "Edit the <team> team" at ?team=<name>, "Save changes" and "No changes to save.": ui/src/lib/custom-team.ts lines 464 and 478; ui/src/components/organisms/EditTeamPanel.tsx line 268
+    # the panel "Edit the <team> team" at ?team=<name>: ui/src/lib/custom-team.ts line 478; "No changes to save.": line 492; "Save changes": ui/src/components/organisms/EditTeamPanel.tsx line 268
     Given the Data team with its lead, analyst and charter, the analyst having learned "Know."
     When the user saves the team as " Numbers ", the analyst renamed statistician on codex, charter removed and plotter added
     Then exactly 1 team.edited event is written and the reply names the team Numbers with its new version
@@ -1436,17 +1436,18 @@ Feature: The user
 
   @USER-107 @manual
   Scenario: An agent's page and its edit page: the prompt, what it knows, its engine, model, profile and where it runs
-    # ui/src/pages/AgentPage.tsx lines 41 and 42, the buttons; line 48, Prompt; line 51, Knowledge; lines 55 to 66, Settings; line 32, no such agent
-    # ui/src/pages/AgentEditPage.tsx lines 25 and 26; ui/src/components/organisms/AgentForm.tsx lines 109 to 175, the Agent panel; lines 179 to 223, Engine; lines 226 to 255, Runs on; line 258, the button
-    # the model names claude knows: ui/src/components/organisms/AgentForm.tsx line 27; the knowledge history shows at most 8 changes: ui/src/components/organisms/KnowledgeEditor.tsx line 63
+    # ui/src/pages/AgentPage.tsx lines 42 and 43, the buttons; line 49, Prompt; line 52, Knowledge; lines 56 to 67, Settings; line 33, no such agent
+    # ui/src/pages/AgentEditPage.tsx lines 25 and 26; ui/src/components/organisms/AgentForm.tsx lines 118 to 199, the Agent panel; lines 201 to 246, Engine; lines 248 to 277, Runs on; line 280, the button
+    # the "Starts each turn" row of an agent with no resume setting of its own, not a reviewer: ui/src/lib/resume.ts line 32
+    # the model names claude knows: ui/src/components/organisms/AgentForm.tsx line 28; the knowledge history shows at most 8 changes: ui/src/components/organisms/KnowledgeEditor.tsx line 63
     Given the engineer, on claude with no model, under the developer profile
     When its page is shown
     Then the header shows its name, role badge and description, with exactly 2 buttons, "Redact a text" and Edit
     And the panel "Prompt" reads "Its standing instructions, given at the start of every turn"
     And the panel "Knowledge" has Save, disabled until the text changes, and lists at most 8 past changes, newest first, each by an agent or "you"
-    And "Settings" lists exactly 5 rows: Engine claude, Model "the engine's default", "Policy profile" developer, Role "Works on the task", "Runs on"
+    And "Settings" lists exactly 6 rows: Engine claude, Model "the engine's default", "Policy profile" developer, Role "Works on the task", "Starts each turn" "Going on with its session", "Runs on"
     When the user clicks Edit
-    Then the form shows exactly 6 fields in the Agent panel: Name, Team, Description, Colour, "Its work counts as" with Building, Review and Shipping, and Coordinates
+    Then the form shows exactly 7 fields in the Agent panel: Name, Team, Description, Colour, "Its work counts as" with Building, Review and Shipping, "Starts each turn", and Coordinates
     And Engine offers exactly claude and codex, Model lists opus, sonnet and haiku for claude, and "Policy profile" starts "default (developer)"
     And Save is disabled while the name or the prompt is empty
     When the user opens /agents/new
@@ -1457,10 +1458,11 @@ Feature: The user
   @USER-108 @test
   Scenario: An agent is added, changed, renamed and removed from the page, and what it knows can be edited
     # internal/web/api_test.go TestAgentsAreEditedFromThePage, TestRenamingAnAgentKeepsItsTasksGoing, TestYouEditWhatAnAgentKnows and TestTheKnowledgeHistoryIsTheSameFromPatches
-    # the toasts "Added <name>" and "Saved <name>" with "The coordinator sees it from its next turn.": ui/src/components/organisms/AgentForm.tsx line 72; "Saved what <name> knows": ui/src/components/organisms/KnowledgeEditor.tsx line 39
+    # the toasts "Added <name>" and "Saved <name>" with "The coordinator sees it from its next turn.": ui/src/components/organisms/AgentForm.tsx line 83; "Saved what <name> knows": ui/src/components/organisms/KnowledgeEditor.tsx line 39
+    # the fixture starts with the Software team's 5 agents; the test asserts 5 again once designer is removed, not the count in between
     Given the Software team's 5 agents
     When the user adds designer and changes the engineer to codex with the model gpt-5
-    Then the roster has exactly 6 agents, the engineer on codex, gpt-5, with an empty list of workers, not null
+    Then the engineer is on codex, gpt-5, with an empty list of workers, not null
     When an agent is saved with a worker that does not exist, or the only coordinator is removed
     Then each is refused with 409
     When the user removes designer
@@ -1530,6 +1532,7 @@ Feature: The user
   Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
     # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
     # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
+    # a verdict no profile rule made has Order 0, no rule place: internal/policy/verdict.go line 28; none of the named tests asserts it
     Given the policy as shipped and the developer profile's panel
     When the user tries Bash "go test ./..."
     Then the verdict shown is allow by the rule "stays inside the workspace", with its why, "as if run in <workspace>"
@@ -1538,7 +1541,6 @@ Feature: The user
     Then the verdicts are ask "every push leaves this machine: you approve it", deny "never sudo" and deny "never touch secrets"
     And under read-only, Edit of main.go is deny "this agent changes nothing"
     And each adds "But today allow-everything decides for every agent:" with allow, while use_for_everyone is set; with it off, no such line
-    And a built-in verdict names no rule place
     When a call is tried
     Then nothing is logged and the policy's hash is the same
     When the profile does not exist, the tool is empty, or the workspace is a relative path
@@ -1586,9 +1588,10 @@ Feature: The user
   Scenario: The Settings page lists the features that are off, with the way to turn each on, and what the log holds that this build skipped
     # ui/src/pages/SettingsPage.test.tsx "on a fresh install, lists Ideas with its why and Ask the visionaries", "doesn't list a visible feature, and says nothing is off", "says nothing until the manifest is read", "shows one tally line per prefix and per type", "ignores a feature only the server knows" and "shows a feature with no button by its label and why alone"
     # the page header and the Privacy panel: ui/src/pages/SettingsPage.tsx lines 33 and 53 to 67
+    # the why is the server's sentence, internal/ideas/feature.go line 66; the page test's fixture carries a shorter one, ui/src/pages/SettingsPage.test.tsx lines 37 and 52
     Given a fresh install, with no Visionaries team
     When the Settings page is shown
-    Then "Features that are off" lists exactly 1 feature, Ideas, with "add a team from the Visionaries template to get ideas" and the button "Ask the visionaries"
+    Then "Features that are off" lists exactly 1 feature, Ideas, with "add a team from the Visionaries template, or one of yours based on it, to get ideas" and the button "Ask the visionaries"
     And "Every feature is on." is not shown
     Given Ideas on
     Then Ideas is not listed, no button is shown, and "Every feature is on." is shown
@@ -1809,3 +1812,19 @@ Feature: The user
     When the focus is in a field, a textarea, a select, the terminal or on a button
     Then n, /, ?, g, j, k, 1 and 2 are text or the control's own, not shortcuts, and Enter is the control's
     And a key with Ctrl, Alt or the command key held is never one of these
+
+  @USER-131 @test
+  Scenario: A task done for the archive age is archived, in a round at start and then every hour
+    # internal/archive/archive_test.go TestATaskIsArchivedOnceDoneForTheAge and TestTheArchiverRunsAtStartAndThenHourly
+    # the age: 30 days unless -archive-after says otherwise, and 0 never archives: cmd/agentry/serve.go lines 70 to 72 and 105; the test's age, 30 days: internal/archive/archive_test.go line 22
+    # a round every hour: internal/archive/archive.go line 20, roundEvery
+    # the task list still shows an archived task as done, with its summary; its page is marked Archived and read only: @USER-73 and @USER-74; README.md, Archiving, erasing and redacting
+    Given the default archive age, 30 days, and 3 tasks done, task-1 first, task-3 reopened since
+    When a round runs 30 days after task-1 was done
+    Then exactly 1 task is archived, task-1; task-2 and task-3 are not
+    When a round runs 30 days after that
+    Then exactly 1 more is archived, task-2; the reopened task-3 is not
+    Given the archiver started with task-1 done for the age
+    Then its first round runs at once: task-1 is archived, and it waits exactly 1 hour for the next
+    When that hour passes, task-2 done for the age by then
+    Then the round an hour on archives task-2, exactly 1 more
