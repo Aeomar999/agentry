@@ -96,7 +96,8 @@ func idProblem(s scenario, prefix string) string {
 }
 
 // tagHint adds, to a missing-tag message, why the tags were missed: they
-// sit above a blank line instead of directly above the Scenario line.
+// sit above a blank or comment line instead of directly above the Scenario
+// line.
 func tagHint(s scenario) string {
 	if s.tagsAbove {
 		return "; the tags must be on the line directly above Scenario:"

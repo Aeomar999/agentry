@@ -14,8 +14,8 @@ type scenario struct {
 	tags  []tag
 	body  []line
 	// tagsAbove is true when the scenario has no tags and the nearest line
-	// above it that is not blank is a tag line: the tags were lost to a
-	// blank line.
+	// above it that is not blank or a comment is a tag line: the tags were
+	// lost to a blank or comment line.
 	tagsAbove bool
 }
 
@@ -36,7 +36,7 @@ type line struct {
 func parseFeature(file, text string) (scenarios []scenario, outlines []line) {
 	var current *scenario
 	var pending []tag
-	tagsAbove := false // the last line that was not blank was a tag line
+	tagsAbove := false // the last line that was not blank or a comment was a tag line
 	for i, raw := range strings.Split(text, "\n") {
 		l := line{number: i + 1, text: strings.TrimSpace(raw)}
 		switch {
@@ -56,7 +56,7 @@ func parseFeature(file, text string) (scenarios []scenario, outlines []line) {
 			current, pending, tagsAbove = nil, nil, false
 		default:
 			pending = nil
-			if l.text != "" {
+			if l.text != "" && !isComment(l.text) {
 				tagsAbove = false
 			}
 			if current != nil {
@@ -70,6 +70,8 @@ func parseFeature(file, text string) (scenarios []scenario, outlines []line) {
 func isTagLine(text string) bool { return strings.HasPrefix(text, "@") }
 
 func isScenarioLine(text string) bool { return strings.HasPrefix(text, "Scenario:") }
+
+func isComment(text string) bool { return strings.HasPrefix(text, "#") }
 
 func isOutlineLine(text string) bool { return strings.HasPrefix(text, "Scenario Outline:") }
 

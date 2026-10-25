@@ -197,6 +197,13 @@ func TestABlankLineBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
 	}
 }
 
+func TestACommentBetweenTheTagsAndTheScenarioIsExplained(t *testing.T) {
+	text := strings.Replace(goodScenario, "@USER-01 @test\n", "@USER-01 @test\n  # internal/web/api_test.go\n", 1)
+	expectProblems(t, problemsOf(t, map[string]string{"functional/user.feature": text}),
+		"user.feature:6: no ID tag; this file's scenarios are tagged @USER-nn; the tags must be on the line directly above Scenario:",
+		"user.feature:6: no check tag; a scenario has exactly one of @test, @benchmark, @manual; the tags must be on the line directly above Scenario:")
+}
+
 func TestAnEmDashAnywhereUnderTheFolderFails(t *testing.T) {
 	expectProblems(t, problemsOf(t, map[string]string{
 		"functional/user.feature": goodScenario,
