@@ -67,11 +67,15 @@ Feature: Supervisor agents
   @PROP-58 @coordinator @test @to-coordinator-and-handoffs
   Scenario: The coordinator stays the one deciding: every report after a supervisor's assign goes back to it
     # @HANDOFF-11: every agent's report returns to the coordinator; PLAN.md T-021 "supervisor is just an agent"
+    # the rule: a supervisor's assign is taken only on a turn the coordinator handed it; on a turn another supervisor handed it, its assign is not taken and the report goes back to the coordinator
     # test: internal/coordinator/loop_test.go (to write)
     Given the reviewer assigned the task to the engineer
     When the engineer's turn ends with its report
     Then the next turn is the coordinator's, not the reviewer's: yes
     And the coordinator's brief shows both steps, reviewer to engineer and engineer to the coordinator: yes
+    Given the engineer may assign too, and the reviewer handed it the turn
+    When the engineer's report ends with an assign to the tester
+    Then the assign is not taken, 0 turns start for the tester, and the report goes back to the coordinator: yes
     Given the reviewer's report ends with a done, an ask, a transfer, a request, a move, a split, a wait or a fetch
     Then none of them is taken, and the report goes back to the coordinator as written: yes
 
@@ -89,7 +93,8 @@ Feature: Supervisor agents
     # test: internal/rules/rules_test.go and internal/coordinator/next_test.go (to write)
     Given the reviewer of the Software team may assign
     When its report ends with an assign to an agent of the Writing team, to no agent of that name, to the coordinator, or to itself
-    Then each is refused: "editor is in the Writing team, not Software", "no agent called designer", "the coordinator can't assign the task to itself" and "reviewer can't assign the task to itself"
+    # "reviewer can't assign the task to itself" is a new check: notToTheCoordinator covers only the coordinator
+    Then each is refused: "editor is in the Writing team, not Software", "no agent called designer", "reviewer can't hand the task to the coordinator; its report goes back there anyway" and "reviewer can't assign the task to itself"
     When it assigns while a question to the user is open, or after the user moved the task to Done, To do or the Backlog
     Then each is refused with the reason the coordinator's assign gets: yes
     And for each refusal 0 turns start and exactly 1 issue goes back to the coordinator, saying why
@@ -121,8 +126,8 @@ Feature: Supervisor agents
   Scenario: Turns a supervisor starts count toward the task's turn limit and budget
     # @HANDOFF-26: the turn limit asks the user; @HANDOFF-29: the budget stop
     # test: internal/coordinator/next_test.go (to write)
-    Given a task with the turn limit 24, and two agents that may assign handing it to each other
-    When its turns reach 24 since the user last answered
+    Given a task with the turn limit 24, and a coordinator and a reviewer that may assign, the reviewer handing the task to the engineer on each of its turns
+    When its turns reach 24 since the user last answered, the coordinator's, the reviewer's and the engineer's counted alike
     Then no turn starts, and the user is asked, as for any task at its turn limit: yes
     Given a task with a budget of 100,000 tokens and turns a supervisor started using 110,000
     Then no turn starts, and the user is asked with "110k tokens of its 100k budget"
@@ -141,4 +146,5 @@ Feature: Supervisor agents
 # What a supervisor may decide: assign only (recommended, as PLAN.md T-021 names ticket.assigned alone), or done too, once every checker approved.
 # Whose agents: its own team's only (recommended, as for the coordinator), or another team's named in its brief, as a transfer is.
 # The field's name: "May assign the task" in the form and assigns in the roster (recommended), or a role such as "Supervises" beside "Its work counts as".
+# Chained assigns: a supervisor's assign is taken only on a turn the coordinator handed it (recommended), or taken on any turn, supervisors handing the task to each other held back only by the turn limit.
 # Agents of another kind: an agent that may assign may also be a checker or a shipper (recommended, since the permission is separate), or a supervisor's work counts as none of the three.

@@ -54,12 +54,15 @@ Feature: Policy rules from the page
   @PROP-05 @user @test @to-policy
   Scenario: A rule without its why, or one that would not load, is refused and nothing is written
     # PLAN.md T-043, "keeping each rule's why"; the checks a file must pass to load: internal/policy/file.go
+    # a change that would not load is a policy.Refusal, which applyPolicy answers with 409 (internal/web/policy_api.go); a missing why and a repeated name are checks the page makes before the edit, so they get 400
     # test: internal/web/policy_api_test.go (to write)
     Given the developer profile's panel
     When a rule is sent with an empty why, or a why of only spaces
     Then it is refused with 400 "a rule needs its why: say what it is for"
-    When a rule is sent with the decision "maybe", a pattern that does not compile, or a name another rule of that profile has
-    Then each is refused with 400, naming the field and why, and the file is not changed
+    When a rule is sent with a name another rule of that profile has
+    Then it is refused with 400, naming the field and why, and the file is not changed
+    When a rule is sent with the decision "maybe" or a pattern that does not compile
+    Then each is refused with 409, naming the field and why, as a policy that would not load is today, and the file is not changed
     And no refused change is logged
 
   @PROP-06 @user @test @to-policy
@@ -128,5 +131,6 @@ Feature: Policy rules from the page
 # Whether the page also changes a profile's own why, otherwise and unreadable, or only its rules as T-043 says (recommended: only the rules).
 # Whether a why is required in policy.toml too, so a hand-written rule without one is refused, or only on the page (recommended: only on the page, so no file that loads today stops loading).
 # Whether a repeated rule name in a profile is refused only on the page, or in the file too (recommended: only on the page, as a verdict names its rule).
+# Whether the page's own checks, a missing why and a repeated name, answer 400 (recommended, as they are not a policy that would not load) or 409 as every refused policy edit does today.
 # Whether a rule is moved by drag or by Up and Down buttons (recommended: Up and Down, which the keys reach too).
 # Whether the banner "Edit the file to change the policy" stays, or names only what the page cannot change (recommended: it names the rest, the profiles' own settings and shell_tools).

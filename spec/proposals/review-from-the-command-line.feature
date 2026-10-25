@@ -95,11 +95,12 @@ Feature: Review from the command line
 
   @PROP-19 @test @to-security
   Scenario: No agent reviews its own work from the command line
-    # PLAN.md T-015; an agent can never approve its own request (@SEC-46); Agentry's own files, the sign-in token among them, are off limits for every profile (@POLICY-38)
+    # PLAN.md T-015; an agent can never approve its own request (@SEC-46); Agentry's own files are off limits for every profile (@POLICY-38)
+    # the command rule for agentry review is new: today's rule for Agentry's own files matches paths, and agentry review names none
     # test: internal/policy/default_test.go (to write)
     Given an agent under any of the 6 profiles, allow-everything included
     When it runs agentry review approve task-5, agentry review send-back task-5 "x" or agentry review discard task-5 --yes
-    Then each is denied by the built-in rule for Agentry's own files, and nothing is sent
+    Then each is denied by a new built-in command rule for agentry review, beside the rule for Agentry's own files, and nothing is sent
     And agentry review task-5 is denied the same way, as it reads with the user's credential too: yes
 
   # ---- Failures and limits -------------------------------------------------------
@@ -138,4 +139,4 @@ Feature: Review from the command line
 # Whether discard only finishes the task and keeps its branch (recommended, as Done does) or also deletes the branch and the worktree.
 # Whether send-back needs a note (recommended) or may go with none, as a drag to In progress may.
 # Whether the diff includes changes not yet committed (recommended, as the Workspace shows them) or only the branch's commits.
-# Whether an agent is stopped by the built-in rule for Agentry's own files (recommended, since the command reads the sign-in token) or by a rule in the shipped profiles that the user could change.
+# Whether an agent is stopped by a new built-in command rule for agentry review (recommended), by a rule in the shipped profiles that the user could change, or by giving agentry review no credential an agent can reach, so it fails with 401.

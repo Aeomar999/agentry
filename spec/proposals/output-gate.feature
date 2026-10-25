@@ -96,12 +96,12 @@ Feature: Output gate
 
   @PROP-73 @test @to-reliability
   Scenario: A result the gate cannot judge does not reach the agent
-    # the gate fails closed: a gate's hook ends || exit 2 and has its own deadline (PLAN.md proof 01, internal/engines/hook_config.go); the output hook becomes a gate for a profile with rules for results
+    # the gate fails closed: a gate's hook ends || exit 2, which blocks a call at PreToolUse (PLAN.md proof 01, internal/engines/hook_config.go); nothing yet shows exit 2 at PostToolUse withholds a result, so Agentry ends the session instead, as in @PROP-75
     # test: internal/hooks/output_test.go and internal/engines/engines_test.go (to write)
     Given an agent whose profile has 1 rule for results
     When the server is down, the hook crashes, or the hook's deadline passes before a decision
-    Then the result does not reach the agent, which gets only "Agentry couldn't judge this result", and its turn goes on: yes
-    And the hook that judges results ends || exit 2 for that profile, as the gate does: yes
+    Then the result reaches 0 model calls: Agentry ends the agent's session before the hook returns, as in @PROP-75, and exactly 1 issue goes back to the coordinator
+    And the results hook also ends || exit 2, and that alone is not counted on to withhold a result until recorded payloads show it does: yes
 
   # ---- The engines -------------------------------------------------------------
 
@@ -111,7 +111,7 @@ Feature: Output gate
     # test: internal/engines/engines_test.go (to write), with recorded payloads
     Given an agent on Claude Code whose profile has rules for results
     When its session is prepared
-    Then PostToolUse is written as a gate, ending || exit 2, and every other reporting hook ends || true as today: yes
+    Then PostToolUse is written to wait for the gate's decision on the result, and every other reporting hook ends || true as today: yes
     And a result Claude Code can replace reaches the agent as the decision says, held, redacted or blocked: yes
     Given an agent whose profile has no rule for results
     Then PostToolUse stays a report ending || true, and nothing waits: yes

@@ -13,7 +13,7 @@ Feature: Codex token count
   @PROP-23 @test @to-observability
   Scenario: A Codex turn's tokens are counted from its session file, this turn's part only
     # the Claude Code count this follows: @OBS-25 (internal/engines/claude.go claudeTokens); the Codex turn today: @OBS-25 and @COMPAT-14 (internal/engines/codex.go CodexTokensNotRead)
-    # Codex writes its running totals into the session file as token count entries: input, cached input and output, each since the session began
+    # assumed, not yet recorded: Codex writes its running totals into the session file as token count entries: input, cached input and output, each since the session began
     # test: internal/engines/tokens_test.go (to write), with a recorded Codex session file
     Given a Codex session file whose totals before the turn's start stamp are 10,000 input, of them 6,000 cached, and 500 output
     And whose last totals at the turn's end are 30,000 input, of them 20,000 cached, and 1,500 output
@@ -48,7 +48,7 @@ Feature: Codex token count
     # test: internal/engines/tokens_test.go (to write)
     Given a Codex turn whose session file is not there, one whose file has no token counts, and one whose counts are all older than its start
     When each turn ends
-    Then their tokens are 0 with the reasons "transcript not saved", "no usage in transcript" and "no usage in this turn's part of the transcript"
+    Then their tokens are 0 with the same reasons a Claude Code turn gives, these 3 among them: "transcript not saved", "no usage in transcript" and "no usage in this turn's part of the transcript"
     And no turn ends with the reason "Codex's token use isn't read" any more: yes
 
   # ---- What the count feeds ------------------------------------------------------
@@ -83,4 +83,4 @@ Feature: Codex token count
 # Reasoning tokens: counted inside output, as Codex's output total already holds them (recommended), or shown as a part of their own.
 # Where the session file comes from: the transcript path in the Stop hook's payload (recommended, as for Claude Code), or the file Codex keeps for the session under its own folder, found by the session's id.
 # This turn's part: the last totals less the totals before the start (recommended), or the sum of each call's own usage after the start.
-# Codex's token count entries are read as Codex writes them today; the adapter's recorded payloads should hold one before this is built, as for the hook payloads in proof 07.
+# Whether Codex's session file holds running totals or each call's usage only (recommended: record a session file in the adapter's payloads before building, and pick the method from it).

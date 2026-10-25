@@ -179,7 +179,7 @@ Feature: Shipping through GitHub, and email
     Then the event keeps 2 KB of the link, exactly 100 jobs and 200 characters of the name
 
   @PROP-44 @test @to-performance
-  Scenario: Polling costs at most 3 calls a request, every two minutes
+  Scenario: Polling costs 2 calls a request, and 1 more for each running run
     # docs/design/t-019-shipping.md section 3: the request and its runs, and the jobs of each run that is new, changed, pending or running
     # test: internal/githost/poll_test.go (to write), counting the fake GitHub's calls
     Given 20 open requests, each with 1 running workflow run
