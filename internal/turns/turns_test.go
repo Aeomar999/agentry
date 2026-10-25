@@ -1,6 +1,7 @@
 package turns
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,4 +176,120 @@ func TestTypeLineIntoNoSessionIsAnError(t *testing.T) {
 	if err := NewRunner(s, state, here(), Config{}).TypeLine(task.ID, "Carry on."); err == nil {
 		t.Error("typing into a session that isn't running should fail")
 	}
+}
+
+// The agent's next turn on the task goes on with its last session; a first
+// one, or any with resume off, starts fresh and says why.
+func TestATurnGoesOnWithTheAgentsLastSession(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		config  Config
+		resumes bool
+		fresh   string
+	}{
+		{"resume on", Config{}, true, ""},
+		{"resume off", Config{NoResume: true}, false, ResumeOff},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			record := fakeClaude(t)
+			s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+			task := taskWithWorktree(t, s, "task-1")
+			defer sessions.Stop(sessions.SocketFor(task.ID))
+			coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
+			runner := NewRunner(s, state, here(), c.config)
+
+			if err := runner.Start(task, coordinator, "brief"); err != nil {
+				t.Fatal(err)
+			}
+			if first := launched(t, record); strings.Contains(first, "--resume") {
+				t.Errorf("a first turn resumes nothing:\n%s", first)
+			}
+			first := tasks.FromEvents(mustStream(t, s, task.ID)).Turn("turn-1")
+			if want := cmp.Or(c.fresh, "first turn"); first.FromSession != "" || first.FreshBecause != want {
+				t.Errorf("first turn: from %q, fresh because %q; want fresh because %q", first.FromSession, first.FreshBecause, want)
+			}
+			endTurn(t, s, "turn-1", "tech-lead", "s-1")
+
+			if err := runner.Start(tasks.FromEvents(mustStream(t, s, task.ID)), coordinator, "brief"); err != nil {
+				t.Fatal(err)
+			}
+			second := tasks.FromEvents(mustStream(t, s, task.ID)).Turn("turn-2")
+			if resumed := strings.Contains(launched(t, record), "--resume\ns-1\n"); resumed != c.resumes {
+				t.Errorf("second turn launched with --resume s-1: %v, want %v", resumed, c.resumes)
+			}
+			if c.resumes && (second.FromSession != "s-1" || second.FreshBecause != "") {
+				t.Errorf("second turn: from %q, fresh because %q; want from s-1", second.FromSession, second.FreshBecause)
+			}
+			if !c.resumes && (second.FromSession != "" || second.FreshBecause != c.fresh) {
+				t.Errorf("second turn: from %q, fresh because %q; want fresh because %q", second.FromSession, second.FreshBecause, c.fresh)
+			}
+		})
+	}
+}
+
+// One turn runs per task at a time: the log refuses a turn.started while
+// one is open, or for a turn id already taken (rules noOpenTurn and
+// isTheNextTurn), so no two turns go on with one session.
+func TestTwoTurnsOfATaskNeverResumeTheSameSessionAtOnce(t *testing.T) {
+	record := fakeClaude(t)
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	task := taskWithWorktree(t, s, "task-1")
+	defer sessions.Stop(sessions.SocketFor(task.ID))
+	coordinator, _ := agents.FromEvents(mustStream(t, s, events.AgentsStream)).Get("tech-lead")
+	runner := NewRunner(s, state, here(), Config{})
+	if err := runner.Start(task, coordinator, "brief"); err != nil {
+		t.Fatal(err)
+	}
+	launched(t, record)
+	endTurn(t, s, "turn-1", "tech-lead", "s-1")
+
+	// Both starts see the task as it was after turn 1, so both would resume s-1.
+	ended := tasks.FromEvents(mustStream(t, s, task.ID))
+	if err := runner.Start(ended, coordinator, "brief"); err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Start(ended, coordinator, "brief"); err == nil {
+		t.Error("a second start while a turn is open should be refused")
+	}
+	// The refused start raises an issue, which cuts turn-2 short too; what
+	// counts here is that only one turn ever started from s-1.
+	from := 0
+	for _, turn := range tasks.FromEvents(mustStream(t, s, task.ID)).Turns {
+		if turn.FromSession == "s-1" {
+			from++
+		}
+	}
+	if from != 1 {
+		t.Errorf("%d turns went on with s-1, want 1", from)
+	}
+}
+
+// launched waits for the fake claude's record of its launch and takes it,
+// so the next launch writes a new one.
+func launched(t *testing.T, record string) string {
+	t.Helper()
+	var content []byte
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && len(content) == 0; time.Sleep(50 * time.Millisecond) {
+		content, _ = os.ReadFile(record)
+	}
+	if len(content) == 0 {
+		t.Fatal("the engine didn't launch")
+	}
+	os.Remove(record)
+	return string(content)
+}
+
+// endTurn logs the turn's session and its end, as its hooks would.
+func endTurn(t *testing.T, s *store.Store, turn, agent, session string) {
+	t.Helper()
+	worker := events.Actor{Kind: events.Worker, ID: workers.Local}
+	for _, p := range []events.Proposal{
+		{Stream: "task-1", Actor: worker, Type: events.SessionStarted, Correlation: turn, Data: map[string]any{"engineSession": session}},
+		{Stream: "task-1", Actor: worker, Type: events.TurnEnded, Correlation: turn, Data: map[string]any{"agent": agent, "report": "done"}},
+	} {
+		if _, rejection, err := s.Propose(p); rejection != nil || err != nil {
+			t.Fatal(rejection, err)
+		}
+	}
+	sessions.Stop(sessions.SocketFor("task-1"))
 }
