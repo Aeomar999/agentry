@@ -3,13 +3,16 @@ package coordinator
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/features"
 	"gitlab.com/dev.chempa/agentry/internal/machines"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
+	"gitlab.com/dev.chempa/agentry/internal/workspace"
 )
 
 // A brief is everything an agent is given for one turn. In a fresh session
@@ -18,7 +21,10 @@ import (
 // last session on the task still has all that, so its brief is what has
 // happened since and what every turn needs anew: its instructions or the
 // decision to make, where the work is and the plan file, which is per turn.
-// Both are made from the same sections.
+// An agent that checks work starts fresh by default, and gets a handoff
+// instead of the trail: the task, the commits to review and the builder's
+// report, with its own earlier findings when it has checked before. All
+// three are made from the same sections.
 
 // longestStep caps each trail entry in the coordinator's brief.
 const longestStep = 4000
@@ -184,6 +190,145 @@ func workerWork(b *strings.Builder, task *tasks.Task, agent agents.Agent, roster
 	section(b, "Where the work is", whereText(task))
 	section(b, "Shared files", sharedText(task, shared, false))
 	plan(b, task, agent.Name, "your plan for this turn: the steps you will take to do your instructions")
+}
+
+// handoffBrief is the brief for an agent that checks work, in a fresh
+// session: what a review needs and nothing of the trail. It has the task,
+// the instructions and the work's place as workerBrief does; then the
+// commits to review, as a range and the files it touches, with the git
+// commands that show them, never the diff itself; the builder's last
+// report; and, when the agent has checked this task before, its own
+// earlier findings and what changed since. commits are the task branch's,
+// newest first, as the machine the work is on lists them; nil when it
+// couldn't.
+func handoffBrief(task *tasks.Task, agent agents.Agent, roster agents.Roster, instructions string, shared []sharedfiles.File,
+	commits []workspace.Commit) string {
+	var b strings.Builder
+	header(&b, agent, task)
+	knowledge(&b, agent)
+	section(&b, "The task", taskText(task))
+	workerWork(&b, task, agent, roster, instructions, shared)
+	section(&b, "What to review", reviewText(task.Worktree.Base, commits))
+	section(&b, "The builder's last report", builderReport(task, roster))
+	if last := task.LastTurnOf(agent.Name); last != nil && last.Ended {
+		section(&b, "Your earlier findings", "From your last turn on this task, "+last.ID+":\n\n"+
+			cmp.Or(tasks.Shorten(last.Report, longestReport), "(It left no report.)"))
+		section(&b, "Changed since your last verdict", changedSince(commits, last.StartedAt))
+	}
+	finish(&b, agent)
+	return b.String()
+}
+
+// longestReport caps a report quoted whole in a handoff: a review needs
+// all of a builder's report, a runaway one still shouldn't swamp the brief.
+const longestReport = 3 * longestStep
+
+// mostFilesListed is how many touched files a handoff lists by name;
+// beyond that it gives the count and the command that lists them.
+const mostFilesListed = 40
+
+// reviewText is the range to review, the files it touches and the git
+// commands that show them. With no commits listed it says so and still
+// gives the commands, so the agent can look for itself.
+func reviewText(base string, commits []workspace.Commit) string {
+	var b strings.Builder
+	if len(commits) == 0 {
+		b.WriteString("Nothing is listed here: the branch has no commits since " + base + " yet, or Agentry couldn't read them. " +
+			"Check for yourself with the commands below; if there is nothing to review, say so in your report.\n\n")
+	} else {
+		fmt.Fprintf(&b, "The commit range is %s..%s: %s on the branch since it started.\n\n%s\n\n",
+			base, commits[0].Hash, count(len(commits), "commit"), filesText(touched(commits), base))
+	}
+	b.WriteString("Read the change with git, in the worktree; this brief never carries the diff itself:\n\n" +
+		"    git log --oneline " + base + "..HEAD\n" +
+		"    git diff " + base + "..HEAD\n" +
+		"    git diff " + base + "..HEAD -- <file>\n")
+	return b.String()
+}
+
+// touched are the files the commits change, each once, sorted by path,
+// with its change in the newest commit that touched it.
+func touched(commits []workspace.Commit) []workspace.File {
+	seen := map[string]bool{}
+	var files []workspace.File
+	for _, commit := range commits { // newest first
+		for _, f := range commit.Files {
+			if !seen[f.Path] {
+				seen[f.Path] = true
+				files = append(files, f)
+			}
+		}
+	}
+	slices.SortFunc(files, func(a, b workspace.File) int { return strings.Compare(a.Path, b.Path) })
+	return files
+}
+
+// filesText lists the files by name while there are few enough to read;
+// past that it gives the count and the command that lists them.
+func filesText(files []workspace.File, base string) string {
+	if len(files) > mostFilesListed {
+		return fmt.Sprintf("It touches %s; list them with `git diff --stat %s..HEAD`.", count(len(files), "file"), base)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "It touches %s:\n", count(len(files), "file"))
+	for _, f := range files {
+		fmt.Fprintf(&b, "- %s %s\n", cmp.Or(string(f.Change), "-"), f.Path)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// builderReport is the report of the task's latest ended turn by an agent
+// that builds the work, with who wrote it; a note when there is none yet.
+func builderReport(task *tasks.Task, roster agents.Roster) string {
+	for i := len(task.Turns) - 1; i >= 0; i-- {
+		turn := task.Turns[i]
+		agent, ok := roster.Get(turn.Agent)
+		if !turn.Ended || !ok || agent.Coordinates || agent.Column != agents.Builds {
+			continue
+		}
+		return "From " + turn.Agent + ", in " + turn.ID + ":\n\n" + cmp.Or(tasks.Shorten(turn.Report, longestReport), "(It left no report.)")
+	}
+	return "No agent that builds the work has reported on this task yet."
+}
+
+// changedSince is what the branch gained after the agent's last turn began,
+// at since: the newer commits, the files they touch, and the command that
+// shows them together. Commit times are git's committer dates, so after a
+// rebase every commit looks new; that errs towards reviewing more.
+func changedSince(commits []workspace.Commit, since time.Time) string {
+	var newer []workspace.Commit
+	for _, commit := range commits { // newest first
+		if commit.At.After(since) {
+			newer = append(newer, commit)
+		}
+	}
+	if len(newer) == 0 {
+		return "No commits since your last turn. The coordinator may still have asked you to check again; your instructions say what."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s since your last turn, newest first:\n", count(len(newer), "commit"))
+	for _, commit := range newer {
+		fmt.Fprintf(&b, "- %s %s\n", shortHash(commit.Hash), commit.Subject)
+	}
+	oldest := newer[len(newer)-1].Hash
+	fmt.Fprintf(&b, "\n%s\n\nSee them together with `git diff %s^..HEAD`.", filesText(touched(newer), oldest+"^"), oldest)
+	return b.String()
+}
+
+// shortHash is the hash as git shows it in a one-line log.
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
+// count is "1 commit" or "3 commits".
+func count(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // finish is how the agent ends its turn: with a report, and a reviewer's
