@@ -187,14 +187,20 @@ func sameAddress(a, b string) bool {
 
 // Options are where Ensure finds or starts Agentry: the data folder and
 // default repo, the path of the agentry binary to start, the host (127.0.0.1 when
-// empty) and first port it listens on, and where its output goes.
+// empty) and first port it listens on, and where its output goes. Once
+// Quit closes, Ensure starts no server and stops one it is waiting for;
+// it may be nil.
 type Options struct {
 	DataDir, Repo string
 	Binary        string
 	Host          string
 	Port          int
 	Output        io.Writer
+	Quit          <-chan struct{}
 }
+
+// ErrQuit is Ensure's error once Options.Quit has closed.
+var ErrQuit = errors.New("quitting, so no server was started")
 
 // Agentry is a running server, and the child to stop when this program
 // started it.
@@ -218,6 +224,9 @@ func (a *Agentry) Stop() {
 // else one it starts as its child, once that answers. The child listens on
 // this computer only unless Host says otherwise.
 func Ensure(o Options) (*Agentry, error) {
+	if closed(o.Quit) {
+		return nil, ErrQuit
+	}
 	if running, ok := Running(o.DataDir); ok {
 		return &Agentry{Client: running}, nil
 	}
@@ -232,13 +241,19 @@ func Ensure(o Options) (*Agentry, error) {
 	if err != nil {
 		return nil, err
 	}
+	if closed(o.Quit) {
+		return nil, ErrQuit
+	}
 	child, err := Start(o.Binary, o.DataDir, o.Repo, address, nil, o.Output)
 	if err != nil {
 		return nil, err
 	}
-	running, ok := Wait(o.DataDir, 30*time.Second, child.Exited())
+	running, ok := Wait(o.DataDir, 30*time.Second, either(child.Exited(), o.Quit))
 	if !ok {
 		child.Stop()
+		if closed(o.Quit) {
+			return nil, ErrQuit
+		}
 		return nil, errors.New("the server didn't start")
 	}
 	if !child.serves(o.DataDir, running, address) {
@@ -248,6 +263,32 @@ func Ensure(o Options) (*Agentry, error) {
 		return &Agentry{Client: running}, nil
 	}
 	return &Agentry{Client: running, child: child}, nil
+}
+
+// closed says whether c has closed; a nil c never does.
+func closed(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
+// either closes when a or b closes; b may be nil.
+func either(a, b <-chan struct{}) <-chan struct{} {
+	if b == nil {
+		return a
+	}
+	both := make(chan struct{})
+	go func() {
+		select {
+		case <-a:
+		case <-b:
+		}
+		close(both)
+	}()
+	return both
 }
 
 // SignIn is the path that opens the page signed in with the token.

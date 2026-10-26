@@ -2,6 +2,7 @@ package launch
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -269,6 +270,51 @@ func TestEnsureSaysWhenTheServerDidNotStart(t *testing.T) {
 	}
 	if waited := time.Since(began); waited > 10*time.Second {
 		t.Errorf("waited %v for a server that had exited", waited)
+	}
+}
+
+// Once Quit has closed, Ensure starts nothing, not even the default repo.
+func TestEnsureStartsNothingAfterQuit(t *testing.T) {
+	t.Setenv(fakeServe, "serve")
+	self, _ := os.Executable()
+	quit := make(chan struct{})
+	close(quit)
+	repo := filepath.Join(t.TempDir(), "Agentry")
+	if _, err := Ensure(Options{DataDir: t.TempDir(), Repo: repo, Binary: self, Host: "127.0.0.1", Port: 7930, Quit: quit}); !errors.Is(err, ErrQuit) {
+		t.Fatalf("error %v, want ErrQuit", err)
+	}
+	if _, err := os.Stat(repo); err == nil {
+		t.Error("the default repo was made after Quit")
+	}
+}
+
+// Quit while Ensure waits for its child to answer stops the child at once.
+func TestQuitStopsTheServerEnsureWaitsFor(t *testing.T) {
+	t.Setenv(fakeServe, "lose")
+	self, _ := os.Executable()
+	dataDir := t.TempDir()
+	quit := make(chan struct{})
+	childPid := make(chan int, 1)
+	go func() {
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+			if lost, err := os.ReadFile(filepath.Join(dataDir, "lost")); err == nil {
+				var pid int
+				fmt.Sscanf(string(lost), "%d", &pid)
+				childPid <- pid
+				close(quit)
+				return
+			}
+		}
+	}()
+	began := time.Now()
+	if _, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930, Quit: quit}); !errors.Is(err, ErrQuit) {
+		t.Fatalf("error %v, want ErrQuit", err)
+	}
+	if waited := time.Since(began); waited > 10*time.Second {
+		t.Errorf("waited %v after Quit", waited)
+	}
+	if pid := <-childPid; procs.Alive(pid) {
+		t.Errorf("the child (pid %d) wasn't stopped", pid)
 	}
 }
 
