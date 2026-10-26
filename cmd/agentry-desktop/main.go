@@ -129,8 +129,10 @@ func (w *window) quitOnSignal() {
 	}()
 }
 
-// exitCode is a shell's for a process the signal s ended: 130 for SIGINT,
-// 143 for SIGTERM.
+// exitCode is the exit status for a process the signal s ended, by the Unix
+// shell convention of 128 + the signal's number: 130 for SIGINT, 143 for
+// SIGTERM. Windows uses the same numbers on purpose, so it is the same
+// everywhere.
 func exitCode(s os.Signal) int {
 	if s == os.Interrupt {
 		return 128 + int(syscall.SIGINT)

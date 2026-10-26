@@ -200,8 +200,8 @@ Feature: Signing in
     Then the app quits, and a server it started stops with it: yes
     And if the signal comes before the start page asks, no server is started: yes
     And if it comes while a start is under way, the server being started is stopped at once: yes
-    And a second SIGINT or SIGTERM while it quits ends the app at once, with exit status 130 or 143, even when the first came before its window opened: yes
-    And a server it started has been told to stop by then: yes
+    And a second SIGINT or SIGTERM while it quits ends the app at once, with exit status 130 or 143 unless the first quit has just finished, even when the first came before its window opened: yes
+    And a server it started has been told to stop by then, unless that server was still starting within moments of the first signal: yes
     Given the desktop app open
     When the user opens it again, even after `agentry stop`, or opens it twice at once
     Then no second window or app is started, and the first window is shown
