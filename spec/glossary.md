@@ -42,6 +42,7 @@ Every noun Agentry uses, one line each, in the words README.md and the page use.
 - **deployer**: the Software team's agent whose work counts as shipping: it merges `origin/dev`, runs the tests and build, pushes `HEAD:dev` when the user approves the push, and reports the pushed commit's pipeline once.
 - **desk**: the Claude Code session Agentry runs for the user in the dock's Claude tab; it has its own token and can create, read and answer tasks, never approve (internal/desk).
 - **Details tab**: the task page's tab with its repo, epic, budget, turn limit, Change repo and Erase this task.
+- **desktop app**: `agentry-desktop`, Agentry's page in a window of its own, signed in: it uses the Agentry running from the data folder or starts the agentry binary beside it on this computer only, opens links that leave Agentry in the system browser, and when it quits stops only a server it started (cmd/agentry-desktop).
 - **developer**: the shipped profile of the engineer, tester and deployer: writes inside the worktree allowed, reaching outside asks, dangerous commands denied, every push asks.
 - **dismiss**: dropping an idea with a note; the next Visionaries session in that repo is told, so it is not suggested again.
 - **dock**: the panel at the bottom of the page, `Ctrl+J` or Terminal in the status bar, with the Questions, Claude and Terminal tabs; a task's Workspace has its own dock.

@@ -27,7 +27,7 @@ The glossary gives each noun Agentry uses its one meaning, so the scenarios can 
 | `spec/functional/worktrees-and-branches.feature` | each task's worktree and branch, and the Workspace page |
 | `spec/functional/workers.feature` | a machine joined as a worker: joining, the service, its commands, the link, where a turn runs, going offline |
 | `spec/functional/shared-files.feature` | the files shared with a task, and how they follow it |
-| `spec/functional/sign-in.feature` | sign-in codes, devices and installing the app |
+| `spec/functional/sign-in.feature` | sign-in codes, devices, installing the app and the desktop app |
 | `spec/functional/notifications.feature` | pushes to the user's devices |
 | `spec/functional/settings.feature` | the Settings page and redacting a text |
 | `spec/functional/claude-code-tools.feature` | Agentry used from Claude Code: the install, the MCP tools and the status line |

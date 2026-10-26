@@ -1,5 +1,5 @@
 Feature: Signing in
-  Signing devices in with one-time codes, trusting Agentry's CA, and installing the app.
+  Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
 
   # ---- Sign-in codes ---------------------------------------------------------
 
@@ -109,3 +109,82 @@ Feature: Signing in
     Given a server with no CA of its own
     Then no reply speaks of trust
     And no reply ever holds the token or a private key
+
+  # ---- The desktop app -------------------------------------------------------
+
+  @SIGNIN-08 @user @test
+  Scenario: The desktop app starts Agentry when none is running
+    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne and TestEnsureListensOnThisComputerByDefault
+    # the data folder, default repo, binary, host and port: cmd/agentry-desktop/desktop_test.go TestLaunchOptions and TestTheAgentryBinaryIsNextToTheApp
+    # docs/decisions.md, 2026-10-26
+    Given no Agentry answering from the data folder
+    When the user opens the desktop app
+    Then it starts the agentry binary beside it as agentry serve, exactly once, on 127.0.0.1 from port 7800
+    And the server uses the same data folder and default repo as Start Agentry, and the default repo is made if it is missing: yes
+
+  @SIGNIN-09 @user @test
+  Scenario: The desktop app uses an Agentry that is already running
+    # internal/launch/launch_test.go TestEnsureReusesARunningServerAndLeavesItRunning and TestEnsureUsesAServerAnotherLaunchStarted
+    # docs/decisions.md, 2026-10-26
+    Given Agentry already answering from the data folder, started by Start Agentry
+    When the user opens the desktop app
+    Then no second server is started, and the app shows the running one
+    Given two launches at the same time, where the other launch's server answers first
+    Then the app uses that server as one it found running, and its own child is stopped: yes
+
+  @SIGNIN-10 @user @test
+  Scenario: Quitting the desktop app stops only a server it started
+    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestEnsureReusesARunningServerAndLeavesItRunning and TestStopDoesNotWaitForAProcessHoldingTheOutput
+    # docs/decisions.md, 2026-10-26
+    Given the desktop app started its own server
+    When the user quits the app
+    Then that server is stopped, and it no longer answers
+    Given the desktop app found a server already running
+    When the user quits the app
+    Then that server is kept running, and it still answers
+    Given a process the server started still holds the server's output
+    Then quitting still ends within 8 seconds: yes
+
+  @SIGNIN-11 @user @test
+  Scenario: Links that leave Agentry open in the system browser, not the window
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp and TestLinksFollowTheRoute; internal/launch/launch_test.go TestRoute
+    # docs/decisions.md, 2026-10-26
+    Given Agentry's page in the desktop app's window
+    When the user clicks a link to another site, such as GitHub or the docs, or a mail link, or the page opens one with window.open
+    Then the window does not follow it, and the system browser opens it: yes
+    And a link to the same host on another port counts as another site: yes
+    When the user clicks a link within Agentry, or one that opens a new window on Agentry's own address
+    Then it opens in the same window, and no browser opens
+    When a link names a local file or a script
+    Then it is not opened, in the window or the browser
+
+  @SIGNIN-12 @user @manual
+  Scenario: The desktop app shows the board signed in, with no browser
+    # cmd/agentry-desktop/main.go, the start page in cmd/agentry-desktop/desktop.go startPage
+    # docs/decisions.md, 2026-10-26
+    Given the desktop app built for this computer, with the agentry binary beside it
+    When the user opens it
+    Then a window titled exactly "Agentry" shows the Tasks board, signed in, and no browser opens
+    And the window and the app carry the Agentry mark: yes
+    Given Agentry did not start, such as the agentry binary missing beside the app
+    Then the window says why Agentry did not start, with the token hidden
+
+  @SIGNIN-13 @user @manual
+  Scenario: The desktop app's menu
+    # cmd/agentry-desktop/main.go menu
+    # docs/decisions.md, 2026-10-26
+    Given Agentry's page in the desktop app's window
+    When the user picks Reload, Zoom in, Zoom out, Actual size, Open in browser and Quit, or presses Ctrl (Cmd on a Mac) with R, =, -, 0, B and Q
+    Then each does what it says, and Open in browser opens the same page signed in in the default browser: yes
+    And the zoom is kept after Reload: yes
+
+  @SIGNIN-14 @user @manual
+  Scenario: Closing the desktop app's window quits it, and a second launch shows the first
+    # cmd/agentry-desktop/main.go options, SingleInstanceLock
+    # docs/decisions.md, 2026-10-26
+    Given the desktop app open, on Linux, Windows or a Mac
+    When the user closes its window
+    Then the app quits, and a server it started stops with it: yes
+    Given the desktop app open
+    When the user opens it again
+    Then no second window or app is started, and the first window is shown

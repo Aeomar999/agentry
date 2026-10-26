@@ -598,3 +598,33 @@ Feature: Security
     When the user reads the hook deadline variable in that environment
     Then its value is "29m50s", exactly 1790 seconds
     # internal/turns/turns.go environment, GateTimeoutSeconds minus 10; no test asserts the number
+
+  @SEC-69 @test
+  Scenario: The desktop app never shows the UI token in its output or logs
+    Given the desktop app, with a server that prints its signed-in link and the bare token
+    When the server writes its output, Wails logs a message holding the link, or Agentry fails to start with the link in the error
+    Then the token is hidden in serve.log, in the app's log on stderr and on the start page, plain or URL-encoded: yes
+    And a token written across two writes is hidden too: yes
+    And the scripts the app runs in the page hold no token
+    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestStartPageHidesTheTokenInAnError and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
+
+  @SEC-70 @manual
+  Scenario: The desktop app's window title never holds the token
+    Given the desktop app showing Agentry's page signed in
+    When the user looks at the window's title, the taskbar or dock entry and the window switcher
+    Then each reads exactly "Agentry", and the token is never shown
+    # cmd/agentry-desktop/main.go options, Title; docs/decisions.md, 2026-10-26
+
+  @SEC-71 @test
+  Scenario: A server the desktop app starts listens on this computer only
+    Given no Agentry running, and the desktop app opened
+    When it starts agentry serve
+    Then the server listens on 127.0.0.1 only, over plain http, never on every interface
+    # internal/launch/launch_test.go TestEnsureListensOnThisComputerByDefault; cmd/agentry-desktop/desktop_test.go TestLaunchOptions; docs/decisions.md, 2026-10-26
+
+  @SEC-72 @test
+  Scenario: A page from another site that gets into the desktop window is sent back to Agentry
+    Given the desktop app's window showing a page from another site, as a script on a page could navigate there
+    When the page finishes loading
+    Then the window goes back to Agentry's page, without the token in the link, and nothing is sent to the app: yes
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOtherPagesBackToAgentry; docs/decisions.md, 2026-10-26

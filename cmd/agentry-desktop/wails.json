@@ -1,0 +1,12 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Agentry",
+  "outputfilename": "agentry-desktop",
+  "author": {
+    "name": "Agentry"
+  },
+  "info": {
+    "productName": "Agentry",
+    "comments": "Agentry's page in a window of its own"
+  }
+}
