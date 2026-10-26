@@ -25,6 +25,10 @@ func NoConsole(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
 }
 
+// KillGroupOnCancel leaves the command as exec.CommandContext made it: it
+// is ended when the context ends. The programs it started may outlive it.
+func KillGroupOnCancel(cmd *exec.Cmd) {}
+
 // Alive says whether a process is running.
 func Alive(pid int) bool {
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))

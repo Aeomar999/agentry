@@ -36,7 +36,6 @@ func main() { os.Exit(run()) }
 
 func run() int {
 	engines.DropParentSession() // so the sessions a started server runs aren't taken for a parent's
-	os.Setenv("PATH", serverPath(goruntime.GOOS, os.Getenv("SHELL"), os.Getenv("PATH")))
 	home, _ := os.UserHomeDir()
 	exe, _ := os.Executable()
 	o := launchOptions(home, exe, goruntime.GOOS, nil)
@@ -58,6 +57,7 @@ func run() int {
 	defer browserOutput.Close()
 
 	a := &window{agentry: newAgentry(o, token), zoom: 1, log: redactedLog{w: os.Stderr, token: token}}
+	a.beforeStart = func() { os.Setenv("PATH", serverPath(goruntime.GOOS, os.Getenv("SHELL"), os.Getenv("PATH"))) }
 	defer a.stop()
 	a.quitOnSignal()
 	var running string

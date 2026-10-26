@@ -5,19 +5,23 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pkg/browser"
 
+	"gitlab.com/dev.chempa/agentry/internal/client"
 	"gitlab.com/dev.chempa/agentry/internal/launch"
+	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
 const origin = "http://localhost:7800"
@@ -454,16 +458,17 @@ func TestScriptsHoldNoToken(t *testing.T) {
 	}
 }
 
-// fakeShell is a shell script at a new path that prints what script
-// prints, as a shell's startup files may, then runs the command it is
-// given (after -ilc) with PATH set to path.
-func fakeShell(t *testing.T, script, path string) string {
+// fakeShell is a shell script at a new path that prints what before
+// prints, as a shell's startup files may, runs the command it is given
+// (after -ilc) with PATH set to path, then prints what after prints, as a
+// shell may as it exits.
+func fakeShell(t *testing.T, before, path, after string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake shell is a sh script")
 	}
 	shell := filepath.Join(t.TempDir(), "shell")
-	text := "#!/bin/sh\n" + script + "\nPATH='" + path + "'\nexport PATH\nexec /bin/sh -c \"$2\"\n"
+	text := "#!/bin/sh\n" + before + "\nPATH='" + path + "'\nexport PATH\n/bin/sh -c \"$2\"\n" + after + "\n"
 	if err := os.WriteFile(shell, []byte(text), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -471,18 +476,24 @@ func fakeShell(t *testing.T, script, path string) string {
 }
 
 // On a Mac the server gets the PATH the user's shell sets up, not the
-// short one an app opened from Finder gets, past what the shell prints.
+// short one an app opened from Finder gets, past what the shell prints
+// before and after it.
 func TestServerPathOnAMacIsTheShells(t *testing.T) {
-	shell := fakeShell(t, "echo 'Last login: today'", "/opt/homebrew/bin:/usr/bin:/bin")
-	if got, want := serverPath("darwin", shell, "/usr/bin:/bin"), "/opt/homebrew/bin:/usr/bin:/bin"; got != want {
-		t.Errorf("serverPath = %q, want %q", got, want)
+	for name, shell := range map[string]string{
+		"before": fakeShell(t, "echo 'Last login: today'", "/opt/homebrew/bin:/usr/bin:/bin", ""),
+		"after":  fakeShell(t, "", "/opt/homebrew/bin:/usr/bin:/bin", "printf 'Saving session...completed.'"),
+		"both":   fakeShell(t, "echo "+pathMark+"/usr/bin", "/opt/homebrew/bin:/usr/bin:/bin", "echo; echo 'Saving session...'"),
+	} {
+		if got, want := serverPath("darwin", shell, "/usr/bin:/bin"), "/opt/homebrew/bin:/usr/bin:/bin"; got != want {
+			t.Errorf("%s: serverPath = %q, want %q", name, got, want)
+		}
 	}
 }
 
 // On Linux and Windows the app keeps its own PATH and runs no shell.
 func TestServerPathElsewhereIsTheAppsOwn(t *testing.T) {
 	ran := filepath.Join(t.TempDir(), "ran")
-	shell := fakeShell(t, "touch '"+ran+"'", "/opt/homebrew/bin")
+	shell := fakeShell(t, "touch '"+ran+"'", "/opt/homebrew/bin", "")
 	for _, goos := range []string{"linux", "windows"} {
 		if got := serverPath(goos, shell, "/usr/bin:/bin"); got != "/usr/bin:/bin" {
 			t.Errorf("%s: serverPath = %q, want the app's own", goos, got)
@@ -493,12 +504,16 @@ func TestServerPathElsewhereIsTheAppsOwn(t *testing.T) {
 	}
 }
 
-// A shell that fails, or prints no PATH, leaves the app's own.
+// A shell that fails or prints no PATH, or a PATH that is empty, cut off
+// or on more than one line, leaves the app's own.
 func TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone(t *testing.T) {
 	for name, shell := range map[string]string{
-		"fails":    fakeShell(t, "exit 1", "/opt/homebrew/bin"),
-		"no PATH":  fakeShell(t, "exit 0", "/opt/homebrew/bin"),
-		"no shell": filepath.Join(t.TempDir(), "missing"),
+		"fails":     fakeShell(t, "exit 1", "/opt/homebrew/bin", ""),
+		"no PATH":   fakeShell(t, "exit 0", "/opt/homebrew/bin", ""),
+		"no shell":  filepath.Join(t.TempDir(), "missing"),
+		"empty":     fakeShell(t, "", "", ""),
+		"no end":    fakeShell(t, "printf '"+pathMark+"/opt/homebrew/bin'; exit 0", "/opt/homebrew/bin", ""),
+		"two lines": fakeShell(t, "", "/opt/homebrew/bin\n/usr/bin", ""),
 	} {
 		if got := serverPath("darwin", shell, "/usr/bin:/bin"); got != "/usr/bin:/bin" {
 			t.Errorf("%s: serverPath = %q, want the app's own", name, got)
@@ -506,14 +521,62 @@ func TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone(t *testing.T) {
 	}
 }
 
-// A shell that hangs is given up on in time.
+// A shell that hangs is given up on in time, and what it started is
+// stopped with it.
 func TestShellPathGivesUpOnAShellThatHangs(t *testing.T) {
-	shell := fakeShell(t, "exec sleep 10", "/opt/homebrew/bin")
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	shell := fakeShell(t, "sleep 10 & echo $! > '"+pidFile+"'; wait", "/opt/homebrew/bin", "")
 	began := time.Now()
-	if path, err := shellPath(shell, 200*time.Millisecond); err == nil {
+	if path, err := shellPath(shell, time.Second); err == nil {
 		t.Errorf("shellPath = %q, want an error", path)
 	}
-	if took := time.Since(began); took > 3*time.Second {
-		t.Errorf("shellPath took %s", took)
+	if took := time.Since(began); took > 1100*time.Millisecond {
+		t.Errorf("shellPath took %s, more than the second it was given", took)
+	}
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(data)))
+	for deadline := time.Now().Add(2 * time.Second); procs.Alive(pid); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			if child, err := os.FindProcess(pid); err == nil {
+				child.Kill()
+			}
+			t.Fatalf("the shell's child %d is still running", pid)
+		}
+	}
+}
+
+// The app asks for the PATH before it starts its own server, and not when
+// one is already running.
+func TestBeforeStartRunsOnlyWhenTheAppStartsAServer(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't installed")
+	}
+	running := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("{}"))
+	}))
+	t.Cleanup(running.Close)
+	withServer := launchNowhere(t)
+	os.MkdirAll(withServer.DataDir, 0o700)
+	client.Save(withServer.DataDir, client.Where{URL: running.URL, Page: running.URL})
+	os.WriteFile(filepath.Join(withServer.DataDir, "ui-token"), []byte("abc\n"), 0o600)
+
+	for name, c := range map[string]struct {
+		o    launch.Options
+		want bool
+	}{
+		"none running": {launchNowhere(t), true},
+		"running":      {withServer, false},
+	} {
+		a := newAgentry(c.o, func() string { return "" })
+		ran := false
+		a.beforeStart = func() { ran = true }
+		a.start()
+		a.stop()
+		if ran != c.want {
+			t.Errorf("%s: beforeStart ran %v, want %v", name, ran, c.want)
+		}
 	}
 }

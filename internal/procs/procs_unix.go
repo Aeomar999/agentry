@@ -15,6 +15,14 @@ func Detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true
 // NoConsole does nothing: only Windows opens a console window for a command.
 func NoConsole(cmd *exec.Cmd) {}
 
+// KillGroupOnCancel starts a command made with exec.CommandContext in a
+// process group of its own, and kills the whole group when the context ends,
+// so the programs it started don't outlive it.
+func KillGroupOnCancel(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+}
+
 // Alive says whether a process is running.
 func Alive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 

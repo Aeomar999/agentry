@@ -209,11 +209,13 @@ Feature: Signing in
 
   @SIGNIN-15 @user @test
   Scenario: The server the Mac desktop app starts finds claude where the user's shell does
-    # cmd/agentry-desktop/desktop.go serverPath and shellPath, set as the app's PATH in cmd/agentry-desktop/main.go run
-    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone and TestShellPathGivesUpOnAShellThatHangs
+    # cmd/agentry-desktop/desktop.go serverPath, shellPath and agentry.start, set as the app's PATH in cmd/agentry-desktop/main.go run; internal/procs KillGroupOnCancel
+    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone, TestShellPathGivesUpOnAShellThatHangs and TestBeforeStartRunsOnlyWhenTheAppStartsAServer
     Given the desktop app opened from Finder or the Dock on a Mac, with launchd's PATH /usr/bin:/bin:/usr/sbin:/sbin, and claude in ~/.local/bin or /opt/homebrew/bin, which the user's shell files add to PATH
     When the app starts its own server
     Then the server and the git the app runs get the PATH the user's login shell sets up, so agents find claude: yes
-    And the PATH is asked of $SHELL (zsh when unset) once, at launch, and given up on after 5 seconds: yes
-    And if the shell fails, hangs or prints no PATH, the app's own PATH is kept: yes
+    And the PATH is asked of $SHELL (zsh when unset) once, just before the app starts its own server, and not when a server is already running: yes
+    And what the shell prints before or after the PATH is left out of it: yes
+    And the shell is given up on within 5 seconds, and the programs it started are stopped with it: yes
+    And if the shell fails, hangs, or prints no PATH, an empty one or one on more than one line, the app's own PATH is kept: yes
     And on Linux and Windows the app's own PATH is kept, and no shell is run: yes

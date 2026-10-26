@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/browser"
 
 	"gitlab.com/dev.chempa/agentry/internal/launch"
+	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
 // binaryNextTo is the agentry binary in the folder of exe, the app's own
@@ -59,8 +60,8 @@ func launchOptions(home, exe, goos string, output io.Writer) launch.Options {
 // runs. On a Mac an app opened from Finder or the Dock gets launchd's PATH,
 // /usr/bin:/bin:/usr/sbin:/sbin, without the folders Claude Code and
 // Homebrew install to, so there it is the PATH the user's shell sets up,
-// as in Terminal; if the shell gives none in time, it stays current.
-// Elsewhere it is current: the app gets the desktop session's PATH.
+// as in Terminal; if the shell gives none within 5 seconds, it stays
+// current. Elsewhere it is current: the app gets the desktop session's PATH.
 func serverPath(goos, shell, current string) string {
 	if goos != "darwin" {
 		return current
@@ -68,32 +69,41 @@ func serverPath(goos, shell, current string) string {
 	if shell == "" {
 		shell = "/bin/zsh" // macOS's default shell
 	}
-	if path, err := shellPath(shell, 5*time.Second); err == nil && path != "" {
+	if path, err := shellPath(shell, 5*time.Second); err == nil {
 		return path
 	}
 	return current
 }
 
-// pathMark comes before the PATH shellPath asks the shell to print, so
-// what its startup files print first is skipped.
+// pathMark comes before and after the PATH shellPath asks the shell to
+// print, so what its startup files print first, and what it prints as it
+// exits, are left out.
 const pathMark = "agentry-desktop-path:"
 
 // shellPath is the PATH that shell sets up, as a login and interactive
-// shell reads both its profile and rc files, within that time.
+// shell reads both its profile and rc files, within that time. The shell
+// and what it started are killed at four fifths of it, and the rest is for
+// a process that escaped the kill and still holds the output open.
 func shellPath(shell string, within time.Duration) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), within)
+	ctx, cancel := context.WithTimeout(context.Background(), within*4/5)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, shell, "-ilc", `printf '%s%s' "`+pathMark+`" "$PATH"`)
-	cmd.WaitDelay = time.Second // a process the shell started may keep stdout open
+	cmd := exec.CommandContext(ctx, shell, "-ilc", `printf '%s%s%s' "`+pathMark+`" "$PATH" "`+pathMark+`"`)
+	procs.KillGroupOnCancel(cmd)
+	cmd.WaitDelay = within / 5
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	i := bytes.LastIndex(out, []byte(pathMark))
-	if i < 0 {
+	end := bytes.LastIndex(out, []byte(pathMark))
+	start := bytes.LastIndex(out[:max(end, 0)], []byte(pathMark))
+	if start < 0 {
 		return "", fmt.Errorf("%s printed no PATH", shell)
 	}
-	return strings.TrimSpace(string(out[i+len(pathMark):])), nil
+	path := string(out[start+len(pathMark) : end])
+	if path == "" || strings.ContainsAny(path, "\r\n") {
+		return "", fmt.Errorf("%s printed no PATH on one line", shell)
+	}
+	return path, nil
 }
 
 // tokenIn is the page token in the data folder, once the server has made it.
@@ -118,6 +128,10 @@ type agentry struct {
 	launch launch.Options
 	token  func() string
 	done   chan struct{} // closed once the app quits; launch.Options.Quit
+
+	// beforeStart, when set, runs once before the app starts its own
+	// server, and not when one is already running.
+	beforeStart func()
 
 	starting, stopping, quitting sync.Once
 
@@ -160,6 +174,9 @@ func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 // first time it is called; later calls wait for that.
 func (a *agentry) start() {
 	a.starting.Do(func() {
+		if _, ok := launch.Running(a.launch.DataDir); !ok && a.beforeStart != nil {
+			a.beforeStart()
+		}
 		running, err := launch.Ensure(a.launch)
 		a.mu.Lock()
 		defer a.mu.Unlock()
