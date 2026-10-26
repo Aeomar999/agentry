@@ -10,8 +10,7 @@ Open
 
 It uses the Agentry already running on this computer (the one in .agentry
 in your home folder, such as Start Agentry's), or else starts its own,
-for this computer only, from agentry in this folder. Keep the two side by
-side. The window opens signed in.
+for this computer only, {{SERVER}} The window opens signed in.
 
 {{FIRST}}
 

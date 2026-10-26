@@ -18,6 +18,13 @@ func TestDesktopNotesFillEveryBlankForTheirSystem(t *testing.T) {
 		if strings.Contains(text, "agentry-desktop.exe") != windows || strings.Contains(text, "Agentry.app") != (goos == "darwin") {
 			t.Errorf("%s: the wrong system's steps in\n%s", goos, text)
 		}
+		inApp := strings.Contains(text, "agentry inside Agentry.app")
+		if inApp != (goos == "darwin") || strings.Contains(text, "agentry in this folder") == inApp {
+			t.Errorf("%s: the wrong place for the server in\n%s", goos, text)
+		}
+		if goos == "darwin" && !strings.Contains(text, "Open Anyway") {
+			t.Errorf("darwin: no Open Anyway in\n%s", text)
+		}
 		crlf := 0 // Windows ends every line with \r\n, Linux none
 		if windows {
 			crlf = strings.Count(text, "\n")
