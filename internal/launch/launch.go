@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -101,6 +102,10 @@ func ServeArgs(dataDir, repo, address string, extra []string) []string {
 	return append([]string{"serve", "-addr", address, "-repo", repo, "-data", dataDir}, extra...)
 }
 
+// LockFile is the file in the data folder that the one serve using it
+// holds locked, with its pid inside.
+const LockFile = "serve.lock"
+
 // Server is an `agentry serve` this program started as its child. Unlike
 // Start Agentry's, it isn't detached and writes no serve.pid: it is this
 // program's to stop.
@@ -119,6 +124,9 @@ func Start(agentry, dataDir, repo, address string, extra []string, output io.Wri
 	cmd := exec.Command(agentry, ServeArgs(dataDir, repo, address, extra)...)
 	cmd.Dir = repo
 	cmd.Stdout, cmd.Stderr = output, output
+	// A process serve starts may keep its output open after serve exits;
+	// don't wait on that, or Exited and Stop never return.
+	cmd.WaitDelay = 2 * time.Second
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -147,9 +155,39 @@ func (s *Server) Stop() {
 	})
 }
 
+// serves says whether the server answering from the data folder is this
+// child: still running, listening on address, and holding serve's lock.
+// Windows keeps the lock file unreadable while it is held, so there the
+// first two decide.
+func (s *Server) serves(dataDir string, running client.Client, address string) bool {
+	select {
+	case <-s.exited:
+		return false
+	default:
+	}
+	if !sameAddress(running.Listen, address) {
+		return false
+	}
+	held, err := os.ReadFile(filepath.Join(dataDir, LockFile))
+	pid := strings.TrimSpace(string(held))
+	return err != nil || pid == "" || pid == strconv.Itoa(s.process.Pid)
+}
+
+// sameAddress says whether two listen addresses are one: the same port and
+// host, where every wildcard is the same host (serve saves 0.0.0.0 as [::]).
+func sameAddress(a, b string) bool {
+	hostA, portA, errA := net.SplitHostPort(a)
+	hostB, portB, errB := net.SplitHostPort(b)
+	if errA != nil || errB != nil || portA != portB {
+		return false
+	}
+	ipA, ipB := net.ParseIP(hostA), net.ParseIP(hostB)
+	return hostA == hostB || ipA != nil && ipB != nil && (ipA.Equal(ipB) || ipA.IsUnspecified() && ipB.IsUnspecified())
+}
+
 // Options are where Ensure finds or starts Agentry: the data folder and
-// default repo, the agentry binary to start, the host and first port it
-// listens on, and where its output goes.
+// default repo, the agentry binary to start, the host (127.0.0.1 when
+// empty) and first port it listens on, and where its output goes.
 type Options struct {
 	DataDir, Repo string
 	Agentry       string
@@ -177,7 +215,8 @@ func (a *Agentry) Stop() {
 }
 
 // Ensure is the server running from the data folder if one answers, or
-// else one it starts as its child, once that answers.
+// else one it starts as its child, once that answers. The child listens on
+// this computer only unless Host says otherwise.
 func Ensure(o Options) (*Agentry, error) {
 	if running, ok := Running(o.DataDir); ok {
 		return &Agentry{Client: running}, nil
@@ -185,7 +224,11 @@ func Ensure(o Options) (*Agentry, error) {
 	if err := DefaultRepo(o.Repo); err != nil {
 		return nil, fmt.Errorf("making the default repo: %w", err)
 	}
-	address, err := FreeAddress(o.Host, o.Port)
+	host := o.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	address, err := FreeAddress(host, o.Port)
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +240,12 @@ func Ensure(o Options) (*Agentry, error) {
 	if !ok {
 		child.Stop()
 		return nil, errors.New("the server didn't start")
+	}
+	if !child.serves(o.DataDir, running, address) {
+		// Another launch started a server from this data folder at the same
+		// time, and it answered: use that one, and stop ours.
+		child.Stop()
+		return &Agentry{Client: running}, nil
 	}
 	return &Agentry{Client: running, child: child}, nil
 }

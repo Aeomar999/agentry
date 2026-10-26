@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"gitlab.com/dev.chempa/agentry/internal/launch"
 )
 
 // lockFile is the file in the data folder that one serve at a time holds
 // locked. The OS drops the lock when the process ends, however it ends, so
 // a crash leaves nothing to clean up.
-const lockFile = "serve.lock"
+const lockFile = launch.LockFile
 
 // errLocked is what lockExclusive returns when another process holds the lock.
 var errLocked = errors.New("locked by another process")

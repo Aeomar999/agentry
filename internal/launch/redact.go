@@ -30,8 +30,8 @@ func Redact(text, token string) string {
 // Redactor writes to W what is written to it, with Redact applied to each
 // line. Token gives the token at the time of writing, so it can be read
 // once the server has made it; it may be nil. A line is written when it
-// ends, so a token split across writes is still hidden: Close writes the
-// last line when it has no newline.
+// ends, so a token split across writes is still hidden. A last line with
+// no newline is written only by Close, and dropped if Close isn't called.
 type Redactor struct {
 	W     io.Writer
 	Token func() string
