@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/client"
+	"gitlab.com/dev.chempa/agentry/internal/launch"
 	"gitlab.com/dev.chempa/agentry/internal/procs"
 )
 
@@ -46,21 +46,21 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	dropParentSession(stderr) // before the server starts, so it doesn't inherit them
 	for _, tool := range []string{"git", "claude"} {
 		if _, err := exec.LookPath(tool); err != nil {
-			fmt.Fprintf(stdout, "Note: %s isn't installed here, and agents need it. %s\n", tool, installHint(tool))
+			fmt.Fprintf(stdout, "Note: %s isn't installed here, and agents need it. %s\n", tool, launch.InstallHint(tool))
 		}
 	}
 
-	if running, ok := runningServer(*dataDir); ok {
+	if running, ok := launch.Running(*dataDir); ok {
 		if len(passed) > 0 {
 			fmt.Fprintln(stdout, waitingForNextStart(passed))
 		}
 		return openPage(running, stdout, stderr)
 	}
-	if err := defaultRepo(*repo); err != nil {
+	if err := launch.DefaultRepo(*repo); err != nil {
 		fmt.Fprintln(stderr, "agentry open: making the default repo:", err)
 		return 1
 	}
-	address, err := freeAddress(*port)
+	address, err := launch.FreeAddress("0.0.0.0", *port)
 	if err != nil {
 		fmt.Fprintln(stderr, "agentry open:", err)
 		return 1
@@ -70,10 +70,8 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "agentry open:", err)
 		return 1
 	}
-	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
-		if running, ok := runningServer(*dataDir); ok {
-			return openPage(running, stdout, stderr)
-		}
+	if running, ok := launch.Wait(*dataDir, 30*time.Second, nil); ok {
+		return openPage(running, stdout, stderr)
 	}
 	said, _ := os.ReadFile(filepath.Join(*dataDir, "serve.log"))
 	fmt.Fprintf(stderr, "agentry open: the server didn't start. Its log, %s, says:\n%s\n", filepath.Join(*dataDir, "serve.log"), lastLines(string(said), 15))
@@ -102,16 +100,6 @@ func runStopServer(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	os.Remove(filepath.Join(*dataDir, pidFile))
 	fmt.Fprintln(stdout, "Agentry stopped. Agents' sessions that were running carry on, and the next start picks them up.")
 	return 0
-}
-
-// runningServer is the server running from this data folder, if it answers.
-func runningServer(dataDir string) (client.Client, bool) {
-	c, err := client.Local(dataDir)
-	if err != nil {
-		return client.Client{}, false
-	}
-	c.Timeout = 2 * time.Second
-	return c, c.Call("GET", "/api/config", nil, nil) == nil
 }
 
 // passedOn is the flags named that were given, as serve takes them, so
@@ -160,7 +148,7 @@ var startServer = func(dataDir, repo, address string, extra []string) error {
 		return err
 	}
 	defer log.Close()
-	server := exec.Command(self, append([]string{"serve", "-addr", address, "-repo", repo, "-data", dataDir}, extra...)...)
+	server := exec.Command(self, launch.ServeArgs(dataDir, repo, address, extra)...)
 	server.Dir = repo
 	server.Stdout, server.Stderr = log, log
 	procs.Detach(server)
@@ -169,42 +157,6 @@ var startServer = func(dataDir, repo, address string, extra []string) error {
 	}
 	os.WriteFile(filepath.Join(dataDir, pidFile), []byte(strconv.Itoa(server.Process.Pid)), 0o600)
 	return server.Process.Release()
-}
-
-// freeAddress is this machine's first free port from first on, on every
-// interface, so other machines (workers, a phone) reach it too.
-func freeAddress(first int) (string, error) {
-	for port := first; port < first+20; port++ {
-		address := fmt.Sprintf("0.0.0.0:%d", port)
-		if listener, err := net.Listen("tcp", address); err == nil {
-			listener.Close()
-			return address, nil
-		}
-	}
-	return "", fmt.Errorf("no free port from %d to %d", first, first+19)
-}
-
-// defaultRepo makes the repo new tasks work in when they name none, the
-// first time: a git repo with one empty commit, so it has a branch.
-func defaultRepo(repo string) error {
-	if _, err := os.Stat(filepath.Join(repo, ".git")); err == nil {
-		return nil
-	}
-	if _, err := exec.LookPath("git"); err != nil {
-		return errors.New("git isn't installed; " + installHint("git"))
-	}
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		return err
-	}
-	for _, args := range [][]string{
-		{"init", "-q", "-b", "main"},
-		{"-c", "user.name=Agentry", "-c", "user.email=agentry@localhost", "commit", "-q", "--allow-empty", "-m", "Start"},
-	} {
-		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
-			return fmt.Errorf("git %s: %v %s", args[0], err, out)
-		}
-	}
-	return nil
 }
 
 func openPage(c client.Client, stdout, stderr io.Writer) int {
@@ -229,18 +181,15 @@ type pageLink struct{ label, url string }
 // the server serves it.
 func pageLinks(c client.Client) []pageLink {
 	signedIn := "/?token=" + c.Token
+	links := []pageLink{{"This computer", launch.PageURL(c)}}
 	here, err := url.Parse(c.URL)
 	if err != nil {
-		return []pageLink{{"This computer", c.PageURL(signedIn)}}
+		return links
 	}
 	if c.HTTPS {
 		here.Scheme = "https"
 	}
 	own := strings.TrimSuffix(here.String(), "/") // serve's page when it has no public address
-	if ip := net.ParseIP(here.Hostname()); ip != nil && ip.IsLoopback() {
-		here.Host = net.JoinHostPort("localhost", here.Port())
-	}
-	links := []pageLink{{"This computer", strings.TrimSuffix(here.String(), "/") + signedIn}}
 	if page := strings.TrimSuffix(c.Page, "/"); page != "" && page != c.URL && page != own {
 		links = append(links, pageLink{"Public address", c.PageURL(signedIn)})
 	}
@@ -269,16 +218,6 @@ var openBrowser = func(link string) error {
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", link).Start()
 	}
 	return exec.Command("xdg-open", link).Start()
-}
-
-func installHint(tool string) string {
-	switch tool {
-	case "git":
-		return "Get it from https://git-scm.com/downloads."
-	case "claude":
-		return "Install Claude Code from https://claude.com/claude-code and sign in."
-	}
-	return ""
 }
 
 func lastLines(text string, n int) string {

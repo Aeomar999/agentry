@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"gitlab.com/dev.chempa/agentry/internal/launch"
 	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 )
 
@@ -27,7 +28,7 @@ func runCA(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 	dir := tlsca.Dir(*dataDir)
 	if *regenerate {
-		if _, running := runningServer(*dataDir); running {
+		if _, running := launch.Running(*dataDir); running {
 			fmt.Fprintln(stderr, "agentry ca: Agentry is running from", *dataDir+", and keeps the CA it loaded. Stop it first (agentry stop, or Ctrl-C where it runs), then regenerate.")
 			return 1
 		}
