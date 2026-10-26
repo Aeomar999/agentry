@@ -28,6 +28,11 @@ func TestTheAgentryBinaryIsNextToTheApp(t *testing.T) {
 	if got, want := binaryNextTo(exe+".exe", "windows"), filepath.Join("apps", "Agentry", "agentry.exe"); got != want {
 		t.Errorf("windows: %s, want %s", got, want)
 	}
+	// The Mac app's executable is in Agentry.app/Contents/MacOS, beside agentry.
+	mac := filepath.Join("Agentry.app", "Contents", "MacOS")
+	if got, want := binaryNextTo(filepath.Join(mac, "agentry-desktop"), "darwin"), filepath.Join(mac, "agentry"); got != want {
+		t.Errorf("darwin: %s, want %s", got, want)
+	}
 }
 
 // The app uses `agentry open`'s data folder and default repo, on this

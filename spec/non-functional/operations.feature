@@ -618,6 +618,27 @@ Feature: Operations
     Then the version in both names ends in -dirty: yes
     # README.md, Desktop app and Make a release; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text
 
+  @OPS-44 @manual
+  Scenario: make desktop on a Mac packages one universal, ad-hoc signed Agentry.app
+    # packaging/desktop_mac.go runMacDesktop: release/agentry-desktop-<version>-macos-universal.zip, made with ditto, the folder Agentry with Agentry.app and README.txt
+    # packaging/desktop_mac.go makeMacApp: the app and the server built for darwin/arm64 and darwin/amd64, joined by lipo into Contents/MacOS, where cmd/agentry-desktop/desktop.go binaryNextTo looks
+    # packaging/desktop_mac.go makeIcns: Contents/Resources/agentry.icns made from cmd/agentry-desktop/build/appicon.png with sips and iconutil at build time
+    # packaging/desktop_mac.go infoPlist: bundle id com.agent3labs.agentry, executable agentry-desktop, icon agentry, both versions the release number (0.0.0 untagged), LSMinimumSystemVersion 13.0, as Go 1.27 builds for macOS 13
+    # packaging/desktop_mac.go signAdHoc: codesign --sign - on the server, then on the app, as Apple Silicon runs no unsigned arm64 code
+    # Steps:
+    # 1. On a clean checkout of the tagged commit, on a Mac with the Xcode command line tools, run make desktop.
+    # 2. Unzip the zip and run unzip -Z on it, lipo -info on both programs, codesign -vv --strict on the app and plutil -p on Info.plist.
+    # 3. Download the zip in Safari, open Agentry.app with right-click, Open, and check the window opens signed in.
+    Given a clean checkout at tag v0.1.0 on a Mac with the UI built
+    When make desktop runs
+    Then release holds 1 more file: agentry-desktop-v0.1.0-macos-universal.zip
+    And the zip holds 1 folder, Agentry, with README.txt and Agentry.app, whose Contents/MacOS holds agentry-desktop and agentry, both executable after an unzip
+    And both programs hold x86_64 and arm64: yes
+    And the app has the Agentry icon, and Info.plist says version 0.1.0 and macOS 13.0 or later: yes
+    And the app is signed ad hoc, with no developer, so the first open needs right-click, Open: yes
+    And the server in it is built with CGO_ENABLED=0, as make package builds it: yes
+    # README.md, Desktop app and Make a release; packaging/desktop_test.go TestBundleVersionIsTheReleaseNumber and TestInfoPlistNamesTheAppItsProgramAndIcon check only Info.plist's text
+
   @OPS-30 @manual
   Scenario: The deploy target runs one image from dev, pinned to one node, with its home as a volume
     # Dockerfile: the server built with CGO_ENABLED=0, with git and Claude Code pinned at CLAUDE_CODE_VERSION 2.1.301, EXPOSE 7800

@@ -15,9 +15,11 @@ import (
 )
 
 // The desktop app, cmd/agentry-desktop, is packaged with the agentry server
-// it starts: a .tar.gz for Linux and a zip for Windows, in release/. The
-// Linux window is WebKitGTK through cgo, so it is built on Linux; Windows'
-// WebView2 needs no cgo, so it is built here too. macOS is built on a Mac.
+// it starts, in release/. On linux/amd64 it makes a .tar.gz for Linux and a
+// zip for Windows: the Linux window is WebKitGTK through cgo, so it is built
+// on Linux; Windows' WebView2 needs no cgo, so it is built here too. On a
+// Mac it makes only the Mac app's zip (desktop_mac.go), whose window needs
+// Apple's SDK.
 
 var (
 	//go:embed files/desktop-README.txt
@@ -33,10 +35,13 @@ func runDesktop() error {
 	if err := checkRoot(); err != nil {
 		return err
 	}
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		return fmt.Errorf("the Linux desktop app is built on linux/amd64, not %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
 	version := gitVersion()
+	if runtime.GOOS == "darwin" {
+		return runMacDesktop(version)
+	}
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		return fmt.Errorf("the desktop app is built on linux/amd64 for Linux and Windows, or on a Mac for macOS, not on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
 	builds, err := os.MkdirTemp("", "agentry-desktop-builds-*")
 	if err != nil {
 		return err
@@ -158,10 +163,14 @@ func packWindowsDesktop(name, build, version string) error {
 // and the version, with Windows line ends on Windows.
 func desktopNotes(text, goos, version string) string {
 	notes := map[string]string{"{{VERSION}}": version}
-	if goos == "windows" {
+	switch goos {
+	case "windows":
 		notes["{{OPEN}}"] = "Double-click agentry-desktop.exe."
 		notes["{{FIRST}}"] = "The first time, Windows may say it protected your PC: click More info,\nthen Run anyway. Agentry isn't signed yet. The window needs Microsoft\nEdge WebView2, which Windows 10 and 11 already have."
-	} else {
+	case "darwin":
+		notes["{{OPEN}}"] = "Double-click Agentry.app. To keep it, drag it to Applications first."
+		notes["{{FIRST}}"] = "The first time, macOS says it can't check the developer, since Agentry\nisn't signed yet: right-click Agentry.app, choose Open, then Open again;\nor, after it is refused once, open it from System Settings, Privacy &\nSecurity, Open Anyway. It needs macOS 13 or later."
+	default:
 		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, copy it\nand agentry to ~/.local/bin, agentry.png to\n~/.local/share/icons/hicolor/512x512/apps and agentry.desktop to\n~/.local/share/applications. If the menu's Agentry doesn't open, log out\nand in again, so ~/.local/bin is on your PATH."
 		notes["{{FIRST}}"] = "The window needs WebKitGTK 4.1 and GTK 3, which most Linux desktops have\n(on Debian or Ubuntu, the package libwebkit2gtk-4.1-0 brings both)."
 	}

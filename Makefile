@@ -36,7 +36,8 @@ spec:
 package: ui
 	go run ./packaging
 
-# The desktop app with the server it starts, in release/: a .tar.gz for
-# Linux, built on Linux, and a zip for Windows (see README, Make a release).
+# The desktop app with the server it starts, in release/: on Linux, a
+# .tar.gz for Linux and a zip for Windows; on a Mac, the Mac app's zip
+# (see README, Make a release).
 desktop: ui
 	go run ./packaging desktop

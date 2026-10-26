@@ -85,9 +85,9 @@ The device keeps the token, and a cookie that lasts a year, so it stays signed i
 
 ### Desktop app
 
-The desktop app is the same Agentry, its server and its page, in a window of its own instead of a browser tab. From the [releases page](https://github.com/agent3-labs/agentry/releases/latest), download `agentry-desktop-<version>-windows-amd64.zip` or `agentry-desktop-<version>-linux-amd64.tar.gz`, unpack it, and open `agentry-desktop` (`agentry-desktop.exe` on Windows) in the Agentry folder. A Mac build comes later.
+The desktop app is the same Agentry, its server and its page, in a window of its own instead of a browser tab. From the [releases page](https://github.com/agent3-labs/agentry/releases/latest), download `agentry-desktop-<version>-windows-amd64.zip` or `agentry-desktop-<version>-linux-amd64.tar.gz`, unpack it, and open `agentry-desktop` (`agentry-desktop.exe` on Windows) in the Agentry folder. On a Mac, download `agentry-desktop-<version>-macos-universal.zip`, unzip it and open `Agentry.app` (drag it to Applications to keep it); it runs on Apple Silicon and Intel Macs, with macOS 13 or later.
 
-- **What it opens:** the Agentry already running on this computer, from `.agentry` in your home folder, such as Start Agentry's. If none is running, it starts its own from the `agentry` beside it, on `127.0.0.1` from port 7800, so only this computer reaches it. Either way the window opens signed in. Keep the two programs side by side. Opening the app again shows the window that is open.
+- **What it opens:** the Agentry already running on this computer, from `.agentry` in your home folder, such as Start Agentry's. If none is running, it starts its own from the `agentry` beside it, on `127.0.0.1` from port 7800, so only this computer reaches it. Either way the window opens signed in. Keep the two programs side by side (in the Mac app, both are inside `Agentry.app`). Opening the app again shows the window that is open.
 - **Quitting:** closing the window, or Quit in the File menu, quits the app. It stops Agentry only if it started it; an Agentry that was already running keeps running.
 - **Links** that leave Agentry open in your browser; File > Open in browser opens Agentry's page there too.
 - **Linux:** the window needs WebKitGTK 4.1 and GTK 3, which most desktops have (on Debian or Ubuntu, `libwebkit2gtk-4.1-0` brings both). For the applications menu, copy `agentry-desktop` and `agentry` to `~/.local/bin`, `agentry.png` to `~/.local/share/icons/hicolor/512x512/apps` and `agentry.desktop` to `~/.local/share/applications`. If the menu's Agentry doesn't open, log out and in again, so `~/.local/bin` is on your PATH.
@@ -371,7 +371,7 @@ make test       # go vet, go test, and the UI's type and format checks
 make            # rebuild the UI, then the binary
 make workers    # the builds other machines download, next to bin/agentry
 make package    # the zips for every system, in release/
-make desktop    # the desktop app for Linux and Windows, in release/
+make desktop    # the desktop app, in release/: Linux and Windows on Linux, the Mac app on a Mac
 ```
 
 The UI lives in `ui/`: React, TypeScript, Vite and Tailwind, built into `internal/web/dist`, which is committed. `cd ui && npm run dev` serves it with live reload against a running `agentry serve`. Its components go `atoms` (spend the design tokens in `src/styles/globals.css`), `molecules`, `organisms` (own state) and one template, `AdminShell`, that every page renders in. The figures in `docs/diagrams` are drawn by `docs/diagrams/source/figures.py`.
@@ -392,7 +392,7 @@ Each folder in `internal/` does one job, and folders only depend on the ones bel
 Releases live on GitHub only; GitLab just checks, builds and deploys.
 
 1. Tag the commit on `dev` and push the tag: `git tag v0.1.0 && git push github v0.1.0`.
-2. Run `make package` and `make desktop` on the tagged commit in a clean checkout, on Linux. The names come from the tag; a tree with changes adds `-dirty`. `make desktop` cross-builds the Windows app, but builds the Linux one with cgo, so it needs a C compiler and the GTK and WebKit headers: on Debian or Ubuntu, `sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. The Mac app is built on a Mac, separately, and is left out for now.
+2. Run `make package` and `make desktop` on the tagged commit in a clean checkout, on Linux. The names come from the tag; a tree with changes adds `-dirty`. `make desktop` cross-builds the Windows app, but builds the Linux one with cgo, so it needs a C compiler and the GTK and WebKit headers: on Debian or Ubuntu, `sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`. Then, for the Mac app, run `make desktop` on a Mac (it needs the Xcode command line tools: `xcode-select --install`) on the same tagged commit in a clean checkout, and copy `release/agentry-desktop-<version>-macos-universal.zip` into `release/` on the machine that publishes. It is one app for Apple Silicon and Intel, signed ad hoc, not by a developer.
 3. Publish them: `gh release create v0.1.0 release/agentry-v0.1.0-*.zip release/agentry-desktop-v0.1.0-* --repo agent3-labs/agentry --title v0.1.0 --notes "What changed"`. The version in the name keeps older files in `release/` out of the release.
 
 ### License
