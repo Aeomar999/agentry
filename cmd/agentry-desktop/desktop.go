@@ -165,16 +165,20 @@ func startPage() []byte {
 }
 
 // startReply is the app's answer at startPath: Agentry's page, signed in,
-// or why Agentry didn't start, with the token hidden.
+// or why Agentry didn't start, with the token hidden. Neither is set when
+// the app quit before the page asked.
 func startReply(page string, failed error, token string) []byte {
 	var reply struct {
 		Page   string `json:"page,omitempty"`
 		Failed string `json:"failed,omitempty"`
 	}
-	if failed != nil {
+	switch {
+	case failed != nil:
 		reply.Failed = launch.Redact(failed.Error(), token)
-	} else {
+	case page != "":
 		reply.Page = page
+	default:
+		reply.Failed = "the app is quitting"
 	}
 	data, _ := json.Marshal(reply)
 	return data

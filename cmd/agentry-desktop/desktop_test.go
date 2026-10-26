@@ -100,6 +100,13 @@ func TestStartReplyGoesOnToAgentry(t *testing.T) {
 	}
 }
 
+// With neither a page nor an error, the app quit before the page asked.
+func TestStartReplySaysTheAppIsQuitting(t *testing.T) {
+	if reply := string(startReply("", nil, "abc")); reply != `{"failed":"the app is quitting"}` {
+		t.Errorf("reply %s", reply)
+	}
+}
+
 // An error that holds the signed-in link shows with the token hidden.
 func TestStartReplyHidesTheTokenInAnError(t *testing.T) {
 	reply := string(startReply("", errors.New("GET "+origin+"/?token=s3cret: refused; s3cret"), "s3cret"))
@@ -152,7 +159,7 @@ func TestStopBeforeStartStartsNothing(t *testing.T) {
 	if _, err := os.Stat(o.Repo); err == nil {
 		t.Error("Agentry started after the app stopped")
 	}
-	if body := reply.Body.String(); body != "{}" {
+	if body := reply.Body.String(); body != `{"failed":"the app is quitting"}` {
 		t.Errorf("reply %s", body)
 	}
 }

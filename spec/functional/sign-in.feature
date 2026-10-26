@@ -116,7 +116,7 @@ Feature: Signing in
   Scenario: The desktop app starts Agentry when none is running
     # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne and TestEnsureListensOnThisComputerByDefault
     # the data folder, default repo, binary, host and port: cmd/agentry-desktop/desktop_test.go TestLaunchOptions and TestTheAgentryBinaryIsNextToTheApp
-    # started only when the start page asks: TestTheAppStartsAgentryWhenTheStartPageAsks, TestStopBeforeStartStartsNothing, TestStartPageAsksTheAppToStartAgentry and TestStartPageGoesWhereTheAppSays
+    # started only when the start page asks: TestTheAppStartsAgentryWhenTheStartPageAsks, TestStopBeforeStartStartsNothing, TestStartReplySaysTheAppIsQuitting, TestStartPageAsksTheAppToStartAgentry and TestStartPageGoesWhereTheAppSays
     # docs/decisions.md, 2026-10-26
     Given no Agentry answering from the data folder
     When the user opens the desktop app
@@ -124,7 +124,7 @@ Feature: Signing in
     And the server uses the same data folder and default repo as Start Agentry, and the default repo is made if it is missing: yes
     And the server starts only once the window's start page asks for it, and the page then goes on to Agentry's page signed in: yes
     Given the app quits before its start page asks
-    Then no server is started, then or later
+    Then no server is started, then or later, and the start page says the app is quitting
 
   @SIGNIN-09 @user @test
   Scenario: The desktop app uses an Agentry that is already running
