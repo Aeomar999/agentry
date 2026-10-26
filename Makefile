@@ -24,6 +24,7 @@ workers:
 test:
 	spec/check
 	go vet ./... && go test ./...
+	cd cmd/agentry-desktop && CGO_ENABLED=0 go vet . && CGO_ENABLED=0 go test .
 	cd ui && npm run lint
 
 # The spec folder's checks: every scenario tagged, numbered and judged.
