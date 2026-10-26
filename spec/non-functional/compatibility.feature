@@ -41,8 +41,15 @@ Feature: Compatibility
     Given a Mac, Apple Silicon or Intel, with Go, git and the Xcode command line tools
     When the user runs make desktop
     Then it builds only the Mac app, for both arm64 and amd64, through clang: yes
-    And on any other kind of machine the command is refused with "the desktop app is built on linux/amd64 for Linux and Windows, or on a Mac for macOS"
     # README.md, Make a release; packaging/desktop.go runDesktop and buildDesktop; packaging/desktop_mac.go buildMacDesktop; no test
+
+  @COMPAT-29 @manual
+  Scenario: The desktop app is not built on any other kind of machine
+    Given a machine that is neither linux/amd64 nor a Mac, such as linux/arm64 or Windows
+    When the user runs make desktop
+    Then the command is refused with "the desktop app is built on linux/amd64 for Linux and Windows, or on a Mac for macOS"
+    And release gets no new file: yes
+    # packaging/desktop.go runDesktop; no test
 
   @COMPAT-04 @manual
   Scenario: Start Agentry and Stop Agentry do the same on every system
