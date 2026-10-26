@@ -79,7 +79,7 @@ type window struct {
 	*agentry
 	ctx     context.Context
 	log     redactedLog
-	signals <-chan os.Signal
+	signals chan os.Signal
 	listen  sync.Once // for linkEvent, from the first page load on
 
 	mu   sync.Mutex
@@ -117,11 +117,13 @@ func (w *window) options(running string) *options.App {
 	}
 }
 
-// startup keeps the window's context, and quits on SIGINT or SIGTERM.
+// startup keeps the window's context, and quits on SIGINT or SIGTERM. A
+// second signal ends the app the default way, as a quit can be slow.
 func (w *window) startup(ctx context.Context) {
 	w.ctx = ctx
 	go func() {
 		<-w.signals
+		signal.Stop(w.signals)
 		runtime.Quit(ctx)
 	}()
 }

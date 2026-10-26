@@ -197,6 +197,7 @@ Feature: Signing in
     Then the app quits, and a server it started stops with it: yes
     When the app is ended with SIGINT or SIGTERM instead
     Then the app quits, and a server it started stops with it: yes
+    And a second SIGINT or SIGTERM while it quits ends the app at once
     Given the desktop app open
     When the user opens it again, even after `agentry stop`, or opens it twice at once
     Then no second window or app is started, and the first window is shown
