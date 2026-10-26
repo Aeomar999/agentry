@@ -69,13 +69,22 @@ func originOf(link string) string {
 type agentry struct {
 	launch launch.Options
 	token  func() string
+	quit   chan struct{} // closed once the app quits; launch.Options.Quit
 
-	starting, stopping sync.Once
+	starting, stopping, quitting sync.Once
 
 	mu           sync.Mutex
 	running      *launch.Agentry
 	failed       error
 	page, origin string // Agentry's signed-in page and its origin; empty until it answers
+}
+
+// newAgentry is the Agentry found or started with o, the page token from
+// token.
+func newAgentry(o launch.Options, token func() string) *agentry {
+	quit := make(chan struct{})
+	o.Quit = quit
+	return &agentry{launch: o, token: token, quit: quit}
 }
 
 // serve is the app's own pages: the start page, and at startPath the
@@ -89,8 +98,12 @@ func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 	}
 	a.start()
 	a.mu.Lock()
-	reply := startReply(a.page, a.failed, a.token())
+	page, failed := a.page, a.failed
 	a.mu.Unlock()
+	if a.hasQuit() {
+		page, failed = "", nil // its server is stopped, or never started
+	}
+	reply := startReply(page, failed, a.token())
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Write(reply)
 }
@@ -110,10 +123,27 @@ func (a *agentry) start() {
 	})
 }
 
+// markQuit says the app quits: no server starts after it, and one a start
+// under way waits for is stopped at once.
+func (a *agentry) markQuit() {
+	a.quitting.Do(func() { close(a.quit) })
+}
+
+// hasQuit says whether the app has begun to quit.
+func (a *agentry) hasQuit() bool {
+	select {
+	case <-a.quit:
+		return true
+	default:
+		return false
+	}
+}
+
 // stop stops the server if the app started it, once, on every way out. It
 // first waits for a start under way, and no server starts after it.
 func (a *agentry) stop() {
 	a.stopping.Do(func() {
+		a.markQuit()
 		a.starting.Do(func() {})
 		a.mu.Lock()
 		running := a.running

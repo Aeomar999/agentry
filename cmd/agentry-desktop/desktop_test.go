@@ -128,7 +128,7 @@ func TestTheAppStartsAgentryWhenTheStartPageAsks(t *testing.T) {
 		t.Skip("git isn't installed")
 	}
 	o := launchNowhere(t)
-	a := &agentry{launch: o, token: func() string { return "s3cret" }}
+	a := newAgentry(o, func() string { return "s3cret" })
 	page := httptest.NewRecorder()
 	a.serve(page, httptest.NewRequest("GET", "/", nil))
 	if !bytes.Equal(page.Body.Bytes(), startPage()) {
@@ -152,13 +152,45 @@ func TestTheAppStartsAgentryWhenTheStartPageAsks(t *testing.T) {
 // A quit before the start page asks starts no server, then or later.
 func TestStopBeforeStartStartsNothing(t *testing.T) {
 	o := launchNowhere(t)
-	a := &agentry{launch: o, token: func() string { return "" }}
+	a := newAgentry(o, func() string { return "" })
+	if a.hasQuit() {
+		t.Error("quitting before a quit")
+	}
 	a.stop()
+	if !a.hasQuit() {
+		t.Error("not quitting after a quit")
+	}
 	reply := httptest.NewRecorder()
 	a.serve(reply, httptest.NewRequest("GET", startPath, nil))
 	if _, err := os.Stat(o.Repo); err == nil {
 		t.Error("Agentry started after the app stopped")
 	}
+	if body := reply.Body.String(); body != `{"failed":"the app is quitting"}` {
+		t.Errorf("reply %s", body)
+	}
+}
+
+// A quit reaches a start under way, which then stops its server at once.
+func TestAQuitReachesAStartUnderWay(t *testing.T) {
+	a := newAgentry(launchNowhere(t), func() string { return "" })
+	a.markQuit()
+	a.markQuit()
+	select {
+	case <-a.launch.Quit:
+	default:
+		t.Error("launch.Options.Quit isn't closed after a quit")
+	}
+}
+
+// A start page that asks after a quit isn't sent on to the server the
+// quit stopped.
+func TestStartReplyAfterAQuitSaysTheAppIsQuitting(t *testing.T) {
+	a := newAgentry(launch.Options{}, func() string { return "" })
+	a.page, a.origin = origin+"/?token=abc", origin
+	a.starting.Do(func() {}) // as if Agentry had answered
+	a.stop()
+	reply := httptest.NewRecorder()
+	a.serve(reply, httptest.NewRequest("GET", startPath, nil))
 	if body := reply.Body.String(); body != `{"failed":"the app is quitting"}` {
 		t.Errorf("reply %s", body)
 	}

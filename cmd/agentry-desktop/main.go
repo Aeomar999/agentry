@@ -56,13 +56,9 @@ func run() int {
 	browserOutput := hideTokenInBrowserOutput(os.Stderr, token)
 	defer browserOutput.Close()
 
-	// Production Wails doesn't handle these, so it would end without
-	// stopping the server; quit the window instead.
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
-
-	a := &window{agentry: &agentry{launch: o, token: token}, zoom: 1, log: redactedLog{w: os.Stderr, token: token}, signals: signals}
+	a := &window{agentry: newAgentry(o, token), zoom: 1, log: redactedLog{w: os.Stderr, token: token}}
 	defer a.stop()
+	a.quitOnSignal()
 	var running string
 	if c, ok := launch.Running(o.DataDir); ok {
 		running = originOf(launch.PageURL(c))
@@ -77,10 +73,9 @@ func run() int {
 // window is the app's one window and what it shows.
 type window struct {
 	*agentry
-	ctx     context.Context
-	log     redactedLog
-	signals chan os.Signal
-	listen  sync.Once // for linkEvent, from the first page load on
+	ctx    context.Context
+	log    redactedLog
+	listen sync.Once // for linkEvent, from the first page load on
 
 	mu   sync.Mutex
 	zoom float64
@@ -117,19 +112,48 @@ func (w *window) options(running string) *options.App {
 	}
 }
 
-// startup keeps the window's context, and quits on SIGINT or SIGTERM. A
-// second signal ends the app the default way, as a quit can be slow.
-func (w *window) startup(ctx context.Context) {
-	w.ctx = ctx
+// quitOnSignal quits the app on the first SIGINT or SIGTERM, from launch
+// on. Wails quits on them too, but only once its window loop runs; a quit
+// before then is lost, so loaded quits again. A second signal ends the app
+// the default way, as a quit can be slow: Reset drops Wails' handler too.
+// By then a server under way has been told to stop.
+func (w *window) quitOnSignal() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-w.signals
-		signal.Stop(w.signals)
-		runtime.Quit(ctx)
+		<-signals
+		w.markQuit()
+		signal.Reset(os.Interrupt, syscall.SIGTERM)
+		w.quit()
 	}()
 }
 
+// quit stops the server if the app started it, starts none after, and
+// quits the window if it has opened.
+func (w *window) quit() {
+	w.stop()
+	w.mu.Lock()
+	ctx := w.ctx
+	w.mu.Unlock()
+	if ctx != nil {
+		runtime.Quit(ctx)
+	}
+}
+
+// startup keeps the window's context.
+func (w *window) startup(ctx context.Context) {
+	w.mu.Lock()
+	w.ctx = ctx
+	w.mu.Unlock()
+}
+
 // loaded runs after every page load: it routes links and keeps the zoom.
+// After a quit it quits the window, as the loop runs by now.
 func (w *window) loaded(ctx context.Context) {
+	if w.hasQuit() {
+		runtime.Quit(ctx)
+		return
+	}
 	_, origin := w.signedIn()
 	if origin == "" {
 		return
