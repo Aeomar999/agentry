@@ -162,7 +162,7 @@ func desktopNotes(text, goos, version string) string {
 		notes["{{OPEN}}"] = "Double-click agentry-desktop.exe."
 		notes["{{FIRST}}"] = "The first time, Windows may say it protected your PC: click More info,\nthen Run anyway. Agentry isn't signed yet. The window needs Microsoft\nEdge WebView2, which Windows 10 and 11 already have."
 	} else {
-		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, copy it\nand agentry to ~/.local/bin, agentry.png to\n~/.local/share/icons/hicolor/512x512/apps and agentry.desktop to\n~/.local/share/applications."
+		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, copy it\nand agentry to ~/.local/bin, agentry.png to\n~/.local/share/icons/hicolor/512x512/apps and agentry.desktop to\n~/.local/share/applications. If the menu's Agentry doesn't open, log out\nand in again, so ~/.local/bin is on your PATH."
 		notes["{{FIRST}}"] = "The window needs WebKitGTK 4.1 and GTK 3, which most Linux desktops have\n(on Debian or Ubuntu, the package libwebkit2gtk-4.1-0 brings both)."
 	}
 	for key, value := range notes {
