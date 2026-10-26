@@ -52,8 +52,8 @@ func main() {
 }
 
 func run() error {
-	if _, err := os.Stat("internal/web/dist/index.html"); err != nil {
-		return fmt.Errorf("run it from the repo's root, with the page built (make ui)")
+	if err := checkRoot(); err != nil {
+		return err
 	}
 	version := gitVersion()
 	builds, err := os.MkdirTemp("", "agentry-builds-*")
@@ -62,11 +62,7 @@ func run() error {
 	}
 	defer os.RemoveAll(builds)
 	for _, p := range platforms {
-		fmt.Printf("Building agentry for %s/%s\n", p.os, p.arch)
-		build := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", filepath.Join(builds, "agentry-"+p.os+"-"+p.arch), "./cmd/agentry")
-		build.Env = append(os.Environ(), "GOOS="+p.os, "GOARCH="+p.arch, "CGO_ENABLED=0")
-		build.Stdout, build.Stderr = os.Stdout, os.Stderr
-		if err := build.Run(); err != nil {
+		if err := buildAgentry(filepath.Join(builds, "agentry-"+p.os+"-"+p.arch), p.os, p.arch); err != nil {
 			return err
 		}
 	}
@@ -82,6 +78,25 @@ func run() error {
 		fmt.Printf("Made %s (%.0f MB)\n", name, float64(info.Size())/(1<<20))
 	}
 	return nil
+}
+
+// checkRoot refuses to run anywhere but the repo's root, with the page built
+// into the server.
+func checkRoot() error {
+	if _, err := os.Stat("internal/web/dist/index.html"); err != nil {
+		return fmt.Errorf("run it from the repo's root, with the page built (make ui)")
+	}
+	return nil
+}
+
+// buildAgentry builds the server for goos/goarch to path, without cgo, so
+// any machine can build it for every other.
+func buildAgentry(path, goos, goarch string) error {
+	fmt.Printf("Building agentry for %s/%s\n", goos, goarch)
+	build := exec.Command("go", "build", "-trimpath", "-ldflags", "-s -w", "-o", path, "./cmd/agentry")
+	build.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
+	build.Stdout, build.Stderr = os.Stdout, os.Stderr
+	return build.Run()
 }
 
 // pack makes one zip: the folder Agentry, with this computer's agentry,
