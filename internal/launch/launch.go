@@ -90,13 +90,14 @@ func DefaultRepo(repo, path string) error {
 }
 
 // lookPathIn is the program name in path, a PATH, as exec.LookPath finds it
-// in this program's when path is empty.
+// in this program's when path is empty. Entries that aren't absolute, such
+// as ".", are skipped, as exec.LookPath refuses a program found through one.
 func lookPathIn(name, path string) (string, error) {
 	if path == "" {
 		return exec.LookPath(name)
 	}
 	for _, dir := range filepath.SplitList(path) {
-		if dir == "" {
+		if !filepath.IsAbs(dir) {
 			continue
 		}
 		if found, err := exec.LookPath(filepath.Join(dir, name)); err == nil {

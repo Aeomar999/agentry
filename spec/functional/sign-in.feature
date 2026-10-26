@@ -210,7 +210,7 @@ Feature: Signing in
   @SIGNIN-15 @user @test
   Scenario: The server the Mac desktop app starts finds claude where the user's shell does
     # cmd/agentry-desktop/desktop.go serverPath, shellPath and agentry.start, set in cmd/agentry-desktop/main.go run; internal/procs KillGroupOnCancel; internal/launch Options.Path, Start and DefaultRepo
-    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone, TestShellPathGivesUpOnAShellThatHangs and TestServerPathIsAskedOnlyWhenTheAppStartsAServer; internal/launch/launch_test.go TestEnsureGivesTheServerAndGitThePath
+    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone, TestShellPathGivesUpOnAShellThatHangs and TestServerPathIsAskedOnlyWhenTheAppStartsAServer; internal/launch/launch_test.go TestEnsureGivesTheServerAndGitThePath and TestLookPathInSkipsEntriesThatArentAbsolute; internal/procs/procs_unix_test.go TestKillGroupOnCancelStartsANewSession
     Given the desktop app opened from Finder or the Dock on a Mac, with launchd's PATH /usr/bin:/bin:/usr/sbin:/sbin, and claude in ~/.local/bin or /opt/homebrew/bin, which the user's shell files add to PATH
     When the app starts its own server
     Then the server and the git the app runs get the PATH the user's login shell sets up, so agents find claude: yes

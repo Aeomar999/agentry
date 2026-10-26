@@ -554,9 +554,6 @@ func TestShellPathGivesUpOnAShellThatHangs(t *testing.T) {
 // The app asks for the PATH just before it starts its own server, and gives
 // it to launch, and not when one is already running.
 func TestServerPathIsAskedOnlyWhenTheAppStartsAServer(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git isn't installed")
-	}
 	running := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("{}"))
 	}))

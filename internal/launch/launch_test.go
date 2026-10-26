@@ -186,6 +186,26 @@ func TestEnsureGivesTheServerAndGitThePath(t *testing.T) {
 	}
 }
 
+// lookPathIn finds a program only in the absolute entries of the PATH it
+// is given: "." or a relative entry is neither searched nor taken for
+// this program's PATH.
+func TestLookPathInSkipsEntriesThatArentAbsolute(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the PATH here names Unix folders")
+	}
+	for path, want := range map[string]bool{
+		".":            false,
+		"bin:.":        false,
+		".:/bin":       true,
+		"bin:/bin:usr": true,
+	} {
+		found, err := lookPathIn("sh", path)
+		if (err == nil) != want || want && found != "/bin/sh" {
+			t.Errorf("lookPathIn(sh, %q) = %q, %v; want found %v", path, found, err, want)
+		}
+	}
+}
+
 // With no Host, the server Ensure starts listens on this computer only.
 func TestEnsureListensOnThisComputerByDefault(t *testing.T) {
 	t.Setenv(fakeServe, "serve")
