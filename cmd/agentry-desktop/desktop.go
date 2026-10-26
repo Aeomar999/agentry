@@ -13,6 +13,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -20,9 +21,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/browser"
 
@@ -50,6 +53,47 @@ func launchOptions(home, exe, goos string, output io.Writer) launch.Options {
 		Port:    7800,
 		Output:  output,
 	}
+}
+
+// serverPath is the PATH for the server the app starts, and the git it
+// runs. On a Mac an app opened from Finder or the Dock gets launchd's PATH,
+// /usr/bin:/bin:/usr/sbin:/sbin, without the folders Claude Code and
+// Homebrew install to, so there it is the PATH the user's shell sets up,
+// as in Terminal; if the shell gives none in time, it stays current.
+// Elsewhere it is current: the app gets the desktop session's PATH.
+func serverPath(goos, shell, current string) string {
+	if goos != "darwin" {
+		return current
+	}
+	if shell == "" {
+		shell = "/bin/zsh" // macOS's default shell
+	}
+	if path, err := shellPath(shell, 5*time.Second); err == nil && path != "" {
+		return path
+	}
+	return current
+}
+
+// pathMark comes before the PATH shellPath asks the shell to print, so
+// what its startup files print first is skipped.
+const pathMark = "agentry-desktop-path:"
+
+// shellPath is the PATH that shell sets up, as a login and interactive
+// shell reads both its profile and rc files, within that time.
+func shellPath(shell string, within time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, shell, "-ilc", `printf '%s%s' "`+pathMark+`" "$PATH"`)
+	cmd.WaitDelay = time.Second // a process the shell started may keep stdout open
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	i := bytes.LastIndex(out, []byte(pathMark))
+	if i < 0 {
+		return "", fmt.Errorf("%s printed no PATH", shell)
+	}
+	return strings.TrimSpace(string(out[i+len(pathMark):])), nil
 }
 
 // tokenIn is the page token in the data folder, once the server has made it.

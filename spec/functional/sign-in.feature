@@ -206,3 +206,14 @@ Feature: Signing in
     When the user opens it again, even after `agentry stop`, or opens it twice at once
     Then no second window or app is started, and the first window is shown
     And the second launch starts no server, and none is left running without an app: yes
+
+  @SIGNIN-15 @user @test
+  Scenario: The server the Mac desktop app starts finds claude where the user's shell does
+    # cmd/agentry-desktop/desktop.go serverPath and shellPath, set as the app's PATH in cmd/agentry-desktop/main.go run
+    # cmd/agentry-desktop/desktop_test.go TestServerPathOnAMacIsTheShells, TestServerPathElsewhereIsTheAppsOwn, TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone and TestShellPathGivesUpOnAShellThatHangs
+    Given the desktop app opened from Finder or the Dock on a Mac, with launchd's PATH /usr/bin:/bin:/usr/sbin:/sbin, and claude in ~/.local/bin or /opt/homebrew/bin, which the user's shell files add to PATH
+    When the app starts its own server
+    Then the server and the git the app runs get the PATH the user's login shell sets up, so agents find claude: yes
+    And the PATH is asked of $SHELL (zsh when unset) once, at launch, and given up on after 5 seconds: yes
+    And if the shell fails, hangs or prints no PATH, the app's own PATH is kept: yes
+    And on Linux and Windows the app's own PATH is kept, and no shell is run: yes

@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pkg/browser"
 
@@ -449,5 +451,69 @@ func TestScriptsHoldNoToken(t *testing.T) {
 		if strings.Contains(script, "token") {
 			t.Errorf("script names a token: %s", script)
 		}
+	}
+}
+
+// fakeShell is a shell script at a new path that prints what script
+// prints, as a shell's startup files may, then runs the command it is
+// given (after -ilc) with PATH set to path.
+func fakeShell(t *testing.T, script, path string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake shell is a sh script")
+	}
+	shell := filepath.Join(t.TempDir(), "shell")
+	text := "#!/bin/sh\n" + script + "\nPATH='" + path + "'\nexport PATH\nexec /bin/sh -c \"$2\"\n"
+	if err := os.WriteFile(shell, []byte(text), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return shell
+}
+
+// On a Mac the server gets the PATH the user's shell sets up, not the
+// short one an app opened from Finder gets, past what the shell prints.
+func TestServerPathOnAMacIsTheShells(t *testing.T) {
+	shell := fakeShell(t, "echo 'Last login: today'", "/opt/homebrew/bin:/usr/bin:/bin")
+	if got, want := serverPath("darwin", shell, "/usr/bin:/bin"), "/opt/homebrew/bin:/usr/bin:/bin"; got != want {
+		t.Errorf("serverPath = %q, want %q", got, want)
+	}
+}
+
+// On Linux and Windows the app keeps its own PATH and runs no shell.
+func TestServerPathElsewhereIsTheAppsOwn(t *testing.T) {
+	ran := filepath.Join(t.TempDir(), "ran")
+	shell := fakeShell(t, "touch '"+ran+"'", "/opt/homebrew/bin")
+	for _, goos := range []string{"linux", "windows"} {
+		if got := serverPath(goos, shell, "/usr/bin:/bin"); got != "/usr/bin:/bin" {
+			t.Errorf("%s: serverPath = %q, want the app's own", goos, got)
+		}
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Error("the shell ran")
+	}
+}
+
+// A shell that fails, or prints no PATH, leaves the app's own.
+func TestServerPathKeepsTheAppsOwnWhenTheShellGivesNone(t *testing.T) {
+	for name, shell := range map[string]string{
+		"fails":    fakeShell(t, "exit 1", "/opt/homebrew/bin"),
+		"no PATH":  fakeShell(t, "exit 0", "/opt/homebrew/bin"),
+		"no shell": filepath.Join(t.TempDir(), "missing"),
+	} {
+		if got := serverPath("darwin", shell, "/usr/bin:/bin"); got != "/usr/bin:/bin" {
+			t.Errorf("%s: serverPath = %q, want the app's own", name, got)
+		}
+	}
+}
+
+// A shell that hangs is given up on in time.
+func TestShellPathGivesUpOnAShellThatHangs(t *testing.T) {
+	shell := fakeShell(t, "exec sleep 10", "/opt/homebrew/bin")
+	began := time.Now()
+	if path, err := shellPath(shell, 200*time.Millisecond); err == nil {
+		t.Errorf("shellPath = %q, want an error", path)
+	}
+	if took := time.Since(began); took > 3*time.Second {
+		t.Errorf("shellPath took %s", took)
 	}
 }
