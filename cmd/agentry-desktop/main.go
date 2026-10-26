@@ -148,11 +148,12 @@ func (w *window) loaded(ctx context.Context) {
 // openInBrowser opens link in the system browser: through Wails, or
 // itself where Wails would refuse the link (see opensItself).
 func (w *window) openInBrowser(link string) {
-	if !opensItself(link) {
+	encoded, itself := opensItself(link)
+	if !itself {
 		runtime.BrowserOpenURL(w.ctx, link)
 		return
 	}
-	if err := browser.OpenURL(link); err != nil {
+	if err := browser.OpenURL(encoded); err != nil {
 		w.log.Error("Unable to open default system browser")
 	}
 }

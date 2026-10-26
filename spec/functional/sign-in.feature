@@ -151,7 +151,7 @@ Feature: Signing in
 
   @SIGNIN-11 @user @test
   Scenario: Links that leave Agentry open in the system browser, not the window
-    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp, TestLinksFollowTheRoute and TestOpensItselfWhereWailsRefuses; internal/launch/launch_test.go TestRoute
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp, TestLinksFollowTheRoute, TestOpensItselfWhereWailsRefuses and TestOpensItselfOpensTheLinkItChecked; internal/launch/launch_test.go TestRoute
     # docs/decisions.md, 2026-10-26
     Given Agentry's page in the desktop app's window
     When the user clicks a link to another site, such as GitHub or the docs, or a mail link, with the left or middle button, or the page opens one with window.open

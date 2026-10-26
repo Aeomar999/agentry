@@ -297,22 +297,23 @@ func (l links) follow(data ...any) {
 const wailsRefuses = ";|`$\\<>*{}[]()~! \t\n\r"
 
 // opensItself says whether the app opens link in the system browser itself
-// instead of through Wails: when Wails would refuse it for those characters
-// alone. pkg/browser hands the link to the browser as one argument, with no
-// shell. A link with control or other unprinted characters is left to
-// Wails, which refuses it.
-func opensItself(link string) bool {
+// instead of through Wails, and the link to open: Go's encoding of it,
+// which is what Wails checks and opens. It does so when Wails would refuse
+// the link for those characters alone. pkg/browser hands the link to the
+// browser as one argument, with no shell. A link with control or other
+// unprinted characters is left to Wails, which refuses it.
+func opensItself(link string) (string, bool) {
 	u, err := url.Parse(link)
 	if err != nil {
-		return false
+		return "", false
 	}
-	link = u.String() // what Wails checks
-	for _, r := range link {
+	encoded := u.String()
+	for _, r := range encoded {
 		if r <= ' ' || r > '~' {
-			return false
+			return "", false
 		}
 	}
-	return strings.ContainsAny(link, wailsRefuses)
+	return encoded, strings.ContainsAny(encoded, wailsRefuses)
 }
 
 // goScript is script that opens link in the window.

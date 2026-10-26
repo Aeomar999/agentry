@@ -240,8 +240,31 @@ func TestOpensItselfWhereWailsRefuses(t *testing.T) {
 		"https://example.com/?q=(x) y":                            false,
 		"mailto:someone@example.com?subject=Agentry%20(task-3)":   true,
 	} {
-		if got := opensItself(link); got != want {
+		if _, got := opensItself(link); got != want {
 			t.Errorf("opensItself(%q) = %v, want %v", link, got, want)
+		}
+	}
+}
+
+// The link the app opens is the one it checked, encoded: a raw space or
+// quote can't reach the browser's command line as extra arguments. In a
+// path Go encodes the parentheses too, so Wails opens those itself.
+func TestOpensItselfOpensTheLinkItChecked(t *testing.T) {
+	for _, c := range []struct {
+		link, opened string
+		itself       bool
+	}{
+		{`https://x.com/a#(b)" --new-window "https://y.com`, "https://x.com/a#(b)%22%20--new-window%20%22https://y.com", true},
+		{"https://x.com/a#(b) c", "https://x.com/a#(b)%20c", true},
+		{`https://x.com/(a)" --new-window "https://y.com`, "https://x.com/%28a%29%22%20--new-window%20%22https://y.com", false},
+		{"https://x.com/(a) b", "https://x.com/%28a%29%20b", false},
+	} {
+		opened, itself := opensItself(c.link)
+		if opened != c.opened || itself != c.itself {
+			t.Errorf("opensItself(%q) = %q, %v, want %q, %v", c.link, opened, itself, c.opened, c.itself)
+		}
+		if strings.ContainsAny(opened, ` "`) {
+			t.Errorf("opensItself(%q) opens %q", c.link, opened)
 		}
 	}
 }
