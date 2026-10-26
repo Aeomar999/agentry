@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	goruntime "runtime"
 	"sync"
+	"syscall"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
@@ -51,15 +53,18 @@ func run() int {
 	defer output.Close()
 	o.Output = output
 
-	a := &window{zoom: 1, log: redactedLog{w: os.Stderr, token: token}}
-	agentry, failed := launch.Ensure(o)
-	if failed == nil {
-		defer agentry.Stop() // only a server this app started
-		a.page = launch.PageURL(agentry.Client)
-		a.origin = originOf(a.page)
+	// Production Wails doesn't handle these, so it would end without
+	// stopping the server; quit the window instead.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+
+	a := &window{agentry: &agentry{launch: o, token: token}, zoom: 1, log: redactedLog{w: os.Stderr, token: token}, signals: signals}
+	defer a.stop()
+	var running string
+	if c, ok := launch.Running(o.DataDir); ok {
+		running = originOf(launch.PageURL(c))
 	}
-	a.start = startPage(a.page, failed, token())
-	if err := wails.Run(a.options()); err != nil {
+	if err := wails.Run(a.options(running)); err != nil {
 		a.log.Error(err.Error())
 		return 1
 	}
@@ -68,11 +73,11 @@ func run() int {
 
 // window is the app's one window and what it shows.
 type window struct {
-	ctx          context.Context
-	page, origin string // Agentry's signed-in page and its origin; empty when it didn't start
-	start        []byte // the page the window opens on
-	log          redactedLog
-	listen       sync.Once // for linkEvent, from the first page load on
+	*agentry
+	ctx     context.Context
+	log     redactedLog
+	signals <-chan os.Signal
+	listen  sync.Once // for linkEvent, from the first page load on
 
 	mu   sync.Mutex
 	zoom float64
@@ -80,23 +85,21 @@ type window struct {
 
 // options are the app's: closing the window quits it on every system (see
 // docs/decisions.md), and a second launch shows this window instead.
-func (w *window) options() *options.App {
+// running is the origin of the server answering now, if any.
+func (w *window) options(running string) *options.App {
 	return &options.App{
-		Title:     "Agentry",
-		Width:     1280,
-		Height:    860,
-		MinWidth:  480,
-		MinHeight: 360,
-		AssetServer: &assetserver.Options{Handler: http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
-			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
-			rw.Header().Set("Cache-Control", "no-store")
-			rw.Write(w.start)
-		})},
+		Title:                    "Agentry",
+		Width:                    1280,
+		Height:                   860,
+		MinWidth:                 480,
+		MinHeight:                360,
+		AssetServer:              &assetserver.Options{Handler: http.HandlerFunc(w.serve)},
 		Menu:                     w.menu(),
-		OnStartup:                func(ctx context.Context) { w.ctx = ctx },
+		OnStartup:                w.startup,
 		OnDomReady:               w.loaded,
+		OnShutdown:               func(context.Context) { w.stop() },
 		EnableDefaultContextMenu: true,
-		BindingsAllowedOrigins:   w.origin, // so the page's links reach linkEvent
+		BindingsAllowedOrigins:   bindingsOrigins(running), // so the page's links reach linkEvent
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "agentry-desktop",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
@@ -112,20 +115,30 @@ func (w *window) options() *options.App {
 	}
 }
 
+// startup keeps the window's context, and quits on SIGINT or SIGTERM.
+func (w *window) startup(ctx context.Context) {
+	w.ctx = ctx
+	go func() {
+		<-w.signals
+		runtime.Quit(ctx)
+	}()
+}
+
 // loaded runs after every page load: it routes links and keeps the zoom.
 func (w *window) loaded(ctx context.Context) {
-	if w.origin == "" {
+	_, origin := w.signedIn()
+	if origin == "" {
 		return
 	}
 	w.listen.Do(func() {
 		follow := links{
-			origin:  w.origin,
+			origin:  origin,
 			browser: func(link string) { runtime.BrowserOpenURL(ctx, link) },
 			window:  func(link string) { runtime.WindowExecJS(ctx, goScript(link)) },
 		}
 		runtime.EventsOn(ctx, linkEvent, follow.follow)
 	})
-	runtime.WindowExecJS(ctx, pageScript(w.origin, w.zoomLevel()))
+	runtime.WindowExecJS(ctx, pageScript(startURL(goruntime.GOOS), origin, w.zoomLevel()))
 }
 
 func (w *window) menu() *menu.Menu {
@@ -136,8 +149,8 @@ func (w *window) menu() *menu.Menu {
 	}
 	file := m.AddSubmenu("File")
 	file.AddText("Open in browser", keys.CmdOrCtrl("b"), func(*menu.CallbackData) {
-		if w.page != "" {
-			runtime.BrowserOpenURL(w.ctx, w.page)
+		if page, _ := w.signedIn(); page != "" {
+			runtime.BrowserOpenURL(w.ctx, page)
 		}
 	})
 	if goruntime.GOOS != "darwin" {

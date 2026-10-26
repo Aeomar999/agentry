@@ -116,11 +116,15 @@ Feature: Signing in
   Scenario: The desktop app starts Agentry when none is running
     # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne and TestEnsureListensOnThisComputerByDefault
     # the data folder, default repo, binary, host and port: cmd/agentry-desktop/desktop_test.go TestLaunchOptions and TestTheAgentryBinaryIsNextToTheApp
+    # started only when the start page asks: TestTheAppStartsAgentryWhenTheStartPageAsks, TestStopBeforeStartStartsNothing, TestStartPageAsksTheAppToStartAgentry and TestStartPageGoesWhereTheAppSays
     # docs/decisions.md, 2026-10-26
     Given no Agentry answering from the data folder
     When the user opens the desktop app
     Then it starts the agentry binary beside it as agentry serve, exactly once, on 127.0.0.1 from port 7800
     And the server uses the same data folder and default repo as Start Agentry, and the default repo is made if it is missing: yes
+    And the server starts only once the window's start page asks for it, and the page then goes on to Agentry's page signed in: yes
+    Given the app quits before its start page asks
+    Then no server is started, then or later
 
   @SIGNIN-09 @user @test
   Scenario: The desktop app uses an Agentry that is already running
@@ -160,11 +164,12 @@ Feature: Signing in
 
   @SIGNIN-12 @user @manual
   Scenario: The desktop app shows the board signed in, with no browser
-    # cmd/agentry-desktop/main.go, the start page in cmd/agentry-desktop/desktop.go startPage
+    # cmd/agentry-desktop/main.go, the start page in cmd/agentry-desktop/desktop.go startPage and startReply
     # docs/decisions.md, 2026-10-26
     Given the desktop app built for this computer, with the agentry binary beside it
     When the user opens it
-    Then a window titled exactly "Agentry" shows the Tasks board, signed in, and no browser opens
+    Then the window shows at once, reading "Starting Agentry…" until Agentry answers: yes
+    And a window titled exactly "Agentry" shows the Tasks board, signed in, and no browser opens
     And the window and the app carry the Agentry mark: yes
     Given Agentry did not start, such as the agentry binary missing beside the app
     Then the window says why Agentry did not start, with the token hidden
@@ -180,11 +185,14 @@ Feature: Signing in
 
   @SIGNIN-14 @user @manual
   Scenario: Closing the desktop app's window quits it, and a second launch shows the first
-    # cmd/agentry-desktop/main.go options, SingleInstanceLock
+    # cmd/agentry-desktop/main.go options, SingleInstanceLock, OnShutdown and startup; cmd/agentry-desktop/desktop.go agentry.stop
     # docs/decisions.md, 2026-10-26
     Given the desktop app open, on Linux, Windows or a Mac
     When the user closes its window
     Then the app quits, and a server it started stops with it: yes
+    When the app is ended with SIGINT or SIGTERM instead
+    Then the app quits, and a server it started stops with it: yes
     Given the desktop app open
-    When the user opens it again
+    When the user opens it again, even after `agentry stop`, or opens it twice at once
     Then no second window or app is started, and the first window is shown
+    And the second launch starts no server, and none is left running without an app: yes

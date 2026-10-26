@@ -606,7 +606,7 @@ Feature: Security
     Then the token is hidden in serve.log, in the app's log on stderr and on the start page, plain or URL-encoded: yes
     And a token written across two writes is hidden too: yes
     And the scripts the app runs in the page hold no token
-    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestStartPageHidesTheTokenInAnError and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
+    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestStartReplyHidesTheTokenInAnError, TestStartPageAsksTheAppToStartAgentry and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
 
   @SEC-70 @manual
   Scenario: The desktop app's window title never holds the token
@@ -627,4 +627,5 @@ Feature: Security
     Given the desktop app's window showing a page from another site, as a script on a page could navigate there
     When the page finishes loading
     Then the window goes back to Agentry's page, without the token in the link, and nothing is sent to the app: yes
-    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOtherPagesBackToAgentry; docs/decisions.md, 2026-10-26
+    And it goes back even when the page sets a global of its own, as only the app's start page, by its address, is left alone: yes
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOtherPagesBackToAgentry and TestPageScriptLeavesTheStartPageAlone; docs/decisions.md, 2026-10-26

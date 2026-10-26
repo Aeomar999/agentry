@@ -13,10 +13,12 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gitlab.com/dev.chempa/agentry/internal/launch"
 )
@@ -59,28 +61,133 @@ func originOf(link string) string {
 	return u.Scheme + "://" + u.Host
 }
 
+// agentry is the Agentry the window shows. It is found or started once,
+// when the start page asks: after Wails' single-instance check, which ends
+// a second launch before then, so that launch never starts a server.
+type agentry struct {
+	launch launch.Options
+	token  func() string
+
+	starting, stopping sync.Once
+
+	mu           sync.Mutex
+	running      *launch.Agentry
+	failed       error
+	page, origin string // Agentry's signed-in page and its origin; empty until it answers
+}
+
+// serve is the app's own pages: the start page, and at startPath the
+// answer once Agentry answers.
+func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Cache-Control", "no-store")
+	if r.URL.Path != startPath {
+		rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+		rw.Write(startPage())
+		return
+	}
+	a.start()
+	a.mu.Lock()
+	reply := startReply(a.page, a.failed, a.token())
+	a.mu.Unlock()
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Write(reply)
+}
+
+// start finds the Agentry running from the data folder, or starts one, the
+// first time it is called; later calls wait for that.
+func (a *agentry) start() {
+	a.starting.Do(func() {
+		running, err := launch.Ensure(a.launch)
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		a.running, a.failed = running, err
+		if err == nil {
+			a.page = launch.PageURL(running.Client)
+			a.origin = originOf(a.page)
+		}
+	})
+}
+
+// stop stops the server if the app started it, once, on every way out. It
+// first waits for a start under way, and no server starts after it.
+func (a *agentry) stop() {
+	a.stopping.Do(func() {
+		a.starting.Do(func() {})
+		a.mu.Lock()
+		running := a.running
+		a.mu.Unlock()
+		if running != nil {
+			running.Stop() // only a server this app started
+		}
+	})
+}
+
+// signedIn is Agentry's signed-in page and its origin, once it answers.
+func (a *agentry) signedIn() (page, origin string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.page, a.origin
+}
+
+// startURL is where Wails v2 serves the app's own pages on goos.
+func startURL(goos string) string {
+	if goos == "windows" {
+		return "http://wails.localhost/"
+	}
+	return "wails://wails/"
+}
+
+// startPath is the app's own address the start page asks to start Agentry.
+const startPath = "/agentry-desktop/start"
+
 var startTemplate = template.Must(template.New("start").Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Agentry</title>
 <style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;height:100vh;background:#fff;color:#111}
 @media (prefers-color-scheme:dark){body{background:#111;color:#eee}}</style></head>
-<body>{{if .Failed}}<p>Agentry didn't start: {{.Failed}}</p>
-{{else}}<p>Opening Agentry…</p>
-<script>window.agentryStart = true; location.replace({{.Page}});</script>{{end}}</body></html>
+<body><p id="status">Starting Agentry…</p>
+<script>
+const say = (text) => { document.getElementById("status").textContent = "Agentry didn't start: " + text; };
+fetch({{.}}).then((reply) => reply.json()).then((started) => {
+  if (started.page) location.replace(started.page); else say(started.failed);
+}, say);
+</script></body></html>
 `))
 
-// startPage is the page the window opens on, served by the app itself: it
-// goes on to Agentry's page, signed in, or says why Agentry didn't start,
-// with the token hidden.
-func startPage(page string, failed error, token string) []byte {
-	var data struct{ Page, Failed string }
-	if failed != nil {
-		data.Failed = launch.Redact(failed.Error(), token)
-	} else {
-		data.Page = page
-	}
+// startPage is the page the window opens on, served by the app itself. It
+// asks the app at startPath to start Agentry, then goes on to Agentry's
+// page, signed in, or says why Agentry didn't start.
+func startPage() []byte {
 	var out bytes.Buffer
-	startTemplate.Execute(&out, data)
+	startTemplate.Execute(&out, startPath)
 	return out.Bytes()
+}
+
+// startReply is the app's answer at startPath: Agentry's page, signed in,
+// or why Agentry didn't start, with the token hidden.
+func startReply(page string, failed error, token string) []byte {
+	var reply struct {
+		Page   string `json:"page,omitempty"`
+		Failed string `json:"failed,omitempty"`
+	}
+	if failed != nil {
+		reply.Failed = launch.Redact(failed.Error(), token)
+	} else {
+		reply.Page = page
+	}
+	data, _ := json.Marshal(reply)
+	return data
+}
+
+// bindingsOrigins are the origins whose pages may send the app linkEvent.
+// Wails fixes them before the window opens, but Agentry starts after, so
+// they are any port of localhost, where a server the app starts serves,
+// and running, the origin of the server answering at launch, if any.
+func bindingsOrigins(running string) string {
+	origins := "http://localhost:*"
+	if running != "" {
+		origins += "," + running
+	}
+	return origins
 }
 
 // linkEvent is the event the page sends with a link that leaves Agentry.
@@ -88,13 +195,13 @@ const linkEvent = "agentry:link"
 
 // pageScript runs in the window after every page load. On Agentry's page it
 // sets the zoom and sends links that leave Agentry's origin, clicked or
-// opened with window.open, to the app as linkEvent; a new window on
-// Agentry's own origin opens in this one. Any other page but the app's
-// start page goes back to Agentry. It holds no token.
-func pageScript(origin string, zoom float64) string {
+// opened with window.open, to the app as linkEvent; a new window on Agentry's own origin opens in this one. Any
+// other page but the app's start page, at start, goes back to Agentry. It
+// holds no token.
+func pageScript(start, origin string, zoom float64) string {
 	return fmt.Sprintf(`(() => {
   const origin = %s;
-  if (window.agentryStart) return;
+  if (location.href.startsWith(%s)) return;
   if (location.origin !== origin) { location.replace(origin + "/"); return; }
   %s
   if (window.agentryDesktop) return;
@@ -118,7 +225,7 @@ func pageScript(origin string, zoom float64) string {
     if (outside(to)) send(to); else location.assign(to);
     return null;
   };
-})();`, quoted(origin), zoomScript(zoom), quoted(linkEvent))
+})();`, quoted(origin), quoted(start), zoomScript(zoom), quoted(linkEvent))
 }
 
 // reloadScript reloads the page; pageScript sets the zoom again after.
