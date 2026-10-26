@@ -517,7 +517,7 @@ Feature: Operations
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
     # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
-    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./packaging
+    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./packaging; desktop = ui, then go run ./packaging desktop
     # Steps:
     # 1. Run make -n all, make -n test and make -n package and read the commands.
     # 2. Run make build and check bin/agentry.
@@ -531,6 +531,8 @@ Feature: Operations
     Then it runs go vet, go test and the UI's lint, and fails if any fails: yes
     When make package runs
     Then it builds the UI first and then runs the packaging program: yes
+    When make desktop runs
+    Then it builds the UI first and then runs the packaging program's desktop mode: yes
     # README.md, Work on it; Makefile
 
   @OPS-28 @manual
@@ -591,6 +593,29 @@ Feature: Operations
     When go run ./packaging runs
     Then it refuses, saying to run it from the repo's root with the page built, and exits 1
     # README.md, Make a release; packaging/main.go
+
+  @OPS-43 @manual
+  Scenario: make desktop packages the desktop app with its server for Linux and Windows
+    # packaging/desktop.go runDesktop: release/agentry-desktop-<version>-linux-amd64.tar.gz and release/agentry-desktop-<version>-windows-amd64.zip, the version from git describe as in make package
+    # packaging/desktop.go packLinuxDesktop and packWindowsDesktop: the folder Agentry, with the app beside the server, where cmd/agentry-desktop/desktop.go binaryNextTo looks; README.txt from packaging/files/desktop-README.txt
+    # packaging/desktop.go buildDesktop: the server as in make package (buildAgentry, CGO_ENABLED=0); the Windows app with -H=windowsgui and the icon in cmd/agentry-desktop/rsrc_windows_amd64.syso
+    # Steps:
+    # 1. On a clean checkout of the tagged commit, on Linux with libwebkit2gtk-4.1-dev and libgtk-3-dev, run make desktop.
+    # 2. List release/, run tar tvzf on the .tar.gz and unzip -l on the zip.
+    # 3. Run file on agentry-desktop.exe, and go run github.com/tc-hib/go-winres@v0.3.3 extract on it.
+    # 4. Make a change in the tree and run make desktop again.
+    Given a clean checkout at tag v0.1.0 on a linux/amd64 machine with the UI built
+    When make desktop runs
+    Then release holds 2 more files: agentry-desktop-v0.1.0-linux-amd64.tar.gz and agentry-desktop-v0.1.0-windows-amd64.zip
+    And the .tar.gz holds 1 folder, Agentry, with agentry-desktop and agentry, both executable, agentry.desktop, agentry.png and README.txt
+    And the zip holds 1 folder, Agentry, with agentry-desktop.exe, agentry.exe and README.txt, the README with Windows line ends
+    And the server in each is built with CGO_ENABLED=0, as make package builds it: yes
+    And agentry-desktop.exe is a GUI program, so no console opens beside its window, and it carries the Agentry icon: yes
+    And the zips make package makes are the same as before: yes
+    Given a tree with changes
+    When make desktop runs
+    Then the version in both names ends in -dirty: yes
+    # README.md, Desktop app and Make a release; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text
 
   @OPS-30 @manual
   Scenario: The deploy target runs one image from dev, pinned to one node, with its home as a volume

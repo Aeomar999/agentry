@@ -32,6 +32,15 @@ Feature: Compatibility
     And the other builds stay next to agentry: they are what the server hands every machine that joins as a worker
     # README.md, What Start Agentry does (The other programs in the folder); packaging/main.go lines 98-142; packaging/files/README.txt; no test
 
+  @COMPAT-28 @manual
+  Scenario: The desktop app for Linux and Windows is built on one Linux machine
+    Given a linux/amd64 machine with Go, git, libwebkit2gtk-4.1-dev and libgtk-3-dev, and no C cross compiler
+    When the user runs make desktop
+    Then the Linux app is built here with cgo, for its WebKitGTK window, and the Windows app with CGO_ENABLED=0, as WebView2 needs no C: yes
+    And on any other kind of machine the command is refused with "the Linux desktop app is built on linux/amd64"
+    And make desktop builds no macOS app: it is built on a Mac
+    # README.md, Make a release; packaging/desktop.go runDesktop and buildDesktop; no test
+
   @COMPAT-04 @manual
   Scenario: Start Agentry and Stop Agentry do the same on every system
     Given the Agentry folder from a zip on a Mac, on Windows and on Linux, with git and Claude Code installed

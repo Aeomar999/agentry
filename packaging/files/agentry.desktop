@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Agentry
+Comment=Agentry's page in a window of its own
+Exec=agentry-desktop
+Icon=agentry
+Terminal=false
+Categories=Development;
+StartupWMClass=Agentry

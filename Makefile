@@ -2,7 +2,7 @@
 # Node is needed only for `make ui`; the built UI is committed, so
 # `go build` and `go install` work without it.
 
-.PHONY: all ui build workers test spec package
+.PHONY: all ui build workers test spec package desktop
 
 all: ui build workers
 
@@ -35,3 +35,8 @@ spec:
 # needs to run Agentry (Start Agentry opens it in the browser).
 package: ui
 	go run ./packaging
+
+# The desktop app with the server it starts, in release/: a .tar.gz for
+# Linux, built on Linux, and a zip for Windows (see README, Make a release).
+desktop: ui
+	go run ./packaging desktop
