@@ -16,6 +16,15 @@ func Detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP, HideWindow: true}
 }
 
+// NoConsole starts the command with a console that is never shown, for a
+// GUI program, which has no console of its own to share: otherwise Windows
+// opens a window for it, and closing that window ends the command. The
+// command stays the caller's, and the programs it starts share its hidden
+// console.
+func NoConsole(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
+}
+
 // Alive says whether a process is running.
 func Alive(pid int) bool {
 	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))

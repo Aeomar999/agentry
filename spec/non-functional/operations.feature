@@ -599,6 +599,7 @@ Feature: Operations
     # packaging/desktop.go runDesktop: release/agentry-desktop-<version>-linux-amd64.tar.gz and release/agentry-desktop-<version>-windows-amd64.zip, the version from git describe as in make package
     # packaging/desktop.go packLinuxDesktop and packWindowsDesktop: the folder Agentry, with the app beside the server, where cmd/agentry-desktop/desktop.go binaryNextTo looks; README.txt from packaging/files/desktop-README.txt
     # packaging/desktop.go buildDesktop: the server as in make package (buildAgentry, CGO_ENABLED=0); the Windows app with -H=windowsgui and the icon in cmd/agentry-desktop/rsrc_windows_amd64.syso
+    # internal/launch/launch.go Start calls procs.NoConsole: on Windows CREATE_NO_WINDOW (internal/procs/procs_windows.go), nothing elsewhere
     # Steps:
     # 1. On a clean checkout of the tagged commit, on Linux with libwebkit2gtk-4.1-dev and libgtk-3-dev, run make desktop.
     # 2. List release/, run tar tvzf on the .tar.gz and unzip -l on the zip.
@@ -610,7 +611,7 @@ Feature: Operations
     And the .tar.gz holds 1 folder, Agentry, with agentry-desktop and agentry, both executable, agentry.desktop, agentry.png and README.txt
     And the zip holds 1 folder, Agentry, with agentry-desktop.exe, agentry.exe and README.txt, the README with Windows line ends
     And the server in each is built with CGO_ENABLED=0, as make package builds it: yes
-    And agentry-desktop.exe is a GUI program, so no console opens beside its window, and it carries the Agentry icon: yes
+    And agentry-desktop.exe is a GUI program with the Agentry icon, and it starts agentry.exe with a hidden console, so no console window opens beside its window: yes
     And the zips make package makes are the same as before: yes
     Given a tree with changes
     When make desktop runs

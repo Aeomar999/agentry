@@ -127,6 +127,7 @@ func Start(agentry, dataDir, repo, address string, extra []string, output io.Wri
 	// A process serve starts may keep its output open after serve exits;
 	// don't wait on that, or Exited and Stop never return.
 	cmd.WaitDelay = 2 * time.Second
+	procs.NoConsole(cmd) // the desktop app has no console to lend it
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

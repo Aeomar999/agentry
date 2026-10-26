@@ -12,6 +12,9 @@ import (
 // that started it and that program's terminal.
 func Detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
 
+// NoConsole does nothing: only Windows opens a console window for a command.
+func NoConsole(cmd *exec.Cmd) {}
+
 // Alive says whether a process is running.
 func Alive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
