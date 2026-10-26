@@ -7,6 +7,10 @@
 // without a build tag hold what needs no window, so they test without cgo.
 package main
 
+// The Windows exe's icon and manifest, linked in by go build. Run go generate
+// again when build/appicon.png changes.
+//go:generate go run github.com/tc-hib/go-winres@v0.3.3 simply --arch amd64 --icon build/appicon.png --manifest gui --product-name Agentry --file-description Agentry --original-filename agentry-desktop.exe
+
 import (
 	"bytes"
 	"encoding/json"
