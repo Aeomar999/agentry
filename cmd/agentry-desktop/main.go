@@ -113,19 +113,29 @@ func (w *window) options(running string) *options.App {
 }
 
 // quitOnSignal quits the app on the first SIGINT or SIGTERM, from launch
-// on. Wails quits on them too, but only once its window loop runs; a quit
-// before then is lost, so loaded quits again. A second signal ends the app
-// the default way, as a quit can be slow: Reset drops Wails' handler too.
-// By then a server under way has been told to stop.
+// on, and ends it at once on a second, as a quit can be slow. Wails quits on
+// a signal too, but only once its window loop runs, so loaded quits again
+// after an earlier one; and Wails reads one signal only, so the second is
+// read here, whichever handler was set up first. By the second, a server
+// under way has been told to stop.
 func (w *window) quitOnSignal() {
-	signals := make(chan os.Signal, 1)
+	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-signals
 		w.markQuit()
-		signal.Reset(os.Interrupt, syscall.SIGTERM)
-		w.quit()
+		go w.quit()
+		os.Exit(exitCode(<-signals))
 	}()
+}
+
+// exitCode is a shell's for a process the signal s ended: 130 for SIGINT,
+// 143 for SIGTERM.
+func exitCode(s os.Signal) int {
+	if s == os.Interrupt {
+		return 128 + int(syscall.SIGINT)
+	}
+	return 128 + int(syscall.SIGTERM)
 }
 
 // quit stops the server if the app started it, starts none after, and

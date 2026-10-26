@@ -190,8 +190,8 @@ Feature: Signing in
 
   @SIGNIN-14 @user @manual
   Scenario: Closing the desktop app's window quits it, and a second launch shows the first
-    # cmd/agentry-desktop/main.go options, SingleInstanceLock, OnShutdown, quitOnSignal and loaded; cmd/agentry-desktop/desktop.go agentry.stop and markQuit
-    # a quit before or during a start: internal/launch/launch_test.go TestEnsureStartsNothingAfterQuit and TestQuitStopsTheServerEnsureWaitsFor; cmd/agentry-desktop/desktop_test.go TestAQuitReachesAStartUnderWay and TestStartReplyAfterAQuitSaysTheAppIsQuitting
+    # cmd/agentry-desktop/main.go options, SingleInstanceLock, OnShutdown, quitOnSignal, exitCode and loaded; cmd/agentry-desktop/desktop.go agentry.stop and markQuit
+    # a quit before or during a start: internal/launch/launch_test.go TestEnsureStartsNothingAfterQuit and TestQuitStopsTheServerEnsureWaitsFor; cmd/agentry-desktop/desktop_test.go TestAQuitClosesLaunchQuitOnce and TestStartReplyAfterAQuitSaysTheAppIsQuitting
     # docs/decisions.md, 2026-10-26
     Given the desktop app open, on Linux, Windows or a Mac
     When the user closes its window
@@ -200,7 +200,8 @@ Feature: Signing in
     Then the app quits, and a server it started stops with it: yes
     And if the signal comes before the start page asks, no server is started: yes
     And if it comes while a start is under way, the server being started is stopped at once: yes
-    And a second SIGINT or SIGTERM while it quits ends the app at once, and leaves no server it started running
+    And a second SIGINT or SIGTERM while it quits ends the app at once, with exit status 130 or 143, even when the first came before its window opened: yes
+    And a server it started has been told to stop by then: yes
     Given the desktop app open
     When the user opens it again, even after `agentry stop`, or opens it twice at once
     Then no second window or app is started, and the first window is shown

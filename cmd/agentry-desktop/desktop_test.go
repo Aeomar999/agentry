@@ -170,8 +170,8 @@ func TestStopBeforeStartStartsNothing(t *testing.T) {
 	}
 }
 
-// A quit reaches a start under way, which then stops its server at once.
-func TestAQuitReachesAStartUnderWay(t *testing.T) {
+// A quit closes launch.Options.Quit, once however often it is marked.
+func TestAQuitClosesLaunchQuitOnce(t *testing.T) {
 	a := newAgentry(launchNowhere(t), func() string { return "" })
 	a.markQuit()
 	a.markQuit()
