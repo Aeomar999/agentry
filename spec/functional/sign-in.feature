@@ -151,11 +151,12 @@ Feature: Signing in
 
   @SIGNIN-11 @user @test
   Scenario: Links that leave Agentry open in the system browser, not the window
-    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp and TestLinksFollowTheRoute; internal/launch/launch_test.go TestRoute
+    # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp, TestLinksFollowTheRoute and TestOpensItselfWhereWailsRefuses; internal/launch/launch_test.go TestRoute
     # docs/decisions.md, 2026-10-26
     Given Agentry's page in the desktop app's window
     When the user clicks a link to another site, such as GitHub or the docs, or a mail link, with the left or middle button, or the page opens one with window.open
     Then the window does not follow it, and the system browser opens it: yes
+    And the browser opens it even when it holds characters such as parentheses, ! or ~: yes
     When the user right-clicks a link to another site
     Then the browser does not open it, and nothing is sent to the app
     And a link to the same host on another port counts as another site: yes

@@ -216,6 +216,29 @@ func TestLinksFollowTheRoute(t *testing.T) {
 	}
 }
 
+// The app opens a link itself only where Wails would refuse it for its
+// shell characters; Wails opens the rest, and refuses the unprintable.
+func TestOpensItselfWhereWailsRefuses(t *testing.T) {
+	for link, want := range map[string]bool{
+		"https://github.com/francischempa/agentry":                false,
+		"mailto:someone@example.com":                              false,
+		"https://en.wikipedia.org/wiki/Go_(programming_language)": true,
+		"https://example.com/#!/docs":                             true,
+		"https://example.com/~francis/notes":                      true,
+		"https://example.com/?ids[]=1&ids[]=2":                    true,
+		"https://example.com/a;b":                                 true,
+		"https://example.com/caf\u00e9?q=(x)":                     true, // Wails encodes the é, and refuses only the parentheses
+		"https://example.com/?q=(x)\u00a0":                        false,
+		"https://example.com/(x)\n":                               false,
+		"https://example.com/?q=(x) y":                            false,
+		"mailto:someone@example.com?subject=Agentry%20(task-3)":   true,
+	} {
+		if got := opensItself(link); got != want {
+			t.Errorf("opensItself(%q) = %v, want %v", link, got, want)
+		}
+	}
+}
+
 func TestLogHidesTheToken(t *testing.T) {
 	var out bytes.Buffer
 	log := redactedLog{w: &out, token: func() string { return "s3cret" }}

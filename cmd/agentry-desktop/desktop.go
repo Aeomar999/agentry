@@ -287,6 +287,30 @@ func (l links) follow(data ...any) {
 	}
 }
 
+// wailsRefuses are the characters Wails v2's BrowserOpenURL refuses in a
+// link, for fear of a shell: it logs an error and opens nothing, though
+// links to GitHub or docs can hold them.
+const wailsRefuses = ";|`$\\<>*{}[]()~! \t\n\r"
+
+// opensItself says whether the app opens link in the system browser itself
+// instead of through Wails: when Wails would refuse it for those characters
+// alone. pkg/browser hands the link to the browser as one argument, with no
+// shell. A link with control or other unprinted characters is left to
+// Wails, which refuses it.
+func opensItself(link string) bool {
+	u, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	link = u.String() // what Wails checks
+	for _, r := range link {
+		if r <= ' ' || r > '~' {
+			return false
+		}
+	}
+	return strings.ContainsAny(link, wailsRefuses)
+}
+
 // goScript is script that opens link in the window.
 func goScript(link string) string { return "location.assign(" + quoted(link) + ");" }
 

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/pkg/browser"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -134,12 +135,24 @@ func (w *window) loaded(ctx context.Context) {
 	w.listen.Do(func() {
 		follow := links{
 			origin:  origin,
-			browser: func(link string) { runtime.BrowserOpenURL(ctx, link) },
+			browser: w.openInBrowser,
 			window:  func(link string) { runtime.WindowExecJS(ctx, goScript(link)) },
 		}
 		runtime.EventsOn(ctx, linkEvent, follow.follow)
 	})
 	runtime.WindowExecJS(ctx, pageScript(startURL(goruntime.GOOS), origin, w.zoomLevel()))
+}
+
+// openInBrowser opens link in the system browser: through Wails, or
+// itself where Wails would refuse the link (see opensItself).
+func (w *window) openInBrowser(link string) {
+	if !opensItself(link) {
+		runtime.BrowserOpenURL(w.ctx, link)
+		return
+	}
+	if err := browser.OpenURL(link); err != nil {
+		w.log.Error("Unable to open default system browser")
+	}
 }
 
 func (w *window) menu() *menu.Menu {
