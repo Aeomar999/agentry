@@ -154,8 +154,10 @@ Feature: Signing in
     # cmd/agentry-desktop/desktop_test.go TestPageScriptSendsOutsideLinksToTheApp and TestLinksFollowTheRoute; internal/launch/launch_test.go TestRoute
     # docs/decisions.md, 2026-10-26
     Given Agentry's page in the desktop app's window
-    When the user clicks a link to another site, such as GitHub or the docs, or a mail link, or the page opens one with window.open
+    When the user clicks a link to another site, such as GitHub or the docs, or a mail link, with the left or middle button, or the page opens one with window.open
     Then the window does not follow it, and the system browser opens it: yes
+    When the user right-clicks a link to another site
+    Then the browser does not open it, and nothing is sent to the app
     And a link to the same host on another port counts as another site: yes
     When the user clicks a link within Agentry, or one that opens a new window on Agentry's own address
     Then it opens in the same window, and no browser opens

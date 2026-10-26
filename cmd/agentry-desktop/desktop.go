@@ -197,7 +197,8 @@ const linkEvent = "agentry:link"
 
 // pageScript runs in the window after every page load. On Agentry's page it
 // sets the zoom and sends links that leave Agentry's origin, clicked or
-// opened with window.open, to the app as linkEvent; a new window on Agentry's own origin opens in this one. Any
+// opened with window.open or with the middle button, to the app as
+// linkEvent; a new window on Agentry's own origin opens in this one. Any
 // other page but the app's start page, at start, goes back to Agentry. It
 // holds no token.
 func pageScript(start, origin string, zoom float64) string {
@@ -221,7 +222,7 @@ func pageScript(start, origin string, zoom float64) string {
     else if (a.target && a.target !== "_self") { event.preventDefault(); location.assign(a.href); }
   };
   document.addEventListener("click", follow, true);
-  document.addEventListener("auxclick", follow, true);
+  document.addEventListener("auxclick", (event) => { if (event.button === 1) follow(event); }, true);
   window.open = (link) => {
     const to = new URL(link || "", location.href).href;
     if (outside(to)) send(to); else location.assign(to);

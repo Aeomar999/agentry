@@ -268,6 +268,7 @@ const prevented = [
   click("/tasks/task-3"),
   click("/tasks/task-3/workspace", "_blank"),
   click("mailto:someone@example.com", "", "auxclick", 1),
+  click("https://elsewhere.example.com/menu", "", "auxclick", 2),
 ];
 if (window.open !== undefined && listeners.click) { window.open("https://docs.example.com/"); window.open("/tasks/task-4", "_blank"); }
 console.log(JSON.stringify({ zoom: document.documentElement.style.zoom, sent, assigned, replaced, prevented }));
@@ -303,7 +304,8 @@ func runPage(t *testing.T, at string, zoom float64) pageRun {
 
 // On Agentry's page, links that leave it go to the app, never followed in
 // the window; Agentry's own links stay, and a new window on Agentry's
-// origin opens in this one. The zoom is set.
+// origin opens in this one. A right click is left to the page. The zoom is
+// set.
 func TestPageScriptSendsOutsideLinksToTheApp(t *testing.T) {
 	run := runPage(t, origin+"/tasks", 1.25)
 	var sent []string
@@ -320,7 +322,7 @@ func TestPageScriptSendsOutsideLinksToTheApp(t *testing.T) {
 	if want := []string{origin + "/tasks/task-3/workspace", origin + "/tasks/task-4"}; !slices.Equal(run.Assigned, want) {
 		t.Errorf("opened in the window %q, want %q", run.Assigned, want)
 	}
-	if want := []bool{true, false, true, true}; !slices.Equal(run.Prevented, want) {
+	if want := []bool{true, false, true, true, false}; !slices.Equal(run.Prevented, want) {
 		t.Errorf("prevented %v, want %v", run.Prevented, want)
 	}
 	if run.Zoom != "1.25" || len(run.Replaced) != 0 {
