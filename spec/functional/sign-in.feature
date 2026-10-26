@@ -184,6 +184,8 @@ Feature: Signing in
     When the user picks Reload, Zoom in, Zoom out, Actual size, Open in browser and Quit, or presses Ctrl (Cmd on a Mac) with R, =, -, 0, B and Q
     Then each does what it says, and Open in browser opens the same page signed in in the default browser: yes
     And the zoom is kept after Reload: yes
+    When the user right-clicks in the window
+    Then no webview menu is shown, and copy and paste still work from the keyboard: yes
 
   @SIGNIN-14 @user @manual
   Scenario: Closing the desktop app's window quits it, and a second launch shows the first

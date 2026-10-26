@@ -90,18 +90,17 @@ type window struct {
 // running is the origin of the server answering now, if any.
 func (w *window) options(running string) *options.App {
 	return &options.App{
-		Title:                    "Agentry",
-		Width:                    1280,
-		Height:                   860,
-		MinWidth:                 480,
-		MinHeight:                360,
-		AssetServer:              &assetserver.Options{Handler: http.HandlerFunc(w.serve)},
-		Menu:                     w.menu(),
-		OnStartup:                w.startup,
-		OnDomReady:               w.loaded,
-		OnShutdown:               func(context.Context) { w.stop() },
-		EnableDefaultContextMenu: true,
-		BindingsAllowedOrigins:   bindingsOrigins(running), // so the page's links reach linkEvent
+		Title:                  "Agentry",
+		Width:                  1280,
+		Height:                 860,
+		MinWidth:               480,
+		MinHeight:              360,
+		AssetServer:            &assetserver.Options{Handler: http.HandlerFunc(w.serve)},
+		Menu:                   w.menu(),
+		OnStartup:              w.startup,
+		OnDomReady:             w.loaded,
+		OnShutdown:             func(context.Context) { w.stop() },
+		BindingsAllowedOrigins: bindingsOrigins(running), // so the page's links reach linkEvent
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "agentry-desktop",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
