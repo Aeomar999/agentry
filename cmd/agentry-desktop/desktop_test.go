@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/pkg/browser"
 
 	"gitlab.com/dev.chempa/agentry/internal/launch"
 )
@@ -160,6 +163,22 @@ func TestBindingsOrigins(t *testing.T) {
 	}
 	if got := bindingsOrigins("https://studio.example.com:7800"); got != "http://localhost:*,https://studio.example.com:7800" {
 		t.Errorf("running: %s", got)
+	}
+}
+
+// What the command that opens the browser prints goes through the
+// redactor, not to the app's stdout and stderr.
+func TestBrowserOutputHidesTheToken(t *testing.T) {
+	stdout, stderr := browser.Stdout, browser.Stderr
+	t.Cleanup(func() { browser.Stdout, browser.Stderr = stdout, stderr })
+	var out bytes.Buffer
+	output := hideTokenInBrowserOutput(&out, func() string { return "s3cret" })
+	if browser.Stdout != output || browser.Stderr != output {
+		t.Fatalf("browser output goes to %v and %v", browser.Stdout, browser.Stderr)
+	}
+	io.WriteString(browser.Stderr, "xdg-open: no method available for opening '"+origin+"/?token=s3cret'\n")
+	if got, want := out.String(), "xdg-open: no method available for opening '"+origin+"/?token="+launch.Hidden+"'\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

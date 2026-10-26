@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pkg/browser"
+
 	"gitlab.com/dev.chempa/agentry/internal/launch"
 )
 
@@ -290,6 +292,15 @@ func goScript(link string) string { return "location.assign(" + quoted(link) + "
 func quoted(s string) string {
 	data, _ := json.Marshal(s)
 	return string(data)
+}
+
+// hideTokenInBrowserOutput sends what the command that opens the system
+// browser prints, which can hold the signed-in link, to w with the token
+// hidden; it would go to the app's stdout and stderr.
+func hideTokenInBrowserOutput(w io.Writer, token func() string) *launch.Redactor {
+	output := &launch.Redactor{W: w, Token: token}
+	browser.Stdout, browser.Stderr = output, output
+	return output
 }
 
 // redactedLog is Wails' logger: each message on its own line to w, with the

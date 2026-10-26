@@ -52,6 +52,8 @@ func run() int {
 	output := &launch.Redactor{W: serveLog, Token: token}
 	defer output.Close()
 	o.Output = output
+	browserOutput := hideTokenInBrowserOutput(os.Stderr, token)
+	defer browserOutput.Close()
 
 	// Production Wails doesn't handle these, so it would end without
 	// stopping the server; quit the window instead.

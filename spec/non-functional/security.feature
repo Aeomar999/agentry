@@ -602,11 +602,11 @@ Feature: Security
   @SEC-69 @test
   Scenario: The desktop app never shows the UI token in its output or logs
     Given the desktop app, with a server that prints its signed-in link and the bare token
-    When the server writes its output, Wails logs a message holding the link, or Agentry fails to start with the link in the error
-    Then the token is hidden in serve.log, in the app's log on stderr and on the start page, plain or URL-encoded: yes
+    When the server writes its output, Wails logs a message holding the link, the command that opens the system browser prints the link, or Agentry fails to start with the link in the error
+    Then the token is hidden in serve.log, in the app's log and the browser command's output on stderr, and on the start page, plain or URL-encoded: yes
     And a token written across two writes is hidden too: yes
     And the scripts the app runs in the page hold no token
-    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestStartReplyHidesTheTokenInAnError, TestStartPageAsksTheAppToStartAgentry and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
+    # internal/launch/launch_test.go TestEnsureStartsAServerAndStopsOnlyThatOne, TestRedactHidesTheToken and TestRedactorHidesATokenSplitAcrossWrites; cmd/agentry-desktop/desktop_test.go TestLogHidesTheToken, TestBrowserOutputHidesTheToken, TestStartReplyHidesTheTokenInAnError, TestStartPageAsksTheAppToStartAgentry and TestScriptsHoldNoToken; docs/decisions.md, 2026-10-26
 
   @SEC-70 @manual
   Scenario: The desktop app's window title never holds the token
