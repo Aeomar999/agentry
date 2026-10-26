@@ -13,8 +13,9 @@ import (
 const Hidden = "[hidden]"
 
 // tokenParam is a token= value in a link, plain or URL-encoded, which
-// serve prints before a reader may know the token.
-var tokenParam = regexp.MustCompile(`(?i)(token(?:=|%3D))[^&\s"'<>#]+`)
+// serve prints before a reader may know the token. A bracket after it
+// closes the text around the link, so it is kept.
+var tokenParam = regexp.MustCompile(`(?i)(token(?:=|%3D))[^&\s"'<>#()\[\]]+`)
 
 // Redact is text with the token hidden wherever it appears, as is or
 // URL-encoded, and with any token= value in a link hidden too.

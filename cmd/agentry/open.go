@@ -180,7 +180,7 @@ type pageLink struct{ label, url string }
 // network address when it listens on every interface. They are https when
 // the server serves it.
 func pageLinks(c client.Client) []pageLink {
-	signedIn := "/?token=" + c.Token
+	signedIn := launch.SignIn(c.Token)
 	links := []pageLink{{"This computer", launch.PageURL(c)}}
 	here, err := url.Parse(c.URL)
 	if err != nil {

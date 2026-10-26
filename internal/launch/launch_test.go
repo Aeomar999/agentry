@@ -67,6 +67,7 @@ func serveFake(args []string) {
 	os.WriteFile(filepath.Join(dataDir, "ui-token"), []byte(fakeToken+"\n"), 0o600)
 	client.Save(dataDir, client.Where{URL: page, Page: page, Listen: listener.Addr().String()})
 	fmt.Printf("Agentry is running. Open %s/?token=%s\n", page, fakeToken)
+	fmt.Printf("the token is %s\n", fakeToken) // only the Redactor's Token hides this one
 	http.Serve(listener, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("{}"))
 	}))
@@ -101,7 +102,7 @@ func TestEnsureReusesARunningServerAndLeavesItRunning(t *testing.T) {
 	client.Save(dataDir, client.Where{URL: running.URL, Page: running.URL})
 	os.WriteFile(filepath.Join(dataDir, "ui-token"), []byte("abc\n"), 0o600)
 
-	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Agentry: filepath.Join(t.TempDir(), "no-agentry"), Host: "127.0.0.1", Port: 7930})
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: filepath.Join(t.TempDir(), "no-agentry"), Host: "127.0.0.1", Port: 7930})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestEnsureStartsAServerAndStopsOnlyThatOne(t *testing.T) {
 	var output bytes.Buffer
 	shown := &Redactor{W: &output, Token: func() string { return readToken(dataDir) }}
 
-	agentry, err := Ensure(Options{DataDir: dataDir, Repo: repo, Agentry: self, Host: "127.0.0.1", Port: 7930, Output: shown})
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: repo, Binary: self, Host: "127.0.0.1", Port: 7930, Output: shown})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestEnsureStartsAServerAndStopsOnlyThatOne(t *testing.T) {
 		t.Error("the server still answers after Stop")
 	}
 	shown.Close()
-	if !strings.Contains(output.String(), "Agentry is running. Open http://127.0.0.1:") || strings.Contains(output.String(), "s3cr") {
+	if !strings.Contains(output.String(), "Agentry is running. Open http://127.0.0.1:") || !strings.Contains(output.String(), "the token is "+Hidden) || strings.Contains(output.String(), "s3cr") {
 		t.Errorf("output %q: want serve's line with no token", output.String())
 	}
 }
@@ -153,7 +154,7 @@ func TestEnsureStartsAServerAndStopsOnlyThatOne(t *testing.T) {
 func TestEnsureListensOnThisComputerByDefault(t *testing.T) {
 	t.Setenv(fakeServe, "serve")
 	self, _ := os.Executable()
-	agentry, err := Ensure(Options{DataDir: t.TempDir(), Repo: t.TempDir(), Agentry: self, Port: 7930})
+	agentry, err := Ensure(Options{DataDir: t.TempDir(), Repo: t.TempDir(), Binary: self, Port: 7930})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +169,7 @@ func TestStopDoesNotWaitForAProcessHoldingTheOutput(t *testing.T) {
 	t.Setenv(fakeServe, "grandchild")
 	self, _ := os.Executable()
 	dataDir := t.TempDir()
-	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Agentry: self, Host: "127.0.0.1", Port: 7930, Output: &bytes.Buffer{}})
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930, Output: &bytes.Buffer{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +227,7 @@ func TestEnsureUsesAServerAnotherLaunchStarted(t *testing.T) {
 			}
 		}()
 
-		agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Agentry: self, Host: "127.0.0.1", Port: 7930})
+		agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930})
 		winner.Close()
 		if err != nil {
 			t.Fatalf("same port %v: %v", samePort, err)
@@ -263,7 +264,7 @@ func TestEnsureSaysWhenTheServerDidNotStart(t *testing.T) {
 	t.Setenv(fakeServe, "fail")
 	self, _ := os.Executable()
 	began := time.Now()
-	if _, err := Ensure(Options{DataDir: t.TempDir(), Repo: t.TempDir(), Agentry: self, Host: "127.0.0.1", Port: 7930}); err == nil {
+	if _, err := Ensure(Options{DataDir: t.TempDir(), Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930}); err == nil {
 		t.Fatal("no error from a server that exited")
 	}
 	if waited := time.Since(began); waited > 10*time.Second {
@@ -345,6 +346,15 @@ func TestRedactHidesTheToken(t *testing.T) {
 	}
 	if got := Redact("Open http://localhost:7800/?token=abc&tab=1 now", ""); got != "Open http://localhost:7800/?token="+Hidden+"&tab=1 now" {
 		t.Errorf("an unknown token: %q", got)
+	}
+	for text, want := range map[string]string{
+		"(see http://localhost:7800/?token=abc)": "(see http://localhost:7800/?token=" + Hidden + ")",
+		"[link](http://localhost/?token=abc)":    "[link](http://localhost/?token=" + Hidden + ")",
+		"[http://localhost/?token=abc]":          "[http://localhost/?token=" + Hidden + "]",
+	} {
+		if got := Redact(text, ""); got != want {
+			t.Errorf("Redact(%q) = %q, want %q", text, got, want)
+		}
 	}
 }
 

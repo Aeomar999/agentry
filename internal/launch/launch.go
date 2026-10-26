@@ -32,9 +32,9 @@ func Running(dataDir string) (client.Client, bool) {
 	return c, c.Call("GET", "/api/config", nil, nil) == nil
 }
 
-// Wait waits up to within for a server to answer from this data folder.
-// It gives up early when gone closes, as when the server it waits for
-// exits; gone may be nil.
+// Wait is the server answering from this data folder, once it answers,
+// for as long as within. It gives up early when gone closes, as when the
+// server it waits for exits; gone may be nil.
 func Wait(dataDir string, within time.Duration, gone <-chan struct{}) (client.Client, bool) {
 	for deadline := time.Now().Add(within); time.Now().Before(deadline); {
 		if running, ok := Running(dataDir); ok {
@@ -186,11 +186,11 @@ func sameAddress(a, b string) bool {
 }
 
 // Options are where Ensure finds or starts Agentry: the data folder and
-// default repo, the agentry binary to start, the host (127.0.0.1 when
+// default repo, the path of the agentry binary to start, the host (127.0.0.1 when
 // empty) and first port it listens on, and where its output goes.
 type Options struct {
 	DataDir, Repo string
-	Agentry       string
+	Binary        string
 	Host          string
 	Port          int
 	Output        io.Writer
@@ -232,7 +232,7 @@ func Ensure(o Options) (*Agentry, error) {
 	if err != nil {
 		return nil, err
 	}
-	child, err := Start(o.Agentry, o.DataDir, o.Repo, address, nil, o.Output)
+	child, err := Start(o.Binary, o.DataDir, o.Repo, address, nil, o.Output)
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +250,14 @@ func Ensure(o Options) (*Agentry, error) {
 	return &Agentry{Client: running, child: child}, nil
 }
 
+// SignIn is the path that opens the page signed in with the token.
+func SignIn(token string) string { return "/?token=" + token }
+
 // PageURL is the link that opens a running server's page on this computer,
 // signed in: at localhost when the server is on this computer's loopback,
 // and https when the server serves it.
 func PageURL(c client.Client) string {
-	signedIn := "/?token=" + c.Token
+	signedIn := SignIn(c.Token)
 	here, err := url.Parse(c.URL)
 	if err != nil {
 		return c.PageURL(signedIn)
