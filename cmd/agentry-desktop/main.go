@@ -100,8 +100,8 @@ func (w *window) options(running string) *options.App {
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "agentry-desktop",
 			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
-				runtime.WindowUnminimise(w.ctx)
-				runtime.WindowShow(w.ctx)
+				runtime.WindowUnminimise(w.context())
+				runtime.WindowShow(w.context())
 			},
 		},
 		Logger:             w.log,
@@ -142,12 +142,16 @@ func exitCode(s os.Signal) int {
 // quits the window if it has opened.
 func (w *window) quit() {
 	w.stop()
-	w.mu.Lock()
-	ctx := w.ctx
-	w.mu.Unlock()
-	if ctx != nil {
+	if ctx := w.context(); ctx != nil {
 		runtime.Quit(ctx)
 	}
+}
+
+// context is the window's, once Wails has started it; nil before.
+func (w *window) context() context.Context {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.ctx
 }
 
 // startup keeps the window's context.
@@ -184,7 +188,7 @@ func (w *window) loaded(ctx context.Context) {
 func (w *window) openInBrowser(link string) {
 	encoded, itself := opensItself(link)
 	if !itself {
-		runtime.BrowserOpenURL(w.ctx, link)
+		runtime.BrowserOpenURL(w.context(), link)
 		return
 	}
 	if err := browser.OpenURL(encoded); err != nil {
@@ -201,15 +205,15 @@ func (w *window) menu() *menu.Menu {
 	file := m.AddSubmenu("File")
 	file.AddText("Open in browser", keys.CmdOrCtrl("b"), func(*menu.CallbackData) {
 		if page, _ := w.signedIn(); page != "" {
-			runtime.BrowserOpenURL(w.ctx, page)
+			runtime.BrowserOpenURL(w.context(), page)
 		}
 	})
 	if goruntime.GOOS != "darwin" {
 		file.AddSeparator()
-		file.AddText("Quit", keys.CmdOrCtrl("q"), func(*menu.CallbackData) { runtime.Quit(w.ctx) })
+		file.AddText("Quit", keys.CmdOrCtrl("q"), func(*menu.CallbackData) { runtime.Quit(w.context()) })
 	}
 	view := m.AddSubmenu("View")
-	view.AddText("Reload", keys.CmdOrCtrl("r"), func(*menu.CallbackData) { runtime.WindowExecJS(w.ctx, reloadScript) })
+	view.AddText("Reload", keys.CmdOrCtrl("r"), func(*menu.CallbackData) { runtime.WindowExecJS(w.context(), reloadScript) })
 	view.AddSeparator()
 	view.AddText("Zoom in", keys.CmdOrCtrl("="), func(*menu.CallbackData) { w.setZoom(zoomIn) })
 	view.AddText("Zoom out", keys.CmdOrCtrl("-"), func(*menu.CallbackData) { w.setZoom(zoomOut) })
@@ -229,5 +233,5 @@ func (w *window) setZoom(next func(float64) float64) {
 	w.zoom = next(w.zoom)
 	zoom := w.zoom
 	w.mu.Unlock()
-	runtime.WindowExecJS(w.ctx, zoomScript(zoom))
+	runtime.WindowExecJS(w.context(), zoomScript(zoom))
 }

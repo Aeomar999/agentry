@@ -69,7 +69,7 @@ func originOf(link string) string {
 type agentry struct {
 	launch launch.Options
 	token  func() string
-	quit   chan struct{} // closed once the app quits; launch.Options.Quit
+	done   chan struct{} // closed once the app quits; launch.Options.Quit
 
 	starting, stopping, quitting sync.Once
 
@@ -82,9 +82,9 @@ type agentry struct {
 // newAgentry is the Agentry found or started with o, the page token from
 // token.
 func newAgentry(o launch.Options, token func() string) *agentry {
-	quit := make(chan struct{})
-	o.Quit = quit
-	return &agentry{launch: o, token: token, quit: quit}
+	done := make(chan struct{})
+	o.Quit = done
+	return &agentry{launch: o, token: token, done: done}
 }
 
 // serve is the app's own pages: the start page, and at startPath the
@@ -126,13 +126,13 @@ func (a *agentry) start() {
 // markQuit says the app quits: no server starts after it, and one a start
 // under way waits for is stopped at once.
 func (a *agentry) markQuit() {
-	a.quitting.Do(func() { close(a.quit) })
+	a.quitting.Do(func() { close(a.done) })
 }
 
 // hasQuit says whether the app has begun to quit.
 func (a *agentry) hasQuit() bool {
 	select {
-	case <-a.quit:
+	case <-a.done:
 		return true
 	default:
 		return false
