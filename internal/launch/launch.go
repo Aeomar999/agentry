@@ -63,12 +63,14 @@ func FreeAddress(host string, first int) (string, error) {
 }
 
 // DefaultRepo makes the repo new tasks work in when they name none, the
-// first time: a git repo with one empty commit, so it has a branch.
-func DefaultRepo(repo string) error {
+// first time: a git repo with one empty commit, so it has a branch. It
+// runs the git in path, a PATH; empty, this program's.
+func DefaultRepo(repo, path string) error {
 	if _, err := os.Stat(filepath.Join(repo, ".git")); err == nil {
 		return nil
 	}
-	if _, err := exec.LookPath("git"); err != nil {
+	git, err := lookPathIn("git", path)
+	if err != nil {
 		return errors.New("git isn't installed; " + InstallHint("git"))
 	}
 	if err := os.MkdirAll(repo, 0o755); err != nil {
@@ -78,11 +80,37 @@ func DefaultRepo(repo string) error {
 		{"init", "-q", "-b", "main"},
 		{"-c", "user.name=Agentry", "-c", "user.email=agentry@localhost", "commit", "-q", "--allow-empty", "-m", "Start"},
 	} {
-		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+		cmd := exec.Command(git, append([]string{"-C", repo}, args...)...)
+		withPath(cmd, path)
+		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git %s: %v %s", args[0], err, out)
 		}
 	}
 	return nil
+}
+
+// lookPathIn is the program name in path, a PATH, as exec.LookPath finds it
+// in this program's when path is empty.
+func lookPathIn(name, path string) (string, error) {
+	if path == "" {
+		return exec.LookPath(name)
+	}
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" {
+			continue
+		}
+		if found, err := exec.LookPath(filepath.Join(dir, name)); err == nil {
+			return found, nil
+		}
+	}
+	return "", fmt.Errorf("%s isn't in %s", name, path)
+}
+
+// withPath gives cmd path as its PATH, when path isn't empty.
+func withPath(cmd *exec.Cmd, path string) {
+	if path != "" {
+		cmd.Env = append(os.Environ(), "PATH="+path) // the later PATH wins
+	}
 }
 
 // InstallHint says where to get a tool agents need.
@@ -116,14 +144,16 @@ type Server struct {
 }
 
 // Start runs agentry, the binary at that path, as `agentry serve` with
-// ServeArgs, in the repo, its output to output (nil drops it).
-func Start(agentry, dataDir, repo, address string, extra []string, output io.Writer) (*Server, error) {
+// ServeArgs, in the repo, its output to output (nil drops it), with path as
+// its PATH (empty: this program's).
+func Start(agentry, dataDir, repo, address string, extra []string, output io.Writer, path string) (*Server, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
 	}
 	cmd := exec.Command(agentry, ServeArgs(dataDir, repo, address, extra)...)
 	cmd.Dir = repo
 	cmd.Stdout, cmd.Stderr = output, output
+	withPath(cmd, path)
 	// A process serve starts may keep its output open after serve exits;
 	// don't wait on that, or Exited and Stop never return.
 	cmd.WaitDelay = 2 * time.Second
@@ -188,7 +218,9 @@ func sameAddress(a, b string) bool {
 
 // Options are where Ensure finds or starts Agentry: the data folder and
 // default repo, the path of the agentry binary to start, the host (127.0.0.1 when
-// empty) and first port it listens on, and where its output goes. Once
+// empty) and first port it listens on, where its output goes, and the PATH
+// the server and the git that makes the repo get (this program's when
+// empty). Once
 // Quit closes, Ensure starts no server and stops one it is waiting for;
 // it may be nil.
 type Options struct {
@@ -197,6 +229,7 @@ type Options struct {
 	Host          string
 	Port          int
 	Output        io.Writer
+	Path          string
 	Quit          <-chan struct{}
 }
 
@@ -231,7 +264,7 @@ func Ensure(o Options) (*Agentry, error) {
 	if running, ok := Running(o.DataDir); ok {
 		return &Agentry{Client: running}, nil
 	}
-	if err := DefaultRepo(o.Repo); err != nil {
+	if err := DefaultRepo(o.Repo, o.Path); err != nil {
 		return nil, fmt.Errorf("making the default repo: %w", err)
 	}
 	host := o.Host
@@ -245,7 +278,7 @@ func Ensure(o Options) (*Agentry, error) {
 	if closed(o.Quit) {
 		return nil, ErrQuit
 	}
-	child, err := Start(o.Binary, o.DataDir, o.Repo, address, nil, o.Output)
+	child, err := Start(o.Binary, o.DataDir, o.Repo, address, nil, o.Output, o.Path)
 	if err != nil {
 		return nil, err
 	}

@@ -129,9 +129,10 @@ type agentry struct {
 	token  func() string
 	done   chan struct{} // closed once the app quits; launch.Options.Quit
 
-	// beforeStart, when set, runs once before the app starts its own
+	// serverPath, when set, is the PATH for the server the app starts and
+	// the git it runs. It is asked once, just before the app starts its own
 	// server, and not when one is already running.
-	beforeStart func()
+	serverPath func() string
 
 	starting, stopping, quitting sync.Once
 
@@ -174,8 +175,8 @@ func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 // first time it is called; later calls wait for that.
 func (a *agentry) start() {
 	a.starting.Do(func() {
-		if _, ok := launch.Running(a.launch.DataDir); !ok && a.beforeStart != nil {
-			a.beforeStart()
+		if _, ok := launch.Running(a.launch.DataDir); !ok && a.serverPath != nil {
+			a.launch.Path = a.serverPath()
 		}
 		running, err := launch.Ensure(a.launch)
 		a.mu.Lock()

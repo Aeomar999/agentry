@@ -56,7 +56,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		}
 		return openPage(running, stdout, stderr)
 	}
-	if err := launch.DefaultRepo(*repo); err != nil {
+	if err := launch.DefaultRepo(*repo, ""); err != nil {
 		fmt.Fprintln(stderr, "agentry open: making the default repo:", err)
 		return 1
 	}

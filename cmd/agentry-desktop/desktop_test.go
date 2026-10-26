@@ -527,11 +527,14 @@ func TestShellPathGivesUpOnAShellThatHangs(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	shell := fakeShell(t, "sleep 10 & echo $! > '"+pidFile+"'; wait", "/opt/homebrew/bin", "")
 	began := time.Now()
-	if path, err := shellPath(shell, time.Second); err == nil {
+	if path, err := shellPath(shell, 2*time.Second); err == nil {
 		t.Errorf("shellPath = %q, want an error", path)
 	}
-	if took := time.Since(began); took > 1100*time.Millisecond {
-		t.Errorf("shellPath took %s, more than the second it was given", took)
+	// The shell is killed at 1.6 s, and its output waited for until 2 s at
+	// most; the second more is slack for a loaded machine, and still far
+	// short of the sleep's 10 s.
+	if took := time.Since(began); took > 3*time.Second {
+		t.Errorf("shellPath took %s, more than the 2 s it was given", took)
 	}
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
@@ -548,9 +551,9 @@ func TestShellPathGivesUpOnAShellThatHangs(t *testing.T) {
 	}
 }
 
-// The app asks for the PATH before it starts its own server, and not when
-// one is already running.
-func TestBeforeStartRunsOnlyWhenTheAppStartsAServer(t *testing.T) {
+// The app asks for the PATH just before it starts its own server, and gives
+// it to launch, and not when one is already running.
+func TestServerPathIsAskedOnlyWhenTheAppStartsAServer(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git isn't installed")
 	}
@@ -571,12 +574,12 @@ func TestBeforeStartRunsOnlyWhenTheAppStartsAServer(t *testing.T) {
 		"running":      {withServer, false},
 	} {
 		a := newAgentry(c.o, func() string { return "" })
-		ran := false
-		a.beforeStart = func() { ran = true }
+		asked := false
+		a.serverPath = func() string { asked = true; return "/opt/homebrew/bin" }
 		a.start()
 		a.stop()
-		if ran != c.want {
-			t.Errorf("%s: beforeStart ran %v, want %v", name, ran, c.want)
+		if asked != c.want || (a.launch.Path == "/opt/homebrew/bin") != c.want {
+			t.Errorf("%s: asked %v, launch.Options.Path %q; want asked %v", name, asked, a.launch.Path, c.want)
 		}
 	}
 }

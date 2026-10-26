@@ -57,7 +57,7 @@ func run() int {
 	defer browserOutput.Close()
 
 	a := &window{agentry: newAgentry(o, token), zoom: 1, log: redactedLog{w: os.Stderr, token: token}}
-	a.beforeStart = func() { os.Setenv("PATH", serverPath(goruntime.GOOS, os.Getenv("SHELL"), os.Getenv("PATH"))) }
+	a.serverPath = func() string { return serverPath(goruntime.GOOS, os.Getenv("SHELL"), os.Getenv("PATH")) }
 	defer a.stop()
 	a.quitOnSignal()
 	var running string

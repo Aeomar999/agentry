@@ -16,10 +16,13 @@ func Detach(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true
 func NoConsole(cmd *exec.Cmd) {}
 
 // KillGroupOnCancel starts a command made with exec.CommandContext in a
-// process group of its own, and kills the whole group when the context ends,
-// so the programs it started don't outlive it.
+// session of its own, and so a process group of its own, and kills the
+// whole group when the context ends, so the programs it started don't
+// outlive it. A new session, not just a new group, has no terminal: an
+// interactive shell in a group of the caller's terminal that isn't in the
+// foreground stops itself, and it can't touch the user's terminal.
 func KillGroupOnCancel(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 }
 

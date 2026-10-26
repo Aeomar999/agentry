@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,9 +48,11 @@ func TestMain(m *testing.M) {
 }
 
 // serveFake answers /api/config at -addr, having saved server.json and
-// ui-token in -data as serve does, and prints serve's signed-in link.
+// ui-token in -data as serve does, and prints serve's signed-in link. It
+// says the PATH it was given in -data's "path" file.
 func serveFake(args []string) {
 	address, dataDir := fakeFlags(args)
+	os.WriteFile(filepath.Join(dataDir, "path"), []byte(os.Getenv("PATH")), 0o600)
 	if os.Getenv(fakeServe) == "grandchild" {
 		self, _ := os.Executable()
 		grandchild := exec.Command(self)
@@ -148,6 +151,38 @@ func TestEnsureStartsAServerAndStopsOnlyThatOne(t *testing.T) {
 	shown.Close()
 	if !strings.Contains(output.String(), "Agentry is running. Open http://127.0.0.1:") || !strings.Contains(output.String(), "the token is "+Hidden) || strings.Contains(output.String(), "s3cr") {
 		t.Errorf("output %q: want serve's line with no token", output.String())
+	}
+}
+
+// The server Ensure starts and the git that makes the default repo get
+// Options.Path as their PATH, and that git is the one in it.
+func TestEnsureGivesTheServerAndGitThePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake git is a sh script")
+	}
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git isn't installed")
+	}
+	t.Setenv(fakeServe, "serve")
+	self, _ := os.Executable()
+	bin, gitPath := t.TempDir(), filepath.Join(t.TempDir(), "git-path")
+	script := "#!/bin/sh\nprintf '%s' \"$PATH\" > '" + gitPath + "'\nexec '" + realGit + "' \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := bin + string(os.PathListSeparator) + os.Getenv("PATH")
+	dataDir, repo := t.TempDir(), filepath.Join(t.TempDir(), "Agentry")
+
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: repo, Binary: self, Port: 7930, Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer agentry.Stop()
+	for who, file := range map[string]string{"git": gitPath, "server": filepath.Join(dataDir, "path")} {
+		if got, _ := os.ReadFile(file); string(got) != path {
+			t.Errorf("%s's PATH %q, want %q", who, got, path)
+		}
 	}
 }
 
