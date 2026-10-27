@@ -262,7 +262,7 @@ Feature: Signing in
   @SIGNIN-18 @user @test
   Scenario: uninstall.sh keeps every file that may not be only the desktop app's
     # packaging/files/uninstall-linux.sh, the comments on which copies are Agentry's
-    # packaging/desktop_install_test.go TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys
+    # packaging/desktop_install_test.go TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestUninstallShPipedInRemovesTheInstallAndNotTheFolderItRunsIn, TestUninstallShWithoutInstallShBesideItKeepsTheDownload and TestUninstallShKeepsAFolderWhoseAppIsNotAgentrys
     Given ~/.local/bin/agentry-desktop whose build info does not name Agentry's desktop app
     When the user runs ./uninstall.sh
     Then it is kept: yes
@@ -270,3 +270,8 @@ Feature: Signing in
     Then that agentry is never removed, since Agentry's Claude Code and worker installs put the same program there, and it says so: yes
     Given a menu entry named agentry.desktop that is not the app's window, with no StartupWMClass=Agentry line
     Then that entry is kept: yes
+    Given uninstall.sh piped into sh from a folder holding a file named agentry, or run from the unpacked folder with its install.sh deleted
+    Then that folder is not taken for the install: it removes the install under XDG_DATA_HOME, or ~/.local/share, and keeps every file in that folder: yes
+    Given a folder named agentry, holding uninstall.sh and no install.sh, whose agentry-desktop is not Agentry's
+    When the user runs uninstall.sh there
+    Then every file in that folder is kept, since a folder's files are removed only when its agentry-desktop is Agentry's: yes

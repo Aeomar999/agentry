@@ -3,17 +3,20 @@
 # in, and the copies the README of v0.20.0 had you make by hand, when they
 # are Agentry's. Your data, in .agentry in your home folder, stays.
 set -eu
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# Run from the unpacked folder (install.sh beside it), it looks in
-# ${XDG_DATA_HOME:-~/.local/share}, so give it the XDG_DATA_HOME install.sh
-# had. The copy install.sh put in uninstalls its own folder.
-if [ -f "$here/install.sh" ]; then
+# The folder this script is in, when it runs from a file and not a pipe.
+here=
+[ -f "$0" ] && here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# The copy install.sh put in uninstalls its own folder: one named agentry,
+# holding uninstall.sh and no install.sh. Anywhere else, as the unpacked
+# folder or a pipe, it looks in ${XDG_DATA_HOME:-~/.local/share}, so give it
+# the XDG_DATA_HOME install.sh had.
+if [ -n "$here" ] && [ "${here##*/}" = agentry ] && [ -f "$here/uninstall.sh" ] && [ ! -f "$here/install.sh" ]; then
+	apps=$here
+	data=$(dirname -- "$apps")
+else
 	data=${XDG_DATA_HOME:-$HOME/.local/share}
 	case $data in /*) ;; *) data=$HOME/.local/share ;; esac
 	apps=$data/agentry
-else
-	apps=$here
-	data=$(dirname -- "$apps")
 fi
 bin=$HOME/.local/bin
 removed=0
@@ -24,10 +27,15 @@ remove() {
 	removed=$((removed + 1))
 }
 
+# An agentry-desktop is Agentry's when its build info names Agentry's app.
+is_agentry_app() {
+	[ -f "$1" ] && grep -q -F gitlab.com/dev.chempa/agentry/cmd/agentry-desktop "$1"
+}
+
 # ~/.local/bin/agentry-desktop is a hand-made copy of Agentry's when its
 # build info names Agentry's desktop app. ~/.local/bin/agentry always stays:
 # Agentry's Claude Code and worker installs put the same program there.
-if [ -f "$bin/agentry-desktop" ] && grep -q -F gitlab.com/dev.chempa/agentry/cmd/agentry-desktop "$bin/agentry-desktop"; then
+if is_agentry_app "$bin/agentry-desktop"; then
 	remove "$bin/agentry-desktop"
 fi
 if [ -e "$bin/agentry" ]; then
@@ -38,23 +46,30 @@ fi
 # and the icon when that entry was, or it is the same as this release's:
 # the one beside this script, or else the one install.sh put in. The README
 # had you copy to ~/.local/share, checked first, while that icon is there.
-ours=$here/agentry.png
-[ -f "$ours" ] || ours=$data/icons/hicolor/512x512/apps/agentry.png
-for share in "$HOME/.local/share" "$data"; do
-	entry=$share/applications/agentry.desktop
-	icon=$share/icons/hicolor/512x512/apps/agentry.png
+ours=$data/icons/hicolor/512x512/apps/agentry.png
+[ -n "$here" ] && [ -f "$here/agentry.png" ] && ours=$here/agentry.png
+remove_menu_entry() {
+	entry=$1/applications/agentry.desktop
+	icon=$1/icons/hicolor/512x512/apps/agentry.png
 	if [ -f "$entry" ] && grep -q -x StartupWMClass=Agentry "$entry"; then
 		remove "$entry"
 		[ -f "$icon" ] && remove "$icon"
 	elif [ -f "$icon" ] && cmp -s "$icon" "$ours"; then
 		remove "$icon"
 	fi
-done
+	return 0
+}
+remove_menu_entry "$HOME/.local/share"
+[ "$data" = "$HOME/.local/share" ] || remove_menu_entry "$data"
 
-# This script may be the installed uninstall.sh, so it goes last.
-for file in agentry-desktop agentry uninstall.sh; do
-	[ -f "$apps/$file" ] && remove "$apps/$file"
-done
+# The folder is Agentry's install only when its app is Agentry's, so a
+# folder taken for it by mistake loses nothing. This script may be the
+# installed uninstall.sh, so it goes last.
+if is_agentry_app "$apps/agentry-desktop"; then
+	for file in agentry-desktop agentry uninstall.sh; do
+		[ -f "$apps/$file" ] && remove "$apps/$file"
+	done
+fi
 [ -d "$apps" ] && rmdir "$apps" 2>/dev/null && echo "Removed $apps"
 
 # The menu and the icon theme forget them at once where these exist.

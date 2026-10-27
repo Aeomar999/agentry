@@ -346,3 +346,76 @@ func TestTheScriptsWorkWithCDPATHSet(t *testing.T) {
 	}
 	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app))
 }
+
+// runDash runs uninstall.sh under dash, the sh of Debian and Ubuntu, from
+// the folder dir, by the args given, or piped in when there are none.
+func runDash(t *testing.T, dir, home string, args []string, env ...string) string {
+	t.Helper()
+	if _, err := exec.LookPath("dash"); err != nil {
+		t.Skip("no dash here")
+	}
+	cmd := exec.Command("dash", args...)
+	if len(args) == 0 {
+		cmd.Stdin = strings.NewReader(desktopUninstall)
+	}
+	cmd.Dir = dir
+	cmd.Env = append([]string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}, env...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("uninstall.sh: %v\n%s", err, out)
+	}
+	return string(out)
+}
+
+// Piped in, uninstall.sh has no folder of its own, so the folder it runs
+// in, here the home folder, is not taken for the install.
+func TestUninstallShPipedInRemovesTheInstallAndNotTheFolderItRunsIn(t *testing.T) {
+	folder := unpackedLinuxDesktop(t)
+	home := t.TempDir()
+	runScript(t, folder, "install.sh", home)
+	mine := filepath.Join(home, "agentry")
+	writeFile(t, mine, "my own notes\n", 0o644)
+
+	out := runDash(t, home, home, nil)
+	at := installedUnder(filepath.Join(home, ".local", "share"))
+	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app))
+	checkFile(t, mine, "my own notes\n", 0o644)
+	if strings.Contains(out, "Removed "+mine+"\n") {
+		t.Errorf("it says it removed %s in\n%s", mine, out)
+	}
+}
+
+// With install.sh deleted from the unpacked folder, that folder is still
+// not the install: it is not named agentry.
+func TestUninstallShWithoutInstallShBesideItKeepsTheDownload(t *testing.T) {
+	folder := unpackedLinuxDesktop(t)
+	home := t.TempDir()
+	data := filepath.Join(t.TempDir(), "data")
+	runScript(t, folder, "install.sh", home, "XDG_DATA_HOME="+data)
+	if err := os.Remove(filepath.Join(folder, "install.sh")); err != nil {
+		t.Fatal(err)
+	}
+
+	runDash(t, folder, home, []string{"./uninstall.sh"}, "XDG_DATA_HOME="+data)
+	at := installedUnder(data)
+	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app))
+	checkFile(t, filepath.Join(folder, "agentry-desktop"), fakeApp, 0o755)
+	checkFile(t, filepath.Join(folder, "agentry"), fakeServer, 0o755)
+	checkFile(t, filepath.Join(folder, "uninstall.sh"), desktopUninstall, 0o755)
+}
+
+// A folder that looks like the install, but whose agentry-desktop is not
+// Agentry's, keeps every file in it.
+func TestUninstallShKeepsAFolderWhoseAppIsNotAgentrys(t *testing.T) {
+	home := t.TempDir()
+	apps := filepath.Join(t.TempDir(), "agentry")
+	notOurs := "#!/bin/sh\n# something else\n"
+	writeFile(t, filepath.Join(apps, "uninstall.sh"), desktopUninstall, 0o755)
+	writeFile(t, filepath.Join(apps, "agentry-desktop"), notOurs, 0o755)
+	writeFile(t, filepath.Join(apps, "agentry"), notOurs, 0o755)
+
+	runDash(t, apps, home, []string{"./uninstall.sh"})
+	checkFile(t, filepath.Join(apps, "uninstall.sh"), desktopUninstall, 0o755)
+	checkFile(t, filepath.Join(apps, "agentry-desktop"), notOurs, 0o755)
+	checkFile(t, filepath.Join(apps, "agentry"), notOurs, 0o755)
+}
