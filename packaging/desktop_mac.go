@@ -18,6 +18,15 @@ import (
 // code for macOS 13, above Wails v2's 10.13.
 const macMinimum = "13.0"
 
+// macIcon is the app's icon at 1024 px, the largest size macOS asks for, so
+// no size is scaled up. Like desktopIcon at 512, it is icon.svg drawn by
+// headless Chromium:
+//
+//	chrome-headless-shell --hide-scrollbars --window-size=1024,1024 \
+//	  --screenshot=cmd/agentry-desktop/build/appicon-1024.png \
+//	  "file://$PWD/ui/public/icons/icon.svg"
+const macIcon = "cmd/agentry-desktop/build/appicon-1024.png"
+
 func runMacDesktop(version string) error {
 	builds, err := os.MkdirTemp("", "agentry-desktop-builds-*")
 	if err != nil {
@@ -126,7 +135,7 @@ func lipo(path string, programs []string) error {
 	return os.Chmod(path, 0o755)
 }
 
-// makeIcns makes the app's icon from desktopIcon, with sips and iconutil,
+// makeIcns makes the app's icon from macIcon, with sips and iconutil,
 // which every Mac has, in each size macOS asks for; scratch holds the
 // iconset.
 func makeIcns(path, scratch string) error {
@@ -141,7 +150,7 @@ func makeIcns(path, scratch string) error {
 				name = fmt.Sprintf("icon_%dx%d@2x.png", size, size)
 			}
 			pixels := fmt.Sprint(size * scale)
-			if err := runTool("sips", "-z", pixels, pixels, desktopIcon, "--out", filepath.Join(set, name)); err != nil {
+			if err := runTool("sips", "-z", pixels, pixels, macIcon, "--out", filepath.Join(set, name)); err != nil {
 				return err
 			}
 		}
