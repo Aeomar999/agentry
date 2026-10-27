@@ -1,6 +1,9 @@
 package main
 
 import (
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -59,6 +62,25 @@ func TestInfoPlistNamesTheAppItsProgramAndIcon(t *testing.T) {
 	} {
 		if !strings.Contains(plist, want) {
 			t.Errorf("no %q in\n%s", want, plist)
+		}
+	}
+}
+
+// The Mac's largest icon, icon_512x512@2x, is 1024 px, so macIcon must be at
+// least that, or sips scales it up; the window's icon stays at 512.
+func TestTheIconsAreTheSizesTheirBuildsNeed(t *testing.T) {
+	for path, want := range map[string]int{macIcon: 1024, desktopIcon: 512} {
+		f, err := os.Open(filepath.Join("..", path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		config, err := png.DecodeConfig(f)
+		f.Close()
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		if config.Width != want || config.Height != want {
+			t.Errorf("%s is %dx%d, want %dx%d", path, config.Width, config.Height, want, want)
 		}
 	}
 }
