@@ -2,7 +2,7 @@
 # Node is needed only for `make ui`; the built UI is committed, so
 # `go build` and `go install` work without it.
 
-.PHONY: all ui build workers test spec package desktop
+.PHONY: all ui build workers test spec package desktop release-check
 
 all: ui build workers
 
@@ -42,3 +42,8 @@ package: ui
 # Node.
 desktop:
 	go run ./packaging desktop
+
+# Before publishing: checks release/ holds the tag's 9 files, built from the
+# tag's commit with no changes, writes SHA256SUMS and prints the gh command.
+release-check:
+	go run ./packaging check $(VERSION)

@@ -5,6 +5,7 @@
 //
 //	go run ./packaging           (make package)
 //	go run ./packaging desktop   (make desktop, see desktop.go)
+//	go run ./packaging check     (make release-check, see check.go)
 //
 // The zips go in release/.
 package main
@@ -47,8 +48,13 @@ var (
 
 func main() {
 	command := run
-	if len(os.Args) > 1 && os.Args[1] == "desktop" {
-		command = runDesktop
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "desktop":
+			command = runDesktop
+		case "check":
+			command = func() error { return runCheck(os.Args[2:]) }
+		}
 	}
 	if err := command(); err != nil {
 		fmt.Fprintln(os.Stderr, "packaging:", err)
@@ -67,7 +73,7 @@ func run() error {
 	}
 	defer os.RemoveAll(builds)
 	for _, p := range platforms {
-		if err := buildAgentry(filepath.Join(builds, "agentry-"+p.os+"-"+p.arch), p.os, p.arch); err != nil {
+		if err := buildAgentry(filepath.Join(builds, workerName(p)), p.os, p.arch); err != nil {
 			return err
 		}
 	}
@@ -75,7 +81,7 @@ func run() error {
 		return err
 	}
 	for _, p := range platforms {
-		name := filepath.Join("release", "agentry-"+version+"-"+p.label+".zip")
+		name := filepath.Join("release", serverZip(version, p))
 		if err := pack(name, p, builds, version); err != nil {
 			return err
 		}
@@ -116,16 +122,12 @@ func pack(name string, p platform, builds, version string) error {
 	defer z.Close()
 
 	windows := p.os == "windows"
-	self := "agentry"
-	if windows {
-		self = "agentry.exe"
-	}
-	if err := addFile(z, self, filepath.Join(builds, "agentry-"+p.os+"-"+p.arch), 0o755); err != nil {
+	if err := addFile(z, selfName(p), filepath.Join(builds, workerName(p)), 0o755); err != nil {
 		return err
 	}
 	for _, other := range platforms {
 		if other != p {
-			if err := addFile(z, "agentry-"+other.os+"-"+other.arch, filepath.Join(builds, "agentry-"+other.os+"-"+other.arch), 0o755); err != nil {
+			if err := addFile(z, workerName(other), filepath.Join(builds, workerName(other)), 0o755); err != nil {
 				return err
 			}
 		}
@@ -160,6 +162,36 @@ func pack(name string, p platform, builds, version string) error {
 		text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\n", "\r\n")
 	}
 	return addText(z, "README.txt", text, 0o644)
+}
+
+// serverZip is the name of p's zip for version.
+func serverZip(version string, p platform) string {
+	return "agentry-" + version + "-" + p.label + ".zip"
+}
+
+// serverPrograms are the programs in p's zip: its own agentry, then the
+// others' for its workers.
+func serverPrograms(p platform) []string {
+	programs := []string{selfName(p)}
+	for _, other := range platforms {
+		if other != p {
+			programs = append(programs, workerName(other))
+		}
+	}
+	return programs
+}
+
+// selfName is the name of p's own agentry in its zip.
+func selfName(p platform) string {
+	if p.os == "windows" {
+		return "agentry.exe"
+	}
+	return "agentry"
+}
+
+// workerName is the name of p's agentry in the other systems' zips.
+func workerName(p platform) string {
+	return "agentry-" + p.os + "-" + p.arch
 }
 
 func addFile(z *zip.Writer, name, path string, mode os.FileMode) error {

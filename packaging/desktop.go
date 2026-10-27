@@ -28,6 +28,23 @@ var (
 	desktopEntry string
 )
 
+// desktopPrograms are the programs in each desktop app, side by side: the
+// app and the server it starts, with .exe on Windows.
+var desktopPrograms = []string{"agentry-desktop", "agentry"}
+
+// The desktop apps' files, each named for its version.
+func linuxDesktopFile(version string) string {
+	return "agentry-desktop-" + version + "-linux-amd64.tar.gz"
+}
+
+func windowsDesktopFile(version string) string {
+	return "agentry-desktop-" + version + "-windows-amd64.zip"
+}
+
+func macDesktopFile(version string) string {
+	return "agentry-desktop-" + version + "-macos-universal.zip"
+}
+
 // desktopIcon is the app's icon, the one its window shows.
 const desktopIcon = "cmd/agentry-desktop/build/appicon.png"
 
@@ -55,11 +72,11 @@ func runDesktop() error {
 	if err := os.MkdirAll("release", 0o755); err != nil {
 		return err
 	}
-	linux := filepath.Join("release", "agentry-desktop-"+version+"-linux-amd64.tar.gz")
+	linux := filepath.Join("release", linuxDesktopFile(version))
 	if err := packLinuxDesktop(linux, filepath.Join(builds, "linux"), version); err != nil {
 		return err
 	}
-	windows := filepath.Join("release", "agentry-desktop-"+version+"-windows-amd64.zip")
+	windows := filepath.Join("release", windowsDesktopFile(version))
 	if err := packWindowsDesktop(windows, filepath.Join(builds, "windows"), version); err != nil {
 		return err
 	}
@@ -113,7 +130,7 @@ func packLinuxDesktop(name, build, version string) error {
 	defer out.Close()
 	gz := gzip.NewWriter(out)
 	t := tar.NewWriter(gz)
-	for _, program := range []string{"agentry-desktop", "agentry"} {
+	for _, program := range desktopPrograms {
 		if err := addTarFile(t, program, filepath.Join(build, program), 0o755); err != nil {
 			return err
 		}
@@ -145,8 +162,8 @@ func packWindowsDesktop(name, build, version string) error {
 	}
 	defer out.Close()
 	z := zip.NewWriter(out)
-	for _, program := range []string{"agentry-desktop.exe", "agentry.exe"} {
-		if err := addFile(z, program, filepath.Join(build, program), 0o755); err != nil {
+	for _, program := range desktopPrograms {
+		if err := addFile(z, program+".exe", filepath.Join(build, program+".exe"), 0o755); err != nil {
 			return err
 		}
 	}

@@ -640,6 +640,30 @@ Feature: Operations
     And the server in it is built with CGO_ENABLED=0, as make package builds it: yes
     # README.md, Desktop app and Make a release; packaging/desktop.go desktopNotes; packaging/desktop_test.go TestBundleVersionIsTheReleaseNumber and TestInfoPlistNamesTheAppItsProgramAndIcon check only Info.plist's text, TestDesktopNotesFillEveryBlankForTheirSystem only the README's
 
+  @OPS-45 @manual
+  Scenario: make release-check checks the release's files against the tag, then writes SHA256SUMS and prints the publish command
+    # Makefile: release-check = go run ./packaging check $(VERSION)
+    # packaging/check.go releaseTag: VERSION if given, else git describe --tags --exact-match, refused when HEAD has no tag of its own; the commit is git rev-list -n 1 of the tag
+    # packaging/check.go releaseFiles: the 6 server zips from platforms (packaging/main.go serverZip) and the 3 desktop files (packaging/desktop.go linuxDesktopFile, windowsDesktopFile, macDesktopFile), each with the programs in its folder Agentry
+    # packaging/check.go programProblems and buildProblems: debug/buildinfo vcs.revision must be the tag's commit and vcs.modified false; a universal Mac program is read arch by arch through debug/macho NewFatFile
+    # packaging/check.go writeSums and publishCommand: SHA256SUMS as sha256sum writes it, sorted by name; gh release create with --verify-tag, printed, not run
+    # packaging/check_test.go TestReleaseFilesAreTheNineForAVersion, TestMissingAndStrayFilesAreReported, TestEachProgramMustBeBuiltFromTheTagWithNoChanges, TestEveryArchOfAUniversalMacProgramIsChecked and TestAReadyReleaseGetsItsSumsAndTheCommandToPublishIt cover the checks, the sums and the command, not make or git
+    # Steps:
+    # 1. On an untagged commit, run make release-check.
+    # 2. On the tagged commit, with the files of make package, make desktop and the Mac's make desktop in release/, run make release-check, then cd release and sha256sum -c SHA256SUMS.
+    # 3. Remove one file, add a -dirty one, and run it again.
+    Given HEAD has no tag of its own and no VERSION is given
+    When make release-check runs
+    Then it is refused, saying to check out the tag or name it with VERSION: yes
+    Given a checkout at tag v0.1.0 whose release holds the 9 files of v0.1.0, all built from the tag's commit with no changes
+    When make release-check runs
+    Then release holds 1 more file, SHA256SUMS, with 9 lines, one per file, sorted by name, that sha256sum -c accepts
+    And it prints gh release create v0.1.0 with the 9 files and release/SHA256SUMS, --repo agent3-labs/agentry, --verify-tag and --title v0.1.0, and runs nothing: yes
+    Given a release missing a file, holding a v0.1.0 file named -dirty or -N-gHASH, or with a program built from another commit, from a tree with changes or with no vcs info, in any arch of a universal Mac program
+    When make release-check runs
+    Then it names every problem, writes no SHA256SUMS and exits non-zero: yes
+    # README.md, Make a release; packaging/check.go
+
   @OPS-30 @manual
   Scenario: The deploy target runs one image from dev, pinned to one node, with its home as a volume
     # Dockerfile: the server built with CGO_ENABLED=0, with git and Claude Code pinned at CLAUDE_CODE_VERSION 2.1.301, EXPOSE 7800

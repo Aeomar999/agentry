@@ -43,7 +43,7 @@ func runMacDesktop(version string) error {
 	if err := os.MkdirAll("release", 0o755); err != nil {
 		return err
 	}
-	name := filepath.Join("release", "agentry-desktop-"+version+"-macos-universal.zip")
+	name := filepath.Join("release", macDesktopFile(version))
 	os.Remove(name) // ditto adds to nothing; an old zip would stay as it is
 	// ditto keeps the programs' modes, so the zip opens to an app that runs.
 	if err := runTool("ditto", "-c", "-k", "--keepParent", folder, name); err != nil {
