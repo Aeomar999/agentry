@@ -283,7 +283,7 @@ Feature: Signing in
     # where serve.log is: README.md, Desktop app; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem
     Given the desktop app starts its own server, its output in serve.log in the data folder, which holds lines from older runs
     When that server exits, or doesn't answer within 30 seconds
-    Then the window says Agentry didn't start, and names serve.log's path: yes
+    Then the window says "Agentry didn't start." once, with no reason repeated, and names serve.log's path: yes
     And it shows the last 15 lines this start wrote to serve.log, line breaks kept, and none from older runs: yes
     And the token is hidden in those lines, as is and in a token= link: yes
     And the lines are shown as text, never as the page's own markup: yes
@@ -298,12 +298,12 @@ Feature: Signing in
     # sent back to the start page: cmd/agentry-desktop/main.go backToStart
     Given Agentry's page in the desktop app's window, from a server the app started
     When that server exits
-    Then the window goes back to the app's start page, reading "The Agentry this window started stopped.", yes
+    Then the window goes back to the app's start page, reading "The Agentry this window started stopped.": yes
     And it names serve.log's path and shows the last 15 lines the server wrote there since it started, token hidden: yes
     Given Agentry's page from a server the app found running
     When that server stops answering 3 times in a row, asked every 2 seconds
-    Then the window goes back to the start page, reading "The Agentry that was running went away.", yes
-    And a single answer missed is not taken for gone
+    Then the window goes back to the start page, reading "The Agentry that was running went away.": yes
+    And a single answer missed is not taken for gone: yes
     Given serve.log can't be read
     Then the window says its log couldn't be read, and names its path: yes
     And the start page offers Try again after a failed start or a server that went away, and not while the app quits: yes
@@ -317,9 +317,9 @@ Feature: Signing in
     When the user clicks Try again
     Then the app uses an Agentry answering from the data folder if there is one, and otherwise starts its own: yes
     And the window goes on to that Agentry's page signed in, and links follow its address, even on another port: yes
-    And reloading the start page without Try again starts nothing
+    And reloading the start page without Try again starts nothing: yes
     When Try again is asked several times while a start is under way
-    Then the server is started exactly once
+    Then the server is started exactly once: yes
     When the app quits while Try again starts a server, or while the window says Agentry stopped
     Then the server being started is stopped, no server starts after, and the app quits: yes
     # Out of scope: a Start Agentry server over https found by Try again sends no links to the app, as the origins allowed to send them are fixed at launch (cmd/agentry-desktop/desktop.go bindingsOrigins); quitting and opening the app again covers it.

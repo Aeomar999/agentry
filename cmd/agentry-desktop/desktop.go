@@ -311,7 +311,7 @@ const ask = (query) => {
   show("status", "Starting Agentry…"); show("log"); show("said");
   fetch({{.Start}} + query).then((reply) => reply.json()).then((started) => {
     if (started.page) { location.replace(started.page); return; }
-    show("status", started.gone || "Agentry didn't start: " + started.failed);
+    show("status", started.gone || (started.failed ? "Agentry didn't start: " + started.failed : "Agentry didn't start."));
     if (started.unread) show("log", "Its log, " + started.log + ", couldn't be read.");
     else if (started.log) show("log", started.said ? "Its log, " + started.log + ", says:" : "It wrote nothing to its log, " + started.log + ".");
     show("said", started.said);
@@ -339,7 +339,9 @@ func startPage() []byte {
 // startReply is the app's answer at startPath: Agentry's page, signed in,
 // why Agentry didn't start, or how it went away, with the token hidden, and
 // for a server the app started, its log and the last lines it wrote there.
-// Neither is set when the app quit before the page asked.
+// A server that didn't start gives no reason beside its log: the page's
+// "Agentry didn't start." says it. Neither is set when the app quit before
+// the page asked.
 func startReply(page string, failed error, token string) []byte {
 	var reply struct {
 		Page   string `json:"page,omitempty"`
@@ -358,7 +360,6 @@ func startReply(page string, failed error, token string) []byte {
 	var stopped *launch.Stopped
 	switch {
 	case errors.As(failed, &notStarted):
-		reply.Failed = notStarted.Reason()
 		logged(notStarted.Tail)
 	case errors.As(failed, &stopped):
 		reply.Gone = "The Agentry that was running went away."

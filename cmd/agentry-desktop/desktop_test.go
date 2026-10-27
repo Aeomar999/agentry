@@ -116,7 +116,7 @@ func TestStartPageGoesWhereTheAppSays(t *testing.T) {
 func TestStartPageShowsWhatTheServerLogged(t *testing.T) {
 	failed := &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Said: "policy.toml: line 3\n<b>bad</b> rule"}}
 	run := runStartPage(t, startReply("", failed, ""))
-	if run.Status != "Agentry didn't start: the server didn't start" || run.Log != "Its log, /home/me/.agentry/serve.log, says:" || run.Said != failed.Said {
+	if run.Status != "Agentry didn't start." || !run.Again || run.Log != "Its log, /home/me/.agentry/serve.log, says:" || run.Said != failed.Said {
 		t.Errorf("shown: %+v", run)
 	}
 	run = runStartPage(t, startReply("", &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log"}}, ""))
@@ -309,11 +309,12 @@ func TestTheAppNoticesTheServerWentAway(t *testing.T) {
 	a.stop()
 }
 
-// A server that failed gives the reason, its log and its lines, token hidden.
+// A server that failed gives its log and its lines, token hidden, and no
+// reason: the page says it didn't start.
 func TestStartReplyCarriesTheServersLog(t *testing.T) {
 	failed := &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Said: "Open " + origin + "/?token=s3cret\nbad rule s3cret"}}
 	reply := string(startReply("", failed, "s3cret"))
-	want := `{"failed":"the server didn't start","log":"/home/me/.agentry/serve.log","said":"Open http://localhost:7800/?token=` + launch.Hidden + `\nbad rule ` + launch.Hidden + `"}`
+	want := `{"log":"/home/me/.agentry/serve.log","said":"Open http://localhost:7800/?token=` + launch.Hidden + `\nbad rule ` + launch.Hidden + `"}`
 	if reply != want {
 		t.Errorf("reply %s, want %s", reply, want)
 	}
