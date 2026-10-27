@@ -38,6 +38,7 @@ package: ui
 
 # The desktop app with the server it starts, in release/: on Linux, a
 # .tar.gz for Linux and a zip for Windows; on a Mac, the Mac app's zip
-# (see README, Make a release).
-desktop: ui
+# (see README, Make a release). It uses the committed page, so it needs no
+# Node.
+desktop:
 	go run ./packaging desktop

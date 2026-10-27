@@ -517,7 +517,7 @@ Feature: Operations
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
     # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
-    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./packaging; desktop = ui, then go run ./packaging desktop
+    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./packaging; desktop = go run ./packaging desktop, with no ui, so it packages the committed internal/web/dist
     # Steps:
     # 1. Run make -n all, make -n test and make -n package and read the commands.
     # 2. Run make build and check bin/agentry.
@@ -532,7 +532,7 @@ Feature: Operations
     When make package runs
     Then it builds the UI first and then runs the packaging program: yes
     When make desktop runs
-    Then it builds the UI first and then runs the packaging program's desktop mode: yes
+    Then it runs the packaging program's desktop mode on the committed page, without building the UI: yes
     # README.md, Work on it; Makefile
 
   @OPS-28 @manual
