@@ -24,14 +24,14 @@ Feature: Operations
     # Steps:
     # 1. Download agentry-<version>-mac-apple-silicon.zip (M1 and later) or agentry-<version>-mac-intel.zip from the releases page.
     # 2. Unzip it: a folder named Agentry appears.
-    # 3. Double-click Start Agentry.command in it. The first time macOS refuses it, since Agentry is not signed: close the warning, then in System Settings, Privacy & Security, click Open Anyway and confirm.
+    # 3. Double-click Start Agentry.command in it. The first time macOS refuses it, since Agentry is not signed: click Done on the warning, then in System Settings, Privacy & Security, click Open Anyway and confirm.
     # 4. Check the browser opened Agentry, signed in.
     Given a Mac with git and Claude Code installed and signed in
     When the zip for it is downloaded, unzipped and Start Agentry.command is run
     Then the folder holds 1 agentry program, 5 builds for other kinds of machine, Start Agentry.command, Stop Agentry.command and README.txt
     And the page opens in the browser, signed in: yes
     And Start Agentry says whether git or Claude Code is missing: yes
-    # README.md, Install, Mac; packaging/main.go
+    # README.md, Install, Mac; packaging/main.go; packaging/main_test.go TestMacZipReadmeLeadsTheFirstOpenWithOpenAnyway checks only README.txt's first-open steps
 
   @OPS-03 @manual
   Scenario: Install on Windows by downloading the zip, extracting it and double-clicking Start Agentry.cmd
@@ -628,7 +628,7 @@ Feature: Operations
     # Steps:
     # 1. On a clean checkout of the tagged commit, on a Mac with the Xcode command line tools, run make desktop.
     # 2. Unzip the zip and run unzip -Z on it, lipo -info on both programs, codesign -vv --strict on the app, plutil -p on Info.plist, and iconutil -c iconset on Contents/Resources/agentry.icns, then sips -g pixelWidth on its icon_512x512@2x.png.
-    # 3. Download the zip in Safari and open Agentry.app. When it is refused, close the warning, click Open Anyway in System Settings, Privacy & Security and confirm, and check the window opens signed in.
+    # 3. Download the zip in Safari and open Agentry.app. When it is refused, click Done on the warning, click Open Anyway in System Settings, Privacy & Security and confirm, and check the window opens signed in.
     Given a clean checkout at tag v0.1.0 on a Mac with the UI built
     When make desktop runs
     Then release holds 1 more file: agentry-desktop-v0.1.0-macos-universal.zip

@@ -20,7 +20,7 @@ const macMinimum = "13.0"
 
 // macIcon is the app's icon at 1024 px, the largest size macOS asks for, so
 // no size is scaled up. Like desktopIcon at 512, it is icon.svg drawn by
-// headless Chromium:
+// headless Chromium (add --no-sandbox when run as root or in a container):
 //
 //	chrome-headless-shell --hide-scrollbars --window-size=1024,1024 \
 //	  --screenshot=cmd/agentry-desktop/build/appicon-1024.png \

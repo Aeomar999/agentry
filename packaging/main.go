@@ -144,7 +144,7 @@ func pack(name string, p platform, builds, version string) error {
 		addText(z, "Stop Agentry.command", stopUnix, 0o755)
 		notes["{{START}}"] = "Double-click Start Agentry.command."
 		notes["{{STOP}}"] = "Double-click Stop Agentry.command."
-		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't signed yet. Close\nthe warning, open System Settings, Privacy & Security, then click\nOpen Anyway and confirm. After that it opens with a double-click."
+		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't signed yet. Click\nDone on the warning, open System Settings, Privacy & Security, then\nclick Open Anyway and confirm. After that it opens with a double-click."
 	default:
 		addText(z, "start-agentry.sh", startUnix, 0o755)
 		addText(z, "stop-agentry.sh", stopUnix, 0o755)

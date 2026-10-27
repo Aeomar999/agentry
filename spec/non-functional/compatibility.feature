@@ -58,7 +58,7 @@ Feature: Compatibility
     Then each runs agentry open from its own folder, and the page opens in the browser signed in
     And on a Mac the quarantine mark is removed from the whole folder first, so every program inside may run
     And on Windows the window waits for a key after the links are printed; on a Mac and on Linux it does not
-    And since Agentry is not signed yet, the first start on a Mac is refused, then needs Open Anyway in System Settings, Privacy & Security and a confirm, and on Windows More info, then Run anyway; Linux needs no step beyond chmod +x when the unzip lost permissions
+    And since Agentry is not signed yet, the first start on a Mac is refused, then needs Done on the warning, Open Anyway in System Settings, Privacy & Security and a confirm, and on Windows More info, then Run anyway; Linux needs no step beyond chmod +x when the unzip lost permissions
     And Stop Agentry runs agentry stop the same way on each system, and on Windows waits 5 seconds before the window closes
     # README.md, Mac, Windows, Linux, What Start Agentry does; packaging/files/start-unix.sh, start-windows.cmd, stop-unix.sh, stop-windows.cmd; no test
 
