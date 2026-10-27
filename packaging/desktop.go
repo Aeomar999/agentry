@@ -26,6 +26,10 @@ var (
 	desktopReadme string
 	//go:embed files/agentry.desktop
 	desktopEntry string
+	//go:embed files/install-linux.sh
+	desktopInstall string
+	//go:embed files/uninstall-linux.sh
+	desktopUninstall string
 )
 
 // desktopPrograms are the programs in each desktop app, side by side: the
@@ -128,7 +132,8 @@ func buildDesktop(dir, goos string) error {
 }
 
 // packLinuxDesktop makes the Linux .tar.gz: the folder Agentry, with the
-// app, the server, the menu entry, the icon and the README.
+// app, the server, the menu entry, the icon, the scripts that put them in
+// the applications menu and take them out, and the README.
 func packLinuxDesktop(name, build, version string) error {
 	out, err := os.Create(name)
 	if err != nil {
@@ -146,6 +151,12 @@ func packLinuxDesktop(name, build, version string) error {
 		return err
 	}
 	if err := addTarText(t, "agentry.desktop", desktopEntry, 0o644); err != nil {
+		return err
+	}
+	if err := addTarText(t, "install.sh", desktopInstall, 0o755); err != nil {
+		return err
+	}
+	if err := addTarText(t, "uninstall.sh", desktopUninstall, 0o755); err != nil {
 		return err
 	}
 	if err := addTarText(t, "README.txt", desktopNotes(desktopReadme, "linux", version), 0o644); err != nil {
@@ -199,7 +210,7 @@ func desktopNotes(text, goos, version string) string {
 		notes["{{SERVER}}"] = "from the agentry inside Agentry.app\n(Contents/MacOS)."
 		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't notarised yet.\nClick Done on the warning, open System Settings, Privacy & Security,\nthen click Open Anyway and confirm. It needs macOS 13 or later."
 	default:
-		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, copy it\nand agentry to ~/.local/bin, agentry.png to\n~/.local/share/icons/hicolor/512x512/apps and agentry.desktop to\n~/.local/share/applications. If the menu's Agentry doesn't open, log out\nand in again, so ~/.local/bin is on your PATH."
+		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, run\n./install.sh; ./uninstall.sh takes it out again."
 		notes["{{FIRST}}"] = "The window needs WebKitGTK 4.1 and GTK 3, which most Linux desktops have\n(on Debian or Ubuntu, the package libwebkit2gtk-4.1-0 brings both)."
 	}
 	for key, value := range notes {

@@ -608,7 +608,7 @@ Feature: Operations
     Given a clean checkout at tag v0.1.0 on a linux/amd64 machine with the UI built
     When make desktop runs
     Then release holds 2 more files: agentry-desktop-v0.1.0-linux-amd64.tar.gz and agentry-desktop-v0.1.0-windows-amd64.zip
-    And the .tar.gz holds 1 folder, Agentry, with agentry-desktop and agentry, both executable, agentry.desktop, agentry.png and README.txt
+    And the .tar.gz holds 1 folder, Agentry, with agentry-desktop, agentry, install.sh and uninstall.sh, all 4 executable, agentry.desktop, agentry.png and README.txt
     And the zip holds 1 folder, Agentry, with agentry-desktop.exe, agentry.exe and README.txt, the README with Windows line ends
     And the server in each is built with CGO_ENABLED=0, as make package builds it: yes
     And agentry-desktop.exe is a GUI program with the Agentry icon, and it starts agentry.exe with a hidden console, so no console window opens beside its window: yes
@@ -616,7 +616,7 @@ Feature: Operations
     Given a tree with changes
     When make desktop runs
     Then the version in both names ends in -dirty: yes
-    # README.md, Desktop app and Make a release; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text
+    # README.md, Desktop app and Make a release; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text; packaging/desktop_install_test.go TestTheLinuxTarGzHoldsInstallAndUninstallScripts checks the 2 scripts and their mode
 
   @OPS-44 @manual
   Scenario: make desktop on a Mac packages one universal, ad-hoc signed Agentry.app
