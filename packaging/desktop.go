@@ -210,7 +210,7 @@ func desktopNotes(text, goos, version string) string {
 		notes["{{SERVER}}"] = "from the agentry inside Agentry.app\n(Contents/MacOS)."
 		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't notarised yet.\nClick Done on the warning, open System Settings, Privacy & Security,\nthen click Open Anyway and confirm. It needs macOS 13 or later."
 	default:
-		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, run\n./install.sh; ./uninstall.sh takes it out again."
+		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, run\n./install.sh; ~/.local/share/agentry/uninstall.sh, or ./uninstall.sh\nhere, takes it out again."
 		notes["{{FIRST}}"] = "The window needs WebKitGTK 4.1 and GTK 3, which most Linux desktops have\n(on Debian or Ubuntu, the package libwebkit2gtk-4.1-0 brings both)."
 	}
 	for key, value := range notes {

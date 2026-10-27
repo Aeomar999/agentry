@@ -3,10 +3,18 @@
 # in, and the copies the README of v0.20.0 had you make by hand, when they
 # are Agentry's. Your data, in .agentry in your home folder, stays.
 set -eu
-here=$(cd "$(dirname "$0")" && pwd)
-data=${XDG_DATA_HOME:-$HOME/.local/share}
-case $data in /*) ;; *) data=$HOME/.local/share ;; esac
-apps=$data/agentry
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Run from the unpacked folder (install.sh beside it), it looks in
+# ${XDG_DATA_HOME:-~/.local/share}, so give it the XDG_DATA_HOME install.sh
+# had. The copy install.sh put in uninstalls its own folder.
+if [ -f "$here/install.sh" ]; then
+	data=${XDG_DATA_HOME:-$HOME/.local/share}
+	case $data in /*) ;; *) data=$HOME/.local/share ;; esac
+	apps=$data/agentry
+else
+	apps=$here
+	data=$(dirname -- "$apps")
+fi
 bin=$HOME/.local/bin
 removed=0
 
@@ -16,36 +24,36 @@ remove() {
 	removed=$((removed + 1))
 }
 
-# The hand-made copies are Agentry's when: ~/.local/bin/agentry-desktop
-# names Agentry's desktop app in its build info; ~/.local/bin/agentry is the
-# same, byte for byte, as the agentry here or installed, and was copied with
-# that agentry-desktop. Agentry's worker and Claude Code installs put an
-# agentry there too, so any other one stays.
+# ~/.local/bin/agentry-desktop is a hand-made copy of Agentry's when its
+# build info names Agentry's desktop app. ~/.local/bin/agentry always stays:
+# Agentry's Claude Code and worker installs put the same program there.
 if [ -f "$bin/agentry-desktop" ] && grep -q -F gitlab.com/dev.chempa/agentry/cmd/agentry-desktop "$bin/agentry-desktop"; then
 	remove "$bin/agentry-desktop"
-	if [ -f "$bin/agentry" ] && { cmp -s "$bin/agentry" "$here/agentry" || cmp -s "$bin/agentry" "$apps/agentry"; }; then
-		remove "$bin/agentry"
-	elif [ -e "$bin/agentry" ]; then
-		echo "Kept $bin/agentry: it is not this release's; delete it yourself if you copied it there for the app"
-	fi
+fi
+if [ -e "$bin/agentry" ]; then
+	echo "Kept $bin/agentry: Agentry's Claude Code and worker installs use it; delete it only if you copied it there just for the app"
 fi
 
 # The menu entry is Agentry's when it is the app's window (StartupWMClass),
-# and the icon when that entry was, or it is this release's. install.sh
-# writes to $data; the README had you copy to ~/.local/share.
-for share in "$data" "$HOME/.local/share"; do
+# and the icon when that entry was, or it is the same as this release's:
+# the one beside this script, or else the one install.sh put in. The README
+# had you copy to ~/.local/share, checked first, while that icon is there.
+ours=$here/agentry.png
+[ -f "$ours" ] || ours=$data/icons/hicolor/512x512/apps/agentry.png
+for share in "$HOME/.local/share" "$data"; do
 	entry=$share/applications/agentry.desktop
 	icon=$share/icons/hicolor/512x512/apps/agentry.png
 	if [ -f "$entry" ] && grep -q -x StartupWMClass=Agentry "$entry"; then
 		remove "$entry"
 		[ -f "$icon" ] && remove "$icon"
-	elif [ -f "$icon" ] && cmp -s "$icon" "$here/agentry.png"; then
+	elif [ -f "$icon" ] && cmp -s "$icon" "$ours"; then
 		remove "$icon"
 	fi
 done
 
-for program in agentry-desktop agentry; do
-	[ -f "$apps/$program" ] && remove "$apps/$program"
+# This script may be the installed uninstall.sh, so it goes last.
+for file in agentry-desktop agentry uninstall.sh; do
+	[ -f "$apps/$file" ] && remove "$apps/$file"
 done
 [ -d "$apps" ] && rmdir "$apps" 2>/dev/null && echo "Removed $apps"
 

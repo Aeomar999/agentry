@@ -127,15 +127,16 @@ func checkGone(t *testing.T, paths ...string) {
 }
 
 // installed is where install.sh puts each file, under the data folder.
-type installed struct{ app, server, icon, entry string }
+type installed struct{ app, server, uninstall, icon, entry string }
 
 func installedUnder(data string) installed {
 	apps := filepath.Join(data, "agentry")
 	return installed{
-		app:    filepath.Join(apps, "agentry-desktop"),
-		server: filepath.Join(apps, "agentry"),
-		icon:   filepath.Join(data, "icons", "hicolor", "512x512", "apps", "agentry.png"),
-		entry:  filepath.Join(data, "applications", "agentry.desktop"),
+		app:       filepath.Join(apps, "agentry-desktop"),
+		server:    filepath.Join(apps, "agentry"),
+		uninstall: filepath.Join(apps, "uninstall.sh"),
+		icon:      filepath.Join(data, "icons", "hicolor", "512x512", "apps", "agentry.png"),
+		entry:     filepath.Join(data, "applications", "agentry.desktop"),
 	}
 }
 
@@ -154,19 +155,20 @@ func TestInstallShPutsTheAppInTheMenuByFullPaths(t *testing.T) {
 		at := installedUnder(filepath.Join(home, ".local", "share"))
 		checkFile(t, at.app, fakeApp, 0o755)
 		checkFile(t, at.server, fakeServer, 0o755)
+		checkFile(t, at.uninstall, desktopUninstall, 0o755)
 		checkFile(t, at.icon, icon, 0o644)
 		want := strings.NewReplacer(
 			"Exec=agentry-desktop", `Exec="`+at.app+`"`,
 			"Icon=agentry", "Icon="+at.icon,
 		).Replace(desktopEntry)
 		checkFile(t, at.entry, want, 0o644)
-		for _, path := range []string{at.app, at.server, at.icon, at.entry} {
+		for _, path := range []string{at.app, at.server, at.uninstall, at.icon, at.entry} {
 			checkGone(t, path+".new")
 			if !strings.Contains(out, path) && !strings.Contains(out, filepath.Dir(path)) {
 				t.Errorf("run %d: %s is not named in\n%s", run, path, out)
 			}
 		}
-		if !strings.Contains(out, "'"+filepath.Join(folder, "uninstall.sh")+"'") {
+		if !strings.Contains(out, "'"+at.uninstall+"'") {
 			t.Errorf("run %d: no uninstall command in\n%s", run, out)
 		}
 	}
@@ -233,7 +235,7 @@ func TestUninstallShRemovesWhatInstallShWroteAndKeepsTheRest(t *testing.T) {
 
 	out := runScript(t, folder, "uninstall.sh", home)
 	at := installedUnder(filepath.Join(home, ".local", "share"))
-	checkGone(t, at.app, at.server, at.icon, at.entry, filepath.Dir(at.app))
+	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app))
 	checkFile(t, data, "the log", 0o644)
 	checkFile(t, other, "#!/bin/sh\n# another agentry\n", 0o755)
 	for _, want := range []string{"Removed " + at.app, "Removed " + at.entry, filepath.Join(home, ".agentry") + " stays"} {
@@ -258,21 +260,21 @@ func TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys(t *testing.T) {
 	notOurs := "#!/bin/sh\n# something else\n"
 	for _, c := range []struct {
 		name               string
-		app, server, entry string
-		keepApp, keepServ  bool
-		keepEntry          bool
+		app, entry         string
+		keepApp, keepEntry bool
 	}{
-		{name: "an older app with this server", app: olderApp, server: fakeServer, entry: desktopEntry},
-		{name: "not Agentry's app", app: notOurs, server: fakeServer, entry: desktopEntry, keepApp: true, keepServ: true},
-		{name: "another server", app: olderApp, server: notOurs, entry: desktopEntry, keepServ: true},
-		{name: "another menu entry", app: fakeApp, server: fakeServer, entry: "[Desktop Entry]\nName=Agentry\n", keepEntry: true},
+		{name: "an older app", app: olderApp, entry: desktopEntry},
+		{name: "not Agentry's app", app: notOurs, entry: desktopEntry, keepApp: true},
+		{name: "another menu entry", app: fakeApp, entry: "[Desktop Entry]\nName=Agentry\n", keepEntry: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			home := t.TempDir()
 			bin := filepath.Join(home, ".local", "bin")
 			at := installedUnder(filepath.Join(home, ".local", "share"))
 			writeFile(t, filepath.Join(bin, "agentry-desktop"), c.app, 0o755)
-			writeFile(t, filepath.Join(bin, "agentry"), c.server, 0o755)
+			// The same as this release's, as the Claude Code and worker
+			// installs put it there, so it always stays.
+			writeFile(t, filepath.Join(bin, "agentry"), fakeServer, 0o755)
 			writeFile(t, at.icon, icon, 0o644)
 			writeFile(t, at.entry, c.entry, 0o644)
 
@@ -282,7 +284,7 @@ func TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys(t *testing.T) {
 				keep       bool
 			}{
 				{filepath.Join(bin, "agentry-desktop"), c.app, c.keepApp},
-				{filepath.Join(bin, "agentry"), c.server, c.keepServ},
+				{filepath.Join(bin, "agentry"), fakeServer, true},
 				{at.entry, c.entry, c.keepEntry},
 				{at.icon, icon, false}, // the same as this release's
 			} {
@@ -294,9 +296,53 @@ func TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys(t *testing.T) {
 					checkGone(t, f.path)
 				}
 			}
-			if c.keepServ && !c.keepApp && !strings.Contains(out, "Kept "+filepath.Join(bin, "agentry")) {
+			if !strings.Contains(out, "Kept "+filepath.Join(bin, "agentry")+": Agentry's Claude Code and worker installs use it") {
 				t.Errorf("no word on the agentry kept in\n%s", out)
 			}
 		})
 	}
+}
+
+// The uninstall.sh install.sh put beside the app uninstalls that folder's
+// install, with the download gone and XDG_DATA_HOME no longer set, and the
+// hand copies too, comparing the icon with the installed one.
+func TestTheInstalledUninstallShWorksWithoutTheDownload(t *testing.T) {
+	folder := unpackedLinuxDesktop(t)
+	icon := readFile(t, filepath.Join(folder, "agentry.png"))
+	home := t.TempDir()
+	at := installedUnder(filepath.Join(t.TempDir(), "data"))
+	runScript(t, folder, "install.sh", home, "XDG_DATA_HOME="+filepath.Dir(filepath.Dir(at.app)))
+	handApp := filepath.Join(home, ".local", "bin", "agentry-desktop")
+	handIcon := installedUnder(filepath.Join(home, ".local", "share")).icon
+	writeFile(t, handApp, fakeApp, 0o755)
+	writeFile(t, handIcon, icon, 0o644)
+	if err := os.RemoveAll(folder); err != nil {
+		t.Fatal(err)
+	}
+
+	out := runScript(t, filepath.Dir(at.app), "uninstall.sh", home)
+	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app), handApp, handIcon)
+	if !strings.Contains(out, "Removed "+at.uninstall) {
+		t.Errorf("no word on removing itself in\n%s", out)
+	}
+}
+
+// With CDPATH set, cd prints the folder it went to, which must not end up
+// in the folder the scripts find their files in.
+func TestTheScriptsWorkWithCDPATHSet(t *testing.T) {
+	folder := unpackedLinuxDesktop(t)
+	home := t.TempDir()
+	at := installedUnder(filepath.Join(home, ".local", "share"))
+	for _, script := range []string{"install.sh", "uninstall.sh"} {
+		cmd := exec.Command("sh", filepath.Join("Agentry", script))
+		cmd.Dir = filepath.Dir(folder)
+		cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "CDPATH=" + cmd.Dir}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v\n%s", script, err, out)
+		}
+		if script == "install.sh" {
+			checkFile(t, at.app, fakeApp, 0o755)
+		}
+	}
+	checkGone(t, at.app, at.server, at.uninstall, at.icon, at.entry, filepath.Dir(at.app))
 }

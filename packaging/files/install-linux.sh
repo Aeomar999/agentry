@@ -2,9 +2,9 @@
 # Puts Agentry in your applications menu: copies the app and the server
 # beside it to ~/.local/share/agentry, the icon, and a menu entry that names
 # them by their full paths, so nothing needs to be on your PATH. Run it again
-# to update; uninstall.sh takes it all out.
+# to update; uninstall.sh, here or copied beside the app, takes it all out.
 set -eu
-here=$(cd "$(dirname "$0")" && pwd)
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 data=${XDG_DATA_HOME:-$HOME/.local/share}
 case $data in /*) ;; *) data=$HOME/.local/share ;; esac
 apps=$data/agentry
@@ -30,6 +30,7 @@ quoted() {
 
 put "$here/agentry-desktop" "$apps/agentry-desktop" 755
 put "$here/agentry" "$apps/agentry" 755
+put "$here/uninstall.sh" "$apps/uninstall.sh" 755
 put "$here/agentry.png" "$icon" 644
 
 exec_line="Exec=$(quoted "$apps/agentry-desktop")"
@@ -54,7 +55,7 @@ if command -v gtk-update-icon-cache >/dev/null; then
 fi
 
 echo "Installed Agentry in your applications menu:"
-echo "  $apps/agentry-desktop and agentry beside it"
+echo "  $apps/agentry-desktop, with agentry and uninstall.sh beside it"
 echo "  $icon"
 echo "  $entry"
-echo "To uninstall: '$here/uninstall.sh'"
+echo "To uninstall: '$apps/uninstall.sh'"

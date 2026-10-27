@@ -225,43 +225,48 @@ Feature: Signing in
   @SIGNIN-16 @user @test
   Scenario: install.sh puts the Linux desktop app in the applications menu
     # packaging/files/install-linux.sh, shipped as Agentry/install.sh by packaging/desktop.go packLinuxDesktop
-    # packaging/desktop_install_test.go TestInstallShPutsTheAppInTheMenuByFullPaths, TestInstallShReplacesTheAppWhileItRuns and TestInstallShQuotesExecAndFollowsXDGDataHome
+    # packaging/desktop_install_test.go TestInstallShPutsTheAppInTheMenuByFullPaths, TestInstallShReplacesTheAppWhileItRuns, TestInstallShQuotesExecAndFollowsXDGDataHome and TestTheScriptsWorkWithCDPATHSet
     # README.md, Desktop app
     Given the Linux desktop .tar.gz unpacked, and a home folder whose path holds a space
     When the user runs ./install.sh, from any folder
-    Then agentry-desktop and agentry are copied side by side to ~/.local/share/agentry, both executable: yes
+    Then agentry-desktop, agentry and uninstall.sh are copied side by side to ~/.local/share/agentry, all 3 executable: yes
     And agentry.png is copied to ~/.local/share/icons/hicolor/512x512/apps, and agentry.desktop to ~/.local/share/applications: yes
     And the menu entry names the app and the icon by their full paths, so nothing needs to be on the PATH: yes
-    And it prints each file it installed and the one command that uninstalls: yes
+    And it prints each file it installed and the one command that uninstalls, ~/.local/share/agentry/uninstall.sh: yes
     When the user runs ./install.sh again, even while the app runs
     Then the same files are replaced, each copied to a new name and then renamed, and no temporary copy is left: yes
     Given XDG_DATA_HOME set to a folder whose path holds a space, a quote, a dollar sign, a backslash and a percent sign
     Then the files go under XDG_DATA_HOME instead, and the entry's Exec quotes that path as the Desktop Entry spec says: yes
+    Given CDPATH set, and the script run by a relative path
+    Then it installs the same files: yes
 
   @SIGNIN-17 @user @test
   Scenario: uninstall.sh takes the Linux desktop app out of the menu and keeps the data
     # packaging/files/uninstall-linux.sh, shipped as Agentry/uninstall.sh by packaging/desktop.go packLinuxDesktop
-    # packaging/desktop_install_test.go TestUninstallShRemovesWhatInstallShWroteAndKeepsTheRest and TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys
+    # packaging/desktop_install_test.go TestUninstallShRemovesWhatInstallShWroteAndKeepsTheRest, TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestTheInstalledUninstallShWorksWithoutTheDownload and TestTheScriptsWorkWithCDPATHSet
     # README.md, Desktop app, Uninstall
-    Given the desktop app installed by install.sh, data in ~/.agentry, and another agentry in ~/.local/bin, as Agentry's worker install puts it
-    When the user runs ./uninstall.sh
+    Given the desktop app installed by install.sh, data in ~/.agentry, and an agentry in ~/.local/bin, as Agentry's worker install puts it
+    When the user runs ./uninstall.sh in the unpacked folder
     Then every file install.sh wrote is removed, and the folder ~/.local/share/agentry with them: yes
-    And ~/.agentry and the other agentry are kept, and it says the data in ~/.agentry stays: yes
+    And ~/.agentry and ~/.local/bin/agentry are kept, and it says the data in ~/.agentry stays and why ~/.local/bin/agentry stays: yes
+    Given the unpacked folder deleted, and XDG_DATA_HOME no longer what install.sh had
+    When the user runs ~/.local/share/agentry/uninstall.sh, the copy install.sh put there
+    Then it removes the same files from its own folder's install, itself last: yes
     Given the copies the README of v0.20.0 had the user make by hand: agentry-desktop and agentry in ~/.local/bin, the icon and the menu entry
-    When the user runs ./uninstall.sh
-    Then each is removed when it is Agentry's: yes
+    When the user runs either uninstall.sh
+    Then agentry-desktop, the icon and the menu entry are each removed when they are Agentry's, and agentry is kept: yes
     Given nothing installed
     When the user runs ./uninstall.sh
     Then it removes nothing, says so, and exits 0
 
   @SIGNIN-18 @user @test
-  Scenario: uninstall.sh never removes a file that is not the desktop app's
+  Scenario: uninstall.sh keeps every file that may not be only the desktop app's
     # packaging/files/uninstall-linux.sh, the comments on which copies are Agentry's
     # packaging/desktop_install_test.go TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys
     Given ~/.local/bin/agentry-desktop whose build info does not name Agentry's desktop app
     When the user runs ./uninstall.sh
-    Then it is kept, and so is the agentry beside it: yes
-    Given Agentry's agentry-desktop in ~/.local/bin, beside an agentry that is not the same, byte for byte, as the agentry in the unpacked folder or the installed one
-    Then that agentry is kept, and it says so: yes
+    Then it is kept: yes
+    Given ~/.local/bin/agentry, even the same, byte for byte, as this release's, beside Agentry's agentry-desktop
+    Then that agentry is never removed, since Agentry's Claude Code and worker installs put the same program there, and it says so: yes
     Given a menu entry named agentry.desktop that is not the app's window, with no StartupWMClass=Agentry line
     Then that entry is kept: yes
