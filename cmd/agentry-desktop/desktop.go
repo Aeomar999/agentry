@@ -15,12 +15,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -43,16 +43,19 @@ func binaryNextTo(exe, goos string) string {
 	return filepath.Join(filepath.Dir(exe), name)
 }
 
-// launchOptions are where the app finds or starts Agentry: the data folder
-// and default repo `agentry open` uses, listening on this computer only.
+// launchOptions are where the app finds or starts Agentry: the data folder,
+// default repo and serve.log `agentry open` uses, listening on this
+// computer only.
 func launchOptions(home, exe, goos string, output io.Writer) launch.Options {
+	dataDir := filepath.Join(home, ".agentry")
 	return launch.Options{
-		DataDir: filepath.Join(home, ".agentry"),
+		DataDir: dataDir,
 		Repo:    filepath.Join(home, "Agentry"),
 		Binary:  binaryNextTo(exe, goos),
 		Host:    "127.0.0.1",
 		Port:    7800,
 		Output:  output,
+		Log:     filepath.Join(dataDir, "serve.log"),
 	}
 }
 
@@ -104,12 +107,6 @@ func shellPath(shell string, within time.Duration) (string, error) {
 		return "", fmt.Errorf("%s printed no PATH on one line", shell)
 	}
 	return path, nil
-}
-
-// tokenIn is the page token in the data folder, once the server has made it.
-func tokenIn(dataDir string) string {
-	token, _ := os.ReadFile(filepath.Join(dataDir, "ui-token"))
-	return strings.TrimSpace(string(token))
 }
 
 // originOf is the scheme, host and port of link.
@@ -240,13 +237,20 @@ const startPath = "/agentry-desktop/start"
 
 var startTemplate = template.Must(template.New("start").Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Agentry</title>
-<style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;height:100vh;background:#fff;color:#111}
-@media (prefers-color-scheme:dark){body{background:#111;color:#eee}}</style></head>
-<body><p id="status">Starting Agentry…</p>
+<style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#fff;color:#111}
+main{max-width:min(860px,calc(100vw - 32px))}
+pre{font:13px ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;border:1px solid #ccc;background:#f6f6f6}
+pre:empty,#log:empty{display:none}
+@media (prefers-color-scheme:dark){body{background:#111;color:#eee}pre{border-color:#444;background:#1b1b1b}}</style></head>
+<body><main><p id="status">Starting Agentry…</p><p id="log"></p><pre id="said"></pre></main>
 <script>
-const say = (text) => { document.getElementById("status").textContent = "Agentry didn't start: " + text; };
+const show = (id, text) => { document.getElementById(id).textContent = text || ""; };
+const say = (text) => { show("status", "Agentry didn't start: " + text); };
 fetch({{.}}).then((reply) => reply.json()).then((started) => {
-  if (started.page) location.replace(started.page); else say(started.failed);
+  if (started.page) { location.replace(started.page); return; }
+  say(started.failed);
+  if (started.log) show("log", started.said ? "Its log, " + started.log + ", says:" : "It wrote nothing to its log, " + started.log + ".");
+  show("said", started.said);
 }, say);
 </script></body></html>
 `))
@@ -261,14 +265,22 @@ func startPage() []byte {
 }
 
 // startReply is the app's answer at startPath: Agentry's page, signed in,
-// or why Agentry didn't start, with the token hidden. Neither is set when
-// the app quit before the page asked.
+// or why Agentry didn't start, with the token hidden, and when the server
+// it started failed, its log and the last lines it wrote there. Neither is
+// set when the app quit before the page asked.
 func startReply(page string, failed error, token string) []byte {
 	var reply struct {
 		Page   string `json:"page,omitempty"`
 		Failed string `json:"failed,omitempty"`
+		Log    string `json:"log,omitempty"`
+		Said   string `json:"said,omitempty"`
 	}
+	var notStarted *launch.NotStarted
 	switch {
+	case errors.As(failed, &notStarted):
+		reply.Failed = notStarted.Reason()
+		reply.Log = launch.Redact(notStarted.Log, token)
+		reply.Said = launch.Redact(notStarted.Said, token)
 	case failed != nil:
 		reply.Failed = launch.Redact(failed.Error(), token)
 	case page != "":

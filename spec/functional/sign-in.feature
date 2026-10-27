@@ -275,3 +275,18 @@ Feature: Signing in
     Given a folder named agentry, holding uninstall.sh and no install.sh, whose agentry-desktop is not Agentry's
     When the user runs uninstall.sh there
     Then every file in that folder is kept, since a folder's files are removed only when its agentry-desktop is Agentry's: yes
+
+  @SIGNIN-19 @user @test
+  Scenario: When the desktop app's server doesn't start, the window says why and shows its log
+    # internal/launch/launch_test.go TestEnsureSaysWhatTheServerThatDidNotStartLogged, TestNotStartedWithoutLines and TestEnsureSaysWhenTheServerDidNotStart
+    # cmd/agentry-desktop/desktop_test.go TestStartReplyCarriesTheServersLog, TestStartPageShowsWhatTheServerLogged, TestStartPageShowsTextOnly and TestLaunchOptions
+    # where serve.log is: README.md, Desktop app; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem
+    Given the desktop app starts its own server, its output in serve.log in the data folder, which holds lines from older runs
+    When that server exits, or doesn't answer within 30 seconds
+    Then the window says Agentry didn't start, and names serve.log's path: yes
+    And it shows the last 15 lines this start wrote to serve.log, line breaks kept, and none from older runs
+    And the token is hidden in those lines, as is and in a token= link: yes
+    And the lines are shown as text, never as the page's own markup: yes
+    Given the server wrote nothing to serve.log
+    Then the window says it wrote nothing to its log, and names its path: yes
+    And README.md and the desktop app's README.txt say where serve.log is, with %USERPROFILE%\.agentry\serve.log on Windows: yes

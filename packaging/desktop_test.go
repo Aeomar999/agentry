@@ -25,6 +25,13 @@ func TestDesktopNotesFillEveryBlankForTheirSystem(t *testing.T) {
 		if inApp != (goos == "darwin") || strings.Contains(text, "agentry in this folder") == inApp {
 			t.Errorf("%s: the wrong place for the server in\n%s", goos, text)
 		}
+		log := "~/.agentry/serve.log"
+		if windows {
+			log = `%USERPROFILE%\.agentry\serve.log`
+		}
+		if !strings.Contains(text, "log to "+log+".") {
+			t.Errorf("%s: serve.log isn't %s in\n%s", goos, log, text)
+		}
 		if goos == "darwin" && (!strings.Contains(text, "Open Anyway") || strings.Contains(text, "right-click")) {
 			t.Errorf("darwin: not Open Anyway alone in\n%s", text)
 		}

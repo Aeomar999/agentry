@@ -41,12 +41,12 @@ func TestTheAgentryBinaryIsNextToTheApp(t *testing.T) {
 	}
 }
 
-// The app uses `agentry open`'s data folder and default repo, on this
-// computer only, from port 7800.
+// The app uses `agentry open`'s data folder, default repo and serve.log, on
+// this computer only, from port 7800.
 func TestLaunchOptions(t *testing.T) {
 	home := filepath.Join("home", "me")
 	o := launchOptions(home, filepath.Join("bin", "agentry-desktop"), "linux", nil)
-	want := launch.Options{DataDir: filepath.Join(home, ".agentry"), Repo: filepath.Join(home, "Agentry"), Binary: filepath.Join("bin", "agentry"), Host: "127.0.0.1", Port: 7800}
+	want := launch.Options{DataDir: filepath.Join(home, ".agentry"), Repo: filepath.Join(home, "Agentry"), Binary: filepath.Join("bin", "agentry"), Host: "127.0.0.1", Port: 7800, Log: filepath.Join(home, ".agentry", "serve.log")}
 	if o != want {
 		t.Errorf("got %+v, want %+v", o, want)
 	}
@@ -63,17 +63,17 @@ func TestStartPageAsksTheAppToStartAgentry(t *testing.T) {
 // startHarness runs the start page's script in node with the app's reply
 // to its fetch, and reports where it went and what it said.
 const startHarness = `
-const asked = [], replaced = [], status = { textContent: "" };
-global.document = { getElementById: () => status };
+const asked = [], replaced = [], shown = { status: {}, log: {}, said: {} };
+global.document = { getElementById: (id) => shown[id] };
 global.location = { replace: (u) => replaced.push(u) };
 global.fetch = async (path) => { asked.push(path); return { json: async () => JSON.parse(process.argv[2]) }; };
 eval(process.argv[1]);
-setTimeout(() => console.log(JSON.stringify({ asked, replaced, said: status.textContent })), 10);
+setTimeout(() => console.log(JSON.stringify({ asked, replaced, status: shown.status.textContent || "", log: shown.log.textContent || "", said: shown.said.textContent || "" })), 10);
 `
 
 func runStartPage(t *testing.T, reply []byte) (run struct {
-	Asked, Replaced []string
-	Said            string
+	Asked, Replaced   []string
+	Status, Log, Said string
 }) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -96,12 +96,43 @@ func runStartPage(t *testing.T, reply []byte) (run struct {
 // Agentry didn't start.
 func TestStartPageGoesWhereTheAppSays(t *testing.T) {
 	run := runStartPage(t, startReply(origin+"/?token=abc", nil, "abc"))
-	if !slices.Equal(run.Asked, []string{startPath}) || !slices.Equal(run.Replaced, []string{origin + "/?token=abc"}) || run.Said != "" {
+	if !slices.Equal(run.Asked, []string{startPath}) || !slices.Equal(run.Replaced, []string{origin + "/?token=abc"}) || run.Status != "" {
 		t.Errorf("started: %+v", run)
 	}
-	run = runStartPage(t, startReply("", errors.New("the server didn't start"), ""))
-	if len(run.Replaced) != 0 || run.Said != "Agentry didn't start: the server didn't start" {
+	run = runStartPage(t, startReply("", errors.New("no free port from 7800 to 7819"), ""))
+	if len(run.Replaced) != 0 || run.Status != "Agentry didn't start: no free port from 7800 to 7819" || run.Log != "" || run.Said != "" {
 		t.Errorf("failed: %+v", run)
+	}
+}
+
+// When the server the app started fails, the start page shows the log's
+// path and its last lines, line breaks kept, as text.
+func TestStartPageShowsWhatTheServerLogged(t *testing.T) {
+	failed := &launch.NotStarted{Log: "/home/me/.agentry/serve.log", Said: "policy.toml: line 3\n<b>bad</b> rule"}
+	run := runStartPage(t, startReply("", failed, ""))
+	if run.Status != "Agentry didn't start: the server didn't start" || run.Log != "Its log, /home/me/.agentry/serve.log, says:" || run.Said != failed.Said {
+		t.Errorf("shown: %+v", run)
+	}
+	run = runStartPage(t, startReply("", &launch.NotStarted{Log: "/home/me/.agentry/serve.log"}, ""))
+	if run.Log != "It wrote nothing to its log, /home/me/.agentry/serve.log." || run.Said != "" {
+		t.Errorf("nothing logged: %+v", run)
+	}
+}
+
+// The page sets the reply's text with textContent only, never as HTML.
+func TestStartPageShowsTextOnly(t *testing.T) {
+	if page := string(startPage()); strings.Contains(page, "innerHTML") || strings.Contains(page, "insertAdjacentHTML") || !strings.Contains(page, `<pre id="said">`) {
+		t.Errorf("page:\n%s", page)
+	}
+}
+
+// A server that failed gives the reason, its log and its lines, token hidden.
+func TestStartReplyCarriesTheServersLog(t *testing.T) {
+	failed := &launch.NotStarted{Log: "/home/me/.agentry/serve.log", Said: "Open " + origin + "/?token=s3cret\nbad rule s3cret"}
+	reply := string(startReply("", failed, "s3cret"))
+	want := `{"failed":"the server didn't start","log":"/home/me/.agentry/serve.log","said":"Open http://localhost:7800/?token=` + launch.Hidden + `\nbad rule ` + launch.Hidden + `"}`
+	if reply != want {
+		t.Errorf("reply %s, want %s", reply, want)
 	}
 }
 
@@ -319,17 +350,6 @@ func TestLogHidesTheToken(t *testing.T) {
 	log.Info("the token s3cret")
 	if strings.Contains(out.String(), "s3cret") || out.String() != "ERROR navigation to "+origin+"/?token="+launch.Hidden+" failed\nINFO the token "+launch.Hidden+"\n" {
 		t.Errorf("logged %q", out.String())
-	}
-}
-
-func TestTokenIn(t *testing.T) {
-	dir := t.TempDir()
-	if token := tokenIn(dir); token != "" {
-		t.Errorf("before the server made it: %q", token)
-	}
-	os.WriteFile(filepath.Join(dir, "ui-token"), []byte("abc\n"), 0o600)
-	if token := tokenIn(dir); token != "abc" {
-		t.Errorf("got %q", token)
 	}
 }
 

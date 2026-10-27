@@ -22,4 +22,10 @@ the app started it; an Agentry that was already running keeps running.
 Links that leave Agentry open in your browser. File, Open in browser opens
 Agentry's page there too.
 
+If Agentry doesn't start
+------------------------
+The server the app starts writes its log to {{LOG}}.
+When it doesn't start, the window says so and shows the last lines it
+wrote there.
+
 Version {{VERSION}}

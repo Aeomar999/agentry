@@ -194,16 +194,19 @@ func packWindowsDesktop(name, build, version string) error {
 	return out.Close()
 }
 
-// desktopNotes is the desktop README for goos: its open and first-run steps
-// and the version, with Windows line ends on Windows.
+// desktopNotes is the desktop README for goos: its open and first-run steps,
+// where the server's log is, and the version, with Windows line ends on
+// Windows.
 func desktopNotes(text, goos, version string) string {
 	notes := map[string]string{
 		"{{VERSION}}": version,
 		"{{SERVER}}":  "from agentry in this folder. Keep the two side by\nside.",
+		"{{LOG}}":     "~/.agentry/serve.log",
 	}
 	switch goos {
 	case "windows":
 		notes["{{OPEN}}"] = "Double-click agentry-desktop.exe."
+		notes["{{LOG}}"] = `%USERPROFILE%\.agentry\serve.log`
 		notes["{{FIRST}}"] = "The first time, Windows may say it protected your PC: click More info,\nthen Run anyway. Agentry isn't signed yet. The window needs Microsoft\nEdge WebView2, which Windows 10 and 11 already have."
 	case "darwin":
 		notes["{{OPEN}}"] = "Double-click Agentry.app. To keep it, drag it to Applications first."

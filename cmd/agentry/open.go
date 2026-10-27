@@ -74,7 +74,7 @@ func runOpen(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return openPage(running, stdout, stderr)
 	}
 	said, _ := os.ReadFile(filepath.Join(*dataDir, "serve.log"))
-	fmt.Fprintf(stderr, "agentry open: the server didn't start. Its log, %s, says:\n%s\n", filepath.Join(*dataDir, "serve.log"), lastLines(string(said), 15))
+	fmt.Fprintf(stderr, "agentry open: the server didn't start. Its log, %s, says:\n%s\n", filepath.Join(*dataDir, "serve.log"), launch.LastLines(string(said), 15))
 	return 1
 }
 
@@ -218,9 +218,4 @@ var openBrowser = func(link string) error {
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", link).Start()
 	}
 	return exec.Command("xdg-open", link).Start()
-}
-
-func lastLines(text string, n int) string {
-	lines := strings.Split(strings.TrimSpace(text), "\n")
-	return strings.Join(lines[max(0, len(lines)-n):], "\n")
 }

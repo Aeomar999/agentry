@@ -219,17 +219,18 @@ func sameAddress(a, b string) bool {
 
 // Options are where Ensure finds or starts Agentry: the data folder and
 // default repo, the path of the agentry binary to start, the host (127.0.0.1 when
-// empty) and first port it listens on, where its output goes, and the PATH
-// the server and the git that makes the repo get (this program's when
-// empty). Once
-// Quit closes, Ensure starts no server and stops one it is waiting for;
-// it may be nil.
+// empty) and first port it listens on, where its output goes, the path of
+// the log file Output writes to, if any, and the PATH the server and the
+// git that makes the repo get (this program's when empty). Once Quit
+// closes, Ensure starts no server and stops one it is waiting for; it may
+// be nil.
 type Options struct {
 	DataDir, Repo string
 	Binary        string
 	Host          string
 	Port          int
 	Output        io.Writer
+	Log           string
 	Path          string
 	Quit          <-chan struct{}
 }
@@ -257,7 +258,8 @@ func (a *Agentry) Stop() {
 
 // Ensure is the server running from the data folder if one answers, or
 // else one it starts as its child, once that answers. The child listens on
-// this computer only unless Host says otherwise.
+// this computer only unless Host says otherwise. A child that exits or
+// doesn't answer is a *NotStarted error.
 func Ensure(o Options) (*Agentry, error) {
 	if closed(o.Quit) {
 		return nil, ErrQuit
@@ -279,6 +281,7 @@ func Ensure(o Options) (*Agentry, error) {
 	if closed(o.Quit) {
 		return nil, ErrQuit
 	}
+	logged := logSize(o.Log)
 	child, err := Start(o.Binary, o.DataDir, o.Repo, address, nil, o.Output, o.Path)
 	if err != nil {
 		return nil, err
@@ -289,7 +292,7 @@ func Ensure(o Options) (*Agentry, error) {
 		if closed(o.Quit) {
 			return nil, ErrQuit
 		}
-		return nil, errors.New("the server didn't start")
+		return nil, notStarted(o.Log, logged, o.DataDir)
 	}
 	if !child.serves(o.DataDir, running, address) {
 		// Another launch started a server from this data folder at the same

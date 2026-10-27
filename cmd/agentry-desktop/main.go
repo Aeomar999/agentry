@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	goruntime "runtime"
 	"sync"
 	"syscall"
@@ -39,12 +38,12 @@ func run() int {
 	home, _ := os.UserHomeDir()
 	exe, _ := os.Executable()
 	o := launchOptions(home, exe, goruntime.GOOS, nil)
-	token := func() string { return tokenIn(o.DataDir) }
+	token := func() string { return launch.TokenIn(o.DataDir) }
 	if err := os.MkdirAll(o.DataDir, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, "agentry-desktop:", err)
 		return 1
 	}
-	serveLog, err := os.OpenFile(filepath.Join(o.DataDir, "serve.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	serveLog, err := os.OpenFile(o.Log, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "agentry-desktop:", err)
 		return 1

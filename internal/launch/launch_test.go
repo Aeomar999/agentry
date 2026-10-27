@@ -24,7 +24,8 @@ import (
 // fakeServe, set in the environment, makes the test binary act as
 // `agentry serve`: "serve" answers like one, "fail" exits at once,
 // "grandchild" serves after starting a process that shares its output
-// ("hold", which sleeps), and "lose" never serves, as one that lost a race.
+// ("hold", which sleeps), "lose" never serves, as one that lost a race, and
+// "say" prints the token and 20 lines, then exits.
 const fakeServe = "AGENTRY_LAUNCH_FAKE_SERVE"
 
 const fakeToken = "s3cr/et+1"
@@ -43,6 +44,15 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	case "lose":
 		loseFake(os.Args[2:])
+	case "say":
+		_, dataDir := fakeFlags(os.Args[2:])
+		os.WriteFile(filepath.Join(dataDir, "ui-token"), []byte(fakeToken+"\n"), 0o600)
+		fmt.Printf("Open http://127.0.0.1:7930/?token=%s\n", fakeToken)
+		for line := 1; line <= 20; line++ {
+			fmt.Printf("said %d\n", line)
+		}
+		fmt.Printf("policy.toml: bad rule; token %s\n", fakeToken)
+		os.Exit(1)
 	}
 	os.Exit(m.Run())
 }
@@ -325,6 +335,66 @@ func TestEnsureSaysWhenTheServerDidNotStart(t *testing.T) {
 	}
 	if waited := time.Since(began); waited > 10*time.Second {
 		t.Errorf("waited %v for a server that had exited", waited)
+	}
+}
+
+// A server that fails says why in Ensure's error: the log's path and the
+// last 15 lines this start wrote there, not older runs', with the token
+// hidden.
+func TestEnsureSaysWhatTheServerThatDidNotStartLogged(t *testing.T) {
+	t.Setenv(fakeServe, "say")
+	self, _ := os.Executable()
+	dataDir := t.TempDir()
+	logPath := filepath.Join(dataDir, "serve.log")
+	os.WriteFile(logPath, []byte("an older run's line\n"), 0o600)
+	log, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	_, err = Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930, Output: log, Log: logPath})
+	var failed *NotStarted
+	if !errors.As(err, &failed) {
+		t.Fatalf("error %v, want a *NotStarted", err)
+	}
+	var want []string
+	for line := 7; line <= 20; line++ {
+		want = append(want, fmt.Sprintf("said %d", line))
+	}
+	want = append(want, "policy.toml: bad rule; token "+Hidden)
+	if failed.Log != logPath || failed.Said != strings.Join(want, "\n") {
+		t.Errorf("log %q, said:\n%s", failed.Log, failed.Said)
+	}
+	if said := err.Error(); !strings.HasPrefix(said, "the server didn't start. Its log, "+logPath+", says:\nsaid 7\n") || strings.Contains(said, fakeToken) || strings.Contains(said, "older") {
+		t.Errorf("error %q", said)
+	}
+}
+
+// Without a log, or with one the start wrote nothing to, the error says so.
+func TestNotStartedWithoutLines(t *testing.T) {
+	if said := (&NotStarted{}).Error(); said != "the server didn't start" {
+		t.Errorf("no log: %q", said)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "serve.log")
+	os.WriteFile(path, []byte("an older run's line\n"), 0o600)
+	if said := notStarted(path, logSize(path), dir).Error(); said != "the server didn't start, and wrote nothing to its log, "+path {
+		t.Errorf("nothing written: %q", said)
+	}
+	// A log started again since is all this start's.
+	if said := notStarted(path, 1000, dir).Said; said != "an older run's line" {
+		t.Errorf("log started again: %q", said)
+	}
+}
+
+func TestTokenIn(t *testing.T) {
+	dir := t.TempDir()
+	if token := TokenIn(dir); token != "" {
+		t.Errorf("before the server made it: %q", token)
+	}
+	os.WriteFile(filepath.Join(dir, "ui-token"), []byte("abc\n"), 0o600)
+	if token := TokenIn(dir); token != "abc" {
+		t.Errorf("got %q", token)
 	}
 }
 
