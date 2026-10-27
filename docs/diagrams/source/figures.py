@@ -10,7 +10,7 @@ def save(f, name):
 f = Figure(1200, 790, "Getting started", "Agentry",
            "Unzip it, double-click Start Agentry, and it opens in your browser. You need git and Claude Code.")
 systems = [
-    (48, "Mac", "agentry-...-mac-apple-silicon.zip", "Start Agentry.command", ["right-click it, choose Open,", "then Open again"]),
+    (48, "Mac", "agentry-...-mac-apple-silicon.zip", "Start Agentry.command", ["Privacy & Security settings:", "Open Anyway, then confirm"]),
     (424, "Windows", "agentry-...-windows-x64.zip", "Start Agentry.cmd", ["More info, then Run anyway", "(it isn't signed yet)"]),
     (800, "Linux", "agentry-...-linux-x64.zip", "start-agentry.sh", ["if it won't run:", "chmod +x the scripts"]),
 ]

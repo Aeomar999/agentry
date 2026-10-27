@@ -173,7 +173,7 @@ func desktopNotes(text, goos, version string) string {
 	case "darwin":
 		notes["{{OPEN}}"] = "Double-click Agentry.app. To keep it, drag it to Applications first."
 		notes["{{SERVER}}"] = "from the agentry inside Agentry.app\n(Contents/MacOS)."
-		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't notarised yet. Then\nopen System Settings, Privacy & Security, click Open Anyway and open it\nagain. On macOS 13 or 14, you can instead right-click Agentry.app, choose\nOpen, then Open again. It needs macOS 13 or later."
+		notes["{{FIRST}}"] = "The first time, macOS refuses it, since Agentry isn't notarised yet.\nClose the warning, open System Settings, Privacy & Security, then click\nOpen Anyway and confirm. It needs macOS 13 or later."
 	default:
 		notes["{{OPEN}}"] = "Run ./agentry-desktop. To have it in your applications menu, copy it\nand agentry to ~/.local/bin, agentry.png to\n~/.local/share/icons/hicolor/512x512/apps and agentry.desktop to\n~/.local/share/applications. If the menu's Agentry doesn't open, log out\nand in again, so ~/.local/bin is on your PATH."
 		notes["{{FIRST}}"] = "The window needs WebKitGTK 4.1 and GTK 3, which most Linux desktops have\n(on Debian or Ubuntu, the package libwebkit2gtk-4.1-0 brings both)."

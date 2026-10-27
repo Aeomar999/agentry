@@ -24,7 +24,7 @@ Feature: Operations
     # Steps:
     # 1. Download agentry-<version>-mac-apple-silicon.zip (M1 and later) or agentry-<version>-mac-intel.zip from the releases page.
     # 2. Unzip it: a folder named Agentry appears.
-    # 3. Double-click Start Agentry.command in it. The first time, right-click it, choose Open, then Open again, since Agentry is not signed.
+    # 3. Double-click Start Agentry.command in it. The first time macOS refuses it, since Agentry is not signed: close the warning, then in System Settings, Privacy & Security, click Open Anyway and confirm.
     # 4. Check the browser opened Agentry, signed in.
     Given a Mac with git and Claude Code installed and signed in
     When the zip for it is downloaded, unzipped and Start Agentry.command is run
@@ -628,14 +628,14 @@ Feature: Operations
     # Steps:
     # 1. On a clean checkout of the tagged commit, on a Mac with the Xcode command line tools, run make desktop.
     # 2. Unzip the zip and run unzip -Z on it, lipo -info on both programs, codesign -vv --strict on the app and plutil -p on Info.plist.
-    # 3. Download the zip in Safari and open Agentry.app. When it is refused, click Open Anyway in System Settings, Privacy & Security (on macOS 13 or 14, right-click, Open works too), and check the window opens signed in.
+    # 3. Download the zip in Safari and open Agentry.app. When it is refused, close the warning, click Open Anyway in System Settings, Privacy & Security and confirm, and check the window opens signed in.
     Given a clean checkout at tag v0.1.0 on a Mac with the UI built
     When make desktop runs
     Then release holds 1 more file: agentry-desktop-v0.1.0-macos-universal.zip
     And the zip holds 1 folder, Agentry, with README.txt and Agentry.app, whose Contents/MacOS holds agentry-desktop and agentry, both executable after an unzip
     And both programs hold x86_64 and arm64: yes
     And the app has the Agentry icon, and Info.plist says version 0.1.0 and macOS 13.0 or later: yes
-    And the app is signed ad hoc, with no developer and not notarised, so the first open is refused until Open Anyway in System Settings, Privacy & Security, or on macOS 13 or 14 right-click, Open: yes
+    And the app is signed ad hoc, with no developer and not notarised, so the first open is refused until Open Anyway in System Settings, Privacy & Security: yes
     And its README.txt says the server it starts is the agentry inside Agentry.app, and leads the first open with Open Anyway: yes
     And the server in it is built with CGO_ENABLED=0, as make package builds it: yes
     # README.md, Desktop app and Make a release; packaging/desktop.go desktopNotes; packaging/desktop_test.go TestBundleVersionIsTheReleaseNumber and TestInfoPlistNamesTheAppItsProgramAndIcon check only Info.plist's text, TestDesktopNotesFillEveryBlankForTheirSystem only the README's

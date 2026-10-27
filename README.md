@@ -49,7 +49,7 @@ The zips are on the [releases page](https://github.com/agent3-labs/agentry/relea
 
 1. [Download](https://github.com/agent3-labs/agentry/releases/latest) `agentry-<version>-mac-apple-silicon.zip` (M1 and later) or `agentry-<version>-mac-intel.zip`.
 2. Unzip it, and double-click **Start Agentry.command** in the Agentry folder.
-3. The first time, macOS says it can't check the developer, since Agentry isn't signed yet: right-click Start Agentry.command, choose **Open**, then **Open** again. After that it opens with a double-click.
+3. The first time, macOS refuses it, since Agentry isn't signed yet: close the warning, then open System Settings > Privacy & Security, click **Open Anyway** and confirm. After that it opens with a double-click.
 
 ### Windows
 
@@ -91,7 +91,7 @@ The desktop app is the same Agentry, its server and its page, in a window of its
 - **Quitting:** closing the window, or Quit in the File menu, quits the app. It stops Agentry only if it started it; an Agentry that was already running keeps running.
 - **Links** that leave Agentry open in your browser; File > Open in browser opens Agentry's page there too.
 - **Linux:** the window needs WebKitGTK 4.1 and GTK 3, which most desktops have (on Debian or Ubuntu, `libwebkit2gtk-4.1-0` brings both). For the applications menu, copy `agentry-desktop` and `agentry` to `~/.local/bin`, `agentry.png` to `~/.local/share/icons/hicolor/512x512/apps` and `agentry.desktop` to `~/.local/share/applications`. If the menu's Agentry doesn't open, log out and in again, so `~/.local/bin` is on your PATH.
-- **The first time:** the app isn't signed yet. On Windows, SmartScreen may say it protected your PC: click **More info**, then **Run anyway**. On a Mac, Gatekeeper says it can't check the developer: right-click the app, choose **Open**, then **Open** again; or, after it is refused once, open it from System Settings > Privacy & Security > **Open Anyway**.
+- **The first time:** the app isn't signed yet. On Windows, SmartScreen may say it protected your PC: click **More info**, then **Run anyway**. On a Mac, Gatekeeper refuses it: close the warning, then open System Settings > Privacy & Security, click **Open Anyway** and confirm.
 
 ### From the source
 
