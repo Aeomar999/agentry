@@ -45,6 +45,13 @@ func macDesktopFile(version string) string {
 	return "agentry-desktop-" + version + "-macos-universal.zip"
 }
 
+// The Mac app, in its zip's folder Agentry, and the folder in it that holds
+// its programs.
+const (
+	macApp            = "Agentry.app"
+	macProgramsFolder = macApp + "/Contents/MacOS"
+)
+
 // desktopIcon is the app's icon, the one its window shows.
 const desktopIcon = "cmd/agentry-desktop/build/appicon.png"
 

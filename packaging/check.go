@@ -41,9 +41,9 @@ func runCheck(args []string) error {
 	if err != nil {
 		return err
 	}
-	commit, err := git("rev-list", "-n", "1", tag)
+	commit, err := tagCommit(tag)
 	if err != nil {
-		return fmt.Errorf("no tag %s: %w", tag, err)
+		return err
 	}
 	problems := checkRelease("release", tag, commit)
 	if len(problems) > 0 {
@@ -55,7 +55,7 @@ func runCheck(args []string) error {
 	if err := writeSums("release", releaseFiles(tag)); err != nil {
 		return err
 	}
-	fmt.Printf("Release %s is ready: 9 files, all built from %s with no changes. Wrote release/SHA256SUMS.\n", tag, commit)
+	fmt.Printf("Release %s is ready: %d files, all built from %s with no changes. Wrote release/SHA256SUMS.\n", tag, len(releaseFiles(tag)), commit)
 	fmt.Println("Publish it with:")
 	fmt.Println(publishCommand(tag, releaseFiles(tag)))
 	return nil
@@ -73,6 +73,16 @@ func releaseTag(args []string) (string, error) {
 	return tag, nil
 }
 
+// tagCommit is the commit the tag points to, annotated or not. A branch or
+// any other revision is refused.
+func tagCommit(tag string) (string, error) {
+	commit, err := git("rev-parse", "--verify", "--quiet", "refs/tags/"+tag+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("%s isn't a tag: name the release's tag, such as VERSION=v0.1.0", tag)
+	}
+	return commit, nil
+}
+
 func git(args ...string) (string, error) {
 	out, err := exec.Command("git", args...).Output()
 	return strings.TrimSpace(string(out)), err
@@ -88,7 +98,7 @@ func releaseFiles(version string) []releaseFile {
 	var windows, mac []string
 	for _, program := range desktopPrograms {
 		windows = append(windows, program+".exe")
-		mac = append(mac, "Agentry.app/Contents/MacOS/"+program)
+		mac = append(mac, macProgramsFolder+"/"+program)
 	}
 	return append(files,
 		releaseFile{linuxDesktopFile(version), desktopPrograms},
@@ -250,7 +260,7 @@ func buildProblems(r io.ReaderAt, commit string) []string {
 		problems = append(problems, "built from "+revision+", not the tag's "+commit)
 	}
 	if settings["vcs.modified"] != "false" {
-		problems = append(problems, "built from a tree with changes")
+		problems = append(problems, "built from a tree with changes (changed or untracked files)")
 	}
 	return problems
 }

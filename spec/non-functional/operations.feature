@@ -643,11 +643,11 @@ Feature: Operations
   @OPS-45 @manual
   Scenario: make release-check checks the release's files against the tag, then writes SHA256SUMS and prints the publish command
     # Makefile: release-check = go run ./packaging check $(VERSION)
-    # packaging/check.go releaseTag: VERSION if given, else git describe --tags --exact-match, refused when HEAD has no tag of its own; the commit is git rev-list -n 1 of the tag
+    # packaging/check.go releaseTag: VERSION if given, else git describe --tags --exact-match, refused when HEAD has no tag of its own; tagCommit: the commit is git rev-parse refs/tags/<tag>^{commit}, annotated or not, and a branch or other revision is refused
     # packaging/check.go releaseFiles: the 6 server zips from platforms (packaging/main.go serverZip) and the 3 desktop files (packaging/desktop.go linuxDesktopFile, windowsDesktopFile, macDesktopFile), each with the programs in its folder Agentry
     # packaging/check.go programProblems and buildProblems: debug/buildinfo vcs.revision must be the tag's commit and vcs.modified false; a universal Mac program is read arch by arch through debug/macho NewFatFile
     # packaging/check.go writeSums and publishCommand: SHA256SUMS as sha256sum writes it, sorted by name; gh release create with --verify-tag, printed, not run
-    # packaging/check_test.go TestReleaseFilesAreTheNineForAVersion, TestMissingAndStrayFilesAreReported, TestEachProgramMustBeBuiltFromTheTagWithNoChanges, TestEveryArchOfAUniversalMacProgramIsChecked and TestAReadyReleaseGetsItsSumsAndTheCommandToPublishIt cover the checks, the sums and the command, not make or git
+    # packaging/check_test.go TestReleaseFilesAreTheNineForAVersion, TestOnlyATagNamesTheReleaseCommit, TestMissingAndStrayFilesAreReported, TestEachProgramMustBeBuiltFromTheTagWithNoChanges, TestEveryArchOfAUniversalMacProgramIsChecked and TestAReadyReleaseGetsItsSumsAndTheCommandToPublishIt cover the checks, the tag's commit, the sums and the command, not make or the tag at HEAD
     # Steps:
     # 1. On an untagged commit, run make release-check.
     # 2. On the tagged commit, with the files of make package, make desktop and the Mac's make desktop in release/, run make release-check, then cd release and sha256sum -c SHA256SUMS.
@@ -655,6 +655,9 @@ Feature: Operations
     Given HEAD has no tag of its own and no VERSION is given
     When make release-check runs
     Then it is refused, saying to check out the tag or name it with VERSION: yes
+    Given VERSION names a branch, a commit or anything else that is not a tag
+    When make release-check runs
+    Then it is refused, saying it isn't a tag: yes
     Given a checkout at tag v0.1.0 whose release holds the 9 files of v0.1.0, all built from the tag's commit with no changes
     When make release-check runs
     Then release holds 1 more file, SHA256SUMS, with 9 lines, one per file, sorted by name, that sha256sum -c accepts

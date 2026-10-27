@@ -34,7 +34,7 @@ func runMacDesktop(version string) error {
 	}
 	defer os.RemoveAll(builds)
 	folder := filepath.Join(builds, "Agentry")
-	if err := makeMacApp(filepath.Join(folder, "Agentry.app"), filepath.Join(builds, "darwin"), version); err != nil {
+	if err := makeMacApp(folder, filepath.Join(builds, "darwin"), version); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(folder, "README.txt"), []byte(desktopNotes(desktopReadme, "darwin", version)), 0o644); err != nil {
@@ -54,11 +54,12 @@ func runMacDesktop(version string) error {
 	return nil
 }
 
-// makeMacApp makes the bundle app, building into build: the app and the
-// server it starts, side by side in Contents/MacOS, where the app looks for
-// the server, with the icon and Info.plist.
-func makeMacApp(app, build, version string) error {
-	programs := filepath.Join(app, "Contents", "MacOS")
+// makeMacApp makes the bundle Agentry.app in folder, building into build:
+// the app and the server it starts, side by side in Contents/MacOS, where
+// the app looks for the server, with the icon and Info.plist.
+func makeMacApp(folder, build, version string) error {
+	app := filepath.Join(folder, macApp)
+	programs := filepath.Join(folder, filepath.FromSlash(macProgramsFolder))
 	resources := filepath.Join(app, "Contents", "Resources")
 	for _, dir := range []string{build, programs, resources} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -89,7 +90,7 @@ func makeMacApp(app, build, version string) error {
 	if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte(infoPlist(version)), 0o644); err != nil {
 		return err
 	}
-	return signAdHoc(app)
+	return signAdHoc(app, filepath.Join(programs, "agentry"))
 }
 
 // signAdHoc signs the app with no identity: Apple Silicon runs no arm64
@@ -97,8 +98,7 @@ func makeMacApp(app, build, version string) error {
 // arm64 half's linker signature, which also names no bundle. The server is
 // signed first, since signing the app seals what is inside it. It is still
 // unsigned in Gatekeeper's sense: no developer, not notarised.
-func signAdHoc(app string) error {
-	server := filepath.Join(app, "Contents", "MacOS", "agentry")
+func signAdHoc(app, server string) error {
 	if err := runTool("codesign", "--force", "--sign", "-", "--identifier", "com.agent3labs.agentry.server", server); err != nil {
 		return err
 	}

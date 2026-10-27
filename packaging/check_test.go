@@ -68,6 +68,32 @@ func TestMissingAndStrayFilesAreReported(t *testing.T) {
 	}
 }
 
+func TestOnlyATagNamesTheReleaseCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't on the PATH")
+	}
+	repo := t.TempDir()
+	write(t, filepath.Join(repo, "a"), "a")
+	runIn(t, repo, "git", "init", "-q")
+	runIn(t, repo, "git", "add", ".")
+	runIn(t, repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a")
+	commit := strings.TrimSpace(runIn(t, repo, "git", "rev-parse", "HEAD"))
+	runIn(t, repo, "git", "tag", "v1.0.0")
+	runIn(t, repo, "git", "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "-m", "v1.1.0", "v1.1.0")
+	runIn(t, repo, "git", "branch", "topic")
+	t.Chdir(repo)
+	for _, tag := range []string{"v1.0.0", "v1.1.0"} {
+		if got, err := tagCommit(tag); err != nil || got != commit {
+			t.Errorf("tagCommit(%q) = %q, %v, want %q", tag, got, err, commit)
+		}
+	}
+	for _, other := range []string{"topic", "HEAD", commit, "v9.9.9"} {
+		if _, err := tagCommit(other); err == nil || !strings.Contains(err.Error(), "isn't a tag") {
+			t.Errorf("tagCommit(%q): %v, want it refused", other, err)
+		}
+	}
+}
+
 func TestEachProgramMustBeBuiltFromTheTagWithNoChanges(t *testing.T) {
 	b := newBuilds(t)
 	if got := programProblems(b.clean["linux/amd64"], b.commit); len(got) != 0 {
@@ -76,7 +102,7 @@ func TestEachProgramMustBeBuiltFromTheTagWithNoChanges(t *testing.T) {
 	if got := programProblems(b.clean["linux/amd64"], "0123abcd"); !hasProblem(got, "built from "+b.commit+", not the tag's 0123abcd") {
 		t.Errorf("another commit: %q", got)
 	}
-	if got := programProblems(b.modified, b.commit); !hasProblem(got, "built from a tree with changes") {
+	if got := programProblems(b.modified, b.commit); !hasProblem(got, "built from a tree with changes (changed or untracked files)") {
 		t.Errorf("a tree with changes: %q", got)
 	}
 	if got := programProblems(b.noVCS, b.commit); !hasProblem(got, "no commit in its build info") {
