@@ -57,6 +57,7 @@ func run() int {
 
 	a := &window{agentry: newAgentry(o, token), zoom: 1, log: redactedLog{w: os.Stderr, token: token}}
 	a.serverPath = func() string { return serverPath(goruntime.GOOS, os.Getenv("SHELL"), os.Getenv("PATH")) }
+	a.wentAway = a.backToStart
 	defer a.stop()
 	a.quitOnSignal()
 	var running string
@@ -175,14 +176,26 @@ func (w *window) loaded(ctx context.Context) {
 		return
 	}
 	w.listen.Do(func() {
-		follow := links{
-			origin:  origin,
-			browser: w.openInBrowser,
-			window:  func(link string) { runtime.WindowExecJS(ctx, goScript(link)) },
-		}
-		runtime.EventsOn(ctx, linkEvent, follow.follow)
+		runtime.EventsOn(ctx, linkEvent, func(data ...any) {
+			// Agentry's origin now: a Try again may have started it on another port.
+			_, origin := w.signedIn()
+			follow := links{
+				origin:  origin,
+				browser: w.openInBrowser,
+				window:  func(link string) { runtime.WindowExecJS(ctx, goScript(link)) },
+			}
+			follow.follow(data...)
+		})
 	})
 	runtime.WindowExecJS(ctx, pageScript(startURL(goruntime.GOOS), origin, w.zoomLevel()))
+}
+
+// backToStart sends the window to the app's start page, which says why
+// Agentry went away, once the window has opened.
+func (w *window) backToStart() {
+	if ctx := w.context(); ctx != nil {
+		runtime.WindowExecJS(ctx, goScript(startURL(goruntime.GOOS)))
+	}
 }
 
 // openInBrowser opens link in the system browser: through Wails, or

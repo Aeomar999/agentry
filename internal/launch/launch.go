@@ -239,14 +239,65 @@ type Options struct {
 var ErrQuit = errors.New("quitting, so no server was started")
 
 // Agentry is a running server, and the child to stop when this program
-// started it.
+// started it, with where the child's output went.
 type Agentry struct {
 	client.Client
-	child *Server
+	child   *Server
+	dataDir string
+	log     string // Options.Log
+	logFrom int64  // the log's size before the child started
+
+	watching sync.Once
+	gone     chan struct{} // for a server found running
 }
 
 // Started says whether this program started the server.
 func (a *Agentry) Started() bool { return a.child != nil }
+
+// watchEvery is how often Exited asks a server found running whether it
+// still answers, and watchMisses how many answers in a row it may miss.
+var (
+	watchEvery  = 2 * time.Second
+	watchMisses = 3
+)
+
+// Exited closes when the server stops. For a server this program started,
+// that is when the child exits. One it found running is asked every
+// watchEvery, from the first call on, whether it still answers, and counts
+// as stopped once it has missed watchMisses answers in a row, so a single
+// slow answer isn't taken for gone.
+func (a *Agentry) Exited() <-chan struct{} {
+	if a.child != nil {
+		return a.child.Exited()
+	}
+	a.watching.Do(func() {
+		a.gone = make(chan struct{})
+		go a.watch()
+	})
+	return a.gone
+}
+
+// watch closes gone once the server found running stops answering.
+func (a *Agentry) watch() {
+	for missed := 0; missed < watchMisses; {
+		time.Sleep(watchEvery)
+		if a.Call("GET", "/api/config", nil, nil) == nil {
+			missed = 0
+		} else {
+			missed++
+		}
+	}
+	close(a.gone)
+}
+
+// Gone is why the server stopped, once Exited has closed: for one this
+// program started, with the last lines it wrote to Options.Log since.
+func (a *Agentry) Gone() *Stopped {
+	if a.child == nil {
+		return &Stopped{}
+	}
+	return &Stopped{Started: true, Tail: tailOf(a.log, a.logFrom, a.dataDir)}
+}
 
 // Stop stops the server if this program started it, and leaves one it
 // found running alone.
@@ -292,7 +343,7 @@ func Ensure(o Options) (*Agentry, error) {
 		if closed(o.Quit) {
 			return nil, ErrQuit
 		}
-		return nil, notStarted(o.Log, logged, o.DataDir)
+		return nil, &NotStarted{Tail: tailOf(o.Log, logged, o.DataDir)}
 	}
 	if !child.serves(o.DataDir, running, address) {
 		// Another launch started a server from this data folder at the same
@@ -300,7 +351,7 @@ func Ensure(o Options) (*Agentry, error) {
 		child.Stop()
 		return &Agentry{Client: running}, nil
 	}
-	return &Agentry{Client: running, child: child}, nil
+	return &Agentry{Client: running, child: child, dataDir: o.DataDir, log: o.Log, logFrom: logged}, nil
 }
 
 // closed says whether c has closed; a nil c never does.

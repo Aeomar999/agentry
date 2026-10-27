@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -378,12 +379,100 @@ func TestNotStartedWithoutLines(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "serve.log")
 	os.WriteFile(path, []byte("an older run's line\n"), 0o600)
-	if said := notStarted(path, logSize(path), dir).Error(); said != "the server didn't start, and wrote nothing to its log, "+path {
+	if said := (&NotStarted{Tail: tailOf(path, logSize(path), dir)}).Error(); said != "the server didn't start, and wrote nothing to its log, "+path {
 		t.Errorf("nothing written: %q", said)
 	}
 	// A log started again since is all this start's.
-	if said := notStarted(path, 1000, dir).Said; said != "an older run's line" {
+	if said := tailOf(path, 1000, dir).Said; said != "an older run's line" {
 		t.Errorf("log started again: %q", said)
+	}
+	gone := filepath.Join(dir, "gone.log")
+	if said := (&NotStarted{Tail: tailOf(gone, 0, dir)}).Error(); said != "the server didn't start, and its log, "+gone+", couldn't be read" {
+		t.Errorf("unread: %q", said)
+	}
+}
+
+// watchQuickly makes Exited ask a found server often, for a test.
+func watchQuickly(t *testing.T) {
+	every := watchEvery
+	watchEvery = 20 * time.Millisecond
+	t.Cleanup(func() { watchEvery = every })
+}
+
+// A server found running counts as stopped once it misses watchMisses
+// answers in a row, not after one slow answer.
+func TestExitedOfAServerFoundRunning(t *testing.T) {
+	watchQuickly(t)
+	var asked atomic.Int32
+	running := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if asked.Add(1) == 2 {
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
+		w.Write([]byte("{}"))
+	}))
+	dataDir := t.TempDir()
+	client.Save(dataDir, client.Where{URL: running.URL, Page: running.URL})
+	os.WriteFile(filepath.Join(dataDir, "ui-token"), []byte("abc\n"), 0o600)
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: filepath.Join(t.TempDir(), "no-agentry"), Port: 7930})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exited := agentry.Exited()
+	for asked.Load() < 8 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case <-exited:
+		t.Fatal("gone after a single missed answer")
+	default:
+	}
+	running.Close()
+	select {
+	case <-exited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not gone after the server stopped answering")
+	}
+	if gone := agentry.Gone(); gone.Started || gone.Error() != "the server that was running went away" {
+		t.Errorf("gone %+v: %v", gone, gone)
+	}
+}
+
+// A server this program started has stopped when it exits, and Gone holds
+// the lines it wrote since it started, token hidden.
+func TestExitedOfAServerThisProgramStarted(t *testing.T) {
+	t.Setenv(fakeServe, "serve")
+	self, _ := os.Executable()
+	dataDir := t.TempDir()
+	logPath := filepath.Join(dataDir, "serve.log")
+	os.WriteFile(logPath, []byte("an older run's line\n"), 0o600)
+	log, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	agentry, err := Ensure(Options{DataDir: dataDir, Repo: t.TempDir(), Binary: self, Host: "127.0.0.1", Port: 7930, Output: log, Log: logPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(agentry.Stop)
+	select {
+	case <-agentry.Exited():
+		t.Fatal("exited while running")
+	default:
+	}
+	agentry.child.process.Kill()
+	select {
+	case <-agentry.Exited():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Exited didn't close when the server exited")
+	}
+	gone := agentry.Gone()
+	if !gone.Started || gone.Log != logPath || !strings.Contains(gone.Said, "Agentry is running") || !strings.Contains(gone.Said, "the token is "+Hidden) || strings.Contains(gone.Said, "older") || strings.Contains(gone.Said, fakeToken) {
+		t.Errorf("gone %+v", gone)
+	}
+	if !strings.HasPrefix(gone.Error(), "the server this program started stopped. Its log, "+logPath+", says:\n") {
+		t.Errorf("error %q", gone.Error())
 	}
 }
 

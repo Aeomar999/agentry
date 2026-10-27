@@ -284,9 +284,42 @@ Feature: Signing in
     Given the desktop app starts its own server, its output in serve.log in the data folder, which holds lines from older runs
     When that server exits, or doesn't answer within 30 seconds
     Then the window says Agentry didn't start, and names serve.log's path: yes
-    And it shows the last 15 lines this start wrote to serve.log, line breaks kept, and none from older runs
+    And it shows the last 15 lines this start wrote to serve.log, line breaks kept, and none from older runs: yes
     And the token is hidden in those lines, as is and in a token= link: yes
     And the lines are shown as text, never as the page's own markup: yes
     Given the server wrote nothing to serve.log
     Then the window says it wrote nothing to its log, and names its path: yes
     And README.md and the desktop app's README.txt say where serve.log is, with %USERPROFILE%\.agentry\serve.log on Windows: yes
+
+  @SIGNIN-20 @user @test
+  Scenario: When Agentry goes away, the desktop app's window says so and offers Try again
+    # internal/launch/launch_test.go TestExitedOfAServerFoundRunning, TestExitedOfAServerThisProgramStarted and TestNotStartedWithoutLines
+    # cmd/agentry-desktop/desktop_test.go TestTheAppNoticesTheServerWentAway, TestStartPageSaysTheServerWentAway and TestStartPageTryAgain
+    # sent back to the start page: cmd/agentry-desktop/main.go backToStart
+    Given Agentry's page in the desktop app's window, from a server the app started
+    When that server exits
+    Then the window goes back to the app's start page, reading "The Agentry this window started stopped.", yes
+    And it names serve.log's path and shows the last 15 lines the server wrote there since it started, token hidden: yes
+    Given Agentry's page from a server the app found running
+    When that server stops answering 3 times in a row, asked every 2 seconds
+    Then the window goes back to the start page, reading "The Agentry that was running went away.", yes
+    And a single answer missed is not taken for gone
+    Given serve.log can't be read
+    Then the window says its log couldn't be read, and names its path: yes
+    And the start page offers Try again after a failed start or a server that went away, and not while the app quits: yes
+    And once the server has gone, the app forgets its page, so Open in browser opens nothing: yes
+
+  @SIGNIN-21 @user @test
+  Scenario: Try again in the desktop app starts Agentry once, and a quit still stops it
+    # cmd/agentry-desktop/desktop.go agentry.start, watch and stop; cmd/agentry-desktop/main.go loaded, whose link handler reads the current origin
+    # cmd/agentry-desktop/desktop_test.go TestTryAgainUsesARunningServerOrStartsOne, TestTryAgainAtOnceStartsOnce and TestQuitDuringTryAgainStopsTheServer
+    Given the start page after a failed start or a server that went away
+    When the user clicks Try again
+    Then the app uses an Agentry answering from the data folder if there is one, and otherwise starts its own: yes
+    And the window goes on to that Agentry's page signed in, and links follow its address, even on another port: yes
+    And reloading the start page without Try again starts nothing
+    When Try again is asked several times while a start is under way
+    Then the server is started exactly once
+    When the app quits while Try again starts a server, or while the window says Agentry stopped
+    Then the server being started is stopped, no server starts after, and the app quits: yes
+    # Out of scope: a Start Agentry server over https found by Try again sends no links to the app, as the origins allowed to send them are fixed at launch (cmd/agentry-desktop/desktop.go bindingsOrigins); quitting and opening the app again covers it.

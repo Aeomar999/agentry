@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/browser"
@@ -118,25 +119,40 @@ func originOf(link string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// agentry is the Agentry the window shows. It is found or started once,
-// when the start page asks: after Wails' single-instance check, which ends
-// a second launch before then, so that launch never starts a server.
+// agentry is the Agentry the window shows. It is found or started when the
+// start page asks: after Wails' single-instance check, which ends a second
+// launch before then, so that launch never starts a server. It is found or
+// started again only when the page asks to try again, after a start failed
+// or the server went away.
+//
+// One start runs at a time, holding starting from start to end, and a Try
+// again asked before one ended is answered by it, not by another. stop takes
+// starting too, so it waits for a start under way. A quit closes done
+// first: a start under way then stops the server Ensure waits for, and a
+// start after it finds done closed under starting and starts nothing.
 type agentry struct {
 	launch launch.Options
 	token  func() string
 	done   chan struct{} // closed once the app quits; launch.Options.Quit
 
 	// serverPath, when set, is the PATH for the server the app starts and
-	// the git it runs. It is asked once, just before the app starts its own
-	// server, and not when one is already running.
+	// the git it runs. It is asked once, just before the app first starts
+	// its own server, and not when one is already running.
 	serverPath func() string
+	// wentAway, when set, sends the window back to the start page once
+	// the server has gone.
+	wentAway func()
 
-	starting, stopping, quitting sync.Once
+	starting  sync.Mutex   // held through a start, and by stop
+	ended     atomic.Int64 // the starts that have ended
+	pathAsked bool         // under starting
+
+	stopping, quitting sync.Once
 
 	mu           sync.Mutex
 	running      *launch.Agentry
-	failed       error
-	page, origin string // Agentry's signed-in page and its origin; empty until it answers
+	failed       error  // why the last start failed, or the server went away
+	page, origin string // Agentry's signed-in page and its origin; empty unless it answers
 }
 
 // newAgentry is the Agentry found or started with o, the page token from
@@ -148,7 +164,8 @@ func newAgentry(o launch.Options, token func() string) *agentry {
 }
 
 // serve is the app's own pages: the start page, and at startPath the
-// answer once Agentry answers.
+// answer once Agentry answers, or why it doesn't. Asked with "again", it
+// tries again after a failed start or a server that went away.
 func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Cache-Control", "no-store")
 	if r.URL.Path != startPath {
@@ -156,7 +173,7 @@ func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 		rw.Write(startPage())
 		return
 	}
-	a.start()
+	a.start(r.URL.Query().Has("again"))
 	a.mu.Lock()
 	page, failed := a.page, a.failed
 	a.mu.Unlock()
@@ -168,22 +185,62 @@ func (a *agentry) serve(rw http.ResponseWriter, r *http.Request) {
 	rw.Write(reply)
 }
 
-// start finds the Agentry running from the data folder, or starts one, the
-// first time it is called; later calls wait for that.
-func (a *agentry) start() {
-	a.starting.Do(func() {
-		if _, ok := launch.Running(a.launch.DataDir); !ok && a.serverPath != nil {
-			a.launch.Path = a.serverPath()
-		}
-		running, err := launch.Ensure(a.launch)
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		a.running, a.failed = running, err
-		if err == nil {
-			a.page = launch.PageURL(running.Client)
-			a.origin = originOf(a.page)
-		}
-	})
+// start finds the Agentry running from the data folder, or starts one. It
+// does nothing once the app quits, while the server it has still runs, or
+// after a failed start or a server that went away, unless again is set and
+// no start has ended since it was asked.
+func (a *agentry) start(again bool) {
+	asked := a.ended.Load()
+	a.starting.Lock()
+	defer a.starting.Unlock()
+	if a.hasQuit() {
+		return
+	}
+	again = again && a.ended.Load() == asked
+	a.mu.Lock()
+	settled := a.failed != nil && !again || a.failed == nil && a.running != nil
+	a.mu.Unlock()
+	if settled {
+		return
+	}
+	if _, ok := launch.Running(a.launch.DataDir); !ok && a.serverPath != nil && !a.pathAsked {
+		a.launch.Path = a.serverPath()
+		a.pathAsked = true
+	}
+	running, err := launch.Ensure(a.launch)
+	a.ended.Add(1)
+	a.mu.Lock()
+	a.running, a.failed, a.page, a.origin = running, err, "", ""
+	if err == nil {
+		a.page = launch.PageURL(running.Client)
+		a.origin = originOf(a.page)
+	}
+	a.mu.Unlock()
+	if err == nil {
+		go a.watch(running)
+	}
+}
+
+// watch waits for running to stop, then keeps why and sends the window
+// back to the start page, unless the app quits first or a later start
+// has replaced it.
+func (a *agentry) watch(running *launch.Agentry) {
+	select {
+	case <-running.Exited():
+	case <-a.done:
+		return
+	}
+	a.mu.Lock()
+	current := a.running == running && !a.hasQuit()
+	if current {
+		a.failed = running.Gone()
+		a.page, a.origin = "", ""
+	}
+	wentAway := a.wentAway
+	a.mu.Unlock()
+	if current && wentAway != nil {
+		wentAway()
+	}
 }
 
 // markQuit says the app quits: no server starts after it, and one a start
@@ -207,7 +264,8 @@ func (a *agentry) hasQuit() bool {
 func (a *agentry) stop() {
 	a.stopping.Do(func() {
 		a.markQuit()
-		a.starting.Do(func() {})
+		a.starting.Lock() // a start under way ends; later ones see the quit
+		a.starting.Unlock()
 		a.mu.Lock()
 		running := a.running
 		a.mu.Unlock()
@@ -241,52 +299,79 @@ var startTemplate = template.Must(template.New("start").Parse(`<!doctype html>
 main{max-width:min(860px,calc(100vw - 32px))}
 pre{font:13px ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:12px;border:1px solid #ccc;background:#f6f6f6}
 pre:empty,#log:empty{display:none}
-@media (prefers-color-scheme:dark){body{background:#111;color:#eee}pre{border-color:#444;background:#1b1b1b}}</style></head>
-<body><main><p id="status">Starting Agentry…</p><p id="log"></p><pre id="said"></pre></main>
+button{font:inherit;margin-top:16px;padding:6px 14px;border:1px solid #888;border-radius:0;background:transparent;color:inherit;cursor:pointer}
+@media (prefers-color-scheme:dark){body{background:#111;color:#eee}pre{border-color:#444;background:#1b1b1b}button{border-color:#777}}</style></head>
+<body><main><p id="status">Starting Agentry…</p><p id="log"></p><pre id="said"></pre><button id="again" hidden>Try again</button></main>
 <script>
+const quitting = {{.Quitting}};
 const show = (id, text) => { document.getElementById(id).textContent = text || ""; };
-const say = (text) => { show("status", "Agentry didn't start: " + text); };
-fetch({{.}}).then((reply) => reply.json()).then((started) => {
-  if (started.page) { location.replace(started.page); return; }
-  say(started.failed);
-  if (started.log) show("log", started.said ? "Its log, " + started.log + ", says:" : "It wrote nothing to its log, " + started.log + ".");
-  show("said", started.said);
-}, say);
+const again = document.getElementById("again");
+const ask = (query) => {
+  again.hidden = true;
+  show("status", "Starting Agentry…"); show("log"); show("said");
+  fetch({{.Start}} + query).then((reply) => reply.json()).then((started) => {
+    if (started.page) { location.replace(started.page); return; }
+    show("status", started.gone || "Agentry didn't start: " + started.failed);
+    if (started.unread) show("log", "Its log, " + started.log + ", couldn't be read.");
+    else if (started.log) show("log", started.said ? "Its log, " + started.log + ", says:" : "It wrote nothing to its log, " + started.log + ".");
+    show("said", started.said);
+    again.hidden = started.failed === quitting;
+  }, (error) => { show("status", "Agentry didn't start: " + error); again.hidden = false; });
+};
+again.addEventListener("click", () => ask("?again"));
+ask("");
 </script></body></html>
 `))
 
+// quittingReply is why Agentry isn't shown once the app quits.
+const quittingReply = "the app is quitting"
+
 // startPage is the page the window opens on, served by the app itself. It
 // asks the app at startPath to start Agentry, then goes on to Agentry's
-// page, signed in, or says why Agentry didn't start.
+// page, signed in, or says why Agentry didn't start or went away, with Try
+// again.
 func startPage() []byte {
 	var out bytes.Buffer
-	startTemplate.Execute(&out, startPath)
+	startTemplate.Execute(&out, struct{ Start, Quitting string }{startPath, quittingReply})
 	return out.Bytes()
 }
 
 // startReply is the app's answer at startPath: Agentry's page, signed in,
-// or why Agentry didn't start, with the token hidden, and when the server
-// it started failed, its log and the last lines it wrote there. Neither is
-// set when the app quit before the page asked.
+// why Agentry didn't start, or how it went away, with the token hidden, and
+// for a server the app started, its log and the last lines it wrote there.
+// Neither is set when the app quit before the page asked.
 func startReply(page string, failed error, token string) []byte {
 	var reply struct {
 		Page   string `json:"page,omitempty"`
 		Failed string `json:"failed,omitempty"`
+		Gone   string `json:"gone,omitempty"`
 		Log    string `json:"log,omitempty"`
 		Said   string `json:"said,omitempty"`
+		Unread bool   `json:"unread,omitempty"`
+	}
+	logged := func(tail launch.Tail) {
+		reply.Log = launch.Redact(tail.Log, token)
+		reply.Said = launch.Redact(tail.Said, token)
+		reply.Unread = tail.Unread
 	}
 	var notStarted *launch.NotStarted
+	var stopped *launch.Stopped
 	switch {
 	case errors.As(failed, &notStarted):
 		reply.Failed = notStarted.Reason()
-		reply.Log = launch.Redact(notStarted.Log, token)
-		reply.Said = launch.Redact(notStarted.Said, token)
+		logged(notStarted.Tail)
+	case errors.As(failed, &stopped):
+		reply.Gone = "The Agentry that was running went away."
+		if stopped.Started {
+			reply.Gone = "The Agentry this window started stopped."
+		}
+		logged(stopped.Tail)
 	case failed != nil:
 		reply.Failed = launch.Redact(failed.Error(), token)
 	case page != "":
 		reply.Page = page
 	default:
-		reply.Failed = "the app is quitting"
+		reply.Failed = quittingReply
 	}
 	data, _ := json.Marshal(reply)
 	return data
@@ -295,7 +380,9 @@ func startReply(page string, failed error, token string) []byte {
 // bindingsOrigins are the origins whose pages may send the app linkEvent.
 // Wails fixes them before the window opens, but Agentry starts after, so
 // they are any port of localhost, where a server the app starts serves,
-// and running, the origin of the server answering at launch, if any.
+// and running, the origin of the server answering at launch, if any. So a
+// server found later elsewhere, such as Start Agentry's over https after a
+// Try again, sends no links to the app; quitting and opening it again does.
 func bindingsOrigins(running string) string {
 	origins := "http://localhost:*"
 	if running != "" {

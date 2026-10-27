@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func TestLaunchOptions(t *testing.T) {
 // The start page asks the app to start Agentry and holds no token.
 func TestStartPageAsksTheAppToStartAgentry(t *testing.T) {
 	page := string(startPage())
-	if !strings.Contains(page, `fetch("/agentry-desktop/start")`) || !strings.Contains(page, "Starting Agentry…") || strings.Contains(page, "token") {
+	if !strings.Contains(page, `fetch("/agentry-desktop/start" + query)`) || !strings.Contains(page, "Starting Agentry…") || strings.Contains(page, "token") {
 		t.Errorf("page:\n%s", page)
 	}
 }
@@ -63,17 +64,22 @@ func TestStartPageAsksTheAppToStartAgentry(t *testing.T) {
 // startHarness runs the start page's script in node with the app's reply
 // to its fetch, and reports where it went and what it said.
 const startHarness = `
-const asked = [], replaced = [], shown = { status: {}, log: {}, said: {} };
+const asked = [], replaced = [], clicks = {};
+const again = { hidden: true, addEventListener: (type, f) => { clicks[type] = f; } };
+const shown = { status: {}, log: {}, said: {}, again };
 global.document = { getElementById: (id) => shown[id] };
 global.location = { replace: (u) => replaced.push(u) };
 global.fetch = async (path) => { asked.push(path); return { json: async () => JSON.parse(process.argv[2]) }; };
 eval(process.argv[1]);
-setTimeout(() => console.log(JSON.stringify({ asked, replaced, status: shown.status.textContent || "", log: shown.log.textContent || "", said: shown.said.textContent || "" })), 10);
+const report = () => console.log(JSON.stringify({ asked, replaced, status: shown.status.textContent || "", log: shown.log.textContent || "", said: shown.said.textContent || "", again: !again.hidden }));
+if (process.argv[3] === "click") setTimeout(() => { clicks.click(); setTimeout(report, 10); }, 10);
+else setTimeout(report, 10);
 `
 
-func runStartPage(t *testing.T, reply []byte) (run struct {
+func runStartPage(t *testing.T, reply []byte, click ...string) (run struct {
 	Asked, Replaced   []string
 	Status, Log, Said string
+	Again             bool
 }) {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -82,7 +88,7 @@ func runStartPage(t *testing.T, reply []byte) (run struct {
 	}
 	page := string(startPage())
 	script := page[strings.Index(page, "<script>")+len("<script>") : strings.Index(page, "</script>")]
-	out, err := exec.Command(node, "-e", startHarness, script, string(reply)).CombinedOutput()
+	out, err := exec.Command(node, append([]string{"-e", startHarness, script, string(reply)}, click...)...).CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
@@ -96,11 +102,11 @@ func runStartPage(t *testing.T, reply []byte) (run struct {
 // Agentry didn't start.
 func TestStartPageGoesWhereTheAppSays(t *testing.T) {
 	run := runStartPage(t, startReply(origin+"/?token=abc", nil, "abc"))
-	if !slices.Equal(run.Asked, []string{startPath}) || !slices.Equal(run.Replaced, []string{origin + "/?token=abc"}) || run.Status != "" {
+	if !slices.Equal(run.Asked, []string{startPath}) || !slices.Equal(run.Replaced, []string{origin + "/?token=abc"}) || run.Status != "Starting Agentry…" || run.Again {
 		t.Errorf("started: %+v", run)
 	}
 	run = runStartPage(t, startReply("", errors.New("no free port from 7800 to 7819"), ""))
-	if len(run.Replaced) != 0 || run.Status != "Agentry didn't start: no free port from 7800 to 7819" || run.Log != "" || run.Said != "" {
+	if len(run.Replaced) != 0 || run.Status != "Agentry didn't start: no free port from 7800 to 7819" || run.Log != "" || run.Said != "" || !run.Again {
 		t.Errorf("failed: %+v", run)
 	}
 }
@@ -108,12 +114,12 @@ func TestStartPageGoesWhereTheAppSays(t *testing.T) {
 // When the server the app started fails, the start page shows the log's
 // path and its last lines, line breaks kept, as text.
 func TestStartPageShowsWhatTheServerLogged(t *testing.T) {
-	failed := &launch.NotStarted{Log: "/home/me/.agentry/serve.log", Said: "policy.toml: line 3\n<b>bad</b> rule"}
+	failed := &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Said: "policy.toml: line 3\n<b>bad</b> rule"}}
 	run := runStartPage(t, startReply("", failed, ""))
 	if run.Status != "Agentry didn't start: the server didn't start" || run.Log != "Its log, /home/me/.agentry/serve.log, says:" || run.Said != failed.Said {
 		t.Errorf("shown: %+v", run)
 	}
-	run = runStartPage(t, startReply("", &launch.NotStarted{Log: "/home/me/.agentry/serve.log"}, ""))
+	run = runStartPage(t, startReply("", &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log"}}, ""))
 	if run.Log != "It wrote nothing to its log, /home/me/.agentry/serve.log." || run.Said != "" {
 		t.Errorf("nothing logged: %+v", run)
 	}
@@ -126,9 +132,186 @@ func TestStartPageShowsTextOnly(t *testing.T) {
 	}
 }
 
+// Once the server has gone, the start page says how, with the log of a
+// server the app started, and offers Try again.
+func TestStartPageSaysTheServerWentAway(t *testing.T) {
+	stopped := &launch.Stopped{Started: true, Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Said: "panic: <b>boom</b>\nexit status 2"}}
+	run := runStartPage(t, startReply("", stopped, ""))
+	if run.Status != "The Agentry this window started stopped." || run.Log != "Its log, /home/me/.agentry/serve.log, says:" || run.Said != stopped.Said || !run.Again || len(run.Replaced) != 0 {
+		t.Errorf("started: %+v", run)
+	}
+	run = runStartPage(t, startReply("", &launch.Stopped{}, ""))
+	if run.Status != "The Agentry that was running went away." || run.Log != "" || run.Said != "" || !run.Again {
+		t.Errorf("found: %+v", run)
+	}
+	run = runStartPage(t, startReply("", &launch.Stopped{Started: true, Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Unread: true}}, ""))
+	if run.Log != "Its log, /home/me/.agentry/serve.log, couldn't be read." {
+		t.Errorf("unread: %+v", run)
+	}
+}
+
+// Try again asks the app to start Agentry again; a quitting app offers none.
+func TestStartPageTryAgain(t *testing.T) {
+	run := runStartPage(t, startReply("", &launch.Stopped{}, ""), "click")
+	if !slices.Equal(run.Asked, []string{startPath, startPath + "?again"}) {
+		t.Errorf("asked %q", run.Asked)
+	}
+	if run := runStartPage(t, startReply("", nil, "")); run.Again || run.Status != "Agentry didn't start: the app is quitting" {
+		t.Errorf("quitting: %+v", run)
+	}
+}
+
+// startAt asks the app at startPath, as the start page does, and gives
+// its reply.
+func startAt(a *agentry, query string) string {
+	reply := httptest.NewRecorder()
+	a.serve(reply, httptest.NewRequest("GET", startPath+query, nil))
+	return reply.Body.String()
+}
+
+// serveIn makes the data folder's Agentry answer, as Start Agentry's does,
+// and gives its page.
+func serveIn(t *testing.T, dataDir string) *httptest.Server {
+	running := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("{}"))
+	}))
+	t.Cleanup(running.Close)
+	os.MkdirAll(dataDir, 0o700)
+	client.Save(dataDir, client.Where{URL: running.URL, Page: running.URL})
+	os.WriteFile(filepath.Join(dataDir, "ui-token"), []byte("abc\n"), 0o600)
+	return running
+}
+
+// After a failed start, only Try again starts again: it uses an Agentry
+// that answers now, or else starts the app's own.
+func TestTryAgainUsesARunningServerOrStartsOne(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't installed")
+	}
+	o := launchNowhere(t)
+	a := newAgentry(o, func() string { return "abc" })
+	defer a.stop()
+	if reply := startAt(a, ""); !strings.Contains(reply, "no-agentry") {
+		t.Fatalf("first start: %s", reply)
+	}
+	if reply := startAt(a, "?again"); !strings.Contains(reply, "no-agentry") || a.ended.Load() != 2 {
+		t.Errorf("tried again with none running, %d starts: %s", a.ended.Load(), reply)
+	}
+	running := serveIn(t, o.DataDir)
+	if reply := startAt(a, ""); !strings.Contains(reply, "no-agentry") || a.ended.Load() != 2 {
+		t.Errorf("started again without Try again, %d starts: %s", a.ended.Load(), reply)
+	}
+	page := launch.PageURL(client.Client{URL: running.URL, Token: "abc"})
+	if reply := startAt(a, "?again"); reply != `{"page":`+quoted(page)+`}` {
+		t.Errorf("tried again with one running: %s", reply)
+	}
+	if got, origin := a.signedIn(); got != page || origin != originOf(page) {
+		t.Errorf("signed in at %q %q", got, origin)
+	}
+}
+
+// fakeServer is a script standing in for the agentry binary, on Unix: it
+// says each start in the data folder's "starts" file, then runs body.
+func fakeServer(t *testing.T, o launch.Options, body string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake server is a shell script")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git isn't installed")
+	}
+	os.MkdirAll(filepath.Dir(o.Binary), 0o700)
+	script := "#!/bin/sh\necho $$ >> " + strconv.Quote(filepath.Join(o.DataDir, "starts")) + "\n" + body + "\n"
+	if err := os.WriteFile(o.Binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// startsIn are the pids of the fake server's starts.
+func startsIn(o launch.Options) []string {
+	said, _ := os.ReadFile(filepath.Join(o.DataDir, "starts"))
+	return strings.Fields(string(said))
+}
+
+// Try again asked many times at once starts the server once.
+func TestTryAgainAtOnceStartsOnce(t *testing.T) {
+	o := launchNowhere(t)
+	fakeServer(t, o, "sleep 1; exit 1")
+	a := newAgentry(o, func() string { return "" })
+	defer a.stop()
+	a.failed = errors.New("an earlier start failed")
+	var replies sync.WaitGroup
+	for range 5 {
+		replies.Add(1)
+		go func() {
+			defer replies.Done()
+			startAt(a, "?again")
+		}()
+	}
+	replies.Wait()
+	if starts := startsIn(o); len(starts) != 1 {
+		t.Errorf("%d starts, want 1; %d begun", len(starts), a.ended.Load())
+	}
+}
+
+// A quit while Try again starts the server stops it at once, and nothing
+// starts after.
+func TestQuitDuringTryAgainStopsTheServer(t *testing.T) {
+	o := launchNowhere(t)
+	fakeServer(t, o, "exec sleep 30")
+	a := newAgentry(o, func() string { return "" })
+	a.failed = errors.New("an earlier start failed")
+	tried := make(chan string)
+	go func() { tried <- startAt(a, "?again") }()
+	for len(startsIn(o)) == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	began := time.Now()
+	a.stop()
+	if waited := time.Since(began); waited > 8*time.Second {
+		t.Errorf("stop waited %v", waited)
+	}
+	if reply := <-tried; reply != `{"failed":"the app is quitting"}` {
+		t.Errorf("reply %s", reply)
+	}
+	pid, _ := strconv.Atoi(startsIn(o)[0])
+	if procs.Alive(pid) {
+		t.Errorf("the server, pid %d, still runs after the quit", pid)
+	}
+	startAt(a, "?again")
+	if starts := startsIn(o); len(starts) != 1 {
+		t.Errorf("%d starts, want 1: one started after the quit", len(starts))
+	}
+}
+
+// Once the server goes away, the app keeps why, forgets its page and
+// sends the window back to the start page; not after a quit.
+func TestTheAppNoticesTheServerWentAway(t *testing.T) {
+	o := launchNowhere(t)
+	running := serveIn(t, o.DataDir)
+	a := newAgentry(o, func() string { return "abc" })
+	wentAway := make(chan struct{}, 1)
+	a.wentAway = func() { wentAway <- struct{}{} }
+	if reply := startAt(a, ""); !strings.Contains(reply, `"page"`) {
+		t.Fatalf("reply %s", reply)
+	}
+	running.Close()
+	select {
+	case <-wentAway:
+	case <-time.After(20 * time.Second):
+		t.Fatal("the window wasn't sent back after the server went away")
+	}
+	if reply := startAt(a, ""); reply != `{"gone":"The Agentry that was running went away."}` {
+		t.Errorf("reply %s", reply)
+	}
+	if page, origin := a.signedIn(); page != "" || origin != "" {
+		t.Errorf("still signed in at %q %q", page, origin)
+	}
+	a.stop()
+}
+
 // A server that failed gives the reason, its log and its lines, token hidden.
 func TestStartReplyCarriesTheServersLog(t *testing.T) {
-	failed := &launch.NotStarted{Log: "/home/me/.agentry/serve.log", Said: "Open " + origin + "/?token=s3cret\nbad rule s3cret"}
+	failed := &launch.NotStarted{Tail: launch.Tail{Log: "/home/me/.agentry/serve.log", Said: "Open " + origin + "/?token=s3cret\nbad rule s3cret"}}
 	reply := string(startReply("", failed, "s3cret"))
 	want := `{"failed":"the server didn't start","log":"/home/me/.agentry/serve.log","said":"Open http://localhost:7800/?token=` + launch.Hidden + `\nbad rule ` + launch.Hidden + `"}`
 	if reply != want {
@@ -229,7 +412,7 @@ func TestAQuitClosesLaunchQuitOnce(t *testing.T) {
 func TestStartReplyAfterAQuitSaysTheAppIsQuitting(t *testing.T) {
 	a := newAgentry(launch.Options{}, func() string { return "" })
 	a.page, a.origin = origin+"/?token=abc", origin
-	a.starting.Do(func() {}) // as if Agentry had answered
+	a.running = &launch.Agentry{} // as if Agentry had answered
 	a.stop()
 	reply := httptest.NewRecorder()
 	a.serve(reply, httptest.NewRequest("GET", startPath, nil))
@@ -593,7 +776,7 @@ func TestServerPathIsAskedOnlyWhenTheAppStartsAServer(t *testing.T) {
 		a := newAgentry(c.o, func() string { return "" })
 		asked := false
 		a.serverPath = func() string { asked = true; return "/opt/homebrew/bin" }
-		a.start()
+		a.start(false)
 		a.stop()
 		if asked != c.want || (a.launch.Path == "/opt/homebrew/bin") != c.want {
 			t.Errorf("%s: asked %v, launch.Options.Path %q; want asked %v", name, asked, a.launch.Path, c.want)
