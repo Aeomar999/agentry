@@ -133,7 +133,7 @@ Feature: Observability
     And both get the session's state saying 2 viewers: yes
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 156)
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 149)
     # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test

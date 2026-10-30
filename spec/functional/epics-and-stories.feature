@@ -173,8 +173,8 @@ Feature: Epics and stories
   Scenario: Close the epic from its page, and one Visionaries session follows
     # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
     # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
-    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 418 to 427
-    # the words "that is approved on the page": internal/web/api.go line 421; the test asserts the 403 only
+    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 419 to 428
+    # the words "that is approved on the page": internal/web/api.go line 422; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
     Then the epic is not in Questions
     When the user clicks "Close the epic"

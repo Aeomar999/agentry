@@ -1,4 +1,4 @@
-package web
+package settingsapi_test
 
 import (
 	"encoding/json"
@@ -15,6 +15,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions/ideas"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
@@ -26,6 +27,44 @@ import (
 // redact_api_test.go; these see what the log-wide routes add: which
 // streams they read, the snapshot written once, and a stream refused
 // leaving the rest redacted.
+
+// streamPreview is a stream the preview across the log lists.
+type streamPreview struct {
+	Stream   string `json:"stream"`
+	Rows     int    `json:"rows"`
+	Archived bool   `json:"archived"`
+	Error    string `json:"error,omitempty"`
+}
+
+// logPreview is what the preview across the log answers.
+type logPreview struct {
+	Rows    int             `json:"rows"`
+	Streams []streamPreview `json:"streams"`
+}
+
+// streamRedacted is a stream a redaction across the log rewrote.
+type streamRedacted struct {
+	Stream   string    `json:"stream"`
+	At       time.Time `json:"at"`
+	Rows     int       `json:"rows"`
+	Archived bool      `json:"archived"`
+}
+
+// streamFailed is a stream a redaction across the log left holding the
+// text.
+type streamFailed struct {
+	Stream  string `json:"stream"`
+	Reason  string `json:"reason"`
+	Recount bool   `json:"recount"`
+}
+
+// logRedacted is what a redaction across the log answers.
+type logRedacted struct {
+	Rows     int              `json:"rows"`
+	Streams  []streamRedacted `json:"streams"`
+	Failures []streamFailed   `json:"failures"`
+	Warnings []string         `json:"warnings"`
+}
 
 // widely has secretHere in task-4 (two rows, withSecret), task-5 (one),
 // the archived task-6 (one, in its blob), the engineer's knowledge and
@@ -299,7 +338,7 @@ func TestATurnRunningAsTheLogIsRedactedDoesNotWriteTheSecretBack(t *testing.T) {
 	f.teach(t, written)
 	f.startTurn(t)
 	answer := redactAcross(t, f.server, secretHere)
-	if !slices.Equal(answer.Warnings, []string{stillRunning}) {
+	if !slices.Equal(answer.Warnings, []string{settingsapi.StillRunning}) {
 		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
 	}
 	f.endTurn(t, written+"\n\nDeploy on Fridays.\n")
@@ -334,7 +373,7 @@ func TestAWrapUpTurnRunningAsTheLogIsRedactedDoesNotWriteTheSecretBack(t *testin
 	if _, rejection, err := f.log.Archive("task-1", func() any { return summary }, f.blobs); err != nil || rejection == nil || !strings.Contains(rejection.Reason, "turn running") {
 		t.Fatalf("archiving task-1 while its wrap-up turn runs: %v, %v, want refused", rejection, err)
 	}
-	if answer := redactAcross(t, f.server, secretHere); !slices.Equal(answer.Warnings, []string{stillRunning}) {
+	if answer := redactAcross(t, f.server, secretHere); !slices.Equal(answer.Warnings, []string{settingsapi.StillRunning}) {
 		t.Errorf("the redaction warned %q, want only that a running turn's end redacts it again", answer.Warnings)
 	}
 	f.endTurnOf(t, "turn-2", written+"\n\nDeploy on Fridays.\n")

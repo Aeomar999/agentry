@@ -1,7 +1,6 @@
 Feature: Settings
   The Settings page, and redacting a text from a task or from everywhere.
   # Sources: internal/extensions, internal/web/extensions_api.go,
-  # internal/web/redact_api.go, internal/web/redact_log_api.go,
   # internal/core/store/redact.go, internal/core/store/redact_refusals.go,
   # internal/core/store/redact_strings.go, internal/core/store/redact_commit.go,
   # internal/core/rules/redact_rules.go,
@@ -35,7 +34,7 @@ Feature: Settings
   Scenario: Redact a text counts first, then redacts, and says what is left
     # ui/src/components/organisms/RedactText.test.tsx "shows the count first, redacts only once you say yes, then what it did and the note on backups"
     # ui/src/pages/TaskPage.test.tsx "asks about the text marked on the page, in %s"
-    # internal/web/redact_api.go lines 37 to 68
+    # internal/domain/settings/settingsapi/redact_api.go lines 37 to 68
     Given the user marked "sk-live-0123456789" on task-1's page
     When the user clicks "Redact a text" in the header
     Then a dialog "Redact a text in task-1" is shown and "The text to take out" holds exactly the marked text
@@ -48,7 +47,7 @@ Feature: Settings
   @SET-03 @user @test
   Scenario: What redacting refuses, and a count gone stale
     # ui/src/components/organisms/RedactText.test.tsx "shows a refusal in the server's words, and redacts nothing" and "a row written since the count is refused 409, counted again and asked again with the new count"
-    # internal/web/redact_api_test.go TestARedactionWithAStaleCountIsRefused and TestARefusedRedactionWritesNothing
+    # internal/domain/settings/settingsapi/redact_api_test.go TestARedactionWithAStaleCountIsRefused and TestARefusedRedactionWritesNothing
     Given the text to redact is a number in a row's JSON
     When the user asks for the count
     Then "It can't be redacted: <the server's reason>" is shown and 0 rows are redacted

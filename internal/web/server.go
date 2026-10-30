@@ -20,7 +20,6 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
-	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
@@ -105,8 +104,6 @@ func (s *Server) Handler() http.Handler {
 	api("PUT /api/tasks/{task}/repo", s.changeRepo)
 	api("PUT /api/tasks/{task}/rank", s.rank)
 	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
-	api("POST /api/tasks/{task}/redact/preview", s.previewRedaction)
-	api("POST /api/tasks/{task}/redact", s.redact) // never the desk's: nothing undoes it
 	api("GET /api/tasks/{task}/files", s.listFiles)
 	api("GET /api/tasks/{task}/file", s.readFile)
 	api("GET /api/tasks/{task}/commits", s.listCommits)
@@ -134,10 +131,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/agents/{name}/rename", s.renameAgent)
 	api("PUT /api/agents/{name}/knowledge", s.setKnowledge)
 	api("GET /api/agents/{name}/knowledge", s.knowledgeHistory)
-	api("POST /api/agents/redact/preview", s.previewAgentsRedaction)
-	api("POST /api/agents/redact", s.redactAgents) // never the desk's: nothing undoes it
-	api("POST /api/redact/preview", s.previewLogRedaction)
-	api("POST /api/redact", s.redactLog) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
 	api("GET /api/changes", s.waitForChanges)
 	// A machine connecting its Claude Code, with its install command's code:
@@ -185,7 +178,7 @@ func (s *Server) Handler() http.Handler {
 	if s.config.Desk != nil {
 		mux.Handle("GET /api/desk/terminal", s.requireUI(s.config.Desk.ServeHTTP))
 	}
-	s.mount("the settings domain", settingsapi.API{Log: s.store, State: s.state}.Routes(), mux)
+	s.mount("the settings domain", s.settingsAPI().Routes(), mux)
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
 	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)

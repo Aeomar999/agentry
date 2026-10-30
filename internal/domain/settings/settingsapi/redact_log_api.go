@@ -1,4 +1,4 @@
-package web
+package settingsapi
 
 import (
 	"errors"
@@ -84,12 +84,12 @@ type logRedacted struct {
 // why it can't be redacted. It writes nothing. No row anywhere holding it
 // is answered as answerPreview answers one stream: 500 when a stream
 // failed, 409 otherwise.
-func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
+func (a API) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	preview := s.previewLog(asked.text)
+	preview := a.previewLog(asked.text)
 	if preview.Rows == 0 {
 		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
@@ -106,12 +106,12 @@ func (s *Server) previewLogRedaction(w http.ResponseWriter, r *http.Request) {
 // the rest are redacted still; only when none is, it is answered as
 // answerRedaction answers one stream, naming each failure. The snapshot
 // is written once, at the end. Only the page may ask, as for redact.
-func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
+func (a API) redactLog(w http.ResponseWriter, r *http.Request) {
 	asked, counts, ok := countedSecretOf(w, r)
 	if !ok {
 		return
 	}
-	preview := s.previewLog(asked.text)
+	preview := a.previewLog(asked.text)
 	if preview.Rows == 0 {
 		http.Error(w, preview.noneHeld(), preview.noneHeldStatus())
 		return
@@ -121,7 +121,7 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 	for _, listed := range preview.Streams {
 		done := streamRedaction{rejection: listed.rejection, err: listed.err}
 		if listed.Error == "" {
-			done = s.redactCountedIn(listed, asked, counts)
+			done = a.redactCountedIn(listed, asked, counts)
 		}
 		switch {
 		case done.redaction.Position != 0:
@@ -149,7 +149,7 @@ func (s *Server) redactLog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, answer.refusal(), http.StatusConflict)
 		return
 	}
-	answer.Warnings = append(answer.Warnings, s.writeOverOldText()...)
+	answer.Warnings = append(answer.Warnings, a.WriteOverOldText()...)
 	httpapi.Reply(w, answer)
 }
 
@@ -199,7 +199,7 @@ func countedSecretOf(w http.ResponseWriter, r *http.Request) (redactionAsked, ma
 // unless as many of its rows hold the text as counts holds for it. With
 // no counts at all, it redacts however many rows hold it; with counts but
 // none for this stream, it is refused, as you didn't see its rows.
-func (s *Server) redactCountedIn(listed streamPreview, asked redactionAsked, counts map[string]int) streamRedaction {
+func (a API) redactCountedIn(listed streamPreview, asked redactionAsked, counts map[string]int) streamRedaction {
 	if counts != nil {
 		rows, counted := counts[listed.Stream]
 		if !counted {
@@ -207,7 +207,7 @@ func (s *Server) redactCountedIn(listed streamPreview, asked redactionAsked, cou
 		}
 		asked.rows = rows
 	}
-	return s.redactIn(listed.Stream, asked, listed.Archived)
+	return a.redactIn(listed.Stream, asked, listed.Archived)
 }
 
 // countedGone is each stream counts holds that the preview no longer
@@ -226,10 +226,10 @@ func countedGone(counts map[string]int, preview logPreview) []string {
 // previewLog previews the redaction of text from every stream in the log
 // (streamsLogged), listing those that hold it and those whose preview is
 // refused or fails, but not those that don't hold it.
-func (s *Server) previewLog(text string) logPreview {
+func (a API) previewLog(text string) logPreview {
 	preview := logPreview{Streams: []streamPreview{}}
-	for _, stream := range s.streamsLogged() {
-		rows, rejection, err := s.previewIn(stream.name, text, stream.archived)
+	for _, stream := range a.streamsLogged() {
+		rows, rejection, err := a.previewIn(stream.name, text, stream.archived)
 		if store.HoldsNone(stream.name, rejection) {
 			continue
 		}
@@ -281,23 +281,23 @@ func (p logPreview) failed() bool {
 // order it lists them: each task's, by id, but an erased one's, of which
 // nothing is left; then the named streams; then each extension's, in log
 // order.
-func (s *Server) streamsLogged() []loggedStream {
+func (a API) streamsLogged() []loggedStream {
 	var streams []loggedStream
-	for _, id := range s.state.TaskIDs() {
-		if _, erased := s.state.Erased(id); erased {
+	for _, id := range a.State.TaskIDs() {
+		if _, erased := a.State.Erased(id); erased {
 			continue
 		}
-		_, err := s.task(id)
+		_, err := a.State.Task(id)
 		streams = append(streams, loggedStream{name: id, archived: errors.Is(err, current.ErrArchived)})
 	}
 	for _, name := range namedStreams {
 		streams = append(streams, loggedStream{name: name})
 	}
-	for _, extension := range s.config.Extensions {
+	for _, extension := range a.Extensions {
 		if extension.Streams == nil {
 			continue
 		}
-		for _, id := range s.state.OwnedIDs(extension.Streams.Prefix) {
+		for _, id := range a.State.OwnedIDs(extension.Streams.Prefix) {
 			streams = append(streams, loggedStream{name: id})
 		}
 	}

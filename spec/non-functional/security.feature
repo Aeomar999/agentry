@@ -427,7 +427,7 @@ Feature: Security
     Given the desk's Claude session holds the desk token
     When it lists, creates or shows a task
     Then every call is allowed
-    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 98 to 100)
+    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 97 to 99)
     # README.md, Use it; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
 
   @SEC-48 @test
@@ -444,7 +444,7 @@ Feature: Security
     When it posts a message to a task's claude/message route
     Then the message is allowed
     And it reaches the task as the user's, marked as sent through Claude: yes
-    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 115)
+    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 112)
     # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse
 
   @SEC-50 @test
@@ -467,7 +467,7 @@ Feature: Security
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
     Then its name is agentry_ui, its path is /, and it lasts at least 300 days
-    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 310); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 222)
+    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 303); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 215)
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token
@@ -533,7 +533,7 @@ Feature: Security
     Then the job gets the secret's value exactly as written
     And the secret is not in the server's output
     And the secret is not in agentry.db, its WAL or the snapshot
-    # not under test, checked by hand: the page and the API never show it; no route serves features.toml, GET /api/settings shows Agentry's own settings (internal/domain/settings/settingsapi/settingsapi.go line 56)
+    # not under test, checked by hand: the page and the API never show it; no route serves features.toml, GET /api/settings shows Agentry's own settings (internal/domain/settings/settingsapi/settingsapi.go line 99)
     And no agent may read features.toml, whatever the policy says
     # README.md, Features' settings and secrets; cmd/agentry/jobs_test.go TestASecretReachesTheJobAndNeitherLog, TestTheSettingsFileIsProtected (under the shipped policy, whose use_for_everyone is allow-everything)
 

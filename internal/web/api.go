@@ -19,6 +19,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
+	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
@@ -663,6 +664,13 @@ func (s *Server) roster() (agents.Roster, error) {
 func (s *Server) policyAPI() policyapi.API {
 	return policyapi.API{Log: s.store, Events: s.store, Policy: s.config.Policy, Roster: s.roster,
 		Version: s.version(), Worktrees: s.config.Worktrees}
+}
+
+// settingsAPI is the Settings page's routes as web mounts them, redacting
+// a secret too.
+func (s *Server) settingsAPI() settingsapi.API {
+	return settingsapi.API{Log: s.store, State: s.state, Store: s.store, Blobs: s.config.Blobs, Redactions: s.config.Redactions,
+		Extensions: s.config.Extensions, Forget: s.archives.forget, WriteOverOldText: s.writeOverOldText}
 }
 
 // version is this Agentry's, as the comment above a profile it adds says.

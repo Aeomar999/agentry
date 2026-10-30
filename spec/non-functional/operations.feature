@@ -482,18 +482,18 @@ Feature: Operations
     Given an agent whose knowledge holds the secret in a version
     When the agents are redacted
     Then each version that holds it is written again whole without it: yes
-    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go TestRedactingALiveTaskLeavesNoTraceOnDisk, TestRedactingAnArchivedTaskLeavesNoTraceOnDisk and TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk; the preview's count of 2: TestARedactionWithAStaleCountIsRefused; every other byte: internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; the versions: internal/core/store/redact_knowledge_test.go TestKnowledgeFromTheSecretOnIsWrittenAgainInFull
+    # README.md, Archiving, erasing and redacting; internal/domain/settings/settingsapi/redact_api_test.go TestRedactingALiveTaskLeavesNoTraceOnDisk and TestRedactingTheAgentsKnowledgeLeavesNoTraceOnDisk; internal/web/redact_api_test.go TestRedactingAnArchivedTaskLeavesNoTraceOnDisk; the preview's count of 2: internal/domain/settings/settingsapi/redact_api_test.go TestARedactionWithAStaleCountIsRefused; every other byte: internal/core/store/redact_test.go TestRedactRewritesOnlyTheSecret; the versions: internal/core/store/redact_knowledge_test.go TestKnowledgeFromTheSecretOnIsWrittenAgainInFull
 
   @OPS-40 @test
   Scenario: A redaction confirmed with a stale count is refused with 409
-    # internal/web/redact_api.go: the rows are counted again as the redaction commits, and a count that no longer holds is answered 409 naming the rows there are now; internal/core/store/redact.go RedactCounted
-    # internal/web/redact_api_test.go TestARedactionWithAStaleCountIsRefused, TestARedactionOfAnArchivedTaskWithAStaleCountIsRefused
+    # internal/domain/settings/settingsapi/redact_api.go: the rows are counted again as the redaction commits, and a count that no longer holds is answered 409 naming the rows there are now; internal/core/store/redact.go RedactCounted
+    # internal/domain/settings/settingsapi/redact_api_test.go TestARedactionWithAStaleCountIsRefused, TestARedactionOfAnArchivedTaskWithAStaleCountIsRefused
     Given a redaction previewed with a count, and a row that holds the text written since
     When it is confirmed with the stale count
     Then it is refused with 409, naming how many rows hold the text now, and 0 rows are written
     When it is confirmed with the count as it is now
     Then the redaction is done: yes
-    # README.md, Archiving, erasing and redacting; internal/web/redact_api_test.go
+    # README.md, Archiving, erasing and redacting; internal/domain/settings/settingsapi/redact_api_test.go
 
   @OPS-26 @test
   Scenario: A redaction that cannot leave the rest of a row as it was is refused

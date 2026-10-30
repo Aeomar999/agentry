@@ -35,8 +35,8 @@ Feature: Tasks and the board
   @TASK-03 @user @test
   Scenario: A task needs only a description, and its first line names it
     # internal/web/api_test.go TestATaskNeedsOnlyADescription
-    # 72 characters: internal/web/api.go line 349, titleFrom
-    # the words "describe the task": internal/web/api.go line 128; the test asserts the 400 only
+    # 72 characters: internal/web/api.go line 350, titleFrom
+    # the words "describe the task": internal/web/api.go line 129; the test asserts the 400 only
     Given a server with no tasks
     When the user adds a task with the description "Fix the login redirect" followed by a second line, and no title
     Then the task is created with exactly the title "Fix the login redirect"
@@ -85,7 +85,7 @@ Feature: Tasks and the board
 
   @TASK-07 @user @manual
   Scenario: Adding a task opens it, and adding a story leaves it in the Backlog
-    # a story is parked in the backlog at creation: internal/web/api.go line 186
+    # a story is parked in the backlog at creation: internal/web/api.go line 187
     Given the New task dialog is open
     When the user describes a task and clicks Add task
     Then a toast "Created task-N" with "The coordinator reads it next." is shown once
@@ -163,7 +163,7 @@ Feature: Tasks and the board
     Then the link counts as an address, and the archive is downloaded into a folder whose name starts with app-1.2-, which is a git repo: yes
     And the files are at the top of the repo, out of the archive's folder, and main.go is committed: yes
     And a link that answers 404 is refused, saying 404
-    # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 101)
+    # not under test, checked by hand: a task whose Another repo is such a link is fetched this way (internal/web/api.go line 102)
     # README.md, Use it (Add a task)
 
   # ---- The board and its columns ---------------------------------------------
@@ -581,7 +581,7 @@ Feature: Tasks and the board
 
   @TASK-48 @user @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
-    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/web/api.go lines 63 to 73
+    # ui/src/pages/TaskPage.tsx lines 627 to 672, RepoEditor; internal/web/api.go lines 64 to 74
     # ui/src/components/organisms/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/web/epics_api.go lines 67 and 73
     Given a live task's Details tab
     When the user clicks Change on the Repo row

@@ -1,4 +1,4 @@
-package web
+package settingsapi
 
 import (
 	"errors"
@@ -34,17 +34,17 @@ const stillRunning = "an agent whose turn is running wrote its knowledge file, s
 // section 5, "Removing a secret"); an archived task's read through its
 // blob. It writes nothing. A refusal, such as no row holding the text, is
 // answered 409 with its reason.
-func (s *Server) previewRedaction(w http.ResponseWriter, r *http.Request) {
+func (a API) previewRedaction(w http.ResponseWriter, r *http.Request) {
 	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
 	id := r.PathValue("task")
-	archived, ok := s.redactable(w, id)
+	archived, ok := a.redactable(w, id)
 	if !ok {
 		return
 	}
-	rows, rejection, err := s.previewIn(id, asked.text, archived)
+	rows, rejection, err := a.previewIn(id, asked.text, archived)
 	answerPreview(w, rows, rejection, err)
 }
 
@@ -54,38 +54,38 @@ func (s *Server) previewRedaction(w http.ResponseWriter, r *http.Request) {
 // preview counted, it is refused 409 unless that many hold the text as it
 // commits. Only the page may ask: nothing undoes a redaction, so the desk
 // can't. A new snapshot is written at once.
-func (s *Server) redact(w http.ResponseWriter, r *http.Request) {
+func (a API) redact(w http.ResponseWriter, r *http.Request) {
 	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
 	id := r.PathValue("task")
-	archived, ok := s.redactable(w, id)
+	archived, ok := a.redactable(w, id)
 	if !ok {
 		return
 	}
-	s.answerRedaction(w, id, s.redactIn(id, asked, archived))
+	a.answerRedaction(w, id, a.redactIn(id, asked, archived))
 }
 
 // previewAgentsRedaction is previewRedaction for the agents' stream: the
 // rows of their roster and knowledge that hold the text you marked.
-func (s *Server) previewAgentsRedaction(w http.ResponseWriter, r *http.Request) {
+func (a API) previewAgentsRedaction(w http.ResponseWriter, r *http.Request) {
 	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	rows, rejection, err := s.store.Preview(events.AgentsStream, asked.text)
+	rows, rejection, err := a.Store.Preview(events.AgentsStream, asked.text)
 	answerPreview(w, rows, rejection, err)
 }
 
 // redactAgents is redact for the agents' stream, their roster and
 // knowledge (redactKnowledge).
-func (s *Server) redactAgents(w http.ResponseWriter, r *http.Request) {
+func (a API) redactAgents(w http.ResponseWriter, r *http.Request) {
 	asked, ok := secretOf(w, r)
 	if !ok {
 		return
 	}
-	s.answerRedaction(w, events.AgentsStream, s.redactIn(events.AgentsStream, asked, false))
+	a.answerRedaction(w, events.AgentsStream, a.redactIn(events.AgentsStream, asked, false))
 }
 
 // streamRedaction is what redacting a secret from one stream did: the
@@ -100,11 +100,11 @@ type streamRedaction struct {
 
 // previewIn is how many rows of stream hold text, an archived task's read
 // through its blob, or why they can't be redacted.
-func (s *Server) previewIn(stream, text string, archived bool) (int, *events.Rejection, error) {
+func (a API) previewIn(stream, text string, archived bool) (int, *events.Rejection, error) {
 	if archived {
-		return s.store.PreviewArchived(stream, text, s.config.Blobs)
+		return a.Store.PreviewArchived(stream, text, a.Blobs)
 	}
-	return s.store.Preview(stream, text)
+	return a.Store.Preview(stream, text)
 }
 
 // redactIn replaces the text asked with [redacted] in every row of stream
@@ -114,16 +114,16 @@ func (s *Server) previewIn(stream, text string, archived bool) (int, *events.Rej
 // The cache of opened archives drops an archived task, as its old
 // marker's entry still holds the text. The snapshot is the caller's to
 // write.
-func (s *Server) redactIn(stream string, asked redactionAsked, archived bool) streamRedaction {
+func (a API) redactIn(stream string, asked redactionAsked, archived bool) streamRedaction {
 	var done streamRedaction
 	switch {
 	case archived:
-		done.redaction, done.rejection, done.err = s.store.RedactArchivedCounted(stream, asked.text, asked.rows, httpapi.You, asked.why, s.summarise(stream), s.config.Blobs)
-		s.archives.forget(stream)
+		done.redaction, done.rejection, done.err = a.Store.RedactArchivedCounted(stream, asked.text, asked.rows, httpapi.You, asked.why, a.summarise(stream), a.Blobs)
+		a.Forget(stream)
 	case stream == events.AgentsStream:
-		done = s.redactKnowledge(asked)
+		done = a.redactKnowledge(asked)
 	default:
-		done.redaction, done.rejection, done.err = s.store.RedactCounted(stream, asked.text, asked.rows, httpapi.You, asked.why)
+		done.redaction, done.rejection, done.err = a.Store.RedactCounted(stream, asked.text, asked.rows, httpapi.You, asked.why)
 	}
 	return done
 }
@@ -139,12 +139,12 @@ func (s *Server) redactIn(stream string, asked redactionAsked, archived bool) st
 // the turns running as the redaction commits, whose ends redact it again
 // (hooks.Redactions); from before it commits, so a turn ending meanwhile
 // is caught too.
-func (s *Server) redactKnowledge(asked redactionAsked) streamRedaction {
-	settle := s.config.Redactions.Hold(asked.text)
+func (a API) redactKnowledge(asked redactionAsked) streamRedaction {
+	settle := a.Redactions.Hold(asked.text)
 	var done streamRedaction
-	done.redaction, done.rejection, done.err = s.store.RedactCounted(events.AgentsStream, asked.text, asked.rows, httpapi.You, asked.why)
+	done.redaction, done.rejection, done.err = a.Store.RedactCounted(events.AgentsStream, asked.text, asked.rows, httpapi.You, asked.why)
 	settle(done.redaction.Position != 0)
-	if s.config.Redactions.Holds(asked.text) {
+	if a.Redactions.Holds(asked.text) {
 		done.warnings = append(done.warnings, stillRunning)
 	}
 	return done
@@ -195,19 +195,41 @@ func askedOf(w http.ResponseWriter, text, why string) (redactionAsked, bool) {
 
 // redactable is whether task id is archived, or false once it has answered
 // that there is no such task (noTask) or that it can't be read.
-func (s *Server) redactable(w http.ResponseWriter, id string) (archived, ok bool) {
-	task, err := s.task(id)
+func (a API) redactable(w http.ResponseWriter, id string) (archived, ok bool) {
+	task, err := a.State.Task(id)
 	switch {
 	case errors.Is(err, current.ErrArchived):
 		return true, true
 	case errors.Is(err, current.ErrErased), err == nil && task == nil:
-		s.noTask(w, id)
+		a.noTask(w, id)
 		return false, false
 	case err != nil:
 		httpapi.Failed(w, err)
 		return false, false
 	}
 	return false, true
+}
+
+// noTask answers as web's noTask does (internal/web/erase_api.go): that an
+// erased task is gone for good, and when it went, 410, rather than that
+// there was never such a task, 404.
+func (a API) noTask(w http.ResponseWriter, id string) {
+	if erasure, erased := a.State.Erased(id); erased {
+		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
+		return
+	}
+	http.Error(w, "no such task "+id, http.StatusNotFound)
+}
+
+// summarise is what an archived task's marker keeps of it, as web's
+// summarise reads it (internal/web/erase_api.go): its summary, or nil.
+func (a API) summarise(id string) func() any {
+	return func() any {
+		if summary, found := a.State.Summary(id); found {
+			return summary
+		}
+		return nil
+	}
 }
 
 // answerPreview answers a preview's count, its refusal 409 or its error
@@ -227,8 +249,8 @@ func answerPreview(w http.ResponseWriter, rows int, rejection *events.Rejection,
 // erasure: a refusal 409 with its reason, and an error before the
 // redaction commits 500. Once it commits, what fails after is a warning,
 // with the redaction's own, and the snapshot is written again
-// (writeOverOldText).
-func (s *Server) answerRedaction(w http.ResponseWriter, stream string, done streamRedaction) {
+// (WriteOverOldText).
+func (a API) answerRedaction(w http.ResponseWriter, stream string, done streamRedaction) {
 	switch {
 	case done.rejection != nil:
 		http.Error(w, done.rejection.Reason, http.StatusConflict)
@@ -241,7 +263,7 @@ func (s *Server) answerRedaction(w http.ResponseWriter, stream string, done stre
 	if done.err != nil {
 		warnings = append(warnings, done.err.Error())
 	}
-	warnings = append(warnings, s.writeOverOldText()...)
+	warnings = append(warnings, a.WriteOverOldText()...)
 	httpapi.Reply(w, redacted{Stream: stream, At: done.redaction.At, Rows: done.rows(), Warnings: warnings})
 }
 

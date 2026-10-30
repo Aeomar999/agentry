@@ -1,5 +1,6 @@
 // Package settingsapi is the settings' HTTP API: GET and PUT /api/settings,
-// as the Settings page reads and changes them. Web mounts its Routes as it
+// as the Settings page reads and changes them, and redacting a secret from
+// a task, the agents' stream or the whole log. Web mounts its Routes as it
 // mounts an extension's.
 package settingsapi
 
@@ -11,26 +12,62 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/coordinator"
 )
 
 // State is what the routes read: the settings, and the tasks and roster
-// that say how many tasks are running.
+// that say how many tasks are running; and, for a redaction, each task,
+// whether it was erased and its summary, and the streams an extension owns.
 type State interface {
 	Settings() settings.Settings
 	Tasks() []*tasks.Task
 	Roster() agents.Roster
+	Task(id string) (*tasks.Task, error)
+	TaskIDs() []string
+	Erased(id string) (tasks.Erasure, bool)
+	OwnedIDs(prefix string) []string
+	Summary(id string) (tasks.Summary, bool)
+}
+
+// Store is the log's side of a redaction: counting the rows that hold a
+// secret, and rewriting them, a live stream's or an archived task's.
+type Store interface {
+	Preview(stream, secret string) (int, *events.Rejection, error)
+	PreviewArchived(stream, secret string, blobs store.Opener) (int, *events.Rejection, error)
+	RedactCounted(stream, secret string, rows int, who events.Actor, why string) (events.Event, *events.Rejection, error)
+	RedactArchivedCounted(stream, secret string, rows int, who events.Actor, why string, summarise func() any, blobs store.ArchiveBlobs) (events.Event, *events.Rejection, error)
+}
+
+// Redactions holds a secret redacted from the agents' knowledge for the
+// turns running then, whose ends redact it again (hooks.Redactions).
+type Redactions interface {
+	Hold(secret string) (settle func(committed bool))
+	Holds(secret string) bool
 }
 
 // API holds what the settings' routes need: the log to write their changes
-// to, and the state to read them back from.
+// to, and the state to read them back from; and, for a redaction, the log
+// to redact, where archived tasks' blobs are kept, the secrets held for
+// running turns, the extensions whose streams it reads, and web's own
+// steps once it commits.
 type API struct {
-	Log   extensions.Proposer
-	State State
+	Log        extensions.Proposer
+	State      State
+	Store      Store
+	Blobs      sharedfiles.Disk
+	Redactions Redactions
+	Extensions []extensions.Extension
+	// Forget drops a stream from web's cache of opened archives.
+	Forget func(stream string)
+	// WriteOverOldText gives the database's free space back and writes a
+	// new snapshot, as erasing a task does, and is what failed, as warnings.
+	WriteOverOldText func() []string
 }
 
 // Routes are the settings' endpoints, for the page and Claude Code.
@@ -38,6 +75,12 @@ func (a API) Routes() []extensions.Route {
 	return []extensions.Route{
 		{Pattern: "GET /api/settings", Auth: extensions.UI, Handler: a.showSettings},
 		{Pattern: "PUT /api/settings", Auth: extensions.UI, Handler: a.changeSettings},
+		{Pattern: "POST /api/tasks/{task}/redact/preview", Auth: extensions.UI, Handler: a.previewRedaction},
+		{Pattern: "POST /api/tasks/{task}/redact", Auth: extensions.UI, Handler: a.redact}, // never the desk's: nothing undoes it
+		{Pattern: "POST /api/agents/redact/preview", Auth: extensions.UI, Handler: a.previewAgentsRedaction},
+		{Pattern: "POST /api/agents/redact", Auth: extensions.UI, Handler: a.redactAgents}, // never the desk's: nothing undoes it
+		{Pattern: "POST /api/redact/preview", Auth: extensions.UI, Handler: a.previewLogRedaction},
+		{Pattern: "POST /api/redact", Auth: extensions.UI, Handler: a.redactLog}, // never the desk's: nothing undoes it
 	}
 }
 
