@@ -223,6 +223,7 @@ func (a API) readArchived(id string) (*archivedRead, error) {
 }
 
 // Opened is the streams the cache keeps, the one used longest ago first.
+// It is exported only for web's tests (internal/web/erase_test.go).
 func (a *Archives) Opened() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
