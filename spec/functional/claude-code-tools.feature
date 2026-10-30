@@ -4,7 +4,8 @@ Feature: Agentry from Claude Code
   # internal/extensions/ideas/tools.go, internal/domain/tasks/tasksapi/tools.go,
   # internal/domain/tasks/tasksapi/tools_approvals.go, internal/domain/connections,
   # internal/domain/connections/connectionsapi, internal/web/server.go,
-  # internal/domain/sharedfiles/sharedfilesapi/tools.go, internal/platform/client/client.go and their tests.
+  # internal/domain/sharedfiles/sharedfilesapi/tools.go, internal/platform/client/client.go,
+  # ui/src/domains/connections and their tests.
 
   # ---- Installing the integration --------------------------------------------
 
@@ -68,6 +69,14 @@ Feature: Agentry from Claude Code
     When the user revokes that connection on the Integrations page
     Then a request to the API with that credential is answered with status 401
     # internal/domain/connections/connectionsapi/connectionsapi_test.go TestClaudeCodeConnectsFromTheIntegrationsPage
+
+  @TOOLS-55 @claude-code @test
+  Scenario: The Integrations page shows a machine that joins while its install command is shown
+    Given the user made an install command on the Integrations page
+    When a new machine connects with it
+    Then the page says the machine is connected, and lists it among the connections: yes
+    And the page reads the connections list 1 time for the join, not again and again
+    # ui/src/domains/connections/IntegrationsPage.test.tsx "reloads the connections once when a machine joins, and shows it"
 
   @TOOLS-06 @claude-code @test
   Scenario: A connected machine's credential cannot issue sign-in codes

@@ -51,10 +51,13 @@ function ClaudeCode({ connections, onChanged }: { connections: Connection[]; onC
   const [error, setError] = useState("");
   const before = useRef<Set<string> | null>(null);
   const joined = invite && before.current ? connections.find((c) => !before.current!.has(c.id)) : undefined;
+  // Keyed on the id, not the object: each reload answers a new object for
+  // the same machine, which would reload again, for ever.
+  const joinedId = joined?.id;
 
   useEffect(() => {
-    if (joined) onChanged();
-  }, [joined, onChanged]);
+    if (joinedId) onChanged();
+  }, [joinedId, onChanged]);
 
   async function makeCommand() {
     setError("");
