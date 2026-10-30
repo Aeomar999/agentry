@@ -57,6 +57,7 @@ Reaching the machines:
 - `tlsca`: Agentry's own certificate authority, name constrained, its key kept in the data folder.
 - `pinned`: how Agentry's own clients reach a server served with Agentry's own CA: they trust that CA and nothing else.
 - `client`: calls a running server's API, for the commands that run beside it: the desk's `agentry task`, `agentry mcp` and the status line.
+- `launch`: what a program that opens Agentry for you does: find the server running from a data folder, or start `agentry serve`, and build the signed-in link to its page, for `agentry open` and the desktop app.
 
 Serving the user:
 
@@ -74,7 +75,7 @@ The spec's own check:
 
 - `speccheck`: `spec/check`, which checks every scenario under `spec/` against the rules in spec/README.md.
 
-Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the list above matching `ls internal` (45 packages); `go test ./internal/extensions ./internal/httpapi`, whose `imports_test.go` fails when a leaf imports a core package.
+Checked by: the reviewer on every change, who asks of each new file and function whether it has one job and sits in the package of its concern, and whether the dependency points downward; the list above matching the last element of each path `go list ./internal/...` prints, leaving out a `<name>test` package beside its `<name>` package (46 packages); `go test ./tools/importrules`, with `TestEveryImportPointsDown`, `TestEveryPackageHasALayer` and `TestTestkitIsOnlyForTests` in `rules_test.go`, which fail when an import points up the layers of docs/design/repo-organization.md section 3 (so `extensions` and `httpapi` never import `store`, `current` or `rules`), when a package has no layer, and when code that isn't a test imports `storetest` or `deeptest`.
 
 ## 2. The append-only event log is the only state
 
