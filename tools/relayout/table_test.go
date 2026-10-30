@@ -89,3 +89,23 @@ func TestEditsAreInStepsThatMove(t *testing.T) {
 		}
 	}
 }
+
+// The repo's packages still to move have no relative path or Chdir that
+// table.go neither edits nor allows, so a new one fails the tests the day
+// it lands, not the day its step runs. It only reads: a package already
+// moved is checked at its new folder.
+func TestTheRepoHasNoUnknownRelativePaths(t *testing.T) {
+	var runs []run
+	for _, step := range []string{"4", "5", "6", "7", "8", "9"} {
+		runs = append(runs, run{moves: movesOf(step, ""), edits: editsOf(step, "")})
+	}
+	for _, area := range areas {
+		runs = append(runs, run{moves: movesOf("7", area), edits: editsOf("7", area)})
+	}
+	for _, r := range runs {
+		r.root, r.allowed = "../..", allowed
+		if err := r.checkRelativePaths(); err != nil {
+			t.Errorf("step %s: %v", strings.TrimSpace(r.moves[0].step+" "+r.moves[0].area), err)
+		}
+	}
+}
