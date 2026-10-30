@@ -96,7 +96,7 @@ Feature: Compatibility
     When the install script asks for /worker/agentry with a working code and the server's own os and arch
     Then the answer is 200 with the server's own binary
     And with an unknown code the install script itself is refused with 401
-    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 262 and 272)
+    # not under test, checked by hand: a used or expired code is refused alike, and the build too needs a code that works (internal/web/workers_api.go lines 149 and 159)
     # README.md, Add machines; internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
   @COMPAT-09 @manual
@@ -106,7 +106,7 @@ Feature: Compatibility
     Then the first gets agentry-<os>-<arch> from beside the server's binary, 200
     And the second gets 404, "this server has no agentry for <os>/<arch>", and the script stops with exit 1 saying so, with nothing installed
     And os and arch are taken only as lower-case letters and digits; anything else gets the same 404
-    # README.md, What Start Agentry does (The other programs in the folder); internal/web/workers_api.go lines 284-326; internal/web/install.sh lines 35-39; internal/web/install.ps1 lines 42-47; no test
+    # README.md, What Start Agentry does (The other programs in the folder); internal/web/workers_api.go lines 171-213; internal/web/install.sh lines 35-39; internal/web/install.ps1 lines 42-47; no test
 
   @COMPAT-10 @manual
   Scenario: The worker is kept running the way its system does

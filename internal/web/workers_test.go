@@ -92,7 +92,12 @@ func TestAWorkerJoinsAndTakesWork(t *testing.T) {
 	}
 	// Its details are read from it, over its link.
 	_, shown := call(t, server, "GET", "/api/workers/laptop", "")
-	var detail workerDetail
+	var detail struct {
+		About   *machines.About `json:"about"`
+		History []struct {
+			What string `json:"what"`
+		} `json:"history"`
+	}
 	json.Unmarshal([]byte(shown), &detail)
 	if detail.About == nil || detail.About.Host == "" || detail.About.CPUs == 0 || len(detail.History) == 0 || detail.History[0].What != "online" {
 		t.Errorf("the worker's details: %s", shown)

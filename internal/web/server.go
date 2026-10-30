@@ -139,10 +139,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/redact/preview", s.previewLogRedaction)
 	api("POST /api/redact", s.redactLog) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
-	api("GET /api/workers", s.listWorkers)
-	api("POST /api/workers/invite", s.invite)
-	api("GET /api/workers/{name}", s.showWorker)
-	api("DELETE /api/workers/{name}", s.removeWorker)
 	api("GET /api/changes", s.waitForChanges)
 	// A machine connecting its Claude Code, with its install command's code:
 	// these stay here, not in connectionsapi, as no extensions.Auth is open.
@@ -161,6 +157,8 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.config.Workers != nil {
 		// A machine joining: with its code, then with the credential it got.
+		// These stay here, not in workersapi, as no extensions.Auth is open
+		// or takes a worker's credential.
 		mux.HandleFunc("GET /worker/install.sh", s.installScript)
 		mux.HandleFunc("GET /worker/install.ps1", s.installWindowsScript)
 		mux.HandleFunc("GET /worker/agentry", s.downloadBinary)
@@ -192,6 +190,7 @@ func (s *Server) Handler() http.Handler {
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
 	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)
 	s.mount("the policy domain", s.policyAPI().Routes(), mux)
+	s.mount("the workers domain", s.workersAPI().Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {

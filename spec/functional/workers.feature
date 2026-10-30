@@ -2,7 +2,7 @@ Feature: Workers
   A machine joined to Agentry so that agents can run on it.
   # Sources: cmd/agentry/worker.go, cmd/agentry/worker_manage.go,
   # internal/domain/workers, internal/domain/workers/workerlink, internal/domain/workers/workerservice,
-  # internal/runtime/machines, internal/runtime/turns, internal/platform/pinned, internal/web/workers_api.go
+  # internal/runtime/machines, internal/runtime/turns, internal/platform/pinned, internal/web/workers_api.go, internal/domain/workers/workersapi
   # and their tests.
 
   # ---- Joining ---------------------------------------------------------------
@@ -33,10 +33,10 @@ Feature: Workers
     Given an install command whose code has not been used
     When the machine sends the code with what it knows about itself
     Then it gets a credential, and its name is its host's name before the first dot, in lowercase: yes
-    # not under test, checked by hand: other characters become dashes (internal/web/workers_api.go line 198 workerName)
+    # not under test, checked by hand: other characters become dashes (internal/web/workers_api.go line 85 workerName)
     # internal/web/workers_api.go workerName: at most 28 characters, starting with a letter; freeName adds -2, -3 and so on to a name taken
     And the same code sent again is refused, saying the code is unknown, used or expired: yes
-    # not under test, checked by hand: the refusal's status is 401 (internal/web/workers_api.go line 182)
+    # not under test, checked by hand: the refusal's status is 401 (internal/web/workers_api.go line 69)
     And the Workers page lists the worker, online once it connects: yes
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 
@@ -310,7 +310,7 @@ Feature: Workers
     # internal/domain/workers/workerlink/server.go Connect: a link with no hello within 10 seconds is closed
     # internal/domain/workers/workerlink/server.go StatusEvery, silentFor: the worker says what it runs every 2 seconds, and a link silent for 20 seconds is hung up
     And the worker's details page shows what the worker reads about itself over the link: yes
-    # internal/web/workers_api.go showWorker: 15 seconds for the details, and the last 20 joined, online and offline entries
+    # internal/domain/workers/workersapi/workersapi.go showWorker: 15 seconds for the details, and the last 20 joined, online and offline entries
     When the worker's link drops
     Then the fleet takes it as gone, unless a newer link replaced it: yes
     # not under test, checked by hand: the server records it offline (internal/domain/workers/workerlink/server.go line 88)
@@ -351,7 +351,7 @@ Feature: Workers
     Given a worker the user removed on the Workers page
     When it dials the link with its old credential
     Then it is refused with status 401: yes
-    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 230), and its open link is dropped at once (line 149)
+    # not under test, checked by hand: the refusal says the worker isn't joined (internal/web/workers_api.go line 117), and its open link is dropped at once (internal/domain/workers/workersapi/workersapi.go line 179)
     # internal/web/workers_api.go requireWorker: the link, the git hub, the bundle, the update, leaving and the blobs all need the credential
     # internal/web/workers_test.go TestAWorkerJoinsAndTakesWork
 

@@ -14,6 +14,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workersapi"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
@@ -68,7 +69,7 @@ func TestAnArchivedTaskIsListedAsItsSummary(t *testing.T) {
 	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-2") {
 		t.Errorf("an archived task asks nothing: %s", body)
 	}
-	if on := app.tasksByMachine()[workers.Local]; slices.Contains(on, "task-2") {
+	if on := workersapi.TasksByMachine(app.state)[workers.Local]; slices.Contains(on, "task-2") {
 		t.Errorf("an archived task is on no machine: %v", on)
 	}
 	if busy, err := app.needing("tech-lead"); err != nil || !slices.Equal(busy, []string{"task-1", "task-3"}) {

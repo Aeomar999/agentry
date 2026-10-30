@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,135 +18,23 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
+	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workersapi"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
-// Workers: the machines, besides this one, that agents run on. You make a
-// join code on the page; the page shows one command that installs agentry
-// on the other machine, joins it with the code, and starts it.
-
-// workerView is a worker as the page shows it, with the tasks whose work is on it.
-type workerView struct {
-	workers.Worker
-	Tasks []string `json:"tasks"`
-}
-
-func (s *Server) listWorkers(w http.ResponseWriter, r *http.Request) {
-	roster, err := s.workers()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	on := s.tasksByMachine()
-	list := []workerView{}
-	for _, worker := range roster.Workers {
-		worker.Engines, worker.Missing = listOf(worker.Engines), listOf(worker.Missing)
-		list = append(list, workerView{Worker: worker, Tasks: listOf(on[worker.Name])})
-	}
-	local := s.config.Local
-	local.Engines, local.Missing = listOf(local.Engines), listOf(local.Missing)
-	httpapi.Reply(w, map[string]any{"workers": list, "local": map[string]any{"tasks": listOf(on[workers.Local]), "machine": local}})
-}
-
-// workerDetail is one machine as the Workers page's side panel shows it.
-type workerDetail struct {
-	Worker     workerView      `json:"worker"`
-	About      *machines.About `json:"about"`      // read from the machine now; nil if it couldn't be
-	AboutError string          `json:"aboutError"` // why not
-	Agents     []string        `json:"agents"`     // the agents that may run on it
-	History    []historyEntry  `json:"history"`    // when it joined, came online and went offline, newest first
-}
-
-type historyEntry struct {
-	At   time.Time `json:"at"`
-	What string    `json:"what"` // joined, online, offline
-}
-
-// showWorker is one machine in detail: workers.Local, or a worker's name.
-func (s *Server) showWorker(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	roster, err := s.workers()
-	if err != nil {
-		httpapi.Failed(w, err)
-		return
-	}
-	var detail workerDetail
-	if name == workers.Local {
-		local := s.config.Local
-		detail.Worker = workerView{Worker: workers.Worker{Name: workers.Local, Host: local.Host, OS: local.OS, Arch: local.Arch,
-			Online: true, Version: local.Version, Engines: listOf(local.Engines), Missing: listOf(local.Missing)}}
-	} else if worker, ok := roster.Get(name); ok {
-		worker.Engines, worker.Missing = listOf(worker.Engines), listOf(worker.Missing)
-		detail.Worker = workerView{Worker: worker}
-	} else {
-		http.Error(w, "no worker called "+name, http.StatusNotFound)
-		return
-	}
-	detail.Worker.Tasks = listOf(s.tasksByMachine()[name])
-
+// workersAPI is the Workers page's routes as web mounts them.
+func (s *Server) workersAPI() workersapi.API {
+	api := workersapi.API{Log: s.store, Events: s.store, State: s.state, Workers: s.workers, Roster: s.roster,
+		Local: s.config.Local, InstallCommands: s.installCommands}
 	if s.config.Fleet != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		defer cancel()
-		if about, err := s.config.Fleet.Of(name).About(ctx); err != nil {
-			detail.AboutError = err.Error()
-		} else {
-			detail.About = &about
+		api.About = func(ctx context.Context, name string) (machines.About, error) {
+			return s.config.Fleet.Of(name).About(ctx)
 		}
 	}
-
-	agentRoster, _ := s.roster()
-	detail.Agents = []string{}
-	for _, agent := range agentRoster {
-		if slices.Contains(agent.Workers, name) || name == workers.Local && len(agent.Workers) == 0 {
-			detail.Agents = append(detail.Agents, agent.Name)
-		}
-	}
-
-	detail.History = []historyEntry{}
-	stream, _ := s.store.Stream(events.WorkersStream)
-	for i := len(stream) - 1; i >= 0 && len(detail.History) < 20; i-- {
-		e := stream[i]
-		what := map[events.Type]string{events.WorkerJoined: "joined", events.WorkerConnected: "online",
-			events.WorkerDisconnected: "offline"}[e.Type]
-		if what != "" && e.Text("name") == name {
-			detail.History = append(detail.History, historyEntry{At: e.At, What: what})
-		}
-		if e.Type == events.WorkerJoined && e.Text("name") == name {
-			break // what came before was an earlier machine by this name
-		}
-	}
-	httpapi.Reply(w, detail)
-}
-
-// tasksByMachine is every unfinished task with a worktree, by the machine it is on.
-func (s *Server) tasksByMachine() map[string][]string {
-	on := map[string][]string{}
-	for _, task := range s.state.Tasks() {
-		if !task.IsDone && task.Worktree != nil {
-			on[task.Worktree.Worker] = append(on[task.Worktree.Worker], task.ID)
-		}
-	}
-	return on
-}
-
-// invite makes a join code, and the command that uses it.
-func (s *Server) invite(w http.ResponseWriter, r *http.Request) {
-	code, p := workers.Invite(httpapi.You, time.Now())
-	if _, rejection, err := s.store.Propose(p); err != nil || rejection != nil {
-		httpapi.Failed(w, firstError(err, rejection))
-		return
-	}
-	answer := s.installCommands(r, "/worker/install", code)
-	answer["code"], answer["expires"] = code, time.Now().Add(workers.InviteLifetime)
-	httpapi.Reply(w, answer)
-}
-
-func (s *Server) removeWorker(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	httpapi.Propose(w, s.store, workers.Removal(httpapi.You, name))
 	if s.config.Workers != nil {
-		s.config.Workers.Disconnect(name)
+		api.Disconnect = s.config.Workers.Disconnect
 	}
+	return api
 }
 
 // publicURL is the server's address as people and workers reach it: the
