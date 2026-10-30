@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"flag"
 	"fmt"
+	"maps"
 	"net/http"
 	"path/filepath"
 	"slices"
@@ -67,7 +68,7 @@ func TestTheRouteTableIsUpToDate(t *testing.T) {
 		}
 		routes.owners[pattern] = ownedRoute{owner: "web", access: access}
 	}
-	for pattern := range webRoutes {
+	for _, pattern := range slices.Sorted(maps.Keys(webRoutes)) {
 		if !slices.Contains(routes.patterns, pattern) {
 			t.Errorf("webRoutes labels %q, which web no longer registers: take it out of webRoutes", pattern)
 		}
