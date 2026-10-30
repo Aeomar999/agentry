@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NewTaskDialog } from "@/domains/tasks/NewTaskDialog";
 import { useNewTask } from "@/lib/new-task";
 import { Outlet, useNavigate } from "react-router-dom";
@@ -18,6 +18,7 @@ import { TaskTitlesProvider } from "@/live/refs";
 import { applyTheme, savedTheme, Theme } from "@/lib/theme";
 import { useKeys } from "@/lib/shortcuts";
 import { CrumbContext } from "@/lib/breadcrumb";
+import { QuestionContext } from "@/shell/questions";
 import { readStored, writeStored } from "@/lib/stored";
 import { shownId } from "@/lib/shown-id";
 import { useExtensions, visibleExtensions } from "@/extensions";
@@ -27,14 +28,6 @@ import { useExtensions, visibleExtensions } from "@/extensions";
 // change, and a page only supplies its breadcrumb (with useBreadcrumb) and
 // its content. An agent's terminal is on its task's page, not in the dock.
 // A page opens the dock on one question with useOpenQuestion.
-
-const QuestionContext = createContext<(questionId: string) => void>(() => {});
-
-// useOpenQuestion opens the dock's Questions on one question, tall enough
-// for the page the coordinator may have made for it.
-export function useOpenQuestion(): (questionId: string) => void {
-  return useContext(QuestionContext);
-}
 
 const sidebarKey = "agentry-sidebar-collapsed";
 const dockKey = "agentry-terminal-height";

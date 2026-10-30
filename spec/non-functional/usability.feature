@@ -17,7 +17,7 @@ Feature: Usability
     And after the reload the dock opens at the height it was left at, kept in this browser, and 320 px the first time
     And its tabs are exactly 2: Questions, with the count of what waits, and Claude; an agent's terminal is on its task's page, in the Terminal tab
     And opened with Ctrl+J while something waits for the user, the dock opens on Questions, not on the tab it was left on
-    # ui/src/shell/AdminShell.tsx lines 40, 41, 61 to 66, 70 to 76 and 90; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
+    # ui/src/shell/AdminShell.tsx lines 33, 34, 54 to 59, 63 to 69 and 83; ui/src/components/organisms/TerminalDock.tsx lines 13 to 16 and 53 to 60
     # Steps:
     # 1. In a private window, open the page, press Ctrl+J and drag the dock's top edge up to the top bar, then down as far as it goes.
     # 2. Reload, press Ctrl+J, and read the dock's height and its tabs.
@@ -118,7 +118,7 @@ Feature: Usability
     Then the sidebar, hidden until then, opens as a drawer over the content under the top bar, and a tap on the dark backdrop or on one of its links closes it
     And at 768 px and wider the same button collapses the 240 px sidebar to a 56 px rail instead, with no drawer
     And the top bar shows the logo, the search button as a 32 px icon with no "Search or jump to" text and no key chip, Install app, the theme button and the account menu; the name "Agentry", the divider after it and the breadcrumbs are hidden under 640 px
-    # README.md, Use it; ui/src/shell/AdminShell.tsx line 181 (matchMedia min-width 768px); ui/src/shell/Sidebar.tsx lines 41, 48-49; ui/src/shell/TopBar.tsx lines 27-55; ui/src/styles/globals.css lines 84-85; no test
+    # README.md, Use it; ui/src/shell/AdminShell.tsx line 174 (matchMedia min-width 768px); ui/src/shell/Sidebar.tsx lines 41, 48-49; ui/src/shell/TopBar.tsx lines 27-55; ui/src/styles/globals.css lines 84-85; no test
 
   @USE-12 @manual
   Scenario: Under 1024 px the task list and the task page drop to one column
@@ -128,7 +128,7 @@ Feature: Usability
     And under 1024 px the task's Plan rail is a band at most 256 px tall above the content, and at 1024 px a 320 px column beside it
     And under 1024 px the Details tab is 1 column of panels, and at 1024 px 2
     And in the Activity tab the time column is 56 px wide under 640 px, 104 px from 640 px and 120 px from 768 px
-    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/domains/tasks/TasksPage.tsx lines 109-120; domains/tasks/TaskPage.tsx lines 430-433, 546; domains/tasks/ActivityFeed.tsx line 63; no test
+    # README.md, Use it, Tasks; README.md, Use it, A task; ui/src/domains/tasks/TasksPage.tsx lines 109-120; domains/tasks/TaskPage.tsx lines 431-434, 547; domains/tasks/ActivityFeed.tsx line 63; no test
 
   @USE-13 @test
   Scenario: A turn's band holds its facts, and its duration for a phone
@@ -145,7 +145,7 @@ Feature: Usability
     When the task page shows the Turns table at 375 px wide
     Then the reason breaks onto more lines under the turn's tokens, in 11 px muted ink, and the table is not widened
     And the page does not scroll sideways
-    # README.md, Use it, A task; ui/src/domains/tasks/TaskPage.tsx lines 136 (break-words, contain inline-size), 174; commit 0701ba9c; no test
+    # README.md, Use it, A task; ui/src/domains/tasks/TaskPage.tsx lines 137 (break-words, contain inline-size), 175; commit 0701ba9c; no test
 
   # --- Keys and focus ---
 
@@ -156,7 +156,7 @@ Feature: Usability
     Then the command palette opens, a dialog named "Command palette", and the key does not reach the field
     And ArrowDown and ArrowUp move the cursor exactly one match at a time, Enter runs the match under it and Esc closes it
     And with an empty query the palette lists every item: Go to Tasks, Agents, Policy, Plan, Integrations and Settings, New task, New epic, Ask Claude to start a task, one Open the terminal command per working task with an agent, the theme switch, the commands of each visible feature, Go to Ideas when Ideas is on, then every task and every agent
-    # README.md, Use it, Keys; ui/src/shell/AdminShell.tsx lines 101-115 (keydown with capture) and 127-164; ui/src/shell/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
+    # README.md, Use it, Keys; ui/src/shell/AdminShell.tsx lines 94-108 (keydown with capture) and 120-157; ui/src/shell/CommandPalette.tsx lines 38-44 (an empty query matches every item), 60-63, 72-73; lib/shortcuts.ts line 12 (modKey); no test presses the keys, CommandPalette.test.tsx covers the matching of epic-N and task-N
 
   @USE-16 @manual
   Scenario: Single keys and two-key chords work outside a field, and Esc closes what is open
@@ -165,7 +165,7 @@ Feature: Usability
     Then ? shows the shortcuts overlay listing exactly 14 shortcuts in 4 groups, Anywhere, Go to, Tasks and Lists; n opens New task; / focuses the page's search field; g t, g a and g p go to Tasks, Agents and Policy when the second key comes within 1200 ms; 1 and 2 show Tasks as a list and as a board; j and k move the row cursor and Enter opens the row under it
     And the same keys typed in an input, a textarea, a select or an editable element, or with Ctrl, ⌘ or Alt held, run no shortcut
     And Esc closes the overlay, the palette, a dialog and a context menu; a context menu also closes on a click elsewhere or a scroll, and is kept 8 px inside the window's right edge
-    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; ui/src/shell/AdminShell.tsx lines 117-125; domains/tasks/TasksPage.tsx line 184; ui/src/shell/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
+    # README.md, Use it, Keys; ui/src/lib/shortcuts.ts lines 14-29 (the list the overlay shows), 33-37 (isTyping), 49, 59 (1200 ms), 72-80; ui/src/shell/AdminShell.tsx lines 110-118; domains/tasks/TasksPage.tsx line 184; ui/src/shell/ShortcutOverlay.tsx line 8; molecules/ContextMenu.tsx lines 5, 13, 30; no test presses these keys
 
   @USE-17 @test
   Scenario: Esc or a press outside closes a dialog, unless it is held
@@ -209,7 +209,7 @@ Feature: Usability
     And the element taller than the room is brought only up to the band, and inside the folded code only the lines above the cut count as what must be in view
     And a click that focuses an element scrolls 0 px
     # not under test, checked by hand: the Activity feed's scroller keeps focus in view this way, with that padding (ui/src/domains/tasks/ActivityFeed.tsx lines 148 and 159)
-    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/domains/tasks/ActivityFeed.tsx lines 148, 159; ui/src/domains/tasks/TaskPage.tsx line 464; ui/src/lib/focus-in-view.test.tsx "scrolls an element under the band down to just below it", "scrolls an element past the bottom up to just above the padding", "leaves an element already in view", "brings an element taller than the room only up to the band", "leaves an element whose lines shown above a fold's cut are in view", "scrolls only far enough to show the lines above a fold's cut" and "doesn't scroll for a click"
+    # README.md, Use it, A task; ui/src/lib/focus-in-view.ts; ui/src/domains/tasks/ActivityFeed.tsx lines 148, 159; ui/src/domains/tasks/TaskPage.tsx line 465; ui/src/lib/focus-in-view.test.tsx "scrolls an element under the band down to just below it", "scrolls an element past the bottom up to just above the padding", "leaves an element already in view", "brings an element taller than the room only up to the band", "leaves an element whose lines shown above a fold's cut are in view", "scrolls only far enough to show the lines above a fold's cut" and "doesn't scroll for a click"
 
   @USE-22 @test
   Scenario: The Activity scroller is a Tab stop named by its heading
@@ -217,7 +217,7 @@ Feature: Usability
     When its scroller is focused
     Then the scroller is a Tab stop with tabIndex 0, a region named "Activity" through aria-labelledby from the tab's heading, with no aria-label of its own
     And focusing the scroller itself moves it 0 px
-    # not under test, checked by hand: the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 490); every agent chip in the bands is aria-hidden (ui/src/components/molecules/Avatar.tsx line 20): the test checks each chip it finds, not that it finds any
+    # not under test, checked by hand: the Activity tab shows this feed (ui/src/domains/tasks/TaskPage.tsx line 491); every agent chip in the bands is aria-hidden (ui/src/components/molecules/Avatar.tsx line 20): the test checks each chip it finds, not that it finds any
     # README.md, Use it, A task; ui/src/domains/tasks/ActivityFeed.tsx lines 144-159; ui/src/domains/tasks/ActivityFeed.test.tsx "makes the scroller a Tab stop named Activity, so the keyboard can scroll rows with nothing focusable", "names the scroller by the tab's heading, so the name has one source" and "hides chips from screen readers"
 
   @USE-23 @test
@@ -252,7 +252,7 @@ Feature: Usability
     When the user presses the theme button in the top bar, "Light theme", or runs "Switch to the light theme" from the palette
     Then the html element gets the class light, every token takes its light value, and the browser's theme colour becomes #fafafa from #16181d
     And the choice is kept in localStorage under agentry-theme, so the next visit opens in the same theme, and is posted to POST /api/theme, which accepts only "light" or "dark"
-    # ui/src/lib/theme.ts lines 7-27; ui/src/shell/AdminShell.tsx lines 95, 149-152; ui/src/shell/TopBar.tsx line 55; internal/web/config_api.go lines 43-56; no test
+    # ui/src/lib/theme.ts lines 7-27; ui/src/shell/AdminShell.tsx lines 88, 142-145; ui/src/shell/TopBar.tsx line 55; internal/web/config_api.go lines 43-56; no test
 
   @USE-27 @test
   Scenario: An agent's chip is its first letter on a tint of its own colour, and you and Agentry are neutral

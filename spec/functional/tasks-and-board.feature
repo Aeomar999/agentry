@@ -416,7 +416,7 @@ Feature: Tasks and the board
 
   @TASK-36 @user @manual
   Scenario: The keys: the palette and the terminal from anywhere, g chords, j, k and Enter, and nothing while typing
-    # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/shell/AdminShell.tsx lines 97 to 113; the other keys: lines 116 to 123
+    # modKey K and modKey J are caught before a field or the terminal sees them: ui/src/shell/AdminShell.tsx lines 90 to 106; the other keys: lines 109 to 116
     # keys do nothing while typing, a field, a textarea, a select or the terminal: ui/src/lib/shortcuts.ts lines 33 to 37 and 49; Enter only with nothing focused: line 50; a chord's second key within 1200 ms: line 59
     # the palette's keys, groups and "Nothing matches": ui/src/shell/CommandPalette.tsx lines 59 to 65 and 90; j, k and Enter on the Tasks and Agents lists: ui/src/domains/tasks/TasksPage.tsx line 242, ui/src/domains/agents/AgentsPage.tsx line 99
     Given any page
@@ -437,7 +437,7 @@ Feature: Tasks and the board
 
   @TASK-37 @user @manual
   Scenario: A task's page: the header, the facts under it and its 2 buttons
-    # ui/src/domains/tasks/TaskPage.tsx lines 289 to 303, the header; lines 367 to 398, the facts
+    # ui/src/domains/tasks/TaskPage.tsx lines 290 to 304, the header; lines 368 to 399, the facts
     # README.md, Use it, "A task"
     Given task-5 is open, with a worktree and the engineer at work
     When the page is shown
@@ -451,7 +451,7 @@ Feature: Tasks and the board
 
   @TASK-38 @user @manual
   Scenario: The tabs, exactly as rendered, and the one an epic adds
-    # ui/src/domains/tasks/TaskPage.tsx lines 443 to 456
+    # ui/src/domains/tasks/TaskPage.tsx lines 444 to 457
     Given task-5 is open with 2 shared files and 4 handoffs
     When the tabs are shown
     Then exactly 8 tabs read, in order: Coordinator, Activity, Terminal, Files, Handoffs, Actions, Events, Details
@@ -553,7 +553,7 @@ Feature: Tasks and the board
 
   @TASK-46 @user @manual
   Scenario: Actions and Events list the raw records, newest first, and the empty tabs say so
-    # ui/src/domains/tasks/TaskPage.tsx lines 70 to 113, the columns; lines 462 to 543, the tabs
+    # ui/src/domains/tasks/TaskPage.tsx lines 71 to 114, the columns; lines 463 to 544, the tabs
     Given task-5 with 12 actions, 1 of them waiting for approval
     When the Actions tab is shown
     Then exactly 6 columns read Time, Turn, Agent, Tool, Command, Decision, the newest action first
@@ -569,7 +569,7 @@ Feature: Tasks and the board
   @TASK-47 @user @test
   Scenario: Details: the id, repo, epic, budget and turns, each with its control while the task is live
     # ui/src/domains/tasks/TaskPage.test.tsx "can change its repo and epic", "shows an epic as epic-N, in the header and its details" and "shows a story as task-N, with its epic as epic-M, linking to task-M"
-    # ui/src/domains/tasks/TaskPage.tsx lines 547 to 582; the words "story of": line 317, which the test does not assert
+    # ui/src/domains/tasks/TaskPage.tsx lines 548 to 583; the words "story of": line 318, which the test does not assert
     Given a live task's Details tab
     Then a Change button is shown on the Repo row and a list named Epic is shown on the Epic row
     Given a story of task-9
@@ -580,7 +580,7 @@ Feature: Tasks and the board
 
   @TASK-48 @user @manual
   Scenario: Change repo moves the task between turns, and the Epic list files it
-    # ui/src/domains/tasks/TaskPage.tsx lines 627 to 672, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
+    # ui/src/domains/tasks/TaskPage.tsx lines 628 to 673, RepoEditor; internal/domain/tasks/tasksapi/repo_api.go lines 18 to 28
     # ui/src/domains/tasks/EpicPicker.tsx lines 12 to 14 and 27 to 35; internal/domain/tasks/tasksapi/epics_api.go lines 62 and 68
     Given a live task's Details tab
     When the user clicks Change on the Repo row
@@ -628,7 +628,7 @@ Feature: Tasks and the board
 
   @TASK-51 @user @manual
   Scenario: A done task's page: what it still allows and what it no longer does
-    # ui/src/domains/tasks/TaskPage.tsx lines 417 to 425, the Done banner; line 596, the worktree; lines 507 to 515, the terminal
+    # ui/src/domains/tasks/TaskPage.tsx lines 418 to 426, the Done banner; line 597, the worktree; lines 508 to 516, the terminal
     # ui/src/components/organisms/LimitEditor.tsx lines 39 and 56; ui/src/domains/tasks/CoordinatorChat.tsx line 119; internal/domain/tasks/tasksapi/chat_api.go lines 36 to 45
     # no Reopen on the page: ui/src/domains/tasks/TaskPage.tsx has none; the board's dialog: ui/src/domains/tasks/TaskBoard.tsx line 283
     Given task-5 is done, moved there by the user
@@ -646,7 +646,7 @@ Feature: Tasks and the board
   @TASK-52 @user @test
   Scenario: An archived task's page is read only
     # ui/src/domains/tasks/TaskPage.test.tsx "marks it archived and offers nothing that writes", "keeps its repo and epic as they are" and "shares no files and takes none away"
-    # ui/src/domains/tasks/TaskPage.tsx lines 236 and 296; ui/src/domains/tasks/CoordinatorChat.tsx lines 188 and 189
+    # ui/src/domains/tasks/TaskPage.tsx lines 237 and 297; ui/src/domains/tasks/CoordinatorChat.tsx lines 188 and 189
     Given task-1 archived on a date
     When the page is shown
     Then the badge "Archived <date>" is shown

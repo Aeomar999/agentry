@@ -134,7 +134,7 @@ Feature: Worktrees and branches
 
   @TREE-11 @user @manual
   Scenario: The Workspace button and the task's Stories tab for an epic
-    # ui/src/domains/tasks/TaskPage.tsx line 300, the button; lines 363 to 365, 444 and 484, Stories
+    # ui/src/domains/tasks/TaskPage.tsx line 301, the button; lines 364 to 366, 445 and 485, Stories
     # the count "1/3", titled "1 of 3 stories done": ui/src/components/molecules/StoryProgress.tsx lines 7 and 12
     # README.md, Use it, "Epics and stories": file tasks under an epic from the epic's Stories tab
     Given an epic with 3 stories, 1 done

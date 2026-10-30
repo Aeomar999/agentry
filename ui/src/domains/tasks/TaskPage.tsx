@@ -33,6 +33,7 @@ import { HandoffPath } from "@/components/molecules/HandoffPath";
 import { terminalURL } from "@/api/client";
 import { StoryTable } from "@/domains/tasks/StoryTable";
 import { EpicPicker } from "@/domains/tasks/EpicPicker";
+// eslint-disable-next-line no-restricted-imports -- the one allowed import between domains: a task's page shows its shared files
 import { SharedFiles } from "@/domains/sharedfiles/SharedFiles";
 import { EraseTask } from "@/domains/tasks/EraseTask";
 import { ErasedTask } from "@/domains/tasks/ErasedTask";

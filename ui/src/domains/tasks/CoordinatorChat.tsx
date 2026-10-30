@@ -23,7 +23,7 @@ import { linkInto } from "@/lib/links";
 import { shownId } from "@/lib/shown-id";
 import { useEvents } from "@/live/use-events";
 import { useToast } from "@/shell/Toasts";
-import { useOpenQuestion } from "@/shell/AdminShell";
+import { useOpenQuestion } from "@/shell/questions";
 
 // Talk to the task's coordinator while the task goes on. What you send
 // stops the turn in progress, so the coordinator reads it at once and

@@ -408,8 +408,13 @@ a page about something that isn't a domain goes where its Go code goes.
 The UI's spec areas go in `domains/`, and its extensions in `extensions/`,
 as Go has `internal/domain` and `internal/extensions`. `ui/src/extensions`
 means what `internal/extensions` means: something a team or a setting turns
-on. One rule is checked, by ESLint's `no-restricted-imports`: `components/`
-imports neither `domains/` nor `extensions/`.
+on. ESLint's `no-restricted-imports` checks the rules between them
+(`ui/eslint.config.js`): `components/` imports neither `domains/` nor
+`extensions/`; a domain imports no other domain, and an extension no domain;
+domains and extensions import `shell/`'s leaf modules (`Toasts`, `questions`)
+but never `AdminShell`, which imports them; `shell/` may import any domain.
+The one import between domains, the task page's shared files, carries a
+disable comment.
 
 ## 5. The repo root
 
