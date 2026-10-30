@@ -15,10 +15,6 @@ type taskSummary = tasks.Summary
 
 type taskDetail struct {
 	taskSummary
-	StoryList []taskSummary `json:"storyList"`
-	Worktree  *struct {
-		Path string `json:"path"`
-	} `json:"worktree"`
 	Trail []struct {
 		To   string `json:"to"`
 		Text string `json:"text"`

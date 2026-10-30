@@ -444,7 +444,7 @@ Feature: Operations
 
   @OPS-24 @test
   Scenario: Erasing a task removes every row of it and what copied its words, for good
-    # internal/web/erase_api.go erase: POST /api/tasks/{task}/erase, with an optional reason; the page only, never the desk
+    # internal/domain/tasks/tasksapi/erase_api.go erase: POST /api/tasks/{task}/erase, with an optional reason; the page only, never the desk
     # internal/core/store/erase.go Erase: the rows, the archive blobs its markers name, a task.erased marker with who, when and why
     Given a done task whose summary its epic and its asker copied, with shared files of its own and one shared with another task, and a planted secret in its rows
     When it is erased
@@ -456,15 +456,15 @@ Feature: Operations
     Given a live task with a session running
     When it is erased
     Then its session is stopped while the task is still there: yes
-    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go TestErasingALiveTaskLeavesNoTraceOnDisk, TestErasingAnArchivedTaskLeavesNoTraceOnDisk, TestErasingKeepsTheSameWordsOutsideTheCopies, TestAnErasedTaskReadsAsGone and TestErasingStopsTheTurnThatRunsFirst
+    # README.md, Archiving, erasing and redacting; internal/domain/tasks/tasksapi/erase_test.go TestErasingALiveTaskLeavesNoTraceOnDisk, TestErasingAnArchivedTaskLeavesNoTraceOnDisk, TestErasingKeepsTheSameWordsOutsideTheCopies, TestAnErasedTaskReadsAsGone and TestErasingStopsTheTurnThatRunsFirst
 
   @OPS-34 @test
   Scenario: Erasing an epic a story still names, or a task already erased, is refused
-    # internal/web/erase_api.go: 409 before anything is written
+    # internal/domain/tasks/tasksapi/erase_api.go: 409 before anything is written
     Given an epic with a story still naming it, or a task already erased
     When it is erased
     Then it is refused with 409 and nothing is written: yes
-    # README.md, Archiving, erasing and redacting; internal/web/erase_test.go TestAnEpicWithStoriesIsntErased and TestARefusedErasureWritesNothing
+    # README.md, Archiving, erasing and redacting; internal/domain/tasks/tasksapi/erase_test.go TestAnEpicWithStoriesIsntErased and TestARefusedErasureWritesNothing
 
   @OPS-25 @test
   Scenario: Redacting a text counts first, then rewrites only the rows that hold it

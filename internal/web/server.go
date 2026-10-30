@@ -90,8 +90,6 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /", s.page) // the UI: its files, and index.html for its pages
 	api := func(pattern string, handler http.HandlerFunc) { mux.Handle(pattern, s.requireUI(handler)) }
-	api("POST /api/tasks/{task}/erase", s.erase) // never the desk's: nothing undoes it
-	api("POST /api/tasks/{task}/direct", s.direct)
 	mux.Handle("POST /api/tasks/{task}/claude/message", s.requireClaude(s.claudeMessage))
 	api("GET /api/features", s.listFeatures)
 	api("GET /api/waiting", s.listWaiting)

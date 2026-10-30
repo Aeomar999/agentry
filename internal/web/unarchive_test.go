@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 
 	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
+	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks/tasksapi"
@@ -45,6 +47,16 @@ func (p putThen) Put(r io.Reader) (string, int64, error) {
 	hash, size, err := p.Disk.Put(r)
 	p.then()
 	return hash, size, err
+}
+
+// openWith has the server read archived tasks' blobs through blobs: a
+// new cache, and the routes mounted again, as they hold the one they
+// were mounted with.
+func (f *archiveFixture) openWith(t *testing.T, blobs store.Opener) {
+	t.Helper()
+	f.app.archives = tasksapi.NewArchives(blobs)
+	f.server = httptest.NewServer(f.app.Handler())
+	t.Cleanup(f.server.Close)
 }
 
 // lastTwo are the types of the stream's last two events.
@@ -171,7 +183,7 @@ func TestAReopenThatCantUnarchiveWritesNothing(t *testing.T) {
 		f := newArchiveFixture(t)
 		storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
 		var last int64
-		f.app.archives = tasksapi.NewArchives(openedThen{Disk: f.blobs.Disk, then: func() {
+		f.openWith(t, openedThen{Disk: f.blobs.Disk, then: func() {
 			if _, rejection, err := f.log.Unarchive("task-2", f.blobs.Disk); rejection != nil || err != nil {
 				t.Fatal(rejection, err)
 			}
@@ -194,7 +206,7 @@ func TestAReopenThatCantUnarchiveWritesNothing(t *testing.T) {
 func TestAReopenFindsTheTaskUnarchivedByAnother(t *testing.T) {
 	f := newArchiveFixture(t)
 	storetest.ArchiveIn(t, f.log, f.state, "task-2", f.blobs.Disk)
-	f.app.archives = tasksapi.NewArchives(openedThen{Disk: f.blobs.Disk, then: func() {
+	f.openWith(t, openedThen{Disk: f.blobs.Disk, then: func() {
 		if _, rejection, err := f.log.Unarchive("task-2", f.blobs.Disk); rejection != nil || err != nil {
 			t.Fatal(rejection, err)
 		}

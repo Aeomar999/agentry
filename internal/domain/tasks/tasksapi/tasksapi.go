@@ -1,6 +1,7 @@
 // Package tasksapi is the tasks' HTTP API: the tasks and each one's
 // detail and events, an archived task's read back from its blob, your
-// answers and approvals, what waits for you in Questions, your chat with a
+// answers and approvals, your moves on the board, erasing a task for
+// good, what waits for you in Questions, your chat with a
 // task's coordinator, a task's Workspace, and the task's settings you
 // change on its page: its epic, labels, rank, budget, limit of turns and
 // repo. Web mounts its Routes as it mounts an extension's.
@@ -11,22 +12,25 @@ import (
 	"slices"
 	"strings"
 
+	"gitlab.com/dev.chempa/agentry/internal/core/current"
 	"gitlab.com/dev.chempa/agentry/internal/core/events"
 	"gitlab.com/dev.chempa/agentry/internal/core/httpapi"
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings"
+	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 )
 
-// State is what the routes read: each task, every task, and an erased or
-// archived one's erasure and summary; every task's summary, and the roster
-// and settings that say how many tasks may run.
+// State is what the routes read: each task, every task and every task's
+// id, and an erased or archived one's erasure and summary; every task's
+// summary, and the roster and settings that say how many tasks may run.
 type State interface {
 	Task(id string) (*tasks.Task, error)
 	Tasks() []*tasks.Task
+	TaskIDs() []string
 	Erased(id string) (tasks.Erasure, bool)
 	Summary(id string) (tasks.Summary, bool)
 	Summaries() []tasks.Summary
@@ -35,22 +39,28 @@ type State interface {
 }
 
 // Store is the log's side of the routes beyond proposing: making a task,
-// reading a task's events a page at a time, and reading an archived task
-// back from its blob, or unarchiving it.
+// reading a task's events a page at a time, reading an archived task back
+// from its blob, or unarchiving it; and erasing a task, redacting the
+// copies of its words other tasks keep, and giving the space back.
 type Store interface {
 	historian
 	Create(prefix string, p events.Proposal) (events.Event, *events.Rejection, error)
 	LogAfter(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error)
 	LogBefore(name string, types []events.Type, after, before int64, limit int) ([]events.Event, error)
 	Unarchive(stream string, blobs store.Opener) (events.Event, *events.Rejection, error)
+	Erase(stream string, who events.Actor, why string, blobs store.Remover) (events.Event, *events.Rejection, error)
+	RedactRows(stream, secret string, positions []int64, who events.Actor, why string) (events.Event, *events.Rejection, error)
+	RedactArchivedRows(stream, secret string, positions []int64, who events.Actor, why string, summarise func() any, blobs store.ArchiveBlobs) (events.Event, *events.Rejection, error)
+	GiveBackSpace() error
 }
 
 // API holds what the tasks' routes need: the log to write their changes
 // to and read their events from, the state to read them back from, the
 // cache of archived tasks read, the roster, where tasks' work is, the repo
 // and limits a new task gets when it names none, where a repo named by its
-// address is cloned, and whether a request carries the UI token; and, for
-// a message that reopens a done task, web's own steps.
+// address is cloned, and whether a request carries the UI token; and, to
+// erase a task, where its shared files and blob are kept, how its session
+// is stopped and the snapshot to write again.
 type API struct {
 	Log         extensions.Proposer
 	Store       Store
@@ -61,6 +71,9 @@ type API struct {
 	DefaultRepo string
 	Defaults    tasks.Limits
 	Clones      string
+	Blobs       sharedfiles.Disk
+	StopSession func(task string)       // ends a task's agent session, wherever it runs; nil for none
+	Snapshots   *current.SnapshotWriter // nil for none
 	// SharedFiles are a task's shared files as the page shows them, in its
 	// detail: the shared files domain's view.
 	SharedFiles func(t *tasks.Task) any
@@ -68,11 +81,6 @@ type API struct {
 	// the page and Claude Code connections have: the desk's answer approves
 	// nothing.
 	CarriesUIToken func(r *http.Request) bool
-	// DropErasedStories takes the erased stories a done epic still lists
-	// out of it, and is false once it has answered that it failed.
-	DropErasedStories func(w http.ResponseWriter, epic *tasks.Task) bool
-	// Reopen is the proposal that reopens a done task with text.
-	Reopen func(task *tasks.Task, text, note string) events.Proposal
 }
 
 // Routes are the tasks' endpoints, for the page, and for the desk too
@@ -84,6 +92,8 @@ func (a API) Routes() []extensions.Route {
 		{Pattern: "GET /api/tasks/{task}", Auth: extensions.Desk, Handler: a.showTask},
 		{Pattern: "GET /api/tasks/{task}/events", Auth: extensions.Desk, Handler: a.listEvents},
 		{Pattern: "POST /api/tasks/{task}/answer", Auth: extensions.Desk, Handler: a.answer},
+		{Pattern: "POST /api/tasks/{task}/erase", Auth: extensions.UI, Handler: a.erase}, // never the desk's: nothing undoes it
+		{Pattern: "POST /api/tasks/{task}/direct", Auth: extensions.UI, Handler: a.direct},
 		{Pattern: "POST /api/tasks/{task}/actions/{action}/approve", Auth: extensions.UI, Handler: a.approve},
 		{Pattern: "POST /api/tasks/{task}/actions/{action}/deny", Auth: extensions.UI, Handler: a.deny},
 		{Pattern: "PUT /api/tasks/{task}/epic", Auth: extensions.Desk, Handler: a.setEpic},
@@ -141,9 +151,10 @@ func CleanLabels(labels []string) []string {
 	return clean
 }
 
-// noTask answers as web's noTask does (internal/web/erase_api.go): that an
-// erased task is gone for good, and when it went, 410, rather than that
-// there was never such a task, 404.
+// noTask answers that there is no task id to act on: that an erased one
+// is gone for good, and when it went, 410, rather than that there was
+// never such a task, 404. Each names id, as setEpic's may be the task's
+// or the epic's.
 func (a API) noTask(w http.ResponseWriter, id string) {
 	if erasure, erased := a.State.Erased(id); erased {
 		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)

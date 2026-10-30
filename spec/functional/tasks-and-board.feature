@@ -2,8 +2,7 @@ Feature: Tasks and the board
   Adding a task, the board and its columns, the Tasks page, a task's page,
   running limits, search, the keys and the archive.
   # Sources: internal/domain/tasks, internal/runtime/archive, internal/domain/settings,
-  # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/web/board_api.go,
-  # internal/web/erase_api.go, internal/domain/tasks/tasksapi,
+  # internal/runtime/coordinator/slots.go, internal/web/api.go, internal/domain/tasks/tasksapi,
   # internal/domain/settings/settingsapi/settingsapi.go, ui/src/pages/TasksPage.tsx,
   # ui/src/pages/TaskPage.tsx, ui/src/components/organisms/TaskBoard.tsx,
   # ui/src/components/organisms/NewTaskForm.tsx,
@@ -206,7 +205,7 @@ Feature: Tasks and the board
 
   @TASK-17 @user @test
   Scenario: Done finishes the task at once, with one last turn for the coordinator
-    # internal/web/api_test.go TestYourMovesOnTheBoardStand
+    # internal/domain/tasks/tasksapi/board_api_test.go TestYourMovesOnTheBoardStand
     Given a task with a turn in progress
     When the user moves its card to Done
     Then the task is done in the same request, marked as moved there by the user
@@ -216,7 +215,7 @@ Feature: Tasks and the board
 
   @TASK-18 @user @test
   Scenario: To do and the Backlog park the task
-    # internal/web/api_test.go TestYourMovesOnTheBoardStand and TestCardsMoveThroughTheStages
+    # internal/domain/tasks/tasksapi/board_api_test.go TestYourMovesOnTheBoardStand and TestCardsMoveThroughTheStages
     Given a task with a turn in progress
     When the user moves its card to To do
     Then the task is held, parked in todo, in the same request
@@ -229,7 +228,7 @@ Feature: Tasks and the board
 
   @TASK-19 @user @test
   Scenario: In progress starts a parked task, and Review has it checked next
-    # internal/web/api_test.go TestCardsMoveThroughTheStages
+    # internal/domain/tasks/tasksapi/board_api_test.go TestCardsMoveThroughTheStages
     Given a task parked in To do
     When the user moves it to In progress
     Then the task is working, no longer parked, and no new step is written, as there is nothing to say
@@ -238,7 +237,7 @@ Feature: Tasks and the board
 
   @TASK-20 @user @test
   Scenario: Shipping ships the task now, and a team with no shipper refuses the move
-    # internal/web/api_test.go TestYourMoveToShippingShipsItNow
+    # internal/domain/tasks/tasksapi/board_api_test.go TestYourMoveToShippingShipsItNow
     Given a task of the Software team in To do
     When the user moves it to Shipping
     Then the task is no longer parked and its column is shipping
@@ -261,8 +260,8 @@ Feature: Tasks and the board
 
   @TASK-22 @user @test
   Scenario: A move the route refuses
-    # internal/web/api_test.go TestCardsMoveThroughTheStages
-    # the words: internal/web/board_api.go lines 92 and 112; the test asserts the codes only
+    # internal/domain/tasks/tasksapi/board_api_test.go TestCardsMoveThroughTheStages
+    # the words: internal/domain/tasks/tasksapi/board_api.go lines 92 and 112; the test asserts the codes only
     Given a task that is done
     When a move to done is sent for it
     Then the move is refused with 409
@@ -271,7 +270,7 @@ Feature: Tasks and the board
 
   @TASK-23 @user @test
   Scenario: A done task dragged back to In progress is reopened for more work
-    # internal/web/api_test.go TestCardsMoveThroughTheStages
+    # internal/domain/tasks/tasksapi/board_api_test.go TestCardsMoveThroughTheStages
     Given a task that is done
     When the user moves it to In progress with the note "The fix broke sign-out."
     Then the task is working again and has no worktree yet
@@ -599,7 +598,7 @@ Feature: Tasks and the board
   @TASK-49 @user @test
   Scenario: Erase this task asks first, and shows what is left afterwards
     # ui/src/pages/TaskPage.test.tsx "asks first, saying nothing undoes it and what goes, and erases nothing until you say so" and "once erased, shows the task erased with the time, what may be left, and the note on backups"
-    # ui/src/components/organisms/EraseTask.tsx lines 59 to 83; internal/web/erase_api.go lines 46 to 102
+    # ui/src/components/organisms/EraseTask.tsx lines 59 to 83; internal/domain/tasks/tasksapi/erase_api.go lines 46 to 102
     Given task-1's Details tab, with "Erase this task" at the bottom
     When the user clicks "Erase this task…"
     Then a dialog "Erase task-1 for good?" is shown reading "Nothing undoes this."
@@ -613,9 +612,9 @@ Feature: Tasks and the board
 
   @TASK-50 @user @test
   Scenario: An epic with stories is not erased, and an erased task is gone from every route
-    # internal/web/erase_test.go TestAnEpicWithStoriesIsntErased and TestTheRoutesOnAnErasedTaskSayItIsGone
+    # internal/domain/tasks/tasksapi/erase_test.go TestAnEpicWithStoriesIsntErased and TestTheRoutesOnAnErasedTaskSayItIsGone
     # ui/src/pages/TaskPage.test.tsx "read again, an erased task shows the server's 410 words, not that there is no such task"
-    # internal/web/erase_api.go lines 110 to 137 and 355 to 361
+    # internal/domain/tasks/tasksapi/erase_api.go lines 110 to 137; internal/domain/tasks/tasksapi/tasksapi.go lines 158 to 164
     Given epic task-3 with the live story task-2
     When the user erases task-3
     Then it is refused with 409 "task-3 has stories (task-2); erase or move them out of the epic first"
@@ -659,7 +658,7 @@ Feature: Tasks and the board
 
   @TASK-53 @user @test
   Scenario: An archived task takes no events until it is reopened
-    # internal/web/archived_test.go TestMovingAnArchivedTaskIsRefused
+    # internal/domain/tasks/tasksapi/archived_test.go TestMovingAnArchivedTaskIsRefused
     # internal/web/archives_test.go TestAnArchivedTaskReadBackStillTakesNoEvents
     Given task-1 done and archived
     When its rank, labels, an answer or a move to done is sent

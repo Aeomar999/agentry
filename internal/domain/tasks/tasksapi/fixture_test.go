@@ -63,6 +63,7 @@ type (
 	taskSummary = tasks.Summary
 	eventEntry  = tasksapi.EventEntry
 	eventsPage  = tasksapi.EventsPage
+	erased      = tasksapi.Erased
 )
 
 const (
@@ -168,3 +169,53 @@ const dataTeam = `{"team":"Data","agents":[
 	{"name":"data-lead","engine":"claude","coordinates":true},
 	{"name":"analyst","engine":"claude","description":"Analyse the numbers."},
 	{"name":"charter","engine":"claude","description":"Draw the charts."}]}`
+
+// newTestServerChecking is newTestServer whose log also runs check after
+// the rules, so a test can refuse one proposal.
+func newTestServerChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store) {
+	t.Helper()
+	server, s, _ := newTestStateChecking(t, check)
+	return server, s
+}
+
+// newTestStateChecking is newTestServerChecking and the state its log
+// keeps, for a test that archives a task in it.
+func newTestStateChecking(t *testing.T, check func(events.Proposal) *events.Rejection) (*httptest.Server, *store.Store, *current.State) {
+	t.Helper()
+	catalogue := events.Core()
+	state := storetest.NewState(catalogue)
+	s, err := store.Open(filepath.Join(t.TempDir(), "agentry.db"), catalogue, state, func(p events.Proposal) *events.Rejection {
+		if rejection := rules.Check(p, state, catalogue, storetest.Installed()...); rejection != nil {
+			return rejection
+		}
+		return check(p)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	for _, p := range agents.SeedProposals(nil) {
+		s.Propose(p)
+	}
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/src/app", Clones: filepath.Join(t.TempDir(), "repos"),
+		Blobs: sharedfiles.Disk{Dir: filepath.Join(t.TempDir(), "files")}}, http.NotFoundHandler(), nil).Handler())
+	t.Cleanup(server.Close)
+	return server, s, state
+}
+
+// callAs is call with bearer as the credential, none when it is ""; it
+// mirrors internal/web/extensions_api_test.go's.
+func callAs(t *testing.T, server *httptest.Server, bearer, method, path string) (int, string) {
+	t.Helper()
+	request, _ := http.NewRequest(method, server.URL+path, strings.NewReader("{}"))
+	if bearer != "" {
+		request.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	content, _ := io.ReadAll(response.Body)
+	return response.StatusCode, string(content)
+}

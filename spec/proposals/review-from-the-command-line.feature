@@ -46,7 +46,7 @@ Feature: Review from the command line
 
   @PROP-15 @user @test @to-tasks-and-board
   Scenario: agentry review approve ships the task, as Shipping on the board does
-    # the move to Shipping (@TASK-20, internal/web/board_api.go)
+    # the move to Shipping (@TASK-20, internal/domain/tasks/tasksapi/board_api.go)
     # test: cmd/agentry/review_test.go and internal/web/api_test.go (to write)
     Given task-5 of the Software team in Review
     When the user runs agentry review approve task-5
@@ -58,7 +58,7 @@ Feature: Review from the command line
 
   @PROP-16 @user @test @to-tasks-and-board
   Scenario: agentry review send-back sends the task back with the user's note, as In progress on the board does
-    # a move back to In progress from Review with a note (@TASK-19, @TASK-23, internal/web/board_api.go sentBack)
+    # a move back to In progress from Review with a note (@TASK-19, @TASK-23, internal/domain/tasks/tasksapi/board_api.go sentBack)
     # test: cmd/agentry/review_test.go (to write)
     Given task-5 in Review
     When the user runs agentry review send-back task-5 "The redirect breaks sign-out."

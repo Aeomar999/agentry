@@ -134,7 +134,7 @@ func (a API) isNone(id string) bool {
 	return errors.Is(err, current.ErrErased) || err == nil && task == nil
 }
 
-// noTask answers as web's noTask does: that an erased task is gone for
+// noTask answers as tasksapi's noTask does: that an erased task is gone for
 // good, and when it went, 410, rather than that there was never such a
 // task, 404.
 func (a API) noTask(w http.ResponseWriter, id string) {

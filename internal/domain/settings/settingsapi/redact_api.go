@@ -210,9 +210,10 @@ func (a API) redactable(w http.ResponseWriter, id string) (archived, ok bool) {
 	return false, true
 }
 
-// noTask answers as web's noTask does (internal/web/erase_api.go): that an
-// erased task is gone for good, and when it went, 410, rather than that
-// there was never such a task, 404.
+// noTask answers as tasksapi's noTask does
+// (internal/domain/tasks/tasksapi/tasksapi.go): that an erased task is
+// gone for good, and when it went, 410, rather than that there was never
+// such a task, 404.
 func (a API) noTask(w http.ResponseWriter, id string) {
 	if erasure, erased := a.State.Erased(id); erased {
 		http.Error(w, id+" was erased on "+erasure.At.Format("2 January 2006"), http.StatusGone)
@@ -221,8 +222,9 @@ func (a API) noTask(w http.ResponseWriter, id string) {
 	http.Error(w, "no such task "+id, http.StatusNotFound)
 }
 
-// summarise is what an archived task's marker keeps of it, as web's
-// summarise reads it (internal/web/erase_api.go): its summary, or nil.
+// summarise is what an archived task's marker keeps of it, as tasksapi's
+// summarise reads it (internal/domain/tasks/tasksapi/erase_api.go): its
+// summary, or nil.
 func (a API) summarise(id string) func() any {
 	return func() any {
 		if summary, found := a.State.Summary(id); found {

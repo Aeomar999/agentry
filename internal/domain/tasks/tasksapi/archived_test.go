@@ -1,4 +1,4 @@
-package web
+package tasksapi_test
 
 import (
 	"encoding/json"
@@ -17,6 +17,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workersapi"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/web"
 )
 
 // An archived task is in the list as its summary and still counts for the
@@ -29,7 +30,7 @@ func TestAnArchivedTaskIsListedAsItsSummary(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	app := NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil)
+	app := web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil)
 	server := httptest.NewServer(app.Handler())
 	defer server.Close()
 	for _, title := range []string{"One", "Two", "Three"} {
@@ -70,10 +71,10 @@ func TestAnArchivedTaskIsListedAsItsSummary(t *testing.T) {
 	if _, body := call(t, server, "GET", "/api/questions", ""); strings.Contains(body, "task-2") {
 		t.Errorf("an archived task asks nothing: %s", body)
 	}
-	if on := workersapi.TasksByMachine(app.state)[workers.Local]; slices.Contains(on, "task-2") {
+	if on := workersapi.TasksByMachine(state)[workers.Local]; slices.Contains(on, "task-2") {
 		t.Errorf("an archived task is on no machine: %v", on)
 	}
-	if busy, err := agentsapi.Needing(app.state, "tech-lead"); err != nil || !slices.Equal(busy, []string{"task-1", "task-3"}) {
+	if busy, err := agentsapi.Needing(state, "tech-lead"); err != nil || !slices.Equal(busy, []string{"task-1", "task-3"}) {
 		t.Errorf("tech-lead is needed by %v, %v: want task-1 and task-3", busy, err)
 	}
 	if code, body := call(t, server, "POST", "/api/tasks", `{"title":"Four"}`); code != 200 || !strings.Contains(body, `"stream":"task-4"`) {
@@ -96,7 +97,7 @@ func TestClosingAnEpicSkipsItsArchivedStory(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	call(t, server, "POST", "/api/tasks", `{"title":"Shipped","kind":"story"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Not yet","kind":"story"}`)
@@ -122,7 +123,7 @@ func TestAnArchivedTaskBlocksNoStory(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	call(t, server, "POST", "/api/tasks", `{"title":"Shipped","kind":"story"}`)
 	call(t, server, "POST", "/api/tasks", `{"title":"Not yet","kind":"story"}`)
@@ -174,7 +175,7 @@ func TestAnEpicShowsItsQueuedStory(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	worker := events.Actor{Kind: events.Worker, ID: workers.Local}
 	call(t, server, "POST", "/api/tasks", `{"title":"Shipped","kind":"story"}`)
@@ -224,7 +225,7 @@ func TestMovingAnArchivedTaskIsRefused(t *testing.T) {
 	for _, p := range agents.SeedProposals(nil) {
 		s.Propose(p)
 	}
-	server := httptest.NewServer(NewServer(s, state, Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
+	server := httptest.NewServer(web.NewServer(s, state, web.Config{UIToken: token, DefaultRepo: "/r"}, http.NotFoundHandler(), nil).Handler())
 	defer server.Close()
 	call(t, server, "POST", "/api/tasks", `{"title":"Shipped"}`)
 	if code, body := call(t, server, "POST", "/api/tasks/task-1/direct", `{"to":"done"}`); code != 200 {

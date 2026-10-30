@@ -1,4 +1,4 @@
-package web
+package tasksapi
 
 import (
 	"errors"
@@ -44,21 +44,21 @@ import (
 // moved anywhere but Done is reopened first, and an archived one is
 // unarchived before that. A task waiting for your answer takes the words as
 // the answer.
-func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
+func (a API) direct(w http.ResponseWriter, r *http.Request) {
 	var request struct{ To, Note string }
 	if !httpapi.Decode(w, r, &request) {
 		return
 	}
 	id := r.PathValue("task")
-	roster, err := s.roster()
+	roster, err := a.Roster()
 	if err != nil {
 		httpapi.Failed(w, err)
 		return
 	}
-	task, err := s.task(id)
+	task, err := a.State.Task(id)
 	switch {
 	case errors.Is(err, current.ErrArchived):
-		refusal, err := s.archivedMove(id, request.To, roster)
+		refusal, err := a.archivedMove(id, request.To, roster)
 		if err != nil {
 			httpapi.Failed(w, err)
 			return
@@ -67,11 +67,11 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, refusal, http.StatusConflict)
 			return
 		}
-		if task = s.tasksAPI().Unarchive(w, id); task == nil {
+		if task = a.unarchive(w, id); task == nil {
 			return
 		}
 	case err != nil || task == nil:
-		s.noTask(w, id)
+		a.noTask(w, id)
 		return
 	}
 	note := strings.TrimSpace(request.Note)
@@ -82,10 +82,10 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 
 	switch request.To {
 	case "backlog", "todo":
-		if task.IsDone && !(s.dropErasedStories(w, task) && httpapi.ProposeOrRefuse(w, s.store, s.reopen(task, "Reopen this task and park it.", note))) {
+		if task.IsDone && !(a.dropErasedStories(w, task) && httpapi.ProposeOrRefuse(w, a.Log, a.reopen(task, "Reopen this task and park it.", note))) {
 			return
 		}
-		httpapi.Propose(w, s.store, park(request.To))
+		httpapi.Propose(w, a.Log, park(request.To))
 		return
 	case "done":
 		if task.IsDone {
@@ -95,10 +95,10 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 		done := events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: events.TaskDone,
 			Data: map[string]any{"summary": "The user moved it to Done, as it was.", "note": note, "moved": true}}
 		if task.Kind != tasks.Epic {
-			httpapi.Propose(w, s.store, done)
+			httpapi.Propose(w, a.Log, done)
 			return
 		}
-		if httpapi.ProposeOrRefuse(w, s.store, done) && s.parkStories(w, task, note) {
+		if httpapi.ProposeOrRefuse(w, a.Log, done) && a.parkStories(w, task, note) {
 			httpapi.Reply(w, map[string]string{"task": task.ID})
 		}
 		return
@@ -136,26 +136,26 @@ func (s *Server) direct(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case task.IsDone:
-		if !s.dropErasedStories(w, task) {
+		if !a.dropErasedStories(w, task) {
 			return
 		}
 		if text == "" {
 			text = "It needs more work."
 		}
-		httpapi.Propose(w, s.store, moved(s.reopen(task, "Reopen this task. "+text, note)))
+		httpapi.Propose(w, a.Log, moved(a.reopen(task, "Reopen this task. "+text, note)))
 	case task.Parked != "":
-		if !httpapi.ProposeOrRefuse(w, s.store, moved(park(""))) {
+		if !httpapi.ProposeOrRefuse(w, a.Log, moved(park(""))) {
 			return
 		}
 		if text == "" { // started from To do or the Backlog: nothing more to say
 			httpapi.Reply(w, map[string]string{"task": task.ID})
 			return
 		}
-		httpapi.Propose(w, s.store, s.direction(task, text, note))
+		httpapi.Propose(w, a.Log, a.direction(task, text, note))
 	case text == "": // already there
 		httpapi.Reply(w, map[string]string{"task": task.ID})
 	default:
-		httpapi.Propose(w, s.store, moved(s.direction(task, text, note)))
+		httpapi.Propose(w, a.Log, moved(a.direction(task, text, note)))
 	}
 }
 
@@ -167,19 +167,19 @@ var reopeningColumns = []string{"backlog", "todo", "in-progress", "review", "shi
 // when it can: only a column that reopens it, and Shipping only while its
 // team has an agent that ships work. The team is read from the task's
 // history, so a move refused here unarchives nothing.
-func (s *Server) archivedMove(id, to string, roster agents.Roster) (string, error) {
+func (a API) archivedMove(id, to string, roster agents.Roster) (string, error) {
 	if !slices.Contains(reopeningColumns, to) {
 		return rules.ArchivedRefusal(id), nil
 	}
 	if to != "shipping" {
 		return "", nil
 	}
-	archived, err := s.tasksAPI().ArchivedTask(id)
+	archived, err := a.readArchived(id)
 	if err != nil {
 		return "", err
 	}
-	if len(teammates(roster, archived, agents.Ships)) == 0 {
-		return noShipperIn(roster, archived), nil
+	if len(teammates(roster, archived.task, agents.Ships)) == 0 {
+		return noShipperIn(roster, archived.task), nil
 	}
 	return "", nil
 }
@@ -187,9 +187,9 @@ func (s *Server) archivedMove(id, to string, roster agents.Roster) (string, erro
 // parkStories parks the stories of an epic you closed that aren't done, in
 // the Backlog: their turns in progress stop, and their coordinators only
 // wrap up. A story parked already stays where it is.
-func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note string) bool {
+func (a API) parkStories(w http.ResponseWriter, epic *tasks.Task, note string) bool {
 	for _, id := range epic.Stories {
-		story, err := s.task(id)
+		story, err := a.State.Task(id)
 		if errors.Is(err, current.ErrArchived) {
 			continue // done, and kept as done
 		}
@@ -204,7 +204,7 @@ func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note strin
 			continue
 		}
 		held := events.Proposal{Stream: id, Actor: httpapi.You, Type: events.TaskHeld, Data: map[string]any{"place": "backlog", "note": note}}
-		if !httpapi.ProposeOrRefuse(w, s.store, held) {
+		if !httpapi.ProposeOrRefuse(w, a.Log, held) {
 			return false
 		}
 	}
@@ -213,7 +213,7 @@ func (s *Server) parkStories(w http.ResponseWriter, epic *tasks.Task, note strin
 
 // direction gives the coordinator your words: as the answer, if it asked
 // you something, or as a direction it reads at its next turn.
-func (s *Server) direction(task *tasks.Task, text, note string) events.Proposal {
+func (a API) direction(task *tasks.Task, text, note string) events.Proposal {
 	if note != "" {
 		text += " " + note
 	}
@@ -224,7 +224,7 @@ func (s *Server) direction(task *tasks.Task, text, note string) events.Proposal 
 	return events.Proposal{Stream: task.ID, Actor: httpapi.You, Type: kind, Data: map[string]any{field: text}}
 }
 
-func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {
+func (a API) reopen(task *tasks.Task, text, note string) events.Proposal {
 	if note != "" {
 		text += " " + note
 	}
@@ -238,18 +238,18 @@ func (s *Server) reopen(task *tasks.Task, text, note string) events.Proposal {
 // leaves an archived epic as it is, or after a clean-up failed part way. A
 // story already gone from the epic, as another reopen took it out first,
 // counts as taken out. It is false once it has answered that it failed.
-func (s *Server) dropErasedStories(w http.ResponseWriter, epic *tasks.Task) bool {
+func (a API) dropErasedStories(w http.ResponseWriter, epic *tasks.Task) bool {
 	for _, story := range epic.Stories {
-		if _, erased := s.state.Erased(story); !erased {
+		if _, erased := a.State.Erased(story); !erased {
 			continue
 		}
 		removal := events.Proposal{Stream: epic.ID, Actor: httpapi.You, Type: events.StoryRemoved, Data: map[string]any{"story": story}}
-		_, rejection, err := s.store.Propose(removal)
+		_, rejection, err := a.Log.Propose(removal)
 		switch {
 		case err != nil:
 			httpapi.Failed(w, err)
 			return false
-		case rejection != nil && s.lists(epic.ID, story):
+		case rejection != nil && a.lists(epic.ID, story):
 			httpapi.Failed(w, fmt.Errorf("erased %s can't be taken out of %s: %s", story, epic.ID, rejection.Reason))
 			return false
 		}
@@ -258,8 +258,8 @@ func (s *Server) dropErasedStories(w http.ResponseWriter, epic *tasks.Task) bool
 }
 
 // lists is whether epic, as the state holds it now, lists story.
-func (s *Server) lists(epic, story string) bool {
-	task, err := s.task(epic)
+func (a API) lists(epic, story string) bool {
+	task, err := a.State.Task(epic)
 	return err == nil && task != nil && slices.Contains(task.Stories, story)
 }
 

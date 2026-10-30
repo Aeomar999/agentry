@@ -102,16 +102,16 @@ func (s *Server) policyAPI() policyapi.API {
 // a secret too.
 func (s *Server) settingsAPI() settingsapi.API {
 	return settingsapi.API{Log: s.store, State: s.state, Store: s.store, Blobs: s.config.Blobs, Redactions: s.config.Redactions,
-		Extensions: s.config.Extensions, Forget: s.archives.Forget, WriteOverOldText: s.writeOverOldText}
+		Extensions: s.config.Extensions, Forget: s.archives.Forget, WriteOverOldText: s.tasksAPI().WriteOverOldText}
 }
 
 // tasksAPI is the tasks' routes as web mounts them, and the one way a
-// message to a task's coordinator is sent, filing a task under an epic
-// and finding a repo's folder too.
+// message to a task's coordinator is sent, filing a task under an epic,
+// finding a repo's folder and writing over a redaction's old text too.
 func (s *Server) tasksAPI() tasksapi.API {
 	return tasksapi.API{Log: s.store, Store: s.store, State: s.state, Archives: s.archives, Roster: s.roster, Fleet: s.config.Fleet,
-		DefaultRepo: s.config.DefaultRepo, Defaults: s.config.defaults(), Clones: s.config.Clones, CarriesUIToken: s.carriesUIToken,
-		SharedFiles: filesShown, DropErasedStories: s.dropErasedStories, Reopen: s.reopen}
+		DefaultRepo: s.config.DefaultRepo, Defaults: s.config.defaults(), Clones: s.config.Clones, Blobs: s.config.Blobs,
+		StopSession: s.config.StopSession, Snapshots: s.config.Snapshots, SharedFiles: filesShown, CarriesUIToken: s.carriesUIToken}
 }
 
 // filesShown is a task's shared files as its detail shows them.

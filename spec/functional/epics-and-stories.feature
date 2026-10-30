@@ -149,7 +149,7 @@ Feature: Epics and stories
 
   @EPIC-13 @user @test
   Scenario: An epic onto Done closes it and parks its open stories
-    # internal/web/api_test.go TestYourMovesOnTheBoardStand
+    # internal/domain/tasks/tasksapi/board_api_test.go TestYourMovesOnTheBoardStand
     Given an epic with 2 stories, 1 of them with a turn in progress and 1 not started
     When the user moves the epic to Done
     Then the epic is done in the same request

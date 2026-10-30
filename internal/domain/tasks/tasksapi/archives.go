@@ -222,19 +222,6 @@ func (a API) readArchived(id string) (*archivedRead, error) {
 	return &archivedRead{task: task, marker: marker, history: history}, nil
 }
 
-// Unarchive is unarchive, for web's board route until it moves here.
-func (a API) Unarchive(w http.ResponseWriter, id string) *tasks.Task { return a.unarchive(w, id) }
-
-// ArchivedTask is an archived task as it was before it was archived, read
-// back from its history, for web's board route until it moves here.
-func (a API) ArchivedTask(id string) (*tasks.Task, error) {
-	archived, err := a.readArchived(id)
-	if err != nil {
-		return nil, err
-	}
-	return archived.task, nil
-}
-
 // Opened is the streams the cache keeps, the one used longest ago first.
 func (a *Archives) Opened() []string {
 	a.mu.Lock()

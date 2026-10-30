@@ -34,10 +34,10 @@ func (a API) Say(w http.ResponseWriter, id, text, via string) {
 		return
 	}
 	if task.IsDone {
-		if !a.DropErasedStories(w, task) {
+		if !a.dropErasedStories(w, task) {
 			return
 		}
-		reopen := a.Reopen(task, text, "")
+		reopen := a.reopen(task, text, "")
 		if via != "" {
 			reopen.Data["via"] = via
 		}
