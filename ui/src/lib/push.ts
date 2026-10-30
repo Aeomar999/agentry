@@ -1,7 +1,7 @@
 // Pushes to this device: the browser subscribes with the server's VAPID key
 // through the service worker (public/sw.js), and the server keeps the
-// subscription (internal/domain/notifications/notificationsapi/notificationsapi.go). What a push does when it comes
-// is the service worker's.
+// subscription (internal/domain/notifications/notificationsapi/notificationsapi.go).
+// What a push does when it comes is the service worker's.
 
 import { api, ApiError } from "@/api/client";
 import type { PushStatus } from "@/api/types";

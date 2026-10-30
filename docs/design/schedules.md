@@ -594,8 +594,7 @@ policy doesn't allow:
    (`internal/mcp/waiting.go:28`) and its desktop notification
    (`internal/mcp/notify.go`, `notify-send` or `osascript`). Web Push
    subscriptions are kept (`internal/webpush/webpush.go`,
-   `internal/domain/notifications/notificationsapi/notificationsapi.go`),
-   but nothing sends a push yet: that is
+   `internal/web/push_api.go`), but nothing sends a push yet: that is
    story 15 ("Push what waits"). So a run at 02:00 that needs you waits
    until you next look.
 
