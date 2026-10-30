@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers/workerlink"
+	"gitlab.com/dev.chempa/agentry/internal/extensions"
 	"gitlab.com/dev.chempa/agentry/internal/platform/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/runtime/machines"
 	"gitlab.com/dev.chempa/agentry/internal/testkit/goldentest"
@@ -48,11 +50,8 @@ const rerunRoutes = "go test ./internal/web -run TestTheRouteTableIsUpToDate -up
 // or one added or dropped, shows as a diff of that file for a reviewer to
 // read. web registers no route of its own besides webRoutes.
 func TestTheRouteTableIsUpToDate(t *testing.T) {
-	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
-	fleet := machines.NewFleet(&machines.Local{Label: "here", WorktreeRoot: t.TempDir()})
 	installed := storetest.Installed()
-	server := NewServer(s, state, Config{UIToken: token, Fleet: fleet, Workers: workerlink.NewServer(s, fleet),
-		Helper: http.NotFoundHandler(), Desk: http.NotFoundHandler(), Extensions: installed}, http.NotFoundHandler(), http.NotFoundHandler())
+	server := fullServer(t, installed)
 	routes := &routeRecorder{mux: http.NewServeMux(), owners: map[string]ownedRoute{}}
 	server.register(routes)
 
@@ -87,6 +86,34 @@ func TestTheRouteTableIsUpToDate(t *testing.T) {
 		table += fmt.Sprintf("%-56s %-28s %s\n", pattern, route.owner, route.access)
 	}
 	goldentest.Check(t, filepath.Join("testdata", "routes.txt"), table, *update, rerunRoutes)
+}
+
+// web's own routes that take the UI token answer 401 to a request with
+// none, so a route that loses its wrapper fails here: the hand labels in
+// webRoutes say what each should have, and this checks they still do.
+func TestWebsOwnRoutesRefuseARequestWithNoToken(t *testing.T) {
+	handler := fullServer(t, storetest.Installed()).Handler()
+	for _, pattern := range slices.Sorted(maps.Keys(webRoutes)) {
+		if access := webRoutes[pattern]; access != "UI" && access != "UI token only" {
+			continue
+		}
+		method, path, _ := strings.Cut(pattern, " ")
+		reply := httptest.NewRecorder()
+		handler.ServeHTTP(reply, httptest.NewRequest(method, strings.ReplaceAll(path, "{task}", "task-1"), nil))
+		if reply.Code != http.StatusUnauthorized {
+			t.Errorf("%s with no token: %d, want 401: is it still behind the wrapper webRoutes names?", pattern, reply.Code)
+		}
+	}
+}
+
+// fullServer is a server with every route on: a task terminal, the Claude
+// helper's terminal, the desk, workers (their routes and the shared files'
+// blobs) and the extensions in installed.
+func fullServer(t *testing.T, installed []extensions.Extension) *Server {
+	s, state := storetest.Open(t, filepath.Join(t.TempDir(), "agentry.db"))
+	fleet := machines.NewFleet(&machines.Local{Label: "here", WorktreeRoot: t.TempDir()})
+	return NewServer(s, state, Config{UIToken: token, Fleet: fleet, Workers: workerlink.NewServer(s, fleet),
+		Helper: http.NotFoundHandler(), Desk: http.NotFoundHandler(), Extensions: installed}, http.NotFoundHandler(), http.NotFoundHandler())
 }
 
 // sortedRoutes are patterns sorted by path, then method, so a path's
