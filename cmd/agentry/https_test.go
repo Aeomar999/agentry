@@ -28,7 +28,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/hookcall"
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/store"
-	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tlsca"
 	"gitlab.com/dev.chempa/agentry/internal/web"
 	"gitlab.com/dev.chempa/agentry/internal/workers"

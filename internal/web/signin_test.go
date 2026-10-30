@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"gitlab.com/dev.chempa/agentry/internal/agents"
-	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
 // signinServer is a server whose clock the test moves, called in process so

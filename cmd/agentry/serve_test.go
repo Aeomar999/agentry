@@ -23,7 +23,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/hostaddrs"
 	"gitlab.com/dev.chempa/agentry/internal/rules"
 	"gitlab.com/dev.chempa/agentry/internal/store"
-	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
 // Started from inside a Claude Code session, serve, open and the worker

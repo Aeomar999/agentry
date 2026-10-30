@@ -30,7 +30,7 @@ func unpackedLinuxDesktop(t *testing.T) string {
 	writeFile(t, filepath.Join(build, "agentry-desktop"), fakeApp, 0o755)
 	writeFile(t, filepath.Join(build, "agentry"), fakeServer, 0o755)
 	name := filepath.Join(t.TempDir(), "agentry-desktop.tar.gz")
-	t.Chdir("..") // packLinuxDesktop reads the icon from the repo's root
+	t.Chdir("../..") // packLinuxDesktop reads the icon from the repo's root
 	if err := packLinuxDesktop(name, build, "v1.2.3"); err != nil {
 		t.Fatal(err)
 	}

@@ -34,16 +34,16 @@ spec:
 # The downloads: a zip for each kind of computer, in release/, with all it
 # needs to run Agentry (Start Agentry opens it in the browser).
 package: ui
-	go run ./packaging
+	go run ./tools/packaging
 
 # The desktop app with the server it starts, in release/: on Linux, a
 # .tar.gz for Linux and a zip for Windows; on a Mac, the Mac app's zip
 # (see README, Make a release). It uses the committed page, so it needs no
 # Node.
 desktop:
-	go run ./packaging desktop
+	go run ./tools/packaging desktop
 
 # Before publishing: checks release/ holds the tag's 9 files, built from the
 # tag's commit with no changes, writes SHA256SUMS and prints the gh command.
 release-check:
-	go run ./packaging check $(VERSION)
+	go run ./tools/packaging check $(VERSION)

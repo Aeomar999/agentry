@@ -90,14 +90,14 @@ var newPath = map[string]string{
 	"internal/web": "internal/web",
 	"internal/mcp": "internal/mcp",
 
-	"internal/storetest": "internal/testkit/storetest",
-	"internal/deeptest":  "internal/testkit/deeptest",
+	"internal/testkit/storetest": "internal/testkit/storetest",
+	"internal/testkit/deeptest":  "internal/testkit/deeptest",
 
-	"internal/speccheck": "tools/speccheck",
-	"packaging":          "tools/packaging",
-	"tools/importrules":  "tools/importrules",
-	"tools/relayout":     "tools/relayout",
-	"cmd/agentry":        "cmd/agentry",
+	"tools/speccheck":   "tools/speccheck",
+	"tools/packaging":   "tools/packaging",
+	"tools/importrules": "tools/importrules",
+	"tools/relayout":    "tools/relayout",
+	"cmd/agentry":       "cmd/agentry",
 }
 
 // layerOf gives a package's layer, and for a surface the folder whose other

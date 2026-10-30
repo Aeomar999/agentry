@@ -8,9 +8,9 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/agents"
 	"gitlab.com/dev.chempa/agentry/internal/current"
 	"gitlab.com/dev.chempa/agentry/internal/events"
-	"gitlab.com/dev.chempa/agentry/internal/storetest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
 // summaryHeapLimit is Target 5's term per archived task.

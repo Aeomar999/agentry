@@ -3,9 +3,9 @@
 // in the background and opens it in the browser; Stop Agentry stops it.
 // Agentry is pure Go, so every zip is built here, whatever this machine is.
 //
-//	go run ./packaging           (make package)
-//	go run ./packaging desktop   (make desktop, see desktop.go)
-//	go run ./packaging check     (make release-check, see check.go)
+//	go run ./tools/packaging           (make package)
+//	go run ./tools/packaging desktop   (make desktop, see desktop.go)
+//	go run ./tools/packaging check     (make release-check, see check.go)
 //
 // The zips go in release/.
 package main

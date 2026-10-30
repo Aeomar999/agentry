@@ -77,7 +77,7 @@ func TestInfoPlistNamesTheAppItsProgramAndIcon(t *testing.T) {
 // least that, or sips scales it up; the window's icon stays at 512.
 func TestTheIconsAreTheSizesTheirBuildsNeed(t *testing.T) {
 	for path, want := range map[string]int{macIcon: 1024, desktopIcon: 512} {
-		f, err := os.Open(filepath.Join("..", path))
+		f, err := os.Open(filepath.Join("..", "..", path))
 		if err != nil {
 			t.Fatal(err)
 		}

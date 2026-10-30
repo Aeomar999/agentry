@@ -19,8 +19,8 @@ Feature: Operations
 
   @OPS-02 @manual
   Scenario: Install on a Mac by downloading the zip, unzipping it and double-clicking Start Agentry
-    # packaging/main.go platforms: mac-apple-silicon (darwin/arm64), mac-intel (darwin/amd64); launchers Start Agentry.command, Stop Agentry.command
-    # packaging/files/start-unix.sh clears the quarantine attribute and runs ./agentry open
+    # tools/packaging/main.go platforms: mac-apple-silicon (darwin/arm64), mac-intel (darwin/amd64); launchers Start Agentry.command, Stop Agentry.command
+    # tools/packaging/files/start-unix.sh clears the quarantine attribute and runs ./agentry open
     # Steps:
     # 1. Download agentry-<version>-mac-apple-silicon.zip (M1 and later) or agentry-<version>-mac-intel.zip from the releases page.
     # 2. Unzip it: a folder named Agentry appears.
@@ -31,12 +31,12 @@ Feature: Operations
     Then the folder holds 1 agentry program, 5 builds for other kinds of machine, Start Agentry.command, Stop Agentry.command and README.txt
     And the page opens in the browser, signed in: yes
     And Start Agentry says whether git or Claude Code is missing: yes
-    # README.md, Install, Mac; packaging/main.go; packaging/main_test.go TestMacZipReadmeLeadsTheFirstOpenWithOpenAnyway checks only README.txt's first-open steps
+    # README.md, Install, Mac; tools/packaging/main.go; tools/packaging/main_test.go TestMacZipReadmeLeadsTheFirstOpenWithOpenAnyway checks only README.txt's first-open steps
 
   @OPS-03 @manual
   Scenario: Install on Windows by downloading the zip, extracting it and double-clicking Start Agentry.cmd
-    # packaging/main.go platforms: windows-x64 (windows/amd64), windows-arm64 (windows/arm64); launchers Start Agentry.cmd, Stop Agentry.cmd
-    # packaging/files/start-windows.cmd runs agentry.exe open, then pause, so the links can be copied
+    # tools/packaging/main.go platforms: windows-x64 (windows/amd64), windows-arm64 (windows/arm64); launchers Start Agentry.cmd, Stop Agentry.cmd
+    # tools/packaging/files/start-windows.cmd runs agentry.exe open, then pause, so the links can be copied
     # Steps:
     # 1. Download agentry-<version>-windows-x64.zip, or agentry-<version>-windows-arm64.zip on an ARM PC.
     # 2. Right-click it, Extract All.
@@ -47,11 +47,11 @@ Feature: Operations
     Then the folder holds agentry.exe, 5 builds for other kinds of machine, Start Agentry.cmd, Stop Agentry.cmd and README.txt
     And the window waits for a key after printing the links: yes
     And the page opens in the browser, signed in: yes
-    # README.md, Install, Windows; packaging/main.go
+    # README.md, Install, Windows; tools/packaging/main.go
 
   @OPS-04 @manual
   Scenario: Install on Linux by downloading the zip, unzipping it and running start-agentry.sh
-    # packaging/main.go platforms: linux-x64 (linux/amd64), linux-arm64 (linux/arm64); launchers start-agentry.sh, stop-agentry.sh, mode 0755 in the zip
+    # tools/packaging/main.go platforms: linux-x64 (linux/amd64), linux-arm64 (linux/arm64); launchers start-agentry.sh, stop-agentry.sh, mode 0755 in the zip
     # Steps:
     # 1. Download agentry-<version>-linux-x64.zip or agentry-<version>-linux-arm64.zip.
     # 2. Unzip it with a tool that keeps permissions (unzip does).
@@ -61,13 +61,13 @@ Feature: Operations
     When the zip for it is downloaded, unzipped and ./start-agentry.sh is run
     Then the folder holds agentry, 5 builds for other kinds of machine, start-agentry.sh, stop-agentry.sh and README.txt
     And the page opens in the browser, signed in: yes
-    # README.md, Install, Linux; packaging/main.go
+    # README.md, Install, Linux; tools/packaging/main.go
 
   # Start Agentry and Stop Agentry
 
   @OPS-05 @test
   Scenario: Opening a running server's page prints one signed-in link per address and opens this computer's
-    # packaging/files/start-unix.sh and start-windows.cmd run agentry open
+    # tools/packaging/files/start-unix.sh and start-windows.cmd run agentry open
     # cmd/agentry/open.go runOpen: a server already running is opened, not started again; startServer writes serve.log and serve.pid in the data folder
     # cmd/agentry/open.go runOpen waits up to 30 seconds, checking every 200 ms, for the new server to answer
     Given a server listening on every interface on port 7901, with a public address set
@@ -99,7 +99,7 @@ Feature: Operations
 
   @OPS-07 @manual
   Scenario: Stop Agentry stops the server that Start Agentry started
-    # packaging/files/stop-unix.sh and stop-windows.cmd run agentry stop; cmd/agentry/open.go runStopServer
+    # tools/packaging/files/stop-unix.sh and stop-windows.cmd run agentry stop; cmd/agentry/open.go runStopServer
     # cmd/agentry/open.go pidFile = serve.pid; the wait is 50 checks of 100 ms = 5 seconds
     # internal/procs/procs_unix.go Terminate sends SIGTERM; procs_windows.go Terminate kills the process
     # Steps:
@@ -517,7 +517,7 @@ Feature: Operations
   Scenario: The Makefile's targets build the UI, the binary, the worker builds, run the checks and package the zips
     # Makefile: all = ui build workers; ui = cd ui && npm ci && npm run build; build = go build -o bin/agentry ./cmd/agentry
     # Makefile: WORKER_PLATFORMS = darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64, built with CGO_ENABLED=0 to bin/agentry-<os>-<arch>
-    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./packaging; desktop = go run ./packaging desktop, with no ui, so it packages the committed internal/web/dist
+    # Makefile: test = go vet ./... && go test ./... then cd ui && npm run lint; package = ui, then go run ./tools/packaging; desktop = go run ./tools/packaging desktop, with no ui, so it packages the committed internal/web/dist
     # Steps:
     # 1. Run make -n all, make -n test and make -n package and read the commands.
     # 2. Run make build and check bin/agentry.
@@ -565,9 +565,9 @@ Feature: Operations
 
   @OPS-29 @manual
   Scenario: make package makes one zip per kind of computer, each holding everything Agentry needs
-    # packaging/main.go: 6 platforms; the zips go to release/agentry-<version>-<label>.zip; version from git describe --tags --always --dirty, or dev without git
-    # packaging/main.go pack: the folder Agentry with this computer's agentry (agentry.exe on Windows), the 5 other builds as agentry-<os>-<arch>, the two launchers and README.txt with the version and the first-run note for the system
-    # packaging/main.go run: refuses unless internal/web/dist/index.html is there
+    # tools/packaging/main.go: 6 platforms; the zips go to release/agentry-<version>-<label>.zip; version from git describe --tags --always --dirty, or dev without git
+    # tools/packaging/main.go pack: the folder Agentry with this computer's agentry (agentry.exe on Windows), the 5 other builds as agentry-<os>-<arch>, the two launchers and README.txt with the version and the first-run note for the system
+    # tools/packaging/main.go run: refuses unless internal/web/dist/index.html is there
     # README.md Make a release: tag the commit on dev, push the tag, make package on the tagged commit in a clean checkout, publish the zips with gh release create
     # Steps:
     # 1. On a clean checkout of the tagged commit, run make package.
@@ -582,23 +582,23 @@ Feature: Operations
     Given a tree with changes
     When make package runs
     Then the version in the zip names ends in -dirty: yes
-    # README.md, Make a release; packaging/main.go
+    # README.md, Make a release; tools/packaging/main.go
 
   @OPS-35 @manual
   Scenario: The packaging program is refused without the page built
-    # packaging/main.go run: refuses unless internal/web/dist/index.html is there
+    # tools/packaging/main.go run: refuses unless internal/web/dist/index.html is there
     # Steps:
-    # 1. Run go run ./packaging in a tree without internal/web/dist/index.html.
+    # 1. Run go run ./tools/packaging in a tree without internal/web/dist/index.html.
     Given a tree without internal/web/dist/index.html
-    When go run ./packaging runs
+    When go run ./tools/packaging runs
     Then it refuses, saying to run it from the repo's root with the page built, and exits 1
-    # README.md, Make a release; packaging/main.go
+    # README.md, Make a release; tools/packaging/main.go
 
   @OPS-43 @manual
   Scenario: make desktop packages the desktop app with its server for Linux and Windows
-    # packaging/desktop.go runDesktop: release/agentry-desktop-<version>-linux-amd64.tar.gz and release/agentry-desktop-<version>-windows-amd64.zip, the version from git describe as in make package
-    # packaging/desktop.go packLinuxDesktop and packWindowsDesktop: the folder Agentry, with the app beside the server, where cmd/agentry-desktop/desktop.go binaryNextTo looks; README.txt from packaging/files/desktop-README.txt
-    # packaging/desktop.go buildDesktop: the server as in make package (buildAgentry, CGO_ENABLED=0); the Windows app with -H=windowsgui and the icon in cmd/agentry-desktop/rsrc_windows_amd64.syso
+    # tools/packaging/desktop.go runDesktop: release/agentry-desktop-<version>-linux-amd64.tar.gz and release/agentry-desktop-<version>-windows-amd64.zip, the version from git describe as in make package
+    # tools/packaging/desktop.go packLinuxDesktop and packWindowsDesktop: the folder Agentry, with the app beside the server, where cmd/agentry-desktop/desktop.go binaryNextTo looks; README.txt from tools/packaging/files/desktop-README.txt
+    # tools/packaging/desktop.go buildDesktop: the server as in make package (buildAgentry, CGO_ENABLED=0); the Windows app with -H=windowsgui and the icon in cmd/agentry-desktop/rsrc_windows_amd64.syso
     # internal/launch/launch.go Start calls procs.NoConsole: on Windows CREATE_NO_WINDOW (internal/procs/procs_windows.go), nothing elsewhere
     # Steps:
     # 1. On a clean checkout of the tagged commit, on Linux with libwebkit2gtk-4.1-dev and libgtk-3-dev, run make desktop.
@@ -616,15 +616,15 @@ Feature: Operations
     Given a tree with changes
     When make desktop runs
     Then the version in both names ends in -dirty: yes
-    # README.md, Desktop app and Make a release; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text; packaging/desktop_install_test.go TestTheLinuxTarGzHoldsInstallAndUninstallScripts checks the 2 scripts and their mode
+    # README.md, Desktop app and Make a release; tools/packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem checks only the README's text; tools/packaging/desktop_install_test.go TestTheLinuxTarGzHoldsInstallAndUninstallScripts checks the 2 scripts and their mode
 
   @OPS-44 @manual
   Scenario: make desktop on a Mac packages one universal, ad-hoc signed Agentry.app
-    # packaging/desktop_mac.go runMacDesktop: release/agentry-desktop-<version>-macos-universal.zip, made with ditto, the folder Agentry with Agentry.app and README.txt
-    # packaging/desktop_mac.go makeMacApp: the app and the server built for darwin/arm64 and darwin/amd64, joined by lipo into Contents/MacOS, where cmd/agentry-desktop/desktop.go binaryNextTo looks
-    # packaging/desktop_mac.go makeIcns: Contents/Resources/agentry.icns made from cmd/agentry-desktop/build/appicon-1024.png (icon.svg at 1024 px, so no size is scaled up) with sips and iconutil at build time
-    # packaging/desktop_mac.go infoPlist: bundle id com.agent3labs.agentry, executable agentry-desktop, icon agentry, both versions the release number (0.0.0 untagged), LSMinimumSystemVersion 13.0, as Go 1.27 builds for macOS 13
-    # packaging/desktop_mac.go signAdHoc: codesign --sign - on the server, then on the app, as Apple Silicon runs no unsigned arm64 code
+    # tools/packaging/desktop_mac.go runMacDesktop: release/agentry-desktop-<version>-macos-universal.zip, made with ditto, the folder Agentry with Agentry.app and README.txt
+    # tools/packaging/desktop_mac.go makeMacApp: the app and the server built for darwin/arm64 and darwin/amd64, joined by lipo into Contents/MacOS, where cmd/agentry-desktop/desktop.go binaryNextTo looks
+    # tools/packaging/desktop_mac.go makeIcns: Contents/Resources/agentry.icns made from cmd/agentry-desktop/build/appicon-1024.png (icon.svg at 1024 px, so no size is scaled up) with sips and iconutil at build time
+    # tools/packaging/desktop_mac.go infoPlist: bundle id com.agent3labs.agentry, executable agentry-desktop, icon agentry, both versions the release number (0.0.0 untagged), LSMinimumSystemVersion 13.0, as Go 1.27 builds for macOS 13
+    # tools/packaging/desktop_mac.go signAdHoc: codesign --sign - on the server, then on the app, as Apple Silicon runs no unsigned arm64 code
     # Steps:
     # 1. On a clean checkout of the tagged commit, on a Mac with the Xcode command line tools, run make desktop.
     # 2. Unzip the zip and run unzip -Z on it, lipo -info on both programs, codesign -vv --strict on the app, plutil -p on Info.plist, and iconutil -c iconset on Contents/Resources/agentry.icns, then sips -g pixelWidth on its icon_512x512@2x.png.
@@ -638,16 +638,16 @@ Feature: Operations
     And the app is signed ad hoc, with no developer and not notarised, so the first open is refused until Open Anyway in System Settings, Privacy & Security: yes
     And its README.txt says the server it starts is the agentry inside Agentry.app, and leads the first open with Open Anyway: yes
     And the server in it is built with CGO_ENABLED=0, as make package builds it: yes
-    # README.md, Desktop app and Make a release; packaging/desktop.go desktopNotes; packaging/desktop_test.go TestBundleVersionIsTheReleaseNumber and TestInfoPlistNamesTheAppItsProgramAndIcon check only Info.plist's text, TestDesktopNotesFillEveryBlankForTheirSystem only the README's
+    # README.md, Desktop app and Make a release; tools/packaging/desktop.go desktopNotes; tools/packaging/desktop_test.go TestBundleVersionIsTheReleaseNumber and TestInfoPlistNamesTheAppItsProgramAndIcon check only Info.plist's text, TestDesktopNotesFillEveryBlankForTheirSystem only the README's
 
   @OPS-45 @manual
   Scenario: make release-check checks the release's files against the tag, then writes SHA256SUMS and prints the publish command
-    # Makefile: release-check = go run ./packaging check $(VERSION)
-    # packaging/check.go releaseTag: VERSION if given, else git describe --tags --exact-match, refused when HEAD has no tag of its own; tagCommit: the commit is git rev-parse refs/tags/<tag>^{commit}, annotated or not, and a branch or other revision is refused
-    # packaging/check.go releaseFiles: the 6 server zips from platforms (packaging/main.go serverZip) and the 3 desktop files (packaging/desktop.go linuxDesktopFile, windowsDesktopFile, macDesktopFile), each with the programs in its folder Agentry
-    # packaging/check.go programProblems and buildProblems: debug/buildinfo vcs.revision must be the tag's commit and vcs.modified false; a universal Mac program is read arch by arch through debug/macho NewFatFile
-    # packaging/check.go writeSums and publishCommand: SHA256SUMS as sha256sum writes it, sorted by name; gh release create with --verify-tag, printed, not run
-    # packaging/check_test.go TestReleaseFilesAreTheNineForAVersion, TestOnlyATagNamesTheReleaseCommit, TestMissingAndStrayFilesAreReported, TestEachProgramMustBeBuiltFromTheTagWithNoChanges, TestEveryArchOfAUniversalMacProgramIsChecked and TestAReadyReleaseGetsItsSumsAndTheCommandToPublishIt cover the checks, the tag's commit, the sums and the command, not make or the tag at HEAD
+    # Makefile: release-check = go run ./tools/packaging check $(VERSION)
+    # tools/packaging/check.go releaseTag: VERSION if given, else git describe --tags --exact-match, refused when HEAD has no tag of its own; tagCommit: the commit is git rev-parse refs/tags/<tag>^{commit}, annotated or not, and a branch or other revision is refused
+    # tools/packaging/check.go releaseFiles: the 6 server zips from platforms (tools/packaging/main.go serverZip) and the 3 desktop files (tools/packaging/desktop.go linuxDesktopFile, windowsDesktopFile, macDesktopFile), each with the programs in its folder Agentry
+    # tools/packaging/check.go programProblems and buildProblems: debug/buildinfo vcs.revision must be the tag's commit and vcs.modified false; a universal Mac program is read arch by arch through debug/macho NewFatFile
+    # tools/packaging/check.go writeSums and publishCommand: SHA256SUMS as sha256sum writes it, sorted by name; gh release create with --verify-tag, printed, not run
+    # tools/packaging/check_test.go TestReleaseFilesAreTheNineForAVersion, TestOnlyATagNamesTheReleaseCommit, TestMissingAndStrayFilesAreReported, TestEachProgramMustBeBuiltFromTheTagWithNoChanges, TestEveryArchOfAUniversalMacProgramIsChecked and TestAReadyReleaseGetsItsSumsAndTheCommandToPublishIt cover the checks, the tag's commit, the sums and the command, not make or the tag at HEAD
     # Steps:
     # 1. On an untagged commit, run make release-check.
     # 2. On the tagged commit, with the files of make package, make desktop and the Mac's make desktop in release/, run make release-check, then cd release and sha256sum -c SHA256SUMS.
@@ -665,7 +665,7 @@ Feature: Operations
     Given a release missing a file, holding a v0.1.0 file named -dirty or -N-gHASH, or with a program built from another commit, from a tree with changes or with no vcs info, in any arch of a universal Mac program
     When make release-check runs
     Then it names every problem, writes no SHA256SUMS and exits non-zero: yes
-    # README.md, Make a release; packaging/check.go
+    # README.md, Make a release; tools/packaging/check.go
 
   @OPS-30 @manual
   Scenario: The deploy target runs one image from dev, pinned to one node, with its home as a volume

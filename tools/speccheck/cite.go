@@ -15,7 +15,7 @@ import (
 // cites. rootFiles are the files at the repo root a comment may cite by
 // their bare name. spec/README.md, Citations, repeats both lists.
 var (
-	rootFolders = []string{"cmd", "deploy", "docs", "internal", "packaging", "spec", "tools", "ui"}
+	rootFolders = []string{"cmd", "deploy", "docs", "internal", "spec", "tools", "ui"}
 	rootFiles   = []string{
 		".dockerignore", ".gitignore", ".gitlab-ci.yml", "Dockerfile", "LICENSE", "Makefile", "NOTICE",
 		"README.md", "docker-stack.dev.yml", "go.mod", "go.sum",
@@ -212,7 +212,7 @@ func (c *citer) check(cite citation) string {
 		if !c.isRepoFolder(cite.folder) {
 			return "" // a word such as and/or, or a folder git leaves out
 		}
-		return fmt.Sprintf("cited path %s is under %s/, a top folder rootFolders does not list; add %s to rootFolders in internal/speccheck/cite.go and to the list in spec/README.md",
+		return fmt.Sprintf("cited path %s is under %s/, a top folder rootFolders does not list; add %s to rootFolders in tools/speccheck/cite.go and to the list in spec/README.md",
 			cite.path, cite.folder, cite.folder)
 	}
 	if cite.test == "" {

@@ -3,9 +3,9 @@ package tasks
 import (
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/deeptest"
 	"gitlab.com/dev.chempa/agentry/internal/events"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/deeptest"
 )
 
 // Action looks actions up by ID, so every copy of a task needs its own way

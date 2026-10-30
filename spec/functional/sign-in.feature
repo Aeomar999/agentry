@@ -1,7 +1,7 @@
 Feature: Signing in
   Signing devices in with one-time codes, trusting Agentry's CA, installing the app, and the desktop app.
   # Sources: cmd/agentry/trust.go, cmd/agentry-desktop, internal/web/signin.go,
-  # internal/tlsca, internal/launch, packaging/desktop.go, packaging/files,
+  # internal/tlsca, internal/launch, tools/packaging/desktop.go, tools/packaging/files,
   # ui/src/pages/SignInPage.tsx,
   # ui/src/components/organisms/SignInDeviceDialog.tsx, ui/src/lib/signin.ts,
   # ui/src/lib/trust.ts,
@@ -230,8 +230,8 @@ Feature: Signing in
 
   @SIGNIN-16 @user @test
   Scenario: install.sh puts the Linux desktop app in the applications menu
-    # packaging/files/install-linux.sh, shipped as Agentry/install.sh by packaging/desktop.go packLinuxDesktop
-    # packaging/desktop_install_test.go TestInstallShPutsTheAppInTheMenuByFullPaths, TestInstallShReplacesTheAppWhileItRuns, TestInstallShQuotesExecAndFollowsXDGDataHome and TestTheScriptsWorkWithCDPATHSet
+    # tools/packaging/files/install-linux.sh, shipped as Agentry/install.sh by tools/packaging/desktop.go packLinuxDesktop
+    # tools/packaging/desktop_install_test.go TestInstallShPutsTheAppInTheMenuByFullPaths, TestInstallShReplacesTheAppWhileItRuns, TestInstallShQuotesExecAndFollowsXDGDataHome and TestTheScriptsWorkWithCDPATHSet
     # README.md, Desktop app
     Given the Linux desktop .tar.gz unpacked, and a home folder whose path holds a space
     When the user runs ./install.sh, from any folder
@@ -248,8 +248,8 @@ Feature: Signing in
 
   @SIGNIN-17 @user @test
   Scenario: uninstall.sh takes the Linux desktop app out of the menu and keeps the data
-    # packaging/files/uninstall-linux.sh, shipped as Agentry/uninstall.sh by packaging/desktop.go packLinuxDesktop
-    # packaging/desktop_install_test.go TestUninstallShRemovesWhatInstallShWroteAndKeepsTheRest, TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestTheInstalledUninstallShWorksWithoutTheDownload and TestTheScriptsWorkWithCDPATHSet
+    # tools/packaging/files/uninstall-linux.sh, shipped as Agentry/uninstall.sh by tools/packaging/desktop.go packLinuxDesktop
+    # tools/packaging/desktop_install_test.go TestUninstallShRemovesWhatInstallShWroteAndKeepsTheRest, TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestTheInstalledUninstallShWorksWithoutTheDownload and TestTheScriptsWorkWithCDPATHSet
     # README.md, Desktop app, Uninstall
     Given the desktop app installed by install.sh, data in ~/.agentry, and an agentry in ~/.local/bin, as Agentry's worker install puts it
     When the user runs ./uninstall.sh in the unpacked folder
@@ -267,8 +267,8 @@ Feature: Signing in
 
   @SIGNIN-18 @user @test
   Scenario: uninstall.sh keeps every file that may not be only the desktop app's
-    # packaging/files/uninstall-linux.sh, the comments on which copies are Agentry's
-    # packaging/desktop_install_test.go TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestUninstallShPipedInRemovesTheInstallAndNotTheFolderItRunsIn, TestUninstallShWithoutInstallShBesideItKeepsTheDownload and TestUninstallShKeepsAFolderWhoseAppIsNotAgentrys
+    # tools/packaging/files/uninstall-linux.sh, the comments on which copies are Agentry's
+    # tools/packaging/desktop_install_test.go TestUninstallShRemovesTheHandCopiesOnlyWhenTheyAreAgentrys, TestUninstallShPipedInRemovesTheInstallAndNotTheFolderItRunsIn, TestUninstallShWithoutInstallShBesideItKeepsTheDownload and TestUninstallShKeepsAFolderWhoseAppIsNotAgentrys
     Given ~/.local/bin/agentry-desktop whose build info does not name Agentry's desktop app
     When the user runs ./uninstall.sh
     Then it is kept: yes
@@ -286,7 +286,7 @@ Feature: Signing in
   Scenario: When the desktop app's server doesn't start, the window says why and shows its log
     # internal/launch/launch_test.go TestEnsureSaysWhatTheServerThatDidNotStartLogged, TestNotStartedWithoutLines and TestEnsureSaysWhenTheServerDidNotStart
     # cmd/agentry-desktop/desktop_test.go TestStartReplyCarriesTheServersLog, TestStartPageShowsWhatTheServerLogged, TestStartPageShowsTextOnly and TestLaunchOptions
-    # where serve.log is: README.md, Desktop app; packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem
+    # where serve.log is: README.md, Desktop app; tools/packaging/desktop_test.go TestDesktopNotesFillEveryBlankForTheirSystem
     Given the desktop app starts its own server, its output in serve.log in the data folder, which holds lines from older runs
     When that server exits, or doesn't answer within 30 seconds
     Then the window says "Agentry didn't start." once, with no reason repeated, and names serve.log's path: yes

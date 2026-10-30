@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/deeptest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/deeptest"
 )
 
 // Every field of a fully populated task is filled by reflection, so a

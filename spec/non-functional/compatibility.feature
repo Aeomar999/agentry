@@ -20,7 +20,7 @@ Feature: Compatibility
     And each is named agentry-<version>-<label>.zip, with the version from git describe, or dev when git gives none
     And every build is made with CGO_ENABLED=0, so no C compiler and no cross toolchain is needed, whatever the machine is
     And without the built page the command is refused with "run it from the repo's root, with the page built (make ui)"
-    # README.md, From the source (make package); packaging/main.go lines 25-32, 55-57, 66-67, 77; Makefile lines 17 (WORKER_PLATFORMS) and 20-22; no test
+    # README.md, From the source (make package); tools/packaging/main.go lines 25-32, 55-57, 66-67, 77; Makefile lines 17 (WORKER_PLATFORMS) and 20-22; no test
 
   @COMPAT-03 @manual
   Scenario: Each zip holds this system's agentry, the five others' and Start and Stop Agentry
@@ -30,7 +30,7 @@ Feature: Compatibility
     And the 2 scripts are Start Agentry.command and Stop Agentry.command on a Mac, Start Agentry.cmd and Stop Agentry.cmd on Windows, start-agentry.sh and stop-agentry.sh on Linux
     And README.txt names only that system's start, stop and first-run steps, with Windows line ends in a Windows zip
     And the other builds stay next to agentry: they are what the server hands every machine that joins as a worker
-    # README.md, What Start Agentry does (The other programs in the folder); packaging/main.go lines 98-142; packaging/files/README.txt; no test
+    # README.md, What Start Agentry does (The other programs in the folder); tools/packaging/main.go lines 98-142; tools/packaging/files/README.txt; no test
 
   @COMPAT-28 @manual
   Scenario: The desktop app for Linux and Windows is built on one Linux machine, and the Mac app on a Mac
@@ -41,7 +41,7 @@ Feature: Compatibility
     Given a Mac, Apple Silicon or Intel, with Go, git and the Xcode command line tools
     When the user runs make desktop
     Then it builds only the Mac app, for both arm64 and amd64, through clang: yes
-    # README.md, Make a release; packaging/desktop.go runDesktop and buildDesktop; packaging/desktop_mac.go buildMacDesktop; no test
+    # README.md, Make a release; tools/packaging/desktop.go runDesktop and buildDesktop; tools/packaging/desktop_mac.go buildMacDesktop; no test
 
   @COMPAT-29 @manual
   Scenario: The desktop app is not built on any other kind of machine
@@ -49,7 +49,7 @@ Feature: Compatibility
     When the user runs make desktop
     Then the command is refused with "the desktop app is built on linux/amd64 for Linux and Windows, or on a Mac for macOS"
     And release gets no new file: yes
-    # packaging/desktop.go runDesktop; no test
+    # tools/packaging/desktop.go runDesktop; no test
 
   @COMPAT-04 @manual
   Scenario: Start Agentry and Stop Agentry do the same on every system
@@ -60,7 +60,7 @@ Feature: Compatibility
     And on Windows the window waits for a key after the links are printed; on a Mac and on Linux it does not
     And since Agentry is not signed yet, the first start on a Mac is refused, then needs Done on the warning, Open Anyway in System Settings, Privacy & Security and a confirm, and on Windows More info, then Run anyway; Linux needs no step beyond chmod +x when the unzip lost permissions
     And Stop Agentry runs agentry stop the same way on each system, and on Windows waits 5 seconds before the window closes
-    # README.md, Mac, Windows, Linux, What Start Agentry does; packaging/files/start-unix.sh, start-windows.cmd, stop-unix.sh, stop-windows.cmd; no test
+    # README.md, Mac, Windows, Linux, What Start Agentry does; tools/packaging/files/start-unix.sh, start-windows.cmd, stop-unix.sh, stop-windows.cmd; no test
 
   @COMPAT-05 @manual
   Scenario: Start Agentry says when git or Claude Code is missing
@@ -213,7 +213,7 @@ Feature: Compatibility
     Then on the plain http page the install state is "insecure", whatever the service worker did: yes
     And on the secure page with the worker registered and no offer yet the state is "unavailable"
     # not under test, checked by hand: the insecure page is not offered the install, and the states are installed, ready, insecure, refused and unavailable (ui/src/lib/install.ts line 17)
-    # README.md, What Start Agentry does (As an app); packaging/files/README.txt lines 16-19; ui/src/lib/install.test.ts "is insecure on a plain http page, whatever the service worker did" and "is unavailable on a secure page with a service worker and no offer yet"
+    # README.md, What Start Agentry does (As an app); tools/packaging/files/README.txt lines 16-19; ui/src/lib/install.test.ts "is insecure on a plain http page, whatever the service worker did" and "is unavailable on a secure page with a service worker and no offer yet"
 
   @COMPAT-21 @test
   Scenario: A browser that refuses the service worker gets no install offer

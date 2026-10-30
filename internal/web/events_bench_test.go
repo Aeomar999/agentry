@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"gitlab.com/dev.chempa/agentry/internal/sharedfiles"
-	"gitlab.com/dev.chempa/agentry/internal/storetest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/storetest"
 )
 
 // TestTaskEventsBench measures, on a copy of a real agentry.db, a task's

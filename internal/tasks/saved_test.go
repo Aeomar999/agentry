@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"gitlab.com/dev.chempa/agentry/internal/deeptest"
 	"gitlab.com/dev.chempa/agentry/internal/tasks/taskstest"
+	"gitlab.com/dev.chempa/agentry/internal/testkit/deeptest"
 )
 
 // Every field, exported or not, is filled by reflection, and the saved form

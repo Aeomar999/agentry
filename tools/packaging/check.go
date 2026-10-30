@@ -25,7 +25,7 @@ import (
 // tag's commit with no changes, then writes release/SHA256SUMS and prints
 // the command that publishes them. It doesn't publish them itself.
 //
-//	go run ./packaging check [vX.Y.Z]   (make release-check [VERSION=vX.Y.Z])
+//	go run ./tools/packaging check [vX.Y.Z]   (make release-check [VERSION=vX.Y.Z])
 //
 // It doesn't see a stale page: one built from an older ui/src and committed.
 
