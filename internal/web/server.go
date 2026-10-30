@@ -18,8 +18,8 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/domain/connections/connectionsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/notificationsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/notifications/webpush"
-	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy/hooks"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/settings/settingsapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles"
 	"gitlab.com/dev.chempa/agentry/internal/domain/sharedfiles/sharedfilesapi"
@@ -65,12 +65,7 @@ type Config struct {
 
 // PolicySource is the policy in force and any problem with the file on
 // disk, and the one way to change it.
-type PolicySource interface {
-	Current() *policy.Policy
-	Problem() string
-	Path() string
-	Change(e policy.Edit, now time.Time) (*policy.Change, error)
-}
+type PolicySource = policyapi.Source
 
 type Server struct {
 	store    *store.Store        // the log: what to propose, and events to show
@@ -144,15 +139,6 @@ func (s *Server) Handler() http.Handler {
 	api("POST /api/redact/preview", s.previewLogRedaction)
 	api("POST /api/redact", s.redactLog) // never the desk's: nothing undoes it
 	api("GET /api/config", s.showConfig)
-	api("GET /api/policy", s.showPolicy)
-	api("GET /api/policy/history", s.policyHistory)
-	api("GET /api/policy/history/{position}", s.policyVersion)
-	api("POST /api/policy/profiles/{name}/add", s.addDefaultProfile)
-	api("POST /api/policy/profiles/{name}/update", s.updateDefaultProfile)
-	api("POST /api/policy/profiles/{name}/use-default", s.useDefaultProfile)
-	api("POST /api/policy/use-for-everyone/off", s.turnOffUseForEveryone)
-	api("POST /api/policy/revert", s.revertPolicy)
-	api("POST /api/policy/try", s.tryPolicy)
 	api("GET /api/workers", s.listWorkers)
 	api("POST /api/workers/invite", s.invite)
 	api("GET /api/workers/{name}", s.showWorker)
@@ -205,6 +191,7 @@ func (s *Server) Handler() http.Handler {
 	s.mount("the connections domain", connectionsapi.API{Log: s.store, State: s.state, InstallCommands: s.installCommands}.Routes(), mux)
 	s.mount("the notifications domain", notificationsapi.API{Push: s.config.Push, PublicURL: s.config.PublicURL}.Routes(), mux)
 	s.mount("the shared files domain", sharedfilesapi.API{Log: s.store, State: s.state, Blobs: s.config.Blobs}.Routes(), mux)
+	s.mount("the policy domain", s.policyAPI().Routes(), mux)
 	// Last, so an extension's route that clashes with any core or domain
 	// route is the one that fails, naming its extension.
 	for _, f := range s.config.Extensions {

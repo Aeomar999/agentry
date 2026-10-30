@@ -760,7 +760,7 @@ func (s *Server) addProfilesFor(w http.ResponseWriter, team string, missing []st
 	if seen == "" {
 		seen = s.config.Policy.Current().Hash()
 	}
-	_, ok := s.applyPolicy(w, seen, "added "+profilesNamed(missing)+" for team "+team, func(text []byte) ([]byte, error) {
+	_, ok := s.policyAPI().Apply(w, seen, "added "+profilesNamed(missing)+" for team "+team, func(text []byte) ([]byte, error) {
 		var err error
 		for _, name := range missing {
 			if text, err = policy.AddProfile(text, name, s.version()); err != nil {

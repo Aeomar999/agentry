@@ -54,7 +54,7 @@ Feature: Observability
     When the page walks GET /api/tasks/{task}/events from ?after=0, each page after the last position of the one before, with the default page and with ?limit=7
     Then the pages add up to exactly the task's record, in position order, the rejection included and no other task's event
     And each page says with "more" whether events lie beyond it, yes or no
-    # not under test, checked by hand: each entry carries its position, time, type, actor as kind:id, correlation and data (internal/web/views.go lines 123 to 130); the test builds the record it compares with through the same entryOf
+    # not under test, checked by hand: each entry carries its position, time, type, actor as kind:id, correlation and data (internal/web/views.go lines 124 to 131); the test builds the record it compares with through the same entryOf
     # README.md, Use it, A task; internal/web/events_api_test.go TestTheEventPagesAddUpToTheTasksRecord; the rejection and "more": TestAnEventPageIsBoundedAndSaysWhetherThereIsMore
 
   @OBS-06 @test
@@ -133,7 +133,7 @@ Feature: Observability
     And both get the session's state saying 2 viewers: yes
     And what the session prints after that reaches both: yes
     But a task with no running session answers HTTP 404, with no terminal to watch
-    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 174)
+    # not under test, checked by hand: the state, with who is in control and which viewer each is, comes first, then the screen, then the live output (internal/platform/terminal/hub.go lines 129 and 130); the page's route is GET /api/tasks/{task}/terminal (internal/web/server.go line 160)
     # README.md, Use it, A task; internal/platform/terminal/terminal_test.go TestOnlyTheViewerInControlCanType and TestNoSessionNoWatch
 
   @OBS-14 @test

@@ -2,7 +2,7 @@ Feature: Policy
   The policy profiles each agent runs under, the gate that judges every action,
   and the Policy page.
   # Sources: cmd/agentry/hook.go, cmd/agentry/policy.go, internal/domain/policy,
-  # internal/domain/policy/hooks, internal/domain/agents/agent.go, internal/web/policy_api.go,
+  # internal/domain/policy/hooks, internal/domain/policy/policyapi, internal/domain/agents/agent.go,
   # ui/src/pages/PolicyPage.tsx, ui/src/components/organisms/TryPolicyCall.tsx,
   # ui/src/components/organisms/DefaultProfiles.tsx,
   # ui/src/components/organisms/PolicyHistory.tsx and their tests.
@@ -11,7 +11,7 @@ Feature: Policy
 
   @POLICY-01 @user @test
   Scenario: The Policy page: the 6 default profiles, who uses which, and what is in force
-    # internal/web/policy_api_test.go TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # internal/domain/policy/policyapi/policyapi_test.go TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
     # the 6 profiles Agentry ships, developer, read-only, read-mostly, network-diagnosis, autonomous and allow-everything: internal/domain/policy/default.toml lines 82, 198, 333, 473, 658 and 683; use_for_everyone as shipped: line 79
     # the Software team's profiles, tech-lead and reviewer read-only, the rest developer: README.md, The policy, "Profiles"
     Given a policy file without read-mostly, with use_for_everyone set to allow-everything
@@ -22,7 +22,7 @@ Feature: Policy
 
   @POLICY-02 @user @test
   Scenario: A missing default profile is added from the page, logged with its diff and a backup
-    # internal/web/policy_api_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/domain/policy/live_test.go TestAgentryKeepsItsNewestBackups
+    # internal/domain/policy/policyapi/policyapi_test.go TestAMissingProfileIsAddedFromThePageAndLogged; internal/domain/policy/live_test.go TestAgentryKeepsItsNewestBackups
     # the 20 newest backups are kept: internal/domain/policy/live.go line 57; the row "missing" with "Add this profile": ui/src/components/organisms/DefaultProfiles.tsx lines 82 to 89 and 124
     Given a policy file without read-mostly, whose row reads "Your file doesn't have it. Adding it appends the <version> default, under a comment naming the version."
     When "Add this profile" is sent without the file's hash, or with a stale one
@@ -38,7 +38,7 @@ Feature: Policy
 
   @POLICY-03 @user @test
   Scenario: An outdated default is updated; one you changed is never overwritten, only replaced by choice
-    # internal/web/policy_api_test.go TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice
+    # internal/domain/policy/policyapi/policyapi_test.go TestAnOutdatedProfileIsUpdatedAndAnEditedOneOnlyByChoice
     # the rows "outdated" and "yours" with "Update to the <version> default", "Keep mine" and "Use the default": ui/src/components/organisms/DefaultProfiles.tsx lines 91 to 113 and 121 to 131
     Given a policy file from a build before v0.1.0, whose read-only is outdated
     When the user clicks "Update to the <version> default" on read-only
@@ -51,7 +51,7 @@ Feature: Policy
 
   @POLICY-04 @user @test
   Scenario: use_for_everyone: the notice on the Policy and Agents pages, and turning it off
-    # internal/web/policy_api_test.go TestTurningOffUseForEveryoneGivesEachAgentItsOwnProfile and TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
+    # internal/domain/policy/policyapi/policyapi_test.go TestTurningOffUseForEveryoneGivesEachAgentItsOwnProfile and TestThePolicyShowsItsDefaultsUsersAndWhatIsInForce
     # ui/src/components/organisms/UseForEveryoneNotice.tsx lines 21 to 47; shown on the Agents page too: ui/src/pages/AgentsPage.tsx lines 139 to 143
     # README.md, The policy, "Allow everything, as shipped"
     Given the policy as shipped, use_for_everyone set to allow-everything
@@ -64,7 +64,7 @@ Feature: Policy
 
   @POLICY-05 @user @test
   Scenario: Try a call against a profile: the rule that decides, the verdict and who decides today
-    # internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
+    # internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt, TestATriedCallSaysWhichRuleDecidedByItsPlace, TestATriedCallSaysWhoDecidesOnlyWhenAnotherProfileDoes, TestTryingACallChangesNothing and TestATriedCallIsRefusedWhenItCantBeJudged
     # the form "Try a call against <profile>" with Tool, 7 suggested tools, "Command or path" and Try: ui/src/components/organisms/TryPolicyCall.tsx lines 10 and 55 to 80; the lines under it: lines 93 to 104
     # a verdict no profile rule made has Order 0, no rule place: internal/domain/policy/verdict.go line 28; none of the named tests asserts it
     # the page's words "as if run in <workspace>" and "But today allow-everything decides for every agent:" are TryPolicyCall.tsx's; the tests assert the reply they are drawn from
@@ -83,7 +83,7 @@ Feature: Policy
 
   @POLICY-06 @user @test
   Scenario: History lists every version, newest first, and Revert restores one as a new version after showing its diff
-    # internal/web/policy_api_test.go TestEveryVersionShowsInTheHistoryAndCanBeRestored, TestAVersionShowsWhatRevertingToItWouldChange and TestARevertMayNotTakeAProfileFromItsAgents
+    # internal/domain/policy/policyapi/policyapi_test.go TestEveryVersionShowsInTheHistoryAndCanBeRestored, TestAVersionShowsWhatRevertingToItWouldChange and TestARevertMayNotTakeAProfileFromItsAgents
     # the panel "History", who made each version, "refused", "in force", Diff and Revert: ui/src/components/organisms/PolicyHistory.tsx lines 26 to 91 and 135 to 138; the dialog: lines 96 to 129
     Given 3 versions: one loaded without its text, the first loaded, and use_for_everyone turned off on the page
     When the history is read
@@ -227,9 +227,9 @@ Feature: Policy
     When it runs ls -la, npm test, git add -A && git commit -m 'remove TODO', echo hi > notes.md, mkdir -p src/refunds && touch src/refunds/index.ts, rm notes.md, or git fetch origin && git merge origin/dev
     Then each is allowed
     And Edit on src/billing.ts in the workspace is allowed by "edit inside the workspace, the diff is reviewed", and Read is allowed anywhere
-    # the rule name, for Edit on main.go in the workspace: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
+    # the rule name, for Edit on main.go in the workspace: internal/domain/policy/policyapi/policyapi_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
     And go test ./... is allowed by "stays inside the workspace"
-    # the rule name, for go test ./...: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/domain/policy/default.toml line 171 and line 158
+    # the rule name, for go test ./...: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt; the rules: internal/domain/policy/default.toml line 171 and line 158
     # the rules: internal/domain/policy/default.toml lines 151 to 195
 
   @POLICY-19 @agent @test
@@ -269,7 +269,7 @@ Feature: Policy
     Given the reviewer under read-only
     When it calls Edit on main.go, or runs git commit -am 'x' or git push origin HEAD:dev
     Then each is denied, and Edit on main.go is denied by "this agent changes nothing"
-    # the rule name: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # the rule name: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
     And Edit on .agentry/knowledge.md in the workspace is allowed, and Write on the same file in another folder is denied
     # not under test, checked by hand: the rules "never commits or changes branches" and "keeps its own notes", at the lines below
     And Read on main.go, git diff c1169f1..HEAD and go test -v ./... && gofmt -l . are allowed
@@ -487,7 +487,7 @@ Feature: Policy
     Given an agent under developer
     When it runs sudo apt install x
     Then it is denied, and sudo ls is denied by "never sudo"
-    # the rule name, for sudo ls: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # the rule name, for sudo ls: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
     # not under test, checked by hand: the rule also names su and doas, and is the developer profile's; autonomous has no such rule and allows anything on this machine
     # the rule: internal/domain/policy/default.toml line 97; autonomous otherwise = "allow": line 660
 
@@ -508,7 +508,7 @@ Feature: Policy
     When it runs cat .env or cat ~/.ssh/id_rsa, or calls Read on .env in the workspace or on an ssh key
     Then each is denied under developer, and cat .env is denied under read-mostly and autonomous too
     And under developer, Read on an ssh key is denied by "never touch secrets"
-    # the rule name: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # the rule name: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
     # not under test, checked by hand: the same under read-only and network-diagnosis, and that "never touch secrets", the first rule of each of those 5 profiles, is the rule that decides under the other 4
     And cd && cat .netrc is denied too, the relative path counted from where cd went
     And under allow-everything cat .env is allowed

@@ -18,6 +18,7 @@ import (
 	"gitlab.com/dev.chempa/agentry/internal/core/store"
 	"gitlab.com/dev.chempa/agentry/internal/domain/agents"
 	"gitlab.com/dev.chempa/agentry/internal/domain/policy"
+	"gitlab.com/dev.chempa/agentry/internal/domain/policy/policyapi"
 	"gitlab.com/dev.chempa/agentry/internal/domain/tasks"
 	"gitlab.com/dev.chempa/agentry/internal/domain/workers"
 	"gitlab.com/dev.chempa/agentry/internal/platform/worktrees"
@@ -508,7 +509,7 @@ func (s *Server) missingProfilesInUse() map[string][]string {
 	if s.config.Policy == nil || err != nil {
 		return map[string][]string{}
 	}
-	return s.config.Policy.Current().MissingProfiles(agentProfiles(roster))
+	return s.config.Policy.Current().MissingProfiles(policyapi.AgentProfiles(roster))
 }
 
 // setTheme records the page's theme, "light" or "dark". Sessions started
@@ -655,4 +656,19 @@ func (s *Server) blocksNone(id string) bool {
 
 func (s *Server) roster() (agents.Roster, error) {
 	return s.state.Roster(), s.state.Broken(events.AgentsStream)
+}
+
+// policyAPI is the Policy page's routes as web mounts them, and the one
+// way a team's missing profiles are added to the policy too.
+func (s *Server) policyAPI() policyapi.API {
+	return policyapi.API{Log: s.store, Events: s.store, Policy: s.config.Policy, Roster: s.roster,
+		Version: s.version(), Worktrees: s.config.Worktrees}
+}
+
+// version is this Agentry's, as the comment above a profile it adds says.
+func (s *Server) version() string {
+	if s.config.Local.Version == "" {
+		return "(unknown version)"
+	}
+	return s.config.Local.Version
 }

@@ -123,7 +123,7 @@ Feature: Epics and stories
   Scenario: A waiting story says what it waits for, and stays parked when that is done
     # ui/src/lib/epics.ts waitingLine; the ready count: ui/src/pages/PlanPage.tsx line 175
     # a parked story gets no turn: internal/runtime/coordinator/next.go line 55
-    # what blocks it empties when task-8 is done: internal/web/views.go lines 134 to 144
+    # what blocks it empties when task-8 is done: internal/web/views.go lines 135 to 145
     # "Not started" and Start: ui/src/pages/PlanPage.tsx lines 298 to 304 and 341
     Given epic-7 with task-8 not started and task-9 that builds on task-8, both in the Backlog
     When the Plan page is shown
@@ -173,8 +173,8 @@ Feature: Epics and stories
   Scenario: Close the epic from its page, and one Visionaries session follows
     # internal/web/api_test.go TestYouCloseAnEpicYouLeftOpen and TestYouCloseAnEpic
     # internal/runtime/coordinator/followups_test.go TestClosingAnEpicStartsOneVisionariesSessionAboutIt
-    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 417 to 426
-    # the words "that is approved on the page": internal/web/api.go line 420; the test asserts the 403 only
+    # ui/src/components/organisms/OpenEpic.tsx lines 34 to 45; internal/web/api.go lines 418 to 427
+    # the words "that is approved on the page": internal/web/api.go line 421; the test asserts the 403 only
     Given an epic left open with every story done, whose page shows the panel "All 1 stories done" with the button "Close the epic"
     Then the epic is not in Questions
     When the user clicks "Close the epic"

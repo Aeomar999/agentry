@@ -45,7 +45,7 @@ Feature: Teams and templates
 
   @TEAM-03 @user @test
   Scenario: A team whose profile the policy lacks is refused, then added with the profile in one click
-    # internal/web/policy_api_test.go TestATeamNeedsItsProfilesInThePolicy
+    # internal/web/policy_test.go TestATeamNeedsItsProfilesInThePolicy
     # ui/src/components/organisms/AddTeam.test.tsx "refused for its profiles, offers them in its own card and adds it with them"
     # the offer's words, "The Visionaries team needs the read-mostly profile, which your policy file doesn't have": ui/src/components/molecules/MissingProfilesOffer.tsx lines 20 to 29; the test asserts the card's alert and button, not the words
     Given a policy file without the read-mostly profile

@@ -12,7 +12,7 @@ Feature: Policy rules from the page
   @PROP-01 @user @test @to-policy
   Scenario: A rule added from a profile's panel is written with its why and logged
     # builds on @POLICY-02 and the policy's one locked write path (internal/domain/policy/live.go Live.Change)
-    # test: internal/web/policy_api_test.go (to write)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given the developer profile's panel, its rules as loaded, and the hash the page saw
     When the user adds the rule "never curl to a pipe" as rule 3, decision deny, runs_any "curl * | sh", why "A script from the internet never runs unread."
     Then the file holds the rule as rule 3 of developer, with its name, decision, pattern and why: yes
@@ -33,7 +33,7 @@ Feature: Policy rules from the page
   @PROP-03 @user @test @to-policy
   Scenario: A rule moved up or down changes which rule decides
     # "Rules are read top to bottom and the first that matches decides" (@POLICY-07)
-    # test: internal/web/policy_api_test.go (to write)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given a profile whose rule 2 allows runs_any "go test *" and whose rule 5 asks for runs_any "go test ./build/*"
     When the user moves rule 5 above rule 2
     Then the rules keep every field, and only their order changes: yes
@@ -43,7 +43,7 @@ Feature: Policy rules from the page
   @PROP-04 @user @test @to-policy
   Scenario: A rule removed from the page can be restored from the history
     # Revert restores a version as a new version (@POLICY-06)
-    # test: internal/web/policy_api_test.go (to write)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given a profile with 8 rules
     When the user removes its rule "never force push"
     Then the profile has exactly 7 rules and the file no longer names that rule
@@ -54,8 +54,8 @@ Feature: Policy rules from the page
   @PROP-05 @user @test @to-policy
   Scenario: A rule without its why, or one that would not load, is refused and nothing is written
     # the old build plan, "keeping each rule's why"; the checks a file must pass to load: internal/domain/policy/file.go
-    # a change that would not load is a policy.Refusal, which applyPolicy answers with 409 (internal/web/policy_api.go); a missing why and a repeated name are checks the page makes before the edit, so they get 400
-    # test: internal/web/policy_api_test.go (to write)
+    # a change that would not load is a policy.Refusal, which Apply answers with 409 (internal/domain/policy/policyapi/policyapi.go); a missing why and a repeated name are checks the page makes before the edit, so they get 400
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given the developer profile's panel
     When a rule is sent with an empty why, or a why of only spaces
     Then it is refused with 400 "a rule needs its why: say what it is for"
@@ -68,7 +68,7 @@ Feature: Policy rules from the page
   @PROP-06 @user @test @to-policy
   Scenario: Changing a rule of a default profile makes it yours
     # the rows "outdated" and "yours" of @POLICY-03 (internal/domain/policy/edit.go ErrProfileEdited)
-    # test: internal/web/policy_api_test.go (to write)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given read-only as Agentry ships it, marked current
     When the user changes the why of one of its rules from the page
     Then read-only is marked "yours", and an update to a newer default is refused with 409 "won't overwrite it"
@@ -78,8 +78,8 @@ Feature: Policy rules from the page
 
   @PROP-07 @test @to-security
   Scenario: Only the page token changes a rule
-    # the other policy changes take the page token only (internal/web/policy_api_test.go TestOnlyTheUITokenChangesThePolicy, @SEC-48, @SEC-50)
-    # test: internal/web/policy_api_test.go (to write)
+    # the other policy changes take the page token only (internal/domain/policy/policyapi/policyapi_test.go TestOnlyTheUITokenChangesThePolicy, @SEC-48, @SEC-50)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given the server has a page token, a hook token, a desk token and a helper token
     When a rule is added, changed, moved or removed with the hook, desk or helper token, or with no token
     Then the answer is HTTP 401 every time, and the file is not changed
@@ -107,7 +107,7 @@ Feature: Policy rules from the page
   @PROP-10 @test @to-reliability
   Scenario: A rule change to a policy file that is a link is refused, and the policy in force is kept
     # WriteFile refuses a symbolic link before it backs anything up (internal/domain/policy/write.go)
-    # test: internal/web/policy_api_test.go (to write)
+    # test: internal/domain/policy/policyapi/policyapi_test.go (to write)
     Given a policy.toml that is a symbolic link to a file elsewhere
     When a rule is added from the page
     Then the change is refused with "policy.toml is a link; edit it yourself", and the version in force is the same as before

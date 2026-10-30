@@ -85,8 +85,6 @@ var edits = []edit{
 	{"4", "", "packaging/desktop_install_test.go", `t.Chdir("..")`, `t.Chdir("../..")`},
 	// events goes one folder deeper.
 	{"6", "", "internal/events/fixtures_test.go", `const module = "../.."`, `const module = "../../.."`},
-	// web stays, so its path into policy gains domain/.
-	{"7", "policy", "internal/web/policy_api_test.go", `"../policy/shipped/`, `"../domain/policy/shipped/`},
 }
 
 // allowed are the files of a moved package whose `..` or Chdir is not a
@@ -94,19 +92,20 @@ var edits = []edit{
 // files, not lines, so an edit to one doesn't stop a step; a new file with
 // a hit does.
 var allowed = map[string]string{
-	"internal/policy/decide.go":                  "comments on how .. is cleaned",
-	"internal/policy/reach.go":                   "comments on how .. is cleaned",
-	"internal/policy/shell.go":                   "comments on .., and splitting a shell range on ..",
-	"internal/sharedfiles/folder.go":             "refuses names that escape the folder",
-	"internal/sharedfiles/blobs_test.go":         "tests that a name can't escape the folder",
-	"internal/sharedfiles/sharedfiles_test.go":   "tests that a name can't escape the folder",
-	"internal/worktrees/repo_test.go":            "tests that a file can't be made outside the worktree",
-	"internal/workspace/workspace_test.go":       "tests that a path can't leave the workspace",
-	"internal/coordinator/handoff_brief_test.go": "a brief's text that names a commit range",
-	"internal/speccheck/sources.go":              "compares a path's parts with \"..\" to refuse paths out of the repo",
-	"internal/speccheck/check_test.go":           "its ../ paths are fixtures' and its Chdirs go into temp folders; tools/speccheck is as deep as internal/speccheck",
-	"packaging/check_test.go":                    "Chdirs into a temp repo",
-	"packaging/root_test.go":                     "Chdirs into a temp repo",
+	"internal/policy/decide.go":                   "comments on how .. is cleaned",
+	"internal/policy/reach.go":                    "comments on how .. is cleaned",
+	"internal/policy/shell.go":                    "comments on .., and splitting a shell range on ..",
+	"internal/policy/policyapi/policyapi_test.go": "reads a shipped policy from its sibling folder, which moves with it",
+	"internal/sharedfiles/folder.go":              "refuses names that escape the folder",
+	"internal/sharedfiles/blobs_test.go":          "tests that a name can't escape the folder",
+	"internal/sharedfiles/sharedfiles_test.go":    "tests that a name can't escape the folder",
+	"internal/worktrees/repo_test.go":             "tests that a file can't be made outside the worktree",
+	"internal/workspace/workspace_test.go":        "tests that a path can't leave the workspace",
+	"internal/coordinator/handoff_brief_test.go":  "a brief's text that names a commit range",
+	"internal/speccheck/sources.go":               "compares a path's parts with \"..\" to refuse paths out of the repo",
+	"internal/speccheck/check_test.go":            "its ../ paths are fixtures' and its Chdirs go into temp folders; tools/speccheck is as deep as internal/speccheck",
+	"packaging/check_test.go":                     "Chdirs into a temp repo",
+	"packaging/root_test.go":                      "Chdirs into a temp repo",
 }
 
 // areas are step 7's areas, in the order the doc moves them.

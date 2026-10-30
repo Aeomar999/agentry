@@ -147,7 +147,7 @@ Feature: Security
     Then every call is allowed
     And go test is allowed by the rule "stays inside the workspace": yes
     # not under test, checked by hand: the others are allowed by that rule too (internal/domain/policy/default.toml line 171)
-    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile, TestTheDeveloperReadsAPipeline; the rule: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-15 @test
   Scenario: Under developer, reading anywhere and editing inside the worktree are allowed
@@ -157,7 +157,7 @@ Feature: Security
     And a read of a file in the worktree is allowed by the rule "reading is always allowed": yes
     # not under test, checked by hand: a read outside it is allowed by that rule too (internal/domain/policy/default.toml line 152)
     And the edit is allowed by the rule "edit inside the workspace, the diff is reviewed"
-    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rules: internal/web/policy_api_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rules: internal/domain/policy/policyapi/policyapi_test.go TestATriedCallRunsInAStandInWorktreeThatIsntAgentrys
 
   @SEC-16 @test
   Scenario: Under developer, what may reach outside the machine asks the user
@@ -192,7 +192,7 @@ Feature: Security
     Then every call is denied
     And sudo is denied by the rule "never sudo"
     # not under test, checked by hand: the force push is denied by "never force push" and the download by "never pipe the internet into a shell" (internal/domain/policy/default.toml lines 115 and 121)
-    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the sudo rule: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-20 @test
   Scenario: Under developer, secrets are denied
@@ -201,7 +201,7 @@ Feature: Security
     Then every call is denied
     And the key under ~/.ssh is denied by the rule "never touch secrets": yes
     # not under test, checked by hand: .env is denied by that rule too (internal/domain/policy/default.toml line 91)
-    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheDeveloperProfile; the rule: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-21 @test
   Scenario: Under developer, a write outside the worktree is denied
@@ -226,7 +226,7 @@ Feature: Security
     Then every call is denied
     And the edit is denied by the rule "this agent changes nothing"
     # not under test, checked by hand: the commit and the push are denied by "never commits or changes branches", the redirect by "writes no files from the shell", tee, sort -o, find -delete and gofmt -w by "runs nothing that changes files", and eslint --fix and jest --coverage by "test and lint tools write no files" (internal/domain/policy/default.toml lines 322, 225, 231 and 254)
-    # README.md, The policy; internal/domain/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/web/policy_api_test.go TestACallIsTriedAsAProfileWouldJudgeIt
+    # README.md, The policy; internal/domain/policy/default_test.go TestTheReadOnlyProfile, TestTheJudgingProfilesWriteNothingFromTheShell, TestTheJudgingProfilesCloseWhatTheReviewFound; the edit's rule: internal/domain/policy/policyapi/policyapi_test.go TestACallIsTriedAsAProfileWouldJudgeIt
 
   @SEC-24 @test
   Scenario: Under read-only, read-mostly and network-diagnosis, a flag that names a program to run is denied
@@ -427,7 +427,7 @@ Feature: Security
     Given the desk's Claude session holds the desk token
     When it lists, creates or shows a task
     Then every call is allowed
-    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 103 to 105)
+    # not under test, checked by hand: reading a task's events, answering a question and filing a task under an epic are open to the desk too (internal/web/server.go lines 98 to 100)
     # README.md, Use it; internal/web/api_test.go TestTheDeskTokenOpensOnlyTasks
 
   @SEC-48 @test
@@ -444,7 +444,7 @@ Feature: Security
     When it posts a message to a task's claude/message route
     Then the message is allowed
     And it reaches the task as the user's, marked as sent through Claude: yes
-    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 120)
+    # every Workspace's session holds the same helper token, and the route takes it for any task (internal/web/server.go line 115)
     # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse
 
   @SEC-50 @test
@@ -452,7 +452,7 @@ Feature: Security
     Given the Claude session in a task's Workspace holds the helper token
     When it calls another route: a task's message or answer route, creating a task, or a policy route
     Then the answer is HTTP 401
-    # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse; the policy: internal/web/policy_api_test.go TestOnlyTheUITokenChangesThePolicy
+    # README.md, Use it; internal/web/claude_api_test.go TestClaudeSendsWhatYouAskedAndNothingElse; the policy: internal/domain/policy/policyapi/policyapi_test.go TestOnlyTheUITokenChangesThePolicy
 
   @SEC-51 @test
   Scenario: Only the real page token issues sign-in codes
@@ -467,7 +467,7 @@ Feature: Security
     Given a device opens the printed link or signs in with a code
     When the server sets the cookie
     Then its name is agentry_ui, its path is /, and it lasts at least 300 days
-    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 324); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 236)
+    # not under test, checked by hand: it lasts 365 days (internal/web/server.go line 311); the tests use the uiCookie constant, agentry_ui (internal/web/server.go line 223)
     And it is HttpOnly with SameSite Lax, so no script on the page reads it
     And it is Secure only when the request came over https
     And the app's manifest, service worker and icons are served with no token

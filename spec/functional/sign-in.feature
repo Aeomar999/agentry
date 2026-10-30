@@ -13,7 +13,7 @@ Feature: Signing in
   Scenario: A one-time code signs another device in once, within 5 minutes
     # internal/web/signin_test.go TestASigninCodeSignsInOnce, TestASigninCodeExpires and TestIssuingPastTheCapDropsTheOldestCode
     # 8 characters from 31 letters and digits, no 0, O, 1, I or L, shown as XXXX-XXXX, 5 minutes, at most 20 live: internal/web/signin.go lines 25 to 28 and 74
-    # the cookie lasts 365 days: internal/web/server.go line 324
+    # the cookie lasts 365 days: internal/web/server.go line 311
     # README.md, Signing in the installed app, or another device
     Given a device that is signed in asked for a code
     When the other device sends the code in lower case with spaces around its dash

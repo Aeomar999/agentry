@@ -224,7 +224,7 @@ Feature: The coordinator and its handoffs
   @HANDOFF-23 @user @test
   Scenario: Raising the budget or the turn limit while stopped at it is the answer
     # internal/web/api_test.go TestRaisingTheBudgetLetsATaskGoOn and TestRaisingTheTurnLimitLetsATaskGoOn
-    # internal/web/api.go lines 222 to 275; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
+    # internal/web/api.go lines 223 to 276; internal/domain/tasks/task.go lines 145 to 163, StoppedAt
     Given task-1 stopped at its budget of 200,000 tokens, with 210,000 used
     When the user sets the budget to 1,000,000
     Then the reply is exactly {"answered":true,"budget":1000000}
